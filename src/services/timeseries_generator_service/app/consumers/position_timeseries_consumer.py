@@ -1,9 +1,15 @@
 import json
 import logging
 from datetime import date
+from typing import Final
 
 from confluent_kafka import Message
-from portfolio_common.database_models import DailyPositionSnapshot, PortfolioAggregationJob
+from portfolio_common.database_models import (
+    Cashflow,
+    DailyPositionSnapshot,
+    PortfolioAggregationJob,
+    PositionTimeseries,
+)
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
@@ -21,6 +27,7 @@ from ..repositories.timeseries_repository import TimeseriesRepository
 logger = logging.getLogger(__name__)
 
 MAX_DEPENDENT_PROPAGATION_ROWS = 500
+_UNSET_PRELOAD: Final = object()
 
 
 class PositionTimeseriesConsumer(BaseConsumer):
@@ -111,10 +118,10 @@ class PositionTimeseriesConsumer(BaseConsumer):
         previous_snapshot: DailyPositionSnapshot | None,
         epoch: int,
         require_existing: bool = False,
-        existing_timeseries=...,
-        cashflows=...,
+        existing_timeseries: PositionTimeseries | None | object = _UNSET_PRELOAD,
+        cashflows: list[Cashflow] | object = _UNSET_PRELOAD,
     ) -> tuple[bool, object]:
-        if existing_timeseries is ...:
+        if existing_timeseries is _UNSET_PRELOAD:
             existing_timeseries = await repo.get_position_timeseries(
                 current_snapshot.portfolio_id,
                 current_snapshot.security_id,
@@ -123,7 +130,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
             )
         if require_existing and existing_timeseries is None:
             return False, None
-        if cashflows is ...:
+        if cashflows is _UNSET_PRELOAD:
             cashflows = await repo.get_all_cashflows_for_security_date(
                 current_snapshot.portfolio_id,
                 current_snapshot.security_id,
