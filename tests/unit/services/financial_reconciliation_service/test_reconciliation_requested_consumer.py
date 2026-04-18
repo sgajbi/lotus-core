@@ -112,7 +112,7 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     mock_service = mock_dependencies["service"]
     mock_db_session = mock_dependencies["db_session"]
     mock_outbox_repo = mock_dependencies["outbox_repo"]
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_service.run_automatic_bundle.return_value = {
         "transaction_cashflow": MagicMock(
             run_id="recon-tx",
@@ -159,13 +159,13 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
         "position_valuation": "recon-val",
     }
 
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
         "portfolio_day.reconciliation.requested-0-7",
         mock_event.portfolio_id,
         consumer_module.SERVICE_NAME,
         "corr-recon",
     )
-    mock_db_session.commit.assert_awaited_once()
+    mock_idempotency_repo.mark_event_processed.assert_not_called()
 
 
 async def test_reconciliation_request_is_noop_when_already_processed(
@@ -175,7 +175,7 @@ async def test_reconciliation_request_is_noop_when_already_processed(
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_service = mock_dependencies["service"]
-    mock_idempotency_repo.is_event_processed.return_value = True
+    mock_idempotency_repo.claim_event_processing.return_value = False
 
     await consumer.process_message(mock_kafka_message)
 
@@ -207,7 +207,7 @@ async def test_reconciliation_request_preserves_payload_correlation_over_header_
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_service = mock_dependencies["service"]
     mock_outbox_repo = mock_dependencies["outbox_repo"]
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_service.run_automatic_bundle.return_value = {}
     mock_service.determine_automatic_bundle_outcome = MagicMock(
         return_value=SimpleNamespace(
@@ -224,4 +224,4 @@ async def test_reconciliation_request_preserves_payload_correlation_over_header_
 
     assert mock_service.run_automatic_bundle.await_args.kwargs["correlation_id"] == "corr-recon"
     assert mock_outbox_repo.create_outbox_event.await_args.kwargs["correlation_id"] == "corr-recon"
-    assert mock_idempotency_repo.mark_event_processed.await_args.args[3] == "corr-recon"
+    assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "corr-recon"

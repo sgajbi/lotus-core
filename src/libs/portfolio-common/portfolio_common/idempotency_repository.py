@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 
 from sqlalchemy import exists, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ProcessedEvent
@@ -49,10 +50,12 @@ class IdempotencyRepository:
         portfolio_id: str,
         service_name: str,
         correlation_id: Optional[str] = None,
-    ) -> None:
+    ) -> bool:
         """
-        Asynchronously marks an event as processed by adding its details to the
-        database session.
+        Asynchronously records an event as processed using a schema-backed upsert.
+
+        Returns True when the event was newly recorded, False when the uniqueness
+        fence already existed.
         Args:
             event_id: The unique identifier of the event.
             portfolio_id: The portfolio ID associated with the event.
@@ -60,19 +63,49 @@ class IdempotencyRepository:
             correlation_id: The correlation ID for tracing the event flow.
         """
         correlation_id = normalize_lineage_value(correlation_id)
-
-        processed_event = ProcessedEvent(
-            event_id=event_id,
-            portfolio_id=portfolio_id,
-            service_name=service_name,
-            correlation_id=correlation_id,
+        stmt = (
+            pg_insert(ProcessedEvent)
+            .values(
+                event_id=event_id,
+                portfolio_id=portfolio_id,
+                service_name=service_name,
+                correlation_id=correlation_id,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["event_id", "service_name"],
+            )
+            .returning(ProcessedEvent.id)
         )
-        self.db.add(processed_event)
+        inserted_id = (await self.db.execute(stmt)).scalar_one_or_none()
+        claimed = inserted_id is not None
         logger.debug(
-            f"Event {event_id} staged to be marked as processed for service {service_name}",
+            "Processed-event fence %s for service %s",
+            "created" if claimed else "already existed",
+            service_name,
             extra={
                 "event_id": event_id,
                 "service_name": service_name,
                 "correlation_id": correlation_id,
             },
+        )
+        return claimed
+
+    async def claim_event_processing(
+        self,
+        event_id: str,
+        portfolio_id: str,
+        service_name: str,
+        correlation_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Atomically claims an event-processing fence at the start of a transaction.
+
+        Callers should use this before mutating durable state. If the surrounding
+        transaction rolls back, the claim rolls back with it.
+        """
+        return await self.mark_event_processed(
+            event_id=event_id,
+            portfolio_id=portfolio_id,
+            service_name=service_name,
+            correlation_id=correlation_id,
         )

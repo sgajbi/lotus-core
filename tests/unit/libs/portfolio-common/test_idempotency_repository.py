@@ -2,7 +2,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import ProcessedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 
 pytestmark = pytest.mark.asyncio
@@ -12,8 +11,6 @@ pytestmark = pytest.mark.asyncio
 def mock_db_session() -> AsyncMock:
     """Provides a mock SQLAlchemy AsyncSession."""
     session = AsyncMock()
-    # FIX: Configure .add() as a synchronous MagicMock on the async mock instance
-    session.add = MagicMock()
     return session
 
 
@@ -71,7 +68,7 @@ async def test_is_event_processed_returns_false_when_not_exists(
     mock_db_session.execute.assert_called_once()
 
 
-async def test_mark_event_processed_adds_to_session(
+async def test_mark_event_processed_inserts_processed_event_fence(
     repository: IdempotencyRepository, mock_db_session: AsyncMock
 ):
     """
@@ -85,24 +82,53 @@ async def test_mark_event_processed_adds_to_session(
     service_name = "test-service"
     correlation_id = "corr-id-123"
 
-    # Act
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = 11
+    mock_db_session.execute.return_value = execute_result
+
     await repository.mark_event_processed(event_id, portfolio_id, service_name, correlation_id)
 
-    # Assert
-    mock_db_session.add.assert_called_once()
-    added_object = mock_db_session.add.call_args[0][0]
+    stmt = mock_db_session.execute.await_args.args[0]
+    stmt_text = str(stmt)
 
-    assert isinstance(added_object, ProcessedEvent)
-    assert added_object.event_id == event_id
-    assert added_object.portfolio_id == portfolio_id
-    assert added_object.service_name == service_name
-    assert added_object.correlation_id == correlation_id
+    assert "INSERT INTO processed_events" in stmt_text
+    assert "ON CONFLICT (event_id, service_name) DO NOTHING" in stmt_text
+    assert "RETURNING processed_events.id" in stmt_text
 
 
 async def test_mark_event_processed_normalizes_sentinel_correlation(
     repository: IdempotencyRepository, mock_db_session: AsyncMock
 ):
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = 12
+    mock_db_session.execute.return_value = execute_result
+
     await repository.mark_event_processed("evt-1", "P1", "svc", "<not-set>")
 
-    added_object = mock_db_session.add.call_args.args[0]
-    assert added_object.correlation_id is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    params = stmt.compile().params
+    assert params["correlation_id"] is None
+
+
+async def test_claim_event_processing_returns_true_for_new_fence(
+    repository: IdempotencyRepository, mock_db_session: AsyncMock
+):
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = 7
+    mock_db_session.execute.return_value = execute_result
+
+    claimed = await repository.claim_event_processing("evt-2", "P1", "svc", "corr-2")
+
+    assert claimed is True
+
+
+async def test_claim_event_processing_returns_false_when_fence_exists(
+    repository: IdempotencyRepository, mock_db_session: AsyncMock
+):
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = execute_result
+
+    claimed = await repository.claim_event_processing("evt-2", "P1", "svc", "corr-2")
+
+    assert claimed is False

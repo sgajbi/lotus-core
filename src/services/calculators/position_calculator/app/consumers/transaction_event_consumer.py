@@ -77,7 +77,14 @@ class TransactionEventConsumer(BaseConsumer):
                     # --- FIX: Wrap entire operation in a single atomic transaction ---
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                        if not await idempotency_repo.claim_event_processing(
+                            event_id,
+                            gate_event.portfolio_id
+                            if gate_event is not None
+                            else event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
+                        ):
                             logger.warning("Event already processed. Skipping.")
                             # Transaction will be rolled back, but that's safe.
                             return
@@ -104,16 +111,6 @@ class TransactionEventConsumer(BaseConsumer):
                             repo=repo,
                             position_state_repo=position_state_repo,
                             outbox_repo=outbox_repo,
-                        )
-
-                        # This is now part of the same transaction
-                        await idempotency_repo.mark_event_processed(
-                            event_id,
-                            gate_event.portfolio_id
-                            if gate_event is not None
-                            else event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
                         )
                     # --- END FIX ---
 

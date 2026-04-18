@@ -108,7 +108,7 @@ async def test_backdated_price_flags_instrument_for_reprocessing(
     mock_reprocessing_repo = mock_dependencies["reprocessing_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date + timedelta(
         days=5
     )
@@ -120,7 +120,7 @@ async def test_backdated_price_flags_instrument_for_reprocessing(
         price_date=mock_event.price_date,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
     )
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once()
 
 
 async def test_current_price_does_not_flag_instrument(
@@ -133,13 +133,13 @@ async def test_current_price_does_not_flag_instrument(
     mock_reprocessing_repo = mock_dependencies["reprocessing_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
 
     await consumer.process_message(mock_kafka_message)
 
     mock_reprocessing_repo.upsert_state.assert_not_called()
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once()
 
 
 async def test_current_price_without_ready_open_positions_stages_reprocessing(
@@ -153,7 +153,7 @@ async def test_current_price_without_ready_open_positions_stages_reprocessing(
     mock_job_repo = mock_dependencies["job_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
     mock_valuation_repo.find_open_position_keys_for_security_on_date.return_value = []
 
@@ -165,7 +165,7 @@ async def test_current_price_without_ready_open_positions_stages_reprocessing(
         price_date=mock_event.price_date,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
     )
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once()
 
 
 async def test_future_dated_price_stages_deferred_reprocessing(
@@ -179,7 +179,7 @@ async def test_future_dated_price_stages_deferred_reprocessing(
     mock_job_repo = mock_dependencies["job_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date - timedelta(
         days=1
     )
@@ -192,7 +192,7 @@ async def test_future_dated_price_stages_deferred_reprocessing(
         price_date=mock_event.price_date,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
     )
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once()
 
 
 async def test_price_without_business_date_stages_deferred_reprocessing(
@@ -206,7 +206,7 @@ async def test_price_without_business_date_stages_deferred_reprocessing(
     mock_job_repo = mock_dependencies["job_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = None
 
     await consumer.process_message(mock_kafka_message)
@@ -217,7 +217,7 @@ async def test_price_without_business_date_stages_deferred_reprocessing(
         price_date=mock_event.price_date,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
     )
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once()
 
 
 async def test_current_price_queues_immediate_jobs_for_open_positions(
@@ -230,7 +230,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
     mock_job_repo = mock_dependencies["job_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
     mock_valuation_repo.find_open_position_keys_for_security_on_date.return_value = [
         ("P1", mock_event.security_id, 0),
@@ -267,7 +267,7 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
     mock_job_repo = mock_dependencies["job_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date + timedelta(
         days=2
     )
@@ -301,7 +301,7 @@ async def test_price_event_uses_header_correlation_for_direct_processing(
     mock_job_repo = mock_dependencies["job_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
     mock_valuation_repo.find_open_position_keys_for_security_on_date.return_value = [
         ("P1", mock_event.security_id, 0)
@@ -311,4 +311,4 @@ async def test_price_event_uses_header_correlation_for_direct_processing(
     await consumer.process_message(mock_kafka_message)
 
     assert mock_job_repo.upsert_job.await_args.kwargs["correlation_id"] == "test-corr-id"
-    assert mock_idempotency_repo.mark_event_processed.await_args.args[3] == "test-corr-id"
+    assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "test-corr-id"

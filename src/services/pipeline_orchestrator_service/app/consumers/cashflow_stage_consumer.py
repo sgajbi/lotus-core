@@ -36,7 +36,12 @@ class CashflowStageConsumer(BaseConsumer):
                 async for db in get_async_db_session():
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                        if not await idempotency_repo.claim_event_processing(
+                            event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
+                        ):
                             return
 
                         service = PipelineOrchestratorService(
@@ -44,10 +49,6 @@ class CashflowStageConsumer(BaseConsumer):
                             outbox_repo=OutboxRepository(db),
                         )
                         await service.register_cashflow_calculated(event, correlation_id)
-
-                        await idempotency_repo.mark_event_processed(
-                            event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                        )
 
         except (json.JSONDecodeError, ValidationError):
             logger.error("Invalid cashflow stage payload; sending to DLQ.", exc_info=True)

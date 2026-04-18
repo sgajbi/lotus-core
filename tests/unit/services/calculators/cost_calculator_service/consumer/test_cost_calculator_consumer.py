@@ -230,7 +230,7 @@ async def test_consumer_integration_with_engine(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
     mock_repo.get_fx_rate.return_value = None
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
 
     def create_db_tx(engine_txn: EngineTransaction) -> DBTransaction:
         data = engine_txn.model_dump(exclude_none=True)
@@ -249,7 +249,7 @@ async def test_consumer_integration_with_engine(
     await cost_calculator_consumer.process_message(mock_sell_kafka_message)
 
     # ASSERT
-    mock_idempotency_repo.is_event_processed.assert_called_once()
+    mock_idempotency_repo.claim_event_processing.assert_called_once()
     mock_repo.get_transaction_history.assert_called_once()
     updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
     assert updated_transaction_arg.__class__.__name__ == "Transaction"
@@ -266,7 +266,7 @@ async def test_consumer_integration_with_engine(
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "cost-corr-id"
     )
-    assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "cost-corr-id"
+    assert mock_idempotency_repo.claim_event_processing.call_args.args[3] == "cost-corr-id"
     mock_repo.upsert_buy_lot_state.assert_not_called()
     mock_repo.upsert_accrued_income_offset_state.assert_not_called()
 
@@ -302,7 +302,7 @@ async def test_cost_consumer_direct_path_uses_header_correlation(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
     mock_repo.get_fx_rate.return_value = None
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
 
     def create_db_tx(engine_txn: EngineTransaction) -> DBTransaction:
         data = engine_txn.model_dump(exclude_none=True)
@@ -326,7 +326,7 @@ async def test_cost_consumer_direct_path_uses_header_correlation(
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "cost-corr-id"
     )
-    assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "cost-corr-id"
+    assert mock_idempotency_repo.claim_event_processing.call_args.args[3] == "cost-corr-id"
 
 
 async def test_consumer_processes_fx_contract_event_without_generic_engine(
@@ -377,7 +377,7 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
             exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
         )
     )
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
 
     with patch.object(
         cost_calculator_consumer, "_get_transaction_processor"
@@ -390,7 +390,7 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
     assert persisted_event.security_id == "FXC-2026-0001"
     assert persisted_event.realized_total_pnl_local == Decimal("0")
     assert mock_outbox_repo.create_outbox_event.call_count == 2
-    mock_idempotency_repo.mark_event_processed.assert_called_once()
+    mock_idempotency_repo.claim_event_processing.assert_called_once()
 
 
 async def test_consumer_rejects_invalid_fx_event(

@@ -214,7 +214,12 @@ class CostCalculatorConsumer(BaseConsumer):
                         idempotency_repo = IdempotencyRepository(db)
                         outbox_repo = OutboxRepository(db)
 
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                        if not await idempotency_repo.claim_event_processing(
+                            event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
+                        ):
                             logger.warning("Event already processed. Skipping.")
                             return
 
@@ -529,10 +534,6 @@ class CostCalculatorConsumer(BaseConsumer):
                                 payload=instrument_event.model_dump(mode="json"),
                                 correlation_id=correlation_id,
                             )
-
-                        await idempotency_repo.mark_event_processed(
-                            event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                        )
 
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error(f"Invalid TransactionEvent; sending to DLQ. Error: {e}", exc_info=True)

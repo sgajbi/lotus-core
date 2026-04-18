@@ -190,6 +190,16 @@ class CashflowCalculatorConsumer(BaseConsumer):
                         cashflow_repo = CashflowRepository(db)
                         outbox_repo = OutboxRepository(db)
 
+                        if not await idempotency_repo.claim_event_processing(
+                            event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
+                        ):
+                            logger.warning(f"Event {event_id} already processed. Skipping.")
+                            await tx.rollback()
+                            return
+
                         if msg.topic() == KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC:
                             portfolio_exists = await cashflow_repo.portfolio_exists(
                                 event.portfolio_id
@@ -212,9 +222,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
                                         "topic": msg.topic(),
                                     },
                                 )
-                                await idempotency_repo.mark_event_processed(
-                                    event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                                )
                                 await db.commit()
                                 return
 
@@ -223,12 +230,11 @@ class CashflowCalculatorConsumer(BaseConsumer):
                             await tx.rollback()
                             return
 
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
-                            logger.warning(f"Event {event_id} already processed. Skipping.")
-                            await tx.rollback()
-                            return
-                        if await idempotency_repo.is_event_processed(
-                            semantic_event_id, SERVICE_NAME
+                        if not await idempotency_repo.claim_event_processing(
+                            semantic_event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
                         ):
                             logger.info(
                                 "Semantic cashflow event already processed. Skipping duplicate "
@@ -241,9 +247,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
                                     "semantic_event_id": semantic_event_id,
                                     "topic": msg.topic(),
                                 },
-                            )
-                            await idempotency_repo.mark_event_processed(
-                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                             )
                             await db.commit()
                             return
@@ -278,15 +281,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
                                     "component_type": event.component_type,
                                     "fx_contract_id": event.fx_contract_id,
                                 },
-                            )
-                            await idempotency_repo.mark_event_processed(
-                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                            )
-                            await idempotency_repo.mark_event_processed(
-                                semantic_event_id,
-                                event.portfolio_id,
-                                SERVICE_NAME,
-                                correlation_id,
                             )
                             await db.commit()
                             return
@@ -325,16 +319,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
                             topic=KAFKA_CASHFLOWS_CALCULATED_TOPIC,
                             payload=completion_evt.model_dump(mode="json"),
                             correlation_id=correlation_id,
-                        )
-
-                        await idempotency_repo.mark_event_processed(
-                            event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                        )
-                        await idempotency_repo.mark_event_processed(
-                            semantic_event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
                         )
                         await db.commit()
 

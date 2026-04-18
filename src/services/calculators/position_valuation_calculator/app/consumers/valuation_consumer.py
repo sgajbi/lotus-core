@@ -81,7 +81,12 @@ class ValuationConsumer(BaseConsumer):
                             outbox_repo = OutboxRepository(db)
                             repo = ValuationRepository(db)
 
-                            if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                            if not await idempotency_repo.claim_event_processing(
+                                event_id,
+                                event.portfolio_id,
+                                SERVICE_NAME,
+                                correlation_id,
+                            ):
                                 logger.warning(f"Event {event_id} already processed. Skipping.")
                                 return
 
@@ -137,9 +142,6 @@ class ValuationConsumer(BaseConsumer):
                                         },
                                     )
                                     return
-                                await idempotency_repo.mark_event_processed(
-                                    event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                                )
                                 return
 
                             # 3. Build the initial snapshot from the position state
@@ -284,10 +286,6 @@ class ValuationConsumer(BaseConsumer):
                                 topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC,
                                 payload=valuation_completion_event.model_dump(mode="json"),
                                 correlation_id=correlation_id,
-                            )
-
-                            await idempotency_repo.mark_event_processed(
-                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                             )
 
                     except DataNotFoundError as e:

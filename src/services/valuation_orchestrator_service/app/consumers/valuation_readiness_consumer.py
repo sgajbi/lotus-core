@@ -33,7 +33,12 @@ class ValuationReadinessConsumer(BaseConsumer):
                 async for db in get_async_db_session():
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                        if not await idempotency_repo.claim_event_processing(
+                            event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
+                        ):
                             return
 
                         await ValuationJobRepository(db).upsert_job(
@@ -42,12 +47,6 @@ class ValuationReadinessConsumer(BaseConsumer):
                             valuation_date=event.valuation_date,
                             epoch=event.epoch,
                             correlation_id=correlation_id,
-                        )
-                        await idempotency_repo.mark_event_processed(
-                            event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
                         )
         except (json.JSONDecodeError, ValidationError):
             logger.error("Invalid valuation readiness payload; sending to DLQ.", exc_info=True)
