@@ -202,6 +202,10 @@ Instead, the run points to a different defect class:
 22. The support contract now derives an explicit dependent propagation cap-risk flag from the
     shared cap and the maximum single-portfolio waiting depth, so operators do not need to infer
     truncation risk manually from multiple fields.
+23. Dependent position-timeseries propagation now drains a bounded number of future snapshot
+    batches per message instead of stopping after the first batch, increasing the truthful
+    per-message row cap published by the support contract while retaining bounded work and
+    accurate overflow warnings.
 
 ## Requirement-to-Implementation Traceability
 
@@ -532,6 +536,10 @@ Implementation status as of 2026-04-18:
 17. the same propagation loop now batch-fetches future cashflows by date as well, so downstream
     recalculation no longer pays one cashflow query per future day once the future snapshot set is
     known.
+18. dependent propagation now drains a bounded number of future-snapshot batches per
+    `valuation.snapshot.persisted` message rather than only the first batch, reducing deep
+    single-portfolio handoff lag while preserving stop-on-gap behavior and an explicit shared
+    per-message row cap for operator interpretation.
 
 Phase 1 exit criteria:
 

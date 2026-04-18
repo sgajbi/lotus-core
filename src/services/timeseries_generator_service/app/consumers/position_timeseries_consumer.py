@@ -16,6 +16,8 @@ from portfolio_common.events import (
 )
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.timeseries_constants import (
+    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_BATCH_SIZE,
+    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_MAX_BATCHES_PER_MESSAGE,
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
 from pydantic import ValidationError
@@ -29,7 +31,11 @@ from ..repositories.timeseries_repository import TimeseriesRepository
 
 logger = logging.getLogger(__name__)
 
-MAX_DEPENDENT_PROPAGATION_ROWS = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+MAX_DEPENDENT_PROPAGATION_ROWS = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_BATCH_SIZE
+MAX_DEPENDENT_PROPAGATION_BATCHES_PER_MESSAGE = (
+    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_MAX_BATCHES_PER_MESSAGE
+)
+MAX_DEPENDENT_PROPAGATION_ROWS_PER_MESSAGE = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
 _UNSET_PRELOAD: Final = object()
 
 
@@ -179,48 +185,57 @@ class PositionTimeseriesConsumer(BaseConsumer):
         correlation_id: str,
     ) -> None:
         previous_snapshot = current_snapshot
-        next_snapshots = await repo.get_next_snapshots_after(
-            previous_snapshot.portfolio_id,
-            previous_snapshot.security_id,
-            previous_snapshot.date,
-            epoch,
-            MAX_DEPENDENT_PROPAGATION_ROWS + 1,
-        )
-        if not next_snapshots:
-            return
-
-        truncated = len(next_snapshots) > MAX_DEPENDENT_PROPAGATION_ROWS
-        next_snapshots_to_process = next_snapshots[:MAX_DEPENDENT_PROPAGATION_ROWS]
-        next_dates = [snapshot.date for snapshot in next_snapshots_to_process]
-        existing_timeseries_by_date = await repo.get_position_timeseries_for_dates(
-            previous_snapshot.portfolio_id,
-            previous_snapshot.security_id,
-            next_dates,
-            epoch,
-        )
-        cashflows_by_date = await repo.get_cashflows_for_security_dates(
-            previous_snapshot.portfolio_id,
-            previous_snapshot.security_id,
-            next_dates,
-            epoch,
-        )
         changed_dates: list[date] = []
-        for next_snapshot in next_snapshots_to_process:
+        has_more_future_snapshots = False
+        stop_propagation = False
 
-            changed, _ = await self._materialize_position_timeseries(
-                repo,
-                current_snapshot=next_snapshot,
-                previous_snapshot=previous_snapshot,
-                epoch=epoch,
-                require_existing=True,
-                existing_timeseries=existing_timeseries_by_date.get(next_snapshot.date),
-                cashflows=cashflows_by_date.get(next_snapshot.date, []),
+        for _ in range(MAX_DEPENDENT_PROPAGATION_BATCHES_PER_MESSAGE):
+            next_snapshots = await repo.get_next_snapshots_after(
+                previous_snapshot.portfolio_id,
+                previous_snapshot.security_id,
+                previous_snapshot.date,
+                epoch,
+                MAX_DEPENDENT_PROPAGATION_ROWS + 1,
             )
-            if not changed:
+            if not next_snapshots:
                 break
 
-            changed_dates.append(next_snapshot.date)
-            previous_snapshot = next_snapshot
+            has_more_future_snapshots = len(next_snapshots) > MAX_DEPENDENT_PROPAGATION_ROWS
+            next_snapshots_to_process = next_snapshots[:MAX_DEPENDENT_PROPAGATION_ROWS]
+            next_dates = [snapshot.date for snapshot in next_snapshots_to_process]
+            existing_timeseries_by_date = await repo.get_position_timeseries_for_dates(
+                previous_snapshot.portfolio_id,
+                previous_snapshot.security_id,
+                next_dates,
+                epoch,
+            )
+            cashflows_by_date = await repo.get_cashflows_for_security_dates(
+                previous_snapshot.portfolio_id,
+                previous_snapshot.security_id,
+                next_dates,
+                epoch,
+            )
+
+            for next_snapshot in next_snapshots_to_process:
+                changed, _ = await self._materialize_position_timeseries(
+                    repo,
+                    current_snapshot=next_snapshot,
+                    previous_snapshot=previous_snapshot,
+                    epoch=epoch,
+                    require_existing=True,
+                    existing_timeseries=existing_timeseries_by_date.get(next_snapshot.date),
+                    cashflows=cashflows_by_date.get(next_snapshot.date, []),
+                )
+                if not changed:
+                    stop_propagation = True
+                    has_more_future_snapshots = False
+                    break
+
+                changed_dates.append(next_snapshot.date)
+                previous_snapshot = next_snapshot
+
+            if stop_propagation or not has_more_future_snapshots:
+                break
 
         await self._stage_aggregation_jobs(
             db_session,
@@ -229,10 +244,10 @@ class PositionTimeseriesConsumer(BaseConsumer):
             correlation_id,
         )
 
-        if truncated:
+        if has_more_future_snapshots:
             logger.warning(
                 "Stopped dependent position-timeseries propagation after %s rows for %s/%s.",
-                MAX_DEPENDENT_PROPAGATION_ROWS,
+                MAX_DEPENDENT_PROPAGATION_ROWS_PER_MESSAGE,
                 current_snapshot.portfolio_id,
                 current_snapshot.security_id,
             )

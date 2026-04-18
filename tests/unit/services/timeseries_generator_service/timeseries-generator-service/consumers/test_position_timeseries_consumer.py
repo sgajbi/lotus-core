@@ -13,6 +13,9 @@ from portfolio_common.logging_utils import correlation_id_var
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.timeseries_generator_service.app.consumers import (
+    position_timeseries_consumer as consumer_module,
+)
 from services.timeseries_generator_service.app.consumers.position_timeseries_consumer import (
     PositionTimeseriesConsumer,
 )
@@ -537,9 +540,13 @@ async def test_process_message_warns_only_when_future_chain_exceeds_cap(
     mock_event: DailyPositionSnapshotPersistedEvent,
     mock_dependencies: dict,
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     mock_repo = mock_dependencies["repo"]
     mock_db_session = mock_dependencies["db_session"]
+    monkeypatch.setattr(consumer_module, "MAX_DEPENDENT_PROPAGATION_ROWS", 2)
+    monkeypatch.setattr(consumer_module, "MAX_DEPENDENT_PROPAGATION_BATCHES_PER_MESSAGE", 2)
+    monkeypatch.setattr(consumer_module, "MAX_DEPENDENT_PROPAGATION_ROWS_PER_MESSAGE", 4)
     current_snapshot = DailyPositionSnapshot(
         id=mock_event.id,
         portfolio_id=mock_event.portfolio_id,
@@ -554,18 +561,18 @@ async def test_process_message_warns_only_when_future_chain_exceeds_cap(
             id=1000 + index,
             portfolio_id=mock_event.portfolio_id,
             security_id=mock_event.security_id,
-            date=date(2025, 8, 13),
+            date=date(2025, 8, 13 + index),
             quantity=Decimal("100"),
             cost_basis_local=Decimal("1000"),
             market_value_local=Decimal("1150"),
         )
-        for index in range(500)
+        for index in range(4)
     ]
     overflow_snapshot = DailyPositionSnapshot(
         id=2001,
         portfolio_id=mock_event.portfolio_id,
         security_id=mock_event.security_id,
-        date=date(2025, 8, 14),
+        date=date(2025, 8, 17),
         quantity=Decimal("100"),
         cost_basis_local=Decimal("1000"),
         market_value_local=Decimal("1200"),
@@ -576,15 +583,175 @@ async def test_process_message_warns_only_when_future_chain_exceeds_cap(
     )
     mock_repo.get_all_cashflows_for_security_date.return_value = []
     mock_repo.get_position_timeseries.return_value = None
-    mock_repo.get_position_timeseries_for_dates.return_value = {}
-    mock_repo.get_cashflows_for_security_dates.return_value = {}
+
+    def _existing_row(eod_market_value: str) -> MagicMock:
+        return MagicMock(
+            bod_market_value=Decimal("0"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal(eod_market_value),
+            fees=Decimal("0"),
+            quantity=Decimal("100"),
+            cost=Decimal("10"),
+        )
 
     caplog.set_level(logging.WARNING)
-    mock_repo.get_next_snapshots_after.return_value = exact_cap_snapshots
+    mock_repo.get_position_timeseries_for_dates.side_effect = [
+        {
+            exact_cap_snapshots[0].date: _existing_row("1150"),
+            exact_cap_snapshots[1].date: _existing_row("1150"),
+        },
+        {
+            exact_cap_snapshots[2].date: _existing_row("1150"),
+            exact_cap_snapshots[3].date: _existing_row("1150"),
+        },
+    ]
+    mock_repo.get_cashflows_for_security_dates.side_effect = [
+        {exact_cap_snapshots[0].date: [], exact_cap_snapshots[1].date: []},
+        {exact_cap_snapshots[2].date: [], exact_cap_snapshots[3].date: []},
+    ]
+    mock_repo.get_next_snapshots_after.side_effect = [
+        exact_cap_snapshots[:3],
+        exact_cap_snapshots[2:],
+    ]
     await consumer._process_message_with_retry(mock_kafka_message)
-    assert "Stopped dependent position-timeseries propagation after 500 rows" not in caplog.text
+    assert "Stopped dependent position-timeseries propagation after 4 rows" not in caplog.text
 
     caplog.clear()
-    mock_repo.get_next_snapshots_after.return_value = exact_cap_snapshots + [overflow_snapshot]
+    mock_repo.get_position_timeseries_for_dates.side_effect = [
+        {
+            exact_cap_snapshots[0].date: _existing_row("1150"),
+            exact_cap_snapshots[1].date: _existing_row("1150"),
+        },
+        {
+            exact_cap_snapshots[2].date: _existing_row("1150"),
+            exact_cap_snapshots[3].date: _existing_row("1150"),
+        },
+    ]
+    mock_repo.get_cashflows_for_security_dates.side_effect = [
+        {exact_cap_snapshots[0].date: [], exact_cap_snapshots[1].date: []},
+        {exact_cap_snapshots[2].date: [], exact_cap_snapshots[3].date: []},
+    ]
+    mock_repo.get_next_snapshots_after.side_effect = [
+        exact_cap_snapshots[:3],
+        exact_cap_snapshots[2:] + [overflow_snapshot],
+    ]
     await consumer._process_message_with_retry(mock_kafka_message)
-    assert "Stopped dependent position-timeseries propagation after 500 rows" in caplog.text
+    assert "Stopped dependent position-timeseries propagation after 4 rows" in caplog.text
+
+
+async def test_process_message_propagates_dependent_timeseries_across_bounded_batches(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    monkeypatch.setattr(consumer_module, "MAX_DEPENDENT_PROPAGATION_ROWS", 2)
+    monkeypatch.setattr(consumer_module, "MAX_DEPENDENT_PROPAGATION_BATCHES_PER_MESSAGE", 2)
+    monkeypatch.setattr(consumer_module, "MAX_DEPENDENT_PROPAGATION_ROWS_PER_MESSAGE", 4)
+
+    current_snapshot = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1100"),
+    )
+    next_snapshot_1 = DailyPositionSnapshot(
+        id=124,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 13),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1150"),
+    )
+    next_snapshot_2 = DailyPositionSnapshot(
+        id=125,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 14),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1200"),
+    )
+    next_snapshot_3 = DailyPositionSnapshot(
+        id=126,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 15),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1250"),
+    )
+
+    def _existing_row(eod_market_value: str) -> MagicMock:
+        return MagicMock(
+            bod_market_value=Decimal("0"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal(eod_market_value),
+            fees=Decimal("0"),
+            quantity=Decimal("100"),
+            cost=Decimal("10"),
+        )
+
+    mock_db_session.get.return_value = current_snapshot
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal("1050")
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = None
+    mock_repo.get_next_snapshots_after.side_effect = [
+        [next_snapshot_1, next_snapshot_2, next_snapshot_3],
+        [next_snapshot_3],
+    ]
+    mock_repo.get_position_timeseries_for_dates.side_effect = [
+        {
+            next_snapshot_1.date: _existing_row("1150"),
+            next_snapshot_2.date: _existing_row("1200"),
+        },
+        {next_snapshot_3.date: _existing_row("1250")},
+    ]
+    mock_repo.get_cashflows_for_security_dates.side_effect = [
+        {next_snapshot_1.date: [], next_snapshot_2.date: []},
+        {next_snapshot_3.date: []},
+    ]
+
+    await consumer._process_message_with_retry(mock_kafka_message)
+
+    assert mock_repo.get_next_snapshots_after.await_count == 2
+    assert mock_repo.get_next_snapshots_after.await_args_list[0].args == (
+        mock_event.portfolio_id,
+        mock_event.security_id,
+        mock_event.date,
+        mock_event.epoch,
+        3,
+    )
+    assert mock_repo.get_next_snapshots_after.await_args_list[1].args == (
+        mock_event.portfolio_id,
+        mock_event.security_id,
+        next_snapshot_2.date,
+        mock_event.epoch,
+        3,
+    )
+    assert mock_repo.upsert_position_timeseries.await_count == 4
+    assert mock_db_session.execute.await_count == 2
+    dependent_stage_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_stmt = str(
+        dependent_stage_stmt.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "VALUES ('PORT_TS_POS_01', '2025-08-13'" in compiled_stmt
+    assert ", ('PORT_TS_POS_01', '2025-08-14'" in compiled_stmt
+    assert ", ('PORT_TS_POS_01', '2025-08-15'" in compiled_stmt

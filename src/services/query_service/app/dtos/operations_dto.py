@@ -688,7 +688,7 @@ class LoadRunProgressResponse(BaseModel):
             "chain. This is operator context for interpreting timeseries lag; it does not by "
             "itself indicate that the cap was reached for the run."
         ),
-        examples=[500],
+        examples=[1000],
     )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
@@ -804,7 +804,7 @@ class LoadRunProgressResponse(BaseModel):
             "target-date position-timeseries materialization within any single affected "
             "portfolio in the run."
         ),
-        examples=[500],
+        examples=[1000],
     )
     dependent_position_timeseries_propagation_cap_risk: bool = Field(
         ...,
