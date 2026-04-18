@@ -181,6 +181,10 @@ Instead, the run points to a different defect class:
     than one write per changed future day.
 15. The dependent aggregation bulk-staging path now normalizes duplicate dates before insert and
     logs only the staged date range, which reduces hot-path log noise during long future chains.
+16. The dependent propagation truncation warning is now truthful: the consumer probes for
+    `MAX_DEPENDENT_PROPAGATION_ROWS + 1` future snapshots and warns only when more than the
+    configured cap actually exists, avoiding false-positive operator alerts when the future chain
+    length is exactly equal to the cap.
 
 ## Requirement-to-Implementation Traceability
 

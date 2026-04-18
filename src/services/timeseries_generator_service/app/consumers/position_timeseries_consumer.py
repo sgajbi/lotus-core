@@ -181,12 +181,14 @@ class PositionTimeseriesConsumer(BaseConsumer):
             previous_snapshot.security_id,
             previous_snapshot.date,
             epoch,
-            MAX_DEPENDENT_PROPAGATION_ROWS,
+            MAX_DEPENDENT_PROPAGATION_ROWS + 1,
         )
         if not next_snapshots:
             return
 
-        next_dates = [snapshot.date for snapshot in next_snapshots]
+        truncated = len(next_snapshots) > MAX_DEPENDENT_PROPAGATION_ROWS
+        next_snapshots_to_process = next_snapshots[:MAX_DEPENDENT_PROPAGATION_ROWS]
+        next_dates = [snapshot.date for snapshot in next_snapshots_to_process]
         existing_timeseries_by_date = await repo.get_position_timeseries_for_dates(
             previous_snapshot.portfolio_id,
             previous_snapshot.security_id,
@@ -200,7 +202,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
             epoch,
         )
         changed_dates: list[date] = []
-        for next_snapshot in next_snapshots:
+        for next_snapshot in next_snapshots_to_process:
 
             changed, _ = await self._materialize_position_timeseries(
                 repo,
@@ -224,7 +226,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
             correlation_id,
         )
 
-        if len(next_snapshots) == MAX_DEPENDENT_PROPAGATION_ROWS:
+        if truncated:
             logger.warning(
                 "Stopped dependent position-timeseries propagation after %s rows for %s/%s.",
                 MAX_DEPENDENT_PROPAGATION_ROWS,

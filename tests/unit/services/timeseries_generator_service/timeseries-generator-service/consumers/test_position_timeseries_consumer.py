@@ -125,7 +125,7 @@ async def test_process_message_success(
         mock_event.security_id,
         mock_event.date,
         mock_event.epoch,
-        500,
+        501,
     )
     mock_repo.get_position_timeseries_for_dates.assert_not_awaited()
     mock_repo.get_cashflows_for_security_dates.assert_not_awaited()
@@ -529,3 +529,62 @@ async def test_stage_aggregation_jobs_deduplicates_dates_before_bulk_insert(
 
     assert compiled_stmt.count("'2025-08-13'") == 1
     assert compiled_stmt.count("'2025-08-14'") == 1
+
+
+async def test_process_message_warns_only_when_future_chain_exceeds_cap(
+    consumer: PositionTimeseriesConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: DailyPositionSnapshotPersistedEvent,
+    mock_dependencies: dict,
+    caplog: pytest.LogCaptureFixture,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_db_session = mock_dependencies["db_session"]
+    current_snapshot = DailyPositionSnapshot(
+        id=mock_event.id,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.date,
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1100"),
+    )
+    exact_cap_snapshots = [
+        DailyPositionSnapshot(
+            id=1000 + index,
+            portfolio_id=mock_event.portfolio_id,
+            security_id=mock_event.security_id,
+            date=date(2025, 8, 13),
+            quantity=Decimal("100"),
+            cost_basis_local=Decimal("1000"),
+            market_value_local=Decimal("1150"),
+        )
+        for index in range(500)
+    ]
+    overflow_snapshot = DailyPositionSnapshot(
+        id=2001,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=date(2025, 8, 14),
+        quantity=Decimal("100"),
+        cost_basis_local=Decimal("1000"),
+        market_value_local=Decimal("1200"),
+    )
+    mock_db_session.get.return_value = current_snapshot
+    mock_repo.get_last_snapshot_before.return_value = DailyPositionSnapshot(
+        market_value_local=Decimal("1050")
+    )
+    mock_repo.get_all_cashflows_for_security_date.return_value = []
+    mock_repo.get_position_timeseries.return_value = None
+    mock_repo.get_position_timeseries_for_dates.return_value = {}
+    mock_repo.get_cashflows_for_security_dates.return_value = {}
+
+    caplog.set_level(logging.WARNING)
+    mock_repo.get_next_snapshots_after.return_value = exact_cap_snapshots
+    await consumer._process_message_with_retry(mock_kafka_message)
+    assert "Stopped dependent position-timeseries propagation after 500 rows" not in caplog.text
+
+    caplog.clear()
+    mock_repo.get_next_snapshots_after.return_value = exact_cap_snapshots + [overflow_snapshot]
+    await consumer._process_message_with_retry(mock_kafka_message)
+    assert "Stopped dependent position-timeseries propagation after 500 rows" in caplog.text
