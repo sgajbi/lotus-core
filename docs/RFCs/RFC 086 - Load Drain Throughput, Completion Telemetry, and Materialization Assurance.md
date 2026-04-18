@@ -496,6 +496,9 @@ Implementation status as of 2026-04-18:
     with one `get_next_snapshot_after` query per day; this reduces read amplification in the
     valuation-to-position-timeseries drain path while keeping the same “latest epoch per future
     date” semantics.
+15. follow-up review of that slice removed the now-dead single-row
+    `get_next_snapshot_after` repository path so future maintenance only has one governed API for
+    dependent future-snapshot retrieval.
 
 Phase 1 exit criteria:
 
