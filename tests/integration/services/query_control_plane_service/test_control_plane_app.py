@@ -234,6 +234,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     overview = schema["paths"]["/support/portfolios/{portfolio_id}/overview"]["get"]
     readiness = schema["paths"]["/support/portfolios/{portfolio_id}/readiness"]["get"]
     calculator_slos = schema["paths"]["/support/portfolios/{portfolio_id}/calculator-slos"]["get"]
+    load_run_progress = schema["paths"]["/support/load-runs/{run_id}"]["get"]
     lineage = schema["paths"]["/lineage/portfolios/{portfolio_id}/securities/{security_id}"]["get"]
 
     overview_portfolio = next(
@@ -286,6 +287,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert failed_window["description"].startswith("Window in hours")
     assert "daily operational SLO checks" in calculator_slos["description"]
+    assert "snapshot, timeseries, and job facts" in load_run_progress["description"]
 
     not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
@@ -314,6 +316,13 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_response["properties"]["latest_valuation_job_correlation_id"][
         "description"
     ].startswith("Durable correlation identifier of the latest valuation job")
+    load_run_progress_schema = schema["components"]["schemas"]["LoadRunProgressResponse"]
+    assert load_run_progress_schema["properties"][
+        "dependent_position_timeseries_propagation_row_cap"
+    ]["description"].startswith("Configured per-message cap on future dependent")
+    assert load_run_progress_schema["properties"][
+        "dependent_position_timeseries_propagation_row_cap"
+    ]["type"] == "integer"
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
@@ -1335,7 +1344,10 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
     assert (
         export_result["responses"]["422"]["description"]
-        == "Export job is incomplete, source payload unavailable, or requested serialization is unsupported."
+        == (
+            "Export job is incomplete, source payload unavailable, or requested "
+            "serialization is unsupported."
+        )
     )
 
     components = schema["components"]["schemas"]

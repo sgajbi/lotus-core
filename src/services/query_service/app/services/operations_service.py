@@ -11,6 +11,9 @@ from portfolio_common.reconciliation_quality import (
     classify_finding_status,
     classify_reconciliation_status,
 )
+from portfolio_common.timeseries_constants import (
+    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.operations_dto import (
@@ -459,6 +462,9 @@ class OperationsService:
             open_aggregation_jobs=summary.open_aggregation_jobs,
             failed_valuation_jobs=summary.failed_valuation_jobs,
             failed_aggregation_jobs=summary.failed_aggregation_jobs,
+            dependent_position_timeseries_propagation_row_cap=(
+                DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+            ),
             oldest_pending_valuation_date=summary.oldest_pending_valuation_date,
             oldest_pending_aggregation_date=summary.oldest_pending_aggregation_date,
             latest_snapshot_date=summary.latest_snapshot_date,

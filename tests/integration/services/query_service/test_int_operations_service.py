@@ -20,6 +20,9 @@ from portfolio_common.database_models import (
     ReprocessingJob,
     Transaction,
 )
+from portfolio_common.timeseries_constants import (
+    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
@@ -1664,6 +1667,10 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     assert response.open_aggregation_jobs == 1
     assert response.failed_valuation_jobs == 0
     assert response.failed_aggregation_jobs == 0
+    assert (
+        response.dependent_position_timeseries_propagation_row_cap
+        == DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+    )
     assert response.oldest_pending_valuation_date == date(2026, 4, 17)
     assert response.oldest_pending_aggregation_date == date(2026, 4, 17)
     assert response.latest_snapshot_date == date(2026, 4, 17)
@@ -1904,6 +1911,10 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     )
     assert response.latest_portfolio_timeseries_materialized_at_utc == datetime(
         2025, 8, 30, 11, 50, tzinfo=timezone.utc
+    )
+    assert (
+        response.dependent_position_timeseries_propagation_row_cap
+        == DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
     )
     assert response.completed_valuation_jobs_without_position_timeseries == 1
     assert response.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(

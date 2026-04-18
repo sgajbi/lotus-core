@@ -680,6 +680,16 @@ class LoadRunProgressResponse(BaseModel):
         description="Count of portfolio aggregation jobs for the run that are in FAILED state.",
         examples=[0],
     )
+    dependent_position_timeseries_propagation_row_cap: int = Field(
+        ...,
+        description=(
+            "Configured per-message cap on future dependent position-timeseries rows that one "
+            "snapshot-persisted event will recalculate before a later message continues the "
+            "chain. This is operator context for interpreting timeseries lag; it does not by "
+            "itself indicate that the cap was reached for the run."
+        ),
+        examples=[500],
+    )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
         description=(

@@ -185,6 +185,9 @@ Instead, the run points to a different defect class:
     `MAX_DEPENDENT_PROPAGATION_ROWS + 1` future snapshots and warns only when more than the
     configured cap actually exists, avoiding false-positive operator alerts when the future chain
     length is exactly equal to the cap.
+17. The run-scoped support contract now publishes the configured dependent position-timeseries
+    propagation row cap from a shared constant, so operators can interpret timeseries lag against
+    the actual per-message drain boundary without reading worker code.
 
 ## Requirement-to-Implementation Traceability
 

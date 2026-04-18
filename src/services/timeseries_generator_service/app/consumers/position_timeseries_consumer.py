@@ -15,6 +15,9 @@ from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
 )
 from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.timeseries_constants import (
+    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
+)
 from pydantic import ValidationError
 from sqlalchemy import func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -26,7 +29,7 @@ from ..repositories.timeseries_repository import TimeseriesRepository
 
 logger = logging.getLogger(__name__)
 
-MAX_DEPENDENT_PROPAGATION_ROWS = 500
+MAX_DEPENDENT_PROPAGATION_ROWS = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
 _UNSET_PRELOAD: Final = object()
 
 
