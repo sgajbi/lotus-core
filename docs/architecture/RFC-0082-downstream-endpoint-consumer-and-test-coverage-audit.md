@@ -454,6 +454,13 @@ plainly:
 Automated proof now includes a risk-free schema-family completeness assertion in
 `tests/integration/services/query_control_plane_service/test_control_plane_app.py`.
 
+Focused certification evidence on April 18, 2026 rechecked the coverage surfaces directly:
+
+1. Downstream code scan still shows direct product usage only for `lotus-risk` risk-free coverage (`src/app/integrations/lotus_core_client.py`, `src/app/services/rolling_mode_adapter.py`, and related unit/integration tests). No active direct benchmark-coverage client binding was found in gateway, manage, report, advise, or performance during this pass.
+2. Live probe: `POST /integration/reference/risk-free-series/coverage?currency=USD` with `window.start_date=2026-03-19` and `window.end_date=2026-04-17` returned `200 OK` with `product_name=DataQualityCoverageReport`, `product_version=v1`, and a current `latest_evidence_timestamp`.
+3. Live probe: `POST /integration/benchmarks/BMK_PB_GLOBAL_BALANCED_60_40/coverage` over the same window returned `200 OK` with `product_name=DataQualityCoverageReport`, `product_version=v1`, and a current `latest_evidence_timestamp`.
+4. Contract probe: the risk-free coverage route rejects an incorrect body shape with `422`, confirming the public contract remains `CoverageRequest` in the body plus `currency` as a query parameter rather than an undocumented mixed payload mode.
+
 ### Issue Disposition For This Endpoint Family
 
 | Issue | Assessment | Disposition |
