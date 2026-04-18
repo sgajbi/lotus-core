@@ -806,6 +806,16 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[500],
     )
+    dependent_position_timeseries_propagation_cap_risk: bool = Field(
+        ...,
+        description=(
+            "True when the maximum single-portfolio waiting valuation-job depth is at least as "
+            "large as the configured dependent position-timeseries propagation row cap, which "
+            "indicates that one portfolio's backlog is deep enough to require multiple message "
+            "cycles to drain."
+        ),
+        examples=[False],
+    )
     oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime] = Field(
         None,
         description=(

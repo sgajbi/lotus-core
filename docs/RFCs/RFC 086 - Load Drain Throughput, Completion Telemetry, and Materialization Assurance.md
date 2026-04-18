@@ -199,6 +199,9 @@ Instead, the run points to a different defect class:
 21. The support contract now publishes the maximum waiting valuation-job depth within any single
     affected portfolio, which gives operators a durable concentration signal for cap-risk and
     localized backlog diagnosis.
+22. The support contract now derives an explicit dependent propagation cap-risk flag from the
+    shared cap and the maximum single-portfolio waiting depth, so operators do not need to infer
+    truncation risk manually from multiple fields.
 
 ## Requirement-to-Implementation Traceability
 

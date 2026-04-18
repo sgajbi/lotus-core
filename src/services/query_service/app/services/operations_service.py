@@ -499,6 +499,10 @@ class OperationsService:
             max_completed_valuation_jobs_without_position_timeseries_single_portfolio=(
                 summary.max_completed_valuation_jobs_without_position_timeseries_single_portfolio
             ),
+            dependent_position_timeseries_propagation_cap_risk=(
+                summary.max_completed_valuation_jobs_without_position_timeseries_single_portfolio
+                >= DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+            ),
             oldest_completed_valuation_without_position_timeseries_at_utc=(
                 summary.oldest_completed_valuation_without_position_timeseries_at_utc
             ),

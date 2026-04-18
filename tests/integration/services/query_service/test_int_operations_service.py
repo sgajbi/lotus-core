@@ -1698,6 +1698,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
         == 0.0
     )
     assert response.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 0
+    assert response.dependent_position_timeseries_propagation_cap_risk is False
     assert response.oldest_completed_valuation_without_position_timeseries_at_utc is None
     assert response.oldest_completed_valuation_without_position_timeseries_age_seconds is None
     assert response.valuation_to_position_timeseries_latency_sample_count == 1
@@ -1931,6 +1932,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
         == 1.0
     )
     assert response.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 1
+    assert response.dependent_position_timeseries_propagation_cap_risk is False
     assert response.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc
     )
