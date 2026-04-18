@@ -75,11 +75,45 @@ Drill deeper with:
 - `GET /support/portfolios/{portfolio_id}/control-stages`
 - `GET /support/portfolios/{portfolio_id}/reprocessing-keys`
 - `GET /support/portfolios/{portfolio_id}/reprocessing-jobs`
+- `GET /support/portfolios/{portfolio_id}/valuation-jobs`
+- `GET /support/portfolios/{portfolio_id}/aggregation-jobs`
+- `GET /support/portfolios/{portfolio_id}/analytics-export-jobs`
 - `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
 - `GET /lineage/portfolios/{portfolio_id}/keys`
 
 Use these routes before going directly to the database unless rollout mismatch or schema doubt makes
 API evidence insufficient.
+
+## Copy-paste examples
+
+Readiness for a governed as-of date:
+
+```text
+GET /support/portfolios/{portfolio_id}/readiness?as_of_date=2026-03-28
+```
+
+Replay backlog inspection:
+
+```text
+GET /support/portfolios/{portfolio_id}/reprocessing-keys?status_filter=REPROCESSING&watermark_date=2026-03-10
+GET /support/portfolios/{portfolio_id}/reprocessing-jobs?status_filter=PROCESSING&security_id=SEC-US-IBM
+```
+
+Blocked reconciliation drill-through:
+
+```text
+GET /support/portfolios/{portfolio_id}/reconciliation-runs?status_filter=FAILED
+GET /support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings?security_id=SEC-US-IBM
+```
+
+Run-scoped institutional load progress:
+
+```text
+GET /support/load-runs/{run_id}?business_date=2026-04-17
+```
+
+This route is for governed load-run validation and operator forensics. It is not a substitute for
+portfolio readiness or normal front-office support posture.
 
 ## Related references
 
@@ -88,3 +122,4 @@ API evidence insufficient.
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
+- [Architecture Index](../docs/architecture/README.md)

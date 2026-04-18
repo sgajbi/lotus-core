@@ -65,6 +65,54 @@ These outputs feed:
 - `lotus-manage`
 - operator and support tooling
 
+## Current query and body conventions
+
+The control plane is intentionally not uniform in the way every route accepts input, so future
+docs need to stay explicit.
+
+Use:
+
+- query parameters for discovery and policy inspection routes
+- JSON request bodies for snapshot, analytics-input, benchmark/reference, and enrichment contracts
+- durable path identifiers for support, lineage, export-job, and simulation-session drill-through
+
+Important current rule:
+
+- policy and capability discovery routes use canonical snake_case query parameters such as
+  `consumer_system` and `tenant_id`
+- camelCase aliases such as `consumerSystem` and `tenantId` are not supported
+
+Examples:
+
+```text
+GET /integration/policy/effective?consumer_system=lotus-gateway&tenant_id=tenant_sg_pb
+GET /integration/capabilities?consumer_system=lotus-risk&tenant_id=tenant_sg_pb
+POST /integration/portfolios/{portfolio_id}/core-snapshot
+POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries
+GET /integration/exports/analytics-timeseries/jobs/{job_id}
+GET /support/portfolios/{portfolio_id}/overview
+```
+
+## Current route map
+
+Use this grouping when deciding where a new consumer should bind:
+
+- policy and capabilities
+  `GET /integration/policy/effective`
+  `GET /integration/capabilities`
+- portfolio snapshots and integration contracts
+  `POST /integration/portfolios/{portfolio_id}/core-snapshot`
+  benchmark, reference, and enrichment routes under `/integration/...`
+- analytics inputs and export jobs
+  portfolio timeseries, position timeseries, analytics reference, and
+  `/integration/exports/analytics-timeseries/jobs...`
+- support and lineage
+  `/support/...` and `/lineage/...`
+- simulation lifecycle
+  `/simulation-sessions/...`
+- canonical advisory simulation execution
+  `/integration/advisory/proposals/simulate-execution`
+
 ## Why it matters
 
 If the control plane is blurred or under-documented:
@@ -94,6 +142,10 @@ Check this service when:
 - integration policy or capability posture needs to be inspected before calling a governed route
 - large analytics windows need export-job retrieval instead of direct inline pagination
 - what-if projected state is needed without mutating booked baseline state
+- a downstream consumer needs policy or capability inspection before choosing a governed snapshot or
+  analytics-input route
+- large-window analytics retrieval should be handled as an export-job lifecycle instead of repeated
+  inline paging
 
 Check beyond this service when:
 
@@ -109,5 +161,6 @@ Check beyond this service when:
 - [System Data Flow](System-Data-Flow)
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Event Replay Service](Event-Replay-Service)
+- [Architecture Index](../docs/architecture/README.md)
 - [Lotus Core Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
 - [RFC-0083 Source-Data Product Catalog](../docs/architecture/RFC-0083-source-data-product-catalog.md)
