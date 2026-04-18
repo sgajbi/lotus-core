@@ -12,13 +12,25 @@ Use it for:
 
 ## Start here
 
+Orientation and boundaries:
+
 - [Overview](Overview)
 - [Architecture](Architecture)
+- [RFC Index](RFC-Index)
+
+Contracts and operator flows:
+
 - [System Data Flow](System-Data-Flow)
-- [Data Models](Data-Models)
 - [API Surface](API-Surface)
 - [Query Control Plane](Query-Control-Plane)
 - [Support and Lineage](Support-and-Lineage)
+- [Integrations](Integrations)
+- [Validation and CI](Validation-and-CI)
+- [Operations Runbook](Operations-Runbook)
+
+Services and subsystems:
+
+- [Data Models](Data-Models)
 - [Ingestion Service](Ingestion-Service)
 - [Event Replay Service](Event-Replay-Service)
 - [Persistence Service](Persistence-Service)
@@ -30,12 +42,13 @@ Use it for:
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries and Aggregation](Timeseries-and-Aggregation)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
+
+Developer workflow:
+
 - [Getting Started](Getting-Started)
 - [Development Workflow](Development-Workflow)
-- [Validation and CI](Validation-and-CI)
 - [Database Migrations](Database-Migrations)
 - [Testing Guide](Testing-Guide)
-- [Operations Runbook](Operations-Runbook)
 
 ## Important commands
 
