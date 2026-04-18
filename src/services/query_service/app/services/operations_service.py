@@ -490,6 +490,12 @@ class OperationsService:
                     summary.portfolios_ingested,
                 )
             ),
+            completed_valuation_jobs_without_position_timeseries_per_affected_portfolio=(
+                self._safe_ratio(
+                    summary.completed_valuation_jobs_without_position_timeseries,
+                    summary.completed_valuation_portfolios_without_position_timeseries,
+                )
+            ),
             oldest_completed_valuation_without_position_timeseries_at_utc=(
                 summary.oldest_completed_valuation_without_position_timeseries_at_utc
             ),

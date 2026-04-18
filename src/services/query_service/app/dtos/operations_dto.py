@@ -787,6 +787,16 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[0.238],
     )
+    completed_valuation_jobs_without_position_timeseries_per_affected_portfolio: float = Field(
+        ...,
+        description=(
+            "Average latest-epoch completed valuation jobs still waiting for target-date "
+            "position-timeseries materialization per affected portfolio, expressed as "
+            "`completed_valuation_jobs_without_position_timeseries / "
+            "completed_valuation_portfolios_without_position_timeseries`."
+        ),
+        examples=[94.454],
+    )
     oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime] = Field(
         None,
         description=(

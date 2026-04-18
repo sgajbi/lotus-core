@@ -193,6 +193,9 @@ Instead, the run points to a different defect class:
     can distinguish localized lag from broad portfolio-level incomplete coverage.
 19. The same support contract now publishes the backlog breadth as a ratio of ingested portfolios,
     so operators can read the handoff lag in scale terms without manually normalizing counts.
+20. The support contract now also publishes waiting valuation-job density per affected portfolio,
+    which helps distinguish narrow deep lag from broad shallow incomplete coverage during load
+    drain analysis.
 
 ## Requirement-to-Implementation Traceability
 

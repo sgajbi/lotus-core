@@ -1693,6 +1693,10 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     assert response.completed_valuation_jobs_without_position_timeseries == 0
     assert response.completed_valuation_portfolios_without_position_timeseries == 0
     assert response.completed_valuation_portfolios_without_position_timeseries_ratio == 0.0
+    assert (
+        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio
+        == 0.0
+    )
     assert response.oldest_completed_valuation_without_position_timeseries_at_utc is None
     assert response.oldest_completed_valuation_without_position_timeseries_age_seconds is None
     assert response.valuation_to_position_timeseries_latency_sample_count == 1
@@ -1921,6 +1925,10 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     assert response.completed_valuation_jobs_without_position_timeseries == 1
     assert response.completed_valuation_portfolios_without_position_timeseries == 1
     assert response.completed_valuation_portfolios_without_position_timeseries_ratio == 0.5
+    assert (
+        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio
+        == 1.0
+    )
     assert response.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(
         2025, 8, 30, 11, 0, tzinfo=timezone.utc
     )
