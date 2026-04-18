@@ -39,6 +39,7 @@ Control execution and reconciliation run contracts.
 
 ## Architecture references
 
+- [Architecture Index](../docs/architecture/README.md)
 - [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)

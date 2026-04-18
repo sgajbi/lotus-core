@@ -56,6 +56,7 @@ make analytics-input-consumer-contract-guard
 
 - [Repository Engineering Context](../REPOSITORY-ENGINEERING-CONTEXT.md)
 - [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
+- [Architecture Index](../docs/architecture/README.md)
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
 - [database_models.py](../src/libs/portfolio-common/portfolio_common/database_models.py)

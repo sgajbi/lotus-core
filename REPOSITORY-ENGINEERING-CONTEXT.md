@@ -67,6 +67,8 @@ Primary areas:
    unit, integration-lite, full integration, ops-contract, transaction-contract, e2e, Docker smoke, and performance-oriented coverage.
 9. `wiki/`
    canonical authored source for GitHub wiki publication and core-owned operator and onboarding summaries.
+10. `docs/architecture/README.md`
+    the primary navigation index for the deep core architecture and RFC hardening set.
 
 ## Runtime And Integration Boundaries
 
@@ -207,6 +209,7 @@ Update this document when:
 3. shared-infrastructure ownership assumptions change,
 4. integration contract posture, RFC-0082 contract-family classification, RFC-0083 target-state slice plan, or current-state architecture shifts materially,
 5. the repository's CI and runtime expectations change.
+6. deep-architecture navigation or documentation entrypoints change materially.
 
 ## Cross-Links
 

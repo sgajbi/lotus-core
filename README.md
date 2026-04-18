@@ -12,6 +12,9 @@ Primary target architecture:
 Contract-family inventory:
 [docs/architecture/RFC-0082-contract-family-inventory.md](docs/architecture/RFC-0082-contract-family-inventory.md)
 
+Architecture index:
+[docs/architecture/README.md](docs/architecture/README.md)
+
 ## Purpose And Scope
 
 `lotus-core` is the system of record for foundational portfolio-management and transaction data in
@@ -202,6 +205,8 @@ Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wik
 
 - target architecture:
   [docs/architecture/lotus-core-target-architecture.md](docs/architecture/lotus-core-target-architecture.md)
+- architecture index:
+  [docs/architecture/README.md](docs/architecture/README.md)
 - contract-family inventory:
   [docs/architecture/RFC-0082-contract-family-inventory.md](docs/architecture/RFC-0082-contract-family-inventory.md)
 - RFC-0083 target-state gap analysis:
