@@ -86,7 +86,8 @@ class PositionTimeseriesConsumer(BaseConsumer):
         even when they arrive under the same correlation id as an earlier partial run.
         Duplicate timeseries writes are filtered before this method is called.
         """
-        if not aggregation_dates:
+        normalized_dates = sorted(set(aggregation_dates))
+        if not normalized_dates:
             return
 
         job_stmt = (
@@ -99,7 +100,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                         "status": "PENDING",
                         "correlation_id": correlation_id,
                     }
-                    for aggregation_date in aggregation_dates
+                    for aggregation_date in normalized_dates
                 ]
             )
             .on_conflict_do_update(
@@ -118,10 +119,11 @@ class PositionTimeseriesConsumer(BaseConsumer):
         )
         await db_session.execute(job_stmt)
         logger.info(
-            "Successfully staged %s aggregation job(s) for portfolio %s on %s",
-            len(aggregation_dates),
+            "Successfully staged %s aggregation job(s) for portfolio %s from %s to %s",
+            len(normalized_dates),
             portfolio_id,
-            aggregation_dates,
+            normalized_dates[0],
+            normalized_dates[-1],
         )
 
     async def _materialize_position_timeseries(

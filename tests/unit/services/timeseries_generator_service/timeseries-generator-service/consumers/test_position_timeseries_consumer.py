@@ -509,3 +509,23 @@ async def test_stage_aggregation_job_rearms_completed_job_for_late_material_inpu
     assert "correlation_id" in compiled_stmt
     assert "portfolio_aggregation_jobs.status != 'PENDING'" in compiled_stmt
     assert "coalesce(portfolio_aggregation_jobs.correlation_id, '') != 'corr-456'" in compiled_stmt
+
+
+async def test_stage_aggregation_jobs_deduplicates_dates_before_bulk_insert(
+    consumer: PositionTimeseriesConsumer,
+    mock_dependencies: dict,
+):
+    await consumer._stage_aggregation_jobs(
+        mock_dependencies["db_session"],
+        "PORT_TS_POS_01",
+        [date(2025, 8, 13), date(2025, 8, 13), date(2025, 8, 14)],
+        "corr-789",
+    )
+
+    executed_stmt = mock_dependencies["db_session"].execute.call_args[0][0]
+    compiled_stmt = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert compiled_stmt.count("'2025-08-13'") == 1
+    assert compiled_stmt.count("'2025-08-14'") == 1

@@ -179,6 +179,8 @@ Instead, the run points to a different defect class:
     propagation now skips empty future batch reads, uses explicit preload sentinels, tightens batch
     repository typing, and stages changed dependent aggregation jobs in a single bulk upsert rather
     than one write per changed future day.
+15. The dependent aggregation bulk-staging path now normalizes duplicate dates before insert and
+    logs only the staged date range, which reduces hot-path log noise during long future chains.
 
 ## Requirement-to-Implementation Traceability
 
