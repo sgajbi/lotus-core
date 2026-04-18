@@ -593,6 +593,30 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[85],
     )
+    complete_portfolios: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios that already have target-date portfolio timeseries and "
+            "therefore meet the current run-level completion definition."
+        ),
+        examples=[85],
+    )
+    incomplete_portfolios: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios that still do not have target-date portfolio "
+            "timeseries and are therefore not yet complete for the run."
+        ),
+        examples=[915],
+    )
+    portfolios_waiting_for_snapshots: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios that still have no target-date daily position "
+            "snapshot coverage."
+        ),
+        examples=[827],
+    )
     snapshot_portfolio_coverage_ratio: float = Field(
         ...,
         description=(
@@ -606,6 +630,14 @@ class LoadRunProgressResponse(BaseModel):
         description=(
             "Count of portfolios that already have target-date daily position snapshots but "
             "still have no target-date position-timeseries rows."
+        ),
+        examples=[81],
+    )
+    portfolios_waiting_for_position_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios whose target-date daily position snapshots exist but "
+            "whose target-date position-timeseries coverage is still incomplete."
         ),
         examples=[81],
     )
@@ -623,6 +655,14 @@ class LoadRunProgressResponse(BaseModel):
         description=(
             "Count of portfolios that already have target-date position-timeseries coverage but "
             "still have no target-date portfolio-timeseries row."
+        ),
+        examples=[7],
+    )
+    portfolios_waiting_for_portfolio_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios whose target-date position-timeseries coverage exists "
+            "but whose target-date portfolio-timeseries row is still missing."
         ),
         examples=[7],
     )

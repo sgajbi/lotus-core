@@ -567,6 +567,9 @@ Implementation status as of 2026-04-18:
 24. the support contract now also derives explicit latest valuation-to-snapshot and valuation-to-
     position-timeseries tail latencies so operators can tell whether the current delay is before
     snapshot persistence or entirely downstream of valuation completion.
+25. the support contract now publishes explicit complete versus incomplete portfolio counts plus
+    stage-waiting portfolio counts for snapshots, position-timeseries, and portfolio-timeseries,
+    so operators do not need to derive remaining completion work from multiple coverage metrics.
 
 Phase 1 exit criteria:
 

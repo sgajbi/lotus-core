@@ -345,6 +345,23 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "latest_valuation_to_position_timeseries_tail_seconds"
     ]["description"].startswith("Seconds between the latest durable valuation-job update")
     assert load_run_progress_schema["properties"][
+        "complete_portfolios"
+    ]["description"].startswith("Count of ingested portfolios that already have target-date")
+    assert load_run_progress_schema["properties"][
+        "incomplete_portfolios"
+    ]["description"].startswith("Count of ingested portfolios that still do not have target-date")
+    assert load_run_progress_schema["properties"][
+        "portfolios_waiting_for_snapshots"
+    ]["description"].startswith("Count of ingested portfolios that still have no target-date")
+    assert load_run_progress_schema["properties"][
+        "portfolios_waiting_for_position_timeseries"
+    ]["description"].startswith("Count of ingested portfolios whose target-date daily position")
+    assert load_run_progress_schema["properties"][
+        "portfolios_waiting_for_portfolio_timeseries"
+    ]["description"].startswith(
+        "Count of ingested portfolios whose target-date position-timeseries"
+    )
+    assert load_run_progress_schema["properties"][
         "latest_snapshot_to_position_timeseries_tail_seconds"
     ]["description"].startswith("Seconds between the latest target-date daily position")
     assert load_run_progress_schema["properties"][

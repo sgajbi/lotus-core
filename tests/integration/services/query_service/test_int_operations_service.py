@@ -1658,10 +1658,15 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     assert response.position_timeseries_rows == 1
     assert response.portfolios_with_timeseries == 1
     assert response.timeseries_rows == 1
+    assert response.complete_portfolios == 1
+    assert response.incomplete_portfolios == 1
+    assert response.portfolios_waiting_for_snapshots == 1
     assert response.snapshot_portfolio_coverage_ratio == 0.5
     assert response.snapshot_portfolios_without_position_timeseries == 0
+    assert response.portfolios_waiting_for_position_timeseries == 0
     assert response.position_timeseries_portfolio_coverage_ratio == 0.5
     assert response.position_timeseries_portfolios_without_portfolio_timeseries == 0
+    assert response.portfolios_waiting_for_portfolio_timeseries == 0
     assert response.timeseries_portfolio_coverage_ratio == 0.5
     assert response.pending_valuation_jobs == 1
     assert response.processing_valuation_jobs == 0
@@ -1934,8 +1939,13 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     assert response.position_timeseries_rows == 1
     assert response.portfolios_with_timeseries == 1
     assert response.timeseries_rows == 1
+    assert response.complete_portfolios == 1
+    assert response.incomplete_portfolios == 1
+    assert response.portfolios_waiting_for_snapshots == 1
     assert response.snapshot_portfolios_without_position_timeseries == 0
+    assert response.portfolios_waiting_for_position_timeseries == 0
     assert response.position_timeseries_portfolios_without_portfolio_timeseries == 0
+    assert response.portfolios_waiting_for_portfolio_timeseries == 0
     assert response.latest_snapshot_materialized_at_utc == datetime(
         2025, 8, 30, 11, 40, tzinfo=timezone.utc
     )
