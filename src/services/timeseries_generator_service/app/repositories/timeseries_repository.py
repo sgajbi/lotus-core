@@ -17,3 +17,23 @@ class TimeseriesRepository(TimeseriesRepositoryBase):
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    @async_timed(repository="TimeseriesRepository", method="get_position_timeseries_for_dates")
+    async def get_position_timeseries_for_dates(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        dates: list,
+        epoch: int,
+    ) -> dict:
+        if not dates:
+            return {}
+        stmt = select(PositionTimeseries).where(
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.security_id == security_id,
+            PositionTimeseries.date.in_(dates),
+            PositionTimeseries.epoch == epoch,
+        )
+        result = await self.db.execute(stmt)
+        rows = result.scalars().all()
+        return {row.date: row for row in rows}

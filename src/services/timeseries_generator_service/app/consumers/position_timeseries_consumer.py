@@ -111,13 +111,15 @@ class PositionTimeseriesConsumer(BaseConsumer):
         previous_snapshot: DailyPositionSnapshot | None,
         epoch: int,
         require_existing: bool = False,
+        existing_timeseries=...,
     ) -> tuple[bool, object]:
-        existing_timeseries = await repo.get_position_timeseries(
-            current_snapshot.portfolio_id,
-            current_snapshot.security_id,
-            current_snapshot.date,
-            epoch,
-        )
+        if existing_timeseries is ...:
+            existing_timeseries = await repo.get_position_timeseries(
+                current_snapshot.portfolio_id,
+                current_snapshot.security_id,
+                current_snapshot.date,
+                epoch,
+            )
         if require_existing and existing_timeseries is None:
             return False, None
         cashflows = await repo.get_all_cashflows_for_security_date(
@@ -156,6 +158,12 @@ class PositionTimeseriesConsumer(BaseConsumer):
             epoch,
             MAX_DEPENDENT_PROPAGATION_ROWS,
         )
+        existing_timeseries_by_date = await repo.get_position_timeseries_for_dates(
+            previous_snapshot.portfolio_id,
+            previous_snapshot.security_id,
+            [snapshot.date for snapshot in next_snapshots],
+            epoch,
+        )
         for next_snapshot in next_snapshots:
 
             changed, _ = await self._materialize_position_timeseries(
@@ -164,6 +172,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                 previous_snapshot=previous_snapshot,
                 epoch=epoch,
                 require_existing=True,
+                existing_timeseries=existing_timeseries_by_date.get(next_snapshot.date),
             )
             if not changed:
                 return

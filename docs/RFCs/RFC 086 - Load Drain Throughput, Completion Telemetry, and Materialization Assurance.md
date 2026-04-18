@@ -499,6 +499,9 @@ Implementation status as of 2026-04-18:
 15. follow-up review of that slice removed the now-dead single-row
     `get_next_snapshot_after` repository path so future maintenance only has one governed API for
     dependent future-snapshot retrieval.
+16. dependent propagation now also batch-fetches existing future `position_timeseries` rows by
+    date before iterating, which removes another per-day lookup from the valuation-to-timeseries
+    drain path while preserving the existing stop-on-gap semantics.
 
 Phase 1 exit criteria:
 

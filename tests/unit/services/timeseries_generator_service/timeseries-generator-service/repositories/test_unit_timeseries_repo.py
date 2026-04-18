@@ -58,6 +58,31 @@ async def test_get_simple_getters(repository: TimeseriesRepository, mock_db_sess
     assert "WHERE instruments.security_id = 'S1'" in compiled_query
 
 
+async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    dated_row = MagicMock()
+    dated_row.date = date(2025, 1, 10)
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
+
+    await repository.get_position_timeseries_for_dates(
+        "P1",
+        "S1",
+        [date(2025, 1, 10), date(2025, 1, 11)],
+        14,
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "position_timeseries.portfolio_id = 'P1'" in compiled_query
+    assert "position_timeseries.security_id = 'S1'" in compiled_query
+    assert "position_timeseries.date IN ('2025-01-10', '2025-01-11')" in compiled_query
+    assert "position_timeseries.epoch = 14" in compiled_query
+
+
 async def test_get_fx_rate(repository: TimeseriesRepository, mock_db_session: AsyncMock):
     """Verifies the query for the latest FX rate."""
     await repository.get_fx_rate("USD", "EUR", date(2025, 1, 10))
