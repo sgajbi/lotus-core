@@ -78,6 +78,7 @@ Check beyond this service when:
 
 ## Related references
 
+- [Timeseries and Aggregation](Timeseries-and-Aggregation)
 - [System Data Flow](System-Data-Flow)
 - [Data Models](Data-Models)
 - [Operations Runbook](Operations-Runbook)

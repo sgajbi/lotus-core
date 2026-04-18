@@ -28,6 +28,7 @@ Use it for:
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Position Calculator](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
+- [Timeseries and Aggregation](Timeseries-and-Aggregation)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
 - [Getting Started](Getting-Started)
 - [Development Workflow](Development-Workflow)

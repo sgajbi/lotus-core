@@ -71,6 +71,7 @@ See also:
 - [Cashflow Calculator](Cashflow-Calculator)
 - [Position Calculator](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
+- [Timeseries and Aggregation](Timeseries-and-Aggregation)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
 
 ### 4. Read and support surfaces

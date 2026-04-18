@@ -228,6 +228,8 @@ Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wik
   [wiki/Query-Control-Plane.md](wiki/Query-Control-Plane.md)
 - wiki support and lineage:
   [wiki/Support-and-Lineage.md](wiki/Support-and-Lineage.md)
+- wiki timeseries and aggregation:
+  [wiki/Timeseries-and-Aggregation.md](wiki/Timeseries-and-Aggregation.md)
 - wiki migration guide:
   [wiki/Database-Migrations.md](wiki/Database-Migrations.md)
 - wiki testing guide:
