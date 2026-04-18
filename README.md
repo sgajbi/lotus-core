@@ -1,535 +1,228 @@
+# lotus-core
+
+Authoritative portfolio, booking, account, holding, and transaction platform for the Lotus
+ecosystem.
+
+Repository-local engineering context:
+[REPOSITORY-ENGINEERING-CONTEXT.md](REPOSITORY-ENGINEERING-CONTEXT.md)
+
+Primary target architecture:
+[docs/architecture/lotus-core-target-architecture.md](docs/architecture/lotus-core-target-architecture.md)
+
+Contract-family inventory:
+[docs/architecture/RFC-0082-contract-family-inventory.md](docs/architecture/RFC-0082-contract-family-inventory.md)
+
+## Purpose And Scope
+
+`lotus-core` is the system of record for foundational portfolio-management and transaction data in
+Lotus.
+
+It owns:
+
+- portfolio, account, holding, mandate, and transaction domain data
+- write-ingress and persistence of source data
+- position, valuation, cashflow, and time-series foundations
+- operational read-plane contracts
+- governed analytics-input, snapshot/simulation, support, lineage, and policy contracts
+
+It does not own:
+
+- downstream performance analytics conclusions
+- downstream risk analytics conclusions
+- product-facing review narratives or report composition
+- advisory recommendation logic
+- the cross-cutting ecosystem platform layer
+
+## Ownership And Boundaries
+
+`lotus-core` is a domain-authoritative backend, not a product surface and not a cross-cutting
+platform repository.
+
+Boundary rules that matter:
+
+1. foundational portfolio and transaction truth stays here
+2. downstream analytics conclusions stay in their authoritative services
+3. downstream-facing APIs must remain classified under RFC-0082 contract families
+4. shared infrastructure ownership now belongs in `lotus-platform`, while `lotus-core` may still
+   provide app-local isolated runtime support
+
+## Current Operational Posture
+
+1. `lotus-core` is the domain authority for portfolio-management and transaction data.
+2. RFC-0082 governs downstream-facing contract-family ownership.
+3. RFC-0083 governs the system-of-record target architecture and current implementation program.
+4. The repository already carries a heavy banking-grade CI contract with architecture, OpenAPI,
+   warning, coverage, runtime, and operational gates.
+5. App-local compose remains available for isolated development, but shared platform runtime support
+   is owned centrally in `lotus-platform`.
+
+## Architecture At A Glance
+
+Primary runtime surfaces:
+
+- `query_service`
+  operational read plane
+- `query_control_plane_service`
+  analytics-input, snapshot/simulation, support, lineage, policy, and export contracts
+- `ingestion_service`
+  write ingress and adapter ingestion contracts
+- `event_replay_service`
+  replay, ingestion-health, DLQ, and operations control-plane contracts
+- `financial_reconciliation_service`
+  reconciliation and control execution contracts
+- calculators and generators
+  position, valuation, cashflow, and time-series materialization
+
+Primary architecture references:
+
+- [RFC-0082 Contract Family Inventory](docs/architecture/RFC-0082-contract-family-inventory.md)
+- [RFC-0083 Target-State Gap Analysis](docs/architecture/RFC-0083-target-state-gap-analysis.md)
+- [Query Service And Control Plane Boundary](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+
+## Repository Layout
+
+- `src/services/query_service/`
+  operational read-plane API
+- `src/services/query_control_plane_service/`
+  control-plane and downstream analytics-input contracts
+- `src/services/ingestion_service/`
+  source-data and adapter ingress
+- `src/services/persistence_service/`
+  persistence orchestration
+- `src/services/calculators/`
+  core financial calculators
+- `src/services/timeseries_generator_service/`
+  position and portfolio time-series generation
+- `src/libs/portfolio-common/`
+  shared domain and contract-support libraries
+- `scripts/`
+  gates, guards, manifests, smoke tools, and operational scripts
+- `docs/`
+  architecture, standards, features, operations, and RFC material
+- `wiki/`
+  canonical authored source for GitHub wiki publication
 
-# Lotus Core
+## Quick Start
 
-This system provides a comprehensive suite of core portfolio services, including ingestion, persistence, position tracking, valuation, cashflow processing, timeseries generation, and simulation. It is designed as a distributed, event-driven architecture using Kafka for messaging and PostgreSQL for data persistence.
-
-Platform architecture governance source:
-- `https://github.com/sgajbi/lotus-platform` (cross-cutting and multi-service decisions)
-- `REPOSITORY-ENGINEERING-CONTEXT.md` (repository-local engineering context and commands)
-
-Local architecture direction and restructuring plan:
-- `docs/RFCs/RFC 057 - Lotus Core Directory Reorganization and Legacy Module Retirement.md`
-- `../lotus-platform/rfcs/RFC-0082-lotus-core-domain-authority-and-analytics-serving-boundary-hardening.md`
-- `../lotus-platform/rfcs/RFC-0083-lotus-core-system-of-record-target-architecture.md`
-- `docs/architecture/lotus-core-target-architecture.md`
-- `docs/architecture/RFC-0082-contract-family-inventory.md`
-- `docs/architecture/RFC-0083-target-state-gap-analysis.md`
-- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
-- `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
-- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
-- `docs/architecture/RFC-0083-source-data-product-catalog.md`
-- `docs/architecture/RFC-0083-market-reference-data-target-model.md`
-- `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
-- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
-- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
-- `docs/architecture/RFC-0083-production-readiness-closure.md`
-- `docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md`
-- `docs/standards/route-contract-family-registry.json`
-- `docs/standards/layering-boundaries.md`
-- `docs/standards/temporal-vocabulary.md`
-
-Query-service PB/WM reporting contract guide:
-- `docs/features/query_service/WEALTH-REPORTING-API-GUIDE.md`
-
-## Table of Contents
-
-- [Architectural Overview](#architectural-overview)
-- [System Setup](#system-setup)
-- [Running the System](#running-the-system)
-- [Running Tests](#running-tests)
-- [Verifying the Workflow](#verifying-the-workflow)
-- [Code Quality](#code-quality)
-- [Tools](#tools)
-
-## Architectural Overview
-
-The system follows a microservices architecture, where each service is responsible for a specific domain. Data flows through the system via Kafka topics, ensuring loose coupling and scalability.
-
-### Core Data Flow
-
-1.  **Ingestion Service**: Receives raw transaction and market data via a REST API and publishes it to Kafka.
-2.  **Persistence Service**: Consumes raw data from Kafka and persists it to the PostgreSQL database.
-3.  **Calculator Services**:
-    * **Position Calculator**: Consumes persisted transactions, calculates position history, and manages reprocessing logic.
-    * **Position Valuation Calculator**: Consumes price data and valuation jobs to calculate the market value of positions. It includes two key background tasks:
-        * **ValuationScheduler**: Creates backfill valuation jobs, advances watermarks, and creates durable jobs for large-scale price reprocessing events.
-        * **ReprocessingWorker**: Consumes the durable reprocessing jobs to fan-out watermark resets in a controlled, scalable manner, mitigating the "Thundering Herd" problem.
-    * **Cashflow Calculator**: Calculates cash flows based on transactions.
-4.  **Timeseries and Aggregation Services**: Materialize position-level and portfolio-level time series through explicit worker and aggregation boundaries.
-5.  **Query Service**: Provides the operational read plane for foundational datasets such as portfolios, positions, transactions, prices, FX rates, instruments, lookups, and reporting-oriented source-data queries.
-6.  **Query Control-Plane Service**: Provides governed downstream contract surfaces for analytics inputs, core snapshots, simulation sessions, integration policy, capabilities, support, lineage, and export lifecycles.
-7.  **Event Replay and Financial Reconciliation Services**: Provide replay, DLQ, ingestion-health, reconciliation, and control-execution surfaces outside the ingestion write path.
-
-### RFC-0082 Contract Families
-
-Downstream-facing API ownership is governed by platform RFC-0082 and the local contract-family inventory:
-
-- `docs/architecture/RFC-0082-contract-family-inventory.md`
-
-The active families are:
-
-1. `query_service`: operational reads.
-2. `query_control_plane_service`: analytics inputs, snapshot/simulation, support, lineage, integration policy, and capability contracts.
-3. `ingestion_service`: write ingress and adapter ingestion contracts.
-4. `event_replay_service`: replay, DLQ, ingestion health, and operations control-plane contracts.
-5. `financial_reconciliation_service`: reconciliation and control execution contracts.
-
-`lotus-core` owns canonical source data and analytics inputs. It does not own downstream performance or risk analytics conclusions.
-
-### RFC-0083 Target-State Gap Analysis
-
-RFC-0083 is the master target architecture blueprint for hardening the current `lotus-core` into the
-banking-grade system of record. The local Slice 0 implementation map is:
-
-- `docs/architecture/RFC-0083-target-state-gap-analysis.md`
-
-It identifies the current route, model, temporal, source-data product, ingestion, reconciliation,
-security, and observability gaps that should drive the next implementation slices.
-
-RFC-0083 Slice 1 temporal vocabulary and schema policy is documented in:
-
-- `docs/standards/temporal-vocabulary.md`
-
-RFC-0083 Slice 2 route family enforcement is documented in:
-
-- `docs/standards/route-contract-family-registry.json`
-- `scripts/route_contract_family_guard.py`
-
-RFC-0083 Slice 3 portfolio reconstruction target state is documented in:
-
-- `docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md`
-- `src/libs/portfolio-common/portfolio_common/reconstruction_identity.py`
-
-RFC-0083 Slice 4 ingestion source-lineage target state is documented in:
-
-- `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md`
-- `src/libs/portfolio-common/portfolio_common/ingestion_evidence.py`
-
-RFC-0083 Slice 5 reconciliation and data-quality target state is documented in:
-
-- `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md`
-- `src/libs/portfolio-common/portfolio_common/reconciliation_quality.py`
-
-RFC-0083 Slice 6 source-data product catalog target state is documented in:
-
-- `docs/architecture/RFC-0083-source-data-product-catalog.md`
-- `src/libs/portfolio-common/portfolio_common/source_data_products.py`
-
-RFC-0083 Slice 7 market and reference data target state is documented in:
-
-- `docs/architecture/RFC-0083-market-reference-data-target-model.md`
-- `src/libs/portfolio-common/portfolio_common/market_reference_quality.py`
-
-RFC-0083 Slice 8 endpoint consolidation disposition is documented in:
-
-- `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
-
-RFC-0083 Slice 9 security, tenancy, and lifecycle target state is documented in:
-
-- `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`
-- `src/libs/portfolio-common/portfolio_common/source_data_security.py`
-
-RFC-0083 Slice 10 eventing and supportability target state is documented in:
-
-- `docs/architecture/RFC-0083-eventing-supportability-target-model.md`
-- `src/libs/portfolio-common/portfolio_common/event_supportability.py`
-
-RFC-0083 Slice 11 production-readiness closure is documented in:
-
-- `docs/architecture/RFC-0083-production-readiness-closure.md`
-- `docs/standards/rfc-0083-implementation-ledger.json`
-- `scripts/rfc0083_closure_guard.py`
-
-### Key Architectural Patterns
-
-* **Event-Driven**: Services communicate asynchronously through events, promoting resilience and scalability.
-* **Outbox Pattern**: Ensures atomicity between database writes and event publishing, guaranteeing "at-least-once" delivery.
-* **Idempotent Consumers**: Consumers are designed to handle duplicate messages gracefully, preventing data corruption.
-* **Durable Job Queues**: For high-volume, asynchronous tasks like reprocessing fan-outs, the system uses persistent database tables as durable queues to ensure reliability and control.
-
-## System Setup
-
-Follow these steps to set up the development environment.
-
-### Prerequisites
-
-* Docker and Docker Compose
-* Python 3.11+
-* Git Bash (on Windows)
-* VSCode (recommended)
-
-### Installation
-
-1.  **Clone the Repository**:
-    ```bash
-    git clone <your-repository-url>
-    cd lotus-core
-    ```
-
-2.  **Create a Virtual Environment**:
-    ```bash
-    py -3.12 -m venv .venv
-    ```
-
-3.  **Activate the Virtual Environment**:
-    ```bash
-    source .venv/Scripts/activate
-    ```
-
-4.  **Install Dependencies**:
-    ```bash
-    python -m pip install --upgrade pip
-    make install
-    ```
-
-5.  **Set Up Environment Variables**:
-    ```bash
-    cp .env.example .env
-    ```
-    Review the `.env` file and ensure the settings are correct for your environment.
-
-## Running the System
-
-Canonical shared infrastructure ownership now lives in `lotus-platform`:
-
-- shared local/platform baseline:
-  - `C:\Users\Sandeep\projects\lotus-platform\platform-stack`
-
-Use the local `lotus-core` compose stack when you specifically want an app-local or isolated-dev
-environment for `lotus-core`.
-
-Machine-readable compose contract:
-
-- project name: `lotus-core-app-local`
-- stack classification: `app-local`
-- canonical shared infra owner: `lotus-platform/platform-stack`
-
-1.  **Start App-Local Stack**:
-    This command starts the local `lotus-core` app stack, including app-local Kafka, Zookeeper,
-    PostgreSQL, Prometheus, `grafana`, all `lotus-core` services, and an automated one-shot demo
-    data loader (`demo_data_loader`).
-    ```bash
-    docker compose up -d
-    ```
-
-    This stack is convenient for isolated development, but it is not the canonical owner of shared
-    platform infrastructure for the rest of Lotus.
-
-2.  **Set Up Kafka Topics**:
-    This tool idempotently creates `lotus-core` domain topics. Topic definitions remain app-owned
-    even when the canonical shared Kafka broker is started from `lotus-platform/platform-stack`.
-    ```bash
-    python -m tools.kafka_setup
-    ```
-
-3.  **Run Database Migrations**:
-    Apply all pending database migrations to set up the schema.
-    ```bash
-    alembic upgrade head
-    ```
-
-4.  **Start Services**:
-    Open a new terminal for each service to run them concurrently.
-    ```bash
-    # Terminal 1: Persistence Service
-    python -m src.services.persistence_service.app.main
-
-    # Terminal 2: Position Calculator Service
-    python -m src.services.calculators.position_calculator.app.main
-
-    # Terminal 3: Position Valuation Calculator Service
-    python -m src.services.calculators.position_valuation_calculator.app.main
-
-    # Terminal 4: Timeseries Generator Service
-    python -m src.services.timeseries_generator_service.app.main
-
-    # Terminal 5: Query Service (API)
-    python -m src.services.query_service.app.main
-
-    # Terminal 6: Query Control-Plane Service (integration, support, simulation)
-    python -m src.services.query_control_plane_service.app.main
-
-    # Terminal 7: Ingestion Service (API)
-    python -m src.services.ingestion_service.app.main
-    ```
-
-## Running Tests
-
-To run the enforced unit test gate:
+Install dependencies:
 
 ```bash
-make test
+make install
 ```
 
-To run Docker/DB-backed unit tests explicitly:
-
-```bash
-make test-unit-db
-```
-
-To run the integration-lite suite used in CI coverage:
-
-```bash
-make test-integration-lite
-```
-
-Test suite composition is centrally managed in `scripts/test_manifest.py`.
-Use this to inspect or validate exact CI test scope:
-
-```bash
-python scripts/test_manifest.py --suite integration-lite --print-args
-python scripts/test_manifest.py --suite integration-lite --validate-only
-```
-
-To run the query-service unit suite directly:
-
-```bash
-pytest tests/unit/services/query_service -q
-```
-
-To run the fast local feature-lane parity gate:
+Fast local feature-lane parity:
 
 ```bash
 make ci-local
 ```
 
-To run the full pull-request merge gate locally:
+App-local isolated stack:
 
 ```bash
-make ci
+docker compose up -d
+python -m tools.kafka_setup
+python -m alembic upgrade head
 ```
 
-To run the full main releasability gate locally:
-
-```bash
-make ci-main
-```
-
-To enforce ingestion endpoint documentation contract (`What/How/When` in OpenAPI descriptions):
-
-```bash
-make ingestion-contract-gate
-```
-
-To run architecture boundary checks:
-
-```bash
-make architecture-guard
-```
-
-To run the E2E smoke suite locally (requires Docker engine running):
-
-```bash
-make test-e2e-smoke
-```
-
-To run deterministic docker endpoint smoke (ingestion -> persistence -> query):
-
-```bash
-make test-docker-smoke
-```
-
-Optional deterministic controls:
-
-```bash
-# Reuse running stack without compose operations
-python scripts/docker_endpoint_smoke.py --skip-compose
-
-# Reset volumes for a clean-state deterministic run
-python scripts/docker_endpoint_smoke.py --reset-volumes --build
-```
-
-## Verifying the Workflow
-
-1.  **Ingest Data (Automated by Default)**:
-    lotus-core now auto-loads a deterministic demo data pack during startup via Docker Compose.
-    The `demo_data_loader` service ingests portfolios/instruments/transactions/prices/FX data
-    and validates downstream query outputs.
-
-    Check loader logs:
-
-    ```bash
-    docker compose logs --tail=200 demo_data_loader
-    ```
-
-    Optional controls:
-
-    ```bash
-    # Disable auto demo data pack loading for a run
-    DEMO_DATA_PACK_ENABLED=false docker compose up -d
-
-    # Run manually against a running stack
-    python -m tools.demo_data_pack --ingestion-base-url http://core-ingestion.dev.lotus --query-base-url http://core-query.dev.lotus --query-control-plane-base-url http://core-control.dev.lotus
-    ```
-
-    The current flagship performance demo pack seeds:
-
-    - portfolio: `DEMO_ADV_USD_001`
-    - assigned benchmark: `BMK_GLOBAL_BALANCED_60_40` (`Global Balanced 60/40`)
-    - alternate benchmark: `BMK_GLOBAL_GROWTH_80_20` (`Global Growth 80/20`)
-
-    Verify benchmark discovery and assignment:
-
-    ```bash
-    curl -X POST "http://core-control.dev.lotus/integration/benchmarks/catalog" \
-      -H "Content-Type: application/json" \
-      -d '{"as_of_date":"2026-03-27","benchmark_currency":"USD","benchmark_status":"active","benchmark_type":"composite"}'
-
-    curl -X POST "http://core-control.dev.lotus/integration/portfolios/DEMO_ADV_USD_001/benchmark-assignment" \
-      -H "Content-Type: application/json" \
-      -d '{"as_of_date":"2026-03-27"}'
-    ```
-
-    For UI/file-upload style onboarding, lotus-core also supports:
-
-    ```bash
-    curl -X POST "http://core-ingestion.dev.lotus/ingest/portfolio-bundle" \
-      -H "Content-Type: application/json" \
-      -d '{"mode":"UPSERT","businessDates":[],"portfolios":[],"instruments":[],"transactions":[],"marketPrices":[],"fxRates":[]}'
-    ```
-
-    For bulk CSV/XLSX onboarding with pre-validation:
-
-    ```bash
-    # Preview (validate only, no publishing)
-    curl -X POST "http://core-ingestion.dev.lotus/ingest/uploads/preview" \
-      -F "entityType=transactions" \
-      -F "sampleSize=20" \
-      -F "file=@./samples/transactions.csv"
-
-    # Commit (strict by default; set allowPartial=true to publish valid rows only)
-    curl -X POST "http://core-ingestion.dev.lotus/ingest/uploads/commit" \
-      -F "entityType=transactions" \
-      -F "allowPartial=true" \
-      -F "file=@./samples/transactions.csv"
-    ```
-
-    For lotus-performance/lotus-manage style integration contracts, use the
-    query control plane. `core-query.dev.lotus` is the operational read plane;
-    `core-control.dev.lotus` owns governed analytics-input, policy, support,
-    lineage, and simulation contracts.
-
-    ```bash
-    curl "http://core-control.dev.lotus/integration/policy/effective?consumer_system=lotus-performance&tenant_id=default&include_sections=OVERVIEW&include_sections=HOLDINGS"
-
-    curl "http://core-control.dev.lotus/integration/capabilities?consumer_system=lotus-gateway&tenant_id=default"
-    ```
-
-    Integration policy controls (optional):
-
-    - `LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON`: policy object for section governance.
-      Supports:
-      - `strict_mode`
-      - `consumers` (consumer -> allowed sections)
-      - `tenants` (tenant overrides for `strict_mode`, `consumers`, `default_sections`)
-
-    Integration capability policy overrides (optional):
-
-    - `LOTUS_CORE_POLICY_VERSION`: default global policy version label.
-    - `LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON`: tenant-scoped policy overrides used by
-      `GET /integration/capabilities`.
-      Supported keys per tenant:
-      - `policy_version`
-      - `features` (map of feature key -> boolean)
-      - `workflows` (map of workflow key -> boolean override)
-      - `supported_input_modes` (map of consumer system -> list, plus optional `default`)
-
-    Example:
-
-    ```bash
-    export LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON='{"tenant-a":{"policy_version":"tenant-a-v7","features":{"lotus_core.ingestion.bulk_upload":false},"supported_input_modes":{"lotus-performance":["lotus_core_ref"],"default":["lotus_core_ref"]}}}'
-    ```
-
-2.  **Query the API**:
-    Once the services have processed the data, you can query the `query-service` API endpoints.
-
-      * API Docs: `http://core-query.dev.lotus/docs`
-      * Query control plane API Docs: `http://core-control.dev.lotus/docs`
-
-3.  **Use Support and Lineage APIs (Preferred over direct DB access)**:
-    Use the query control plane support APIs for diagnostics.
-
-    ```bash
-    # Portfolio-level support overview
-    curl "http://core-control.dev.lotus/support/portfolios/PORT001/overview"
-
-    # Key-level lineage (epoch/watermark + latest artifacts)
-    curl "http://core-control.dev.lotus/lineage/portfolios/PORT001/securities/SEC001"
-
-    # Portfolio lineage key listing for support dashboards
-    curl "http://core-control.dev.lotus/lineage/portfolios/PORT001/keys?reprocessing_status=CURRENT&skip=0&limit=100"
-
-    # Valuation and aggregation support job queues
-    curl "http://core-control.dev.lotus/support/portfolios/PORT001/valuation-jobs?status=PENDING&skip=0&limit=100"
-    curl "http://core-control.dev.lotus/support/portfolios/PORT001/aggregation-jobs?status=PROCESSING&skip=0&limit=100"
-    ```
-
-## Code Quality
-
-This project uses a lotus-manage-aligned engineering baseline:
-
-```bash
-make lint
-make typecheck
-make openapi-gate
-make warning-gate
-make check
-make coverage-gate
-make ci-local
-make ci
-make ci-main
-```
-
-`make check` enforces OpenAPI documentation quality for query-service endpoints:
-- each business endpoint must define both `summary` and `description`
-- each business endpoint must define `tags` and response contracts (including at least one `2xx` and one error response)
-- duplicate `operationId` values are rejected
-- `/health/*` endpoints are exempt
-
-`make warning-gate` enforces warning-free unit execution (warning budget = `0`).
-
-Active CI lane shape:
-
-- `Remote Feature Lane`
-- `Pull Request Merge Gate`
-- `Main Releasability Gate`
-
-`make ci` is the repository-native source of truth for the pull-request merge gate.
-It includes dependency verification, contract guards, migration smoke, PR-grade
-suite coverage, and the Docker-backed runtime gates that remain required before merge.
-
-`make ci-main` extends `make ci` with the releasability-only gates:
-
-- `Integration Full`
-- `E2E Full`
-- `Performance Load Gate (Full)`
-- `Failure Recovery Gate`
-- `Institutional Sign-Off Pack`
-
-## Tools
-
-The `tools/` directory contains helpful scripts for development:
-
-  * `kafka_setup.py`: Creates Kafka topics.
-  * `demo_data_pack.py`: Loads and validates a realistic multi-portfolio demo data pack.
-  * `dlq_replayer.py`: Replays messages from a Dead Letter Queue.
-  * `reprocess_tool.py`: Triggers reprocessing for specific transactions.
-
-<!-- end list -->
-
- 
-
- 
-
-## Platform Foundation Commands
-
-- `make migration-smoke`
-- `make migration-apply`
-- `make security-audit`
-
-Standards documentation:
-
-- `docs/standards/migration-contract.md`
-- `docs/standards/data-model-ownership.md`
-
-
+Important runtime note:
+
+- use `lotus-core` app-local compose for isolated backend development
+- use `lotus-platform/platform-stack` for shared infrastructure support
+- use `lotus-workbench` canonical runtime when the task is really front-office populated product
+  proof
+
+## Common Commands
+
+- `make install`
+  install development dependencies
+- `make ci-local`
+  feature-lane parity
+- `make ci`
+  PR merge gate parity
+- `make ci-main`
+  main releasability parity
+- `make test`
+  targeted unit gate
+- `make test-unit-db`
+  database-backed unit gate
+- `make test-integration-lite`
+  integration-lite suite
+- `make test-e2e-smoke`
+  E2E smoke
+- `make test-docker-smoke`
+  deterministic Docker endpoint smoke
+- `make route-contract-family-guard`
+  RFC-0082 route-family enforcement
+- `make source-data-product-contract-guard`
+  source-data product contract enforcement
+- `make analytics-input-consumer-contract-guard`
+  downstream analytics-input consumer enforcement
+- `make event-runtime-contract-guard`
+  eventing and supportability contract enforcement
+- `make rfc0083-closure-guard`
+  RFC-0083 closure ledger enforcement
+
+## Validation And CI Lanes
+
+`lotus-core` uses:
+
+1. `Remote Feature Lane`
+2. `Pull Request Merge Gate`
+3. `Main Releasability Gate`
+
+Important lane mapping:
+
+- `make ci-local`
+  fast local feature-lane parity
+- `make ci`
+  PR merge gate parity
+- `make ci-main`
+  main releasability parity
+
+Because this repo has a heavy validation contract, targeted local proof plus GitHub-backed heavy
+execution is often the right workflow.
+
+## Contract Notes
+
+Important current core truths:
+
+1. `query_service` is the operational read plane
+2. `query_control_plane_service` owns analytics-input, snapshot/simulation, support, lineage,
+   integration policy, capability, and export contracts
+3. `lotus-core` owns canonical source data and analytics inputs, not downstream performance or risk
+   conclusions
+4. route-family, temporal-vocabulary, source-data-product, security, and event-runtime governance
+   are all active and enforced by repo-native guards
+5. app-local runtime support is still valid here, but cross-cutting platform ownership lives in
+   `lotus-platform`
+
+Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wiki/API-Surface.md).
+
+## Documentation Map
+
+- target architecture:
+  [docs/architecture/lotus-core-target-architecture.md](docs/architecture/lotus-core-target-architecture.md)
+- contract-family inventory:
+  [docs/architecture/RFC-0082-contract-family-inventory.md](docs/architecture/RFC-0082-contract-family-inventory.md)
+- RFC-0083 target-state gap analysis:
+  [docs/architecture/RFC-0083-target-state-gap-analysis.md](docs/architecture/RFC-0083-target-state-gap-analysis.md)
+- query/control-plane boundary:
+  [docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+- route-family registry:
+  [docs/standards/route-contract-family-registry.json](docs/standards/route-contract-family-registry.json)
+- temporal vocabulary:
+  [docs/standards/temporal-vocabulary.md](docs/standards/temporal-vocabulary.md)
+- wiki home:
+  [wiki/Home.md](wiki/Home.md)
+- wiki data model:
+  [wiki/Data-Models.md](wiki/Data-Models.md)
+- wiki migration guide:
+  [wiki/Database-Migrations.md](wiki/Database-Migrations.md)
+- wiki testing guide:
+  [wiki/Testing-Guide.md](wiki/Testing-Guide.md)
+
+## Wiki Source
+
+Repository-authored wiki pages live under [wiki/](wiki). If the GitHub wiki is published later,
+keep `wiki/` as the canonical source and treat any separate `*.wiki.git` clone as publication
+plumbing only.
