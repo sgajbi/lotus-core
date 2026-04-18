@@ -2,7 +2,7 @@
 
 Status: Draft implementation audit  
 Owner: lotus-core  
-Last reviewed: 2026-04-17  
+Last reviewed: 2026-04-18  
 Scope: query-control-plane source-data products and downstream integration posture
 
 ## Purpose
@@ -874,6 +874,14 @@ The strategic route is now strong for the intended contract:
    from broad holdings payloads or account master records;
 4. `GET /portfolios/{portfolio_id}/cash-accounts` intentionally remains identity metadata only.
 
+Fresh live evidence on April 18, 2026 for `PB_SG_GLOBAL_BAL_001` shows the strategic route
+returning two populated operating cash accounts with truthful translated totals:
+
+1. `CASH-ACC-USD-001` / `CASH_USD_BOOK_OPERATING` = `101347.0000000000` USD;
+2. `CASH-ACC-EUR-001` / `CASH_EUR_BOOK_OPERATING` = `19805.5000000000` EUR,
+   `21943.7611965000` USD translated;
+3. `totals.total_balance_portfolio_currency` = `123290.7611965000`.
+
 ### Swagger / OpenAPI Assessment
 
 For this endpoint, Swagger now makes the following explicit:
@@ -901,6 +909,7 @@ route-purpose wording and endpoint-specific schema examples.
 | `lotus-core #308` strategic `HoldingsAsOf` cash-account balance gap | Closed. lotus-core now publishes `GET /portfolios/{portfolio_id}/cash-balances` and the implementation evidence has been recorded. | Re-open only if a fresh downstream requirement exposes a real gap in the strategic route. |
 | `lotus-core #310` retire deprecated `POST /reporting/cash-balances/query` compatibility route | Closed on 2026-04-16. The deprecated handler, request DTO, reporting-service bridge, route-catalog entries, and direct router/OpenAPI coverage were removed after internal downstream scans plus remote gateway closure evidence showed no active binding. | Keep closed unless fresh evidence shows a real consumer still depended on the retired compatibility route. |
 | `lotus-gateway #119` deprecated `cash-balances/query` usage in holdings flows | Closed on 2026-04-16. Current gateway repo truth and remote issue closure both align to strategic `GET /portfolios/{portfolio_id}/cash-balances` adoption. | Keep closed unless fresh route-level evidence shows gateway reintroduced deprecated `cash-balances/query` usage. |
+| `lotus-gateway #134` foundation workspace cash summary remains zero despite populated strategic cash balances | Still valid on 2026-04-18. Fresh live evidence shows gateway workspace `allocations[Cash].market_value_base = 123290.76` while `summary.total_cash_base = 0.0` and `cash_weight_pct = 0.0`, even though lotus-core now returns populated `GET /portfolios/{portfolio_id}/cash-balances` totals for the same as-of date. | Keep open in gateway until workspace summary mapping uses the strategic cash-balance payload consistently with the already-correct cash allocation block. |
 | `lotus-advise #92` downstream adoption of enrichment/state route hardening | Closed on current repo truth. Advise stateful context now uses `GET /portfolios/{portfolio_id}/cash-balances`, and the remaining active advise bindings stay aligned with the hardened enrichment/state routes. | Re-open only if a later core contract change exposes advise-side drift. |
 
 ## Certified Endpoint Slice: Cash Account Master Operational Read
@@ -1163,6 +1172,13 @@ The route is strong and domain-correct for operational liquidity planning:
 4. the dependency lane already proves success, parameter forwarding, and 404 behavior through the
    ASGI surface.
 
+Fresh live evidence on April 18, 2026 for `PB_SG_GLOBAL_BAL_001` confirms projected settlement
+cashflow handling is now truthful for future-dated withdrawals:
+
+1. `points[2026-04-20].net_cashflow = -18000.0000000000`;
+2. `total_net_cashflow = -18000.0000000000`;
+3. booked-only days around that settlement remain zero rather than double-counted.
+
 ### Swagger / OpenAPI Assessment
 
 For this endpoint, Swagger now makes the following explicit:
@@ -1304,6 +1320,16 @@ The family is strong for its intended purpose:
    transaction linkage, and missing persisted BUY/SELL security-key state rather than collapsing
    investigative misses into empty generic payloads.
 
+Fresh live evidence on April 18, 2026 for `PB_SG_GLOBAL_BAL_001` confirms the strategic
+investigative reads are behaving consistently with the seeded ledger:
+
+1. `GET /portfolios/PB_SG_GLOBAL_BAL_001/positions/FO_EQ_AAPL_US/lots` returns the original BUY
+   lot with `original_quantity = 420.0` and corrected `open_quantity = 310.0`;
+2. `GET /portfolios/PB_SG_GLOBAL_BAL_001/positions/FO_EQ_AAPL_US/sell-disposals` returns the SELL
+   disposal with `quantity_disposed = 110.0000000000`,
+   `disposal_cost_basis_base = 20295.0000000000`, and
+   `realized_gain_loss_base = 2519.0000000000`.
+
 No upstream defect was found in this pass. The family is narrow by design, and that narrowness is
 appropriate.
 
@@ -1337,7 +1363,7 @@ route-purpose wording, parameter descriptions, and concrete investigative not-fo
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core` | No open issue found in this pass | No lotus-core defect was found against the BUY / SELL investigative state routes. |
+| `lotus-core #314` FIFO lot open-quantity drift on BUY / SELL investigative state | Fixed in current local worktree and freshly revalidated on 2026-04-18. Live lot evidence for `PB_SG_GLOBAL_BAL_001` now shows `open_quantity = 310.0` for `TXN-BUY-AAPL-001` after the 110-share SELL, matching the disposal route and seeded transaction history. | Keep open until the implementing change is merged, then close with the recorded lot/disposal evidence and focused unit/integration regression tests. |
 | Downstream repos | No open issue found in this pass | No downstream misuse or stale-contract binding was evidenced for these endpoints, so no new issue was opened. |
 
 ## Certified Endpoint Slice: Portfolio Discovery And Detail Reads
