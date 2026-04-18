@@ -55,4 +55,12 @@ consumer audit instead of treating this page as a route-by-route source of truth
 
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [RFC-0082 Downstream Endpoint Consumer And Test Coverage Audit](../docs/architecture/RFC-0082-downstream-endpoint-consumer-and-test-coverage-audit.md)
+- [Architecture Index](../docs/architecture/README.md)
+- [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [API Surface](API-Surface)
+
+## Read Next
+
+1. use [API Surface](API-Surface) when you need the grouped route families rather than the repo map,
+2. use [System Data Flow](System-Data-Flow) when the integration question depends on write-to-read materialization order,
+3. use [Query Control Plane](Query-Control-Plane) when the change touches snapshot, analytics-input, support, lineage, or policy-bearing contracts.
