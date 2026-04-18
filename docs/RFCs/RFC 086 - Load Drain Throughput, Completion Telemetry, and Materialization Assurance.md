@@ -474,6 +474,14 @@ Implementation status as of 2026-04-18:
 8. a new repo-native `scripts/bank_day_load_reconciliation_report.py` workflow now lets operators
    reconcile an existing completed run without reseeding data, which reduces pressure to rerun a
    long institutional load test just to tighten correctness evidence after drain completion.
+9. scheduler/orchestration review found avoidable database churn in the
+   `pipeline_orchestrator_service` transaction-stage merge path: every processed-transaction and
+   cashflow signal previously paid for an upsert, a follow-up `SELECT`, and a `refresh` before
+   readiness emission could proceed.
+10. the first safe cadence-oriented optimization slice removed those extra reads by switching
+    `PipelineStageRepository.upsert_stage_flags` to `INSERT .. ON CONFLICT .. RETURNING` with
+    `populate_existing=True`; integration tests confirm prerequisite merge behavior and readiness
+    emission semantics remain unchanged.
 
 Phase 1 exit criteria:
 

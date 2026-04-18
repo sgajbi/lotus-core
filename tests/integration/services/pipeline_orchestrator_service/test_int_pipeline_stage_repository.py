@@ -45,6 +45,7 @@ async def test_upsert_stage_flags_merges_prerequisite_signals(
     assert second.cost_event_seen is True
     assert second.cashflow_event_seen is True
     assert second.status == "PENDING"
+    assert second.last_source_event_type == "cashflows.calculated"
 
 
 async def test_mark_stage_completed_if_pending_is_idempotent(

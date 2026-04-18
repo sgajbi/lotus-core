@@ -40,6 +40,8 @@ class PipelineStageRepository:
             .on_conflict_do_update(
                 index_elements=["stage_name", "transaction_id", "epoch"],
                 set_={
+                    # Preserve the owning portfolio on conflict so the stage key cannot be
+                    # rebound by a later event from a different portfolio.
                     "portfolio_id": PipelineStageState.portfolio_id,
                     "security_id": security_id,
                     "business_date": business_date,
@@ -49,26 +51,19 @@ class PipelineStageRepository:
                     "last_source_event_type": source_event_type,
                 },
             )
+            .returning(PipelineStageState)
         )
-        await self.db.execute(stmt)
-
-        result = await self.db.execute(
-            select(PipelineStageState)
-            .where(
-                PipelineStageState.stage_name == stage_name,
-                PipelineStageState.transaction_id == transaction_id,
-                PipelineStageState.epoch == epoch,
+        stage = (
+            await self.db.execute(
+                stmt.execution_options(populate_existing=True)
             )
-            .execution_options(populate_existing=True)
-        )
-        stage = result.scalar_one()
+        ).scalar_one()
         if stage.portfolio_id != portfolio_id:
             raise ValueError(
                 "Pipeline stage key collision detected for different portfolios: "
                 f"{stage_name}/{transaction_id}/{epoch} "
                 f"existing={stage.portfolio_id} incoming={portfolio_id}"
             )
-        await self.db.refresh(stage)
         return stage
 
     async def mark_stage_completed(self, stage_state: PipelineStageState) -> None:
