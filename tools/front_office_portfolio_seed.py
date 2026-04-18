@@ -1634,7 +1634,9 @@ def _verify_front_office_portfolio(
     while datetime.now(tz=UTC) < deadline:
         try:
             _, positions_payload = _request_json(
-                "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/positions"
+                "GET",
+                f"{query_base_url}/portfolios/{expected.portfolio_id}/positions"
+                f"?as_of_date={as_of_date}",
             )
             _, transactions_payload = _request_json(
                 "GET",
@@ -1665,6 +1667,10 @@ def _verify_front_office_portfolio(
                 "POST",
                 f"{query_control_plane_base_url}/integration/portfolios/{expected.portfolio_id}/analytics/reference",
                 payload={"as_of_date": as_of_date, "consumer_system": "lotus-performance"},
+            )
+            _, support_overview = _request_json(
+                "GET",
+                f"{query_control_plane_base_url}/support/portfolios/{expected.portfolio_id}/overview",
             )
             _, cashflow_projection = _request_json(
                 "GET",
@@ -1713,6 +1719,12 @@ def _verify_front_office_portfolio(
             "activity_buckets": len(activity_rows),
             "projected_cashflow_points": len(projected_cashflow_points),
             "has_non_zero_projection": has_non_zero_projection,
+            "positions_data_quality_status": positions_payload.get("data_quality_status"),
+            "cash_data_quality_status": cash_payload.get("data_quality_status"),
+            "pending_valuation_jobs": support_overview.get("pending_valuation_jobs"),
+            "processing_valuation_jobs": support_overview.get("processing_valuation_jobs"),
+            "pending_aggregation_jobs": support_overview.get("pending_aggregation_jobs"),
+            "processing_aggregation_jobs": support_overview.get("processing_aggregation_jobs"),
             "benchmark_code": performance_summary.get("benchmark_code"),
             "analytics_performance_end_date": analytics_reference.get("performance_end_date"),
             "performance_report_end_date": performance_summary.get("report_end_date"),
@@ -1733,6 +1745,12 @@ def _verify_front_office_portfolio(
             and activity_rows
             and len(projected_cashflow_points) >= expected.min_projected_cashflow_points
             and has_non_zero_projection
+            and positions_payload.get("data_quality_status") == "COMPLETE"
+            and cash_payload.get("data_quality_status") == "COMPLETE"
+            and int(support_overview.get("pending_valuation_jobs") or 0) == 0
+            and int(support_overview.get("processing_valuation_jobs") or 0) == 0
+            and int(support_overview.get("pending_aggregation_jobs") or 0) == 0
+            and int(support_overview.get("processing_aggregation_jobs") or 0) == 0
             and benchmark_assignment.get("benchmark_id")
             and performance_summary.get("benchmark_code")
             and _front_office_analytics_are_fresh(
@@ -1751,6 +1769,12 @@ def _verify_front_office_portfolio(
                 "income_types": len(income_rows),
                 "activity_buckets": len(activity_rows),
                 "projected_cashflow_points": len(projected_cashflow_points),
+                "pending_valuation_jobs": support_overview.get("pending_valuation_jobs"),
+                "processing_valuation_jobs": support_overview.get("processing_valuation_jobs"),
+                "pending_aggregation_jobs": support_overview.get("pending_aggregation_jobs"),
+                "processing_aggregation_jobs": support_overview.get("processing_aggregation_jobs"),
+                "positions_data_quality_status": positions_payload.get("data_quality_status"),
+                "cash_data_quality_status": cash_payload.get("data_quality_status"),
                 "benchmark_code": performance_summary.get("benchmark_code"),
                 "analytics_performance_end_date": analytics_reference.get("performance_end_date"),
                 "performance_report_end_date": performance_summary.get("report_end_date"),

@@ -274,7 +274,8 @@ class SupportOverviewResponse(BaseModel):
     latest_booked_transaction_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent transaction business date observed for the portfolio up to business_date."
+            "Most recent booked transaction business date observed for the portfolio on or before "
+            "business_date; future-dated planned activity is excluded."
         ),
         examples=["2025-12-30"],
     )
@@ -289,7 +290,9 @@ class SupportOverviewResponse(BaseModel):
     latest_booked_position_snapshot_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent daily position snapshot date in the current epoch up to business_date."
+            "Most recent daily position snapshot date in the current epoch on or before "
+            "business_date; this can be later than latest_booked_transaction_date when holdings "
+            "carry forward after the last booked trade."
         ),
         examples=["2025-12-30"],
     )
@@ -639,13 +642,18 @@ class PortfolioReadinessResponse(BaseModel):
     )
     latest_booked_transaction_date: Optional[date] = Field(
         None,
-        description="Most recent portfolio transaction date on or before resolved_as_of_date.",
+        description=(
+            "Most recent booked portfolio transaction date on or before resolved_as_of_date; "
+            "future-dated planned activity is excluded."
+        ),
         examples=["2026-03-28"],
     )
     latest_booked_position_snapshot_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent current-epoch position snapshot date on or before resolved_as_of_date."
+            "Most recent current-epoch position snapshot date on or before resolved_as_of_date; "
+            "this can be later than latest_booked_transaction_date when holdings carry forward "
+            "after the last booked trade."
         ),
         examples=["2026-03-28"],
     )

@@ -252,6 +252,69 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert control_call.kwargs["as_of"] == response.generated_at_utc
 
 
+async def test_get_support_overview_keeps_carried_forward_snapshot_ahead_of_last_booked_trade(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 2
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+        oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
+    )
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+        oldest_open_job_id=None,
+        oldest_open_request_fingerprint=None,
+    )
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
+    mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 26)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
+        2025, 8, 30
+    )
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
+
+    response = await service.get_support_overview("P1")
+
+    assert response.latest_transaction_date == date(2025, 9, 2)
+    assert response.latest_booked_transaction_date == date(2025, 8, 26)
+    assert response.latest_position_snapshot_date == date(2025, 8, 30)
+    assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)
+    assert response.publish_allowed is True
+
+
 async def test_get_lineage_raises_when_state_missing(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):

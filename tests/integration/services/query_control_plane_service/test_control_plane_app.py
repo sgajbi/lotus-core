@@ -613,8 +613,28 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
         "Number of valuation jobs currently in FAILED terminal state."
     )
+    assert support_overview["properties"]["latest_booked_transaction_date"]["description"] == (
+        "Most recent booked transaction business date observed for the portfolio on or before "
+        "business_date; future-dated planned activity is excluded."
+    )
+    assert (
+        support_overview["properties"]["latest_booked_position_snapshot_date"]["description"]
+        == "Most recent daily position snapshot date in the current epoch on or before "
+        "business_date; this can be later than latest_booked_transaction_date when holdings "
+        "carry forward after the last booked trade."
+    )
     assert readiness_response["properties"]["holdings"]["description"] == (
         "Holdings/snapshot coverage readiness for the portfolio."
+    )
+    assert readiness_response["properties"]["latest_booked_transaction_date"]["description"] == (
+        "Most recent booked portfolio transaction date on or before resolved_as_of_date; "
+        "future-dated planned activity is excluded."
+    )
+    assert (
+        readiness_response["properties"]["latest_booked_position_snapshot_date"]["description"]
+        == "Most recent current-epoch position snapshot date on or before resolved_as_of_date; "
+        "this can be later than latest_booked_transaction_date when holdings carry forward "
+        "after the last booked trade."
     )
     assert readiness_response["properties"]["pricing"]["description"] == (
         "Pricing and valuation coverage readiness for the portfolio."

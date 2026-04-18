@@ -94,6 +94,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.totals.total_balance_portfolio_currency == Decimal("250")
     assert response.totals.total_balance_reporting_currency == Decimal("300.0")
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 15, tzinfo=UTC)
 
 
@@ -144,6 +145,7 @@ async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_
     assert response.cash_accounts[0].balance_portfolio_currency == Decimal("0")
     assert response.cash_accounts[1].balance_portfolio_currency == Decimal("250")
     assert response.totals.cash_account_count == 2
+    assert response.data_quality_status == "COMPLETE"
 
 
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:

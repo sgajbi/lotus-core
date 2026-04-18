@@ -11,12 +11,15 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    FxRate,
+    Instrument,
+    Portfolio,
     PortfolioTimeseries,
     PositionTimeseries,
     Transaction,
 )
 from portfolio_common.logging_utils import normalize_lineage_value
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -157,12 +160,17 @@ class ReconciliationRepository:
         portfolio_id: str | None,
         business_date: date | None,
         epoch: int | None,
-    ) -> list[DailyPositionSnapshot]:
-        stmt = select(DailyPositionSnapshot).where(
+    ):
+        stmt = (
+            select(DailyPositionSnapshot, Instrument, Portfolio)
+            .join(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
+            .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
+            .where(
             DailyPositionSnapshot.market_price.is_not(None),
             DailyPositionSnapshot.market_value_local.is_not(None),
             DailyPositionSnapshot.cost_basis_local.is_not(None),
             DailyPositionSnapshot.unrealized_gain_loss_local.is_not(None),
+            )
         )
         if portfolio_id is not None:
             stmt = stmt.where(DailyPositionSnapshot.portfolio_id == portfolio_id)
@@ -178,7 +186,7 @@ class ReconciliationRepository:
                 DailyPositionSnapshot.epoch.asc(),
             )
         )
-        return list(result.scalars().all())
+        return result.all()
 
     async def fetch_portfolio_timeseries_rows(
         self,
@@ -257,3 +265,102 @@ class ReconciliationRepository:
             stmt = stmt.where(DailyPositionSnapshot.epoch == epoch)
         result = await self.db.execute(stmt)
         return result.all()
+
+    async def fetch_authoritative_position_timeseries_rows(
+        self,
+        *,
+        portfolio_id: str,
+        business_date: date,
+        epoch: int,
+    ):
+        ranked_position_rows = (
+            select(
+                PositionTimeseries.portfolio_id.label("portfolio_id"),
+                PositionTimeseries.security_id.label("security_id"),
+                PositionTimeseries.date.label("date"),
+                PositionTimeseries.epoch.label("epoch"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionTimeseries.security_id,),
+                    order_by=(PositionTimeseries.date.desc(), PositionTimeseries.epoch.desc()),
+                )
+                .label("rn"),
+            )
+            .where(
+                PositionTimeseries.portfolio_id == portfolio_id,
+                PositionTimeseries.date <= business_date,
+                PositionTimeseries.epoch <= epoch,
+            )
+            .subquery()
+        )
+
+        stmt = (
+            select(PositionTimeseries, Instrument, Portfolio)
+            .join(
+                ranked_position_rows,
+                and_(
+                    PositionTimeseries.portfolio_id == ranked_position_rows.c.portfolio_id,
+                    PositionTimeseries.security_id == ranked_position_rows.c.security_id,
+                    PositionTimeseries.date == ranked_position_rows.c.date,
+                    PositionTimeseries.epoch == ranked_position_rows.c.epoch,
+                ),
+            )
+            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .join(Portfolio, Portfolio.portfolio_id == PositionTimeseries.portfolio_id)
+            .where(ranked_position_rows.c.rn == 1)
+            .order_by(PositionTimeseries.security_id.asc())
+        )
+        result = await self.db.execute(stmt)
+        return result.all()
+
+    async def fetch_authoritative_snapshot_count(
+        self,
+        *,
+        portfolio_id: str,
+        business_date: date,
+        epoch: int,
+    ) -> int:
+        ranked_snapshot_rows = (
+            select(
+                DailyPositionSnapshot.security_id.label("security_id"),
+                DailyPositionSnapshot.date.label("date"),
+                DailyPositionSnapshot.epoch.label("epoch"),
+                func.row_number()
+                .over(
+                    partition_by=(DailyPositionSnapshot.security_id,),
+                    order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.epoch.desc()),
+                )
+                .label("rn"),
+            )
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.date <= business_date,
+                DailyPositionSnapshot.epoch <= epoch,
+            )
+            .subquery()
+        )
+        stmt = select(func.count()).select_from(ranked_snapshot_rows).where(
+            ranked_snapshot_rows.c.rn == 1
+        )
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one() or 0)
+
+    async def fetch_latest_fx_rate(
+        self,
+        *,
+        from_currency: str,
+        to_currency: str,
+        business_date: date,
+    ) -> FxRate | None:
+        stmt = (
+            select(FxRate)
+            .where(
+                FxRate.from_currency == from_currency,
+                FxRate.to_currency == to_currency,
+                FxRate.rate_date <= business_date,
+            )
+            .order_by(FxRate.rate_date.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
