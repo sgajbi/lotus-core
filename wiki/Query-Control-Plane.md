@@ -105,6 +105,7 @@ Check beyond this service when:
 ## Related references
 
 - [API Surface](API-Surface)
+- [Support and Lineage](Support-and-Lineage)
 - [System Data Flow](System-Data-Flow)
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Event Replay Service](Event-Replay-Service)

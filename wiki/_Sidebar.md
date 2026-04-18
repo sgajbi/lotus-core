@@ -7,6 +7,7 @@
 - [Data Models](Data-Models)
 - [API Surface](API-Surface)
 - [Query Control Plane](Query-Control-Plane)
+- [Support and Lineage](Support-and-Lineage)
 - [Ingestion Service](Ingestion-Service)
 - [Event Replay Service](Event-Replay-Service)
 - [Persistence Service](Persistence-Service)
