@@ -18,6 +18,7 @@ Use it for:
 - [Data Models](Data-Models)
 - [API Surface](API-Surface)
 - [Ingestion Service](Ingestion-Service)
+- [Event Replay Service](Event-Replay-Service)
 - [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
 - [Cost Calculator](Cost-Calculator)

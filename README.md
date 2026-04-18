@@ -222,6 +222,8 @@ Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wik
   [wiki/Cashflow-Calculator.md](wiki/Cashflow-Calculator.md)
 - wiki financial reconciliation:
   [wiki/Financial-Reconciliation.md](wiki/Financial-Reconciliation.md)
+- wiki event replay:
+  [wiki/Event-Replay-Service.md](wiki/Event-Replay-Service.md)
 - wiki migration guide:
   [wiki/Database-Migrations.md](wiki/Database-Migrations.md)
 - wiki testing guide:

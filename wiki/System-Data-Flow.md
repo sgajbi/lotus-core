@@ -121,6 +121,7 @@ reconciliation surfaces are part of the supported system behavior.
 
 - [Architecture](Architecture)
 - [API Surface](API-Surface)
+- [Event Replay Service](Event-Replay-Service)
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
