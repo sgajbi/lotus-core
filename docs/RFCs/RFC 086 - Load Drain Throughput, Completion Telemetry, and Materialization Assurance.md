@@ -486,6 +486,9 @@ Implementation status as of 2026-04-18:
     replaced the dataclass-plus-`asdict` material-change comparison with a direct tuple snapshot of
     persisted business fields, reducing per-message comparison churn without changing write
     semantics.
+12. the same review pass also collapsed duplicate dependent-propagation branching in
+    `PositionTimeseriesConsumer` so the hot path now stages aggregation only when a material write
+    occurred but always drives downstream dependent recalculation through one shared path.
 
 Phase 1 exit criteria:
 

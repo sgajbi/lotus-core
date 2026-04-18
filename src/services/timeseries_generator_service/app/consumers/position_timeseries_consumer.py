@@ -20,7 +20,6 @@ from ..repositories.timeseries_repository import TimeseriesRepository
 
 logger = logging.getLogger(__name__)
 
-SERVICE_NAME = "timeseries-generator"
 MAX_DEPENDENT_PROPAGATION_ROWS = 500
 
 
@@ -236,18 +235,10 @@ class PositionTimeseriesConsumer(BaseConsumer):
                                 event.date,
                                 event.epoch,
                             )
-                            await self._propagate_dependent_position_timeseries(
-                                db,
-                                repo,
-                                current_snapshot=current_snapshot,
-                                epoch=event.epoch,
-                                correlation_id=correlation_id,
+                        else:
+                            await self._stage_aggregation_job(
+                                db, event.portfolio_id, event.date, correlation_id
                             )
-                            return
-
-                        await self._stage_aggregation_job(
-                            db, event.portfolio_id, event.date, correlation_id
-                        )
                         await self._propagate_dependent_position_timeseries(
                             db,
                             repo,
