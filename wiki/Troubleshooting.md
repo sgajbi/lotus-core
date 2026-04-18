@@ -8,6 +8,7 @@ Use:
 
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+- [API Surface](API-Surface)
 
 ### Shared runtime or ingress is broken
 
@@ -30,6 +31,35 @@ Prefer support, lineage, replay, and reconciliation APIs before direct database 
 If runtime telemetry and database facts disagree, use durable database state as the source of truth
 and record the rollout gap explicitly.
 
+Start with:
+
+- `GET /support/portfolios/{portfolio_id}/overview`
+- `GET /support/portfolios/{portfolio_id}/readiness?as_of_date=YYYY-MM-DD`
+- `GET /lineage/portfolios/{portfolio_id}/keys`
+
+Then drill deeper into:
+
+- replay evidence via `reprocessing-keys` and `reprocessing-jobs`
+- valuation or aggregation backlog via the support job listings
+- reconciliation blockage via `reconciliation-runs` and `findings`
+- governed institutional validation via `GET /support/load-runs/{run_id}?business_date=YYYY-MM-DD`
+
+### A control-plane route returns 400, 404, or 422 and you are unsure whether the problem is caller-side
+
+Check the route family before changing code.
+
+- `400` usually means request-shape, filter, or policy-evaluation problems
+- `404` usually means the portfolio, session, run id, or job id genuinely does not exist in
+  governed source state
+- `422` on control-plane contracts often means the route exists but the requested source state
+  cannot be fulfilled truthfully because dependencies or source data are missing
+
+Use:
+
+- [Query Control Plane](Query-Control-Plane)
+- [Support and Lineage](Support-and-Lineage)
+- [Architecture Index](../docs/architecture/README.md)
+
 ### Validation scope feels too expensive
 
 Use targeted proof first:
@@ -47,3 +77,26 @@ That material likely belongs in `lotus-platform`, not `lotus-core`.
 See:
 
 - `lotus-platform/wiki/Legacy-Core-Wiki-Migration-Ledger.md`
+
+## Escalation rule
+
+Stay in `lotus-core` when the problem is about:
+
+- domain truth
+- replay and persistence behavior
+- source-data contracts
+- supportability and lineage evidence
+- route-family placement
+
+Move to `lotus-platform` when the problem is about:
+
+- shared ingress
+- shared infrastructure ownership
+- cross-repo runtime wiring
+- ecosystem validation wrappers or platform governance automation
+
+## Related pages
+
+- [Operations Runbook](Operations-Runbook)
+- [Support and Lineage](Support-and-Lineage)
+- [Security and Governance](Security-and-Governance)
