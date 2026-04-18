@@ -67,6 +67,7 @@ Downstream workers consume completion topics and build the supported derived sta
 
 See also:
 
+- [Valuation Calculator](Valuation-Calculator)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
 
 ### 4. Read and support surfaces

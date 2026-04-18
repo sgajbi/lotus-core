@@ -9,6 +9,7 @@
 - [Ingestion Service](Ingestion-Service)
 - [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
+- [Valuation Calculator](Valuation-Calculator)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
 - [Getting Started](Getting-Started)
 - [Development Workflow](Development-Workflow)
