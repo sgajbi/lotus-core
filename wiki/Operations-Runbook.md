@@ -25,13 +25,32 @@ Use APIs before going directly to the database where possible:
 
 - support overview:
   `GET /support/portfolios/{portfolio_id}/overview`
+- readiness:
+  `GET /support/portfolios/{portfolio_id}/readiness?as_of_date=YYYY-MM-DD`
 - lineage routes:
   `GET /lineage/portfolios/{portfolio_id}/keys`
-- replay and ingestion-health routes
-- reconciliation run inspection
+- replay evidence:
+  `GET /support/portfolios/{portfolio_id}/reprocessing-keys`
+  `GET /support/portfolios/{portfolio_id}/reprocessing-jobs`
+- reconciliation run inspection:
+  `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
+- institutional load progress:
+  `GET /support/load-runs/{run_id}?business_date=YYYY-MM-DD`
 
 For event-publication drift, inspect outbox backlog and dispatcher health before assuming downstream
 consumer faults.
+
+## Preferred diagnostic sequence
+
+When a portfolio or load scenario looks wrong, check in this order:
+
+1. support overview or load-run progress for the first truthful status
+2. readiness when the question is front-office or workflow gating rather than operator backlog
+3. replay, valuation, aggregation, and reconciliation listings when support evidence shows lag or
+   blocking controls
+4. lineage routes when the problem is narrowed to a portfolio-security key
+5. database facts only when rollout mismatch, migration doubt, or API/schema drift makes the API
+   evidence insufficient
 
 ## Startup checks
 
@@ -50,6 +69,8 @@ Prefer API diagnostics first, but go to the database when:
 - service rollout has not caught up with support telemetry changes
 - migration state is in doubt
 - you need durable truth for queue or materialization state
+- you need exact run-scoped facts after a branch-only telemetry change has not yet reached the
+  running stack
 
 For schema state:
 
@@ -77,3 +98,9 @@ Treat these as `lotus-platform` issues:
 
 When shared infrastructure ownership is the issue, move to `lotus-platform`. When the issue is core
 domain truth, replay, persistence, or supportability behavior, stay in `lotus-core`.
+
+## Related references
+
+- [Support and Lineage](Support-and-Lineage)
+- [Query Control Plane](Query-Control-Plane)
+- [Architecture Index](../docs/architecture/README.md)
