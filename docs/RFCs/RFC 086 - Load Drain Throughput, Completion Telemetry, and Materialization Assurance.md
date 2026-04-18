@@ -489,6 +489,9 @@ Implementation status as of 2026-04-18:
 12. the same review pass also collapsed duplicate dependent-propagation branching in
     `PositionTimeseriesConsumer` so the hot path now stages aggregation only when a material write
     occurred but always drives downstream dependent recalculation through one shared path.
+13. another drain-path cleanup reordered dependent propagation so the worker now checks whether the
+    downstream `position_timeseries` row exists before fetching same-day cashflows; that removes a
+    wasted query on absent dependent days while preserving the existing stop-propagation behavior.
 
 Phase 1 exit criteria:
 

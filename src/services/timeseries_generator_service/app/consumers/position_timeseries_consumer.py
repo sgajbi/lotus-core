@@ -112,12 +112,6 @@ class PositionTimeseriesConsumer(BaseConsumer):
         epoch: int,
         require_existing: bool = False,
     ) -> tuple[bool, object]:
-        cashflows = await repo.get_all_cashflows_for_security_date(
-            current_snapshot.portfolio_id,
-            current_snapshot.security_id,
-            current_snapshot.date,
-            epoch,
-        )
         existing_timeseries = await repo.get_position_timeseries(
             current_snapshot.portfolio_id,
             current_snapshot.security_id,
@@ -126,6 +120,12 @@ class PositionTimeseriesConsumer(BaseConsumer):
         )
         if require_existing and existing_timeseries is None:
             return False, None
+        cashflows = await repo.get_all_cashflows_for_security_date(
+            current_snapshot.portfolio_id,
+            current_snapshot.security_id,
+            current_snapshot.date,
+            epoch,
+        )
 
         new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
             current_snapshot=current_snapshot,

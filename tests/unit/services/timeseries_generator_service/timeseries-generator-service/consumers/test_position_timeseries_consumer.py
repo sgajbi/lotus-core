@@ -378,6 +378,7 @@ async def test_process_message_does_not_precompute_absent_dependent_day(
     mock_repo.upsert_position_timeseries.assert_awaited_once()
     created_record = mock_repo.upsert_position_timeseries.await_args.args[0]
     assert created_record.date == mock_event.date
+    assert mock_repo.get_all_cashflows_for_security_date.await_count == 1
     assert mock_db_session.execute.await_count == 1
 
 
