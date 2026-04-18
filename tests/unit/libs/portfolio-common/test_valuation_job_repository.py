@@ -154,6 +154,48 @@ async def test_upsert_job_marks_prior_pending_epochs_as_superseded(
     assert "portfolio_valuation_jobs.epoch < 2" in compiled_query
 
 
+@patch("portfolio_common.valuation_job_repository.pg_insert")
+async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
+    mock_pg_insert, repository: ValuationJobRepository, mock_db_session: AsyncMock
+):
+    mock_final_statement = MagicMock()
+    mock_returning_statement = MagicMock()
+    (
+        mock_pg_insert.return_value.values.return_value.on_conflict_do_update.return_value
+    ) = mock_final_statement
+    mock_final_statement.returning.return_value = mock_returning_statement
+    latest_epoch_result = MagicMock()
+    latest_epoch_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 2)]
+    insert_result = MagicMock()
+    insert_result.all.return_value = []
+    skip_result = MagicMock()
+    skip_result.fetchall.return_value = []
+    mock_db_session.execute.side_effect = [latest_epoch_result, insert_result, skip_result]
+
+    await repository.upsert_job(
+        portfolio_id="P1",
+        security_id="S1",
+        valuation_date=date(2025, 8, 10),
+        epoch=2,
+        correlation_id="corr-processing",
+    )
+
+    mock_pg_insert.return_value.values.return_value.on_conflict_do_update.assert_called_once_with(
+        index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
+        set_=ANY,
+        where=ANY,
+    )
+    where_clause = (
+        mock_pg_insert.return_value.values.return_value.on_conflict_do_update.call_args.kwargs[
+            "where"
+        ]
+    )
+    compiled_where = str(where_clause.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_valuation_jobs.status != 'PROCESSING'" in compiled_where
+    assert "portfolio_valuation_jobs.status IN ('PENDING', 'COMPLETE')" in compiled_where
+    assert "IS NOT DISTINCT FROM" in compiled_where
+
+
 async def test_upsert_jobs_deduplicates_duplicate_requests(repository: ValuationJobRepository):
     jobs = [
         ValuationJobUpsert(

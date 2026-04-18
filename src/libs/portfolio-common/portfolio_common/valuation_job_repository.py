@@ -99,8 +99,11 @@ class ValuationJobRepository:
                 index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
                 set_=update_dict,
                 where=not_(
+                    PortfolioValuationJob.status == "PROCESSING"
+                )
+                & not_(
                     and_(
-                        PortfolioValuationJob.status == "COMPLETE",
+                        PortfolioValuationJob.status.in_(("PENDING", "COMPLETE")),
                         PortfolioValuationJob.correlation_id.is_not_distinct_from(
                             stmt.excluded.correlation_id
                         ),

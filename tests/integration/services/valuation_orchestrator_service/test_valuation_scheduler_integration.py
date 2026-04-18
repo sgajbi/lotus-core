@@ -8,6 +8,7 @@ import pytest
 from portfolio_common.database_models import (
     BusinessDate,
     DailyPositionSnapshot,
+    Instrument,
     Portfolio,
     PortfolioValuationJob,
     PositionHistory,
@@ -41,6 +42,7 @@ def _seed_backlog_state(
     security_id: str,
     updated_at: datetime,
     with_history: bool,
+    with_instrument: bool = True,
 ) -> None:
     session.add(
         Portfolio(
@@ -55,6 +57,17 @@ def _seed_backlog_state(
             status="f",
         )
     )
+    if with_instrument:
+        session.add(
+            Instrument(
+                security_id=security_id,
+                name=f"{security_id} Name",
+                isin=f"{security_id}-ISIN",
+                currency="USD",
+                product_type="Equity",
+                asset_class="Equity",
+            )
+        )
     session.add(
         PositionState(
             portfolio_id=portfolio_id,
@@ -195,6 +208,62 @@ async def test_scheduler_drains_zombie_backlog_and_reaches_fresh_live_key(
         date(2025, 8, 10),
         date(2025, 8, 11),
         date(2025, 8, 12),
+    ]
+
+
+async def test_scheduler_ignores_missing_instrument_backfill_keys_and_reaches_live_key(
+    scheduler: ValuationScheduler,
+    clean_db,
+    async_db_session: AsyncSession,
+    db_engine,
+):
+    latest_business_date = date(2025, 8, 12)
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 10)),
+                BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 11)),
+                BusinessDate(calendar_code="GLOBAL", date=latest_business_date),
+            ]
+        )
+        _seed_backlog_state(
+            session,
+            portfolio_id="MISSING_INSTRUMENT_P1",
+            security_id="MISSING_INSTRUMENT_S1",
+            updated_at=datetime(2025, 8, 12, tzinfo=timezone.utc),
+            with_history=True,
+            with_instrument=False,
+        )
+        _seed_backlog_state(
+            session,
+            portfolio_id="LIVE_P2",
+            security_id="LIVE_S2",
+            updated_at=datetime(2025, 8, 12, tzinfo=timezone.utc),
+            with_history=True,
+        )
+        session.commit()
+
+    await scheduler._create_backfill_jobs(async_db_session)
+    await async_db_session.commit()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob)
+                .order_by(
+                    PortfolioValuationJob.portfolio_id.asc(),
+                    PortfolioValuationJob.valuation_date.asc(),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert [(job.portfolio_id, job.security_id, job.valuation_date) for job in jobs] == [
+        ("LIVE_P2", "LIVE_S2", date(2025, 8, 10)),
+        ("LIVE_P2", "LIVE_S2", date(2025, 8, 11)),
+        ("LIVE_P2", "LIVE_S2", date(2025, 8, 12)),
     ]
 
 

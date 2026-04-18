@@ -9,6 +9,7 @@ from portfolio_common import valuation_repository_base as valuation_repository_b
 from portfolio_common.database_models import (
     BusinessDate,
     DailyPositionSnapshot,
+    Instrument,
     MarketPrice,
     Portfolio,
     PortfolioValuationJob,
@@ -1145,6 +1146,54 @@ async def test_upsert_jobs_bulk_skips_stale_rows_and_stages_eligible_rows(
     ]
 
 
+async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = ValuationJobRepository(async_db_session)
+
+    async_db_session.add(
+        PortfolioValuationJob(
+            portfolio_id="P-PROCESSING-1",
+            security_id="S-PROCESSING-1",
+            valuation_date=date(2025, 8, 12),
+            epoch=2,
+            status="PROCESSING",
+            correlation_id="corr-active",
+            attempt_count=1,
+        )
+    )
+    await async_db_session.commit()
+
+    staged_count = await repo.upsert_job(
+        portfolio_id="P-PROCESSING-1",
+        security_id="S-PROCESSING-1",
+        valuation_date=date(2025, 8, 12),
+        epoch=2,
+        correlation_id="corr-active",
+    )
+    await async_db_session.commit()
+
+    job = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob).where(
+                    PortfolioValuationJob.portfolio_id == "P-PROCESSING-1",
+                    PortfolioValuationJob.security_id == "S-PROCESSING-1",
+                    PortfolioValuationJob.valuation_date == date(2025, 8, 12),
+                    PortfolioValuationJob.epoch == 2,
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+
+    assert staged_count == 0
+    assert job.status == "PROCESSING"
+    assert job.correlation_id == "corr-active"
+    assert job.attempt_count == 1
+
+
 async def test_upsert_job_marks_older_pending_epoch_skipped_when_newer_epoch_arrives(
     async_db_session: AsyncSession, clean_db
 ):
@@ -1378,3 +1427,42 @@ async def test_get_latest_business_date_falls_back_to_processing_dates_when_cale
     latest_date = await repo.get_latest_business_date()
 
     assert latest_date == date(2025, 8, 10)
+
+
+async def test_get_states_needing_backfill_skips_keys_without_instrument(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add_all(
+        [
+            Instrument(
+                security_id="S-VALID",
+                name="Valid Security",
+                isin="S-VALID-ISIN",
+                currency="USD",
+                product_type="Equity",
+                asset_class="Equity",
+            ),
+            PositionState(
+                portfolio_id="P-VALID",
+                security_id="S-VALID",
+                epoch=0,
+                watermark_date=date(2025, 8, 10),
+                status="CURRENT",
+            ),
+            PositionState(
+                portfolio_id="P-MISSING",
+                security_id="S-MISSING",
+                epoch=0,
+                watermark_date=date(2025, 8, 9),
+                status="CURRENT",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    states = await repo.get_states_needing_backfill(date(2025, 8, 12), limit=10)
+
+    assert [(state.portfolio_id, state.security_id) for state in states] == [
+        ("P-VALID", "S-VALID")
+    ]

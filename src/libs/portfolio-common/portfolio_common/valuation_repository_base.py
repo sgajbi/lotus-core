@@ -320,6 +320,7 @@ class ValuationRepositoryBase:
     ) -> List[PositionState]:
         stmt = (
             select(PositionState)
+            .join(Instrument, Instrument.security_id == PositionState.security_id)
             .where(PositionState.watermark_date < latest_business_date)
             .order_by(PositionState.updated_at.asc())
             .limit(limit)
