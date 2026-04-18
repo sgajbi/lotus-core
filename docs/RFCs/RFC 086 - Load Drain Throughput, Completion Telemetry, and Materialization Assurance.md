@@ -543,6 +543,9 @@ Implementation status as of 2026-04-18:
 19. valuation scheduler dispatch now uses a higher default per-poll claim budget and stops early
     once a partial claimed batch shows the queue is drained for that poll, reducing avoidable
     handoff idle time without changing worker correctness or duplicate-claim protections.
+20. the load-run support contract now publishes the valuation scheduler poll interval and maximum
+    dispatch jobs per poll, so operators can compare observed handoff lag against the actual
+    configured scheduler claim budget without reading runtime settings directly.
 
 Phase 1 exit criteria:
 

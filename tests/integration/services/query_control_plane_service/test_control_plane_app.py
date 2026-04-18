@@ -323,6 +323,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert load_run_progress_schema["properties"][
         "dependent_position_timeseries_propagation_row_cap"
     ]["type"] == "integer"
+    assert load_run_progress_schema["properties"][
+        "valuation_scheduler_poll_interval_seconds"
+    ]["description"].startswith("Configured valuation scheduler poll interval")
+    assert load_run_progress_schema["properties"][
+        "valuation_scheduler_max_dispatch_jobs_per_poll"
+    ]["description"].startswith("Configured maximum number of valuation jobs")
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"

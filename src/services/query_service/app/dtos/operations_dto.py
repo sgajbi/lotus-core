@@ -690,6 +690,24 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=[1000],
     )
+    valuation_scheduler_poll_interval_seconds: int = Field(
+        ...,
+        description=(
+            "Configured valuation scheduler poll interval in seconds for the active runtime. "
+            "This helps operators interpret how often pending valuation jobs can be claimed "
+            "and dispatched."
+        ),
+        examples=[30],
+    )
+    valuation_scheduler_max_dispatch_jobs_per_poll: int = Field(
+        ...,
+        description=(
+            "Configured maximum number of valuation jobs that the scheduler can claim and "
+            "dispatch in a single poll cycle, expressed as "
+            "`valuation_scheduler_batch_size * valuation_scheduler_dispatch_rounds`."
+        ),
+        examples=[1000],
+    )
     oldest_pending_valuation_date: Optional[date] = Field(
         None,
         description=(

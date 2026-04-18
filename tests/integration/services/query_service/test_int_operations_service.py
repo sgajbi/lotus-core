@@ -30,10 +30,14 @@ from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_
 )
 from src.services.query_service.app.services import operations_service as operations_service_module
 from src.services.query_service.app.services.operations_service import OperationsService
+from src.services.valuation_orchestrator_service.app.settings import (
+    get_valuation_runtime_settings,
+)
 
 pytestmark = pytest.mark.asyncio
 
 FIXED_GENERATED_AT = datetime(2025, 8, 30, 12, 0, tzinfo=timezone.utc)
+VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
 
 
 class _FixedDateTime(datetime):
@@ -1671,6 +1675,15 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
         response.dependent_position_timeseries_propagation_row_cap
         == DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
     )
+    assert (
+        response.valuation_scheduler_poll_interval_seconds
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
+    )
+    assert (
+        response.valuation_scheduler_max_dispatch_jobs_per_poll
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_batch_size
+        * VALUATION_RUNTIME_SETTINGS.valuation_scheduler_dispatch_rounds
+    )
     assert response.oldest_pending_valuation_date == date(2026, 4, 17)
     assert response.oldest_pending_aggregation_date == date(2026, 4, 17)
     assert response.latest_snapshot_date == date(2026, 4, 17)
@@ -1923,6 +1936,15 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     assert (
         response.dependent_position_timeseries_propagation_row_cap
         == DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+    )
+    assert (
+        response.valuation_scheduler_poll_interval_seconds
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
+    )
+    assert (
+        response.valuation_scheduler_max_dispatch_jobs_per_poll
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_batch_size
+        * VALUATION_RUNTIME_SETTINGS.valuation_scheduler_dispatch_rounds
     )
     assert response.completed_valuation_jobs_without_position_timeseries == 1
     assert response.completed_valuation_portfolios_without_position_timeseries == 1

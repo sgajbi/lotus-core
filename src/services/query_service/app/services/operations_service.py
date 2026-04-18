@@ -16,6 +16,10 @@ from portfolio_common.timeseries_constants import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.valuation_orchestrator_service.app.settings import (
+    get_valuation_runtime_settings,
+)
+
 from ..dtos.operations_dto import (
     AnalyticsExportJobListResponse,
     AnalyticsExportJobRecord,
@@ -53,6 +57,15 @@ from ..repositories.operations_repository import (
 from ..support_policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+)
+
+_VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
+VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = (
+    _VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
+)
+VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL = (
+    _VALUATION_RUNTIME_SETTINGS.valuation_scheduler_batch_size
+    * _VALUATION_RUNTIME_SETTINGS.valuation_scheduler_dispatch_rounds
 )
 
 
@@ -464,6 +477,12 @@ class OperationsService:
             failed_aggregation_jobs=summary.failed_aggregation_jobs,
             dependent_position_timeseries_propagation_row_cap=(
                 DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+            ),
+            valuation_scheduler_poll_interval_seconds=(
+                VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
+            ),
+            valuation_scheduler_max_dispatch_jobs_per_poll=(
+                VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL
             ),
             oldest_pending_valuation_date=summary.oldest_pending_valuation_date,
             oldest_pending_aggregation_date=summary.oldest_pending_aggregation_date,
