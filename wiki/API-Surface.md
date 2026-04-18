@@ -29,6 +29,10 @@ Governed downstream contracts for:
 
 Write-ingress contracts for source-data and adapter upload flows.
 
+See also:
+
+- [Ingestion Service](Ingestion-Service)
+
 ### `event_replay_service`
 
 Replay, ingestion-health, DLQ, and operations control-plane contracts.
@@ -63,6 +67,8 @@ Write ingress:
 ```text
 POST /ingest/transactions
 POST /ingest/portfolio-bundle
+POST /ingest/uploads/preview
+POST /ingest/uploads/commit
 ```
 
 ## Source of truth

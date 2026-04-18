@@ -17,6 +17,7 @@ Use it for:
 - [System Data Flow](System-Data-Flow)
 - [Data Models](Data-Models)
 - [API Surface](API-Surface)
+- [Ingestion Service](Ingestion-Service)
 - [Getting Started](Getting-Started)
 - [Development Workflow](Development-Workflow)
 - [Validation and CI](Validation-and-CI)
