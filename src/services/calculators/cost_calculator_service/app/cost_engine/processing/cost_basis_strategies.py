@@ -16,6 +16,7 @@ class CostBasisStrategy(Protocol):
     ) -> Tuple[Decimal, Decimal, Decimal, Optional[str]]: ...
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal: ...
     def set_initial_lots(self, transactions: list[Transaction]): ...
+    def get_open_lot_quantities(self) -> dict[str, Decimal]: ...
 
 
 class FIFOBasisStrategy:
@@ -25,6 +26,7 @@ class FIFOBasisStrategy:
 
     def __init__(self):
         self._open_lots: Dict[Tuple[str, str], Deque[CostLot]] = defaultdict(deque)
+        self._remaining_quantity_by_transaction_id: Dict[str, Decimal] = {}
         logger.debug("FIFOBasisStrategy initialized.")
 
     def add_buy_lot(self, transaction: Transaction):
@@ -48,6 +50,9 @@ class FIFOBasisStrategy:
         )
         key = (transaction.portfolio_id, transaction.instrument_id)
         self._open_lots[key].append(new_lot)
+        self._remaining_quantity_by_transaction_id[transaction.transaction_id] = (
+            transaction.quantity
+        )
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
@@ -77,6 +82,9 @@ class FIFOBasisStrategy:
                 total_matched_cost_local += required_quantity * current_lot.cost_per_share_local
                 consumed_quantity += required_quantity
                 current_lot.remaining_quantity -= required_quantity
+                self._remaining_quantity_by_transaction_id[current_lot.transaction_id] = (
+                    current_lot.remaining_quantity
+                )
                 required_quantity = Decimal(0)
 
                 if current_lot.remaining_quantity == Decimal(0):
@@ -90,6 +98,7 @@ class FIFOBasisStrategy:
                 )
                 consumed_quantity += current_lot.remaining_quantity
                 required_quantity -= current_lot.remaining_quantity
+                self._remaining_quantity_by_transaction_id[current_lot.transaction_id] = Decimal(0)
                 lots_for_instrument.popleft()
         return total_matched_cost_base, total_matched_cost_local, consumed_quantity, None
 
@@ -101,6 +110,9 @@ class FIFOBasisStrategy:
         for txn in transactions:
             if txn.transaction_type == "BUY":
                 self.add_buy_lot(txn)
+
+    def get_open_lot_quantities(self) -> dict[str, Decimal]:
+        return dict(self._remaining_quantity_by_transaction_id)
 
 
 class AverageCostBasisStrategy(CostBasisStrategy):
@@ -177,3 +189,6 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         for txn in transactions:
             if txn.transaction_type == "BUY":
                 self.add_buy_lot(txn)
+
+    def get_open_lot_quantities(self) -> dict[str, Decimal]:
+        return {}

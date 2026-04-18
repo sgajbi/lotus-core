@@ -284,6 +284,25 @@ class CostCalculatorRepository:
             stmt.on_conflict_do_update(index_elements=["source_transaction_id"], set_=update_dict)
         )
 
+    async def update_lot_open_quantities(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+        open_quantities_by_source_transaction_id: dict[str, Decimal],
+    ) -> None:
+        """Reconciles persisted lot state with the latest engine-derived remaining quantities."""
+        stmt = select(PositionLotState).where(
+            PositionLotState.portfolio_id == portfolio_id,
+            PositionLotState.security_id == security_id,
+        )
+        lot_rows = (await self.db.execute(stmt)).scalars().all()
+        for lot_row in lot_rows:
+            lot_row.open_quantity = open_quantities_by_source_transaction_id.get(
+                lot_row.source_transaction_id,
+                Decimal(0),
+            )
+
     async def upsert_accrued_income_offset_state(
         self, transaction_result: EngineTransaction
     ) -> None:

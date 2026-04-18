@@ -112,7 +112,7 @@ def test_transaction_processor_handles_backdated_insert(
 
     # ACT
     # The engine processes the full list and is responsible for sorting and calculating
-    processed_txns, errored_txns = transaction_processor.process_transactions(
+    processed_txns, errored_txns, open_lot_quantities = transaction_processor.process_transactions(
         existing_transactions_raw=[],  # Simulating a full recalculation call
         new_transactions_raw=all_transactions_raw,
     )
@@ -134,6 +134,10 @@ def test_transaction_processor_handles_backdated_insert(
     assert results["BUY_2_BACKDATED"].net_cost == Decimal("800")
     assert results["BUY_1"].realized_gain_loss == Decimal("0")
     assert results["BUY_2_BACKDATED"].realized_gain_loss == Decimal("0")
+    assert open_lot_quantities == {
+        "BUY_1": Decimal("50"),
+        "BUY_2_BACKDATED": Decimal("100"),
+    }
 
 
 @patch(

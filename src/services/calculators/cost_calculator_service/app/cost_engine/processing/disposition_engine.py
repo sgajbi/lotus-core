@@ -40,3 +40,6 @@ class DispositionEngine:
             if txn.transaction_type == TransactionType.BUY and txn.quantity > Decimal(0)
         ]
         self._cost_basis_strategy.set_initial_lots(filtered_buys)
+
+    def get_open_lot_quantities(self) -> dict[str, Decimal]:
+        return self._cost_basis_strategy.get_open_lot_quantities()

@@ -278,7 +278,7 @@ class CostCalculatorConsumer(BaseConsumer):
                             new_transaction_ids = {event.transaction_id}
 
                             processor = self._get_transaction_processor(cost_basis_method)
-                            processed, errored = processor.process_transactions(
+                            processed, errored, open_lot_quantities = processor.process_transactions(
                                 existing_transactions_raw=[],
                                 new_transactions_raw=all_transactions_raw,
                             )
@@ -371,6 +371,13 @@ class CostCalculatorConsumer(BaseConsumer):
 
                                 events_to_publish.append(
                                     TransactionEvent.model_validate(updated_txn)
+                                )
+
+                            if event_transaction_type in {"BUY", "SELL"}:
+                                await repo.update_lot_open_quantities(
+                                    portfolio_id=event.portfolio_id,
+                                    security_id=event.security_id,
+                                    open_quantities_by_source_transaction_id=open_lot_quantities,
                                 )
 
                         emitted_events: list[TransactionEvent] = []

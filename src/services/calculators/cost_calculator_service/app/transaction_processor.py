@@ -1,5 +1,6 @@
 import logging
 import time
+from decimal import Decimal
 from typing import Any
 
 from .cost_engine.domain.models.error import ErroredTransaction
@@ -39,7 +40,7 @@ class TransactionProcessor:
         self,
         existing_transactions_raw: list[dict[str, Any]],
         new_transactions_raw: list[dict[str, Any]],
-    ) -> tuple[list[Transaction], list[ErroredTransaction]]:
+    ) -> tuple[list[Transaction], list[ErroredTransaction], dict[str, Decimal]]:
         start_time = time.monotonic()
         try:
             self._error_reporter.clear()
@@ -77,7 +78,11 @@ class TransactionProcessor:
                 txn for txn in processed_timeline if txn.transaction_id in new_transaction_ids
             ]
 
-            return final_processed_new, self._error_reporter.get_errors()
+            return (
+                final_processed_new,
+                self._error_reporter.get_errors(),
+                self._disposition_engine.get_open_lot_quantities(),
+            )
         finally:
             duration = time.monotonic() - start_time
             RECALCULATION_DURATION_SECONDS.observe(duration)

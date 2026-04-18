@@ -110,3 +110,67 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
     assert offset.accrued_interest_paid_local == Decimal("125")
     assert offset.remaining_offset_local == Decimal("125")
     assert offset.linked_transaction_group_id == "LTG-2026-777"
+
+
+async def test_cost_repository_updates_lot_open_quantity_from_engine_state(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_SLICE4_02",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="Medium",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_SLICE4_02",
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        DBTransaction(
+            transaction_id="TXN_SLICE4_02",
+            portfolio_id="PORT_SLICE4_02",
+            instrument_id="BOND_USD_02",
+            security_id="BOND_USD_02",
+            transaction_type="BUY",
+            quantity=Decimal("100"),
+            price=Decimal("98"),
+            gross_transaction_amount=Decimal("9800"),
+            trade_currency="USD",
+            currency="USD",
+            transaction_date=datetime(2026, 2, 28, 10, 0, 0),
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add(
+        PositionLotState(
+            lot_id="LOT-TXN_SLICE4_02",
+            source_transaction_id="TXN_SLICE4_02",
+            portfolio_id="PORT_SLICE4_02",
+            instrument_id="BOND_USD_02",
+            security_id="BOND_USD_02",
+            acquisition_date=date(2026, 2, 28),
+            original_quantity=Decimal("100"),
+            open_quantity=Decimal("100"),
+            lot_cost_local=Decimal("9800"),
+            lot_cost_base=Decimal("9800"),
+        )
+    )
+    await async_db_session.commit()
+
+    repo = CostCalculatorRepository(async_db_session)
+    await repo.update_lot_open_quantities(
+        portfolio_id="PORT_SLICE4_02",
+        security_id="BOND_USD_02",
+        open_quantities_by_source_transaction_id={"TXN_SLICE4_02": Decimal("40")},
+    )
+    await async_db_session.commit()
+
+    lot_stmt = select(PositionLotState).where(
+        PositionLotState.source_transaction_id == "TXN_SLICE4_02"
+    )
+    lot = (await async_db_session.execute(lot_stmt)).scalar_one()
+    assert lot.open_quantity == Decimal("40")
