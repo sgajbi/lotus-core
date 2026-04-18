@@ -43,6 +43,7 @@ Control execution and reconciliation run contracts.
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
+- [System Data Flow](System-Data-Flow)
 
 ## Ownership rule
 
