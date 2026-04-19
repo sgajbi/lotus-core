@@ -11,6 +11,7 @@ ALLOWED_OS_GETENV_PATHS = {
     Path("src/libs/portfolio-common/portfolio_common/db.py"),
     Path("src/libs/portfolio-common/portfolio_common/logging_utils.py"),
     Path("src/libs/portfolio-common/portfolio_common/outbox_settings.py"),
+    Path("src/libs/portfolio-common/portfolio_common/valuation_runtime_settings.py"),
     Path("src/services/valuation_orchestrator_service/app/settings.py"),
     Path("src/services/ingestion_service/app/settings.py"),
     Path("src/services/portfolio_aggregation_service/app/settings.py"),
