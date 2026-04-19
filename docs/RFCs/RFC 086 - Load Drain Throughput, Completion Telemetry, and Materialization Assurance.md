@@ -582,6 +582,9 @@ Implementation status as of 2026-04-18:
 29. the institutional sign-off pack now validates the latest bank-day load reconciliation artifact
     alongside the existing Docker, latency, performance, and failure-recovery artifacts, so
     Phase 3 evidence generation includes explicit completion and sampled reconciliation proof.
+30. the institutional sign-off pack now also enforces a configurable maximum load completion lag
+    using reconciliation-artifact stage-tail evidence, so approval-grade evidence can fail when a
+    run completes only after an unacceptable post-snapshot drain period.
 
 Phase 1 exit criteria:
 

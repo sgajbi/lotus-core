@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from scripts.institutional_signoff_pack import (
+    _completion_lag_seconds,
     _docker_smoke_status,
     _failure_recovery_status,
     _latency_status,
@@ -95,6 +96,8 @@ def test_load_reconciliation_status_requires_complete_reconciled_run(tmp_path: P
                 "operator_progress_state": "COMPLETE",
                 "complete_portfolios": 1000,
                 "portfolios_ingested": 1000,
+                "latest_snapshot_materialized_at_utc": "2026-04-18T09:05:10.887768Z",
+                "latest_portfolio_timeseries_materialized_at_utc": "2026-04-18T09:32:59.815258Z",
             },
             "summary": {
                 "all_samples_reconciled": True,
@@ -105,10 +108,11 @@ def test_load_reconciliation_status_requires_complete_reconciled_run(tmp_path: P
         },
     )
 
-    status = _load_reconciliation_status(artifact)
+    status = _load_reconciliation_status(artifact, max_completion_lag_seconds=1800)
 
     assert status.passed is True
     assert "complete_portfolios=1000/1000" in status.summary
+    assert "completion_lag_seconds=" in status.summary
 
 
 def test_load_reconciliation_status_rejects_incomplete_or_unreconciled_artifact(
@@ -124,6 +128,8 @@ def test_load_reconciliation_status_rejects_incomplete_or_unreconciled_artifact(
                 "operator_progress_state": "SLOW",
                 "complete_portfolios": 733,
                 "portfolios_ingested": 1000,
+                "latest_snapshot_materialized_at_utc": "2026-04-18T09:05:10.887768Z",
+                "latest_portfolio_timeseries_materialized_at_utc": "2026-04-18T09:32:59.815258Z",
             },
             "summary": {
                 "all_samples_reconciled": False,
@@ -134,7 +140,49 @@ def test_load_reconciliation_status_rejects_incomplete_or_unreconciled_artifact(
         },
     )
 
-    status = _load_reconciliation_status(artifact)
+    status = _load_reconciliation_status(artifact, max_completion_lag_seconds=1800)
 
     assert status.passed is False
     assert "run_state=MATERIALIZING" in status.summary
+
+
+def test_completion_lag_seconds_prefers_explicit_tail_fields() -> None:
+    lag_seconds = _completion_lag_seconds(
+        {
+            "latest_snapshot_to_position_timeseries_tail_seconds": 1668.362283,
+            "latest_position_timeseries_to_portfolio_timeseries_tail_seconds": 0.565207,
+            "latest_snapshot_materialized_at_utc": "2026-04-18T09:05:10.887768Z",
+            "latest_portfolio_timeseries_materialized_at_utc": "2026-04-18T09:32:59.815258Z",
+        }
+    )
+
+    assert lag_seconds == 1668.92749
+
+
+def test_load_reconciliation_status_rejects_excess_completion_lag(tmp_path: Path) -> None:
+    artifact = tmp_path / "20260418T142850-bank-day-load-reconciliation.json"
+    _write_json(
+        artifact,
+        {
+            "portfolio_count_evaluated": 5,
+            "run_progress": {
+                "run_state": "COMPLETE",
+                "operator_progress_state": "COMPLETE",
+                "complete_portfolios": 1000,
+                "portfolios_ingested": 1000,
+                "latest_snapshot_to_position_timeseries_tail_seconds": 1700.0,
+                "latest_position_timeseries_to_portfolio_timeseries_tail_seconds": 200.0,
+            },
+            "summary": {
+                "all_samples_reconciled": True,
+                "all_position_counts_match_expected": True,
+                "all_transaction_counts_match_expected": True,
+                "all_market_values_match_expected": True,
+            },
+        },
+    )
+
+    status = _load_reconciliation_status(artifact, max_completion_lag_seconds=1800)
+
+    assert status.passed is False
+    assert "completion_lag_seconds=1900.0" in status.summary

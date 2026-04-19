@@ -19,6 +19,13 @@ class ArtifactStatus:
     summary: str
 
 
+def _parse_optional_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    return datetime.fromisoformat(normalized)
+
+
 def _latest_artifact(output_dir: Path, pattern: str) -> Path | None:
     # CI artifact downloads can include nested paths.
     # Use recursive discovery so sign-off generation remains robust
@@ -119,7 +126,40 @@ def _failure_recovery_status(path: Path | None) -> ArtifactStatus:
     )
 
 
-def _load_reconciliation_status(path: Path | None) -> ArtifactStatus:
+def _completion_lag_seconds(run_progress: dict[str, Any]) -> float | None:
+    explicit_tail = run_progress.get("latest_snapshot_to_position_timeseries_tail_seconds")
+    explicit_portfolio_tail = run_progress.get(
+        "latest_position_timeseries_to_portfolio_timeseries_tail_seconds"
+    )
+    if isinstance(explicit_tail, Real) and isinstance(explicit_portfolio_tail, Real):
+        return round(float(explicit_tail) + float(explicit_portfolio_tail), 6)
+    latest_snapshot_materialized_at = _parse_optional_datetime(
+        run_progress.get("latest_snapshot_materialized_at_utc")
+    )
+    latest_portfolio_timeseries_materialized_at = _parse_optional_datetime(
+        run_progress.get("latest_portfolio_timeseries_materialized_at_utc")
+    )
+    if (
+        latest_snapshot_materialized_at is None
+        or latest_portfolio_timeseries_materialized_at is None
+    ):
+        return None
+    return round(
+        max(
+            (
+                latest_portfolio_timeseries_materialized_at - latest_snapshot_materialized_at
+            ).total_seconds(),
+            0.0,
+        ),
+        6,
+    )
+
+
+def _load_reconciliation_status(
+    path: Path | None,
+    *,
+    max_completion_lag_seconds: int,
+) -> ArtifactStatus:
     if path is None:
         return ArtifactStatus(
             name="bank_day_load_reconciliation",
@@ -135,6 +175,7 @@ def _load_reconciliation_status(path: Path | None) -> ArtifactStatus:
     operator_progress_state = str(run_progress.get("operator_progress_state", "UNKNOWN"))
     complete_portfolios = int(run_progress.get("complete_portfolios", 0) or 0)
     portfolios_ingested = int(run_progress.get("portfolios_ingested", 0) or 0)
+    completion_lag_seconds = _completion_lag_seconds(run_progress)
     passed = (
         bool(summary.get("all_samples_reconciled"))
         and bool(summary.get("all_position_counts_match_expected"))
@@ -144,12 +185,16 @@ def _load_reconciliation_status(path: Path | None) -> ArtifactStatus:
         and run_state == "COMPLETE"
         and operator_progress_state == "COMPLETE"
         and complete_portfolios == portfolios_ingested
+        and completion_lag_seconds is not None
+        and completion_lag_seconds <= max_completion_lag_seconds
     )
     artifact_summary = (
         f"run_state={run_state}, operator_progress_state={operator_progress_state}, "
         f"complete_portfolios={complete_portfolios}/{portfolios_ingested}, "
         f"portfolios_evaluated={portfolios_evaluated}, "
-        f"all_samples_reconciled={summary.get('all_samples_reconciled')}"
+        f"all_samples_reconciled={summary.get('all_samples_reconciled')}, "
+        f"completion_lag_seconds={completion_lag_seconds}, "
+        f"max_completion_lag_seconds={max_completion_lag_seconds}"
     )
     return ArtifactStatus(
         name="bank_day_load_reconciliation",
@@ -255,6 +300,15 @@ def main() -> int:
         default=24,
         help="Maximum allowed artifact age for recency policy.",
     )
+    parser.add_argument(
+        "--max-load-completion-lag-seconds",
+        type=int,
+        default=1800,
+        help=(
+            "Maximum allowed snapshot-to-portfolio completion lag for bank-day "
+            "reconciliation evidence."
+        ),
+    )
     args = parser.parse_args()
 
     artifact_dir = Path(args.artifact_dir).resolve()
@@ -266,7 +320,8 @@ def main() -> int:
         _performance_status(_latest_artifact(artifact_dir, "*-performance-load-gate.json")),
         _failure_recovery_status(_latest_artifact(artifact_dir, "*-failure-recovery-gate.json")),
         _load_reconciliation_status(
-            _latest_artifact(artifact_dir, "*-bank-day-load-reconciliation.json")
+            _latest_artifact(artifact_dir, "*-bank-day-load-reconciliation.json"),
+            max_completion_lag_seconds=args.max_load_completion_lag_seconds,
         ),
     ]
     statuses = _apply_recency_policy(statuses, max_age_hours=args.max_age_hours)
