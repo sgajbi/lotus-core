@@ -197,7 +197,11 @@ Most relevant current governance:
     workload: use `scripts/bank_day_load_reconciliation_report.py` against the completed `run_id`
     to collect sampled or exhaustive reconciliation proof for positions, transactions, support
     overview state, and timeseries-integrity findings.
-25. legacy PAS-era wiki material should be filtered through the platform migration ledger before
+26. institutional sign-off evidence selection must prefer the strongest available proof, not just
+    the newest artifact timestamp: use `full` profile-tier performance-load artifacts ahead of
+    newer `fast` artifacts, and prefer exhaustive bank-day reconciliation artifacts where
+    `portfolio_count_evaluated == portfolios_ingested` ahead of newer sampled refresh artifacts,
+27. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 
 ## Context Maintenance Rule

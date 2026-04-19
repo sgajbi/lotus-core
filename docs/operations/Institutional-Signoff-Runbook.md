@@ -9,6 +9,7 @@ Evidence must come from the latest generated artifacts in `output/task-runs`:
 2. `*-latency-profile.json`
 3. `*-performance-load-gate.json` (full tier)
 4. `*-failure-recovery-gate.json`
+5. `*-bank-day-load-reconciliation.json` (prefer exhaustive portfolio coverage when both exhaustive and sampled artifacts exist)
 
 ## Generate Sign-Off Pack
 Run:
@@ -37,10 +38,11 @@ All items must be `yes`:
 2. Latency profile has zero endpoint violations (`p95 <= budget`, no request errors).
 3. Performance load gate (full) passed with no failed profiles.
 4. Failure recovery gate passed with no failed checks.
-5. Evidence artifacts are less than 24 hours old.
-6. CI run containing these artifacts is green on `main` or release candidate branch.
-7. Operations control-plane endpoints are reachable and token-guarded.
-8. No unresolved Sev-1/Sev-2 production-readiness defects.
+5. Bank-day load reconciliation proves complete portfolio coverage, reconciled sampled or exhaustive tie-out, and bounded completion lag.
+6. Evidence artifacts are less than 24 hours old.
+7. CI run containing these artifacts is green on `main` or release candidate branch.
+8. Operations control-plane endpoints are reachable and token-guarded.
+9. No unresolved Sev-1/Sev-2 production-readiness defects.
 
 ## Interpretation Guidance
 1. If smoke fails:
@@ -51,6 +53,12 @@ All items must be `yes`:
 - inspect failed profile(s), backlog drain behavior, and pressure metrics.
 4. If failure recovery fails:
 - do not proceed; fix recovery determinism first.
+5. If reconciliation fails:
+- treat incomplete portfolio breadth, sampled or exhaustive mismatch, or excessive post-snapshot completion lag as release blockers.
+6. When both lightweight and approval-grade artifacts exist:
+- sign-off must use the strongest available evidence, not merely the newest artifact.
+- for performance load, prefer `full` profile-tier artifacts over newer `fast` artifacts.
+- for bank-day reconciliation, prefer exhaustive artifacts where `portfolio_count_evaluated == portfolios_ingested` over newer sampled refresh artifacts.
 
 ## Escalation Rules
 1. Any hard gate failure blocks release.
