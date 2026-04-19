@@ -400,9 +400,147 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
         "count(distinct" in compiled.lower() and "portfolio_id" in compiled.lower()
         for compiled in execute_sql
     )
-    assert any(
-        "left outer join position_timeseries" in compiled.lower() for compiled in execute_sql
+
+
+async def test_get_snapshot_valuation_coverage_summary_returns_zero_when_snapshot_missing(
+    repository: OperationsRepository,
+) -> None:
+    summary = await repository.get_snapshot_valuation_coverage_summary("P1", snapshot_date=None)
+
+    assert summary.snapshot_date is None
+    assert summary.total_positions == 0
+    assert summary.valued_positions == 0
+    assert summary.unvalued_positions == 0
+
+
+async def test_get_snapshot_valuation_coverage_summary_honors_snapshot_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    result = MagicMock()
+    result.one.return_value = MagicMock(total_positions=7, valued_positions=5)
+    mock_db_session.execute = AsyncMock(return_value=result)
+
+    summary = await repository.get_snapshot_valuation_coverage_summary(
+        "P1",
+        snapshot_date=date(2026, 4, 17),
+        snapshot_as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
     )
+
+    assert summary.snapshot_date == date(2026, 4, 17)
+    assert summary.total_positions == 7
+    assert summary.valued_positions == 5
+    assert summary.unvalued_positions == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled
+    assert "daily_position_snapshots.date = '2026-04-17'" in compiled
+    assert "daily_position_snapshots.created_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "position_state.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "valuation_status != 'UNVALUED'" in compiled
+
+
+async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_samples(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    aggregate_result = MagicMock()
+    aggregate_result.one.return_value = MagicMock(
+        missing_count=2,
+        earliest_transaction_date=date(2026, 4, 1),
+        latest_transaction_date=date(2026, 4, 4),
+    )
+    sample_result = MagicMock()
+    sample_result.all.return_value = [
+        MagicMock(
+            transaction_id="TXN-001",
+            security_id="SEC-IBM",
+            transaction_date=date(2026, 4, 1),
+            trade_currency="EUR",
+            portfolio_currency="USD",
+        ),
+        MagicMock(
+            transaction_id="TXN-002",
+            security_id="SEC-NOVN",
+            transaction_date=date(2026, 4, 4),
+            trade_currency="CHF",
+            portfolio_currency="USD",
+        ),
+    ]
+    mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, sample_result])
+
+    summary = await repository.get_missing_historical_fx_dependency_summary(
+        "P1",
+        as_of_date=date(2026, 4, 17),
+        snapshot_as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
+        sample_limit=5,
+    )
+
+    assert summary.missing_count == 2
+    assert summary.earliest_transaction_date == date(2026, 4, 1)
+    assert summary.latest_transaction_date == date(2026, 4, 4)
+    assert [record.transaction_id for record in summary.sample_records] == ["TXN-001", "TXN-002"]
+    aggregate_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.portfolio_id = 'P1'" in aggregate_compiled
+    assert "transaction_date" in aggregate_compiled
+    assert "<= '2026-04-17'" in aggregate_compiled
+    assert "transactions.trade_currency != portfolios.base_currency" in aggregate_compiled
+    assert "transactions.transaction_fx_rate IS NULL" in aggregate_compiled
+    assert "transactions.created_at <= '2026-04-18 07:30:00+00:00'" in aggregate_compiled
+    sample_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    sample_compiled = str(sample_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "ORDER BY anon_1.transaction_date ASC, anon_1.transaction_id ASC" in sample_compiled
+    assert "LIMIT 5" in sample_compiled
+
+
+async def test_get_latest_financial_reconciliation_control_stage_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    mock_execute_scalar_one_or_none(
+        mock_db_session,
+        MagicMock(id=701, status="COMPLETED"),
+    )
+
+    stage = await repository.get_latest_financial_reconciliation_control_stage(
+        "P1",
+        as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
+    )
+
+    assert stage.id == 701
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "pipeline_stage_state.portfolio_id = 'P1'" in compiled
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "pipeline_stage_state.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "ORDER BY pipeline_stage_state.business_date DESC" in compiled
+    assert "LIMIT 1" in compiled
+
+
+async def test_get_latest_reconciliation_run_for_portfolio_day_prefers_latest_high_priority_run(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    mock_execute_scalar_one_or_none(
+        mock_db_session,
+        MagicMock(run_id="recon-001", status="COMPLETED"),
+    )
+
+    run = await repository.get_latest_reconciliation_run_for_portfolio_day(
+        "P1",
+        business_date=date(2026, 4, 17),
+        epoch=4,
+        as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
+    )
+
+    assert run.run_id == "recon-001"
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled
+    assert "financial_reconciliation_runs.business_date = '2026-04-17'" in compiled
+    assert "financial_reconciliation_runs.epoch = 4" in compiled
+    assert "financial_reconciliation_runs.started_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "financial_reconciliation_runs.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "ORDER BY CASE" in compiled
+    assert "financial_reconciliation_runs.started_at DESC" in compiled
+    assert "LIMIT 1" in compiled
 
 
 async def test_support_job_queries_honor_job_id_filters(

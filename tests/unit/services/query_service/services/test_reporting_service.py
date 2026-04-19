@@ -351,3 +351,149 @@ async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mod
     assert response.look_through.requested_mode == "direct_only"
     assert response.look_through.applied_mode == "direct_only"
     assert response.look_through.supported is True
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_can_decompose_position_requires_complete_weights() -> None:
+    assert ReportingService._can_decompose_position([]) is False
+    assert (
+        ReportingService._can_decompose_position(
+            [
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF1",
+                    component_weight=Decimal("0.7"),
+                    component_instrument=_instrument("ETF1"),
+                ),
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF2",
+                    component_weight=Decimal("0.2"),
+                    component_instrument=_instrument("ETF2"),
+                ),
+            ]
+        )
+        is False
+    )
+    assert (
+        ReportingService._can_decompose_position(
+            [
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF1",
+                    component_weight=Decimal("0.6"),
+                    component_instrument=_instrument("ETF1"),
+                ),
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF2",
+                    component_weight=Decimal("0.4"),
+                    component_instrument=_instrument("ETF2"),
+                ),
+            ]
+        )
+        is True
+    )
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_resolve_scope_requires_business_date() -> None:
+    repo = AsyncMock()
+    repo.get_latest_business_date.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(ValueError, match="No business date is available"):
+            await service._resolve_scope_portfolios_and_date(
+                ReportingScope(portfolio_id="P1"),
+                None,
+            )
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_resolve_scope_requires_matching_portfolios() -> None:
+    repo = AsyncMock()
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = []
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(ValueError, match="No portfolios matched"):
+            await service._resolve_scope_portfolios_and_date(
+                ReportingScope(portfolio_id="P1"),
+                None,
+            )
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_resolve_reporting_currency_covers_scope_rules() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        assert (
+            await service._resolve_reporting_currency(
+                scope=ReportingScope(portfolio_id="P1"),
+                portfolios=[portfolio],
+                requested_reporting_currency="SGD",
+            )
+            == "SGD"
+        )
+        assert (
+            await service._resolve_reporting_currency(
+                scope=ReportingScope(portfolio_id="P1"),
+                portfolios=[portfolio],
+                requested_reporting_currency=None,
+            )
+            == "USD"
+        )
+        with pytest.raises(ValueError, match="reporting_currency is required"):
+            await service._resolve_reporting_currency(
+                scope=ReportingScope(portfolio_ids=["P1", "P2"]),
+                portfolios=[portfolio],
+                requested_reporting_currency=None,
+            )
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_get_fx_rate_uses_cache_and_raises_for_missing_rate() -> None:
+    repo = AsyncMock()
+    repo.get_latest_fx_rate.side_effect = [Decimal("1.25"), None]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        first = await service._get_fx_rate("EUR", "USD", date(2026, 3, 27))
+        second = await service._get_fx_rate("EUR", "USD", date(2026, 3, 27))
+        assert first == Decimal("1.25")
+        assert second == Decimal("1.25")
+        assert repo.get_latest_fx_rate.await_count == 1
+        with pytest.raises(ValueError, match="FX rate not found"):
+            await service._get_fx_rate("CHF", "USD", date(2026, 3, 27))
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_latest_snapshot_evidence_timestamp_prefers_latest_available_update(
+) -> None:
+    older = datetime(2026, 3, 27, 9, 0)
+    newer = datetime(2026, 3, 27, 10, 0)
+    rows = [
+        SimpleNamespace(snapshot=SimpleNamespace(created_at=older, updated_at=None)),
+        SimpleNamespace(snapshot=SimpleNamespace(created_at=older, updated_at=newer)),
+        SimpleNamespace(snapshot=None),
+    ]
+
+    assert ReportingService._latest_snapshot_evidence_timestamp(rows) == newer
+    assert ReportingService._latest_snapshot_evidence_timestamp([]) is None
