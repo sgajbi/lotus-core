@@ -47,6 +47,9 @@ Current repository posture:
 17. RFC-0086 repo-native domain-product declarations now live under
     `contracts/domain-data-products/` and are validated by `make domain-product-validate` when the
     sibling `lotus-platform` validator and vocabulary registries are available.
+18. RFC-0087 trust telemetry proof for `PortfolioStateSnapshot` now lives under
+    `contracts/trust-telemetry/` and is validated by `tests/unit/test_trust_telemetry.py` against
+    the platform trust telemetry validator when `lotus-platform` is available.
 
 ## Architecture And Module Map
 
@@ -71,9 +74,11 @@ Primary areas:
 9. `contracts/domain-data-products/`
    Repo-native RFC-0086 domain-product producer declarations for governed `lotus-core` source-data
    products.
-10. `wiki/`
+10. `contracts/trust-telemetry/`
+    Repo-native RFC-0087 trust telemetry fixtures for governed first-wave source-data products.
+11. `wiki/`
    canonical authored source for GitHub wiki publication and core-owned operator and onboarding summaries.
-11. `docs/architecture/README.md`
+12. `docs/architecture/README.md`
     the primary navigation index for the deep core architecture and RFC hardening set.
 
 ## Runtime And Integration Boundaries
