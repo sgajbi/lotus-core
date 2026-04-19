@@ -320,15 +320,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert load_run_progress_schema["properties"][
         "dependent_position_timeseries_propagation_row_cap"
     ]["description"].startswith("Configured per-message cap on future dependent")
-    assert load_run_progress_schema["properties"][
-        "dependent_position_timeseries_propagation_row_cap"
-    ]["type"] == "integer"
-    assert load_run_progress_schema["properties"][
-        "valuation_scheduler_poll_interval_seconds"
-    ]["description"].startswith("Configured valuation scheduler poll interval")
-    assert load_run_progress_schema["properties"][
-        "valuation_scheduler_max_dispatch_jobs_per_poll"
-    ]["description"].startswith("Configured maximum number of valuation jobs")
+    assert (
+        load_run_progress_schema["properties"]["dependent_position_timeseries_propagation_row_cap"][
+            "type"
+        ]
+        == "integer"
+    )
+    assert load_run_progress_schema["properties"]["valuation_scheduler_poll_interval_seconds"][
+        "description"
+    ].startswith("Configured valuation scheduler poll interval")
+    assert load_run_progress_schema["properties"]["valuation_scheduler_max_dispatch_jobs_per_poll"][
+        "description"
+    ].startswith("Configured maximum number of valuation jobs")
     assert load_run_progress_schema["properties"][
         "valuation_scheduler_pending_dispatch_polls_lower_bound"
     ]["description"].startswith("Lower bound on scheduler poll cycles")
@@ -338,44 +341,42 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert load_run_progress_schema["properties"][
         "valuation_to_position_timeseries_handoff_pressure_hint"
     ]["description"].startswith("Derived operator hint describing where current")
-    assert load_run_progress_schema["properties"][
-        "operator_progress_stale_threshold_minutes"
-    ]["description"].startswith("Threshold in minutes used to decide whether the latest")
-    assert load_run_progress_schema["properties"][
-        "operator_progress_state"
-    ]["description"].startswith("Operator-facing progress interpretation layered on top")
-    assert load_run_progress_schema["properties"][
-        "latest_valuation_to_snapshot_tail_seconds"
-    ]["description"].startswith("Seconds between the latest durable valuation-job update")
+    assert load_run_progress_schema["properties"]["operator_progress_stale_threshold_minutes"][
+        "description"
+    ].startswith("Threshold in minutes used to decide whether the latest")
+    assert load_run_progress_schema["properties"]["operator_progress_state"][
+        "description"
+    ].startswith("Operator-facing progress interpretation layered on top")
+    assert load_run_progress_schema["properties"]["latest_valuation_to_snapshot_tail_seconds"][
+        "description"
+    ].startswith("Seconds between the latest durable valuation-job update")
     assert load_run_progress_schema["properties"][
         "latest_valuation_to_position_timeseries_tail_seconds"
     ]["description"].startswith("Seconds between the latest durable valuation-job update")
-    assert load_run_progress_schema["properties"][
-        "complete_portfolios"
-    ]["description"].startswith("Count of ingested portfolios that already have target-date")
-    assert load_run_progress_schema["properties"][
-        "incomplete_portfolios"
-    ]["description"].startswith("Count of ingested portfolios that still do not have target-date")
-    assert load_run_progress_schema["properties"][
-        "portfolios_waiting_for_snapshots"
-    ]["description"].startswith("Count of ingested portfolios that still have no target-date")
-    assert load_run_progress_schema["properties"][
-        "remaining_snapshot_rows"
-    ]["description"].startswith("Estimated remaining target-date daily position snapshot rows")
-    assert load_run_progress_schema["properties"][
-        "portfolios_waiting_for_position_timeseries"
-    ]["description"].startswith("Count of ingested portfolios whose target-date daily position")
-    assert load_run_progress_schema["properties"][
-        "remaining_position_timeseries_rows"
-    ]["description"].startswith("Estimated remaining target-date position-timeseries rows")
-    assert load_run_progress_schema["properties"][
-        "portfolios_waiting_for_portfolio_timeseries"
-    ]["description"].startswith(
-        "Count of ingested portfolios whose target-date position-timeseries"
+    assert load_run_progress_schema["properties"]["complete_portfolios"]["description"].startswith(
+        "Count of ingested portfolios that already have target-date"
     )
-    assert load_run_progress_schema["properties"][
-        "remaining_portfolio_timeseries_rows"
-    ]["description"].startswith("Estimated remaining target-date portfolio-timeseries rows")
+    assert load_run_progress_schema["properties"]["incomplete_portfolios"][
+        "description"
+    ].startswith("Count of ingested portfolios that still do not have target-date")
+    assert load_run_progress_schema["properties"]["portfolios_waiting_for_snapshots"][
+        "description"
+    ].startswith("Count of ingested portfolios that still have no target-date")
+    assert load_run_progress_schema["properties"]["remaining_snapshot_rows"][
+        "description"
+    ].startswith("Estimated remaining target-date daily position snapshot rows")
+    assert load_run_progress_schema["properties"]["portfolios_waiting_for_position_timeseries"][
+        "description"
+    ].startswith("Count of ingested portfolios whose target-date daily position")
+    assert load_run_progress_schema["properties"]["remaining_position_timeseries_rows"][
+        "description"
+    ].startswith("Estimated remaining target-date position-timeseries rows")
+    assert load_run_progress_schema["properties"]["portfolios_waiting_for_portfolio_timeseries"][
+        "description"
+    ].startswith("Count of ingested portfolios whose target-date position-timeseries")
+    assert load_run_progress_schema["properties"]["remaining_portfolio_timeseries_rows"][
+        "description"
+    ].startswith("Estimated remaining target-date portfolio-timeseries rows")
     assert load_run_progress_schema["properties"][
         "latest_snapshot_to_position_timeseries_tail_seconds"
     ]["description"].startswith("Seconds between the latest target-date daily position")
@@ -1401,12 +1402,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
-    assert (
-        export_result["responses"]["422"]["description"]
-        == (
-            "Export job is incomplete, source payload unavailable, or requested "
-            "serialization is unsupported."
-        )
+    assert export_result["responses"]["422"]["description"] == (
+        "Export job is incomplete, source payload unavailable, or requested "
+        "serialization is unsupported."
     )
 
     components = schema["components"]["schemas"]

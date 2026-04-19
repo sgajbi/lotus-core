@@ -312,9 +312,7 @@ async def test_get_support_overview_keeps_carried_forward_snapshot_ahead_of_last
     mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
     mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 26)
     mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
-    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(
-        2025, 8, 30
-    )
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
 

@@ -583,9 +583,7 @@ class OperationsService:
             dependent_position_timeseries_propagation_row_cap=(
                 DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
             ),
-            valuation_scheduler_poll_interval_seconds=(
-                VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-            ),
+            valuation_scheduler_poll_interval_seconds=(VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS),
             valuation_scheduler_max_dispatch_jobs_per_poll=(
                 VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL
             ),

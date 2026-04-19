@@ -502,8 +502,7 @@ class LoadRunProgressResponse(BaseModel):
     run_id: str = Field(
         ...,
         description=(
-            "Governed load run identifier embedded in synthetic portfolio and "
-            "transaction ids."
+            "Governed load run identifier embedded in synthetic portfolio and transaction ids."
         ),
         examples=["20260418T065154Z"],
     )

@@ -1355,9 +1355,7 @@ async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
     service = OperationsService(async_db_session)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_valuation_jobs(
-            "P9R", skip=0, limit=20, job_id=skipped_job.id
-        )
+        response = await service.get_valuation_jobs("P9R", skip=0, limit=20, job_id=skipped_job.id)
 
     assert response.total == 1
     assert len(response.items) == 1
@@ -1729,8 +1727,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     assert response.completed_valuation_portfolios_without_position_timeseries == 0
     assert response.completed_valuation_portfolios_without_position_timeseries_ratio == 0.0
     assert (
-        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio
-        == 0.0
+        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio == 0.0
     )
     assert response.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 0
     assert response.dependent_position_timeseries_propagation_cap_risk is False
@@ -1991,8 +1988,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
     assert response.completed_valuation_portfolios_without_position_timeseries == 1
     assert response.completed_valuation_portfolios_without_position_timeseries_ratio == 0.5
     assert (
-        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio
-        == 1.0
+        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio == 1.0
     )
     assert response.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 1
     assert response.dependent_position_timeseries_propagation_cap_risk is False

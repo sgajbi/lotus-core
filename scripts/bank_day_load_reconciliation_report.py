@@ -138,15 +138,12 @@ def _build_summary(
     expected_market_value: str,
 ) -> ReconciliationSummary:
     return ReconciliationSummary(
-        all_samples_reconciled=all(
-            sample.reconciliation_passed for sample in sample_portfolios
-        ),
+        all_samples_reconciled=all(sample.reconciliation_passed for sample in sample_portfolios),
         all_position_counts_match_expected=all(
             sample.positions_count == expected_positions_count for sample in sample_portfolios
         ),
         all_transaction_counts_match_expected=all(
-            sample.transactions_count == expected_transactions_count
-            for sample in sample_portfolios
+            sample.transactions_count == expected_transactions_count for sample in sample_portfolios
         ),
         all_market_values_match_expected=all(
             sample.total_market_value == expected_market_value for sample in sample_portfolios
@@ -219,10 +216,7 @@ def _write_report(
             f"- complete portfolios: `{report.run_progress.get('complete_portfolios', 'n/a')}` / "
             f"`{report.run_progress.get('portfolios_ingested', 'n/a')}`"
         ),
-        (
-            f"- incomplete portfolios: "
-            f"`{report.run_progress.get('incomplete_portfolios', 'n/a')}`"
-        ),
+        (f"- incomplete portfolios: `{report.run_progress.get('incomplete_portfolios', 'n/a')}`"),
         (
             f"- waiting for snapshots: "
             f"`{report.run_progress.get('portfolios_waiting_for_snapshots', 'n/a')}`"
@@ -235,10 +229,7 @@ def _write_report(
             f"- waiting for portfolio timeseries: "
             f"`{report.run_progress.get('portfolios_waiting_for_portfolio_timeseries', 'n/a')}`"
         ),
-        (
-            f"- handoff pressure hint: "
-            f"`{handoff_pressure_hint}`"
-        ),
+        (f"- handoff pressure hint: `{handoff_pressure_hint}`"),
         "",
         "```json",
         json.dumps(report.run_progress, indent=2),
