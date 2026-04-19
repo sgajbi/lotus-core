@@ -5,6 +5,8 @@ import pytest
 
 from scripts.institutional_completion_gate import (
     ScenarioArtifactMetadata,
+    _compose_down,
+    _compose_up,
     _latest_new_scenario_artifact,
     _load_scenario_metadata,
     _reconciliation_args,
@@ -108,6 +110,62 @@ def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
     ]
 
 
+def test_compose_up_starts_governed_completion_services(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], Path]] = []
+
+    def _fake_run(cmd: list[str], cwd: Path) -> None:
+        calls.append((cmd, cwd))
+
+    monkeypatch.setattr("scripts.institutional_completion_gate._run", _fake_run)
+
+    repo_root = Path("/tmp/repo")
+    _compose_up(repo_root=repo_root, compose_file="docker-compose.yml", build=False)
+
+    assert calls == [
+        (
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker-compose.yml",
+                "up",
+                "-d",
+                "ingestion_service",
+                "event_replay_service",
+                "query_service",
+                "query_control_plane_service",
+                "persistence_service",
+                "cost_calculator_service",
+                "cashflow_calculator_service",
+                "position_calculator_service",
+                "pipeline_orchestrator_service",
+                "position_valuation_calculator",
+                "timeseries_generator_service",
+                "valuation_orchestrator_service",
+                "portfolio_aggregation_service",
+                "financial_reconciliation_service",
+            ],
+            repo_root,
+        )
+    ]
+
+
+def test_compose_down_uses_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], Path]] = []
+
+    def _fake_run(cmd: list[str], cwd: Path) -> None:
+        calls.append((cmd, cwd))
+
+    monkeypatch.setattr("scripts.institutional_completion_gate._run", _fake_run)
+
+    repo_root = Path("/tmp/repo")
+    _compose_down(repo_root=repo_root, compose_file="docker-compose.yml")
+
+    assert calls == [
+        (["docker", "compose", "-f", "docker-compose.yml", "down"], repo_root)
+    ]
+
+
 def test_main_runs_scenario_then_exhaustive_reconciliation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -144,6 +202,14 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         _fake_run_python_script,
     )
     monkeypatch.setattr(
+        "scripts.institutional_completion_gate._compose_up",
+        lambda **_kwargs: calls.append(("compose_up", [])),
+    )
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate._compose_down",
+        lambda **_kwargs: calls.append(("compose_down", [])),
+    )
+    monkeypatch.setattr(
         "scripts.institutional_completion_gate.Path.resolve",
         lambda self: repo_root / "scripts" / "institutional_completion_gate.py",
     )
@@ -158,6 +224,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
 
     assert main() == 0
     assert calls == [
+        ("compose_up", []),
         (
             "scripts/bank_day_load_scenario.py",
             [
@@ -192,4 +259,5 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
                 "output/task-runs",
             ],
         ),
+        ("compose_down", []),
     ]

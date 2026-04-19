@@ -442,7 +442,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group failure-recovery-gate
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group institutional-completion-gate
       - name: Run governed institutional completion gate
         run: make test-institutional-completion-gate
       - name: Capture docker compose logs on failure

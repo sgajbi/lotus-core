@@ -57,6 +57,11 @@ E2E_SMOKE_SERVICES: tuple[str, ...] = (
     "portfolio_aggregation_service",
 )
 
+INSTITUTIONAL_COMPLETION_GATE_SERVICES: tuple[str, ...] = (
+    *E2E_SMOKE_SERVICES,
+    "financial_reconciliation_service",
+)
+
 PREBUILD_GROUPS: dict[str, tuple[str, ...]] = {
     "query-only": QUERY_BUILD_SERVICES,
     "docker-smoke": DOCKER_SMOKE_SERVICES,
@@ -64,4 +69,5 @@ PREBUILD_GROUPS: dict[str, tuple[str, ...]] = {
     "latency-gate": LATENCY_GATE_SERVICES,
     "performance-gate": PERFORMANCE_GATE_SERVICES,
     "failure-recovery-gate": FAILURE_RECOVERY_GATE_SERVICES,
+    "institutional-completion-gate": INSTITUTIONAL_COMPLETION_GATE_SERVICES,
 }

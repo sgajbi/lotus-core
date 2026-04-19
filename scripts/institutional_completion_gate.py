@@ -15,7 +15,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    from scripts.ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
+
 DEFAULT_OUTPUT_DIR = "output/task-runs"
+DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +31,34 @@ class ScenarioArtifactMetadata:
     portfolio_count: int
     transactions_per_portfolio: int
     artifact_path: Path
+
+
+def _run(cmd: list[str], cwd: Path) -> None:
+    completed = subprocess.run(
+        cmd,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"Command failed ({completed.returncode}): {' '.join(cmd)}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+
+
+def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
+    cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
+    if build:
+        cmd.append("--build")
+    cmd.extend(INSTITUTIONAL_COMPLETION_GATE_SERVICES)
+    _run(cmd, cwd=repo_root)
+
+
+def _compose_down(*, repo_root: Path, compose_file: str) -> None:
+    _run(["docker", "compose", "-f", compose_file, "down"], cwd=repo_root)
 
 
 def _run_python_script(*, repo_root: Path, script_relative_path: str, args: list[str]) -> None:
@@ -128,6 +162,8 @@ def main() -> int:
     parser.add_argument("--drain-timeout-seconds", type=int, default=7200)
     parser.add_argument("--trade-date", default="2026-04-17")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--compose-file", default=DEFAULT_COMPOSE_FILE)
+    parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -135,21 +171,25 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     known_paths = set(output_dir.glob("*-bank-day-load.json"))
 
-    _run_python_script(
-        repo_root=repo_root,
-        script_relative_path="scripts/bank_day_load_scenario.py",
-        args=_scenario_args(args),
-    )
-    scenario_artifact = _latest_new_scenario_artifact(
-        output_dir=output_dir,
-        known_paths=known_paths,
-    )
-    scenario = _load_scenario_metadata(scenario_artifact)
-    _run_python_script(
-        repo_root=repo_root,
-        script_relative_path="scripts/bank_day_load_reconciliation_report.py",
-        args=_reconciliation_args(parsed_args=args, scenario=scenario),
-    )
+    _compose_up(repo_root=repo_root, compose_file=args.compose_file, build=args.build)
+    try:
+        _run_python_script(
+            repo_root=repo_root,
+            script_relative_path="scripts/bank_day_load_scenario.py",
+            args=_scenario_args(args),
+        )
+        scenario_artifact = _latest_new_scenario_artifact(
+            output_dir=output_dir,
+            known_paths=known_paths,
+        )
+        scenario = _load_scenario_metadata(scenario_artifact)
+        _run_python_script(
+            repo_root=repo_root,
+            script_relative_path="scripts/bank_day_load_reconciliation_report.py",
+            args=_reconciliation_args(parsed_args=args, scenario=scenario),
+        )
+    finally:
+        _compose_down(repo_root=repo_root, compose_file=args.compose_file)
     print(scenario.artifact_path)
     return 0
 
