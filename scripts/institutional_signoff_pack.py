@@ -56,6 +56,29 @@ def _latest_performance_artifact(output_dir: Path) -> Path | None:
     return matches[-1]
 
 
+def _latest_load_reconciliation_artifact(output_dir: Path) -> Path | None:
+    matches = sorted(
+        output_dir.rglob("*-bank-day-load-reconciliation.json"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    if not matches:
+        return None
+    preferred_exhaustive_matches: list[Path] = []
+    for path in matches:
+        try:
+            payload = _load_json(path)
+        except json.JSONDecodeError:
+            continue
+        run_progress = payload.get("run_progress", {})
+        portfolios_evaluated = int(payload.get("portfolio_count_evaluated", 0) or 0)
+        portfolios_ingested = int(run_progress.get("portfolios_ingested", 0) or 0)
+        if portfolios_ingested > 0 and portfolios_evaluated == portfolios_ingested:
+            preferred_exhaustive_matches.append(path)
+    if preferred_exhaustive_matches:
+        return preferred_exhaustive_matches[-1]
+    return matches[-1]
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -340,7 +363,7 @@ def main() -> int:
         _performance_status(_latest_performance_artifact(artifact_dir)),
         _failure_recovery_status(_latest_artifact(artifact_dir, "*-failure-recovery-gate.json")),
         _load_reconciliation_status(
-            _latest_artifact(artifact_dir, "*-bank-day-load-reconciliation.json"),
+            _latest_load_reconciliation_artifact(artifact_dir),
             max_completion_lag_seconds=args.max_load_completion_lag_seconds,
         ),
     ]

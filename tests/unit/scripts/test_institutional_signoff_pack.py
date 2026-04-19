@@ -7,6 +7,7 @@ from scripts.institutional_signoff_pack import (
     _failure_recovery_status,
     _latency_status,
     _latest_artifact,
+    _latest_load_reconciliation_artifact,
     _latest_performance_artifact,
     _load_reconciliation_status,
     _performance_status,
@@ -112,6 +113,60 @@ def test_latest_performance_artifact_falls_back_to_latest_when_full_missing(
     _write_json(newer_artifact, {"overall_passed": True, "profiles": []})
 
     selected = _latest_performance_artifact(tmp_path)
+
+    assert selected == newer_artifact
+
+
+def test_latest_load_reconciliation_artifact_prefers_exhaustive_artifact(
+    tmp_path: Path,
+) -> None:
+    exhaustive_artifact = tmp_path / "20260419T080000-bank-day-load-reconciliation.json"
+    sampled_artifact = tmp_path / "20260419T090000-bank-day-load-reconciliation.json"
+    _write_json(
+        exhaustive_artifact,
+        {
+            "portfolio_count_evaluated": 1000,
+            "run_progress": {"portfolios_ingested": 1000},
+            "summary": {},
+        },
+    )
+    _write_json(
+        sampled_artifact,
+        {
+            "portfolio_count_evaluated": 5,
+            "run_progress": {"portfolios_ingested": 1000},
+            "summary": {},
+        },
+    )
+
+    selected = _latest_load_reconciliation_artifact(tmp_path)
+
+    assert selected == exhaustive_artifact
+
+
+def test_latest_load_reconciliation_artifact_falls_back_to_latest_when_exhaustive_missing(
+    tmp_path: Path,
+) -> None:
+    older_artifact = tmp_path / "20260419T080000-bank-day-load-reconciliation.json"
+    newer_artifact = tmp_path / "20260419T090000-bank-day-load-reconciliation.json"
+    _write_json(
+        older_artifact,
+        {
+            "portfolio_count_evaluated": 5,
+            "run_progress": {"portfolios_ingested": 1000},
+            "summary": {},
+        },
+    )
+    _write_json(
+        newer_artifact,
+        {
+            "portfolio_count_evaluated": 10,
+            "run_progress": {"portfolios_ingested": 1000},
+            "summary": {},
+        },
+    )
+
+    selected = _latest_load_reconciliation_artifact(tmp_path)
 
     assert selected == newer_artifact
 

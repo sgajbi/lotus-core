@@ -588,6 +588,9 @@ Implementation status as of 2026-04-18:
 31. performance-load artifacts now record their `fast` versus `full` profile tier, and the
     institutional sign-off pack now prefers `full` institutional load evidence when both tiers are
     present, avoiding accidental approval from a newer PR-friendly fast artifact.
+32. institutional sign-off now also prefers exhaustive bank-day reconciliation artifacts over
+    newer sampled refresh artifacts when both are present, so approval-grade evidence uses the
+    strongest available portfolio-breadth tie-out instead of the most recent lightweight sample.
 
 Phase 1 exit criteria:
 
