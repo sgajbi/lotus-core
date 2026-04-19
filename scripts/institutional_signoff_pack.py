@@ -175,7 +175,7 @@ def _completion_lag_seconds(run_progress: dict[str, Any]) -> float | None:
         "latest_position_timeseries_to_portfolio_timeseries_tail_seconds"
     )
     if isinstance(explicit_tail, Real) and isinstance(explicit_portfolio_tail, Real):
-        return round(float(explicit_tail) + float(explicit_portfolio_tail), 6)
+        return round(explicit_tail + explicit_portfolio_tail, 6)
     latest_snapshot_materialized_at = _parse_optional_datetime(
         run_progress.get("latest_snapshot_materialized_at_utc")
     )
