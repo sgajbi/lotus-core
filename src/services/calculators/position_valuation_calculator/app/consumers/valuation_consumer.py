@@ -14,7 +14,6 @@ from portfolio_common.events import (
 )
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.logging_utils import normalize_lineage_value
 from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
@@ -47,19 +46,8 @@ class ValuationConsumer(BaseConsumer):
     """
 
     @staticmethod
-    def _build_processing_event_id(
-        *,
-        msg: Message,
-        event: PortfolioValuationRequiredEvent,
-        correlation_id: str | None,
-    ) -> str:
-        durable_correlation_id = normalize_lineage_value(correlation_id)
-        logical_scope = (
-            f"{event.portfolio_id}:{event.security_id}:{event.valuation_date.isoformat()}:{event.epoch}"
-        )
-        if durable_correlation_id:
-            return f"{msg.topic()}:{logical_scope}:{durable_correlation_id}"
-        return f"{msg.topic()}:{logical_scope}"
+    def _build_processing_event_id(*, msg: Message) -> str:
+        return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
 
     @retry(
         wait=wait_fixed(3),
@@ -83,8 +71,6 @@ class ValuationConsumer(BaseConsumer):
                 event = PortfolioValuationRequiredEvent.model_validate(event_data)
                 event_id = self._build_processing_event_id(
                     msg=msg,
-                    event=event,
-                    correlation_id=correlation_id,
                 )
 
                 logger.info(

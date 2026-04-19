@@ -175,14 +175,11 @@ async def test_valuation_consumer_success(
         "test-corr-id-123"
     )
     claimed_event_id = mock_idempotency_repo.claim_event_processing.call_args.args[0]
-    assert claimed_event_id == (
-        "valuation.job.requested:"
-        "PORT_VAL_01:SEC_VAL_01:2025-08-01:1:test-corr-id-123"
-    )
+    assert claimed_event_id == "valuation.job.requested-0-1"
     assert mock_idempotency_repo.claim_event_processing.call_args.args[3] == "test-corr-id-123"
 
 
-async def test_valuation_consumer_uses_logical_event_identity_instead_of_kafka_offset(
+async def test_valuation_consumer_uses_kafka_delivery_identity_for_idempotency(
     consumer: ValuationConsumer,
     mock_kafka_message: MagicMock,
     mock_dependencies: dict,
@@ -216,10 +213,7 @@ async def test_valuation_consumer_uses_logical_event_identity_instead_of_kafka_o
     await consumer.process_message(mock_kafka_message)
 
     claimed_event_id = mock_idempotency_repo.claim_event_processing.call_args.args[0]
-    assert claimed_event_id != "valuation.job.requested-0-1"
-    assert claimed_event_id.startswith(
-        "valuation.job.requested:PORT_VAL_01:SEC_VAL_01:2025-08-01:1:"
-    )
+    assert claimed_event_id == "valuation.job.requested-0-1"
 
 
 async def test_process_message_handles_data_not_found_error(
