@@ -2,9 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Partially Implemented |
 | Created | 2026-04-18 |
-| Last Updated | 2026-04-18 |
+| Last Updated | 2026-04-19 |
 | Owners | lotus-core engineering |
 | Depends On | RFC 024; RFC 065; RFC 066; RFC 081 |
 | Related Standards | production-readiness and operational governance standards |
