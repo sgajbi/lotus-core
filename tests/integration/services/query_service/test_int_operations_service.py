@@ -23,6 +23,7 @@ from portfolio_common.database_models import (
 from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
+from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
@@ -30,9 +31,6 @@ from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_
 )
 from src.services.query_service.app.services import operations_service as operations_service_module
 from src.services.query_service.app.services.operations_service import OperationsService
-from src.services.valuation_orchestrator_service.app.settings import (
-    get_valuation_runtime_settings,
-)
 
 pytestmark = pytest.mark.asyncio
 
@@ -1649,7 +1647,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     assert response.generated_at_utc == FIXED_GENERATED_AT
     assert response.run_state == "MATERIALIZING"
     assert response.operator_progress_stale_threshold_minutes == 15
-    assert response.operator_progress_state == "SLOW"
+    assert response.operator_progress_state == "RUNNING"
     assert response.portfolios_ingested == 2
     assert response.transactions_ingested == 2
     assert response.portfolios_with_snapshots == 1

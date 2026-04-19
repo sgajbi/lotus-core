@@ -14,11 +14,8 @@ from portfolio_common.reconciliation_quality import (
 from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
+from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.services.valuation_orchestrator_service.app.settings import (
-    get_valuation_runtime_settings,
-)
 
 from ..dtos.operations_dto import (
     AnalyticsExportJobListResponse,
