@@ -14,6 +14,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 try:
     from scripts.ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
@@ -22,6 +23,7 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
 
 DEFAULT_OUTPUT_DIR = "output/task-runs"
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
+JSON_REPORT_PREFIX: Final[str] = "Wrote JSON report:"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +63,7 @@ def _compose_down(*, repo_root: Path, compose_file: str) -> None:
     _run(["docker", "compose", "-f", compose_file, "down"], cwd=repo_root)
 
 
-def _run_python_script(*, repo_root: Path, script_relative_path: str, args: list[str]) -> None:
+def _run_python_script(*, repo_root: Path, script_relative_path: str, args: list[str]) -> str:
     cmd = [sys.executable, script_relative_path, *args]
     completed = subprocess.run(
         cmd,
@@ -76,6 +78,20 @@ def _run_python_script(*, repo_root: Path, script_relative_path: str, args: list
             f"stdout:\n{completed.stdout}\n"
             f"stderr:\n{completed.stderr}"
         )
+    return completed.stdout
+
+
+def _reported_scenario_artifact_path(*, stdout: str, repo_root: Path) -> Path | None:
+    for line in reversed(stdout.splitlines()):
+        normalized = line.strip()
+        if not normalized.startswith(JSON_REPORT_PREFIX):
+            continue
+        reported_path = normalized.removeprefix(JSON_REPORT_PREFIX).strip()
+        artifact_path = Path(reported_path)
+        if not artifact_path.is_absolute():
+            artifact_path = repo_root / artifact_path
+        return artifact_path
+    return None
 
 
 def _latest_new_scenario_artifact(*, output_dir: Path, known_paths: set[Path]) -> Path:
@@ -172,24 +188,44 @@ def main() -> int:
     known_paths = set(output_dir.glob("*-bank-day-load.json"))
 
     _compose_up(repo_root=repo_root, compose_file=args.compose_file, build=args.build)
+    scenario: ScenarioArtifactMetadata | None = None
+    primary_error: Exception | None = None
     try:
-        _run_python_script(
+        scenario_stdout = _run_python_script(
             repo_root=repo_root,
             script_relative_path="scripts/bank_day_load_scenario.py",
             args=_scenario_args(args),
         )
-        scenario_artifact = _latest_new_scenario_artifact(
-            output_dir=output_dir,
-            known_paths=known_paths,
+        scenario_artifact = _reported_scenario_artifact_path(
+            stdout=scenario_stdout,
+            repo_root=repo_root,
         )
+        if scenario_artifact is None:
+            scenario_artifact = _latest_new_scenario_artifact(
+                output_dir=output_dir,
+                known_paths=known_paths,
+            )
         scenario = _load_scenario_metadata(scenario_artifact)
         _run_python_script(
             repo_root=repo_root,
             script_relative_path="scripts/bank_day_load_reconciliation_report.py",
             args=_reconciliation_args(parsed_args=args, scenario=scenario),
         )
+    except Exception as exc:
+        primary_error = exc
+        raise
     finally:
-        _compose_down(repo_root=repo_root, compose_file=args.compose_file)
+        try:
+            _compose_down(repo_root=repo_root, compose_file=args.compose_file)
+        except Exception as cleanup_exc:
+            if primary_error is not None:
+                raise RuntimeError(
+                    "Institutional completion gate teardown failed after an earlier error. "
+                    f"Original error: {primary_error}"
+                ) from cleanup_exc
+            raise
+    if scenario is None:
+        raise RuntimeError("Institutional completion gate completed without scenario metadata.")
     print(scenario.artifact_path)
     return 0
 

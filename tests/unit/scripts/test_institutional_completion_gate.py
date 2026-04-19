@@ -10,6 +10,7 @@ from scripts.institutional_completion_gate import (
     _latest_new_scenario_artifact,
     _load_scenario_metadata,
     _reconciliation_args,
+    _reported_scenario_artifact_path,
     _scenario_args,
     main,
 )
@@ -60,6 +61,23 @@ def test_latest_new_scenario_artifact_selects_latest_unseen_file(tmp_path: Path)
     selected = _latest_new_scenario_artifact(output_dir=tmp_path, known_paths={known})
 
     assert selected == newer
+
+
+def test_reported_scenario_artifact_path_resolves_reported_json_path(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    reported = _reported_scenario_artifact_path(
+        stdout="\n".join(
+            [
+                "diagnostic output",
+                "Wrote JSON report: output/task-runs/20260419T130000Z-bank-day-load.json",
+            ]
+        ),
+        repo_root=repo_root,
+    )
+
+    assert reported == repo_root / "output" / "task-runs" / "20260419T130000Z-bank-day-load.json"
 
 
 def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
@@ -179,7 +197,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         repo_root: Path,
         script_relative_path: str,
         args: list[str],
-    ) -> None:
+    ) -> str:
         calls.append((script_relative_path, args))
         if script_relative_path == "scripts/bank_day_load_scenario.py":
             scenario_artifact = output_dir / "20260419T120000Z-bank-day-load.json"
@@ -196,6 +214,8 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
                 ),
                 encoding="utf-8",
             )
+            return "Wrote JSON report: output/task-runs/20260419T120000Z-bank-day-load.json\n"
+        return ""
 
     monkeypatch.setattr(
         "scripts.institutional_completion_gate._run_python_script",
@@ -261,3 +281,135 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         ),
         ("compose_down", []),
     ]
+
+
+def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo_root = tmp_path
+    output_dir = repo_root / "output" / "task-runs"
+    output_dir.mkdir(parents=True)
+    known_artifact = output_dir / "20260419T110000Z-bank-day-load.json"
+    known_artifact.write_text("{}", encoding="utf-8")
+
+    calls: list[tuple[str, list[str]]] = []
+
+    def _fake_run_python_script(
+        *,
+        repo_root: Path,
+        script_relative_path: str,
+        args: list[str],
+    ) -> str:
+        calls.append((script_relative_path, args))
+        if script_relative_path == "scripts/bank_day_load_scenario.py":
+            scenario_artifact = output_dir / "20260419T120000Z-bank-day-load.json"
+            scenario_artifact.write_text(
+                json.dumps(
+                    {
+                        "run_id": "20260419T120000Z",
+                        "config": {
+                            "trade_date": "2026-04-17",
+                            "portfolio_count": 1000,
+                            "transactions_per_portfolio": 100,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+        return ""
+
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate._run_python_script",
+        _fake_run_python_script,
+    )
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate._compose_up",
+        lambda **_kwargs: calls.append(("compose_up", [])),
+    )
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate._compose_down",
+        lambda **_kwargs: calls.append(("compose_down", [])),
+    )
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate.Path.resolve",
+        lambda self: repo_root / "scripts" / "institutional_completion_gate.py",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "institutional_completion_gate.py",
+            "--output-dir",
+            "output/task-runs",
+        ],
+    )
+
+    assert main() == 0
+    assert calls[-2][0] == "scripts/bank_day_load_reconciliation_report.py"
+
+
+def test_main_preserves_primary_error_when_teardown_also_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo_root = tmp_path
+    output_dir = repo_root / "output" / "task-runs"
+    output_dir.mkdir(parents=True)
+    scenario_artifact = output_dir / "20260419T120000Z-bank-day-load.json"
+    scenario_artifact.write_text(
+        json.dumps(
+            {
+                "run_id": "20260419T120000Z",
+                "config": {
+                    "trade_date": "2026-04-17",
+                    "portfolio_count": 1000,
+                    "transactions_per_portfolio": 100,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_run_python_script(
+        *,
+        repo_root: Path,
+        script_relative_path: str,
+        args: list[str],
+    ) -> str:
+        if script_relative_path == "scripts/bank_day_load_scenario.py":
+            return "Wrote JSON report: output/task-runs/20260419T120000Z-bank-day-load.json\n"
+        raise RuntimeError("reconciliation failed")
+
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate._run_python_script",
+        _fake_run_python_script,
+    )
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate._compose_up",
+        lambda **_kwargs: None,
+    )
+
+    def _raise_cleanup_error(**_kwargs: object) -> None:
+        raise RuntimeError("compose down failed")
+
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate._compose_down",
+        _raise_cleanup_error,
+    )
+    monkeypatch.setattr(
+        "scripts.institutional_completion_gate.Path.resolve",
+        lambda self: repo_root / "scripts" / "institutional_completion_gate.py",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "institutional_completion_gate.py",
+            "--output-dir",
+            "output/task-runs",
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="teardown failed after an earlier error") as excinfo:
+        main()
+
+    assert "reconciliation failed" in str(excinfo.value)
+    assert excinfo.value.__cause__ is not None
+    assert "compose down failed" in str(excinfo.value.__cause__)
