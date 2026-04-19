@@ -585,6 +585,9 @@ Implementation status as of 2026-04-18:
 30. the institutional sign-off pack now also enforces a configurable maximum load completion lag
     using reconciliation-artifact stage-tail evidence, so approval-grade evidence can fail when a
     run completes only after an unacceptable post-snapshot drain period.
+31. performance-load artifacts now record their `fast` versus `full` profile tier, and the
+    institutional sign-off pack now prefers `full` institutional load evidence when both tiers are
+    present, avoiding accidental approval from a newer PR-friendly fast artifact.
 
 Phase 1 exit criteria:
 

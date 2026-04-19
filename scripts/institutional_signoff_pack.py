@@ -36,6 +36,26 @@ def _latest_artifact(output_dir: Path, pattern: str) -> Path | None:
     return matches[-1]
 
 
+def _latest_performance_artifact(output_dir: Path) -> Path | None:
+    matches = sorted(
+        output_dir.rglob("*-performance-load-gate.json"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    if not matches:
+        return None
+    preferred_full_matches: list[Path] = []
+    for path in matches:
+        try:
+            payload = _load_json(path)
+        except json.JSONDecodeError:
+            continue
+        if payload.get("profile_tier") == "full":
+            preferred_full_matches.append(path)
+    if preferred_full_matches:
+        return preferred_full_matches[-1]
+    return matches[-1]
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -317,7 +337,7 @@ def main() -> int:
     statuses = [
         _docker_smoke_status(_latest_artifact(artifact_dir, "*-docker-endpoint-smoke.json")),
         _latency_status(_latest_artifact(artifact_dir, "*-latency-profile.json")),
-        _performance_status(_latest_artifact(artifact_dir, "*-performance-load-gate.json")),
+        _performance_status(_latest_performance_artifact(artifact_dir)),
         _failure_recovery_status(_latest_artifact(artifact_dir, "*-failure-recovery-gate.json")),
         _load_reconciliation_status(
             _latest_artifact(artifact_dir, "*-bank-day-load-reconciliation.json"),

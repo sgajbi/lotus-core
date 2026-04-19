@@ -7,6 +7,7 @@ from scripts.institutional_signoff_pack import (
     _failure_recovery_status,
     _latency_status,
     _latest_artifact,
+    _latest_performance_artifact,
     _load_reconciliation_status,
     _performance_status,
 )
@@ -83,6 +84,36 @@ def test_latest_artifact_discovers_nested_download_paths(tmp_path: Path) -> None
 
     assert discovered is not None
     assert discovered == artifact
+
+
+def test_latest_performance_artifact_prefers_full_profile_tier(tmp_path: Path) -> None:
+    fast_artifact = tmp_path / "20260419T090000Z-performance-load-gate.json"
+    full_artifact = tmp_path / "20260419T080000Z-performance-load-gate.json"
+    _write_json(
+        fast_artifact,
+        {"profile_tier": "fast", "overall_passed": True, "profiles": []},
+    )
+    _write_json(
+        full_artifact,
+        {"profile_tier": "full", "overall_passed": True, "profiles": []},
+    )
+
+    selected = _latest_performance_artifact(tmp_path)
+
+    assert selected == full_artifact
+
+
+def test_latest_performance_artifact_falls_back_to_latest_when_full_missing(
+    tmp_path: Path,
+) -> None:
+    older_artifact = tmp_path / "20260419T080000Z-performance-load-gate.json"
+    newer_artifact = tmp_path / "20260419T090000Z-performance-load-gate.json"
+    _write_json(older_artifact, {"profile_tier": "fast", "overall_passed": True, "profiles": []})
+    _write_json(newer_artifact, {"overall_passed": True, "profiles": []})
+
+    selected = _latest_performance_artifact(tmp_path)
+
+    assert selected == newer_artifact
 
 
 def test_load_reconciliation_status_requires_complete_reconciled_run(tmp_path: Path) -> None:
