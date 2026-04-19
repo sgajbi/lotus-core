@@ -37,20 +37,6 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
     "IDX_GLOBAL_BOND_TR",
 )
 
-GLOBAL_PROCESSED_EVENT_RESET_PATTERNS = (
-    ("position-calculator", "transaction_processing.ready-%"),
-    ("position-calculator", "transactions.cost.processed-%"),
-    ("cost-calculator", "transactions.persisted-%"),
-    ("cashflow-calculator", "transactions.persisted-%"),
-    ("cashflow-calculator", "transactions.cost.processed-%"),
-    ("pipeline-orchestrator-processed-txn", "transactions.cost.processed-%"),
-    ("persistence-portfolios", "portfolios.raw.received-%"),
-    ("persistence-instruments", "instruments.received-%"),
-    ("persistence-market-prices", "market_prices.raw.received-%"),
-    ("persistence-fx-rates", "fx_rates.raw.received-%"),
-    ("persistence-business-dates", "business_dates.raw.received-%"),
-)
-
 
 @dataclass(frozen=True)
 class FrontOfficePortfolioExpectation:
@@ -136,17 +122,11 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     """
     Build the destructive local reseed cleanup SQL for the canonical front-office seed.
 
-    The global processed-event reset is intentionally broader than a single portfolio because
-    local Docker restarts can reset Kafka offsets while the persisted idempotency table survives.
-    For shared raw-topic services that key idempotency by topic/partition/offset only, a clean
-    local reseed must clear those offset-based markers or the canonical ingest will be skipped.
+    This cleanup stays scoped to portfolio-owned rows only. If a local Docker-backed runtime has
+    stale shared Kafka, idempotency, or replay state from a prior load or performance run, reset
+    the lotus-core Docker state before reseeding instead of deleting shared runtime tables from the
+    front-office seed tool.
     """
-    global_processed_event_filter = " or ".join(
-        (
-            f"(service_name = '{service_name}' and event_id like '{event_pattern}')"
-            for service_name, event_pattern in GLOBAL_PROCESSED_EVENT_RESET_PATTERNS
-        )
-    )
     return "\n".join(
         [
             (
@@ -173,7 +153,6 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             ),
             f"delete from pipeline_stage_state where portfolio_id = '{portfolio_id}';",
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
-            (f"delete from processed_events where ({global_processed_event_filter});"),
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
             f"delete from transactions where portfolio_id = '{portfolio_id}';",

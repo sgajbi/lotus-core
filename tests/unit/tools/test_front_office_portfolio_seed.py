@@ -113,7 +113,9 @@ def test_front_office_bundle_honors_explicit_end_date_for_market_prices():
     )
 
     aapl_prices = [
-        row["price_date"] for row in bundle["market_prices"] if row["security_id"] == "FO_EQ_AAPL_US"
+        row["price_date"]
+        for row in bundle["market_prices"]
+        if row["security_id"] == "FO_EQ_AAPL_US"
     ]
     cash_prices = [
         row["price_date"]
@@ -406,14 +408,15 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
-    assert "service_name = 'position-calculator'" in sql
-    assert "event_id like 'transaction_processing.ready-%'" in sql
-    assert "event_id like 'transactions.cost.processed-%'" in sql
-    assert "service_name = 'cost-calculator'" in sql
-    assert "service_name = 'cashflow-calculator'" in sql
-    assert "service_name = 'pipeline-orchestrator-processed-txn'" in sql
-    assert "service_name = 'persistence-portfolios'" in sql
-    assert "event_id like 'portfolios.raw.received-%'" in sql
+    assert "delete from reprocessing_jobs;" not in sql
+    assert "service_name = 'position-calculator'" not in sql
+    assert "event_id like 'transaction_processing.ready-%'" not in sql
+    assert "event_id like 'transactions.cost.processed-%'" not in sql
+    assert "service_name = 'cost-calculator'" not in sql
+    assert "service_name = 'cashflow-calculator'" not in sql
+    assert "service_name = 'pipeline-orchestrator-processed-txn'" not in sql
+    assert "service_name = 'persistence-portfolios'" not in sql
+    assert "event_id like 'portfolios.raw.received-%'" not in sql
 
 
 def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
