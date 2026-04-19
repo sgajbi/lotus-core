@@ -174,7 +174,52 @@ async def test_valuation_consumer_success(
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "test-corr-id-123"
     )
+    claimed_event_id = mock_idempotency_repo.claim_event_processing.call_args.args[0]
+    assert claimed_event_id == (
+        "valuation.job.requested:"
+        "PORT_VAL_01:SEC_VAL_01:2025-08-01:1:test-corr-id-123"
+    )
     assert mock_idempotency_repo.claim_event_processing.call_args.args[3] == "test-corr-id-123"
+
+
+async def test_valuation_consumer_uses_logical_event_identity_instead_of_kafka_offset(
+    consumer: ValuationConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("8000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(currency="USD")
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id="PORT_VAL_01",
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("90"),
+        currency="USD",
+        price_date=date(2025, 8, 1),
+    )
+    mock_valuation_repo.upsert_daily_snapshot.return_value = DailyPositionSnapshot(
+        id=1,
+        portfolio_id="PORT_VAL_01",
+        security_id="SEC_VAL_01",
+        date=date(2025, 8, 1),
+        epoch=1,
+    )
+
+    await consumer.process_message(mock_kafka_message)
+
+    claimed_event_id = mock_idempotency_repo.claim_event_processing.call_args.args[0]
+    assert claimed_event_id != "valuation.job.requested-0-1"
+    assert claimed_event_id.startswith(
+        "valuation.job.requested:PORT_VAL_01:SEC_VAL_01:2025-08-01:1:"
+    )
 
 
 async def test_process_message_handles_data_not_found_error(

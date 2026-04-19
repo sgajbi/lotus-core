@@ -155,7 +155,8 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id == "valuation.job.requested-0-7",
+                    ProcessedEvent.event_id
+                    == "valuation.job.requested:PORT-VAL-INT-01:SEC-VAL-INT-01:2025-08-19:0:corr-val-int-01",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )
@@ -353,7 +354,8 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id == "valuation.job.requested-0-8",
+                    ProcessedEvent.event_id
+                    == "valuation.job.requested:PORT-VAL-INT-02:SEC-VAL-INT-02:2025-08-20:0:corr-val-int-02",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )
@@ -372,7 +374,8 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
 
     assert snapshots == []
     assert outbox_rows == []
-    assert processed_rows == []
+    assert len(processed_rows) == 1
+    assert processed_rows[0].correlation_id == "corr-val-int-02"
     assert job is not None
     assert job.status == "COMPLETE"
     consumer._send_to_dlq_async.assert_not_awaited()

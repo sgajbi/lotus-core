@@ -14,6 +14,7 @@ from portfolio_common.events import (
 )
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.logging_utils import normalize_lineage_value
 from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
@@ -45,6 +46,21 @@ class ValuationConsumer(BaseConsumer):
     calculates market value, and saves the result.
     """
 
+    @staticmethod
+    def _build_processing_event_id(
+        *,
+        msg: Message,
+        event: PortfolioValuationRequiredEvent,
+        correlation_id: str | None,
+    ) -> str:
+        durable_correlation_id = normalize_lineage_value(correlation_id)
+        logical_scope = (
+            f"{event.portfolio_id}:{event.security_id}:{event.valuation_date.isoformat()}:{event.epoch}"
+        )
+        if durable_correlation_id:
+            return f"{msg.topic()}:{logical_scope}:{durable_correlation_id}"
+        return f"{msg.topic()}:{logical_scope}"
+
     @retry(
         wait=wait_fixed(3),
         stop=stop_after_attempt(5),
@@ -55,7 +71,7 @@ class ValuationConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         key = msg.key().decode("utf-8") if msg.key() else "NoKey"
         value = msg.value().decode("utf-8")
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+        event_id = None
         event = None
 
         try:
@@ -65,6 +81,11 @@ class ValuationConsumer(BaseConsumer):
                 fallback_correlation_id=event_data.get("correlation_id"),
             ) as correlation_id:
                 event = PortfolioValuationRequiredEvent.model_validate(event_data)
+                event_id = self._build_processing_event_id(
+                    msg=msg,
+                    event=event,
+                    correlation_id=correlation_id,
+                )
 
                 logger.info(
                     "Processing valuation job for "
