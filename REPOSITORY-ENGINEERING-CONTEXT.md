@@ -43,7 +43,10 @@ Current repository posture:
 13. RFC-0083 Slice 10 now defines event family governance, schema governance requirements, operator supportability surface posture, operator-only security profile bindings for support evidence, a guarded runtime outbox event/type topic alignment check, direct Kafka publish-topic governance for source-ingestion, recovery, and job-command topics, explicit shared event-model envelope tolerance, and centralized outbox payload envelope metadata for `event_type`, `schema_version`, and `correlation_id`,
 14. RFC-0083 Slice 11 now records target-model closure through a machine-readable implementation ledger and closure guard,
 15. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-16. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development.
+16. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development,
+17. RFC-0086 repo-native domain-product declarations now live under
+    `contracts/domain-data-products/` and are validated by `make domain-product-validate` when the
+    sibling `lotus-platform` validator and vocabulary registries are available.
 
 ## Architecture And Module Map
 
@@ -65,9 +68,12 @@ Primary areas:
    quality gates, performance and recovery gates, test-manifest orchestration, and operational tooling.
 8. `tests/`
    unit, integration-lite, full integration, ops-contract, transaction-contract, e2e, Docker smoke, and performance-oriented coverage.
-9. `wiki/`
+9. `contracts/domain-data-products/`
+   Repo-native RFC-0086 domain-product producer declarations for governed `lotus-core` source-data
+   products.
+10. `wiki/`
    canonical authored source for GitHub wiki publication and core-owned operator and onboarding summaries.
-10. `docs/architecture/README.md`
+11. `docs/architecture/README.md`
     the primary navigation index for the deep core architecture and RFC hardening set.
 
 ## Runtime And Integration Boundaries
@@ -108,6 +114,8 @@ Use these commands as the primary local contract:
    `make test-e2e-smoke`
 9. Docker smoke
    `make test-docker-smoke`
+10. repo-native domain-product validation
+   `make domain-product-validate`
 
 ## Validation And CI Expectations
 
@@ -163,48 +171,49 @@ Most relevant current governance:
 7. future ingestion/replay evidence products must use `docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md` before expanding runtime evidence contracts,
 8. future reconciliation/data-quality evidence products must use `docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md` before expanding source-data product supportability fields,
 9. future source-data product DTO and route work must use `docs/architecture/RFC-0083-source-data-product-catalog.md` and `src/libs/portfolio-common/portfolio_common/source_data_products.py` for product names, versions, required metadata, consumer mapping, and paging/export disposition, and must pass `make source-data-product-contract-guard`; performance-facing or risk-facing upstream contract changes must also pass `make analytics-input-consumer-contract-guard`,
-10. future market/reference/benchmark/index/risk-free DTO work must use `docs/architecture/RFC-0083-market-reference-data-target-model.md` and `src/libs/portfolio-common/portfolio_common/market_reference_quality.py` before changing observed/source timestamp or freshness/completeness semantics,
-11. route removal or deprecation must follow `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`, update the route-family registry when routes change, and carry affected-consumer evidence,
-12. future source-data product security, retention, audit, capability, and entitlement changes must use `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`, `src/libs/portfolio-common/portfolio_common/source_data_security.py`, and `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`; they must keep generated `x-lotus-source-data-security` route metadata and catalog-derived capability rules aligned with the governed profile and avoid reintroducing duplicated service-local authorization or audit middleware logic,
-13. future event, outbox, replay, DLQ, direct Kafka publish, and operator diagnostic changes must use `docs/architecture/RFC-0083-eventing-supportability-target-model.md`, `src/libs/portfolio-common/portfolio_common/event_supportability.py`, `src/libs/portfolio-common/portfolio_common/events.py`, and the centralized payload envelope in `src/libs/portfolio-common/portfolio_common/outbox_repository.py`; they must pass `make event-runtime-contract-guard` when outbox emissions, direct publish topics, or Kafka topics are touched,
-14. RFC-0083 target-model closure is tracked by `docs/standards/rfc-0083-implementation-ledger.json` and guarded by `make rfc0083-closure-guard`; the ledger intentionally does not claim full production runtime closure,
-15. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-16. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-17. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
-18. institutional load-run diagnosis should distinguish target-date `daily_position_snapshots`,
+10. future source-data product catalog changes must keep `contracts/domain-data-products/lotus-core-products.v1.json` aligned with the same product names, versions, consumers, route metadata, serving planes, required trust metadata, and source-data security profile references, and must pass `make domain-product-validate` when the sibling platform checkout is available,
+11. future market/reference/benchmark/index/risk-free DTO work must use `docs/architecture/RFC-0083-market-reference-data-target-model.md` and `src/libs/portfolio-common/portfolio_common/market_reference_quality.py` before changing observed/source timestamp or freshness/completeness semantics,
+12. route removal or deprecation must follow `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`, update the route-family registry when routes change, and carry affected-consumer evidence,
+13. future source-data product security, retention, audit, capability, and entitlement changes must use `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`, `src/libs/portfolio-common/portfolio_common/source_data_security.py`, and `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`; they must keep generated `x-lotus-source-data-security` route metadata and catalog-derived capability rules aligned with the governed profile and avoid reintroducing duplicated service-local authorization or audit middleware logic,
+14. future event, outbox, replay, DLQ, direct Kafka publish, and operator diagnostic changes must use `docs/architecture/RFC-0083-eventing-supportability-target-model.md`, `src/libs/portfolio-common/portfolio_common/event_supportability.py`, `src/libs/portfolio-common/portfolio_common/events.py`, and the centralized payload envelope in `src/libs/portfolio-common/portfolio_common/outbox_repository.py`; they must pass `make event-runtime-contract-guard` when outbox emissions, direct publish topics, or Kafka topics are touched,
+15. RFC-0083 target-model closure is tracked by `docs/standards/rfc-0083-implementation-ledger.json` and guarded by `make rfc0083-closure-guard`; the ledger intentionally does not claim full production runtime closure,
+16. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+17. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+18. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+19. institutional load-run diagnosis should distinguish target-date `daily_position_snapshots`,
     security-level `position_timeseries`, and portfolio-level `portfolio_timeseries` coverage,
     because timeseries lag can concentrate before portfolio aggregation rather than inside it,
-19. run-progress evidence for institutional load work should split pending versus processing queue
+20. run-progress evidence for institutional load work should split pending versus processing queue
     counts for valuation and aggregation so operators can distinguish backlog from active drain,
-20. when branch-only support telemetry exists but the running stack has not been refreshed, use
+21. when branch-only support telemetry exists but the running stack has not been refreshed, use
     durable database facts as the source of truth and record the runtime rollout gap explicitly in
     RFC and operator evidence,
-21. for institutional load monitoring, record harness process state separately from database
+22. for institutional load monitoring, record harness process state separately from database
     completion state because asynchronous workers can continue draining after the original Python
     runner exits,
-22. event-catalog completion topics are not automatically part of the active runtime graph:
+23. event-catalog completion topics are not automatically part of the active runtime graph:
     `portfolio_security_day.valuation.completed` and
     `portfolio_security_day.position_timeseries.completed` are currently dormant and should not be
     reintroduced into hot paths without a proven consumer need,
-23. institutional load diagnosis should track outbox backlog separately from materialized
+24. institutional load diagnosis should track outbox backlog separately from materialized
     portfolio/business-date coverage, because load completion can converge before non-critical
     completion-topic publication drains,
-24. the run-scoped support route for institutional load progress is now part of the live local
+25. the run-scoped support route for institutional load progress is now part of the live local
     runtime baseline for RFC-086 work; after service refresh, use
     `GET /support/load-runs/{run_id}?business_date={date}` as the first completion surface and
     fall back to direct database facts only when runtime rollout has not yet occurred,
-25. exact-run correctness evidence for institutional load no longer requires reseeding a fresh
+26. exact-run correctness evidence for institutional load no longer requires reseeding a fresh
     workload: use `scripts/bank_day_load_reconciliation_report.py` against the completed `run_id`
     to collect sampled or exhaustive reconciliation proof for positions, transactions, support
     overview state, and timeseries-integrity findings.
-26. institutional sign-off evidence selection must prefer the strongest available proof, not just
+27. institutional sign-off evidence selection must prefer the strongest available proof, not just
     the newest artifact timestamp: use `full` profile-tier performance-load artifacts ahead of
     newer `fast` artifacts, and prefer exhaustive bank-day reconciliation artifacts where
     `portfolio_count_evaluated == portfolios_ingested` ahead of newer sampled refresh artifacts,
-27. main releasability now owns a governed RFC-086 institutional completion gate that runs the
+28. main releasability now owns a governed RFC-086 institutional completion gate that runs the
     bank-day load scenario and then exhaustive reconciliation for the generated run before the
     institutional sign-off pack aggregates artifacts,
-28. legacy PAS-era wiki material should be filtered through the platform migration ledger before
+29. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 
 ## Context Maintenance Rule
