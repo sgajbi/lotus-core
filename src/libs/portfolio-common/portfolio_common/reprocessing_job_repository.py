@@ -188,7 +188,9 @@ class ReprocessingJobRepository:
                 updated_at = now(),
                 last_attempted_at = now(),
                 attempt_count = attempt_count + 1
-            WHERE id IN (
+            WHERE status = 'PENDING'
+              AND job_type = :job_type
+              AND id IN (
                 SELECT id
                 FROM reprocessing_jobs
                 WHERE status = 'PENDING' AND job_type = :job_type
