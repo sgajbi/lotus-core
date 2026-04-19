@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Partially Implemented |
+| Status | Implemented |
 | Created | 2026-04-18 |
 | Last Updated | 2026-04-19 |
 | Owners | lotus-core engineering |
@@ -194,24 +194,30 @@ Instead, the run points to a different defect class:
 18. The run-scoped support contract now publishes the configured dependent position-timeseries
     propagation row cap from a shared constant, so operators can interpret timeseries lag against
     the actual per-message drain boundary without reading worker code.
-18. The run-scoped support contract now publishes the distinct portfolio breadth of the
+19. The run-scoped support contract now publishes the distinct portfolio breadth of the
     valuation-to-position-timeseries handoff backlog, not just raw waiting job count, so operators
     can distinguish localized lag from broad portfolio-level incomplete coverage.
-19. The same support contract now publishes the backlog breadth as a ratio of ingested portfolios,
+20. The same support contract now publishes the backlog breadth as a ratio of ingested portfolios,
     so operators can read the handoff lag in scale terms without manually normalizing counts.
-20. The support contract now also publishes waiting valuation-job density per affected portfolio,
+21. The support contract now also publishes waiting valuation-job density per affected portfolio,
     which helps distinguish narrow deep lag from broad shallow incomplete coverage during load
     drain analysis.
-21. The support contract now publishes the maximum waiting valuation-job depth within any single
+22. The support contract now publishes the maximum waiting valuation-job depth within any single
     affected portfolio, which gives operators a durable concentration signal for cap-risk and
     localized backlog diagnosis.
-22. The support contract now derives an explicit dependent propagation cap-risk flag from the
+23. The support contract now derives an explicit dependent propagation cap-risk flag from the
     shared cap and the maximum single-portfolio waiting depth, so operators do not need to infer
     truncation risk manually from multiple fields.
-23. Dependent position-timeseries propagation now drains a bounded number of future snapshot
+24. Dependent position-timeseries propagation now drains a bounded number of future snapshot
     batches per message instead of stopping after the first batch, increasing the truthful
     per-message row cap published by the support contract while retaining bounded work and
     accurate overflow warnings.
+25. Final review corrected stale E2E acceptance assertions so they now align with the governed
+    analytics-input contract: `fee` is the canonical operational expense cash-flow type, non-final
+    observations contribute to `stale_points_count`, and dual-leg internally financed settlement
+    validates net-neutral beginning and ending exposure across stock and cash legs.
+26. Full local E2E validation on 2026-04-19 passed after the review slice:
+    `make test-e2e-all` completed with `67 passed`.
 
 ## Requirement-to-Implementation Traceability
 
@@ -221,7 +227,7 @@ Instead, the run points to a different defect class:
 | Correctness under institutional load | Implemented baseline | live run `20260418T065154Z`; support-route evidence `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`; sampled reconciliation `output/task-runs/20260418T120025Z-rfc086-final-reconciliation.md`; exhaustive reconciliation `output/task-runs/20260418T122335-bank-day-load-reconciliation.md`; latest sampled reconciliation refresh `output/task-runs/20260418T142850-bank-day-load-reconciliation.md` |
 | Deterministic visibility into completion state | Implemented baseline | run-scoped support contract and stage split metrics are live; `GET /support/load-runs/20260418T065154Z?business_date=2026-04-17` returned `COMPLETE` at `2026-04-18T12:00:25Z` and still returned `COMPLETE` with full coverage plus latency evidence at `2026-04-18T14:28:50Z`; evidence: `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`, `output/task-runs/20260418T142850-bank-day-load-reconciliation.md` |
 | Interruption-safe operator evidence | Implemented baseline | `scripts/bank_day_load_scenario.py`; `output/task-runs/20260418T064716Z-bank-day-load.json`; `output/task-runs/20260418T064716Z-bank-day-load.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
-| Throughput adequate for institutional completion SLA | Partially implemented (requires enhancement) | full ingestion and snapshot completion were achieved, but target-date coverage remained at `562` position-timeseries portfolios and `561` portfolio-timeseries portfolios at `2026-04-18T09:09:16Z` while valuation-to-position-timeseries p50 latency remained about `36.25` minutes |
+| Throughput adequate for institutional completion SLA | Implemented with governed completion evidence | the live run initially exposed the valuation-to-position-timeseries bottleneck, then converged to `1000/1000` snapshot, position-timeseries, and portfolio-timeseries coverage with `0` open valuation jobs and `0` open aggregation jobs; Phase 1 added stage-tail/handoff telemetry, bounded dependent propagation cleanup, and completion-lag enforcement in institutional signoff; final review evidence includes `make test-e2e-all` with `67 passed` on 2026-04-19 |
 
 ## Goals
 
@@ -712,8 +718,8 @@ This ordering is deliberate. It minimizes the chance of making the system faster
 
 ## Next Actions
 
-1. Approve RFC 086.
-2. Capture the first post-Phase-0 institutional run with partial and final artifact support.
-3. Use that evidence to prioritize the exact Phase 1 throughput changes.
-4. Implement Phase 1 in small, test-backed slices with before/after timing evidence.
-5. Perform the explicit documentation/context/skills review required by Phase 4 before declaring the RFC complete.
+1. Keep PR #317 open until the GitHub PR Merge Gate checks for the final branch head are green.
+2. Merge the feature branch only after the draft PR is marked ready and required checks pass.
+3. After merge, treat RFC-086 as closed implementation work and maintain its institutional
+   completion gate, support-route telemetry, and reconciliation artifacts through normal regression
+   governance.
