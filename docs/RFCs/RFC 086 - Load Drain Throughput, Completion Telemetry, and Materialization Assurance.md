@@ -591,6 +591,10 @@ Implementation status as of 2026-04-18:
 32. institutional sign-off now also prefers exhaustive bank-day reconciliation artifacts over
     newer sampled refresh artifacts when both are present, so approval-grade evidence uses the
     strongest available portfolio-breadth tie-out instead of the most recent lightweight sample.
+33. main releasability now includes a governed institutional completion gate that runs the
+    bank-day load scenario and then exhaustive reconciliation for the exact generated `run_id`
+    before sign-off aggregation, so RFC-086 completion evidence is produced by the readiness lane
+    instead of being left as a manual prerequisite.
 
 Phase 1 exit criteria:
 

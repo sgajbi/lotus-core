@@ -201,7 +201,10 @@ Most relevant current governance:
     the newest artifact timestamp: use `full` profile-tier performance-load artifacts ahead of
     newer `fast` artifacts, and prefer exhaustive bank-day reconciliation artifacts where
     `portfolio_count_evaluated == portfolios_ingested` ahead of newer sampled refresh artifacts,
-27. legacy PAS-era wiki material should be filtered through the platform migration ledger before
+27. main releasability now owns a governed RFC-086 institutional completion gate that runs the
+    bank-day load scenario and then exhaustive reconciliation for the generated run before the
+    institutional sign-off pack aggregates artifacts,
+28. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 
 ## Context Maintenance Rule

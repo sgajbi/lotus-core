@@ -22,6 +22,17 @@ This command writes:
 1. `output/task-runs/*-institutional-signoff-pack.json`
 2. `output/task-runs/*-institutional-signoff-pack.md`
 
+To generate the full RFC-086 completion evidence set first, run:
+
+```powershell
+make test-institutional-completion-gate
+```
+
+That governed wrapper runs the bank-day load scenario and then exhaustive
+reconciliation for the exact generated `run_id`, producing both:
+1. `output/task-runs/*-bank-day-load.json|md`
+2. `output/task-runs/*-bank-day-load-reconciliation.json|md`
+
 ## CI Enforcement
 1. GitHub Actions job `Institutional Sign-Off Pack` runs on:
    1. `main` pushes,
@@ -31,6 +42,8 @@ This command writes:
    1. any required artifact is missing,
    2. any gate status is failed,
    3. any required artifact is older than 24 hours (`--max-age-hours 24`).
+3. The main releasability workflow now generates RFC-086 completion evidence through
+   `Main Releasability / Institutional Completion Gate` before sign-off aggregation.
 
 ## Go-Live Checklist
 All items must be `yes`:
