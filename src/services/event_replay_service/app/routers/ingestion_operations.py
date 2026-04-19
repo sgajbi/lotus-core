@@ -184,7 +184,7 @@ INGESTION_OPS_POLICY_RESPONSE_EXAMPLE = {
     "reprocessing_worker_batch_size": 10,
     "valuation_scheduler_poll_interval_seconds": 30,
     "valuation_scheduler_batch_size": 100,
-    "valuation_scheduler_dispatch_rounds": 3,
+    "valuation_scheduler_dispatch_rounds": 10,
     "dlq_budget_events_per_window": 10,
     "operating_band_yellow_backlog_age_seconds": 15.0,
     "operating_band_orange_backlog_age_seconds": 60.0,

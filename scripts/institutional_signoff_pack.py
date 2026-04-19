@@ -19,6 +19,13 @@ class ArtifactStatus:
     summary: str
 
 
+def _parse_optional_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    return datetime.fromisoformat(normalized)
+
+
 def _latest_artifact(output_dir: Path, pattern: str) -> Path | None:
     # CI artifact downloads can include nested paths.
     # Use recursive discovery so sign-off generation remains robust
@@ -26,6 +33,49 @@ def _latest_artifact(output_dir: Path, pattern: str) -> Path | None:
     matches = sorted(output_dir.rglob(pattern), key=lambda p: p.stat().st_mtime)
     if not matches:
         return None
+    return matches[-1]
+
+
+def _latest_performance_artifact(output_dir: Path) -> Path | None:
+    matches = sorted(
+        output_dir.rglob("*-performance-load-gate.json"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    if not matches:
+        return None
+    preferred_full_matches: list[Path] = []
+    for path in matches:
+        try:
+            payload = _load_json(path)
+        except json.JSONDecodeError:
+            continue
+        if payload.get("profile_tier") == "full":
+            preferred_full_matches.append(path)
+    if preferred_full_matches:
+        return preferred_full_matches[-1]
+    return matches[-1]
+
+
+def _latest_load_reconciliation_artifact(output_dir: Path) -> Path | None:
+    matches = sorted(
+        output_dir.rglob("*-bank-day-load-reconciliation.json"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    if not matches:
+        return None
+    preferred_exhaustive_matches: list[Path] = []
+    for path in matches:
+        try:
+            payload = _load_json(path)
+        except json.JSONDecodeError:
+            continue
+        run_progress = payload.get("run_progress", {})
+        portfolios_evaluated = int(payload.get("portfolio_count_evaluated", 0) or 0)
+        portfolios_ingested = int(run_progress.get("portfolios_ingested", 0) or 0)
+        if portfolios_ingested > 0 and portfolios_evaluated == portfolios_ingested:
+            preferred_exhaustive_matches.append(path)
+    if preferred_exhaustive_matches:
+        return preferred_exhaustive_matches[-1]
     return matches[-1]
 
 
@@ -116,6 +166,84 @@ def _failure_recovery_status(path: Path | None) -> ArtifactStatus:
     summary = f"checks_passed={passed}, failed_checks={failed_checks}"
     return ArtifactStatus(
         name="failure_recovery_gate", path=str(path), passed=passed, summary=summary
+    )
+
+
+def _completion_lag_seconds(run_progress: dict[str, Any]) -> float | None:
+    explicit_tail = run_progress.get("latest_snapshot_to_position_timeseries_tail_seconds")
+    explicit_portfolio_tail = run_progress.get(
+        "latest_position_timeseries_to_portfolio_timeseries_tail_seconds"
+    )
+    if isinstance(explicit_tail, Real) and isinstance(explicit_portfolio_tail, Real):
+        return round(explicit_tail + explicit_portfolio_tail, 6)
+    latest_snapshot_materialized_at = _parse_optional_datetime(
+        run_progress.get("latest_snapshot_materialized_at_utc")
+    )
+    latest_portfolio_timeseries_materialized_at = _parse_optional_datetime(
+        run_progress.get("latest_portfolio_timeseries_materialized_at_utc")
+    )
+    if (
+        latest_snapshot_materialized_at is None
+        or latest_portfolio_timeseries_materialized_at is None
+    ):
+        return None
+    return round(
+        max(
+            (
+                latest_portfolio_timeseries_materialized_at - latest_snapshot_materialized_at
+            ).total_seconds(),
+            0.0,
+        ),
+        6,
+    )
+
+
+def _load_reconciliation_status(
+    path: Path | None,
+    *,
+    max_completion_lag_seconds: int,
+) -> ArtifactStatus:
+    if path is None:
+        return ArtifactStatus(
+            name="bank_day_load_reconciliation",
+            path=None,
+            passed=False,
+            summary="missing artifact",
+        )
+    payload = _load_json(path)
+    run_progress = payload.get("run_progress", {})
+    summary = payload.get("summary", {})
+    portfolios_evaluated = int(payload.get("portfolio_count_evaluated", 0) or 0)
+    run_state = str(run_progress.get("run_state", "UNKNOWN"))
+    operator_progress_state = str(run_progress.get("operator_progress_state", "UNKNOWN"))
+    complete_portfolios = int(run_progress.get("complete_portfolios", 0) or 0)
+    portfolios_ingested = int(run_progress.get("portfolios_ingested", 0) or 0)
+    completion_lag_seconds = _completion_lag_seconds(run_progress)
+    passed = (
+        bool(summary.get("all_samples_reconciled"))
+        and bool(summary.get("all_position_counts_match_expected"))
+        and bool(summary.get("all_transaction_counts_match_expected"))
+        and bool(summary.get("all_market_values_match_expected"))
+        and portfolios_evaluated > 0
+        and run_state == "COMPLETE"
+        and operator_progress_state == "COMPLETE"
+        and complete_portfolios == portfolios_ingested
+        and completion_lag_seconds is not None
+        and completion_lag_seconds <= max_completion_lag_seconds
+    )
+    artifact_summary = (
+        f"run_state={run_state}, operator_progress_state={operator_progress_state}, "
+        f"complete_portfolios={complete_portfolios}/{portfolios_ingested}, "
+        f"portfolios_evaluated={portfolios_evaluated}, "
+        f"all_samples_reconciled={summary.get('all_samples_reconciled')}, "
+        f"completion_lag_seconds={completion_lag_seconds}, "
+        f"max_completion_lag_seconds={max_completion_lag_seconds}"
+    )
+    return ArtifactStatus(
+        name="bank_day_load_reconciliation",
+        path=str(path),
+        passed=passed,
+        summary=artifact_summary,
     )
 
 
@@ -215,6 +343,15 @@ def main() -> int:
         default=24,
         help="Maximum allowed artifact age for recency policy.",
     )
+    parser.add_argument(
+        "--max-load-completion-lag-seconds",
+        type=int,
+        default=1800,
+        help=(
+            "Maximum allowed snapshot-to-portfolio completion lag for bank-day "
+            "reconciliation evidence."
+        ),
+    )
     args = parser.parse_args()
 
     artifact_dir = Path(args.artifact_dir).resolve()
@@ -223,8 +360,12 @@ def main() -> int:
     statuses = [
         _docker_smoke_status(_latest_artifact(artifact_dir, "*-docker-endpoint-smoke.json")),
         _latency_status(_latest_artifact(artifact_dir, "*-latency-profile.json")),
-        _performance_status(_latest_artifact(artifact_dir, "*-performance-load-gate.json")),
+        _performance_status(_latest_performance_artifact(artifact_dir)),
         _failure_recovery_status(_latest_artifact(artifact_dir, "*-failure-recovery-gate.json")),
+        _load_reconciliation_status(
+            _latest_load_reconciliation_artifact(artifact_dir),
+            max_completion_lag_seconds=args.max_load_completion_lag_seconds,
+        ),
     ]
     statuses = _apply_recency_policy(statuses, max_age_hours=args.max_age_hours)
     json_path, md_path, overall_passed = _write_pack(

@@ -65,6 +65,10 @@ Primary areas:
    quality gates, performance and recovery gates, test-manifest orchestration, and operational tooling.
 8. `tests/`
    unit, integration-lite, full integration, ops-contract, transaction-contract, e2e, Docker smoke, and performance-oriented coverage.
+9. `wiki/`
+   canonical authored source for GitHub wiki publication and core-owned operator and onboarding summaries.
+10. `docs/architecture/README.md`
+    the primary navigation index for the deep core architecture and RFC hardening set.
 
 ## Runtime And Integration Boundaries
 
@@ -114,7 +118,9 @@ Important validation expectations:
 1. architecture guards, OpenAPI gates, warning budget, vocabulary, source-data product, and contract gates are active,
 2. PR-grade validation includes runtime gates, Docker smoke, latency, and performance load checks,
 3. main releasability extends PR validation with heavier release-only gates,
-4. deterministic test-manifest orchestration is part of the repo truth and should not be bypassed casually.
+4. deterministic test-manifest orchestration is part of the repo truth and should not be bypassed casually,
+5. repo-local wiki and README content should stay limited to current `lotus-core` ownership and
+   should not re-import ecosystem-wide or commercial narrative that now belongs in `lotus-platform`.
 
 ## Standards And RFCs That Govern This Repository
 
@@ -165,6 +171,41 @@ Most relevant current governance:
 15. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
 16. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
 17. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+18. institutional load-run diagnosis should distinguish target-date `daily_position_snapshots`,
+    security-level `position_timeseries`, and portfolio-level `portfolio_timeseries` coverage,
+    because timeseries lag can concentrate before portfolio aggregation rather than inside it,
+19. run-progress evidence for institutional load work should split pending versus processing queue
+    counts for valuation and aggregation so operators can distinguish backlog from active drain,
+20. when branch-only support telemetry exists but the running stack has not been refreshed, use
+    durable database facts as the source of truth and record the runtime rollout gap explicitly in
+    RFC and operator evidence,
+21. for institutional load monitoring, record harness process state separately from database
+    completion state because asynchronous workers can continue draining after the original Python
+    runner exits,
+22. event-catalog completion topics are not automatically part of the active runtime graph:
+    `portfolio_security_day.valuation.completed` and
+    `portfolio_security_day.position_timeseries.completed` are currently dormant and should not be
+    reintroduced into hot paths without a proven consumer need,
+23. institutional load diagnosis should track outbox backlog separately from materialized
+    portfolio/business-date coverage, because load completion can converge before non-critical
+    completion-topic publication drains,
+24. the run-scoped support route for institutional load progress is now part of the live local
+    runtime baseline for RFC-086 work; after service refresh, use
+    `GET /support/load-runs/{run_id}?business_date={date}` as the first completion surface and
+    fall back to direct database facts only when runtime rollout has not yet occurred,
+25. exact-run correctness evidence for institutional load no longer requires reseeding a fresh
+    workload: use `scripts/bank_day_load_reconciliation_report.py` against the completed `run_id`
+    to collect sampled or exhaustive reconciliation proof for positions, transactions, support
+    overview state, and timeseries-integrity findings.
+26. institutional sign-off evidence selection must prefer the strongest available proof, not just
+    the newest artifact timestamp: use `full` profile-tier performance-load artifacts ahead of
+    newer `fast` artifacts, and prefer exhaustive bank-day reconciliation artifacts where
+    `portfolio_count_evaluated == portfolios_ingested` ahead of newer sampled refresh artifacts,
+27. main releasability now owns a governed RFC-086 institutional completion gate that runs the
+    bank-day load scenario and then exhaustive reconciliation for the generated run before the
+    institutional sign-off pack aggregates artifacts,
+28. legacy PAS-era wiki material should be filtered through the platform migration ledger before
+    reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 
 ## Context Maintenance Rule
 
@@ -175,6 +216,7 @@ Update this document when:
 3. shared-infrastructure ownership assumptions change,
 4. integration contract posture, RFC-0082 contract-family classification, RFC-0083 target-state slice plan, or current-state architecture shifts materially,
 5. the repository's CI and runtime expectations change.
+6. deep-architecture navigation or documentation entrypoints change materially.
 
 ## Cross-Links
 

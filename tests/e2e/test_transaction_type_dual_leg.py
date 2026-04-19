@@ -86,9 +86,19 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
 
     stock_flow_total = sum(Decimal(str(flow["amount"])) for flow in stock_row["cash_flows"])
     cash_flow_total = sum(Decimal(str(flow["amount"])) for flow in cash_row["cash_flows"])
+    stock_beginning_value = Decimal(
+        str(stock_row["beginning_market_value_position_currency"])
+    )
+    stock_ending_value = Decimal(str(stock_row["ending_market_value_position_currency"]))
+    cash_beginning_value = Decimal(str(cash_row["beginning_market_value_position_currency"]))
+    cash_ending_value = Decimal(str(cash_row["ending_market_value_position_currency"]))
 
-    assert Decimal(str(stock_row["beginning_market_value_position_currency"])) == Decimal("0")
-    assert Decimal(str(stock_row["ending_market_value_position_currency"])) == Decimal("1000")
+    assert stock_beginning_value == Decimal("1000")
+    assert stock_ending_value == Decimal("1000")
+    assert cash_beginning_value == Decimal("-1000")
+    assert cash_ending_value == Decimal("-1000")
+    assert stock_beginning_value + cash_beginning_value == Decimal("0")
+    assert stock_ending_value + cash_ending_value == Decimal("0")
     assert stock_flow_total == Decimal("1000")
     assert cash_flow_total == Decimal("-1000")
     assert stock_flow_total + cash_flow_total == Decimal("0")

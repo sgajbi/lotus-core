@@ -419,10 +419,51 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  institutional-completion-gate:
+    name: Main Releasability / Institutional Completion Gate
+    needs: [coverage-gate, failure-recovery-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Restore Docker build cache
+        uses: actions/cache@v4
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group institutional-completion-gate
+      - name: Run governed institutional completion gate
+        run: make test-institutional-completion-gate
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > institutional-completion-gate-logs.txt
+      - name: Upload institutional completion artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-releasability-institutional-completion-artifacts
+          path: |
+            output/task-runs/*bank-day-load*.json
+            output/task-runs/*bank-day-load*.md
+            institutional-completion-gate-logs.txt
+          if-no-files-found: warn
+          retention-days: 30
+
   institutional-signoff-pack:
     name: Main Releasability / Institutional Sign-Off Pack
     needs:
-      [docker-smoke-contract, latency-gate, performance-load-gate, failure-recovery-gate]
+      [docker-smoke-contract, latency-gate, performance-load-gate, failure-recovery-gate, institutional-completion-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

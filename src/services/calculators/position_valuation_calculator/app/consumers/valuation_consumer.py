@@ -4,7 +4,6 @@ import logging
 
 from confluent_kafka import Message
 from portfolio_common.config import (
-    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC,
     KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
 )
 from portfolio_common.database_models import DailyPositionSnapshot
@@ -12,7 +11,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
     PortfolioValuationRequiredEvent,
-    ValuationDayCompletedEvent,
 )
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -47,6 +45,10 @@ class ValuationConsumer(BaseConsumer):
     calculates market value, and saves the result.
     """
 
+    @staticmethod
+    def _build_processing_event_id(*, msg: Message) -> str:
+        return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+
     @retry(
         wait=wait_fixed(3),
         stop=stop_after_attempt(5),
@@ -57,7 +59,7 @@ class ValuationConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         key = msg.key().decode("utf-8") if msg.key() else "NoKey"
         value = msg.value().decode("utf-8")
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+        event_id = None
         event = None
 
         try:
@@ -67,6 +69,9 @@ class ValuationConsumer(BaseConsumer):
                 fallback_correlation_id=event_data.get("correlation_id"),
             ) as correlation_id:
                 event = PortfolioValuationRequiredEvent.model_validate(event_data)
+                event_id = self._build_processing_event_id(
+                    msg=msg,
+                )
 
                 logger.info(
                     "Processing valuation job for "
@@ -81,7 +86,12 @@ class ValuationConsumer(BaseConsumer):
                             outbox_repo = OutboxRepository(db)
                             repo = ValuationRepository(db)
 
-                            if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                            if not await idempotency_repo.claim_event_processing(
+                                event_id,
+                                event.portfolio_id,
+                                SERVICE_NAME,
+                                correlation_id,
+                            ):
                                 logger.warning(f"Event {event_id} already processed. Skipping.")
                                 return
 
@@ -137,9 +147,6 @@ class ValuationConsumer(BaseConsumer):
                                         },
                                     )
                                     return
-                                await idempotency_repo.mark_event_processed(
-                                    event_id, event.portfolio_id, SERVICE_NAME, correlation_id
-                                )
                                 return
 
                             # 3. Build the initial snapshot from the position state
@@ -249,7 +256,8 @@ class ValuationConsumer(BaseConsumer):
                                 )
                                 return
 
-                            # 5. Persist the snapshot and create completion event
+                            # 5. Persist the snapshot and publish the active
+                            # valuation-to-timeseries handoff event.
                             persisted_snapshot = await repo.upsert_daily_snapshot(snapshot)
                             completion_event = DailyPositionSnapshotPersistedEvent.model_validate(
                                 persisted_snapshot
@@ -262,32 +270,6 @@ class ValuationConsumer(BaseConsumer):
                                 topic=KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
                                 payload=completion_event.model_dump(mode="json"),
                                 correlation_id=correlation_id,
-                            )
-                            valuation_completion_event = ValuationDayCompletedEvent(
-                                daily_position_snapshot_id=persisted_snapshot.id,
-                                portfolio_id=persisted_snapshot.portfolio_id,
-                                security_id=persisted_snapshot.security_id,
-                                valuation_date=persisted_snapshot.date,
-                                epoch=persisted_snapshot.epoch,
-                                valuation_status=persisted_snapshot.valuation_status,
-                                correlation_id=correlation_id,
-                            )
-                            await outbox_repo.create_outbox_event(
-                                aggregate_type="ValuationStage",
-                                aggregate_id=(
-                                    f"{persisted_snapshot.portfolio_id}:"
-                                    f"{persisted_snapshot.security_id}:"
-                                    f"{persisted_snapshot.date}:"
-                                    f"{persisted_snapshot.epoch}"
-                                ),
-                                event_type="ValuationDayCompleted",
-                                topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_COMPLETED_TOPIC,
-                                payload=valuation_completion_event.model_dump(mode="json"),
-                                correlation_id=correlation_id,
-                            )
-
-                            await idempotency_repo.mark_event_processed(
-                                event_id, event.portfolio_id, SERVICE_NAME, correlation_id
                             )
 
                     except DataNotFoundError as e:

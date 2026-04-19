@@ -36,6 +36,81 @@ class ReconciliationService:
     def __init__(self, repository: ReconciliationRepository):
         self.repository = repository
 
+    async def _aggregate_authoritative_portfolio_metrics(
+        self,
+        *,
+        portfolio_id: str,
+        business_date: date,
+        epoch: int,
+    ) -> tuple[dict[str, Decimal], int]:
+        authoritative_rows = await self.repository.fetch_authoritative_position_timeseries_rows(
+            portfolio_id=portfolio_id,
+            business_date=business_date,
+            epoch=epoch,
+        )
+        metrics = {
+            "bod_market_value": ZERO,
+            "bod_cashflow": ZERO,
+            "eod_cashflow": ZERO,
+            "eod_market_value": ZERO,
+            "fees": ZERO,
+        }
+        fx_cache: dict[tuple[str, str, date], Decimal] = {}
+
+        for position_row, instrument, portfolio in authoritative_rows:
+            from_currency = (instrument.currency or "").strip()
+            to_currency = (portfolio.base_currency or "").strip()
+            rate = Decimal("1")
+            if from_currency and to_currency and from_currency != to_currency:
+                cache_key = (from_currency, to_currency, position_row.date)
+                if cache_key not in fx_cache:
+                    fx_rate = await self.repository.fetch_latest_fx_rate(
+                        from_currency=from_currency,
+                        to_currency=to_currency,
+                        business_date=position_row.date,
+                    )
+                    fx_cache[cache_key] = Decimal(str(fx_rate.rate)) if fx_rate else ZERO
+                rate = fx_cache[cache_key]
+                if rate == ZERO:
+                    continue
+
+            metrics["bod_market_value"] += Decimal(str(position_row.bod_market_value or ZERO)) * rate
+            metrics["bod_cashflow"] += Decimal(
+                str(position_row.bod_cashflow_portfolio or ZERO)
+            ) * rate
+            metrics["eod_cashflow"] += Decimal(
+                str(position_row.eod_cashflow_portfolio or ZERO)
+            ) * rate
+            metrics["eod_market_value"] += Decimal(str(position_row.eod_market_value or ZERO)) * rate
+            metrics["fees"] += Decimal(str(position_row.fees or ZERO)) * rate
+
+        return metrics, len(authoritative_rows)
+
+    @staticmethod
+    def _expected_market_value_local(
+        *,
+        quantity: Decimal,
+        market_price: Decimal,
+        cost_basis_local: Decimal,
+        product_type: str | None,
+    ) -> Decimal:
+        normalized_product_type = (product_type or "").strip().upper()
+        valuation_price_local = market_price
+        if normalized_product_type == "BOND" and not quantity.is_zero():
+            average_cost_local = abs(cost_basis_local / quantity)
+            absolute_price_local = abs(valuation_price_local)
+            if (
+                absolute_price_local > Decimal("0")
+                and absolute_price_local < Decimal("200")
+                and average_cost_local >= Decimal("500")
+            ):
+                price_ratio = average_cost_local / absolute_price_local
+                if price_ratio >= Decimal("50"):
+                    valuation_price_local *= Decimal("100")
+                elif price_ratio >= Decimal("5"):
+                    valuation_price_local *= Decimal("10")
+        return quantity * valuation_price_local
+
     @staticmethod
     def _automatic_dedupe_key(
         *,
@@ -223,12 +298,18 @@ class ReconciliationService:
         )
         findings: list[FinancialReconciliationFinding] = []
         examined = 0
-        for row in rows:
+        for snapshot, instrument, _portfolio in rows:
             examined += 1
-            expected_market_value_local = Decimal(str(row.quantity)) * Decimal(
-                str(row.market_price)
+            quantity = Decimal(str(snapshot.quantity))
+            cost_basis_local = Decimal(str(snapshot.cost_basis_local))
+            expected_market_value_local = self._expected_market_value_local(
+                quantity=quantity,
+                market_price=Decimal(str(snapshot.market_price)),
+                cost_basis_local=cost_basis_local,
+                product_type=instrument.product_type,
             )
-            observed_market_value_local = Decimal(str(row.market_value_local))
+            expected_unrealized = expected_market_value_local - cost_basis_local
+            observed_market_value_local = Decimal(str(snapshot.market_value_local))
             market_delta = observed_market_value_local - expected_market_value_local
             if abs(market_delta) > tolerance:
                 findings.append(
@@ -237,25 +318,25 @@ class ReconciliationService:
                         reconciliation_type="position_valuation",
                         finding_type="market_value_local_mismatch",
                         severity="ERROR",
-                        portfolio_id=row.portfolio_id,
-                        security_id=row.security_id,
+                        portfolio_id=snapshot.portfolio_id,
+                        security_id=snapshot.security_id,
                         transaction_id=None,
-                        business_date=row.date,
-                        epoch=row.epoch,
+                        business_date=snapshot.date,
+                        epoch=snapshot.epoch,
                         expected_value={"market_value_local": str(expected_market_value_local)},
                         observed_value={
                             "market_value_local": str(observed_market_value_local),
                             "delta": str(market_delta),
                         },
                         detail={
-                            "quantity": str(row.quantity),
-                            "market_price": str(row.market_price),
+                            "quantity": str(snapshot.quantity),
+                            "market_price": str(snapshot.market_price),
+                            "product_type": instrument.product_type,
                         },
                     )
                 )
 
-            expected_unrealized = observed_market_value_local - Decimal(str(row.cost_basis_local))
-            observed_unrealized = Decimal(str(row.unrealized_gain_loss_local))
+            observed_unrealized = Decimal(str(snapshot.unrealized_gain_loss_local))
             unrealized_delta = observed_unrealized - expected_unrealized
             if abs(unrealized_delta) > tolerance:
                 findings.append(
@@ -264,11 +345,11 @@ class ReconciliationService:
                         reconciliation_type="position_valuation",
                         finding_type="unrealized_gain_loss_local_mismatch",
                         severity="ERROR",
-                        portfolio_id=row.portfolio_id,
-                        security_id=row.security_id,
+                        portfolio_id=snapshot.portfolio_id,
+                        security_id=snapshot.security_id,
                         transaction_id=None,
-                        business_date=row.date,
-                        epoch=row.epoch,
+                        business_date=snapshot.date,
+                        epoch=snapshot.epoch,
                         expected_value={"unrealized_gain_loss_local": str(expected_unrealized)},
                         observed_value={
                             "unrealized_gain_loss_local": str(observed_unrealized),
@@ -276,7 +357,8 @@ class ReconciliationService:
                         },
                         detail={
                             "market_value_local": str(observed_market_value_local),
-                            "cost_basis_local": str(row.cost_basis_local),
+                            "cost_basis_local": str(snapshot.cost_basis_local),
+                            "product_type": instrument.product_type,
                         },
                     )
                 )
@@ -345,17 +427,22 @@ class ReconciliationService:
 
         findings: list[FinancialReconciliationFinding] = []
         examined = 0
-        all_keys = set(portfolio_by_key) | set(aggregate_by_key) | set(snapshot_count_by_key)
+        if portfolio_by_key:
+            all_keys = set(portfolio_by_key)
+        else:
+            all_keys = set(aggregate_by_key) | set(snapshot_count_by_key)
         for key in sorted(
             all_keys,
             key=lambda item: (item.portfolio_id, item.business_date, item.epoch),
         ):
             examined += 1
             portfolio_row = portfolio_by_key.get(key)
-            aggregate_row = aggregate_by_key.get(key)
             snapshot_count = snapshot_count_by_key.get(key, 0)
 
-            if portfolio_row is None and aggregate_row is not None:
+            if portfolio_row is None:
+                aggregate_row = aggregate_by_key.get(key)
+                if aggregate_row is None:
+                    continue
                 findings.append(
                     self._build_finding(
                         run_id=run.run_id,
@@ -374,7 +461,20 @@ class ReconciliationService:
                 )
                 continue
 
-            if aggregate_row is None and portfolio_row is not None:
+            authoritative_metrics, authoritative_position_count = (
+                await self._aggregate_authoritative_portfolio_metrics(
+                    portfolio_id=key.portfolio_id,
+                    business_date=key.business_date,
+                    epoch=key.epoch,
+                )
+            )
+            authoritative_snapshot_count = await self.repository.fetch_authoritative_snapshot_count(
+                portfolio_id=key.portfolio_id,
+                business_date=key.business_date,
+                epoch=key.epoch,
+            )
+
+            if authoritative_position_count == 0:
                 findings.append(
                     self._build_finding(
                         run_id=run.run_id,
@@ -393,10 +493,10 @@ class ReconciliationService:
                 )
                 continue
 
-            if portfolio_row is None or aggregate_row is None:
-                continue
+            if not portfolio_by_key:
+                snapshot_count = authoritative_snapshot_count or snapshot_count
 
-            if int(aggregate_row.position_row_count) != snapshot_count:
+            if authoritative_position_count != authoritative_snapshot_count:
                 findings.append(
                     self._build_finding(
                         run_id=run.run_id,
@@ -408,10 +508,8 @@ class ReconciliationService:
                         transaction_id=None,
                         business_date=key.business_date,
                         epoch=key.epoch,
-                        expected_value={"snapshot_count": snapshot_count},
-                        observed_value={
-                            "position_timeseries_count": int(aggregate_row.position_row_count)
-                        },
+                        expected_value={"snapshot_count": authoritative_snapshot_count},
+                        observed_value={"position_timeseries_count": authoritative_position_count},
                         detail=None,
                     )
                 )
@@ -419,23 +517,23 @@ class ReconciliationService:
             metric_pairs = {
                 "bod_market_value": (
                     Decimal(str(portfolio_row.bod_market_value)),
-                    Decimal(str(aggregate_row.bod_market_value or ZERO)),
+                    authoritative_metrics["bod_market_value"],
                 ),
                 "bod_cashflow": (
                     Decimal(str(portfolio_row.bod_cashflow)),
-                    Decimal(str(aggregate_row.bod_cashflow or ZERO)),
+                    authoritative_metrics["bod_cashflow"],
                 ),
                 "eod_cashflow": (
                     Decimal(str(portfolio_row.eod_cashflow)),
-                    Decimal(str(aggregate_row.eod_cashflow or ZERO)),
+                    authoritative_metrics["eod_cashflow"],
                 ),
                 "eod_market_value": (
                     Decimal(str(portfolio_row.eod_market_value)),
-                    Decimal(str(aggregate_row.eod_market_value or ZERO)),
+                    authoritative_metrics["eod_market_value"],
                 ),
                 "fees": (
                     Decimal(str(portfolio_row.fees)),
-                    Decimal(str(aggregate_row.fees or ZERO)),
+                    authoritative_metrics["fees"],
                 ),
             }
             mismatches = {}

@@ -50,6 +50,21 @@ async def test_reporting_repository_lists_portfolios_with_scope_filters() -> Non
 
 
 @pytest.mark.asyncio
+async def test_reporting_repository_lists_portfolios_with_portfolio_and_client_filters() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([SimpleNamespace(portfolio_id="P1")])
+    repo = ReportingRepository(db)
+
+    rows = await repo.list_portfolios(portfolio_id="P1", client_id="CIF-1")
+
+    assert [row.portfolio_id for row in rows] == ["P1"]
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.portfolio_id = 'P1'" in compiled
+    assert "portfolios.client_id = 'CIF-1'" in compiled
+
+
+@pytest.mark.asyncio
 async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_of_snapshot() -> (
     None
 ):
@@ -110,6 +125,21 @@ async def test_reporting_repository_get_latest_fx_rate_uses_desc_limit_one() -> 
 
 
 @pytest.mark.asyncio
+async def test_reporting_repository_get_latest_fx_rate_short_circuits_same_currency() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReportingRepository(db)
+
+    rate = await repo.get_latest_fx_rate(
+        from_currency="USD",
+        to_currency="USD",
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert rate == Decimal("1")
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_reporting_repository_cash_account_resolution_uses_index_friendly_date_bound() -> (
     None
 ):
@@ -142,6 +172,22 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
 
 
 @pytest.mark.asyncio
+async def test_reporting_repository_cash_account_resolution_skips_query_when_no_securities(
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReportingRepository(db)
+
+    mapping = await repo.get_latest_cash_account_ids(
+        portfolio_id="P1",
+        cash_security_ids=[],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert mapping == {}
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_reporting_repository_cash_account_master_query_uses_effective_window() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult([])
@@ -160,6 +206,25 @@ async def test_reporting_repository_cash_account_master_query_uses_effective_win
 
 
 @pytest.mark.asyncio
+async def test_reporting_repository_cash_account_master_query_omits_effective_window_without_date(
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReportingRepository(db)
+
+    await repo.list_cash_account_masters(
+        portfolio_id="P1",
+        as_of_date=None,
+    )
+
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "cash_account_masters.portfolio_id = 'P1'" in compiled
+    assert "cash_account_masters.opened_on <=" not in compiled
+    assert "cash_account_masters.closed_on >=" not in compiled
+
+
+@pytest.mark.asyncio
 async def test_reporting_repository_lookthrough_query_uses_effective_window() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult([])
@@ -175,4 +240,19 @@ async def test_reporting_repository_lookthrough_query_uses_effective_window() ->
     assert "instrument_lookthrough_components.parent_security_id IN ('FUND1', 'FUND2')" in compiled
     assert "instrument_lookthrough_components.effective_from <= '2026-03-27'" in compiled
     assert "instrument_lookthrough_components.effective_to >= '2026-03-27'" in compiled
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_lookthrough_query_skips_database_when_parent_list_empty(
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReportingRepository(db)
+
+    rows = await repo.list_instrument_lookthrough_components(
+        parent_security_ids=[],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert rows == []
+    db.execute.assert_not_awaited()
 

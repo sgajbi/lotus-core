@@ -38,6 +38,11 @@ def mock_position_repo() -> AsyncMock:
         security_id="S1",
         quantity=Decimal(100),
         cost_basis=Decimal(1000),
+        market_price=Decimal("10"),
+        market_value=Decimal("1000"),
+        market_value_local=Decimal("1000"),
+        unrealized_gain_loss=Decimal("0"),
+        unrealized_gain_loss_local=Decimal("0"),
         date=date(2025, 1, 1),
         created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
@@ -72,6 +77,7 @@ def mock_position_repo() -> AsyncMock:
     repo.get_latest_position_history_by_portfolio_as_of_date.return_value = []
     repo.get_latest_snapshot_valuation_map.return_value = {}
     repo.get_latest_snapshot_valuation_map_as_of_date.return_value = {}
+    repo.get_latest_market_price_dates.return_value = {"S1": date(2025, 1, 1)}
     # --- END FIX ---
     return repo
 
@@ -248,6 +254,8 @@ async def test_holdings_data_quality_status_does_not_infer_missing_state():
                 )
             ],
             history_supplements=[],
+            response_as_of_date=date(2025, 1, 1),
+            latest_market_price_dates={},
         )
         == "UNKNOWN"
     )
@@ -294,6 +302,25 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
         assert response.positions[0].held_since_date == date(2025, 1, 3)
         assert response.as_of_date == date(2025, 1, 1)
         assert response.data_quality_status == "PARTIAL"
+
+
+async def test_get_latest_positions_marks_stale_when_market_prices_are_not_current(
+    mock_position_repo: AsyncMock,
+):
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        mock_position_repo.get_latest_market_price_dates.return_value = {"S1": date(2024, 12, 30)}
+        service = PositionService(AsyncMock())
+
+        response = await service.get_portfolio_positions(portfolio_id="P1")
+
+        mock_position_repo.get_latest_market_price_dates.assert_awaited_once_with(
+            security_ids=["S1"],
+            as_of_date=date(2025, 1, 1),
+        )
+        assert response.data_quality_status == "STALE"
 
 
 async def test_get_latest_positions_supplements_missing_snapshot_rows_from_history(

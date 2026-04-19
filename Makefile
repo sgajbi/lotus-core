@@ -1,4 +1,4 @@
-.PHONY: install install-ci verify-dependencies compile-runtime-lock lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard temporal-vocabulary-guard route-contract-family-guard source-data-product-contract-guard analytics-input-consumer-contract-guard event-runtime-contract-guard rfc0083-closure-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-signoff-pack test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci clean
+.PHONY: install install-ci verify-dependencies compile-runtime-lock lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard temporal-vocabulary-guard route-contract-family-guard source-data-product-contract-guard analytics-input-consumer-contract-guard event-runtime-contract-guard rfc0083-closure-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-completion-gate test-institutional-signoff-pack test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci clean
 
 install:
 	python scripts/bootstrap_dev.py
@@ -159,6 +159,9 @@ test-performance-load-gate-full:
 test-failure-recovery-gate:
 	python scripts/failure_recovery_gate.py --build --enforce
 
+test-institutional-completion-gate:
+	python scripts/institutional_completion_gate.py
+
 test-institutional-signoff-pack:
 	python scripts/institutional_signoff_pack.py --require-all --max-age-hours 24
 
@@ -185,6 +188,7 @@ test-release-gates:
 	$(MAKE) test-e2e-all
 	$(MAKE) test-performance-load-gate-full
 	$(MAKE) test-failure-recovery-gate
+	$(MAKE) test-institutional-completion-gate
 	$(MAKE) test-institutional-signoff-pack
 
 security-audit:

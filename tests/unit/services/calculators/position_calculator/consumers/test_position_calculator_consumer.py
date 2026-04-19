@@ -145,7 +145,7 @@ async def test_consumer_calls_logic_with_original_event(
 ):
     """Tests that an original event (no epoch in payload) calls the logic, and the event object passed has epoch=None."""  # noqa: E501
     # ARRANGE
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     mock_dependencies["position_repo"].get_transaction_by_id.return_value = mock_transaction_event
 
     # ACT
@@ -167,7 +167,7 @@ async def test_consumer_passes_epoch_from_payload_to_logic(
 ):
     """Consumer must apply stage epoch to the loaded canonical transaction payload."""
     # ARRANGE
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     mock_dependencies["position_repo"].get_transaction_by_id.return_value = mock_transaction_event
     mock_stage_event.epoch = 7
     mock_kafka_message.value.return_value = mock_stage_event.model_dump_json().encode("utf-8")
@@ -189,13 +189,13 @@ async def test_consumer_skips_already_processed_events(
 ):
     """Tests that if the idempotency check returns True, the business logic is not called."""
     # ARRANGE
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = True
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = False
 
     # ACT
     await position_consumer.process_message(mock_kafka_message)
 
     # ASSERT
-    mock_dependencies["idempotency_repo"].is_event_processed.assert_awaited_once()
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_awaited_once()
     mock_dependencies["calculate_logic"].assert_not_awaited()
 
 
@@ -204,7 +204,7 @@ async def test_consumer_retries_when_transaction_not_available_yet(
     mock_kafka_message: MagicMock,
     mock_dependencies: dict,
 ):
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     mock_dependencies["position_repo"].get_transaction_by_id.return_value = None
 
     with pytest.raises(TransactionNotYetAvailableError):
@@ -218,7 +218,7 @@ async def test_consumer_accepts_replay_transaction_payload(
     mock_kafka_message_replay: MagicMock,
     mock_dependencies: dict,
 ):
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
 
     await position_consumer.process_message(mock_kafka_message_replay)
 
@@ -232,7 +232,7 @@ async def test_consumer_marks_replay_payload_processed_without_canonical_lookup(
     mock_transaction_event: TransactionEvent,
     mock_dependencies: dict,
 ):
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     mock_transaction_event.epoch = 9
     mock_kafka_message_replay.value.return_value = mock_transaction_event.model_dump_json().encode(
         "utf-8"
@@ -244,7 +244,7 @@ async def test_consumer_marks_replay_payload_processed_without_canonical_lookup(
     mock_dependencies["calculate_logic"].assert_awaited_once()
     passed_event: TransactionEvent = mock_dependencies["calculate_logic"].await_args.kwargs["event"]
     assert passed_event.epoch == 9
-    mock_dependencies["idempotency_repo"].mark_event_processed.assert_awaited_once_with(
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_awaited_once_with(
         "transactions.cost.processed-0-124",
         mock_transaction_event.portfolio_id,
         "position-calculator",
@@ -258,7 +258,7 @@ async def test_consumer_stale_replay_payload_exits_before_canonical_lookup(
     mock_transaction_event: TransactionEvent,
     mock_dependencies: dict,
 ):
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     mock_dependencies["calculate_logic"].return_value = None
     mock_transaction_event.epoch = 4
     mock_kafka_message_replay.value.return_value = mock_transaction_event.model_dump_json().encode(
@@ -269,7 +269,7 @@ async def test_consumer_stale_replay_payload_exits_before_canonical_lookup(
 
     mock_dependencies["position_repo"].get_transaction_by_id.assert_not_awaited()
     mock_dependencies["calculate_logic"].assert_awaited_once()
-    mock_dependencies["idempotency_repo"].mark_event_processed.assert_awaited_once()
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_awaited_once()
 
 
 async def test_consumer_marks_stage_gate_processed_with_header_correlation(
@@ -278,12 +278,12 @@ async def test_consumer_marks_stage_gate_processed_with_header_correlation(
     mock_transaction_event: TransactionEvent,
     mock_dependencies: dict,
 ):
-    mock_dependencies["idempotency_repo"].is_event_processed.return_value = False
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     mock_dependencies["position_repo"].get_transaction_by_id.return_value = mock_transaction_event
 
     await position_consumer.process_message(mock_kafka_message)
 
-    mock_dependencies["idempotency_repo"].mark_event_processed.assert_awaited_once_with(
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_awaited_once_with(
         "transaction_processing.ready-0-123",
         mock_transaction_event.portfolio_id,
         "position-calculator",
@@ -307,7 +307,7 @@ async def test_consumer_sends_to_dlq_on_logic_failure(
     mock_calculate_logic = mock_dependencies["calculate_logic"]
     mock_position_repo = mock_dependencies["position_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_position_repo.get_transaction_by_id.return_value = mock_transaction_event
 
     # Simulate a crash inside the core business logic

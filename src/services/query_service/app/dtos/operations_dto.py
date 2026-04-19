@@ -3,15 +3,15 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from .source_data_product_identity import (
-    SourceDataProductRuntimeMetadata,
-    product_name_field,
-    product_version_field,
-)
 from ..support_policy import (
     CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
+)
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
 )
 
 
@@ -274,7 +274,8 @@ class SupportOverviewResponse(BaseModel):
     latest_booked_transaction_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent transaction business date observed for the portfolio up to business_date."
+            "Most recent booked transaction business date observed for the portfolio on or before "
+            "business_date; future-dated planned activity is excluded."
         ),
         examples=["2025-12-30"],
     )
@@ -289,7 +290,9 @@ class SupportOverviewResponse(BaseModel):
     latest_booked_position_snapshot_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent daily position snapshot date in the current epoch up to business_date."
+            "Most recent daily position snapshot date in the current epoch on or before "
+            "business_date; this can be later than latest_booked_transaction_date when holdings "
+            "carry forward after the last booked trade."
         ),
         examples=["2025-12-30"],
     )
@@ -495,6 +498,548 @@ class SupportOverviewResponse(BaseModel):
     )
 
 
+class LoadRunProgressResponse(BaseModel):
+    run_id: str = Field(
+        ...,
+        description=(
+            "Governed load run identifier embedded in synthetic portfolio and transaction ids."
+        ),
+        examples=["20260418T065154Z"],
+    )
+    business_date: date = Field(
+        ...,
+        description="Target business date used to measure target-date completion coverage.",
+        examples=["2026-04-17"],
+    )
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when the load-run progress snapshot was generated.",
+        examples=["2026-04-18T07:29:38Z"],
+    )
+    run_state: Literal["SEEDING", "MATERIALIZING", "COMPLETE", "FAILED"] = Field(
+        ...,
+        description=(
+            "High-level run state derived from durable facts. "
+            "`SEEDING` means portfolios exist but transactions have not landed yet. "
+            "`MATERIALIZING` means transactions exist and downstream completion is in progress. "
+            "`COMPLETE` means all ingested portfolios have target-date timeseries coverage "
+            "and no open jobs remain. "
+            "`FAILED` means failed valuation or aggregation jobs exist for the run."
+        ),
+        examples=["MATERIALIZING"],
+    )
+    operator_progress_stale_threshold_minutes: int = Field(
+        ...,
+        description=(
+            "Threshold in minutes used to decide whether the latest durable run activity is still "
+            "fresh enough to classify an incomplete run as active rather than stuck."
+        ),
+        examples=[15],
+    )
+    operator_progress_state: Literal["RUNNING", "SLOW", "STUCK", "COMPLETE", "FAILED"] = Field(
+        ...,
+        description=(
+            "Operator-facing progress interpretation layered on top of `run_state`. "
+            "`RUNNING` means incomplete work remains and open jobs are still advancing within the "
+            "stale threshold. `SLOW` means the run is still incomplete, recent durable activity "
+            "exists, but open jobs are already drained so the remaining lag is downstream or tail "
+            "drain work. `STUCK` means the run is incomplete and the latest durable activity is "
+            "older than `operator_progress_stale_threshold_minutes`. `COMPLETE` and `FAILED` "
+            "mirror the terminal run states."
+        ),
+        examples=["SLOW"],
+    )
+    portfolios_ingested: int = Field(
+        ...,
+        description=(
+            "Number of synthetic load-run portfolios durably ingested into the core ledger."
+        ),
+        examples=[1000],
+    )
+    transactions_ingested: int = Field(
+        ...,
+        description=(
+            "Number of synthetic load-run transactions durably ingested into the transaction "
+            "ledger for the run."
+        ),
+        examples=[100000],
+    )
+    portfolios_with_snapshots: int = Field(
+        ...,
+        description=(
+            "Number of load-run portfolios with at least one daily position snapshot on the "
+            "target business date."
+        ),
+        examples=[173],
+    )
+    snapshot_rows: int = Field(
+        ...,
+        description=(
+            "Number of daily position snapshot rows materialized on the target business date "
+            "for load-run portfolios."
+        ),
+        examples=[17288],
+    )
+    portfolios_with_position_timeseries: int = Field(
+        ...,
+        description=(
+            "Number of load-run portfolios with at least one position-timeseries row on the "
+            "target business date. This shows whether the security-level timeseries stage has "
+            "begun for the portfolio even before portfolio-level aggregation completes."
+        ),
+        examples=[92],
+    )
+    position_timeseries_rows: int = Field(
+        ...,
+        description=(
+            "Number of position-timeseries rows materialized on the target business date for "
+            "load-run portfolios."
+        ),
+        examples=[1832],
+    )
+    portfolios_with_timeseries: int = Field(
+        ...,
+        description=(
+            "Number of load-run portfolios with at least one portfolio timeseries row on the "
+            "target business date."
+        ),
+        examples=[85],
+    )
+    timeseries_rows: int = Field(
+        ...,
+        description=(
+            "Number of portfolio timeseries rows materialized on the target business date for "
+            "load-run portfolios."
+        ),
+        examples=[85],
+    )
+    complete_portfolios: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios that already have target-date portfolio timeseries and "
+            "therefore meet the current run-level completion definition."
+        ),
+        examples=[85],
+    )
+    incomplete_portfolios: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios that still do not have target-date portfolio "
+            "timeseries and are therefore not yet complete for the run."
+        ),
+        examples=[915],
+    )
+    portfolios_waiting_for_snapshots: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios that still have no target-date daily position "
+            "snapshot coverage."
+        ),
+        examples=[827],
+    )
+    remaining_snapshot_rows: int = Field(
+        ...,
+        description=(
+            "Estimated remaining target-date daily position snapshot rows, derived as "
+            "`transactions_ingested - snapshot_rows` and clamped at zero."
+        ),
+        examples=[17349],
+    )
+    snapshot_portfolio_coverage_ratio: float = Field(
+        ...,
+        description=(
+            "Ratio of ingested portfolios that already have target-date snapshot coverage, "
+            "expressed as `portfolios_with_snapshots / portfolios_ingested`."
+        ),
+        examples=[0.173],
+    )
+    snapshot_portfolios_without_position_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of portfolios that already have target-date daily position snapshots but "
+            "still have no target-date position-timeseries rows."
+        ),
+        examples=[81],
+    )
+    portfolios_waiting_for_position_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios whose target-date daily position snapshots exist but "
+            "whose target-date position-timeseries coverage is still incomplete."
+        ),
+        examples=[81],
+    )
+    remaining_position_timeseries_rows: int = Field(
+        ...,
+        description=(
+            "Estimated remaining target-date position-timeseries rows, derived as "
+            "`transactions_ingested - position_timeseries_rows` and clamped at zero."
+        ),
+        examples=[43806],
+    )
+    position_timeseries_portfolio_coverage_ratio: float = Field(
+        ...,
+        description=(
+            "Ratio of ingested portfolios that already have target-date position-timeseries "
+            "coverage, expressed as "
+            "`portfolios_with_position_timeseries / portfolios_ingested`."
+        ),
+        examples=[0.092],
+    )
+    position_timeseries_portfolios_without_portfolio_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of portfolios that already have target-date position-timeseries coverage but "
+            "still have no target-date portfolio-timeseries row."
+        ),
+        examples=[7],
+    )
+    portfolios_waiting_for_portfolio_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of ingested portfolios whose target-date position-timeseries coverage exists "
+            "but whose target-date portfolio-timeseries row is still missing."
+        ),
+        examples=[7],
+    )
+    remaining_portfolio_timeseries_rows: int = Field(
+        ...,
+        description=(
+            "Estimated remaining target-date portfolio-timeseries rows, derived as "
+            "`portfolios_ingested - timeseries_rows` and clamped at zero."
+        ),
+        examples=[915],
+    )
+    timeseries_portfolio_coverage_ratio: float = Field(
+        ...,
+        description=(
+            "Ratio of ingested portfolios that already have target-date timeseries coverage, "
+            "expressed as `portfolios_with_timeseries / portfolios_ingested`."
+        ),
+        examples=[0.085],
+    )
+    pending_valuation_jobs: int = Field(
+        ...,
+        description="Count of actionable valuation jobs for the run that are still pending.",
+        examples=[13],
+    )
+    processing_valuation_jobs: int = Field(
+        ...,
+        description="Count of actionable valuation jobs for the run that are actively processing.",
+        examples=[43],
+    )
+    open_valuation_jobs: int = Field(
+        ...,
+        description=(
+            "Count of actionable valuation jobs for the run that remain pending or processing. "
+            "This equals `pending_valuation_jobs + processing_valuation_jobs`."
+        ),
+        examples=[56],
+    )
+    pending_aggregation_jobs: int = Field(
+        ...,
+        description="Count of portfolio aggregation jobs for the run that are still pending.",
+        examples=[2],
+    )
+    processing_aggregation_jobs: int = Field(
+        ...,
+        description="Count of portfolio aggregation jobs for the run that are actively processing.",
+        examples=[0],
+    )
+    open_aggregation_jobs: int = Field(
+        ...,
+        description=(
+            "Count of portfolio aggregation jobs for the run that remain pending or processing. "
+            "This equals `pending_aggregation_jobs + processing_aggregation_jobs`."
+        ),
+        examples=[2],
+    )
+    failed_valuation_jobs: int = Field(
+        ...,
+        description="Count of actionable valuation jobs for the run that are in FAILED state.",
+        examples=[0],
+    )
+    failed_aggregation_jobs: int = Field(
+        ...,
+        description="Count of portfolio aggregation jobs for the run that are in FAILED state.",
+        examples=[0],
+    )
+    dependent_position_timeseries_propagation_row_cap: int = Field(
+        ...,
+        description=(
+            "Configured per-message cap on future dependent position-timeseries rows that one "
+            "snapshot-persisted event will recalculate before a later message continues the "
+            "chain. This is operator context for interpreting timeseries lag; it does not by "
+            "itself indicate that the cap was reached for the run."
+        ),
+        examples=[1000],
+    )
+    valuation_scheduler_poll_interval_seconds: int = Field(
+        ...,
+        description=(
+            "Configured valuation scheduler poll interval in seconds for the active runtime. "
+            "This helps operators interpret how often pending valuation jobs can be claimed "
+            "and dispatched."
+        ),
+        examples=[30],
+    )
+    valuation_scheduler_max_dispatch_jobs_per_poll: int = Field(
+        ...,
+        description=(
+            "Configured maximum number of valuation jobs that the scheduler can claim and "
+            "dispatch in a single poll cycle, expressed as "
+            "`valuation_scheduler_batch_size * valuation_scheduler_dispatch_rounds`."
+        ),
+        examples=[1000],
+    )
+    valuation_scheduler_pending_dispatch_polls_lower_bound: int = Field(
+        ...,
+        description=(
+            "Lower bound on scheduler poll cycles required to claim the current "
+            "`pending_valuation_jobs`, expressed as "
+            "`ceil(pending_valuation_jobs / valuation_scheduler_max_dispatch_jobs_per_poll)`. "
+            "This excludes already-processing jobs and assumes no new pending jobs arrive."
+        ),
+        examples=[1],
+    )
+    valuation_scheduler_pending_dispatch_time_lower_bound_seconds: int = Field(
+        ...,
+        description=(
+            "Lower bound in seconds to claim the current `pending_valuation_jobs` at the "
+            "configured scheduler poll interval and maximum per-poll dispatch budget, "
+            "expressed as `valuation_scheduler_pending_dispatch_polls_lower_bound * "
+            "valuation_scheduler_poll_interval_seconds`. This is a claim-budget estimate, "
+            "not a full end-to-end completion forecast."
+        ),
+        examples=[30],
+    )
+    valuation_to_position_timeseries_handoff_pressure_hint: Literal[
+        "NO_HANDOFF_PRESSURE",
+        "SCHEDULER_DISPATCH_BOUND",
+        "DOWNSTREAM_OF_VALUATION",
+        "MIXED_HANDOFF_PRESSURE",
+    ] = Field(
+        ...,
+        description=(
+            "Derived operator hint describing where current valuation-to-position-timeseries "
+            "handoff pressure is concentrated. `SCHEDULER_DISPATCH_BOUND` means there are still "
+            "pending valuation jobs but no completed valuations waiting for position-timeseries. "
+            "`DOWNSTREAM_OF_VALUATION` means pending valuation jobs are drained but completed "
+            "valuations are still waiting for position-timeseries. `MIXED_HANDOFF_PRESSURE` "
+            "means both conditions are present. `NO_HANDOFF_PRESSURE` means neither condition is "
+            "currently present."
+        ),
+        examples=["DOWNSTREAM_OF_VALUATION"],
+    )
+    oldest_pending_valuation_date: Optional[date] = Field(
+        None,
+        description=(
+            "Oldest valuation date among open actionable valuation jobs for the run, used to "
+            "measure backlog age."
+        ),
+        examples=["2026-04-17"],
+    )
+    oldest_pending_aggregation_date: Optional[date] = Field(
+        None,
+        description=(
+            "Oldest aggregation date among open aggregation jobs for the run, used to measure "
+            "backlog age."
+        ),
+        examples=["2026-04-17"],
+    )
+    latest_snapshot_date: Optional[date] = Field(
+        None,
+        description=(
+            "Latest business date for which any load-run portfolio has daily position snapshot "
+            "materialization."
+        ),
+        examples=["2026-04-17"],
+    )
+    latest_timeseries_date: Optional[date] = Field(
+        None,
+        description=(
+            "Latest business date for which any load-run portfolio has portfolio timeseries "
+            "materialization."
+        ),
+        examples=["2026-04-17"],
+    )
+    latest_snapshot_materialized_at_utc: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent target-date daily position snapshot row "
+            "materialized for the run."
+        ),
+        examples=["2026-04-18T08:44:46Z"],
+    )
+    latest_valuation_to_snapshot_tail_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Seconds between the latest durable valuation-job update and the latest target-date "
+            "daily position snapshot materialization observed for the run."
+        ),
+        examples=[0.0],
+    )
+    latest_position_timeseries_materialized_at_utc: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent target-date position-timeseries row "
+            "materialized for the run."
+        ),
+        examples=["2026-04-18T08:44:41Z"],
+    )
+    latest_valuation_to_position_timeseries_tail_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Seconds between the latest durable valuation-job update and the latest target-date "
+            "position-timeseries materialization observed for the run."
+        ),
+        examples=[1668.362283],
+    )
+    latest_snapshot_to_position_timeseries_tail_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Seconds between the latest target-date daily position snapshot materialization and "
+            "the latest target-date position-timeseries materialization observed for the run."
+        ),
+        examples=[1668.362283],
+    )
+    latest_portfolio_timeseries_materialized_at_utc: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent target-date portfolio-timeseries row "
+            "materialized for the run."
+        ),
+        examples=["2026-04-18T08:44:39Z"],
+    )
+    latest_position_timeseries_to_portfolio_timeseries_tail_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Seconds between the latest target-date position-timeseries materialization and the "
+            "latest target-date portfolio-timeseries materialization observed for the run."
+        ),
+        examples=[0.565207],
+    )
+    latest_valuation_job_updated_at_utc: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent valuation-job durable update observed for the run."
+        ),
+        examples=["2026-04-18T08:44:46Z"],
+    )
+    latest_aggregation_job_updated_at_utc: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the most recent aggregation-job durable update observed for the run."
+        ),
+        examples=["2026-04-18T08:44:46Z"],
+    )
+    completed_valuation_jobs_without_position_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of latest-epoch valuation jobs already in COMPLETE state that still have no "
+            "matching target-date position-timeseries row for the same portfolio, security, date, "
+            "and epoch."
+        ),
+        examples=[22480],
+    )
+    completed_valuation_portfolios_without_position_timeseries: int = Field(
+        ...,
+        description=(
+            "Count of distinct portfolios that already have at least one latest-epoch valuation "
+            "job in COMPLETE state but still have no matching target-date position-timeseries row "
+            "for one or more securities."
+        ),
+        examples=[238],
+    )
+    completed_valuation_portfolios_without_position_timeseries_ratio: float = Field(
+        ...,
+        description=(
+            "Ratio of ingested portfolios that already have at least one completed valuation "
+            "waiting for target-date position-timeseries materialization, expressed as "
+            "`completed_valuation_portfolios_without_position_timeseries / portfolios_ingested`."
+        ),
+        examples=[0.238],
+    )
+    completed_valuation_jobs_without_position_timeseries_per_affected_portfolio: float = Field(
+        ...,
+        description=(
+            "Average latest-epoch completed valuation jobs still waiting for target-date "
+            "position-timeseries materialization per affected portfolio, expressed as "
+            "`completed_valuation_jobs_without_position_timeseries / "
+            "completed_valuation_portfolios_without_position_timeseries`."
+        ),
+        examples=[94.454],
+    )
+    max_completed_valuation_jobs_without_position_timeseries_single_portfolio: int = Field(
+        ...,
+        description=(
+            "Largest number of latest-epoch completed valuation jobs still waiting for "
+            "target-date position-timeseries materialization within any single affected "
+            "portfolio in the run."
+        ),
+        examples=[1000],
+    )
+    dependent_position_timeseries_propagation_cap_risk: bool = Field(
+        ...,
+        description=(
+            "True when the maximum single-portfolio waiting valuation-job depth is at least as "
+            "large as the configured dependent position-timeseries propagation row cap, which "
+            "indicates that one portfolio's backlog is deep enough to require multiple message "
+            "cycles to drain."
+        ),
+        examples=[False],
+    )
+    oldest_completed_valuation_without_position_timeseries_at_utc: Optional[datetime] = Field(
+        None,
+        description=(
+            "UTC timestamp of the oldest valuation-job COMPLETE update that is still waiting for "
+            "a matching target-date position-timeseries row."
+        ),
+        examples=["2026-04-18T08:28:10Z"],
+    )
+    oldest_completed_valuation_without_position_timeseries_age_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Age in seconds between `generated_at_utc` and the oldest completed valuation job "
+            "that still has no matching target-date position-timeseries row."
+        ),
+        examples=[2468.0],
+    )
+    valuation_to_position_timeseries_latency_sample_count: int = Field(
+        ...,
+        description=(
+            "Number of matched valuation-complete to position-timeseries materialization pairs "
+            "used to calculate the handoff latency summary."
+        ),
+        examples=[33725],
+    )
+    valuation_to_position_timeseries_latency_p50_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Median seconds between a durable valuation-job COMPLETE update and the matching "
+            "position-timeseries row materialization for the same portfolio, security, date, "
+            "and epoch."
+        ),
+        examples=[2.4],
+    )
+    valuation_to_position_timeseries_latency_p95_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "95th percentile seconds between a durable valuation-job COMPLETE update and the "
+            "matching position-timeseries row materialization."
+        ),
+        examples=[8.7],
+    )
+    valuation_to_position_timeseries_latency_max_seconds: Optional[float] = Field(
+        None,
+        description=(
+            "Longest observed seconds between a durable valuation-job COMPLETE update and the "
+            "matching position-timeseries row materialization."
+        ),
+        examples=[21.3],
+    )
+
+
 ReadinessStatus = Literal["READY", "PENDING", "BLOCKED", "NO_ACTIVITY"]
 ReadinessSeverity = Literal["INFO", "WARNING", "ERROR"]
 ReadinessDomain = Literal["holdings", "pricing", "transactions", "reporting"]
@@ -639,13 +1184,18 @@ class PortfolioReadinessResponse(BaseModel):
     )
     latest_booked_transaction_date: Optional[date] = Field(
         None,
-        description="Most recent portfolio transaction date on or before resolved_as_of_date.",
+        description=(
+            "Most recent booked portfolio transaction date on or before resolved_as_of_date; "
+            "future-dated planned activity is excluded."
+        ),
         examples=["2026-03-28"],
     )
     latest_booked_position_snapshot_date: Optional[date] = Field(
         None,
         description=(
-            "Most recent current-epoch position snapshot date on or before resolved_as_of_date."
+            "Most recent current-epoch position snapshot date on or before resolved_as_of_date; "
+            "this can be later than latest_booked_transaction_date when holdings carry forward "
+            "after the last booked trade."
         ),
         examples=["2026-03-28"],
     )

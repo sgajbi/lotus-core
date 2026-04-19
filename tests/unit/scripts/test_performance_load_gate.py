@@ -1,4 +1,6 @@
-from scripts.performance_load_gate import _evaluate_profile
+import json
+
+from scripts.performance_load_gate import _evaluate_profile, _write_report
 
 
 def test_evaluate_profile_uses_incremental_health_pressure_against_baseline() -> None:
@@ -83,3 +85,53 @@ def test_evaluate_profile_fails_when_incremental_pressure_breaches_thresholds() 
     assert "backlog_age_increase 160.00 > max 60.00" in result.failed_checks
     assert "dlq_pressure_added 0.7000 > max 0.5000" in result.failed_checks
     assert "replay_pressure_increase 0.3500 > max 0.2000" in result.failed_checks
+
+
+def test_write_report_persists_profile_tier(tmp_path) -> None:
+    result = _evaluate_profile(
+        profile_name="steady_state",
+        records_submitted=100,
+        batches_submitted=2,
+        started_at=10.0,
+        ended_at=20.0,
+        baseline_health={
+            "summary": {"backlog_jobs": 0},
+            "slo": {"backlog_age_seconds": 0.0},
+            "error_budget": {
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "replay_backlog_pressure_ratio": "0.0000",
+            },
+        },
+        health={
+            "summary": {"backlog_jobs": 0},
+            "slo": {"backlog_age_seconds": 0.0},
+            "error_budget": {
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "replay_backlog_pressure_ratio": "0.0000",
+            },
+        },
+        drain_seconds=None,
+        thresholds={
+            "min_throughput_rps": 1.0,
+            "max_backlog_age_increase_seconds": 60.0,
+            "max_dlq_pressure_ratio_added": 0.5,
+            "max_replay_pressure_ratio_increase": 0.1,
+            "max_drain_seconds": None,
+        },
+    )
+
+    json_path, md_path = _write_report(
+        output_dir=tmp_path,
+        run_id="RUN1",
+        profile_tier="full",
+        results=[result],
+        enforce=True,
+    )
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert payload["profile_tier"] == "full"
+    assert "- Profile tier: full" in markdown

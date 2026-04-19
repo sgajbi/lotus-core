@@ -8,6 +8,7 @@ from portfolio_common.database_models import (
     BusinessDate,
     DailyPositionSnapshot,
     Instrument,
+    MarketPrice,
     Portfolio,
     PositionHistory,
     PositionState,
@@ -513,3 +514,29 @@ class PositionRepository:
                 "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
             }
         return valuation_map
+
+    async def get_latest_market_price_dates(
+        self,
+        security_ids: list[str],
+        as_of_date: date,
+    ) -> dict[str, date]:
+        if not security_ids:
+            return {}
+
+        stmt = (
+            select(
+                MarketPrice.security_id,
+                func.max(MarketPrice.price_date).label("latest_price_date"),
+            )
+            .where(
+                MarketPrice.security_id.in_(security_ids),
+                MarketPrice.price_date <= as_of_date,
+            )
+            .group_by(MarketPrice.security_id)
+        )
+        rows = (await self.db.execute(stmt)).all()
+        return {
+            str(row.security_id): row.latest_price_date
+            for row in rows
+            if row.latest_price_date is not None
+        }

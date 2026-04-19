@@ -166,17 +166,54 @@ async def test_valuation_consumer_success(
     mock_valuation_repo.get_last_position_history_before_date.assert_called_once_with(
         mock_event.portfolio_id, mock_event.security_id, mock_event.valuation_date, mock_event.epoch
     )
-    assert mock_outbox_repo.create_outbox_event.call_count == 2
+    mock_outbox_repo.create_outbox_event.assert_called_once()
 
-    first_payload = mock_outbox_repo.create_outbox_event.call_args_list[0].kwargs["payload"]
-    second_payload = mock_outbox_repo.create_outbox_event.call_args_list[1].kwargs["payload"]
-    assert first_payload["epoch"] == mock_event.epoch
-    assert second_payload["epoch"] == mock_event.epoch
-    assert second_payload["daily_position_snapshot_id"] == persisted_snapshot.id
-    assert mock_outbox_repo.create_outbox_event.call_args_list[0].kwargs["correlation_id"] == (
+    payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
+    assert payload["epoch"] == mock_event.epoch
+    assert payload["id"] == persisted_snapshot.id
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "test-corr-id-123"
     )
-    assert mock_idempotency_repo.mark_event_processed.call_args.args[3] == "test-corr-id-123"
+    claimed_event_id = mock_idempotency_repo.claim_event_processing.call_args.args[0]
+    assert claimed_event_id == "valuation.job.requested-0-1"
+    assert mock_idempotency_repo.claim_event_processing.call_args.args[3] == "test-corr-id-123"
+
+
+async def test_valuation_consumer_uses_kafka_delivery_identity_for_idempotency(
+    consumer: ValuationConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("8000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(currency="USD")
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id="PORT_VAL_01",
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("90"),
+        currency="USD",
+        price_date=date(2025, 8, 1),
+    )
+    mock_valuation_repo.upsert_daily_snapshot.return_value = DailyPositionSnapshot(
+        id=1,
+        portfolio_id="PORT_VAL_01",
+        security_id="SEC_VAL_01",
+        date=date(2025, 8, 1),
+        epoch=1,
+    )
+
+    await consumer.process_message(mock_kafka_message)
+
+    claimed_event_id = mock_idempotency_repo.claim_event_processing.call_args.args[0]
+    assert claimed_event_id == "valuation.job.requested-0-1"
 
 
 async def test_process_message_handles_data_not_found_error(
@@ -322,9 +359,12 @@ async def test_process_message_marks_job_failed_when_fx_rate_missing(
     update_kwargs = mock_valuation_repo.update_job_status.call_args.kwargs
     assert update_args[4] == "FAILED"
     assert "Missing FX rate" in update_kwargs["failure_reason"]
-    assert mock_outbox_repo.create_outbox_event.call_count == 2
+    mock_outbox_repo.create_outbox_event.assert_called_once()
+    payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
+    assert payload["epoch"] == mock_event.epoch
+    assert payload["id"] == 1
     consumer._send_to_dlq_async.assert_not_called()
-    mock_idempotency_repo.mark_event_processed.assert_called_once()
+    assert mock_idempotency_repo.claim_event_processing.await_count == 1
 
 
 async def test_valuation_consumer_skips_success_side_effects_when_job_ownership_is_lost(

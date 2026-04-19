@@ -8,12 +8,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.repositories.operations_repository import (
     ExportJobHealthSummary,
     JobHealthSummary,
+    LoadRunProgressSummary,
     ReconciliationFindingSummary,
     ReprocessingHealthSummary,
 )
+from src.services.query_service.app.services import operations_service as operations_service_module
 from src.services.query_service.app.services.operations_service import OperationsService
 
 pytestmark = pytest.mark.asyncio
+
+FIXED_GENERATED_AT = datetime(2026, 4, 18, 8, 10, tzinfo=timezone.utc)
+
+
+class _FixedDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is None:
+            return FIXED_GENERATED_AT.replace(tzinfo=None)
+        return FIXED_GENERATED_AT.astimezone(tz)
 
 
 @pytest.fixture
@@ -32,6 +44,53 @@ def service(mock_ops_repo: AsyncMock) -> OperationsService:
         return OperationsService(AsyncMock(spec=AsyncSession))
 
 
+def _load_run_summary(**overrides) -> LoadRunProgressSummary:
+    values = {
+        "portfolios_ingested": 1000,
+        "transactions_ingested": 100000,
+        "portfolios_with_snapshots": 800,
+        "snapshot_rows": 80000,
+        "portfolios_with_position_timeseries": 700,
+        "position_timeseries_rows": 700,
+        "portfolios_with_timeseries": 650,
+        "timeseries_rows": 650,
+        "pending_valuation_jobs": 10,
+        "processing_valuation_jobs": 5,
+        "open_valuation_jobs": 15,
+        "pending_aggregation_jobs": 2,
+        "processing_aggregation_jobs": 1,
+        "open_aggregation_jobs": 3,
+        "failed_valuation_jobs": 0,
+        "failed_aggregation_jobs": 0,
+        "oldest_pending_valuation_date": date(2026, 4, 17),
+        "oldest_pending_aggregation_date": date(2026, 4, 17),
+        "latest_snapshot_date": date(2026, 4, 17),
+        "latest_timeseries_date": date(2026, 4, 17),
+        "latest_snapshot_materialized_at_utc": FIXED_GENERATED_AT - timedelta(minutes=2),
+        "latest_position_timeseries_materialized_at_utc": (
+            FIXED_GENERATED_AT - timedelta(minutes=3)
+        ),
+        "latest_portfolio_timeseries_materialized_at_utc": (
+            FIXED_GENERATED_AT - timedelta(minutes=4)
+        ),
+        "latest_valuation_job_updated_at_utc": FIXED_GENERATED_AT - timedelta(minutes=1),
+        "latest_aggregation_job_updated_at_utc": FIXED_GENERATED_AT - timedelta(minutes=5),
+        "completed_valuation_jobs_without_position_timeseries": 4,
+        "completed_valuation_portfolios_without_position_timeseries": 3,
+        "max_completed_valuation_jobs_without_position_timeseries_single_portfolio": 2,
+        "oldest_completed_valuation_without_position_timeseries_at_utc": (
+            FIXED_GENERATED_AT - timedelta(minutes=10)
+        ),
+        "valuation_to_position_timeseries_latency_sample_count": 20,
+        "valuation_to_position_timeseries_latency_p50_seconds": 30.0,
+        "valuation_to_position_timeseries_latency_p95_seconds": 90.0,
+        "valuation_to_position_timeseries_latency_max_seconds": 180.0,
+    }
+    values.update(overrides)
+    return LoadRunProgressSummary(**values)
+
+
+@pytest.mark.asyncio
 async def test_get_support_overview(service: OperationsService, mock_ops_repo: AsyncMock):
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_current_portfolio_epoch.return_value = 2
@@ -250,6 +309,256 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     control_call = mock_ops_repo.get_latest_financial_reconciliation_control_stage.await_args
     assert control_call.args == ("P1",)
     assert control_call.kwargs["as_of"] == response.generated_at_utc
+
+
+async def test_operations_service_helper_branches_cover_ratio_division_and_elapsed_time() -> None:
+    assert OperationsService._safe_ratio(3, 0) == 0.0
+    assert OperationsService._safe_ratio(1, 3) == pytest.approx(0.333333)
+    assert OperationsService._ceiling_division(0, 10) == 0
+    assert OperationsService._ceiling_division(7, 3) == 3
+    assert OperationsService._elapsed_seconds_between(None, FIXED_GENERATED_AT) is None
+    assert (
+        OperationsService._elapsed_seconds_between(
+            FIXED_GENERATED_AT,
+            FIXED_GENERATED_AT - timedelta(minutes=1),
+        )
+        == 0.0
+    )
+
+
+async def test_operations_service_load_run_state_and_handoff_pressure_cover_major_paths() -> None:
+    assert (
+        OperationsService._get_load_run_state(
+            _load_run_summary(failed_valuation_jobs=1)
+        )
+        == "FAILED"
+    )
+    assert (
+        OperationsService._get_load_run_state(
+            _load_run_summary(
+                portfolios_with_timeseries=1000,
+                open_valuation_jobs=0,
+                open_aggregation_jobs=0,
+            )
+        )
+        == "COMPLETE"
+    )
+    assert (
+        OperationsService._get_load_run_state(
+            _load_run_summary(transactions_ingested=0)
+        )
+        == "SEEDING"
+    )
+    assert OperationsService._get_load_run_state(_load_run_summary()) == "MATERIALIZING"
+    assert (
+        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+            _load_run_summary(
+                pending_valuation_jobs=0,
+                completed_valuation_jobs_without_position_timeseries=0,
+            )
+        )
+        == "NO_HANDOFF_PRESSURE"
+    )
+    assert (
+        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+            _load_run_summary(
+                pending_valuation_jobs=10,
+                completed_valuation_jobs_without_position_timeseries=0,
+            )
+        )
+        == "SCHEDULER_DISPATCH_BOUND"
+    )
+    assert (
+        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+            _load_run_summary(
+                pending_valuation_jobs=0,
+                completed_valuation_jobs_without_position_timeseries=3,
+            )
+        )
+        == "DOWNSTREAM_OF_VALUATION"
+    )
+    assert (
+        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+            _load_run_summary()
+        )
+        == "MIXED_HANDOFF_PRESSURE"
+    )
+
+
+async def test_operations_service_operational_state_helpers_cover_terminal_and_stale_paths(
+) -> None:
+    now = FIXED_GENERATED_AT
+    stale_at = now - timedelta(minutes=30)
+    assert OperationsService._aggregate_statuses([]) == UNKNOWN
+    assert OperationsService._aggregate_statuses([COMPLETE, BLOCKED]) == BLOCKED
+    assert OperationsService._aggregate_statuses([COMPLETE, BREAK_OPEN]) == BREAK_OPEN
+    assert OperationsService._aggregate_statuses([COMPLETE, PARTIAL]) == PARTIAL
+    assert OperationsService._aggregate_statuses([COMPLETE, COMPLETE]) == COMPLETE
+    assert OperationsService._aggregate_statuses([COMPLETE, "SOMETHING_ELSE"]) == UNKNOWN
+    assert OperationsService._get_support_job_operational_state("FAILED", None, now) == "FAILED"
+    assert (
+        OperationsService._get_support_job_operational_state("SKIPPED_POLICY", None, now)
+        == "SKIPPED"
+    )
+    assert (
+        OperationsService._get_support_job_operational_state("PROCESSING", stale_at, now)
+        == "STALE_PROCESSING"
+    )
+    assert (
+        OperationsService._get_support_job_operational_state("PROCESSING", now, now)
+        == "PROCESSING"
+    )
+    assert (
+        OperationsService._get_support_job_operational_state("PENDING", now, now)
+        == "PENDING"
+    )
+    assert (
+        OperationsService._get_support_job_operational_state("COMPLETED", now, now)
+        == "COMPLETED"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("FAILED", None, now)
+        == "FAILED"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("running", stale_at, now)
+        == "STALE_RUNNING"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("running", now, now)
+        == "RUNNING"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("accepted", now, now)
+        == "ACCEPTED"
+    )
+    assert (
+        OperationsService._get_analytics_export_operational_state("completed", now, now)
+        == "COMPLETED"
+    )
+
+
+async def test_operations_service_reconciliation_and_lineage_helpers_cover_blocking_logic() -> None:
+    now = FIXED_GENERATED_AT
+    stale_at = now - timedelta(minutes=30)
+    assert OperationsService._get_reconciliation_operational_state("FAILED") == "BLOCKING"
+    assert OperationsService._get_reconciliation_operational_state("RUNNING") == "RUNNING"
+    assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
+    assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
+    assert (
+        OperationsService._get_portfolio_control_stage_operational_state("COMPLETED")
+        == "COMPLETED"
+    )
+    assert (
+        OperationsService._get_reconciliation_finding_operational_state("ERROR")
+        == "BLOCKING"
+    )
+    assert (
+        OperationsService._get_reconciliation_finding_operational_state("WARN")
+        == "NON_BLOCKING"
+    )
+    assert (
+        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", stale_at, now)
+        == "STALE_REPROCESSING"
+    )
+    assert (
+        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", now, now)
+        == "REPROCESSING"
+    )
+    assert (
+        OperationsService._get_reprocessing_key_operational_state("CURRENT", now, now)
+        == "CURRENT"
+    )
+    assert OperationsService._has_lineage_artifact_gap(None, None, None, None) is False
+    assert (
+        OperationsService._has_lineage_artifact_gap(
+            latest_position_history_date=date(2026, 4, 17),
+            latest_daily_snapshot_date=date(2026, 4, 16),
+            latest_valuation_job_date=date(2026, 4, 17),
+            latest_valuation_job_status="COMPLETED",
+        )
+        is True
+    )
+    assert (
+        OperationsService._has_lineage_artifact_gap(
+            latest_position_history_date=date(2026, 4, 17),
+            latest_daily_snapshot_date=date(2026, 4, 17),
+            latest_valuation_job_date=date(2026, 4, 17),
+            latest_valuation_job_status="FAILED",
+        )
+        is True
+    )
+    assert (
+        OperationsService._has_lineage_artifact_gap(
+            latest_position_history_date=date(2026, 4, 17),
+            latest_daily_snapshot_date=date(2026, 4, 17),
+            latest_valuation_job_date=date(2026, 4, 17),
+            latest_valuation_job_status="COMPLETED",
+        )
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_support_overview_keeps_carried_forward_snapshot_ahead_of_last_booked_trade(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 2
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+        oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
+    )
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+        oldest_open_job_id=None,
+        oldest_open_request_fingerprint=None,
+    )
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
+    mock_ops_repo.get_latest_transaction_date_as_of.return_value = date(2025, 8, 26)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
+
+    response = await service.get_support_overview("P1")
+
+    assert response.latest_transaction_date == date(2025, 9, 2)
+    assert response.latest_booked_transaction_date == date(2025, 8, 26)
+    assert response.latest_position_snapshot_date == date(2025, 8, 30)
+    assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)
+    assert response.publish_allowed is True
 
 
 async def test_get_lineage_raises_when_state_missing(
@@ -2382,4 +2691,177 @@ async def test_get_calculator_slos(service: OperationsService, mock_ops_repo: As
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
         as_of=response.generated_at_utc,
+    )
+
+
+async def test_get_load_run_progress_derives_remaining_work_counts(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.get_load_run_progress.return_value = LoadRunProgressSummary(
+        portfolios_ingested=10,
+        transactions_ingested=100,
+        portfolios_with_snapshots=8,
+        snapshot_rows=80,
+        portfolios_with_position_timeseries=7,
+        position_timeseries_rows=70,
+        portfolios_with_timeseries=6,
+        timeseries_rows=6,
+        pending_valuation_jobs=3,
+        processing_valuation_jobs=2,
+        open_valuation_jobs=5,
+        pending_aggregation_jobs=1,
+        processing_aggregation_jobs=0,
+        open_aggregation_jobs=1,
+        failed_valuation_jobs=0,
+        failed_aggregation_jobs=0,
+        oldest_pending_valuation_date=date(2026, 4, 17),
+        oldest_pending_aggregation_date=date(2026, 4, 17),
+        latest_snapshot_date=date(2026, 4, 17),
+        latest_timeseries_date=date(2026, 4, 17),
+        latest_snapshot_materialized_at_utc=datetime(2026, 4, 18, 8, 0, tzinfo=timezone.utc),
+        latest_position_timeseries_materialized_at_utc=datetime(
+            2026, 4, 18, 8, 5, tzinfo=timezone.utc
+        ),
+        latest_portfolio_timeseries_materialized_at_utc=datetime(
+            2026, 4, 18, 8, 6, tzinfo=timezone.utc
+        ),
+        latest_valuation_job_updated_at_utc=datetime(2026, 4, 18, 7, 55, tzinfo=timezone.utc),
+        latest_aggregation_job_updated_at_utc=datetime(2026, 4, 18, 8, 6, tzinfo=timezone.utc),
+        completed_valuation_jobs_without_position_timeseries=4,
+        completed_valuation_portfolios_without_position_timeseries=2,
+        max_completed_valuation_jobs_without_position_timeseries_single_portfolio=2,
+        oldest_completed_valuation_without_position_timeseries_at_utc=datetime(
+            2026, 4, 18, 7, 50, tzinfo=timezone.utc
+        ),
+        valuation_to_position_timeseries_latency_sample_count=70,
+        valuation_to_position_timeseries_latency_p50_seconds=600.0,
+        valuation_to_position_timeseries_latency_p95_seconds=900.0,
+        valuation_to_position_timeseries_latency_max_seconds=1200.0,
+    )
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_load_run_progress("RUN1", date(2026, 4, 17))
+
+    assert response.operator_progress_stale_threshold_minutes == 15
+    assert response.operator_progress_state == "RUNNING"
+    assert response.complete_portfolios == 6
+    assert response.incomplete_portfolios == 4
+    assert response.portfolios_waiting_for_snapshots == 2
+    assert response.remaining_snapshot_rows == 20
+    assert response.portfolios_waiting_for_position_timeseries == 1
+    assert response.remaining_position_timeseries_rows == 30
+    assert response.portfolios_waiting_for_portfolio_timeseries == 1
+    assert response.remaining_portfolio_timeseries_rows == 4
+    mock_ops_repo.get_load_run_progress.assert_awaited_once_with(
+        run_id="RUN1",
+        business_date=date(2026, 4, 17),
+        as_of=response.generated_at_utc,
+    )
+
+
+async def test_get_load_run_operator_progress_state_covers_running_slow_stuck_and_terminals():
+    reference_now = datetime(2026, 4, 19, 8, 0, tzinfo=timezone.utc)
+
+    running_summary = LoadRunProgressSummary(
+        portfolios_ingested=10,
+        transactions_ingested=100,
+        portfolios_with_snapshots=8,
+        snapshot_rows=80,
+        portfolios_with_position_timeseries=7,
+        position_timeseries_rows=70,
+        portfolios_with_timeseries=6,
+        timeseries_rows=6,
+        pending_valuation_jobs=2,
+        processing_valuation_jobs=1,
+        open_valuation_jobs=3,
+        pending_aggregation_jobs=0,
+        processing_aggregation_jobs=0,
+        open_aggregation_jobs=0,
+        failed_valuation_jobs=0,
+        failed_aggregation_jobs=0,
+        oldest_pending_valuation_date=None,
+        oldest_pending_aggregation_date=None,
+        latest_snapshot_date=date(2026, 4, 18),
+        latest_timeseries_date=date(2026, 4, 18),
+        latest_snapshot_materialized_at_utc=reference_now - timedelta(minutes=2),
+        latest_position_timeseries_materialized_at_utc=None,
+        latest_portfolio_timeseries_materialized_at_utc=None,
+        latest_valuation_job_updated_at_utc=reference_now - timedelta(minutes=1),
+        latest_aggregation_job_updated_at_utc=None,
+        completed_valuation_jobs_without_position_timeseries=0,
+        completed_valuation_portfolios_without_position_timeseries=0,
+        max_completed_valuation_jobs_without_position_timeseries_single_portfolio=0,
+        oldest_completed_valuation_without_position_timeseries_at_utc=None,
+        valuation_to_position_timeseries_latency_sample_count=0,
+        valuation_to_position_timeseries_latency_p50_seconds=None,
+        valuation_to_position_timeseries_latency_p95_seconds=None,
+        valuation_to_position_timeseries_latency_max_seconds=None,
+    )
+    slow_summary = LoadRunProgressSummary(
+        **{
+            **running_summary.__dict__,
+            "pending_valuation_jobs": 0,
+            "processing_valuation_jobs": 0,
+            "open_valuation_jobs": 0,
+            "completed_valuation_jobs_without_position_timeseries": 4,
+        }
+    )
+    stuck_summary = LoadRunProgressSummary(
+        **{
+            **slow_summary.__dict__,
+            "latest_snapshot_materialized_at_utc": reference_now - timedelta(minutes=40),
+            "latest_valuation_job_updated_at_utc": reference_now - timedelta(minutes=40),
+        }
+    )
+    complete_summary = LoadRunProgressSummary(
+        **{
+            **running_summary.__dict__,
+            "portfolios_with_timeseries": 10,
+            "timeseries_rows": 10,
+            "open_valuation_jobs": 0,
+            "pending_valuation_jobs": 0,
+            "processing_valuation_jobs": 0,
+        }
+    )
+    failed_summary = LoadRunProgressSummary(
+        **{
+            **running_summary.__dict__,
+            "failed_valuation_jobs": 1,
+        }
+    )
+
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            running_summary,
+            reference_now=reference_now,
+        )
+        == "RUNNING"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            slow_summary,
+            reference_now=reference_now,
+        )
+        == "SLOW"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            stuck_summary,
+            reference_now=reference_now,
+        )
+        == "STUCK"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            complete_summary,
+            reference_now=reference_now,
+        )
+        == "COMPLETE"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            failed_summary,
+            reference_now=reference_now,
+        )
+        == "FAILED"
     )

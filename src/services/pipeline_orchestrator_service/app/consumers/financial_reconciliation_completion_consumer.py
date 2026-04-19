@@ -40,7 +40,12 @@ class FinancialReconciliationCompletionConsumer(BaseConsumer):
                 async for db in get_async_db_session():
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                        if not await idempotency_repo.claim_event_processing(
+                            event_id,
+                            event.portfolio_id,
+                            SERVICE_NAME,
+                            correlation_id,
+                        ):
                             return
 
                         service = PipelineOrchestratorService(
@@ -49,13 +54,6 @@ class FinancialReconciliationCompletionConsumer(BaseConsumer):
                         )
                         await service.register_reconciliation_completed(
                             event,
-                            correlation_id,
-                        )
-
-                        await idempotency_repo.mark_event_processed(
-                            event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
                             correlation_id,
                         )
 

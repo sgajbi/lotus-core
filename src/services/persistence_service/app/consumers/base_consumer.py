@@ -77,9 +77,11 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                 async for db in get_async_db_session():
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
-
-                        if await idempotency_repo.is_event_processed(
-                            idempotency_key, self.service_name
+                        if not await idempotency_repo.claim_event_processing(
+                            idempotency_key,
+                            getattr(event, "portfolio_id", None) or "N/A",
+                            self.service_name,
+                            correlation_id,
                         ):
                             logger.warning(f"Event {idempotency_key} already processed. Skipping.")
                             return
@@ -92,13 +94,6 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                             await outbox_repo.create_outbox_event(
                                 correlation_id=correlation_id, **outbox_details
                             )
-
-                        await idempotency_repo.mark_event_processed(
-                            event_id=idempotency_key,
-                            portfolio_id=getattr(event, "portfolio_id", None) or "N/A",
-                            service_name=self.service_name,
-                            correlation_id=correlation_id,
-                        )
 
         except (json.JSONDecodeError, ValidationError) as e:
             # This is a non-retryable "poison pill" message. Send to DLQ.

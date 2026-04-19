@@ -347,6 +347,7 @@ def _write_report(
     *,
     output_dir: Path,
     run_id: str,
+    profile_tier: str,
     results: list[ProfileResult],
     enforce: bool,
 ) -> tuple[Path, Path]:
@@ -355,6 +356,7 @@ def _write_report(
     payload = {
         "run_id": run_id,
         "generated_at": datetime.now(UTC).isoformat(),
+        "profile_tier": profile_tier,
         "enforce": enforce,
         "overall_passed": overall_passed,
         "profiles": [asdict(item) for item in results],
@@ -367,6 +369,7 @@ def _write_report(
         f"# Performance Load Gate {run_id}",
         "",
         f"- Overall passed: {overall_passed}",
+        f"- Profile tier: {profile_tier}",
         f"- Enforce mode: {enforce}",
         "",
         (
@@ -631,6 +634,7 @@ def main() -> int:
     json_path, md_path = _write_report(
         output_dir=(repo_root / args.output_dir),
         run_id=run_id,
+        profile_tier=args.profile_tier,
         results=all_results,
         enforce=args.enforce,
     )

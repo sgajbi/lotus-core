@@ -222,6 +222,14 @@ class PositionService:
         response_as_of_date = effective_as_of_date or max(
             (position.position_date for position in positions), default=date.today()
         )
+        latest_market_price_dates = await self.repo.get_latest_market_price_dates(
+            security_ids=[
+                position.security_id
+                for position in positions
+                if self._requires_market_price_freshness(position)
+            ],
+            as_of_date=response_as_of_date,
+        )
         return PortfolioPositionsResponse(
             portfolio_id=portfolio_id,
             positions=positions,
@@ -230,6 +238,8 @@ class PositionService:
                 data_quality_status=self._holdings_data_quality_status(
                     positions=positions,
                     history_supplements=history_supplements,
+                    response_as_of_date=response_as_of_date,
+                    latest_market_price_dates=latest_market_price_dates,
                 ),
                 latest_evidence_timestamp=self._latest_holdings_evidence_timestamp(db_results),
             ),
@@ -240,6 +250,8 @@ class PositionService:
         *,
         positions: list[Position],
         history_supplements: list[tuple[Any, Any, Any]],
+        response_as_of_date: date,
+        latest_market_price_dates: dict[str, date],
     ) -> str:
         if not positions:
             return UNKNOWN
@@ -250,9 +262,26 @@ class PositionService:
             return UNKNOWN
         if any(status != "CURRENT" for status in normalized_statuses):
             return STALE
+        if any(
+            (
+                latest_market_price_dates.get(position.security_id) != response_as_of_date
+                if PositionService._requires_market_price_freshness(position)
+                else False
+            )
+            for position in positions
+        ):
+            return STALE
         if history_supplements:
             return PARTIAL
         return COMPLETE
+
+    @staticmethod
+    def _requires_market_price_freshness(position: Position) -> bool:
+        return (
+            (position.asset_class or "").strip().upper() != "CASH"
+            and position.valuation is not None
+            and position.valuation.market_price is not None
+        )
 
     @staticmethod
     def _latest_holdings_evidence_timestamp(

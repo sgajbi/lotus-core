@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    FxRate,
     Instrument,
     Portfolio,
     PortfolioTimeseries,
@@ -240,6 +241,7 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
     ensure_reconciliation_tables,
 ):
     await _seed_portfolio(async_db_session, "PORT-R2")
+    await _seed_instrument(async_db_session, "SEC-R2")
     async_db_session.add(
         DailyPositionSnapshot(
             portfolio_id="PORT-R2",
@@ -357,6 +359,225 @@ async def test_timeseries_integrity_run_detects_aggregate_and_completeness_drift
         "position_timeseries_completeness_gap",
         "portfolio_timeseries_aggregate_mismatch",
     }
+
+
+async def test_timeseries_integrity_run_detects_missing_portfolio_timeseries_row(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+):
+    await _seed_portfolio(async_db_session, "PORT-R3B")
+    await _seed_instrument(async_db_session, "SEC-R3B")
+
+    async_db_session.add_all(
+        [
+            DailyPositionSnapshot(
+                portfolio_id="PORT-R3B",
+                security_id="SEC-R3B",
+                date=date(2026, 3, 9),
+                epoch=1,
+                quantity=Decimal("8"),
+                cost_basis=Decimal("80"),
+                cost_basis_local=Decimal("80"),
+                valuation_status="VALUED",
+            ),
+            PositionTimeseries(
+                portfolio_id="PORT-R3B",
+                security_id="SEC-R3B",
+                date=date(2026, 3, 9),
+                epoch=1,
+                bod_market_value=Decimal("80"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("84"),
+                fees=Decimal("0"),
+                quantity=Decimal("8"),
+                cost=Decimal("80"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    response = await async_test_client.post(
+        "/reconciliation/runs/timeseries-integrity",
+        json={"portfolio_id": "PORT-R3B", "business_date": "2026-03-09", "epoch": 1},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["finding_count"] == 1
+    assert payload["summary"]["passed"] is False
+
+    findings_response = await async_test_client.get(
+        f"/reconciliation/runs/{payload['run_id']}/findings"
+    )
+    assert findings_response.status_code == 200
+    findings = findings_response.json()["findings"]
+    assert len(findings) == 1
+    assert findings[0]["finding_type"] == "missing_portfolio_timeseries"
+    assert findings[0]["detail"]["position_timeseries_rows"] == 1
+
+
+async def test_timeseries_integrity_run_detects_missing_position_timeseries_rows(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+):
+    await _seed_portfolio(async_db_session, "PORT-R3C")
+    await _seed_instrument(async_db_session, "SEC-R3C")
+
+    async_db_session.add_all(
+        [
+            DailyPositionSnapshot(
+                portfolio_id="PORT-R3C",
+                security_id="SEC-R3C",
+                date=date(2026, 3, 10),
+                epoch=2,
+                quantity=Decimal("12"),
+                cost_basis=Decimal("120"),
+                cost_basis_local=Decimal("120"),
+                valuation_status="VALUED",
+            ),
+            PortfolioTimeseries(
+                portfolio_id="PORT-R3C",
+                date=date(2026, 3, 10),
+                epoch=2,
+                bod_market_value=Decimal("120"),
+                bod_cashflow=Decimal("0"),
+                eod_cashflow=Decimal("0"),
+                eod_market_value=Decimal("126"),
+                fees=Decimal("0"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    response = await async_test_client.post(
+        "/reconciliation/runs/timeseries-integrity",
+        json={"portfolio_id": "PORT-R3C", "business_date": "2026-03-10", "epoch": 2},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["finding_count"] == 1
+    assert payload["summary"]["passed"] is False
+
+    findings_response = await async_test_client.get(
+        f"/reconciliation/runs/{payload['run_id']}/findings"
+    )
+    assert findings_response.status_code == 200
+    findings = findings_response.json()["findings"]
+    assert len(findings) == 1
+    assert findings[0]["finding_type"] == "missing_position_timeseries"
+    assert findings[0]["observed_value"]["position_timeseries_rows"] == 0
+
+
+async def test_timeseries_integrity_run_accepts_authoritative_mixed_epoch_asof_aggregate(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+):
+    await _seed_portfolio(async_db_session, "PORT-R3D")
+    async_db_session.add_all(
+        [
+            Instrument(
+                security_id="SEC-R3D-USD",
+                name="USD Instrument",
+                isin="ISINR3DUSD1",
+                currency="USD",
+                product_type="EQUITY",
+            ),
+            Instrument(
+                security_id="SEC-R3D-EUR",
+                name="EUR Instrument",
+                isin="ISINR3DEUR1",
+                currency="EUR",
+                product_type="EQUITY",
+            ),
+            FxRate(
+                from_currency="EUR",
+                to_currency="USD",
+                rate=Decimal("1.2"),
+                rate_date=date(2026, 3, 7),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="PORT-R3D",
+                security_id="SEC-R3D-USD",
+                date=date(2026, 3, 8),
+                epoch=0,
+                quantity=Decimal("10"),
+                cost_basis=Decimal("100"),
+                cost_basis_local=Decimal("100"),
+                valuation_status="VALUED",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="PORT-R3D",
+                security_id="SEC-R3D-EUR",
+                date=date(2026, 3, 7),
+                epoch=1,
+                quantity=Decimal("5"),
+                cost_basis=Decimal("25"),
+                cost_basis_local=Decimal("25"),
+                valuation_status="VALUED",
+            ),
+            PositionTimeseries(
+                portfolio_id="PORT-R3D",
+                security_id="SEC-R3D-USD",
+                date=date(2026, 3, 8),
+                epoch=0,
+                bod_market_value=Decimal("100"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("100"),
+                fees=Decimal("0"),
+                quantity=Decimal("10"),
+                cost=Decimal("100"),
+            ),
+            PositionTimeseries(
+                portfolio_id="PORT-R3D",
+                security_id="SEC-R3D-EUR",
+                date=date(2026, 3, 7),
+                epoch=1,
+                bod_market_value=Decimal("25"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("-15"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("-15"),
+                eod_market_value=Decimal("10"),
+                fees=Decimal("0"),
+                quantity=Decimal("5"),
+                cost=Decimal("25"),
+            ),
+            PortfolioTimeseries(
+                portfolio_id="PORT-R3D",
+                date=date(2026, 3, 8),
+                epoch=13,
+                bod_market_value=Decimal("130"),
+                bod_cashflow=Decimal("0"),
+                eod_cashflow=Decimal("-18"),
+                eod_market_value=Decimal("112"),
+                fees=Decimal("0"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    response = await async_test_client.post(
+        "/reconciliation/runs/timeseries-integrity",
+        json={"portfolio_id": "PORT-R3D", "business_date": "2026-03-08", "epoch": 13},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["finding_count"] == 0
+    assert payload["summary"]["passed"] is True
 
 
 async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_404(

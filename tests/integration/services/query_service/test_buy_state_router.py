@@ -67,6 +67,8 @@ async def async_test_client():
             transaction_type="BUY",
             economic_event_id="EVT-1",
             linked_transaction_group_id="LTG-1",
+            calculation_policy_id="BUY_DEFAULT_POLICY",
+            calculation_policy_version="1.0.0",
             cashflow_amount=-15005.5,
             cashflow_currency="USD",
             cashflow_classification="INVESTMENT_OUTFLOW",
@@ -125,6 +127,7 @@ async def test_get_cash_linkage_success(async_test_client):
     assert response.status_code == 200
     payload = response.json()
     assert payload["transaction_id"] == "TXN-1"
+    assert payload["calculation_policy_id"] == "BUY_DEFAULT_POLICY"
     assert payload["cashflow_classification"] == "INVESTMENT_OUTFLOW"
     mock_service.get_buy_cash_linkage.assert_awaited_with(
         portfolio_id="PORT-1", transaction_id="TXN-1"

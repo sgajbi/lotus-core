@@ -203,29 +203,15 @@ class ValuationRepositoryBase:
         keys_tuple = tuple((s.portfolio_id, s.security_id, s.epoch) for s in states)
         first_open_dates = first_open_dates or {}
 
-        first_open_dates_table = (
-            values(
-                column("portfolio_id", String),
-                column("security_id", String),
-                column("epoch", Integer),
-                column("first_open_date", Date),
-                name="first_open_dates",
+        first_open_dates_rows = [
+            (
+                portfolio_id,
+                security_id,
+                epoch,
+                first_open_date,
             )
-            .data(
-                [
-                    (
-                        portfolio_id,
-                        security_id,
-                        epoch,
-                        first_open_date,
-                    )
-                    for (portfolio_id, security_id, epoch), first_open_date in (
-                        first_open_dates.items()
-                    )
-                ]
-            )
-            .alias("first_open_dates")
-        )
+            for (portfolio_id, security_id, epoch), first_open_date in first_open_dates.items()
+        ]
 
         s = aliased(PositionState)
         dps = aliased(DailyPositionSnapshot)
@@ -235,16 +221,35 @@ class ValuationRepositoryBase:
             .scalar_subquery()
         )
 
-        expected_start_date = cast(
-            func.greatest(
-                s.watermark_date + timedelta(days=1),
-                func.coalesce(
-                    first_open_dates_table.c.first_open_date,
+        expected_start_date = cast(s.watermark_date + timedelta(days=1), Date)
+        join_first_open_dates = False
+
+        if first_open_dates_rows:
+            first_open_dates_table = (
+                values(
+                    column("portfolio_id", String),
+                    column("security_id", String),
+                    column("epoch", Integer),
+                    column("first_open_date", Date),
+                    name="first_open_dates",
+                )
+                .data(first_open_dates_rows)
+                .alias("first_open_dates")
+            )
+            expected_start_date = cast(
+                func.greatest(
                     s.watermark_date + timedelta(days=1),
+                    func.coalesce(
+                        first_open_dates_table.c.first_open_date,
+                        s.watermark_date + timedelta(days=1),
+                    ),
                 ),
-            ),
-            Date,
-        )
+                Date,
+            )
+            join_first_open_dates = True
+            correlate_targets = (s, first_open_dates_table)
+        else:
+            correlate_targets = (s,)
 
         date_series_subq = (
             select(
@@ -256,7 +261,7 @@ class ValuationRepositoryBase:
                 .cast(Date)
                 .label("expected_date")
             )
-            .correlate(s, first_open_dates_table)
+            .correlate(*correlate_targets)
             .subquery("date_series")
         )
 
@@ -299,17 +304,18 @@ class ValuationRepositoryBase:
                 ).label("contiguous_date"),
             )
             .select_from(s)
-            .outerjoin(
-                first_open_dates_table,
-                (first_open_dates_table.c.portfolio_id == s.portfolio_id)
-                & (first_open_dates_table.c.security_id == s.security_id)
-                & (first_open_dates_table.c.epoch == s.epoch),
-            )
             .where(
                 tuple_(s.portfolio_id, s.security_id, s.epoch).in_(keys_tuple),
                 latest_snapshot_subq.isnot(None),
             )
         )
+        if join_first_open_dates:
+            stmt = stmt.outerjoin(
+                first_open_dates_table,
+                (first_open_dates_table.c.portfolio_id == s.portfolio_id)
+                & (first_open_dates_table.c.security_id == s.security_id)
+                & (first_open_dates_table.c.epoch == s.epoch),
+            )
 
         result = await self.db.execute(stmt)
         return {(row.portfolio_id, row.security_id): row.contiguous_date for row in result}
@@ -320,6 +326,7 @@ class ValuationRepositoryBase:
     ) -> List[PositionState]:
         stmt = (
             select(PositionState)
+            .join(Instrument, Instrument.security_id == PositionState.security_id)
             .where(PositionState.watermark_date < latest_business_date)
             .order_by(PositionState.updated_at.asc())
             .limit(limit)

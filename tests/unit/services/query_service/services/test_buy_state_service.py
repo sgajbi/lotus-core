@@ -61,6 +61,8 @@ def mock_buy_state_repo() -> AsyncMock:
             transaction_date=datetime(2026, 2, 28, 0, 0, 0),
             economic_event_id="EVT-1",
             linked_transaction_group_id="LTG-1",
+            calculation_policy_id="BUY_DEFAULT_POLICY",
+            calculation_policy_version="1.0.0",
         ),
         Cashflow(
             transaction_id="TXN-1",
@@ -101,6 +103,8 @@ async def test_get_buy_cash_linkage(mock_buy_state_repo: AsyncMock):
         response = await service.get_buy_cash_linkage("PORT-1", "TXN-1")
         assert response.transaction_id == "TXN-1"
         assert response.economic_event_id == "EVT-1"
+        assert response.calculation_policy_id == "BUY_DEFAULT_POLICY"
+        assert response.calculation_policy_version == "1.0.0"
         assert response.cashflow_classification == "INVESTMENT_OUTFLOW"
 
 

@@ -42,7 +42,7 @@ class ValuationScheduler:
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
             scheduler_batch_size_default=batch_size,
-            scheduler_dispatch_rounds_default=3,
+            scheduler_dispatch_rounds_default=10,
         )
         self._poll_interval = runtime_settings.valuation_scheduler_poll_interval_seconds
         self._batch_size = runtime_settings.valuation_scheduler_batch_size
@@ -424,6 +424,19 @@ class ValuationScheduler:
             )
         logger.info(f"Successfully flushed {len(jobs)} valuation jobs.")
 
+    async def _claim_and_dispatch_ready_jobs(self) -> None:
+        for _ in range(self._dispatch_rounds_per_poll):
+            claimed_jobs: list[PortfolioValuationJob] = []
+            async for db in get_async_db_session():
+                async with db.begin():
+                    repo = ValuationRepository(db)
+                    claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
+            if not claimed_jobs:
+                break
+            await self._dispatch_jobs(claimed_jobs)
+            if len(claimed_jobs) < self._batch_size:
+                break
+
     async def run(self):
         """The main polling loop for the scheduler."""
         logger.info(f"ValuationScheduler started. Polling every {self._poll_interval} seconds.")
@@ -450,15 +463,7 @@ class ValuationScheduler:
                     async with db.begin():
                         await self._create_backfill_jobs(db)
 
-                for _ in range(self._dispatch_rounds_per_poll):
-                    claimed_jobs = []
-                    async for db in get_async_db_session():
-                        async with db.begin():
-                            repo = ValuationRepository(db)
-                            claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
-                    if not claimed_jobs:
-                        break
-                    await self._dispatch_jobs(claimed_jobs)
+                await self._claim_and_dispatch_ready_jobs()
 
                 async for db in get_async_db_session():
                     async with db.begin():

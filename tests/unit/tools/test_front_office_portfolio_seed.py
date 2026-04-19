@@ -103,6 +103,35 @@ def test_front_office_bundle_includes_income_and_paired_cash_transactions():
     assert by_txn["TXN-FEE-ADVISORY-001"]["price"] == "1"
 
 
+def test_front_office_bundle_honors_explicit_end_date_for_market_prices():
+    bundle = build_front_office_portfolio_bundle(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        start_date=date(2025, 3, 31),
+        end_date=date(2026, 4, 17),
+        benchmark_start_date=date(2025, 1, 6),
+        benchmark_id=DEFAULT_BENCHMARK_ID,
+    )
+
+    aapl_prices = [
+        row["price_date"] for row in bundle["market_prices"] if row["security_id"] == "FO_EQ_AAPL_US"
+    ]
+    cash_prices = [
+        row["price_date"]
+        for row in bundle["market_prices"]
+        if row["security_id"] == "CASH_USD_BOOK_OPERATING"
+    ]
+    future_withdrawal = next(
+        transaction
+        for transaction in bundle["transactions"]
+        if transaction["transaction_id"] == "TXN-WITHDRAWAL-FUTURE-001"
+    )
+
+    assert max(aapl_prices) == "2026-04-17"
+    assert max(cash_prices) == "2026-04-17"
+    assert future_withdrawal["transaction_date"].startswith("2026-04-24")
+    assert future_withdrawal["settlement_date"].startswith("2026-04-27")
+
+
 def test_front_office_bundle_pairs_internal_transactions_under_shared_event_linkage():
     bundle = _build_bundle()
     by_txn = {transaction["transaction_id"]: transaction for transaction in bundle["transactions"]}
@@ -697,9 +726,10 @@ def test_collect_front_office_readiness_diagnostics_queries_support_endpoints(mo
 def test_front_office_seed_verification_counts_projected_transactions(monkeypatch) -> None:
     requested_urls: list[str] = []
     responses = {
-        "http://query.dev/portfolios/P1/positions": (
+        "http://query.dev/portfolios/P1/positions?as_of_date=2026-04-10": (
             200,
             {
+                "data_quality_status": "COMPLETE",
                 "positions": [
                     {"security_id": "SEC-1", "valuation": {"market_value": "100"}},
                     {"security_id": "SEC-2", "valuation": {"market_value": "200"}},
@@ -744,7 +774,10 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
             "?as_of_date=2026-04-10&reporting_currency=USD"
         ): (
             200,
-            {"cash_accounts": [{"id": "USD"}, {"id": "EUR"}]},
+            {
+                "data_quality_status": "COMPLETE",
+                "cash_accounts": [{"id": "USD"}, {"id": "EUR"}],
+            },
         ),
         "http://cp.dev/integration/portfolios/P1/benchmark-assignment": (
             200,
@@ -753,6 +786,15 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         "http://cp.dev/integration/portfolios/P1/analytics/reference": (
             200,
             {"performance_end_date": "2026-04-10"},
+        ),
+        "http://cp.dev/support/portfolios/P1/overview": (
+            200,
+            {
+                "pending_valuation_jobs": 0,
+                "processing_valuation_jobs": 0,
+                "pending_aggregation_jobs": 0,
+                "processing_aggregation_jobs": 0,
+            },
         ),
         (
             "http://query.dev/portfolios/P1/cashflow-projection"
@@ -803,6 +845,8 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert verification["transactions"] == 30
     assert verification["income_types"] == 2
     assert verification["activity_buckets"] == 3
+    assert verification["positions_data_quality_status"] == "COMPLETE"
+    assert verification["pending_aggregation_jobs"] == 0
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
     assert all("activity-summary/query" not in url for url in requested_urls)

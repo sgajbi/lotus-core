@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.reporting_repository import ReportingRepository
+from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
@@ -58,6 +59,10 @@ class CashBalanceResolver:
             cash_accounts=account_records,
             **source_data_product_runtime_metadata(
                 as_of_date=resolved_as_of_date,
+                data_quality_status=self.data_quality_status(
+                    cash_rows=cash_rows,
+                    account_records=account_records,
+                ),
                 latest_evidence_timestamp=self.latest_snapshot_evidence_timestamp(cash_rows),
             ),
         )
@@ -198,6 +203,16 @@ class CashBalanceResolver:
                 if isinstance(candidate, datetime):
                     timestamps.append(candidate)
         return max(timestamps) if timestamps else None
+
+    @staticmethod
+    def data_quality_status(
+        *,
+        cash_rows: list[Any],
+        account_records: list[CashAccountBalanceRecord],
+    ) -> str:
+        if not account_records:
+            return UNKNOWN
+        return COMPLETE if cash_rows else UNKNOWN
 
 
 class CashBalanceService:

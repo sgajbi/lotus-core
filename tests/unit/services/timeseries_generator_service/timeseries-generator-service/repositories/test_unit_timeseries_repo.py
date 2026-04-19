@@ -58,6 +58,31 @@ async def test_get_simple_getters(repository: TimeseriesRepository, mock_db_sess
     assert "WHERE instruments.security_id = 'S1'" in compiled_query
 
 
+async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    dated_row = MagicMock()
+    dated_row.date = date(2025, 1, 10)
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
+
+    await repository.get_position_timeseries_for_dates(
+        "P1",
+        "S1",
+        [date(2025, 1, 10), date(2025, 1, 11)],
+        14,
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "position_timeseries.portfolio_id = 'P1'" in compiled_query
+    assert "position_timeseries.security_id = 'S1'" in compiled_query
+    assert "position_timeseries.date IN ('2025-01-10', '2025-01-11')" in compiled_query
+    assert "position_timeseries.epoch = 14" in compiled_query
+
+
 async def test_get_fx_rate(repository: TimeseriesRepository, mock_db_session: AsyncMock):
     """Verifies the query for the latest FX rate."""
     await repository.get_fx_rate("USD", "EUR", date(2025, 1, 10))
@@ -151,7 +176,8 @@ async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_w
     )
 
     assert (
-        "row_number() OVER (PARTITION BY position_timeseries.security_id ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)"
+        "row_number() OVER (PARTITION BY position_timeseries.security_id "
+        "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)"
         in compiled_query
     )
     assert "position_timeseries.date <= '2025-01-10'" in compiled_query
@@ -182,6 +208,33 @@ async def test_get_all_cashflows_for_security_date_uses_latest_cashflow_epoch_wi
     assert "anon_1.rn = 1" in compiled_query
 
 
+async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    dated_row = MagicMock()
+    dated_row.cashflow_date = date(2025, 1, 10)
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
+
+    result = await repository.get_cashflows_for_security_dates(
+        "P1",
+        "S1",
+        [date(2025, 1, 10), date(2025, 1, 11)],
+        14,
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "cashflows.portfolio_id = 'P1'" in compiled_query
+    assert "cashflows.security_id = 'S1'" in compiled_query
+    assert "cashflows.cashflow_date IN ('2025-01-10', '2025-01-11')" in compiled_query
+    assert "cashflows.epoch <= 14" in compiled_query
+    assert result[date(2025, 1, 10)] == [dated_row]
+    assert result[date(2025, 1, 11)] == []
+
+
 async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_target_epoch(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
@@ -199,10 +252,10 @@ async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_targe
     )
 
 
-async def test_get_next_snapshot_after_uses_earliest_later_snapshot_not_exceeding_target_epoch(
+async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
-    await repository.get_next_snapshot_after("P1", "S1", date(2025, 1, 10), 14)
+    await repository.get_next_snapshots_after("P1", "S1", date(2025, 1, 10), 14, 25)
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(
@@ -212,9 +265,13 @@ async def test_get_next_snapshot_after_uses_earliest_later_snapshot_not_exceedin
     assert "daily_position_snapshots.epoch <= 14" in compiled_query
     assert "daily_position_snapshots.date > '2025-01-10'" in compiled_query
     assert (
-        "ORDER BY daily_position_snapshots.date ASC, daily_position_snapshots.epoch DESC"
+        "row_number() OVER (PARTITION BY daily_position_snapshots.date "
+        "ORDER BY daily_position_snapshots.epoch DESC)"
         in compiled_query
     )
+    assert "anon_1.rn = 1" in compiled_query
+    assert "ORDER BY daily_position_snapshots.date ASC" in compiled_query
+    assert "LIMIT 25" in compiled_query
 
 
 async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
@@ -233,7 +290,8 @@ async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
         in compiled_query
     )
     assert (
-        "row_number() OVER (PARTITION BY anon_2.security_id ORDER BY anon_2.date DESC, anon_2.epoch DESC)"
+        "row_number() OVER (PARTITION BY anon_2.security_id "
+        "ORDER BY anon_2.date DESC, anon_2.epoch DESC)"
         in compiled_query
     )
     assert "daily_position_snapshots.date = anon_1.date" in compiled_query

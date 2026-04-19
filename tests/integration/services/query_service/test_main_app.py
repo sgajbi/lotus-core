@@ -672,7 +672,8 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
         if parameter["name"] == "include_projected"
     )
     assert include_projected["description"] == (
-        "When true, includes projected future-dated cashflows."
+        "When true, includes projected future-dated external cash movements "
+        "(for example deposits and withdrawals)."
     )
 
     not_found = projection["responses"]["404"]["content"]["application/json"]["example"]
@@ -880,6 +881,7 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
+    components = schema["components"]["schemas"]
 
     buy_lots = schema["paths"]["/portfolios/{portfolio_id}/positions/{security_id}/lots"]["get"]
     buy_offsets = schema["paths"][
@@ -956,6 +958,39 @@ async def test_openapi_describes_buy_sell_state_contract_examples(async_test_cli
     assert sell_cash_not_found["detail"] == (
         "SELL cash linkage not found for portfolio PORT-STATE-001 and transaction "
         "TXN-SELL-2026-0001"
+    )
+
+    sell_disposal_record = components["SellDisposalRecord"]
+    assert sell_disposal_record["properties"]["disposal_cost_basis_base"]["description"] == (
+        "Disposed cost basis in portfolio base currency (absolute value)."
+    )
+    assert sell_disposal_record["properties"]["disposal_cost_basis_base"]["example"] == 3750.0
+    assert sell_disposal_record["properties"]["net_sell_proceeds_local"]["description"] == (
+        "Net SELL proceeds in trade/local currency after fees."
+    )
+    assert sell_disposal_record["properties"]["realized_gain_loss_local"]["example"] == 500.0
+    assert sell_disposal_record["properties"]["source_system"]["description"] == (
+        "Upstream source system that originated the transaction."
+    )
+
+    sell_cash_linkage_response = components["SellCashLinkageResponse"]
+    assert sell_cash_linkage_response["properties"]["cashflow_amount"]["description"] == (
+        "Linked settlement cashflow amount."
+    )
+    assert sell_cash_linkage_response["properties"]["cashflow_amount"]["example"] == 4250.0
+    assert sell_cash_linkage_response["properties"]["cashflow_classification"]["description"] == (
+        "Cashflow classification for the linked settlement event."
+    )
+
+    buy_cash_linkage_response = components["BuyCashLinkageResponse"]
+    assert buy_cash_linkage_response["properties"]["calculation_policy_id"]["description"] == (
+        "Calculation policy identifier used for BUY processing."
+    )
+    assert buy_cash_linkage_response["properties"]["calculation_policy_id"]["example"] == (
+        "BUY_DEFAULT_POLICY"
+    )
+    assert buy_cash_linkage_response["properties"]["calculation_policy_version"]["example"] == (
+        "1.0.0"
     )
 
 

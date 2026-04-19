@@ -56,5 +56,5 @@ class CashflowProjectionResponse(BaseModel):
     notes: Optional[str] = Field(
         None,
         description="Additional context for operators or downstream analytics.",
-        examples=["Projected window includes settlement-dated future transactions."],
+        examples=["Projected window includes settlement-dated future external cash movements."],
     )

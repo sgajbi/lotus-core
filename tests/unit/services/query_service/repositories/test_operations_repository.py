@@ -264,6 +264,285 @@ async def test_get_analytics_export_job_health_summary(
     assert "request_fingerprint" in compiled.lower()
 
 
+async def test_get_load_run_progress_aggregates_run_scoped_counts(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_db_session.scalar = AsyncMock(
+        side_effect=[
+            1000,
+            100000,
+            173,
+            17288,
+            92,
+            1832,
+            85,
+            85,
+            7,
+            date(2026, 4, 17),
+            datetime(2026, 4, 18, 7, 28, tzinfo=timezone.utc),
+            datetime(2026, 4, 18, 7, 27, tzinfo=timezone.utc),
+            date(2026, 4, 17),
+            datetime(2026, 4, 18, 7, 26, tzinfo=timezone.utc),
+        ]
+    )
+    valuation_result = MagicMock()
+    valuation_result.one.return_value = (
+        13,
+        43,
+        0,
+        date(2026, 4, 17),
+        datetime(2026, 4, 18, 7, 29, tzinfo=timezone.utc),
+    )
+    aggregation_result = MagicMock()
+    aggregation_result.one.return_value = (
+        2,
+        0,
+        0,
+        date(2026, 4, 17),
+        datetime(2026, 4, 18, 7, 29, tzinfo=timezone.utc),
+    )
+    latency_result = MagicMock()
+    latency_result.one.return_value = (92, 2.5, 8.9, 21.3)
+    waiting_result = MagicMock()
+    waiting_result.one.return_value = (
+        11,
+        4,
+        datetime(2026, 4, 18, 6, 45, tzinfo=timezone.utc),
+    )
+    mock_db_session.execute = AsyncMock(
+        side_effect=[valuation_result, aggregation_result, latency_result, waiting_result]
+    )
+
+    summary = await repository.get_load_run_progress(
+        "20260418T065154Z",
+        business_date=date(2026, 4, 17),
+        as_of=datetime(2026, 4, 18, 7, 29, tzinfo=timezone.utc),
+    )
+
+    assert summary.portfolios_ingested == 1000
+    assert summary.transactions_ingested == 100000
+    assert summary.portfolios_with_snapshots == 173
+    assert summary.snapshot_rows == 17288
+    assert summary.portfolios_with_position_timeseries == 92
+    assert summary.position_timeseries_rows == 1832
+    assert summary.portfolios_with_timeseries == 85
+    assert summary.timeseries_rows == 85
+    assert summary.pending_valuation_jobs == 13
+    assert summary.processing_valuation_jobs == 43
+    assert summary.open_valuation_jobs == 56
+    assert summary.pending_aggregation_jobs == 2
+    assert summary.processing_aggregation_jobs == 0
+    assert summary.open_aggregation_jobs == 2
+    assert summary.failed_valuation_jobs == 0
+    assert summary.failed_aggregation_jobs == 0
+    assert summary.oldest_pending_valuation_date == date(2026, 4, 17)
+    assert summary.oldest_pending_aggregation_date == date(2026, 4, 17)
+    assert summary.latest_snapshot_materialized_at_utc == datetime(
+        2026, 4, 18, 7, 28, tzinfo=timezone.utc
+    )
+    assert summary.latest_position_timeseries_materialized_at_utc == datetime(
+        2026, 4, 18, 7, 27, tzinfo=timezone.utc
+    )
+    assert summary.latest_portfolio_timeseries_materialized_at_utc == datetime(
+        2026, 4, 18, 7, 26, tzinfo=timezone.utc
+    )
+    assert summary.latest_valuation_job_updated_at_utc == datetime(
+        2026, 4, 18, 7, 29, tzinfo=timezone.utc
+    )
+    assert summary.latest_aggregation_job_updated_at_utc == datetime(
+        2026, 4, 18, 7, 29, tzinfo=timezone.utc
+    )
+    assert summary.completed_valuation_jobs_without_position_timeseries == 11
+    assert summary.completed_valuation_portfolios_without_position_timeseries == 4
+    assert summary.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 7
+    assert summary.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(
+        2026, 4, 18, 6, 45, tzinfo=timezone.utc
+    )
+    assert summary.valuation_to_position_timeseries_latency_sample_count == 92
+    assert summary.valuation_to_position_timeseries_latency_p50_seconds == 2.5
+    assert summary.valuation_to_position_timeseries_latency_p95_seconds == 8.9
+    assert summary.valuation_to_position_timeseries_latency_max_seconds == 21.3
+
+    scalar_sql = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in mock_db_session.scalar.call_args_list
+    ]
+    assert any("from portfolios" in compiled.lower() for compiled in scalar_sql)
+    assert any("from transactions" in compiled.lower() for compiled in scalar_sql)
+    assert any("from daily_position_snapshots" in compiled.lower() for compiled in scalar_sql)
+    assert any("from position_timeseries" in compiled.lower() for compiled in scalar_sql)
+    assert any("from portfolio_timeseries" in compiled.lower() for compiled in scalar_sql)
+    assert any(
+        "max(" in compiled.lower() and "waiting_count" in compiled.lower()
+        for compiled in scalar_sql
+    )
+    assert any(
+        "daily_position_snapshots.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in scalar_sql
+    )
+    assert any(
+        "position_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in scalar_sql
+    )
+    assert any(
+        "portfolio_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in scalar_sql
+    )
+    execute_sql = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in mock_db_session.execute.call_args_list
+    ]
+    assert any(
+        "position_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
+        "count(distinct" in compiled.lower() and "portfolio_id" in compiled.lower()
+        for compiled in execute_sql
+    )
+
+
+async def test_get_snapshot_valuation_coverage_summary_returns_zero_when_snapshot_missing(
+    repository: OperationsRepository,
+) -> None:
+    summary = await repository.get_snapshot_valuation_coverage_summary("P1", snapshot_date=None)
+
+    assert summary.snapshot_date is None
+    assert summary.total_positions == 0
+    assert summary.valued_positions == 0
+    assert summary.unvalued_positions == 0
+
+
+async def test_get_snapshot_valuation_coverage_summary_honors_snapshot_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    result = MagicMock()
+    result.one.return_value = MagicMock(total_positions=7, valued_positions=5)
+    mock_db_session.execute = AsyncMock(return_value=result)
+
+    summary = await repository.get_snapshot_valuation_coverage_summary(
+        "P1",
+        snapshot_date=date(2026, 4, 17),
+        snapshot_as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
+    )
+
+    assert summary.snapshot_date == date(2026, 4, 17)
+    assert summary.total_positions == 7
+    assert summary.valued_positions == 5
+    assert summary.unvalued_positions == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled
+    assert "daily_position_snapshots.date = '2026-04-17'" in compiled
+    assert "daily_position_snapshots.created_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "position_state.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "valuation_status != 'UNVALUED'" in compiled
+
+
+async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_samples(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    aggregate_result = MagicMock()
+    aggregate_result.one.return_value = MagicMock(
+        missing_count=2,
+        earliest_transaction_date=date(2026, 4, 1),
+        latest_transaction_date=date(2026, 4, 4),
+    )
+    sample_result = MagicMock()
+    sample_result.all.return_value = [
+        MagicMock(
+            transaction_id="TXN-001",
+            security_id="SEC-IBM",
+            transaction_date=date(2026, 4, 1),
+            trade_currency="EUR",
+            portfolio_currency="USD",
+        ),
+        MagicMock(
+            transaction_id="TXN-002",
+            security_id="SEC-NOVN",
+            transaction_date=date(2026, 4, 4),
+            trade_currency="CHF",
+            portfolio_currency="USD",
+        ),
+    ]
+    mock_db_session.execute = AsyncMock(side_effect=[aggregate_result, sample_result])
+
+    summary = await repository.get_missing_historical_fx_dependency_summary(
+        "P1",
+        as_of_date=date(2026, 4, 17),
+        snapshot_as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
+        sample_limit=5,
+    )
+
+    assert summary.missing_count == 2
+    assert summary.earliest_transaction_date == date(2026, 4, 1)
+    assert summary.latest_transaction_date == date(2026, 4, 4)
+    assert [record.transaction_id for record in summary.sample_records] == ["TXN-001", "TXN-002"]
+    aggregate_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.portfolio_id = 'P1'" in aggregate_compiled
+    assert "transaction_date" in aggregate_compiled
+    assert "<= '2026-04-17'" in aggregate_compiled
+    assert "transactions.trade_currency != portfolios.base_currency" in aggregate_compiled
+    assert "transactions.transaction_fx_rate IS NULL" in aggregate_compiled
+    assert "transactions.created_at <= '2026-04-18 07:30:00+00:00'" in aggregate_compiled
+    sample_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    sample_compiled = str(sample_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "ORDER BY anon_1.transaction_date ASC, anon_1.transaction_id ASC" in sample_compiled
+    assert "LIMIT 5" in sample_compiled
+
+
+async def test_get_latest_financial_reconciliation_control_stage_honors_as_of(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    mock_execute_scalar_one_or_none(
+        mock_db_session,
+        MagicMock(id=701, status="COMPLETED"),
+    )
+
+    stage = await repository.get_latest_financial_reconciliation_control_stage(
+        "P1",
+        as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
+    )
+
+    assert stage.id == 701
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "pipeline_stage_state.portfolio_id = 'P1'" in compiled
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "pipeline_stage_state.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "ORDER BY pipeline_stage_state.business_date DESC" in compiled
+    assert "LIMIT 1" in compiled
+
+
+async def test_get_latest_reconciliation_run_for_portfolio_day_prefers_latest_high_priority_run(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+) -> None:
+    mock_execute_scalar_one_or_none(
+        mock_db_session,
+        MagicMock(run_id="recon-001", status="COMPLETED"),
+    )
+
+    run = await repository.get_latest_reconciliation_run_for_portfolio_day(
+        "P1",
+        business_date=date(2026, 4, 17),
+        epoch=4,
+        as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
+    )
+
+    assert run.run_id == "recon-001"
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled
+    assert "financial_reconciliation_runs.business_date = '2026-04-17'" in compiled
+    assert "financial_reconciliation_runs.epoch = 4" in compiled
+    assert "financial_reconciliation_runs.started_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "financial_reconciliation_runs.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
+    assert "ORDER BY CASE" in compiled
+    assert "financial_reconciliation_runs.started_at DESC" in compiled
+    assert "LIMIT 1" in compiled
+
+
 async def test_support_job_queries_honor_job_id_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

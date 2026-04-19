@@ -99,7 +99,7 @@ async def test_readiness_event_upserts_valuation_job_and_marks_idempotency(
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_job_repo = mock_dependencies["job_repo"]
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
 
     await consumer.process_message(mock_kafka_message)
 
@@ -111,8 +111,8 @@ async def test_readiness_event_upserts_valuation_job_and_marks_idempotency(
     assert job_kwargs["epoch"] == mock_event.epoch
     assert isinstance(job_kwargs["correlation_id"], str)
 
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once()
-    mark_args = mock_idempotency_repo.mark_event_processed.await_args.args
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once()
+    mark_args = mock_idempotency_repo.claim_event_processing.await_args.args
     assert mark_args[0] == "portfolio_security_day.valuation.ready-0-1"
     assert mark_args[1] == mock_event.portfolio_id
     assert mark_args[2] == SERVICE_NAME
@@ -125,7 +125,7 @@ async def test_readiness_event_is_noop_when_already_processed(
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_job_repo = mock_dependencies["job_repo"]
-    mock_idempotency_repo.is_event_processed.return_value = True
+    mock_idempotency_repo.claim_event_processing.return_value = False
 
     await consumer.process_message(mock_kafka_message)
 
@@ -154,10 +154,10 @@ async def test_readiness_event_uses_header_correlation_for_direct_processing(
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_job_repo = mock_dependencies["job_repo"]
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_kafka_message.headers.return_value = [("correlation_id", b"test-corr-id")]
 
     await consumer.process_message(mock_kafka_message)
 
     assert mock_job_repo.upsert_job.await_args.kwargs["correlation_id"] == "test-corr-id"
-    assert mock_idempotency_repo.mark_event_processed.await_args.args[3] == "test-corr-id"
+    assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "test-corr-id"

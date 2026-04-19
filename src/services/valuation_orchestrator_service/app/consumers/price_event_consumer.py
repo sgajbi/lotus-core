@@ -67,7 +67,12 @@ class PriceEventConsumer(BaseConsumer):
                         valuation_repo = ValuationRepository(db)
                         reprocessing_repo = InstrumentReprocessingStateRepository(db)
 
-                        if await idempotency_repo.is_event_processed(event_id, SERVICE_NAME):
+                        if not await idempotency_repo.claim_event_processing(
+                            event_id,
+                            "N/A",
+                            SERVICE_NAME,
+                            correlation_id,
+                        ):
                             logger.warning(
                                 f"Event {event_id} already processed by {SERVICE_NAME}. Skipping."
                             )
@@ -90,10 +95,6 @@ class PriceEventConsumer(BaseConsumer):
                             latest_business_date=latest_business_date,
                             open_position_keys=open_position_keys,
                             correlation_id=event_correlation_id,
-                        )
-
-                        await idempotency_repo.mark_event_processed(
-                            event_id, "N/A", SERVICE_NAME, event_correlation_id
                         )
 
         except (json.JSONDecodeError, ValidationError) as e:

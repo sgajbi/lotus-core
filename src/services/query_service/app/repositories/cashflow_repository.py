@@ -5,9 +5,15 @@ from decimal import Decimal
 from typing import List, Optional, Tuple
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
-from portfolio_common.database_models import BusinessDate, Cashflow, Portfolio, PositionState
+from portfolio_common.database_models import (
+    BusinessDate,
+    Cashflow,
+    Portfolio,
+    PositionState,
+    Transaction,
+)
 from portfolio_common.utils import async_timed
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -70,6 +76,43 @@ class CashflowRepository:
             )
             .group_by(latest_cashflows.c.cashflow_date)
             .order_by(latest_cashflows.c.cashflow_date.asc())
+        )
+        return (await self.db.execute(stmt)).all()
+
+    @async_timed(repository="CashflowRepository", method="get_projected_settlement_cashflow_series")
+    async def get_projected_settlement_cashflow_series(
+        self,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> List[Tuple[date, Decimal]]:
+        """Projects future external settlement movements not yet present in booked cashflows."""
+        settlement_date = func.date(Transaction.settlement_date)
+        signed_amount = case(
+            (
+                Transaction.transaction_type == "DEPOSIT",
+                func.abs(Transaction.gross_transaction_amount),
+            ),
+            (
+                Transaction.transaction_type == "WITHDRAWAL",
+                -func.abs(Transaction.gross_transaction_amount),
+            ),
+            else_=None,
+        )
+        stmt = (
+            select(
+                settlement_date.label("cashflow_date"),
+                func.sum(signed_amount).label("net_amount"),
+            )
+            .where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_type.in_(("DEPOSIT", "WITHDRAWAL")),
+                Transaction.settlement_date.is_not(None),
+                settlement_date.between(start_date, end_date),
+                func.date(Transaction.transaction_date) < start_date,
+            )
+            .group_by(settlement_date)
+            .order_by(settlement_date.asc())
         )
         return (await self.db.execute(stmt)).all()
 

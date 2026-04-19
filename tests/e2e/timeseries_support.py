@@ -397,13 +397,19 @@ def assert_timeseries_payload(
     assert payload["page"]["snapshot_epoch"] >= 0
     diagnostics = payload["diagnostics"]
     assert diagnostics["missing_dates_count"] == 0
-    assert diagnostics["stale_points_count"] == 0
     assert diagnostics["requested_dimensions"] == []
     assert diagnostics["cash_flows_included"] is True
     expected_quality_distribution = dict(
         Counter(row["valuation_status"] for row in payload["rows"])
     )
+    expected_stale_points_count = sum(
+        count for status, count in expected_quality_distribution.items() if status != "final"
+    )
+    assert diagnostics["stale_points_count"] == expected_stale_points_count
     assert diagnostics["quality_status_distribution"] == expected_quality_distribution
+    assert payload["data_quality_status"] == (
+        "STALE" if expected_stale_points_count else "COMPLETE"
+    )
 
     rows = payload["rows"]
     assert len(rows) == 2

@@ -107,7 +107,7 @@ async def test_process_message_success_without_portfolio_id(
     mock_repo = mock_dependencies["repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_repo.create_or_update_instrument.return_value = DBInstrument(
         security_id=valid_instrument_event.security_id,
         name=valid_instrument_event.name,
@@ -133,11 +133,11 @@ async def test_process_message_success_without_portfolio_id(
         await instrument_consumer.process_message(mock_kafka_message)
 
     mock_repo.create_or_update_instrument.assert_awaited_once_with(valid_instrument_event)
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        event_id="instruments.received-0-1",
-        portfolio_id="N/A",
-        service_name="persistence-instruments",
-        correlation_id="test-corr-id",
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
+        "instruments.received-0-1",
+        "N/A",
+        "persistence-instruments",
+        "test-corr-id",
     )
     mock_send_to_dlq.assert_not_called()
 
@@ -151,7 +151,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     mock_repo = mock_dependencies["repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_idempotency_repo.is_event_processed.return_value = False
+    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_repo.create_or_update_instrument.return_value = DBInstrument(
         security_id=valid_instrument_event.security_id,
         name=valid_instrument_event.name,
@@ -177,9 +177,9 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     finally:
         correlation_id_var.reset(token)
 
-    mock_idempotency_repo.mark_event_processed.assert_awaited_once_with(
-        event_id="instruments.received-0-1",
-        portfolio_id="N/A",
-        service_name="persistence-instruments",
-        correlation_id="test-corr-id",
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
+        "instruments.received-0-1",
+        "N/A",
+        "persistence-instruments",
+        "test-corr-id",
     )

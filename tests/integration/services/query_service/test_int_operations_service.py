@@ -8,15 +8,22 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    Instrument,
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
+    PortfolioTimeseries,
     PortfolioValuationJob,
     PositionHistory,
     PositionState,
+    PositionTimeseries,
     ReprocessingJob,
     Transaction,
 )
+from portfolio_common.timeseries_constants import (
+    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
+)
+from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
@@ -28,6 +35,7 @@ from src.services.query_service.app.services.operations_service import Operation
 pytestmark = pytest.mark.asyncio
 
 FIXED_GENERATED_AT = datetime(2025, 8, 30, 12, 0, tzinfo=timezone.utc)
+VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
 
 
 class _FixedDateTime(datetime):
@@ -1345,9 +1353,7 @@ async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
     service = OperationsService(async_db_session)
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_valuation_jobs(
-            "P9R", skip=0, limit=20, job_id=skipped_job.id
-        )
+        response = await service.get_valuation_jobs("P9R", skip=0, limit=20, job_id=skipped_job.id)
 
     assert response.total == 1
     assert len(response.items) == 1
@@ -1476,3 +1482,519 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
     assert response.items[0].status == "running"
     assert response.items[0].is_stale_running is True
     assert response.items[0].operational_state == "STALE_RUNNING"
+
+
+async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add_all(
+        [
+            Portfolio(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                base_currency="USD",
+                open_date=date(2026, 4, 1),
+                risk_exposure="BALANCED",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="PB_SG",
+                client_id="CLIENT-1",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            Portfolio(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                base_currency="USD",
+                open_date=date(2026, 4, 1),
+                risk_exposure="BALANCED",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="PB_SG",
+                client_id="CLIENT-2",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            Transaction(
+                transaction_id="LOAD_20260418T065154Z_TX_00000001",
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                instrument_id="SEC-1",
+                security_id="SEC-1",
+                transaction_type="BUY",
+                quantity=1,
+                price=100,
+                gross_transaction_amount=100,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 4, 17, 0, 0, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="LOAD_20260418T065154Z_TX_00000002",
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                instrument_id="SEC-2",
+                security_id="SEC-2",
+                transaction_type="BUY",
+                quantity=1,
+                price=100,
+                gross_transaction_amount=100,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 4, 17, 0, 0, tzinfo=timezone.utc),
+            ),
+            Instrument(
+                security_id="SEC-1",
+                name="Security 1",
+                isin="ISIN-SEC-1",
+                currency="USD",
+                product_type="EQUITY",
+            ),
+            Instrument(
+                security_id="SEC-2",
+                name="Security 2",
+                isin="ISIN-SEC-2",
+                currency="USD",
+                product_type="EQUITY",
+            ),
+        ]
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            DailyPositionSnapshot(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                security_id="SEC-1",
+                date=date(2026, 4, 17),
+                quantity=1,
+                cost_basis=100,
+                cost_basis_local=100,
+                market_price=101,
+                market_value=101,
+                market_value_local=101,
+                unrealized_gain_loss=1,
+                unrealized_gain_loss_local=1,
+                valuation_status="COMPLETE",
+                epoch=0,
+                created_at=datetime(2025, 8, 30, 11, 40, tzinfo=timezone.utc),
+            ),
+            PositionTimeseries(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                security_id="SEC-1",
+                date=date(2026, 4, 17),
+                bod_market_value=0,
+                bod_cashflow_position=0,
+                eod_cashflow_position=0,
+                bod_cashflow_portfolio=0,
+                eod_cashflow_portfolio=0,
+                eod_market_value=101,
+                fees=0,
+                quantity=1,
+                cost=100,
+                epoch=0,
+                created_at=datetime(2025, 8, 30, 11, 45, tzinfo=timezone.utc),
+            ),
+            PortfolioTimeseries(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                date=date(2026, 4, 17),
+                bod_market_value=0,
+                bod_cashflow=0,
+                eod_cashflow=0,
+                eod_market_value=101,
+                fees=0,
+                epoch=0,
+                created_at=datetime(2025, 8, 30, 11, 50, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                security_id="SEC-1",
+                valuation_date=date(2026, 4, 17),
+                epoch=0,
+                status="COMPLETE",
+                correlation_id="corr-val-complete",
+                created_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                security_id="SEC-2",
+                valuation_date=date(2026, 4, 17),
+                epoch=0,
+                status="PENDING",
+                correlation_id="corr-val-load",
+                created_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioAggregationJob(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                aggregation_date=date(2026, 4, 17),
+                status="PENDING",
+                correlation_id="corr-agg-load",
+                created_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_load_run_progress(
+            run_id="20260418T065154Z",
+            business_date=date(2026, 4, 17),
+        )
+
+    assert response.run_id == "20260418T065154Z"
+    assert response.business_date == date(2026, 4, 17)
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.run_state == "MATERIALIZING"
+    assert response.operator_progress_stale_threshold_minutes == 15
+    assert response.operator_progress_state == "RUNNING"
+    assert response.portfolios_ingested == 2
+    assert response.transactions_ingested == 2
+    assert response.portfolios_with_snapshots == 1
+    assert response.snapshot_rows == 1
+    assert response.portfolios_with_position_timeseries == 1
+    assert response.position_timeseries_rows == 1
+    assert response.portfolios_with_timeseries == 1
+    assert response.timeseries_rows == 1
+    assert response.complete_portfolios == 1
+    assert response.incomplete_portfolios == 1
+    assert response.portfolios_waiting_for_snapshots == 1
+    assert response.remaining_snapshot_rows == 1
+    assert response.snapshot_portfolio_coverage_ratio == 0.5
+    assert response.snapshot_portfolios_without_position_timeseries == 0
+    assert response.portfolios_waiting_for_position_timeseries == 0
+    assert response.remaining_position_timeseries_rows == 1
+    assert response.position_timeseries_portfolio_coverage_ratio == 0.5
+    assert response.position_timeseries_portfolios_without_portfolio_timeseries == 0
+    assert response.portfolios_waiting_for_portfolio_timeseries == 0
+    assert response.remaining_portfolio_timeseries_rows == 1
+    assert response.timeseries_portfolio_coverage_ratio == 0.5
+    assert response.pending_valuation_jobs == 1
+    assert response.processing_valuation_jobs == 0
+    assert response.open_valuation_jobs == 1
+    assert response.pending_aggregation_jobs == 1
+    assert response.processing_aggregation_jobs == 0
+    assert response.open_aggregation_jobs == 1
+    assert response.failed_valuation_jobs == 0
+    assert response.failed_aggregation_jobs == 0
+    assert (
+        response.dependent_position_timeseries_propagation_row_cap
+        == DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+    )
+    assert (
+        response.valuation_scheduler_poll_interval_seconds
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
+    )
+    assert (
+        response.valuation_scheduler_max_dispatch_jobs_per_poll
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_batch_size
+        * VALUATION_RUNTIME_SETTINGS.valuation_scheduler_dispatch_rounds
+    )
+    assert response.valuation_scheduler_pending_dispatch_polls_lower_bound == 1
+    assert (
+        response.valuation_scheduler_pending_dispatch_time_lower_bound_seconds
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
+    )
+    assert response.valuation_to_position_timeseries_handoff_pressure_hint == (
+        "SCHEDULER_DISPATCH_BOUND"
+    )
+    assert response.oldest_pending_valuation_date == date(2026, 4, 17)
+    assert response.oldest_pending_aggregation_date == date(2026, 4, 17)
+    assert response.latest_snapshot_date == date(2026, 4, 17)
+    assert response.latest_timeseries_date == date(2026, 4, 17)
+    assert response.latest_snapshot_materialized_at_utc == datetime(
+        2025, 8, 30, 11, 40, tzinfo=timezone.utc
+    )
+    assert response.latest_valuation_to_snapshot_tail_seconds == 2400.0
+    assert response.latest_position_timeseries_materialized_at_utc == datetime(
+        2025, 8, 30, 11, 45, tzinfo=timezone.utc
+    )
+    assert response.latest_valuation_to_position_timeseries_tail_seconds == 2700.0
+    assert response.latest_snapshot_to_position_timeseries_tail_seconds == 300.0
+    assert response.latest_portfolio_timeseries_materialized_at_utc == datetime(
+        2025, 8, 30, 11, 50, tzinfo=timezone.utc
+    )
+    assert response.latest_position_timeseries_to_portfolio_timeseries_tail_seconds == 300.0
+    assert response.latest_valuation_job_updated_at_utc == datetime(
+        2025, 8, 30, 11, 0, tzinfo=timezone.utc
+    )
+    assert response.latest_aggregation_job_updated_at_utc == datetime(
+        2025, 8, 30, 11, 0, tzinfo=timezone.utc
+    )
+    assert response.completed_valuation_jobs_without_position_timeseries == 0
+    assert response.completed_valuation_portfolios_without_position_timeseries == 0
+    assert response.completed_valuation_portfolios_without_position_timeseries_ratio == 0.0
+    assert (
+        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio == 0.0
+    )
+    assert response.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 0
+    assert response.dependent_position_timeseries_propagation_cap_risk is False
+    assert response.oldest_completed_valuation_without_position_timeseries_at_utc is None
+    assert response.oldest_completed_valuation_without_position_timeseries_age_seconds is None
+    assert response.valuation_to_position_timeseries_latency_sample_count == 1
+    assert response.valuation_to_position_timeseries_latency_p50_seconds == 2700.0
+    assert response.valuation_to_position_timeseries_latency_p95_seconds == 2700.0
+    assert response.valuation_to_position_timeseries_latency_max_seconds == 2700.0
+
+
+async def test_get_load_run_progress_excludes_stage_rows_created_after_generated_at(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add_all(
+        [
+            Portfolio(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                base_currency="USD",
+                open_date=date(2026, 4, 1),
+                risk_exposure="BALANCED",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="PB_SG",
+                client_id="CLIENT-1",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            Portfolio(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                base_currency="USD",
+                open_date=date(2026, 4, 1),
+                risk_exposure="BALANCED",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="PB_SG",
+                client_id="CLIENT-2",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            Transaction(
+                transaction_id="LOAD_20260418T065154Z_TX_00000001",
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                instrument_id="SEC-1",
+                security_id="SEC-1",
+                transaction_type="BUY",
+                quantity=1,
+                price=100,
+                gross_transaction_amount=100,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 4, 17, 0, 0, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="LOAD_20260418T065154Z_TX_00000002",
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                instrument_id="SEC-2",
+                security_id="SEC-2",
+                transaction_type="BUY",
+                quantity=1,
+                price=100,
+                gross_transaction_amount=100,
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 4, 17, 0, 0, tzinfo=timezone.utc),
+            ),
+            Instrument(
+                security_id="SEC-1",
+                name="Security 1",
+                isin="ISIN-SEC-1",
+                currency="USD",
+                product_type="EQUITY",
+            ),
+            Instrument(
+                security_id="SEC-2",
+                name="Security 2",
+                isin="ISIN-SEC-2",
+                currency="USD",
+                product_type="EQUITY",
+            ),
+        ]
+    )
+    await async_db_session.flush()
+
+    async_db_session.add_all(
+        [
+            DailyPositionSnapshot(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                security_id="SEC-1",
+                date=date(2026, 4, 17),
+                quantity=1,
+                cost_basis=100,
+                cost_basis_local=100,
+                market_price=101,
+                market_value=101,
+                market_value_local=101,
+                unrealized_gain_loss=1,
+                unrealized_gain_loss_local=1,
+                valuation_status="COMPLETE",
+                epoch=0,
+                created_at=datetime(2025, 8, 30, 11, 40, tzinfo=timezone.utc),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                security_id="SEC-2",
+                date=date(2026, 4, 17),
+                quantity=1,
+                cost_basis=100,
+                cost_basis_local=100,
+                market_price=101,
+                market_value=101,
+                market_value_local=101,
+                unrealized_gain_loss=1,
+                unrealized_gain_loss_local=1,
+                valuation_status="COMPLETE",
+                epoch=0,
+                created_at=datetime(2025, 8, 31, 12, 30, tzinfo=timezone.utc),
+            ),
+            PositionTimeseries(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                security_id="SEC-1",
+                date=date(2026, 4, 17),
+                bod_market_value=0,
+                bod_cashflow_position=0,
+                eod_cashflow_position=0,
+                bod_cashflow_portfolio=0,
+                eod_cashflow_portfolio=0,
+                eod_market_value=101,
+                fees=0,
+                quantity=1,
+                cost=100,
+                epoch=0,
+                created_at=datetime(2025, 8, 30, 11, 45, tzinfo=timezone.utc),
+            ),
+            PositionTimeseries(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                security_id="SEC-2",
+                date=date(2026, 4, 17),
+                bod_market_value=0,
+                bod_cashflow_position=0,
+                eod_cashflow_position=0,
+                bod_cashflow_portfolio=0,
+                eod_cashflow_portfolio=0,
+                eod_market_value=101,
+                fees=0,
+                quantity=1,
+                cost=100,
+                epoch=0,
+                created_at=datetime(2025, 8, 31, 12, 30, tzinfo=timezone.utc),
+            ),
+            PortfolioTimeseries(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                date=date(2026, 4, 17),
+                bod_market_value=0,
+                bod_cashflow=0,
+                eod_cashflow=0,
+                eod_market_value=101,
+                fees=0,
+                epoch=0,
+                created_at=datetime(2025, 8, 30, 11, 50, tzinfo=timezone.utc),
+            ),
+            PortfolioTimeseries(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                date=date(2026, 4, 17),
+                bod_market_value=0,
+                bod_cashflow=0,
+                eod_cashflow=0,
+                eod_market_value=101,
+                fees=0,
+                epoch=0,
+                created_at=datetime(2025, 8, 31, 12, 30, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="LOAD_20260418T065154Z_PF_0001",
+                security_id="SEC-1",
+                valuation_date=date(2026, 4, 17),
+                epoch=0,
+                status="COMPLETE",
+                correlation_id="corr-val-before-cutoff",
+                created_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+            ),
+            PortfolioValuationJob(
+                portfolio_id="LOAD_20260418T065154Z_PF_0002",
+                security_id="SEC-2",
+                valuation_date=date(2026, 4, 17),
+                epoch=0,
+                status="COMPLETE",
+                correlation_id="corr-val-after-cutoff",
+                created_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    service = OperationsService(async_db_session)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_load_run_progress(
+            run_id="20260418T065154Z",
+            business_date=date(2026, 4, 17),
+        )
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.operator_progress_stale_threshold_minutes == 15
+    assert response.operator_progress_state == "SLOW"
+    assert response.portfolios_ingested == 2
+    assert response.transactions_ingested == 2
+    assert response.portfolios_with_snapshots == 1
+    assert response.snapshot_rows == 1
+    assert response.portfolios_with_position_timeseries == 1
+    assert response.position_timeseries_rows == 1
+    assert response.portfolios_with_timeseries == 1
+    assert response.timeseries_rows == 1
+    assert response.complete_portfolios == 1
+    assert response.incomplete_portfolios == 1
+    assert response.portfolios_waiting_for_snapshots == 1
+    assert response.remaining_snapshot_rows == 1
+    assert response.snapshot_portfolios_without_position_timeseries == 0
+    assert response.portfolios_waiting_for_position_timeseries == 0
+    assert response.remaining_position_timeseries_rows == 1
+    assert response.position_timeseries_portfolios_without_portfolio_timeseries == 0
+    assert response.portfolios_waiting_for_portfolio_timeseries == 0
+    assert response.remaining_portfolio_timeseries_rows == 1
+    assert response.latest_snapshot_materialized_at_utc == datetime(
+        2025, 8, 30, 11, 40, tzinfo=timezone.utc
+    )
+    assert response.latest_valuation_to_snapshot_tail_seconds == 2400.0
+    assert response.latest_position_timeseries_materialized_at_utc == datetime(
+        2025, 8, 30, 11, 45, tzinfo=timezone.utc
+    )
+    assert response.latest_valuation_to_position_timeseries_tail_seconds == 2700.0
+    assert response.latest_snapshot_to_position_timeseries_tail_seconds == 300.0
+    assert response.latest_portfolio_timeseries_materialized_at_utc == datetime(
+        2025, 8, 30, 11, 50, tzinfo=timezone.utc
+    )
+    assert response.latest_position_timeseries_to_portfolio_timeseries_tail_seconds == 300.0
+    assert (
+        response.dependent_position_timeseries_propagation_row_cap
+        == DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
+    )
+    assert (
+        response.valuation_scheduler_poll_interval_seconds
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
+    )
+    assert (
+        response.valuation_scheduler_max_dispatch_jobs_per_poll
+        == VALUATION_RUNTIME_SETTINGS.valuation_scheduler_batch_size
+        * VALUATION_RUNTIME_SETTINGS.valuation_scheduler_dispatch_rounds
+    )
+    assert response.valuation_scheduler_pending_dispatch_polls_lower_bound == 0
+    assert response.valuation_scheduler_pending_dispatch_time_lower_bound_seconds == 0
+    assert response.valuation_to_position_timeseries_handoff_pressure_hint == (
+        "DOWNSTREAM_OF_VALUATION"
+    )
+    assert response.completed_valuation_jobs_without_position_timeseries == 1
+    assert response.completed_valuation_portfolios_without_position_timeseries == 1
+    assert response.completed_valuation_portfolios_without_position_timeseries_ratio == 0.5
+    assert (
+        response.completed_valuation_jobs_without_position_timeseries_per_affected_portfolio == 1.0
+    )
+    assert response.max_completed_valuation_jobs_without_position_timeseries_single_portfolio == 1
+    assert response.dependent_position_timeseries_propagation_cap_risk is False
+    assert response.oldest_completed_valuation_without_position_timeseries_at_utc == datetime(
+        2025, 8, 30, 11, 0, tzinfo=timezone.utc
+    )
+    assert response.oldest_completed_valuation_without_position_timeseries_age_seconds == 3600.0
+    assert response.valuation_to_position_timeseries_latency_sample_count == 1
+    assert response.valuation_to_position_timeseries_latency_p50_seconds == 2700.0
+    assert response.valuation_to_position_timeseries_latency_p95_seconds == 2700.0
+    assert response.valuation_to_position_timeseries_latency_max_seconds == 2700.0

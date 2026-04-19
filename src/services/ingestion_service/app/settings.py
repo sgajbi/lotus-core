@@ -198,7 +198,7 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             ),
             valuation_scheduler_batch_size=_env_int("VALUATION_SCHEDULER_BATCH_SIZE", 100),
             valuation_scheduler_dispatch_rounds=_env_int(
-                "VALUATION_SCHEDULER_DISPATCH_ROUNDS", 3
+                "VALUATION_SCHEDULER_DISPATCH_ROUNDS", 10
             ),
             capacity_assumed_replicas=_env_int("LOTUS_CORE_CAPACITY_ASSUMED_REPLICAS", 1),
             replay_isolation_mode=_env_str(

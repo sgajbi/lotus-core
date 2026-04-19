@@ -95,7 +95,7 @@ def test_portfolio_timeseries_contract_returns_expected_rows(
             assert actual_flow["cash_flow_type"] in {
                 "external_flow",
                 "internal_trade_flow",
-                "expense",
+                "fee",
                 "transfer",
                 "income",
                 "other",

@@ -1,4 +1,5 @@
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -47,6 +48,37 @@ class _FakeSuccessConsumer:
 class _FakeFailingConsumer(_FakeSuccessConsumer):
     async def run(self):
         raise ValueError("simulated-timeseries-consumer-failure")
+
+
+async def test_consumer_manager_only_requires_active_input_topics(monkeypatch):
+    required_topics: list[str] = []
+
+    monkeypatch.setattr(
+        consumer_manager,
+        "ensure_topics_exist",
+        lambda topics: required_topics.extend(topics),
+    )
+    monkeypatch.setattr(consumer_manager.signal, "signal", lambda *_: None)
+    monkeypatch.setattr(consumer_manager, "get_kafka_producer", lambda: object())
+    monkeypatch.setattr(consumer_manager, "OutboxDispatcher", _FakeDispatcher)
+    monkeypatch.setattr(consumer_manager.uvicorn, "Config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(consumer_manager.uvicorn, "Server", _FakeServer)
+    monkeypatch.setattr(consumer_manager, "PositionTimeseriesConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(
+        consumer_manager,
+        "wait_for_shutdown_or_task_failure",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        consumer_manager,
+        "shutdown_runtime_components",
+        AsyncMock(return_value=None),
+    )
+
+    manager = consumer_manager.ConsumerManager()
+    await manager.run()
+
+    assert required_topics == ["valuation.snapshot.persisted"]
 
 
 @pytest.fixture

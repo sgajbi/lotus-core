@@ -40,8 +40,19 @@ class CashflowProjectionService:
             start_date=range_start_date,
             end_date=query_end_date,
         )
+        projected_rows = []
+        if include_projected:
+            projected_rows = await self.repo.get_projected_settlement_cashflow_series(
+                portfolio_id=portfolio_id,
+                start_date=range_start_date,
+                end_date=query_end_date,
+            )
 
-        net_by_date = {flow_date: Decimal(str(amount)) for flow_date, amount in rows}
+        net_by_date: dict[date, Decimal] = {}
+        for flow_date, amount in [*rows, *projected_rows]:
+            net_by_date[flow_date] = net_by_date.get(flow_date, Decimal("0")) + Decimal(
+                str(amount)
+            )
         running = Decimal("0")
         points: list[CashflowProjectionPoint] = []
         cursor = range_start_date
@@ -67,7 +78,7 @@ class CashflowProjectionService:
             total_net_cashflow=running,
             projection_days=horizon_days,
             notes=(
-                "Projected window includes settlement-dated future transactions."
+                "Projected window includes settlement-dated future external cash movements."
                 if include_projected
                 else "Booked-only view capped at as_of_date."
             ),

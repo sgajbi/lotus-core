@@ -155,7 +155,8 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id == "valuation.job.requested-0-7",
+                    ProcessedEvent.event_id
+                    == "valuation.job.requested-0-7",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )
@@ -353,7 +354,8 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id == "valuation.job.requested-0-8",
+                    ProcessedEvent.event_id
+                    == "valuation.job.requested-0-8",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )
@@ -372,7 +374,178 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
 
     assert snapshots == []
     assert outbox_rows == []
-    assert processed_rows == []
+    assert len(processed_rows) == 1
+    assert processed_rows[0].correlation_id == "corr-val-int-02"
+    assert job is not None
+    assert job.status == "COMPLETE"
+    consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_snapshot(
+    clean_db, async_db_session: AsyncSession
+):
+    async_db_session.add_all(
+        [
+            Portfolio(
+                portfolio_id="PORT-VAL-INT-03",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                risk_exposure="MODERATE",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="SG",
+                client_id="CLIENT-VAL-INT-03",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            Instrument(
+                security_id="CASH-VAL-INT-03",
+                name="US Dollar Cash",
+                isin="US-CASH-VAL-INT-03",
+                asset_class="CASH",
+                product_type="Cash",
+                currency="USD",
+            ),
+            Transaction(
+                transaction_id="TXN-VAL-INT-03",
+                portfolio_id="PORT-VAL-INT-03",
+                instrument_id="CASH-VAL-INT-03",
+                security_id="CASH-VAL-INT-03",
+                transaction_date=datetime(2025, 8, 21, 12, 0, 0),
+                transaction_type="SELL",
+                quantity=Decimal("70015"),
+                price=Decimal("1"),
+                gross_transaction_amount=Decimal("70015"),
+                trade_currency="USD",
+                currency="USD",
+            ),
+            MarketPrice(
+                security_id="CASH-VAL-INT-03",
+                price_date=date(2025, 8, 21),
+                price=Decimal("1"),
+                currency="USD",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    async_db_session.add_all(
+        [
+            DailyPositionSnapshot(
+                portfolio_id="PORT-VAL-INT-03",
+                security_id="CASH-VAL-INT-03",
+                date=date(2025, 8, 21),
+                epoch=0,
+                quantity=Decimal("824974.5"),
+                cost_basis=Decimal("824974.5"),
+                cost_basis_local=Decimal("824974.5"),
+                market_price=Decimal("1"),
+                market_value=Decimal("824974.5"),
+                market_value_local=Decimal("824974.5"),
+                unrealized_gain_loss=Decimal("0"),
+                unrealized_gain_loss_local=Decimal("0"),
+                valuation_status="VALUED_CURRENT",
+            ),
+            PortfolioValuationJob(
+                portfolio_id="PORT-VAL-INT-03",
+                security_id="CASH-VAL-INT-03",
+                valuation_date=date(2025, 8, 21),
+                epoch=0,
+                status="PROCESSING",
+                correlation_id="corr-val-int-03",
+            ),
+            ProcessedEvent(
+                event_id="valuation.job.requested-0-9",
+                portfolio_id="PORT-VAL-INT-03",
+                service_name="position-valuation-calculator",
+                correlation_id="corr-val-int-03",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    async_db_session.add(
+        PositionHistory(
+            transaction_id="TXN-VAL-INT-03",
+            portfolio_id="PORT-VAL-INT-03",
+            security_id="CASH-VAL-INT-03",
+            position_date=date(2025, 8, 21),
+            epoch=0,
+            quantity=Decimal("754959.5"),
+            cost_basis=Decimal("754959.5"),
+            cost_basis_local=Decimal("754959.5"),
+        )
+    )
+    await async_db_session.commit()
+
+    event = PortfolioValuationRequiredEvent(
+        portfolio_id="PORT-VAL-INT-03",
+        security_id="CASH-VAL-INT-03",
+        valuation_date=date(2025, 8, 21),
+        epoch=0,
+    )
+    msg = MagicMock()
+    msg.value.return_value = event.model_dump_json().encode("utf-8")
+    msg.key.return_value = event.portfolio_id.encode("utf-8")
+    msg.topic.return_value = "valuation.job.requested"
+    msg.partition.return_value = 0
+    msg.offset.return_value = 10
+    msg.headers.return_value = [("correlation_id", b"corr-val-int-03")]
+
+    consumer = valuation_consumer_module.ValuationConsumer(
+        bootstrap_servers="mock_server",
+        topic="valuation.job.requested",
+        group_id="test_group",
+    )
+    consumer._send_to_dlq_async = AsyncMock()
+
+    async def override_session():
+        yield async_db_session
+
+    with patch(
+        "src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.get_async_db_session",
+        new=override_session,
+    ):
+        await consumer.process_message(msg)
+
+    snapshot = await async_db_session.scalar(
+        select(DailyPositionSnapshot).where(
+            DailyPositionSnapshot.portfolio_id == "PORT-VAL-INT-03",
+            DailyPositionSnapshot.security_id == "CASH-VAL-INT-03",
+            DailyPositionSnapshot.date == date(2025, 8, 21),
+            DailyPositionSnapshot.epoch == 0,
+        )
+    )
+    processed_rows = (
+        (
+            await async_db_session.execute(
+                select(ProcessedEvent).where(
+                    ProcessedEvent.event_id.in_(
+                        ["valuation.job.requested-0-9", "valuation.job.requested-0-10"]
+                    ),
+                    ProcessedEvent.service_name == "position-valuation-calculator",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    job = await async_db_session.scalar(
+        select(PortfolioValuationJob).where(
+            PortfolioValuationJob.portfolio_id == "PORT-VAL-INT-03",
+            PortfolioValuationJob.security_id == "CASH-VAL-INT-03",
+            PortfolioValuationJob.valuation_date == date(2025, 8, 21),
+            PortfolioValuationJob.epoch == 0,
+        )
+    )
+
+    assert snapshot is not None
+    assert snapshot.quantity == Decimal("754959.5000000000")
+    assert snapshot.cost_basis == Decimal("754959.5000000000")
+    assert snapshot.market_value == Decimal("754959.5000000000")
+    assert sorted(row.event_id for row in processed_rows) == [
+        "valuation.job.requested-0-10",
+        "valuation.job.requested-0-9",
+    ]
     assert job is not None
     assert job.status == "COMPLETE"
     consumer._send_to_dlq_async.assert_not_awaited()

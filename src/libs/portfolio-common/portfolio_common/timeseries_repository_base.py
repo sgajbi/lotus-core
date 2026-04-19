@@ -488,20 +488,84 @@ class TimeseriesRepositoryBase:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    @async_timed(repository="TimeseriesRepository", method="get_next_snapshot_after")
-    async def get_next_snapshot_after(
-        self, portfolio_id: str, security_id: str, a_date: date, epoch: int
-    ) -> Optional[DailyPositionSnapshot]:
-        stmt = (
-            select(DailyPositionSnapshot)
-            .filter(
+    @async_timed(repository="TimeseriesRepository", method="get_next_snapshots_after")
+    async def get_next_snapshots_after(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        a_date: date,
+        epoch: int,
+        max_rows: int,
+    ) -> List[DailyPositionSnapshot]:
+        ranked_future_snapshots = (
+            select(
+                DailyPositionSnapshot.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=(DailyPositionSnapshot.date,),
+                    order_by=(DailyPositionSnapshot.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .where(
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
                 DailyPositionSnapshot.security_id == security_id,
                 DailyPositionSnapshot.date > a_date,
                 DailyPositionSnapshot.epoch <= epoch,
             )
-            .order_by(DailyPositionSnapshot.date.asc(), DailyPositionSnapshot.epoch.desc())
-            .limit(1)
+            .subquery()
+        )
+        stmt = (
+            select(DailyPositionSnapshot)
+            .join(ranked_future_snapshots, DailyPositionSnapshot.id == ranked_future_snapshots.c.id)
+            .where(ranked_future_snapshots.c.rn == 1)
+            .order_by(DailyPositionSnapshot.date.asc())
+            .limit(max_rows)
         )
         result = await self.db.execute(stmt)
-        return result.scalars().first()
+        return result.scalars().all()
+
+    @async_timed(repository="TimeseriesRepository", method="get_cashflows_for_security_dates")
+    async def get_cashflows_for_security_dates(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        dates: List[date],
+        epoch: int,
+    ) -> dict[date, List[Cashflow]]:
+        if not dates:
+            return {}
+        ranked_cashflows = (
+            select(
+                Cashflow.id.label("id"),
+                Cashflow.cashflow_date.label("cashflow_date"),
+                func.row_number()
+                .over(
+                    partition_by=(Cashflow.transaction_id,),
+                    order_by=(Cashflow.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .where(
+                Cashflow.portfolio_id == portfolio_id,
+                Cashflow.security_id == security_id,
+                Cashflow.cashflow_date.in_(dates),
+                Cashflow.epoch <= epoch,
+            )
+            .subquery()
+        )
+        stmt = (
+            select(Cashflow)
+            .join(ranked_cashflows, Cashflow.id == ranked_cashflows.c.id)
+            .where(ranked_cashflows.c.rn == 1)
+            .order_by(
+                Cashflow.cashflow_date.asc(),
+                Cashflow.timing.asc(),
+                Cashflow.transaction_id.asc(),
+            )
+        )
+        result = await self.db.execute(stmt)
+        grouped: dict[date, List[Cashflow]] = {cashflow_date: [] for cashflow_date in dates}
+        for cashflow in result.scalars().all():
+            grouped.setdefault(cashflow.cashflow_date, []).append(cashflow)
+        return grouped

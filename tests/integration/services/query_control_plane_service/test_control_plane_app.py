@@ -234,6 +234,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     overview = schema["paths"]["/support/portfolios/{portfolio_id}/overview"]["get"]
     readiness = schema["paths"]["/support/portfolios/{portfolio_id}/readiness"]["get"]
     calculator_slos = schema["paths"]["/support/portfolios/{portfolio_id}/calculator-slos"]["get"]
+    load_run_progress = schema["paths"]["/support/load-runs/{run_id}"]["get"]
     lineage = schema["paths"]["/lineage/portfolios/{portfolio_id}/securities/{security_id}"]["get"]
 
     overview_portfolio = next(
@@ -286,6 +287,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert failed_window["description"].startswith("Window in hours")
     assert "daily operational SLO checks" in calculator_slos["description"]
+    assert "snapshot, timeseries, and job facts" in load_run_progress["description"]
 
     not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
@@ -314,6 +316,73 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert lineage_response["properties"]["latest_valuation_job_correlation_id"][
         "description"
     ].startswith("Durable correlation identifier of the latest valuation job")
+    load_run_progress_schema = schema["components"]["schemas"]["LoadRunProgressResponse"]
+    assert load_run_progress_schema["properties"][
+        "dependent_position_timeseries_propagation_row_cap"
+    ]["description"].startswith("Configured per-message cap on future dependent")
+    assert (
+        load_run_progress_schema["properties"]["dependent_position_timeseries_propagation_row_cap"][
+            "type"
+        ]
+        == "integer"
+    )
+    assert load_run_progress_schema["properties"]["valuation_scheduler_poll_interval_seconds"][
+        "description"
+    ].startswith("Configured valuation scheduler poll interval")
+    assert load_run_progress_schema["properties"]["valuation_scheduler_max_dispatch_jobs_per_poll"][
+        "description"
+    ].startswith("Configured maximum number of valuation jobs")
+    assert load_run_progress_schema["properties"][
+        "valuation_scheduler_pending_dispatch_polls_lower_bound"
+    ]["description"].startswith("Lower bound on scheduler poll cycles")
+    assert load_run_progress_schema["properties"][
+        "valuation_scheduler_pending_dispatch_time_lower_bound_seconds"
+    ]["description"].startswith("Lower bound in seconds to claim the current")
+    assert load_run_progress_schema["properties"][
+        "valuation_to_position_timeseries_handoff_pressure_hint"
+    ]["description"].startswith("Derived operator hint describing where current")
+    assert load_run_progress_schema["properties"]["operator_progress_stale_threshold_minutes"][
+        "description"
+    ].startswith("Threshold in minutes used to decide whether the latest")
+    assert load_run_progress_schema["properties"]["operator_progress_state"][
+        "description"
+    ].startswith("Operator-facing progress interpretation layered on top")
+    assert load_run_progress_schema["properties"]["latest_valuation_to_snapshot_tail_seconds"][
+        "description"
+    ].startswith("Seconds between the latest durable valuation-job update")
+    assert load_run_progress_schema["properties"][
+        "latest_valuation_to_position_timeseries_tail_seconds"
+    ]["description"].startswith("Seconds between the latest durable valuation-job update")
+    assert load_run_progress_schema["properties"]["complete_portfolios"]["description"].startswith(
+        "Count of ingested portfolios that already have target-date"
+    )
+    assert load_run_progress_schema["properties"]["incomplete_portfolios"][
+        "description"
+    ].startswith("Count of ingested portfolios that still do not have target-date")
+    assert load_run_progress_schema["properties"]["portfolios_waiting_for_snapshots"][
+        "description"
+    ].startswith("Count of ingested portfolios that still have no target-date")
+    assert load_run_progress_schema["properties"]["remaining_snapshot_rows"][
+        "description"
+    ].startswith("Estimated remaining target-date daily position snapshot rows")
+    assert load_run_progress_schema["properties"]["portfolios_waiting_for_position_timeseries"][
+        "description"
+    ].startswith("Count of ingested portfolios whose target-date daily position")
+    assert load_run_progress_schema["properties"]["remaining_position_timeseries_rows"][
+        "description"
+    ].startswith("Estimated remaining target-date position-timeseries rows")
+    assert load_run_progress_schema["properties"]["portfolios_waiting_for_portfolio_timeseries"][
+        "description"
+    ].startswith("Count of ingested portfolios whose target-date position-timeseries")
+    assert load_run_progress_schema["properties"]["remaining_portfolio_timeseries_rows"][
+        "description"
+    ].startswith("Estimated remaining target-date portfolio-timeseries rows")
+    assert load_run_progress_schema["properties"][
+        "latest_snapshot_to_position_timeseries_tail_seconds"
+    ]["description"].startswith("Seconds between the latest target-date daily position")
+    assert load_run_progress_schema["properties"][
+        "latest_position_timeseries_to_portfolio_timeseries_tail_seconds"
+    ]["description"].startswith("Seconds between the latest target-date position-timeseries")
 
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
@@ -613,8 +682,28 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["failed_valuation_jobs"]["description"] == (
         "Number of valuation jobs currently in FAILED terminal state."
     )
+    assert support_overview["properties"]["latest_booked_transaction_date"]["description"] == (
+        "Most recent booked transaction business date observed for the portfolio on or before "
+        "business_date; future-dated planned activity is excluded."
+    )
+    assert (
+        support_overview["properties"]["latest_booked_position_snapshot_date"]["description"]
+        == "Most recent daily position snapshot date in the current epoch on or before "
+        "business_date; this can be later than latest_booked_transaction_date when holdings "
+        "carry forward after the last booked trade."
+    )
     assert readiness_response["properties"]["holdings"]["description"] == (
         "Holdings/snapshot coverage readiness for the portfolio."
+    )
+    assert readiness_response["properties"]["latest_booked_transaction_date"]["description"] == (
+        "Most recent booked portfolio transaction date on or before resolved_as_of_date; "
+        "future-dated planned activity is excluded."
+    )
+    assert (
+        readiness_response["properties"]["latest_booked_position_snapshot_date"]["description"]
+        == "Most recent current-epoch position snapshot date on or before resolved_as_of_date; "
+        "this can be later than latest_booked_transaction_date when holdings carry forward "
+        "after the last booked trade."
     )
     assert readiness_response["properties"]["pricing"]["description"] == (
         "Pricing and valuation coverage readiness for the portfolio."
@@ -1313,9 +1402,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
 
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
     assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
-    assert (
-        export_result["responses"]["422"]["description"]
-        == "Export job is incomplete, source payload unavailable, or requested serialization is unsupported."
+    assert export_result["responses"]["422"]["description"] == (
+        "Export job is incomplete, source payload unavailable, or requested "
+        "serialization is unsupported."
     )
 
     components = schema["components"]["schemas"]

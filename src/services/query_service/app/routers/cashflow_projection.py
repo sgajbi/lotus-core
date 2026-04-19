@@ -62,7 +62,10 @@ async def get_cashflow_projection(
     ),
     include_projected: bool = Query(
         True,
-        description="When true, includes projected future-dated cashflows.",
+        description=(
+            "When true, includes projected future-dated external cash movements "
+            "(for example deposits and withdrawals)."
+        ),
         examples=[True],
     ),
     service: CashflowProjectionService = Depends(get_cashflow_projection_service),

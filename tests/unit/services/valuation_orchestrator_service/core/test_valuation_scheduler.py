@@ -1,6 +1,6 @@
 import asyncio
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from portfolio_common.config import KAFKA_VALUATION_JOB_REQUESTED_TOPIC
@@ -675,6 +675,69 @@ async def test_scheduler_reads_max_attempts_from_environment(
     assert scheduler._dispatch_rounds_per_poll == 4
     assert scheduler._stale_timeout_minutes == 12
     assert scheduler._max_attempts == 6
+
+
+async def test_scheduler_claim_loop_stops_after_partial_batch(
+    mock_kafka_producer: MagicMock,
+):
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_kafka_producer",
+        return_value=mock_kafka_producer,
+    ):
+        scheduler = ValuationScheduler(poll_interval=0.01, batch_size=2)
+
+    claimed_batch_1 = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+    claimed_batch_2 = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 13),
+            epoch=1,
+            correlation_id="corr-3",
+        )
+    ]
+
+    async def get_session_gen():
+        yield AsyncMock(spec=AsyncSession)
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
+        ) as mock_repo_factory,
+        patch.object(scheduler, "_dispatch_jobs", new=AsyncMock()) as mock_dispatch_jobs,
+    ):
+        mock_repo = AsyncMock()
+        mock_repo.find_and_claim_eligible_jobs.side_effect = [claimed_batch_1, claimed_batch_2]
+        mock_repo_factory.return_value = mock_repo
+
+        await scheduler._claim_and_dispatch_ready_jobs()
+
+    assert mock_repo.find_and_claim_eligible_jobs.await_count == 2
+    mock_dispatch_jobs.assert_has_awaits(
+        [
+            call(claimed_batch_1),
+            call(claimed_batch_2),
+        ]
+    )
 
 
 @patch.object(INSTRUMENT_REPROCESSING_TRIGGERS_PENDING, "set")
