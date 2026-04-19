@@ -6,6 +6,7 @@ from scripts.institutional_signoff_pack import (
     _failure_recovery_status,
     _latency_status,
     _latest_artifact,
+    _load_reconciliation_status,
     _performance_status,
 )
 
@@ -81,3 +82,59 @@ def test_latest_artifact_discovers_nested_download_paths(tmp_path: Path) -> None
 
     assert discovered is not None
     assert discovered == artifact
+
+
+def test_load_reconciliation_status_requires_complete_reconciled_run(tmp_path: Path) -> None:
+    artifact = tmp_path / "20260418T142850-bank-day-load-reconciliation.json"
+    _write_json(
+        artifact,
+        {
+            "portfolio_count_evaluated": 5,
+            "run_progress": {
+                "run_state": "COMPLETE",
+                "operator_progress_state": "COMPLETE",
+                "complete_portfolios": 1000,
+                "portfolios_ingested": 1000,
+            },
+            "summary": {
+                "all_samples_reconciled": True,
+                "all_position_counts_match_expected": True,
+                "all_transaction_counts_match_expected": True,
+                "all_market_values_match_expected": True,
+            },
+        },
+    )
+
+    status = _load_reconciliation_status(artifact)
+
+    assert status.passed is True
+    assert "complete_portfolios=1000/1000" in status.summary
+
+
+def test_load_reconciliation_status_rejects_incomplete_or_unreconciled_artifact(
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "20260418T091831-bank-day-load-reconciliation.json"
+    _write_json(
+        artifact,
+        {
+            "portfolio_count_evaluated": 5,
+            "run_progress": {
+                "run_state": "MATERIALIZING",
+                "operator_progress_state": "SLOW",
+                "complete_portfolios": 733,
+                "portfolios_ingested": 1000,
+            },
+            "summary": {
+                "all_samples_reconciled": False,
+                "all_position_counts_match_expected": True,
+                "all_transaction_counts_match_expected": True,
+                "all_market_values_match_expected": True,
+            },
+        },
+    )
+
+    status = _load_reconciliation_status(artifact)
+
+    assert status.passed is False
+    assert "run_state=MATERIALIZING" in status.summary

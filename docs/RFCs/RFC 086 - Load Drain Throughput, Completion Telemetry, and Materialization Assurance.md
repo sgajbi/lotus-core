@@ -579,6 +579,9 @@ Implementation status as of 2026-04-18:
 28. the support contract now adds an operator-facing progress classification that distinguishes
     `RUNNING`, `SLOW`, and `STUCK` from the high-level lifecycle state, while the reconciliation
     artifact markdown now surfaces that same interpretation directly for completed-run evidence.
+29. the institutional sign-off pack now validates the latest bank-day load reconciliation artifact
+    alongside the existing Docker, latency, performance, and failure-recovery artifacts, so
+    Phase 3 evidence generation includes explicit completion and sampled reconciliation proof.
 
 Phase 1 exit criteria:
 
