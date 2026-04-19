@@ -1,0 +1,59 @@
+{
+  "contract_id": "lotus-domain-product-trust-telemetry-snapshot",
+  "contract_version": "1.0.0",
+  "governed_by_rfcs": [
+    "RFC-0087"
+  ],
+  "emitted_at_utc": "2026-04-19T00:00:00Z",
+  "product_id": "lotus-core:PortfolioStateSnapshot:v1",
+  "producer_repository": "lotus-core",
+  "product_name": "PortfolioStateSnapshot",
+  "product_version": "v1",
+  "source_repository": "lotus-core",
+  "freshness": {
+    "freshness_class": "daily",
+    "freshness_state": "current",
+    "evaluated_at_utc": "2026-04-19T00:00:00Z",
+    "observed_at_utc": "2026-04-19T00:00:00Z",
+    "age_seconds": 0,
+    "max_allowed_age_seconds": 86400
+  },
+  "completeness_status": "complete",
+  "reconciliation_status": "reconciled",
+  "data_quality_status": "quality_passed",
+  "lineage": {
+    "lineage_materialized": true,
+    "lineage_bundle_id": "lineage:lotus-core:portfolio-state-snapshot:2026-04-19",
+    "evidence_access_class": "customer_consumable",
+    "evidence_uris": [
+      "lotus-core://evidence/portfolio-state-snapshot/PB_SG_GLOBAL_BAL_001/2026-04-19"
+    ]
+  },
+  "blocking": {
+    "blocked": false
+  },
+  "observed_trust_metadata": {
+    "product_name": "PortfolioStateSnapshot",
+    "product_version": "v1",
+    "tenant_id": "TENANT_PRIVATE_BANKING_DEMO",
+    "generated_at": "2026-04-19T00:00:00Z",
+    "as_of_date": "2026-04-19",
+    "restatement_version": "restatement:2026-04-19:0",
+    "reconciliation_status": "reconciled",
+    "data_quality_status": "quality_passed",
+    "latest_evidence_timestamp": "2026-04-19T00:00:00Z",
+    "source_batch_fingerprint": "sha256:portfolio-state-snapshot-demo-batch",
+    "snapshot_id": "PB_SG_GLOBAL_BAL_001:2026-04-19",
+    "policy_version": "portfolio-state-snapshot-policy.v1",
+    "correlation_id": "rfc-0087-lotus-core-portfolio-state-snapshot"
+  },
+  "evidence": {
+    "correlation_id": "rfc-0087-lotus-core-portfolio-state-snapshot",
+    "validation_lanes": [
+      "feature",
+      "pr-merge"
+    ],
+    "source_event_id": "source-event:lotus-core:portfolio-state-snapshot:2026-04-19",
+    "source_artifact_uri": "lotus-core://contracts/trust-telemetry/portfolio-state-snapshot.telemetry.v1.json"
+  }
+}
