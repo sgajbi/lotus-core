@@ -12,9 +12,20 @@ from src.services.query_service.app.repositories.operations_repository import (
     ReconciliationFindingSummary,
     ReprocessingHealthSummary,
 )
+from src.services.query_service.app.services import operations_service as operations_service_module
 from src.services.query_service.app.services.operations_service import OperationsService
 
 pytestmark = pytest.mark.asyncio
+
+FIXED_GENERATED_AT = datetime(2026, 4, 18, 8, 10, tzinfo=timezone.utc)
+
+
+class _FixedDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is None:
+            return FIXED_GENERATED_AT.replace(tzinfo=None)
+        return FIXED_GENERATED_AT.astimezone(tz)
 
 
 @pytest.fixture
@@ -2494,8 +2505,11 @@ async def test_get_load_run_progress_derives_remaining_work_counts(
         valuation_to_position_timeseries_latency_max_seconds=1200.0,
     )
 
-    response = await service.get_load_run_progress("RUN1", date(2026, 4, 17))
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_load_run_progress("RUN1", date(2026, 4, 17))
 
+    assert response.operator_progress_stale_threshold_minutes == 15
+    assert response.operator_progress_state == "RUNNING"
     assert response.complete_portfolios == 6
     assert response.incomplete_portfolios == 4
     assert response.portfolios_waiting_for_snapshots == 2
@@ -2508,4 +2522,112 @@ async def test_get_load_run_progress_derives_remaining_work_counts(
         run_id="RUN1",
         business_date=date(2026, 4, 17),
         as_of=response.generated_at_utc,
+    )
+
+
+async def test_get_load_run_operator_progress_state_covers_running_slow_stuck_and_terminals():
+    reference_now = datetime(2026, 4, 19, 8, 0, tzinfo=timezone.utc)
+
+    running_summary = LoadRunProgressSummary(
+        portfolios_ingested=10,
+        transactions_ingested=100,
+        portfolios_with_snapshots=8,
+        snapshot_rows=80,
+        portfolios_with_position_timeseries=7,
+        position_timeseries_rows=70,
+        portfolios_with_timeseries=6,
+        timeseries_rows=6,
+        pending_valuation_jobs=2,
+        processing_valuation_jobs=1,
+        open_valuation_jobs=3,
+        pending_aggregation_jobs=0,
+        processing_aggregation_jobs=0,
+        open_aggregation_jobs=0,
+        failed_valuation_jobs=0,
+        failed_aggregation_jobs=0,
+        oldest_pending_valuation_date=None,
+        oldest_pending_aggregation_date=None,
+        latest_snapshot_date=date(2026, 4, 18),
+        latest_timeseries_date=date(2026, 4, 18),
+        latest_snapshot_materialized_at_utc=reference_now - timedelta(minutes=2),
+        latest_position_timeseries_materialized_at_utc=None,
+        latest_portfolio_timeseries_materialized_at_utc=None,
+        latest_valuation_job_updated_at_utc=reference_now - timedelta(minutes=1),
+        latest_aggregation_job_updated_at_utc=None,
+        completed_valuation_jobs_without_position_timeseries=0,
+        completed_valuation_portfolios_without_position_timeseries=0,
+        max_completed_valuation_jobs_without_position_timeseries_single_portfolio=0,
+        oldest_completed_valuation_without_position_timeseries_at_utc=None,
+        valuation_to_position_timeseries_latency_sample_count=0,
+        valuation_to_position_timeseries_latency_p50_seconds=None,
+        valuation_to_position_timeseries_latency_p95_seconds=None,
+        valuation_to_position_timeseries_latency_max_seconds=None,
+    )
+    slow_summary = LoadRunProgressSummary(
+        **{
+            **running_summary.__dict__,
+            "pending_valuation_jobs": 0,
+            "processing_valuation_jobs": 0,
+            "open_valuation_jobs": 0,
+            "completed_valuation_jobs_without_position_timeseries": 4,
+        }
+    )
+    stuck_summary = LoadRunProgressSummary(
+        **{
+            **slow_summary.__dict__,
+            "latest_snapshot_materialized_at_utc": reference_now - timedelta(minutes=40),
+            "latest_valuation_job_updated_at_utc": reference_now - timedelta(minutes=40),
+        }
+    )
+    complete_summary = LoadRunProgressSummary(
+        **{
+            **running_summary.__dict__,
+            "portfolios_with_timeseries": 10,
+            "timeseries_rows": 10,
+            "open_valuation_jobs": 0,
+            "pending_valuation_jobs": 0,
+            "processing_valuation_jobs": 0,
+        }
+    )
+    failed_summary = LoadRunProgressSummary(
+        **{
+            **running_summary.__dict__,
+            "failed_valuation_jobs": 1,
+        }
+    )
+
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            running_summary,
+            reference_now=reference_now,
+        )
+        == "RUNNING"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            slow_summary,
+            reference_now=reference_now,
+        )
+        == "SLOW"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            stuck_summary,
+            reference_now=reference_now,
+        )
+        == "STUCK"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            complete_summary,
+            reference_now=reference_now,
+        )
+        == "COMPLETE"
+    )
+    assert (
+        OperationsService._get_load_run_operator_progress_state(
+            failed_summary,
+            reference_now=reference_now,
+        )
+        == "FAILED"
     )

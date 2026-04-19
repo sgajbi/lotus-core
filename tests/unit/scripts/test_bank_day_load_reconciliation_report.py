@@ -136,6 +136,7 @@ def test_write_report_includes_run_progress_completion_details(tmp_path) -> None
         sample_portfolio_ids=["P1", "P2"],
         run_progress={
             "run_state": "RUNNING",
+            "operator_progress_state": "SLOW",
             "portfolios_ingested": 1000,
             "complete_portfolios": 733,
             "incomplete_portfolios": 267,
@@ -183,6 +184,7 @@ def test_write_report_includes_run_progress_completion_details(tmp_path) -> None
 
     assert json_payload["run_progress"]["complete_portfolios"] == 733
     assert "## Run progress" in markdown
+    assert "- operator progress state: `SLOW`" in markdown
     assert "- complete portfolios: `733` / `1000`" in markdown
     assert "- waiting for position timeseries: `267`" in markdown
     assert "- handoff pressure hint: `POST_VALUATION_DRAIN`" in markdown

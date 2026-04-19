@@ -1650,6 +1650,8 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
     assert response.business_date == date(2026, 4, 17)
     assert response.generated_at_utc == FIXED_GENERATED_AT
     assert response.run_state == "MATERIALIZING"
+    assert response.operator_progress_stale_threshold_minutes == 15
+    assert response.operator_progress_state == "SLOW"
     assert response.portfolios_ingested == 2
     assert response.transactions_ingested == 2
     assert response.portfolios_with_snapshots == 1
@@ -1934,6 +1936,8 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
         )
 
     assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.operator_progress_stale_threshold_minutes == 15
+    assert response.operator_progress_state == "SLOW"
     assert response.portfolios_ingested == 2
     assert response.transactions_ingested == 2
     assert response.portfolios_with_snapshots == 1

@@ -529,6 +529,27 @@ class LoadRunProgressResponse(BaseModel):
         ),
         examples=["MATERIALIZING"],
     )
+    operator_progress_stale_threshold_minutes: int = Field(
+        ...,
+        description=(
+            "Threshold in minutes used to decide whether the latest durable run activity is still "
+            "fresh enough to classify an incomplete run as active rather than stuck."
+        ),
+        examples=[15],
+    )
+    operator_progress_state: Literal["RUNNING", "SLOW", "STUCK", "COMPLETE", "FAILED"] = Field(
+        ...,
+        description=(
+            "Operator-facing progress interpretation layered on top of `run_state`. "
+            "`RUNNING` means incomplete work remains and open jobs are still advancing within the "
+            "stale threshold. `SLOW` means the run is still incomplete, recent durable activity "
+            "exists, but open jobs are already drained so the remaining lag is downstream or tail "
+            "drain work. `STUCK` means the run is incomplete and the latest durable activity is "
+            "older than `operator_progress_stale_threshold_minutes`. `COMPLETE` and `FAILED` "
+            "mirror the terminal run states."
+        ),
+        examples=["SLOW"],
+    )
     portfolios_ingested: int = Field(
         ...,
         description=(

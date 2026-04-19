@@ -114,6 +114,44 @@ class OperationsService:
         return "MATERIALIZING"
 
     @staticmethod
+    def _latest_load_run_activity_at(summary: LoadRunProgressSummary) -> datetime | None:
+        activity_timestamps = [
+            summary.latest_snapshot_materialized_at_utc,
+            summary.latest_position_timeseries_materialized_at_utc,
+            summary.latest_portfolio_timeseries_materialized_at_utc,
+            summary.latest_valuation_job_updated_at_utc,
+            summary.latest_aggregation_job_updated_at_utc,
+        ]
+        resolved_timestamps = [
+            activity_timestamp
+            for activity_timestamp in activity_timestamps
+            if activity_timestamp is not None
+        ]
+        return max(resolved_timestamps) if resolved_timestamps else None
+
+    @classmethod
+    def _get_load_run_operator_progress_state(
+        cls,
+        summary: LoadRunProgressSummary,
+        *,
+        reference_now: datetime,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+    ) -> str:
+        run_state = cls._get_load_run_state(summary)
+        if run_state in {"FAILED", "COMPLETE"}:
+            return run_state
+        latest_activity_at = cls._latest_load_run_activity_at(summary)
+        has_fresh_activity = latest_activity_at is not None and latest_activity_at >= (
+            reference_now - timedelta(minutes=stale_threshold_minutes)
+        )
+        has_open_jobs = summary.open_valuation_jobs > 0 or summary.open_aggregation_jobs > 0
+        if has_open_jobs and has_fresh_activity:
+            return "RUNNING"
+        if has_fresh_activity:
+            return "SLOW"
+        return "STUCK"
+
+    @staticmethod
     def _get_valuation_to_timeseries_handoff_pressure_hint(
         summary: LoadRunProgressSummary,
     ) -> str:
@@ -465,11 +503,18 @@ class OperationsService:
             summary.pending_valuation_jobs,
             VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL,
         )
+        run_state = self._get_load_run_state(summary)
         return LoadRunProgressResponse(
             run_id=run_id,
             business_date=business_date,
             generated_at_utc=generated_at_utc,
-            run_state=self._get_load_run_state(summary),
+            run_state=run_state,
+            operator_progress_stale_threshold_minutes=DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+            operator_progress_state=self._get_load_run_operator_progress_state(
+                summary,
+                reference_now=generated_at_utc,
+                stale_threshold_minutes=DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+            ),
             portfolios_ingested=summary.portfolios_ingested,
             transactions_ingested=summary.transactions_ingested,
             portfolios_with_snapshots=summary.portfolios_with_snapshots,

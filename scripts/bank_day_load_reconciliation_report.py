@@ -212,6 +212,10 @@ def _write_report(
         "",
         f"- run state: `{report.run_progress.get('run_state', 'UNKNOWN')}`",
         (
+            f"- operator progress state: "
+            f"`{report.run_progress.get('operator_progress_state', 'n/a')}`"
+        ),
+        (
             f"- complete portfolios: `{report.run_progress.get('complete_portfolios', 'n/a')}` / "
             f"`{report.run_progress.get('portfolios_ingested', 'n/a')}`"
         ),

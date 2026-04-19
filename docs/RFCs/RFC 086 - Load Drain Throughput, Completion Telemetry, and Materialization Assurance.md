@@ -576,6 +576,9 @@ Implementation status as of 2026-04-18:
 27. the load-run support contract now derives explicit remaining snapshot, position-timeseries,
     and portfolio-timeseries row counts from ingested work versus materialized rows, so operators
     can read remaining stage work directly instead of estimating it from raw totals.
+28. the support contract now adds an operator-facing progress classification that distinguishes
+    `RUNNING`, `SLOW`, and `STUCK` from the high-level lifecycle state, while the reconciliation
+    artifact markdown now surfaces that same interpretation directly for completed-run evidence.
 
 Phase 1 exit criteria:
 
