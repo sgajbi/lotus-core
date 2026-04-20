@@ -437,6 +437,77 @@ async def test_find_portfolios_holding_security_on_date_uses_latest_history_on_o
     assert portfolios_after_reopen == ["P_MIXED"]
 
 
+async def test_find_portfolios_first_holding_security_after_date_returns_later_open_positions(
+    async_db_session: AsyncSession, db_engine, clean_db
+):
+    """
+    GIVEN a portfolio that first opens a security after the replay impacted date
+    WHEN the worker fallback lookup runs
+    THEN the portfolio should still be targeted for watermark reset because the
+    earlier market data affects the first future-valued holding.
+    """
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id="P_LATE_OPEN",
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="f",
+            )
+        )
+        session.flush()
+        session.add(
+            PositionState(
+                portfolio_id="P_LATE_OPEN",
+                security_id="S1",
+                epoch=0,
+                watermark_date=date(2025, 8, 12),
+                status="CURRENT",
+            )
+        )
+        session.add(
+            Transaction(
+                transaction_id="TX-LATE-OPEN",
+                portfolio_id="P_LATE_OPEN",
+                instrument_id="I-S1",
+                security_id="S1",
+                transaction_type="BUY",
+                quantity=Decimal("100"),
+                price=Decimal("1"),
+                gross_transaction_amount=Decimal("100"),
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2025, 8, 11, 9, 0, 0),
+            )
+        )
+        session.flush()
+        session.add(
+            PositionHistory(
+                portfolio_id="P_LATE_OPEN",
+                security_id="S1",
+                transaction_id="TX-LATE-OPEN",
+                epoch=0,
+                position_date=date(2025, 8, 11),
+                quantity=100,
+                cost_basis=Decimal("100"),
+            )
+        )
+        session.commit()
+
+    repo = ValuationRepository(async_db_session)
+
+    portfolios = await repo.find_portfolios_first_holding_security_after_date(
+        "S1", date(2025, 8, 10)
+    )
+
+    assert portfolios == ["P_LATE_OPEN"]
+
+
 async def test_find_portfolios_holding_security_on_date_ignores_stale_epochs(
     async_db_session: AsyncSession, db_engine, clean_db
 ):

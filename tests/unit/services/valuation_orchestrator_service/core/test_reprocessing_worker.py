@@ -289,6 +289,7 @@ async def test_worker_requeues_job_when_no_impacted_portfolios_are_visible_yet(
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
     mock_repro_job_repo.update_job_status.return_value = True
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
+    mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = []
 
     await worker._process_batch()
 
@@ -300,6 +301,49 @@ async def test_worker_requeues_job_when_no_impacted_portfolios_are_visible_yet(
     mock_observe_completed.assert_not_called()
     mock_observe_stale_skips.assert_not_called()
     mock_repro_job_repo.update_job_status.assert_awaited_once_with(19, "PENDING")
+
+
+async def test_worker_falls_back_to_later_first_holdings_before_requeueing(
+    mock_dependencies,
+):
+    worker = ReprocessingWorker(poll_interval=0.1)
+    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    mock_observe_completed = mock_dependencies["observe_completed"]
+    mock_observe_noop = mock_dependencies["observe_noop"]
+
+    pending_job = ReprocessingJob(
+        id=20,
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-08-10"},
+        status="PENDING",
+    )
+
+    mock_repro_job_repo.find_and_reset_stale_jobs.return_value = 0
+    mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
+    mock_repro_job_repo.update_job_status.return_value = True
+    mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
+    mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = ["P_LATE"]
+    mock_state_repo.update_watermarks_if_older.return_value = 1
+
+    await worker._process_batch()
+
+    mock_valuation_repo.find_portfolios_holding_security_on_date.assert_awaited_once_with(
+        "S1",
+        date(2025, 8, 10),
+    )
+    mock_valuation_repo.find_portfolios_first_holding_security_after_date.assert_awaited_once_with(
+        "S1",
+        date(2025, 8, 10),
+    )
+    mock_state_repo.update_watermarks_if_older.assert_awaited_once_with(
+        keys=[("P_LATE", "S1")],
+        new_watermark_date=date(2025, 8, 9),
+    )
+    mock_observe_noop.assert_not_called()
+    mock_observe_completed.assert_called_once_with("RESET_WATERMARKS")
+    mock_repro_job_repo.update_job_status.assert_awaited_once_with(20, "COMPLETE")
 
 
 async def test_worker_skips_completion_metric_when_terminal_ownership_is_lost(mock_dependencies):
@@ -353,6 +397,7 @@ async def test_worker_emits_requeue_ownership_metric_when_requeue_ownership_is_l
     mock_repro_job_repo.find_and_claim_jobs.return_value = [pending_job]
     mock_repro_job_repo.update_job_status.return_value = False
     mock_valuation_repo.find_portfolios_holding_security_on_date.return_value = []
+    mock_valuation_repo.find_portfolios_first_holding_security_after_date.return_value = []
 
     await worker._process_batch()
 
