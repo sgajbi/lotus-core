@@ -64,6 +64,7 @@ python tools/front_office_portfolio_seed.py `
 The tool ingests the portfolio bundle plus benchmark reference data and then
 verifies:
 
+- required cross-currency FX windows are queryable before transaction replay
 - positions are populated
 - valued positions are populated
 - transactions are populated

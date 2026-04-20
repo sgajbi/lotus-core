@@ -1406,6 +1406,109 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
 
 
+def _required_cross_currency_fx_windows(bundle: dict[str, Any]) -> list[tuple[str, str, str, str]]:
+    portfolios = {
+        row["portfolio_id"]: row["base_currency"]
+        for row in bundle.get("portfolios", [])
+        if isinstance(row, dict)
+        and isinstance(row.get("portfolio_id"), str)
+        and isinstance(row.get("base_currency"), str)
+    }
+    windows: dict[tuple[str, str], tuple[date, date]] = {}
+
+    for transaction in bundle.get("transactions", []):
+        if not isinstance(transaction, dict):
+            continue
+        portfolio_id = transaction.get("portfolio_id")
+        trade_currency = transaction.get("trade_currency")
+        transaction_date = transaction.get("transaction_date")
+        if (
+            not isinstance(portfolio_id, str)
+            or not isinstance(trade_currency, str)
+            or not isinstance(transaction_date, str)
+        ):
+            continue
+        portfolio_base_currency = portfolios.get(portfolio_id)
+        if portfolio_base_currency is None or trade_currency == portfolio_base_currency:
+            continue
+        transaction_business_date = datetime.fromisoformat(
+            transaction_date.replace("Z", "+00:00")
+        ).date()
+        pair = (trade_currency, portfolio_base_currency)
+        current_window = windows.get(pair)
+        if current_window is None:
+            windows[pair] = (transaction_business_date, transaction_business_date)
+            continue
+        windows[pair] = (
+            min(current_window[0], transaction_business_date),
+            max(current_window[1], transaction_business_date),
+        )
+
+    return [
+        (
+            from_currency,
+            to_currency,
+            window_start.isoformat(),
+            window_end.isoformat(),
+        )
+        for (from_currency, to_currency), (window_start, window_end) in sorted(windows.items())
+    ]
+
+
+def _fx_window_is_covered(
+    actual_rates: list[dict[str, Any]], expected_start: str, expected_end: str
+) -> bool:
+    if not actual_rates:
+        return False
+    expected_start_date = date.fromisoformat(expected_start)
+    expected_end_date = date.fromisoformat(expected_end)
+    actual_dates = sorted(
+        date.fromisoformat(rate["rate_date"])
+        for rate in actual_rates
+        if isinstance(rate, dict) and isinstance(rate.get("rate_date"), str)
+    )
+    if not actual_dates:
+        return False
+    return actual_dates[0] <= expected_start_date and actual_dates[-1] >= expected_end_date
+
+
+def _wait_for_required_fx_readiness(
+    *,
+    query_base_url: str,
+    bundle: dict[str, Any],
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    required_windows = _required_cross_currency_fx_windows(bundle)
+    if not required_windows:
+        return
+
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    pending = required_windows
+    while datetime.now(tz=UTC) < deadline:
+        still_pending: list[tuple[str, str, str, str]] = []
+        for from_currency, to_currency, start_date, end_date in pending:
+            _, payload = _request_json(
+                "GET",
+                f"{query_base_url}/fx-rates/"
+                f"?from_currency={from_currency}&to_currency={to_currency}"
+                f"&start_date={start_date}&end_date={end_date}",
+            )
+            rates = payload.get("rates") or []
+            if not _fx_window_is_covered(rates, start_date, end_date):
+                still_pending.append((from_currency, to_currency, start_date, end_date))
+        if not still_pending:
+            return
+        time.sleep(poll_interval_seconds)
+        pending = still_pending
+
+    outstanding = ", ".join(
+        f"{from_currency}->{to_currency} {start_date}..{end_date}"
+        for from_currency, to_currency, start_date, end_date in pending
+    )
+    raise RuntimeError(f"Timed out waiting for FX readiness: {outstanding}")
+
+
 def _ingest_front_office_core_data(
     *,
     ingestion_base_url: str,
@@ -1430,6 +1533,13 @@ def _ingest_front_office_core_data(
             _wait_for_portfolio_persistence(
                 query_base_url=query_base_url,
                 portfolio_id=portfolio_id,
+                wait_seconds=wait_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+        if endpoint == "/ingest/fx-rates":
+            _wait_for_required_fx_readiness(
+                query_base_url=query_base_url,
+                bundle=bundle,
                 wait_seconds=wait_seconds,
                 poll_interval_seconds=poll_interval_seconds,
             )
