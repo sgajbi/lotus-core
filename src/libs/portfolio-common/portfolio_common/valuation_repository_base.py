@@ -154,6 +154,40 @@ class ValuationRepositoryBase:
         )
         return portfolio_ids
 
+    @async_timed(
+        repository="ValuationRepository", method="find_portfolios_first_holding_security_after_date"
+    )
+    async def find_portfolios_first_holding_security_after_date(
+        self, security_id: str, a_date: date
+    ) -> List[str]:
+        stmt = (
+            select(func.distinct(PositionHistory.portfolio_id))
+            .join(
+                PositionState,
+                and_(
+                    PositionState.portfolio_id == PositionHistory.portfolio_id,
+                    PositionState.security_id == PositionHistory.security_id,
+                    PositionState.epoch == PositionHistory.epoch,
+                ),
+            )
+            .where(
+                PositionHistory.security_id == security_id,
+                PositionHistory.position_date > a_date,
+                PositionHistory.quantity > 0,
+            )
+            .order_by(PositionHistory.portfolio_id.asc())
+        )
+
+        result = await self.db.execute(stmt)
+        portfolio_ids = result.scalars().all()
+        logger.info(
+            "Found %s portfolios first holding '%s' after %s.",
+            len(portfolio_ids),
+            security_id,
+            a_date,
+        )
+        return portfolio_ids
+
     @async_timed(repository="ValuationRepository", method="get_portfolios_by_ids")
     async def get_portfolios_by_ids(self, portfolio_ids: List[str]) -> List[Portfolio]:
         if not portfolio_ids:

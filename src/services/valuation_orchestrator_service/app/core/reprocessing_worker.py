@@ -102,6 +102,13 @@ class ReprocessingWorker:
                                     earliest_date,
                                 )
                             )
+                            if not affected_portfolios:
+                                find_later_holdings = (
+                                    valuation_repo.find_portfolios_first_holding_security_after_date
+                                )
+                                affected_portfolios = (
+                                    await find_later_holdings(security_id, earliest_date)
+                                )
 
                             should_complete_job = True
 

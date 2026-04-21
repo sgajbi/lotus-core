@@ -15,10 +15,12 @@ from tools.front_office_portfolio_seed import (
     _front_office_analytics_are_fresh,
     _ingest_front_office_core_data,
     _reprocess_front_office_transactions,
+    _required_cross_currency_fx_windows,
     _validate_front_office_cash_transactions,
     _validate_front_office_internal_transaction_pairs,
     _verify_front_office_portfolio,
     _wait_for_portfolio_persistence,
+    _wait_for_required_fx_readiness,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
     build_portfolio_seed_cleanup_sql,
@@ -113,7 +115,9 @@ def test_front_office_bundle_honors_explicit_end_date_for_market_prices():
     )
 
     aapl_prices = [
-        row["price_date"] for row in bundle["market_prices"] if row["security_id"] == "FO_EQ_AAPL_US"
+        row["price_date"]
+        for row in bundle["market_prices"]
+        if row["security_id"] == "FO_EQ_AAPL_US"
     ]
     cash_prices = [
         row["price_date"]
@@ -406,20 +410,22 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
-    assert "service_name = 'position-calculator'" in sql
-    assert "event_id like 'transaction_processing.ready-%'" in sql
-    assert "event_id like 'transactions.cost.processed-%'" in sql
-    assert "service_name = 'cost-calculator'" in sql
-    assert "service_name = 'cashflow-calculator'" in sql
-    assert "service_name = 'pipeline-orchestrator-processed-txn'" in sql
-    assert "service_name = 'persistence-portfolios'" in sql
-    assert "event_id like 'portfolios.raw.received-%'" in sql
+    assert "delete from reprocessing_jobs;" not in sql
+    assert "service_name = 'position-calculator'" not in sql
+    assert "event_id like 'transaction_processing.ready-%'" not in sql
+    assert "event_id like 'transactions.cost.processed-%'" not in sql
+    assert "service_name = 'cost-calculator'" not in sql
+    assert "service_name = 'cashflow-calculator'" not in sql
+    assert "service_name = 'pipeline-orchestrator-processed-txn'" not in sql
+    assert "service_name = 'persistence-portfolios'" not in sql
+    assert "event_id like 'portfolios.raw.received-%'" not in sql
 
 
 def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
     bundle = _build_bundle()
     calls = []
     waits = []
+    fx_waits = []
 
     def capture_request(method, url, *, payload=None):
         calls.append((method, url, payload))
@@ -432,6 +438,10 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
     monkeypatch.setattr(
         "tools.front_office_portfolio_seed._wait_for_portfolio_persistence",
         capture_wait,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._wait_for_required_fx_readiness",
+        lambda **kwargs: fx_waits.append(kwargs),
     )
 
     _ingest_front_office_core_data(
@@ -459,6 +469,88 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
             "poll_interval_seconds": 3,
         }
     ]
+    assert fx_waits == [
+        {
+            "query_base_url": "http://query.dev.lotus",
+            "bundle": bundle,
+            "wait_seconds": 90,
+            "poll_interval_seconds": 3,
+        }
+    ]
+
+
+def test_front_office_seed_derives_required_cross_currency_fx_windows():
+    bundle = _build_bundle()
+
+    assert _required_cross_currency_fx_windows(bundle) == [
+        ("EUR", "USD", "2025-04-02", "2025-07-27")
+    ]
+
+
+def test_front_office_seed_waits_for_required_fx_readiness(monkeypatch):
+    bundle = _build_bundle()
+    observed_urls = []
+    responses = iter(
+        [
+            (200, {"rates": [{"rate_date": "2025-04-20", "rate": "1.074352"}]}),
+            (
+                200,
+                {
+                    "rates": [
+                        {"rate_date": "2025-04-02", "rate": "1.072685"},
+                        {"rate_date": "2025-07-27", "rate": "1.081000"},
+                    ]
+                },
+            ),
+        ]
+    )
+
+    def fake_request(method, url, *, payload=None):
+        observed_urls.append((method, url, payload))
+        return next(responses)
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", fake_request)
+    monkeypatch.setattr("tools.front_office_portfolio_seed.time.sleep", lambda _: None)
+
+    _wait_for_required_fx_readiness(
+        query_base_url="http://query.dev.lotus",
+        bundle=bundle,
+        wait_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert observed_urls == [
+        (
+            "GET",
+            "http://query.dev.lotus/fx-rates/"
+            "?from_currency=EUR&to_currency=USD&start_date=2025-04-02&end_date=2025-07-27",
+            None,
+        ),
+        (
+            "GET",
+            "http://query.dev.lotus/fx-rates/"
+            "?from_currency=EUR&to_currency=USD&start_date=2025-04-02&end_date=2025-07-27",
+            None,
+        ),
+    ]
+
+
+def test_front_office_seed_wait_for_required_fx_readiness_times_out(monkeypatch):
+    bundle = _build_bundle()
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._request_json",
+        lambda method, url, *, payload=None: (200, {"rates": []}),
+    )
+    monkeypatch.setattr("tools.front_office_portfolio_seed.time.sleep", lambda _: None)
+
+    with pytest.raises(RuntimeError, match="Timed out waiting for FX readiness"):
+        _wait_for_required_fx_readiness(
+            query_base_url="http://query.dev.lotus",
+            bundle=bundle,
+            wait_seconds=0,
+            poll_interval_seconds=0,
+        )
 
 
 def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeypatch):

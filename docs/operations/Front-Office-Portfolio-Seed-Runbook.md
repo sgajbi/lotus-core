@@ -17,6 +17,10 @@ Use this when you need one portfolio that exercises:
 
 This runbook is local-only and does not depend on `lotus-manage`.
 
+Routine front-office seeding is intentionally limited to `PB_SG_GLOBAL_BAL_001`. The governed
+RFC-086 bank-day load scenario with `1000` portfolios is separate load/performance tooling and is
+not part of canonical Workbench runtime bring-up.
+
 ## Seeded Portfolio
 
 - portfolio id: `PB_SG_GLOBAL_BAL_001`
@@ -60,6 +64,7 @@ python tools/front_office_portfolio_seed.py `
 The tool ingests the portfolio bundle plus benchmark reference data and then
 verifies:
 
+- required cross-currency FX windows are queryable before transaction replay
 - positions are populated
 - valued positions are populated
 - transactions are populated
@@ -108,6 +113,10 @@ available, check `portfolio_aggregation_jobs` for a pending backlog and
 `portfolio_timeseries` for a stale max date. The canonical readiness path
 requires portfolio aggregation to catch up before workbench validation or demo
 screenshots are accepted.
+
+If a prior local load or performance run polluted shared `lotus-core` Docker state, reset the
+Docker-backed core runtime before reseeding instead of broadening the seed cleanup SQL. The
+governed Workbench startup script accepts `-CleanCoreState` for this purpose.
 
 ## Related Documents
 
