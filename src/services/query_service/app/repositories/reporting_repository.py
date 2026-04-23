@@ -13,6 +13,8 @@ from portfolio_common.database_models import (
     Instrument,
     InstrumentLookthroughComponent,
     Portfolio,
+    PositionHistory,
+    PositionState,
     Transaction,
 )
 from sqlalchemy import and_, func, or_, select
@@ -76,6 +78,44 @@ class ReportingRepository:
         portfolio_ids: list[str],
         as_of_date: date,
     ) -> list[ReportingSnapshotRow]:
+        latest_history_subq = (
+            select(
+                PositionHistory.portfolio_id.label("portfolio_id"),
+                PositionHistory.security_id.label("security_id"),
+                PositionHistory.epoch.label("epoch"),
+                PositionHistory.quantity.label("quantity"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        PositionHistory.portfolio_id,
+                        PositionHistory.security_id,
+                    ),
+                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
+                )
+                .label("rn"),
+            )
+            .join(
+                PositionState,
+                and_(
+                    PositionHistory.portfolio_id == PositionState.portfolio_id,
+                    PositionHistory.security_id == PositionState.security_id,
+                    PositionHistory.epoch == PositionState.epoch,
+                ),
+            )
+            .where(
+                PositionHistory.portfolio_id.in_(portfolio_ids),
+                PositionHistory.position_date <= as_of_date,
+            )
+            .subquery()
+        )
+        latest_open_history_subq = (
+            select(latest_history_subq)
+            .where(
+                latest_history_subq.c.rn == 1,
+                latest_history_subq.c.quantity != 0,
+            )
+            .subquery()
+        )
         ranked_snapshot_subq = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
@@ -88,6 +128,17 @@ class ReportingRepository:
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
                 .label("rn"),
+            )
+            .join(
+                latest_open_history_subq,
+                and_(
+                    DailyPositionSnapshot.portfolio_id
+                    == latest_open_history_subq.c.portfolio_id,
+                    DailyPositionSnapshot.security_id
+                    == latest_open_history_subq.c.security_id,
+                    DailyPositionSnapshot.epoch == latest_open_history_subq.c.epoch,
+                    DailyPositionSnapshot.quantity == latest_open_history_subq.c.quantity,
+                ),
             )
             .where(
                 DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),

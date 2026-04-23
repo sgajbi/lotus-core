@@ -12,6 +12,8 @@ from portfolio_common.database_models import (
     Instrument,
     Portfolio,
     PortfolioTimeseries,
+    PositionHistory,
+    PositionState,
     PositionTimeseries,
 )
 from sqlalchemy import and_, func, or_, select
@@ -203,6 +205,7 @@ class AnalyticsTimeseriesRepository:
         ]
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
+        latest_history_quantity = self._latest_current_position_history_quantity()
         ranked = (
             select(
                 PositionTimeseries.security_id.label("security_id"),
@@ -227,8 +230,17 @@ class AnalyticsTimeseriesRepository:
                 )
                 .label("rn"),
             )
+            .select_from(PositionTimeseries)
+            .join(
+                PositionState,
+                and_(
+                    PositionTimeseries.portfolio_id == PositionState.portfolio_id,
+                    PositionTimeseries.security_id == PositionState.security_id,
+                    PositionTimeseries.epoch == PositionState.epoch,
+                ),
+            )
             .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
-            .where(*predicates)
+            .where(*predicates, PositionTimeseries.quantity == latest_history_quantity)
             .subquery()
         )
 
@@ -286,6 +298,7 @@ class AnalyticsTimeseriesRepository:
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
 
+        latest_history_quantity = self._latest_current_position_history_quantity()
         ranked = (
             select(
                 PositionTimeseries.security_id.label("security_id"),
@@ -308,8 +321,17 @@ class AnalyticsTimeseriesRepository:
                 )
                 .label("rn"),
             )
+            .select_from(PositionTimeseries)
+            .join(
+                PositionState,
+                and_(
+                    PositionTimeseries.portfolio_id == PositionState.portfolio_id,
+                    PositionTimeseries.security_id == PositionState.security_id,
+                    PositionTimeseries.epoch == PositionState.epoch,
+                ),
+            )
             .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
-            .where(*predicates)
+            .where(*predicates, PositionTimeseries.quantity == latest_history_quantity)
             .subquery()
         )
 
@@ -340,6 +362,7 @@ class AnalyticsTimeseriesRepository:
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
 
+        latest_history_quantity = self._latest_current_position_history_quantity()
         ranked = (
             select(
                 PositionTimeseries.security_id.label("security_id"),
@@ -353,13 +376,38 @@ class AnalyticsTimeseriesRepository:
                 )
                 .label("rn"),
             )
-            .where(*predicates)
+            .select_from(PositionTimeseries)
+            .join(
+                PositionState,
+                and_(
+                    PositionTimeseries.portfolio_id == PositionState.portfolio_id,
+                    PositionTimeseries.security_id == PositionState.security_id,
+                    PositionTimeseries.epoch == PositionState.epoch,
+                ),
+            )
+            .where(*predicates, PositionTimeseries.quantity == latest_history_quantity)
             .subquery()
         )
 
         stmt = select(ranked).where(ranked.c.rn == 1).order_by(ranked.c.security_id.asc())
         result = await self.db.execute(stmt)
         return result.all()
+
+    @staticmethod
+    def _latest_current_position_history_quantity():
+        return (
+            select(PositionHistory.quantity)
+            .where(
+                PositionHistory.portfolio_id == PositionTimeseries.portfolio_id,
+                PositionHistory.security_id == PositionTimeseries.security_id,
+                PositionHistory.epoch == PositionState.epoch,
+                PositionHistory.position_date <= PositionTimeseries.date,
+            )
+            .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+            .limit(1)
+            .correlate(PositionTimeseries, PositionState)
+            .scalar_subquery()
+        )
 
     async def list_position_cashflow_rows(
         self,

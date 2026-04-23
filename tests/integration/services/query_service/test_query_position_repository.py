@@ -78,7 +78,31 @@ def setup_test_data(db_engine):
             cost_basis=Decimal("11000"),
             epoch=0,
         )
-        session.add_all([snapshot_yesterday, snapshot_today])
+        transaction = Transaction(
+            transaction_id="POS-REPO-TXN-01",
+            portfolio_id="POS_REPO_TEST_01",
+            security_id="SEC_POS_TEST_01",
+            instrument_id="SEC_POS_TEST_01",
+            transaction_date=today,
+            transaction_type="BUY",
+            quantity=Decimal("110"),
+            price=Decimal("100"),
+            gross_transaction_amount=Decimal("11000"),
+            trade_currency="USD",
+            currency="USD",
+        )
+        history = PositionHistory(
+            portfolio_id="POS_REPO_TEST_01",
+            security_id="SEC_POS_TEST_01",
+            transaction_id="POS-REPO-TXN-01",
+            position_date=today,
+            quantity=Decimal("110"),
+            cost_basis=Decimal("11000"),
+            epoch=0,
+        )
+        session.add(transaction)
+        session.flush()
+        session.add_all([history, snapshot_yesterday, snapshot_today])
         session.commit()
 
     return {"today": today, "yesterday": yesterday}
@@ -287,6 +311,33 @@ def setup_snapshot_id_order_mismatch_data(db_engine):
         newer_date = date(2025, 1, 10)
         older_date = date(2025, 1, 9)
         session.add(
+            Transaction(
+                transaction_id="POS-REPO-TXN-02",
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                instrument_id=security_id,
+                transaction_date=newer_date,
+                transaction_type="BUY",
+                quantity=Decimal("200"),
+                price=Decimal("100"),
+                gross_transaction_amount=Decimal("20000"),
+                trade_currency="USD",
+                currency="USD",
+            )
+        )
+        session.flush()
+        session.add(
+            PositionHistory(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                transaction_id="POS-REPO-TXN-02",
+                position_date=newer_date,
+                quantity=Decimal("200"),
+                cost_basis=Decimal("20000"),
+                epoch=0,
+            )
+        )
+        session.add(
             DailyPositionSnapshot(
                 portfolio_id=portfolio_id,
                 security_id=security_id,
@@ -391,6 +442,55 @@ def setup_as_of_positive_filter_data(db_engine):
         session.flush()
         session.add_all(
             [
+                Transaction(
+                    transaction_id="POS-REPO-TXN-03-POS",
+                    portfolio_id=portfolio_id,
+                    security_id=positive_security,
+                    instrument_id=positive_security,
+                    transaction_date=as_of_date,
+                    transaction_type="BUY",
+                    quantity=Decimal("25"),
+                    price=Decimal("100"),
+                    gross_transaction_amount=Decimal("2500"),
+                    trade_currency="USD",
+                    currency="USD",
+                ),
+                Transaction(
+                    transaction_id="POS-REPO-TXN-03-NEG",
+                    portfolio_id=portfolio_id,
+                    security_id=negative_security,
+                    instrument_id=negative_security,
+                    transaction_date=as_of_date,
+                    transaction_type="BUY",
+                    quantity=Decimal("-10"),
+                    price=Decimal("1"),
+                    gross_transaction_amount=Decimal("-10"),
+                    trade_currency="USD",
+                    currency="USD",
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                PositionHistory(
+                    portfolio_id=portfolio_id,
+                    security_id=positive_security,
+                    transaction_id="POS-REPO-TXN-03-POS",
+                    position_date=as_of_date,
+                    quantity=Decimal("25"),
+                    cost_basis=Decimal("2500"),
+                    epoch=0,
+                ),
+                PositionHistory(
+                    portfolio_id=portfolio_id,
+                    security_id=negative_security,
+                    transaction_id="POS-REPO-TXN-03-NEG",
+                    position_date=as_of_date,
+                    quantity=Decimal("-10"),
+                    cost_basis=Decimal("-10"),
+                    epoch=1,
+                ),
                 DailyPositionSnapshot(
                     portfolio_id=portfolio_id,
                     security_id=positive_security,
@@ -439,3 +539,123 @@ async def test_get_latest_positions_by_portfolio_as_of_date_keeps_negative_open_
     assert negative_snapshot.quantity == Decimal("-10")
     assert negative_instrument.name == "Negative"
     assert negative_state.status == "REPROCESSING"
+
+
+@pytest.fixture(scope="function")
+def setup_stale_snapshot_reconciliation_data(db_engine):
+    portfolio_id = "POS_REPO_STALE_RECON"
+    security_id = "SEC_POS_STALE_RECON"
+    as_of_date = date(2026, 4, 22)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="balanced",
+                investment_time_horizon="medium",
+                portfolio_type="discretionary",
+                booking_center_code="SGPB",
+                client_id="C1",
+                status="ACTIVE",
+            )
+        )
+        session.add(
+            Instrument(
+                security_id=security_id,
+                name="Reconciled Bond",
+                isin="XS0000000099",
+                currency="USD",
+                product_type="Bond",
+                asset_class="Fixed Income",
+                sector="Government",
+                country_of_risk="US",
+            )
+        )
+        session.add(
+            PositionState(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                epoch=2,
+                watermark_date=as_of_date,
+                status="CURRENT",
+            )
+        )
+        session.add(
+            Transaction(
+                transaction_id="POS-RECON-TXN-01",
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                instrument_id=security_id,
+                transaction_date=date(2026, 3, 11),
+                transaction_type="BUY",
+                quantity=Decimal("180"),
+                price=Decimal("992.8"),
+                gross_transaction_amount=Decimal("178704"),
+                trade_currency="USD",
+                currency="USD",
+            )
+        )
+        session.flush()
+        session.add(
+            PositionHistory(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                transaction_id="POS-RECON-TXN-01",
+                position_date=date(2026, 3, 11),
+                quantity=Decimal("180"),
+                cost_basis=Decimal("178704"),
+                epoch=2,
+            )
+        )
+        session.flush()
+        session.add_all(
+            [
+                DailyPositionSnapshot(
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    date=as_of_date,
+                    quantity=Decimal("0"),
+                    cost_basis=Decimal("0"),
+                    market_price=Decimal("101.35"),
+                    market_value=Decimal("0"),
+                    epoch=2,
+                ),
+                DailyPositionSnapshot(
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    date=date(2026, 4, 10),
+                    quantity=Decimal("180"),
+                    cost_basis=Decimal("178704"),
+                    market_price=Decimal("101.35"),
+                    market_value=Decimal("182430"),
+                    epoch=2,
+                ),
+            ]
+        )
+        session.commit()
+
+    return {"portfolio_id": portfolio_id, "security_id": security_id, "as_of_date": as_of_date}
+
+
+async def test_get_latest_positions_ignores_stale_snapshot_quantity_after_replay(
+    clean_db,
+    setup_stale_snapshot_reconciliation_data,
+    async_db_session: AsyncSession,
+):
+    repo = PositionRepository(async_db_session)
+
+    latest_positions = await repo.get_latest_positions_by_portfolio_as_of_date(
+        setup_stale_snapshot_reconciliation_data["portfolio_id"],
+        setup_stale_snapshot_reconciliation_data["as_of_date"],
+    )
+
+    assert len(latest_positions) == 1
+    snapshot, instrument, position_state = latest_positions[0]
+    assert snapshot.security_id == setup_stale_snapshot_reconciliation_data["security_id"]
+    assert snapshot.date == date(2026, 4, 10)
+    assert snapshot.quantity == Decimal("180")
+    assert snapshot.market_value == Decimal("182430")
+    assert instrument.name == "Reconciled Bond"
+    assert position_state.status == "CURRENT"
