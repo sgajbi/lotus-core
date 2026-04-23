@@ -185,9 +185,12 @@ async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
         snapshot_epoch=4,
     )
     position_stmt = db.execute.await_args_list[1].args[0]
-    assert "position_timeseries.epoch <= 4" in str(
-        position_stmt.compile(compile_kwargs={"literal_binds": True})
-    )
+    position_sql = str(position_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_timeseries.epoch <= 4" in position_sql
+    assert "JOIN position_state ON" in position_sql
+    assert "position_timeseries.epoch = position_state.epoch" in position_sql
+    assert "position_timeseries.quantity = (SELECT position_history.quantity" in position_sql
+    assert "position_history.position_date <= position_timeseries.date" in position_sql
 
 
 @pytest.mark.asyncio
@@ -239,6 +242,8 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     unpaged_stmt = db.execute.await_args_list[0].args[0]
     unpaged_sql = str(unpaged_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.epoch <= 2" in unpaged_sql
+    assert "JOIN position_state ON" in unpaged_sql
+    assert "position_timeseries.quantity = (SELECT position_history.quantity" in unpaged_sql
     assert "instruments.asset_class" in unpaged_sql
     assert "ORDER BY anon_1.valuation_date ASC, anon_1.security_id ASC" in unpaged_sql
 
@@ -253,6 +258,8 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     prior_sql = str(prior_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.date < '2025-01-01'" in prior_sql
     assert "position_timeseries.epoch <= 3" in prior_sql
+    assert "JOIN position_state ON" in prior_sql
+    assert "position_timeseries.quantity = (SELECT position_history.quantity" in prior_sql
     assert "row_number() OVER (PARTITION BY position_timeseries.security_id" in prior_sql
     assert "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC" in prior_sql
 

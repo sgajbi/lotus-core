@@ -189,16 +189,26 @@ class PositionRepository:
 
     async def get_latest_positions_by_portfolio(self, portfolio_id: str) -> List[Any]:
         """
-        Retrieves the single latest daily snapshot for each security in a given portfolio,
-        ensuring that the snapshot belongs to the current epoch for that security.
+        Retrieves the latest daily snapshot for each current open position.
+
+        Position history is the authoritative booked quantity stream. Snapshots can be
+        produced asynchronously and may temporarily contain stale carried quantities after
+        replay. To avoid exposing a stale completed snapshot as a live holding, only
+        return snapshots whose quantity reconciles to the latest current-epoch history row.
         It eagerly loads the related Instrument and PositionState data.
         """
+        latest_history_subq = self._latest_current_position_history_subquery(
+            portfolio_id=portfolio_id,
+        )
         ranked_snapshot_subq = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
                 func.row_number()
                 .over(
-                    partition_by=DailyPositionSnapshot.security_id,
+                    partition_by=(
+                        DailyPositionSnapshot.portfolio_id,
+                        DailyPositionSnapshot.security_id,
+                    ),
                     order_by=(
                         DailyPositionSnapshot.date.desc(),
                         DailyPositionSnapshot.id.desc(),
@@ -207,14 +217,20 @@ class PositionRepository:
                 .label("rn"),
             )
             .join(
-                PositionState,
+                latest_history_subq,
                 and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
+                    DailyPositionSnapshot.portfolio_id
+                    == latest_history_subq.c.portfolio_id,
+                    DailyPositionSnapshot.security_id
+                    == latest_history_subq.c.security_id,
+                    DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
+                    DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
                 ),
             )
-            .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+            .where(
+                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                DailyPositionSnapshot.quantity != 0,
+            )
             .subquery()
         )
 
@@ -300,29 +316,40 @@ class PositionRepository:
     ) -> List[Any]:
         """
         Returns the latest available daily snapshot per security on or before as_of_date,
-        constrained to current epoch via PositionState.
+        constrained to the latest current-epoch booked quantity for that security.
         """
+        latest_history_subq = self._latest_current_position_history_subquery(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+        )
         ranked_snapshot_subq = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
                 func.row_number()
                 .over(
-                    partition_by=DailyPositionSnapshot.security_id,
+                    partition_by=(
+                        DailyPositionSnapshot.portfolio_id,
+                        DailyPositionSnapshot.security_id,
+                    ),
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
                 .label("rn"),
             )
             .join(
-                PositionState,
+                latest_history_subq,
                 and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
+                    DailyPositionSnapshot.portfolio_id
+                    == latest_history_subq.c.portfolio_id,
+                    DailyPositionSnapshot.security_id
+                    == latest_history_subq.c.security_id,
+                    DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
+                    DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
                 ),
             )
             .where(
                 DailyPositionSnapshot.portfolio_id == portfolio_id,
                 DailyPositionSnapshot.date <= as_of_date,
+                DailyPositionSnapshot.quantity != 0,
             )
             .subquery()
         )
@@ -357,6 +384,53 @@ class PositionRepository:
             as_of_date,
         )
         return positions
+
+    def _latest_current_position_history_subquery(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date: date | None = None,
+    ):
+        ranked_history_subq = (
+            select(
+                PositionHistory.portfolio_id.label("portfolio_id"),
+                PositionHistory.security_id.label("security_id"),
+                PositionHistory.epoch.label("epoch"),
+                PositionHistory.quantity.label("quantity"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        PositionHistory.portfolio_id,
+                        PositionHistory.security_id,
+                    ),
+                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
+                )
+                .label("rn"),
+            )
+            .join(
+                PositionState,
+                and_(
+                    PositionHistory.portfolio_id == PositionState.portfolio_id,
+                    PositionHistory.security_id == PositionState.security_id,
+                    PositionHistory.epoch == PositionState.epoch,
+                ),
+            )
+            .where(PositionHistory.portfolio_id == portfolio_id)
+        )
+        if as_of_date is not None:
+            ranked_history_subq = ranked_history_subq.where(
+                PositionHistory.position_date <= as_of_date
+            )
+
+        ranked_history_subq = ranked_history_subq.subquery()
+        return (
+            select(ranked_history_subq)
+            .where(
+                ranked_history_subq.c.rn == 1,
+                ranked_history_subq.c.quantity != 0,
+            )
+            .subquery()
+        )
 
     async def get_latest_position_history_by_portfolio_as_of_date(
         self, portfolio_id: str, as_of_date: date

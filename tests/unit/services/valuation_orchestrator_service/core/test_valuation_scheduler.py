@@ -125,6 +125,44 @@ async def test_scheduler_creates_position_aware_backfill_jobs(
         mock_gauge_labels.return_value.set.assert_called_once_with(expected_lag)
 
 
+async def test_scheduler_rearms_completed_jobs_after_watermark_reset(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+
+    latest_business_date = date(2026, 4, 22)
+    watermark_reset_at = datetime(2026, 4, 23, 9, 30, tzinfo=timezone.utc)
+    states_to_backfill = [
+        PositionState(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            security_id="FO_BOND_UST_2030",
+            watermark_date=date(2026, 3, 10),
+            epoch=2,
+            status="REPROCESSING",
+            updated_at=watermark_reset_at,
+        )
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_states_needing_backfill.return_value = states_to_backfill
+    mock_repo.get_first_open_dates_for_keys.return_value = {
+        ("PB_SG_GLOBAL_BAL_001", "FO_BOND_UST_2030", 2): date(2026, 3, 11)
+    }
+    mock_job_repo.upsert_jobs.return_value = 43
+
+    await scheduler._create_backfill_jobs(AsyncMock())
+
+    mock_job_repo.upsert_jobs.assert_awaited_once()
+    scheduled_jobs = mock_job_repo.upsert_jobs.await_args.args[0]
+    assert scheduled_jobs[0].valuation_date == date(2026, 3, 11)
+    assert scheduled_jobs[0].correlation_id == (
+        "SCHEDULER_BACKFILL:PB_SG_GLOBAL_BAL_001:FO_BOND_UST_2030:"
+        "2:2026-03-11:2026-04-23T09:30:00+00:00"
+    )
+
+
 async def test_scheduler_normalizes_non_reprocessing_keys_with_no_position_history(
     scheduler: ValuationScheduler,
     mock_dependencies: dict,

@@ -95,6 +95,9 @@ async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_
     )
     assert "daily_position_snapshots.date <= '2026-03-27'" in compiled
     assert "daily_position_snapshots.quantity != 0" in compiled
+    assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled
+    assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled
+    assert "position_history.position_date <= '2026-03-27'" in compiled
     assert "LEFT OUTER JOIN instruments" in compiled
     assert (
         "ORDER BY daily_position_snapshots.portfolio_id ASC, "

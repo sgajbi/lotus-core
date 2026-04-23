@@ -134,6 +134,48 @@ async def test_calculate_normal_flow(
 
 
 @pytest.mark.asyncio
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_rearms_current_epoch_when_position_history_arrives_after_valuation(
+    mock_fencer_class: MagicMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_outbox_repo: AsyncMock,
+    sample_event: TransactionEvent,
+):
+    """
+    GIVEN a replay/current-epoch event materializes position history for a date
+    already covered by valuation snapshots
+    WHEN PositionCalculator persists the corrected history
+    THEN the current epoch watermark is reset so valuation and timeseries jobs
+    are regenerated instead of leaving stale snapshots marked current.
+    """
+    mock_fencer_instance = mock_fencer_class.return_value
+    mock_fencer_instance.check = AsyncMock(return_value=True)
+    sample_event.epoch = 2
+    sample_event.transaction_date = datetime(2026, 3, 11, 9, 0, 0)
+
+    mock_state_repo.get_or_create_state.return_value = PositionState(
+        watermark_date=date(2026, 4, 22), epoch=2, status="CURRENT"
+    )
+    mock_repo.get_latest_completed_snapshot_date.return_value = date(2026, 4, 22)
+    mock_repo.get_latest_position_history_date.return_value = None
+    mock_repo.get_transactions_on_or_after.return_value = [sample_event]
+    mock_state_repo.update_watermarks_if_older.return_value = 1
+
+    await PositionCalculator.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
+    )
+
+    mock_state_repo.increment_epoch_and_reset_watermark.assert_not_called()
+    mock_repo.save_positions.assert_awaited_once()
+    mock_state_repo.update_watermarks_if_older.assert_awaited_once_with(
+        keys=[("P1", "S1")],
+        new_watermark_date=date(2026, 3, 10),
+    )
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+
+
+@pytest.mark.asyncio
 @patch(
     "src.services.calculators.position_calculator.app.core.position_logic.REPROCESSING_EPOCH_BUMPED_TOTAL"
 )

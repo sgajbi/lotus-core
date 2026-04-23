@@ -54,6 +54,17 @@ class E2EApiClient:
         response.raise_for_status()
         return response
 
+    def reprocess_transactions(self, transaction_ids: List[str]) -> requests.Response:
+        """Queues existing transactions for replay through the governed reprocessing API."""
+        url = f"{self.ingestion_url}/reprocess/transactions"
+        response = self.session.post(
+            url,
+            json={"transaction_ids": transaction_ids},
+            timeout=10,
+        )
+        response.raise_for_status()
+        return response
+
     def query(self, endpoint: str) -> requests.Response:
         """Retrieves data from a specified query endpoint."""
         url = f"{self.query_url}{endpoint}"

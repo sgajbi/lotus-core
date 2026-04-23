@@ -14,7 +14,7 @@ dependencies = [
     "sqlalchemy==2.0.46",
     "asyncpg==0.30.0",
     "pydantic==2.12.5",
-    "python-dotenv==1.0.1",
+    "python-dotenv==1.2.2",
     "prometheus-fastapi-instrumentator==7.1.0",
     "python-dateutil==2.9.0.post0",
     "httpx==0.28.1"

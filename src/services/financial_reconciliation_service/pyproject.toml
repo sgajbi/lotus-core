@@ -15,7 +15,7 @@ dependencies = [
     "confluent-kafka==2.12.0",
     "tenacity==8.2.3",
     "pydantic==2.12.5",
-    "python-dotenv==1.0.1",
+    "python-dotenv==1.2.2",
     "prometheus-fastapi-instrumentator==7.1.0",
     "httpx==0.28.1"
 ]

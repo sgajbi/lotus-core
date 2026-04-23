@@ -61,12 +61,19 @@ class ValuationScheduler:
 
     @staticmethod
     def _build_backfill_correlation_id(
-        portfolio_id: str, security_id: str, epoch: int, valuation_date
+        portfolio_id: str,
+        security_id: str,
+        epoch: int,
+        valuation_date,
+        watermark_updated_at: datetime | None = None,
     ) -> str:
-        return (
+        base_correlation_id = (
             f"SCHEDULER_BACKFILL:{portfolio_id}:{security_id}:"
             f"{epoch}:{valuation_date.isoformat()}"
         )
+        if watermark_updated_at is None:
+            return base_correlation_id
+        return f"{base_correlation_id}:{watermark_updated_at.isoformat()}"
 
     async def _update_reprocessing_metrics(self, db):
         """Queries for and sets key gauges related to reprocessing workload."""
@@ -362,6 +369,7 @@ class ValuationScheduler:
                             state.security_id,
                             state.epoch,
                             current_date,
+                            state.updated_at,
                         ),
                     )
                 )

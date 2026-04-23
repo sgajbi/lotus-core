@@ -19,7 +19,7 @@ psycopg2-binary==2.9.10
 asyncpg==0.30.0
 
 # Environment variable management
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 
 # Docker testcontainers for E2E and integration tests
 testcontainers[kafka,postgres]==4.5.0

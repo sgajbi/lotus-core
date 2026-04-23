@@ -3,4 +3,4 @@ psycopg2-binary==2.9.9
 confluent-kafka==2.4.0
 pydantic==2.7.4
 tenacity==8.2.3
-python-dotenv==1.0.1
+python-dotenv==1.2.2
