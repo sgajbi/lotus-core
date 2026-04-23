@@ -224,6 +224,14 @@ class TransactionRecord(BaseModel):
         ),
         examples=[-512.8],
     )
+    realized_gain_loss_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Transaction-level realized gain/loss restated into the requested reporting "
+            "currency when `reporting_currency` is supplied on the route."
+        ),
+        examples=[500.0],
+    )
     withholding_tax_amount_reporting_currency: Optional[Decimal] = Field(
         None,
         description=(
