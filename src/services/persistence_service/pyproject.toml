@@ -15,7 +15,7 @@ dependencies = [
     "pydantic==2.12.5",
     "tenacity==8.2.3",
     "alembic==1.13.1",
-    "python-dotenv==1.0.1",
+    "python-dotenv==1.2.2",
     "structlog==24.1.0",
     "python-json-logger==2.0.7",
     "fastapi==0.129.0",

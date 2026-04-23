@@ -71,7 +71,7 @@ pydantic-core==2.41.5
     # via pydantic
 python-dateutil==2.9.0.post0
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
-python-dotenv==1.0.1
+python-dotenv==1.2.2
     # via
     #   -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
     #   uvicorn
