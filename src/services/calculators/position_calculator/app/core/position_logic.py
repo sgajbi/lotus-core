@@ -152,6 +152,23 @@ class PositionCalculator:
 
         if new_positions:
             await repo.save_positions(new_positions)
+            updated_count = await position_state_repo.update_watermarks_if_older(
+                keys=[(portfolio_id, security_id)],
+                new_watermark_date=transaction_date - timedelta(days=1),
+            )
+            if updated_count:
+                logger.info(
+                    "Re-armed valuation and timeseries generation after position history write.",
+                    extra={
+                        "portfolio_id": portfolio_id,
+                        "security_id": security_id,
+                        "epoch": message_epoch,
+                        "transaction_date": transaction_date.isoformat(),
+                        "new_watermark_date": (
+                            transaction_date - timedelta(days=1)
+                        ).isoformat(),
+                    },
+                )
 
         logger.info(
             f"[Calculate] Staged {len(new_positions)} position records for Epoch {message_epoch}"

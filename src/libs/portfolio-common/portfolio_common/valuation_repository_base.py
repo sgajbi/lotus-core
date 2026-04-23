@@ -298,6 +298,19 @@ class ValuationRepositoryBase:
             .correlate(*correlate_targets)
             .subquery("date_series")
         )
+        latest_history_quantity_for_snapshot = (
+            select(PositionHistory.quantity)
+            .where(
+                PositionHistory.portfolio_id == dps.portfolio_id,
+                PositionHistory.security_id == dps.security_id,
+                PositionHistory.epoch == dps.epoch,
+                PositionHistory.position_date <= dps.date,
+            )
+            .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+            .limit(1)
+            .correlate(dps)
+            .scalar_subquery()
+        )
 
         first_gap_subq = (
             (
@@ -308,7 +321,8 @@ class ValuationRepositoryBase:
                         (dps.portfolio_id == s.portfolio_id)
                         & (dps.security_id == s.security_id)
                         & (dps.epoch == s.epoch)
-                        & (dps.date == date_series_subq.c.expected_date),
+                        & (dps.date == date_series_subq.c.expected_date)
+                        & (dps.quantity == latest_history_quantity_for_snapshot),
                     )
                 )
                 .where(dps.id.is_(None))
@@ -323,6 +337,7 @@ class ValuationRepositoryBase:
                     (dps.portfolio_id == s.portfolio_id)
                     & (dps.security_id == s.security_id)
                     & (dps.epoch == s.epoch)
+                    & (dps.quantity == latest_history_quantity_for_snapshot)
                 )
             )
             .correlate(s)

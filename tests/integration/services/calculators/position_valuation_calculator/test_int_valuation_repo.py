@@ -994,6 +994,118 @@ async def test_find_contiguous_snapshot_dates_respects_first_open_dates(
     assert contiguous_dates == {("P-CONTIG", "S-CONTIG"): date(2025, 8, 11)}
 
 
+async def test_find_contiguous_snapshot_dates_stops_at_unreconciled_snapshot(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = ValuationRepository(async_db_session)
+
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P-STALE-SNAPSHOT",
+            base_currency="USD",
+            open_date=date(2026, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="f",
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add(
+        Transaction(
+            transaction_id="TX-STALE-SNAPSHOT-1",
+            portfolio_id="P-STALE-SNAPSHOT",
+            instrument_id="I-STALE-SNAPSHOT",
+            security_id="S-STALE-SNAPSHOT",
+            transaction_date=date(2026, 3, 11),
+            transaction_type="BUY",
+            quantity=1,
+            price=1,
+            gross_transaction_amount=1,
+            trade_currency="USD",
+            currency="USD",
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add_all(
+        [
+            PositionState(
+                portfolio_id="P-STALE-SNAPSHOT",
+                security_id="S-STALE-SNAPSHOT",
+                epoch=2,
+                watermark_date=date(2026, 3, 10),
+                status="REPROCESSING",
+            ),
+            PositionHistory(
+                portfolio_id="P-STALE-SNAPSHOT",
+                security_id="S-STALE-SNAPSHOT",
+                transaction_id="TX-STALE-SNAPSHOT-1",
+                position_date=date(2026, 3, 11),
+                quantity=Decimal("180"),
+                cost_basis=Decimal("180000"),
+                cost_basis_local=Decimal("180000"),
+                epoch=2,
+            ),
+            BusinessDate(calendar_code="GLOBAL", date=date(2026, 3, 11)),
+            BusinessDate(calendar_code="GLOBAL", date=date(2026, 3, 12)),
+            DailyPositionSnapshot(
+                portfolio_id="P-STALE-SNAPSHOT",
+                security_id="S-STALE-SNAPSHOT",
+                date=date(2026, 3, 11),
+                epoch=2,
+                quantity=Decimal("0"),
+                cost_basis=Decimal("0"),
+                cost_basis_local=Decimal("0"),
+                market_price=Decimal("1013.5"),
+                market_value=Decimal("0"),
+                market_value_local=Decimal("0"),
+                unrealized_gain_loss=Decimal("0"),
+                unrealized_gain_loss_local=Decimal("0"),
+                valuation_status="VALUED_CURRENT",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P-STALE-SNAPSHOT",
+                security_id="S-STALE-SNAPSHOT",
+                date=date(2026, 3, 12),
+                epoch=2,
+                quantity=Decimal("180"),
+                cost_basis=Decimal("180000"),
+                cost_basis_local=Decimal("180000"),
+                market_price=Decimal("1013.5"),
+                market_value=Decimal("182430"),
+                market_value_local=Decimal("182430"),
+                unrealized_gain_loss=Decimal("2430"),
+                unrealized_gain_loss_local=Decimal("2430"),
+                valuation_status="VALUED_CURRENT",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    states = [
+        PositionState(
+            portfolio_id="P-STALE-SNAPSHOT",
+            security_id="S-STALE-SNAPSHOT",
+            epoch=2,
+            watermark_date=date(2026, 3, 10),
+            status="REPROCESSING",
+        )
+    ]
+
+    contiguous_dates = await repo.find_contiguous_snapshot_dates(
+        states,
+        {("P-STALE-SNAPSHOT", "S-STALE-SNAPSHOT", 2): date(2026, 3, 11)},
+    )
+
+    assert contiguous_dates == {
+        ("P-STALE-SNAPSHOT", "S-STALE-SNAPSHOT"): date(2026, 3, 10)
+    }
+
+
 async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
     async_db_session: AsyncSession, clean_db
 ):
