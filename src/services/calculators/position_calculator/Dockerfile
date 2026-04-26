@@ -39,7 +39,7 @@ COPY src/libs/portfolio-common /build/src/libs/portfolio-common
 COPY src/services/calculators/position_calculator/pyproject.toml /build/src/services/calculators/position_calculator/pyproject.toml
 COPY src/services/calculators/position_calculator/app /build/src/services/calculators/position_calculator/app
 
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip wheel --wheel-dir /wheels \
     /build/src/libs/portfolio-common \
     /build/src/services/calculators/position_calculator
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM runtime-base AS final
 
 COPY --from=wheel-builder /wheels /wheels
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \
     chown -R appuser:appuser /opt/venv
