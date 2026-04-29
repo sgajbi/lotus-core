@@ -39,7 +39,7 @@ COPY src/libs/portfolio-common /build/src/libs/portfolio-common
 COPY src/services/portfolio_aggregation_service/pyproject.toml /build/src/services/portfolio_aggregation_service/pyproject.toml
 COPY src/services/portfolio_aggregation_service/app /build/src/services/portfolio_aggregation_service/app
 
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip wheel --wheel-dir /wheels \
     /build/src/libs/portfolio-common \
     /build/src/services/portfolio_aggregation_service
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM runtime-base AS final
 
 COPY --from=wheel-builder /wheels /wheels
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \
     chown -R appuser:appuser /opt/venv

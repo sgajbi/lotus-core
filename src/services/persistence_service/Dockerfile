@@ -39,7 +39,7 @@ COPY src/libs/portfolio-common /build/src/libs/portfolio-common
 COPY src/services/persistence_service/pyproject.toml /build/src/services/persistence_service/pyproject.toml
 COPY src/services/persistence_service/app /build/src/services/persistence_service/app
 
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip wheel --wheel-dir /wheels \
     /build/src/libs/portfolio-common \
     /build/src/services/persistence_service
@@ -51,7 +51,7 @@ COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 COPY tools/kafka_setup.py /app/tools/kafka_setup.py
 COPY tools/demo_data_pack.py /app/tools/demo_data_pack.py
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \
     chown -R appuser:appuser /opt/venv /app

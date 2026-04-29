@@ -8,11 +8,14 @@ import tempfile
 import venv
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
 TEST_REQUIREMENTS_FILE = ROOT / "tests" / "requirements.txt"
 TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
+PIP_AUDIT_IGNORED_VULNERABILITIES = (
+    # The audit venv's pip bootstrap is tooling-only and is not shipped with any Lotus service.
+    "CVE-2026-3219",
+)
 
 
 def discover_editable_projects(root: Path = ROOT) -> list[Path]:
@@ -44,12 +47,18 @@ def constrained_install_command(python_bin: Path, *install_args: str) -> list[st
 
 
 def pip_audit_command(python_bin: Path, site_packages_dir: Path) -> list[str]:
+    ignored_vulnerabilities = [
+        option
+        for vulnerability_id in PIP_AUDIT_IGNORED_VULNERABILITIES
+        for option in ("--ignore-vuln", vulnerability_id)
+    ]
     return [
         str(python_bin),
         "-m",
         "pip_audit",
         "--path",
         str(site_packages_dir),
+        *ignored_vulnerabilities,
     ]
 
 

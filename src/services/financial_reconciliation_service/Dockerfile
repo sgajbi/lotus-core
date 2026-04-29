@@ -39,7 +39,7 @@ COPY src/libs/portfolio-common /build/src/libs/portfolio-common
 COPY src/services/financial_reconciliation_service/pyproject.toml /build/src/services/financial_reconciliation_service/pyproject.toml
 COPY src/services/financial_reconciliation_service/app /build/src/services/financial_reconciliation_service/app
 
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     rm -rf /wheels && mkdir -p /wheels && \
     pip wheel --wheel-dir /wheels \
     /build/src/libs/portfolio-common \
@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM runtime-base AS final
 
 COPY --from=wheel-builder /wheels /wheels
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \
     chown -R appuser:appuser /opt/venv
