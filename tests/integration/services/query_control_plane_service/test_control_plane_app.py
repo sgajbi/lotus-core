@@ -708,6 +708,16 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert readiness_response["properties"]["pricing"]["description"] == (
         "Pricing and valuation coverage readiness for the portfolio."
     )
+    assert readiness_response["properties"]["supportability"]["description"].startswith(
+        "RFC-0108 portfolio supportability posture"
+    )
+    supportability_summary = components["PortfolioSupportabilitySummary"]
+    assert supportability_summary["properties"]["feature_key"]["default"] == (
+        "core.observability.portfolio_supportability"
+    )
+    assert supportability_summary["properties"]["state"]["description"] == (
+        "Overall supportability state for portfolio readiness composition."
+    )
     assert readiness_response["properties"]["missing_historical_fx_dependencies"][
         "description"
     ].startswith("Source-owned summary of cross-currency transactions blocked")

@@ -3,7 +3,17 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ConsumerSystem = Literal["lotus-gateway", "lotus-performance", "lotus-manage", "UI", "UNKNOWN"]
+ConsumerSystem = Literal[
+    "lotus-advise",
+    "lotus-gateway",
+    "lotus-manage",
+    "lotus-performance",
+    "lotus-report",
+    "lotus-risk",
+    "lotus-workbench",
+    "UI",
+    "UNKNOWN",
+]
 
 
 class FeatureCapability(BaseModel):

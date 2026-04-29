@@ -408,6 +408,12 @@ FINANCIAL_RECONCILIATION_RUN_DURATION_SECONDS = Histogram(
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
 )
 
+LOTUS_CORE_PORTFOLIO_SUPPORTABILITY_TOTAL = Counter(
+    "lotus_core_portfolio_supportability_total",
+    "Portfolio supportability readiness summaries emitted by lotus-core.",
+    ["state", "reason", "freshness_bucket"],
+)
+
 
 def observe_reprocessing_worker_jobs_claimed(job_type: str, count: int = 1) -> None:
     REPROCESSING_WORKER_JOBS_CLAIMED_TOTAL.labels(job_type).inc(count)
@@ -444,6 +450,19 @@ def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:
 
 def observe_valuation_worker_stale_resets(count: int = 1) -> None:
     VALUATION_WORKER_STALE_RESETS_TOTAL.inc(count)
+
+
+def observe_portfolio_supportability(
+    state: str,
+    reason: str,
+    freshness_bucket: str,
+    count: int = 1,
+) -> None:
+    LOTUS_CORE_PORTFOLIO_SUPPORTABILITY_TOTAL.labels(
+        state,
+        reason,
+        freshness_bucket,
+    ).inc(count)
 
 
 # --------------------------------------------------------------------------------------

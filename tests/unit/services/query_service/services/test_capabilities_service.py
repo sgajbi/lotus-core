@@ -11,6 +11,7 @@ from src.services.query_service.app.services.capabilities_service import Capabil
 def test_capabilities_default_flags(monkeypatch):
     monkeypatch.delenv("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", raising=False)
     monkeypatch.delenv("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_PORTFOLIO_SUPPORTABILITY_ENABLED", raising=False)
     monkeypatch.delenv("LOTUS_CORE_POLICY_VERSION", raising=False)
     monkeypatch.delenv("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON", raising=False)
 
@@ -28,11 +29,14 @@ def test_capabilities_default_flags(monkeypatch):
         "file_upload",
     }
     assert all(feature.enabled for feature in response.features[:2])
+    feature_map = {feature.key: feature.enabled for feature in response.features}
+    assert feature_map["core.observability.portfolio_supportability"] is True
 
 
 def test_capabilities_env_override(monkeypatch):
     monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", "false")
     monkeypatch.setenv("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", "false")
+    monkeypatch.setenv("LOTUS_CORE_PORTFOLIO_SUPPORTABILITY_ENABLED", "false")
     monkeypatch.setenv("LOTUS_CORE_POLICY_VERSION", "tenant-x-v3")
     monkeypatch.delenv("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON", raising=False)
 
@@ -44,6 +48,7 @@ def test_capabilities_env_override(monkeypatch):
     feature_map = {feature.key: feature.enabled for feature in response.features}
     assert feature_map["lotus_core.ingestion.bulk_upload_adapter"] is False
     assert feature_map["lotus_core.ingestion.portfolio_bundle_adapter"] is False
+    assert feature_map["core.observability.portfolio_supportability"] is False
     assert response.policy_version == "tenant-x-v3"
     assert set(response.supported_input_modes) == {"lotus_core_ref"}
     assert response.tenant_id == "tenant-x"
@@ -133,6 +138,24 @@ def test_capabilities_workflow_required_features_are_canonical() -> None:
     for workflow in response.workflows:
         assert workflow.required_features
         assert set(workflow.required_features).issubset(feature_keys)
+
+
+def test_capabilities_includes_ecosystem_consumers() -> None:
+    service = CapabilitiesService()
+
+    response = service.get_integration_capabilities(
+        consumer_system="lotus-workbench",
+        tenant_id="tenant_sg_pb",
+    )
+
+    assert response.consumer_system == "lotus-workbench"
+    assert response.supported_input_modes == ["lotus_core_ref"]
+    workflow_map = {
+        workflow.workflow_key: workflow.required_features for workflow in response.workflows
+    }
+    assert (
+        "core.observability.portfolio_supportability" in workflow_map["advisor_workbench_overview"]
+    )
 
 
 def test_resolve_as_of_date_uses_latest_business_date_from_db(monkeypatch):

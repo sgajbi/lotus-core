@@ -11,6 +11,7 @@ from portfolio_common.reconciliation_quality import (
     classify_finding_status,
     classify_reconciliation_status,
 )
+from portfolio_common.monitoring import observe_portfolio_supportability
 from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
@@ -31,6 +32,7 @@ from ..dtos.operations_dto import (
     PortfolioReadinessBucket,
     PortfolioReadinessReason,
     PortfolioReadinessResponse,
+    PortfolioSupportabilitySummary,
     ReconciliationFindingListResponse,
     ReconciliationFindingRecord,
     ReconciliationRunListResponse,
@@ -450,6 +452,50 @@ class OperationsService:
         if reasons:
             return "PENDING"
         return "READY"
+
+    @staticmethod
+    def _portfolio_supportability_summary(
+        *,
+        buckets: list[PortfolioReadinessBucket],
+        resolved_as_of_date: date | None,
+        generated_at_utc: datetime,
+    ) -> PortfolioSupportabilitySummary:
+        statuses = [bucket.status for bucket in buckets]
+        ready_domains = statuses.count("READY")
+        pending_domains = statuses.count("PENDING")
+        blocked_domains = statuses.count("BLOCKED")
+        no_activity_domains = statuses.count("NO_ACTIVITY")
+
+        if no_activity_domains == len(statuses):
+            state = "empty"
+            reason = "portfolio_supportability_empty"
+        elif blocked_domains > 0:
+            state = "degraded"
+            reason = "portfolio_supportability_blocked"
+        elif pending_domains > 0:
+            state = "degraded"
+            reason = "portfolio_supportability_pending"
+        else:
+            state = "ready"
+            reason = "portfolio_supportability_ready"
+
+        if resolved_as_of_date is None:
+            freshness_bucket = "unknown"
+        elif resolved_as_of_date >= generated_at_utc.date() - timedelta(days=1):
+            freshness_bucket = "current"
+        else:
+            freshness_bucket = "stale"
+
+        observe_portfolio_supportability(state, reason, freshness_bucket)
+        return PortfolioSupportabilitySummary(
+            state=state,
+            reason=reason,
+            freshness_bucket=freshness_bucket,
+            ready_domains=ready_domains,
+            pending_domains=pending_domains,
+            blocked_domains=blocked_domains,
+            no_activity_domains=no_activity_domains,
+        )
 
     @staticmethod
     def _blocking_reasons(
@@ -1202,6 +1248,11 @@ class OperationsService:
             status=self._bucket_status(reporting_reasons, has_activity),
             reasons=reporting_reasons,
         )
+        supportability = self._portfolio_supportability_summary(
+            buckets=[holdings, pricing, transactions, reporting],
+            resolved_as_of_date=resolved_as_of_date,
+            generated_at_utc=generated_at_utc,
+        )
 
         return PortfolioReadinessResponse(
             portfolio_id=portfolio_id,
@@ -1218,6 +1269,7 @@ class OperationsService:
                 + self._blocking_reasons(transaction_reasons)
                 + self._blocking_reasons(reporting_reasons)
             ),
+            supportability=supportability,
             latest_booked_transaction_date=latest_booked_transaction_date,
             latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
             current_epoch=support_overview.current_epoch,

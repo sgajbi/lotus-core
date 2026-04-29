@@ -33,7 +33,8 @@ Current router groups inside `query_control_plane_service` are:
 
 - `operations`
   support overview, readiness, calculator SLOs, control stages, replay, reconciliation, lineage,
-  analytics export support listings, and run-scoped load progress
+  analytics export support listings, run-scoped load progress, and the RFC-0108
+  `core.observability.portfolio_supportability` summary embedded in readiness responses
 - `integration`
   effective policy, core snapshot, benchmark and reference integration contracts, and enrichment
   requests
@@ -41,7 +42,9 @@ Current router groups inside `query_control_plane_service` are:
   portfolio and position analytics timeseries, analytics reference metadata, and durable export-job
   lifecycle
 - `capabilities`
-  tenant- and consumer-aware capability discovery
+  tenant- and consumer-aware capability discovery, including the
+  `core.observability.portfolio_supportability` feature flag for Gateway, Workbench, and downstream
+  app composition
 - `simulation`
   deterministic simulation-session lifecycle and projected-state reads
 - `advisory_simulation`
@@ -103,6 +106,11 @@ GET /support/portfolios/{portfolio_id}/readiness?as_of_date=2026-03-28
 GET /support/portfolios/{portfolio_id}/reprocessing-jobs?status_filter=PROCESSING
 GET /lineage/portfolios/{portfolio_id}/keys
 ```
+
+`GET /support/portfolios/{portfolio_id}/readiness` carries a bounded `supportability` object with
+`state`, `reason`, and `freshness_bucket` values for platform-wide operational posture aggregation.
+The same posture is observable through the `lotus_core_portfolio_supportability_total` Prometheus
+counter.
 
 Write ingress:
 
