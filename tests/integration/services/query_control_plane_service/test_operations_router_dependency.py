@@ -287,6 +287,16 @@ async def test_portfolio_readiness_success(async_test_client):
                 "affected_security_ids": ["SEC-EUR-1"],
             }
         ],
+        "supportability": {
+            "feature_key": "core.observability.portfolio_supportability",
+            "state": "degraded",
+            "reason": "portfolio_supportability_blocked",
+            "freshness_bucket": "current",
+            "ready_domains": 0,
+            "pending_domains": 1,
+            "blocked_domains": 3,
+            "no_activity_domains": 0,
+        },
         "latest_booked_transaction_date": date(2026, 3, 28),
         "latest_booked_position_snapshot_date": date(2026, 3, 27),
         "current_epoch": 4,
@@ -319,6 +329,9 @@ async def test_portfolio_readiness_success(async_test_client):
     assert response.status_code == 200
     assert response.json()["portfolio_id"] == "P1"
     assert response.json()["pricing"]["status"] == "BLOCKED"
+    assert response.json()["supportability"]["feature_key"] == (
+        "core.observability.portfolio_supportability"
+    )
     assert response.json()["missing_historical_fx_dependencies"]["missing_count"] == 1
     mock_service.get_portfolio_readiness.assert_awaited_once_with(
         portfolio_id="P1",
@@ -340,6 +353,16 @@ async def test_portfolio_readiness_defaults_apply(async_test_client):
         "transactions": {"status": "READY", "reasons": []},
         "reporting": {"status": "READY", "reasons": []},
         "blocking_reasons": [],
+        "supportability": {
+            "feature_key": "core.observability.portfolio_supportability",
+            "state": "ready",
+            "reason": "portfolio_supportability_ready",
+            "freshness_bucket": "current",
+            "ready_domains": 4,
+            "pending_domains": 0,
+            "blocked_domains": 0,
+            "no_activity_domains": 0,
+        },
         "latest_booked_transaction_date": date(2026, 3, 28),
         "latest_booked_position_snapshot_date": date(2026, 3, 28),
         "current_epoch": 4,

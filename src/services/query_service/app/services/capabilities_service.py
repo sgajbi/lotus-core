@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 _FEATURE_ENV_DEFAULTS: dict[str, tuple[str, bool]] = {
     "lotus_core.support.overview_api": ("LOTUS_CORE_CAP_SUPPORT_APIS_ENABLED", True),
     "lotus_core.support.lineage_api": ("LOTUS_CORE_CAP_LINEAGE_APIS_ENABLED", True),
+    "core.observability.portfolio_supportability": (
+        "LOTUS_CORE_PORTFOLIO_SUPPORTABILITY_ENABLED",
+        True,
+    ),
     "lotus_core.ingestion.bulk_upload_adapter": ("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", True),
     "lotus_core.ingestion.portfolio_bundle_adapter": (
         "LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED",
@@ -35,7 +39,10 @@ _FEATURE_ENV_DEFAULTS: dict[str, tuple[str, bool]] = {
 }
 
 _WORKFLOW_DEPENDENCIES: dict[str, list[str]] = {
-    "advisor_workbench_overview": ["lotus_core.support.overview_api"],
+    "advisor_workbench_overview": [
+        "lotus_core.support.overview_api",
+        "core.observability.portfolio_supportability",
+    ],
     "portfolio_bulk_onboarding": [
         "lotus_core.ingestion.bulk_upload_adapter",
         "lotus_core.ingestion.portfolio_bundle_adapter",
@@ -44,8 +51,12 @@ _WORKFLOW_DEPENDENCIES: dict[str, list[str]] = {
 }
 
 _DEFAULT_INPUT_MODES_BY_CONSUMER: dict[str, list[str]] = {
+    "lotus-advise": ["lotus_core_ref"],
     "lotus-performance": ["lotus_core_ref"],
     "lotus-manage": ["lotus_core_ref"],
+    "lotus-report": ["lotus_core_ref"],
+    "lotus-risk": ["lotus_core_ref"],
+    "lotus-workbench": ["lotus_core_ref"],
     "lotus-gateway": ["lotus_core_ref", "inline_bundle", "file_upload"],
     "UI": ["lotus_core_ref", "inline_bundle", "file_upload"],
     "UNKNOWN": ["lotus_core_ref"],
@@ -171,6 +182,15 @@ class CapabilitiesService:
                 enabled=feature_states["lotus_core.support.lineage_api"],
                 owner_service="lotus-core",
                 description="Lineage and epoch/watermark traceability APIs.",
+            ),
+            FeatureCapability(
+                key="core.observability.portfolio_supportability",
+                enabled=feature_states["core.observability.portfolio_supportability"],
+                owner_service="lotus-core",
+                description=(
+                    "Portfolio supportability summary on readiness responses for "
+                    "Gateway, Workbench, and downstream app health composition."
+                ),
             ),
             FeatureCapability(
                 key="lotus_core.ingestion.bulk_upload_adapter",

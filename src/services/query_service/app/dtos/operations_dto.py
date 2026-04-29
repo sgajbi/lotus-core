@@ -1043,6 +1043,14 @@ class LoadRunProgressResponse(BaseModel):
 ReadinessStatus = Literal["READY", "PENDING", "BLOCKED", "NO_ACTIVITY"]
 ReadinessSeverity = Literal["INFO", "WARNING", "ERROR"]
 ReadinessDomain = Literal["holdings", "pricing", "transactions", "reporting"]
+PortfolioSupportabilityState = Literal["ready", "degraded", "empty"]
+PortfolioSupportabilityReason = Literal[
+    "portfolio_supportability_ready",
+    "portfolio_supportability_blocked",
+    "portfolio_supportability_pending",
+    "portfolio_supportability_empty",
+]
+PortfolioSupportabilityFreshnessBucket = Literal["current", "stale", "unknown"]
 
 
 class PortfolioReadinessReason(BaseModel):
@@ -1092,6 +1100,49 @@ class PortfolioReadinessBucket(BaseModel):
     reasons: list[PortfolioReadinessReason] = Field(
         default_factory=list,
         description="Source-owned reasons explaining why this readiness bucket is not fully ready.",
+    )
+
+
+class PortfolioSupportabilitySummary(BaseModel):
+    feature_key: str = Field(
+        "core.observability.portfolio_supportability",
+        description="RFC-0108 ecosystem feature key implemented by this supportability summary.",
+        examples=["core.observability.portfolio_supportability"],
+    )
+    state: PortfolioSupportabilityState = Field(
+        ...,
+        description="Overall supportability state for portfolio readiness composition.",
+        examples=["ready"],
+    )
+    reason: PortfolioSupportabilityReason = Field(
+        ...,
+        description="Bounded reason code for the supportability state.",
+        examples=["portfolio_supportability_ready"],
+    )
+    freshness_bucket: PortfolioSupportabilityFreshnessBucket = Field(
+        ...,
+        description="Freshness bucket derived from resolved source-owned as-of evidence.",
+        examples=["current"],
+    )
+    ready_domains: int = Field(
+        ...,
+        description="Number of readiness domains currently READY.",
+        examples=[4],
+    )
+    pending_domains: int = Field(
+        ...,
+        description="Number of readiness domains currently PENDING.",
+        examples=[0],
+    )
+    blocked_domains: int = Field(
+        ...,
+        description="Number of readiness domains currently BLOCKED.",
+        examples=[0],
+    )
+    no_activity_domains: int = Field(
+        ...,
+        description="Number of readiness domains with no source-owned activity.",
+        examples=[0],
     )
 
 
@@ -1181,6 +1232,13 @@ class PortfolioReadinessResponse(BaseModel):
     blocking_reasons: list[PortfolioReadinessReason] = Field(
         default_factory=list,
         description="Flattened blocking reasons that make the portfolio not fully ready.",
+    )
+    supportability: PortfolioSupportabilitySummary = Field(
+        ...,
+        description=(
+            "RFC-0108 portfolio supportability posture for Gateway, Workbench, and "
+            "downstream ecosystem health composition."
+        ),
     )
     latest_booked_transaction_date: Optional[date] = Field(
         None,

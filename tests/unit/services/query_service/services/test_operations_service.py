@@ -328,9 +328,7 @@ async def test_operations_service_helper_branches_cover_ratio_division_and_elaps
 
 async def test_operations_service_load_run_state_and_handoff_pressure_cover_major_paths() -> None:
     assert (
-        OperationsService._get_load_run_state(
-            _load_run_summary(failed_valuation_jobs=1)
-        )
+        OperationsService._get_load_run_state(_load_run_summary(failed_valuation_jobs=1))
         == "FAILED"
     )
     assert (
@@ -344,9 +342,7 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "COMPLETE"
     )
     assert (
-        OperationsService._get_load_run_state(
-            _load_run_summary(transactions_ingested=0)
-        )
+        OperationsService._get_load_run_state(_load_run_summary(transactions_ingested=0))
         == "SEEDING"
     )
     assert OperationsService._get_load_run_state(_load_run_summary()) == "MATERIALIZING"
@@ -378,15 +374,14 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "DOWNSTREAM_OF_VALUATION"
     )
     assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
-            _load_run_summary()
-        )
+        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(_load_run_summary())
         == "MIXED_HANDOFF_PRESSURE"
     )
 
 
-async def test_operations_service_operational_state_helpers_cover_terminal_and_stale_paths(
-) -> None:
+async def test_operations_service_operational_state_helpers_cover_terminal_and_stale_paths() -> (
+    None
+):
     now = FIXED_GENERATED_AT
     stale_at = now - timedelta(minutes=30)
     assert OperationsService._aggregate_statuses([]) == UNKNOWN
@@ -405,28 +400,21 @@ async def test_operations_service_operational_state_helpers_cover_terminal_and_s
         == "STALE_PROCESSING"
     )
     assert (
-        OperationsService._get_support_job_operational_state("PROCESSING", now, now)
-        == "PROCESSING"
+        OperationsService._get_support_job_operational_state("PROCESSING", now, now) == "PROCESSING"
+    )
+    assert OperationsService._get_support_job_operational_state("PENDING", now, now) == "PENDING"
+    assert (
+        OperationsService._get_support_job_operational_state("COMPLETED", now, now) == "COMPLETED"
     )
     assert (
-        OperationsService._get_support_job_operational_state("PENDING", now, now)
-        == "PENDING"
-    )
-    assert (
-        OperationsService._get_support_job_operational_state("COMPLETED", now, now)
-        == "COMPLETED"
-    )
-    assert (
-        OperationsService._get_analytics_export_operational_state("FAILED", None, now)
-        == "FAILED"
+        OperationsService._get_analytics_export_operational_state("FAILED", None, now) == "FAILED"
     )
     assert (
         OperationsService._get_analytics_export_operational_state("running", stale_at, now)
         == "STALE_RUNNING"
     )
     assert (
-        OperationsService._get_analytics_export_operational_state("running", now, now)
-        == "RUNNING"
+        OperationsService._get_analytics_export_operational_state("running", now, now) == "RUNNING"
     )
     assert (
         OperationsService._get_analytics_export_operational_state("accepted", now, now)
@@ -446,17 +434,10 @@ async def test_operations_service_reconciliation_and_lineage_helpers_cover_block
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
     assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
     assert (
-        OperationsService._get_portfolio_control_stage_operational_state("COMPLETED")
-        == "COMPLETED"
+        OperationsService._get_portfolio_control_stage_operational_state("COMPLETED") == "COMPLETED"
     )
-    assert (
-        OperationsService._get_reconciliation_finding_operational_state("ERROR")
-        == "BLOCKING"
-    )
-    assert (
-        OperationsService._get_reconciliation_finding_operational_state("WARN")
-        == "NON_BLOCKING"
-    )
+    assert OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
+    assert OperationsService._get_reconciliation_finding_operational_state("WARN") == "NON_BLOCKING"
     assert (
         OperationsService._get_reprocessing_key_operational_state("REPROCESSING", stale_at, now)
         == "STALE_REPROCESSING"
@@ -466,8 +447,7 @@ async def test_operations_service_reconciliation_and_lineage_helpers_cover_block
         == "REPROCESSING"
     )
     assert (
-        OperationsService._get_reprocessing_key_operational_state("CURRENT", now, now)
-        == "CURRENT"
+        OperationsService._get_reprocessing_key_operational_state("CURRENT", now, now) == "CURRENT"
     )
     assert OperationsService._has_lineage_artifact_gap(None, None, None, None) is False
     assert (
@@ -2511,6 +2491,10 @@ async def test_get_portfolio_readiness_surfaces_missing_historical_fx_as_blockin
     assert response.pricing.status == "BLOCKED"
     assert response.reporting.status == "BLOCKED"
     assert response.holdings.status == "BLOCKED"
+    assert response.supportability.state == "degraded"
+    assert response.supportability.reason == "portfolio_supportability_blocked"
+    assert response.supportability.freshness_bucket == "stale"
+    assert response.supportability.blocked_domains == 4
     assert response.missing_historical_fx_dependencies.missing_count == 2
     assert response.missing_historical_fx_dependencies.sample_records[0].transaction_id == "TXN-1"
     assert any(
@@ -2602,6 +2586,10 @@ async def test_get_portfolio_readiness_marks_pending_when_snapshots_lag_transact
     assert response.pricing.status == "PENDING"
     assert response.reporting.status == "PENDING"
     assert response.transactions.status == "READY"
+    assert response.supportability.state == "degraded"
+    assert response.supportability.reason == "portfolio_supportability_pending"
+    assert response.supportability.ready_domains == 1
+    assert response.supportability.pending_domains == 3
     assert response.snapshot_valuation_unvalued_positions == 1
     assert any(
         reason.code == "SNAPSHOT_BEHIND_TRANSACTION_LEDGER" for reason in response.holdings.reasons
