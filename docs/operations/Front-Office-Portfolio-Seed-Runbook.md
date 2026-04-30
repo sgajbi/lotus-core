@@ -114,8 +114,13 @@ available, check `portfolio_aggregation_jobs` for a pending backlog and
 requires portfolio aggregation to catch up before workbench validation or demo
 screenshots are accepted.
 
-If a prior local load or performance run polluted shared `lotus-core` Docker state, reset the
-Docker-backed core runtime before reseeding instead of broadening the seed cleanup SQL. The
+The seed cleanup remains bounded to `PB_SG_GLOBAL_BAL_001` data plus known volatile replay fences
+for canonical seed topics. It clears stale local `processed_events` fences that can survive when
+Kafka offsets are reset or reused, but it must not delete unrelated processed-event history or broad
+runtime tables.
+
+If a prior local load or performance run polluted broader shared `lotus-core` Docker state, reset
+the Docker-backed core runtime before reseeding instead of broadening the seed cleanup SQL. The
 governed Workbench startup script accepts `-CleanCoreState` for this purpose.
 
 ## Related Documents

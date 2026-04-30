@@ -411,14 +411,41 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
     assert "delete from reprocessing_jobs;" not in sql
-    assert "service_name = 'position-calculator'" not in sql
-    assert "event_id like 'transaction_processing.ready-%'" not in sql
-    assert "event_id like 'transactions.cost.processed-%'" not in sql
-    assert "service_name = 'cost-calculator'" not in sql
-    assert "service_name = 'cashflow-calculator'" not in sql
-    assert "service_name = 'pipeline-orchestrator-processed-txn'" not in sql
-    assert "service_name = 'persistence-portfolios'" not in sql
-    assert "event_id like 'portfolios.raw.received-%'" not in sql
+    assert "delete from processed_events where service_name in" in sql
+    assert "delete from processed_events where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+
+
+def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
+    sql = build_portfolio_seed_cleanup_sql(portfolio_id="PB_SG_GLOBAL_BAL_001")
+
+    assert "delete from processed_events where service_name in" in sql
+    assert "'persistence-business-dates'" in sql
+    assert "'persistence-fx-rates'" in sql
+    assert "'persistence-instruments'" in sql
+    assert "'persistence-market-prices'" in sql
+    assert "'persistence-portfolios'" in sql
+    assert "'persistence-transactions'" in sql
+    assert "'cost-calculator'" in sql
+    assert "'position-calculator'" in sql
+    assert "'cashflow-calculator'" in sql
+    assert "'pipeline-orchestrator-processed-txn'" in sql
+    assert "'price-event-reprocessing-trigger'" in sql
+    assert "'position-valuation-calculator'" in sql
+    assert "event_id like 'business_dates.raw.received-%'" in sql
+    assert "event_id like 'fx_rates.raw.received-%'" in sql
+    assert "event_id like 'instruments.raw.received-%'" in sql
+    assert "event_id like 'market_prices.raw.received-%'" in sql
+    assert "event_id like 'portfolios.raw.received-%'" in sql
+    assert "event_id like 'market_prices.persisted-%'" in sql
+    assert "event_id like 'transactions.reprocessing.requested-%'" in sql
+    assert "event_id like 'transactions.persisted-%'" in sql
+    assert "event_id like 'transactions.cost.processed-%'" in sql
+    assert "event_id like 'transaction_processing.ready-%'" in sql
+    assert "event_id like 'valuation.job.requested-%'" in sql
+    assert "delete from processed_events where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from processed_events;" not in sql
+    assert "'reporting-export-service'" not in sql
+    assert "event_id like 'portfolio_day.reconciliation.%'" not in sql
 
 
 def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
