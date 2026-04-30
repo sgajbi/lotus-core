@@ -52,6 +52,13 @@ When a portfolio or load scenario looks wrong, check in this order:
 5. database facts only when rollout mismatch, migration doubt, or API/schema drift makes the API
    evidence insufficient
 
+## Canonical front-office reseed
+
+Routine canonical front-office reseeding is scoped to `PB_SG_GLOBAL_BAL_001`. The seed tool may
+clear known volatile replay fences for canonical seed topics when local Kafka offsets have been
+reset or reused, but it must not perform broad `processed_events` deletion. If broader local
+runtime state is polluted, reset the Docker-backed core runtime before reseeding.
+
 ## Startup checks
 
 When app-local runtime is unhealthy, check this order:

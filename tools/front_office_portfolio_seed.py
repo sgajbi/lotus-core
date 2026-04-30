@@ -36,6 +36,34 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
     "IDX_GLOBAL_EQUITY_TR",
     "IDX_GLOBAL_BOND_TR",
 )
+FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
+    "persistence-business-dates",
+    "persistence-fx-rates",
+    "persistence-instruments",
+    "persistence-market-prices",
+    "persistence-portfolios",
+    "persistence-transactions",
+    "cost-calculator",
+    "position-calculator",
+    "cashflow-calculator",
+    "pipeline-orchestrator-processed-txn",
+    "price-event-reprocessing-trigger",
+    "position-valuation-calculator",
+)
+FRONT_OFFICE_RESEED_VOLATILE_EVENT_TOPIC_PREFIXES = (
+    "business_dates.raw.received-",
+    "fx_rates.raw.received-",
+    "instruments.raw.received-",
+    "market_prices.raw.received-",
+    "portfolios.raw.received-",
+    "transactions.raw.received-",
+    "transactions.reprocessing.requested-",
+    "transactions.persisted-",
+    "transactions.cost.processed-",
+    "transaction_processing.ready-",
+    "market_prices.persisted-",
+    "valuation.job.requested-",
+)
 
 
 @dataclass(frozen=True)
@@ -122,10 +150,9 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     """
     Build the destructive local reseed cleanup SQL for the canonical front-office seed.
 
-    This cleanup stays scoped to portfolio-owned rows only. If a local Docker-backed runtime has
-    stale shared Kafka, idempotency, or replay state from a prior load or performance run, reset
-    the lotus-core Docker state before reseeding instead of deleting shared runtime tables from the
-    front-office seed tool.
+    This cleanup stays scoped to portfolio-owned rows and known local replay fences. The Docker
+    local stack may retain Postgres idempotency rows while Kafka offsets are reset or reused; clear
+    only the canonical seed topic/service fences that can block a deterministic front-office reseed.
     """
     return "\n".join(
         [
@@ -152,6 +179,16 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
                 f"(select transaction_id from transactions where portfolio_id = '{portfolio_id}');"
             ),
             f"delete from pipeline_stage_state where portfolio_id = '{portfolio_id}';",
+            (
+                "delete from processed_events "
+                "where service_name in "
+                f"({_sql_list(FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES)}) "
+                "and ("
+                + _processed_event_topic_prefix_predicate(
+                    FRONT_OFFICE_RESEED_VOLATILE_EVENT_TOPIC_PREFIXES
+                )
+                + ");"
+            ),
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
@@ -226,6 +263,14 @@ def _interpolate_prices(
 
 def _invert_rate(rate: str, precision: str = "0.000001") -> str:
     return format((Decimal("1") / Decimal(rate)).quantize(Decimal(precision)), "f")
+
+
+def _sql_list(values: tuple[str, ...]) -> str:
+    return ", ".join(f"'{value}'" for value in values)
+
+
+def _processed_event_topic_prefix_predicate(prefixes: tuple[str, ...]) -> str:
+    return " or ".join(f"event_id like '{prefix}%'" for prefix in prefixes)
 
 
 def _tx(
