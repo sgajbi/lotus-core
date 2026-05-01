@@ -718,6 +718,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert supportability_summary["properties"]["state"]["description"] == (
         "Overall supportability state for portfolio readiness composition."
     )
+    assert supportability_summary["properties"]["metric_labels"]["description"].startswith(
+        "Bounded Prometheus label keys emitted by lotus_core_portfolio_supportability_total"
+    )
     assert readiness_response["properties"]["missing_historical_fx_dependencies"][
         "description"
     ].startswith("Source-owned summary of cross-currency transactions blocked")

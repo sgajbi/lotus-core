@@ -10,6 +10,10 @@
   CI and validation governance
 - `RFC-0067`
   API vocabulary and OpenAPI governance
+- `RFC-0108`
+  front-office analytics UI observability and operational posture; `lotus-core` implements the
+  `core.observability.portfolio_supportability` source supportability slice through bounded
+  readiness response fields and bounded Prometheus metric labels.
 
 ## Key local references
 

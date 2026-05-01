@@ -52,6 +52,30 @@ When a portfolio or load scenario looks wrong, check in this order:
 5. database facts only when rollout mismatch, migration doubt, or API/schema drift makes the API
    evidence insufficient
 
+## Portfolio Readiness Observability
+
+`GET /support/portfolios/{portfolio_id}/readiness` is the source-owned supportability surface for
+front-office portfolio readiness. The response `supportability` object publishes:
+
+- `feature_key`: `core.observability.portfolio_supportability`
+- `state`: `ready`, `degraded`, or `empty`
+- `reason`: a bounded `portfolio_supportability_*` reason
+- `freshness_bucket`: `current`, `stale`, or `unknown`
+- `metric_labels`: `state`, `reason`, and `freshness_bucket`
+
+The matching Prometheus counter is `lotus_core_portfolio_supportability_total`. Do not add
+portfolio, account, client, transaction, security, trace, correlation, request-body, or
+response-body fields to metric labels. Use readiness payload fields for drill-through, and use
+metrics only for aggregate supportability posture.
+
+```mermaid
+flowchart LR
+    A[Readiness domains] --> B[PortfolioSupportabilitySummary]
+    B --> C[Gateway and Workbench support state]
+    B --> D[lotus_core_portfolio_supportability_total]
+    D --> E[Aggregate alerts and dashboards]
+```
+
 ## Canonical front-office reseed
 
 Routine canonical front-office reseeding is scoped to `PB_SG_GLOBAL_BAL_001`. The seed tool may
