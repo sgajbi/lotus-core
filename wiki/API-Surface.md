@@ -108,9 +108,10 @@ GET /lineage/portfolios/{portfolio_id}/keys
 ```
 
 `GET /support/portfolios/{portfolio_id}/readiness` carries a bounded `supportability` object with
-`state`, `reason`, and `freshness_bucket` values for platform-wide operational posture aggregation.
-The same posture is observable through the `lotus_core_portfolio_supportability_total` Prometheus
-counter.
+`state`, `reason`, `freshness_bucket`, and `metric_labels` values for platform-wide operational
+posture aggregation. The same posture is observable through the
+`lotus_core_portfolio_supportability_total` Prometheus counter, whose label contract is limited to
+`state`, `reason`, and `freshness_bucket`.
 
 Write ingress:
 

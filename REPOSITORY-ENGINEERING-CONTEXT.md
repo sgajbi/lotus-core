@@ -50,6 +50,13 @@ Current repository posture:
 18. RFC-0087 trust telemetry proof for `PortfolioStateSnapshot` now lives under
     `contracts/trust-telemetry/` and is validated by `tests/unit/test_trust_telemetry.py` against
     the platform trust telemetry validator when `lotus-platform` is available.
+19. RFC-0108 portfolio readiness supportability now publishes the bounded
+    `metric_labels=["state", "reason", "freshness_bucket"]` contract in
+    `PortfolioSupportabilitySummary`, uses the shared
+    `portfolio_common.observability_contracts.PORTFOLIO_SUPPORTABILITY_METRIC_LABELS` tuple for the
+    Prometheus counter, and has focused tests proving
+    `lotus_core_portfolio_supportability_total` does not add portfolio, account, client,
+    correlation, trace, transaction, security, request-body, or response-body labels.
 
 ## Architecture And Module Map
 

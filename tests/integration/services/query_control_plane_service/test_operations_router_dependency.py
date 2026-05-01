@@ -292,6 +292,7 @@ async def test_portfolio_readiness_success(async_test_client):
             "state": "degraded",
             "reason": "portfolio_supportability_blocked",
             "freshness_bucket": "current",
+            "metric_labels": ["state", "reason", "freshness_bucket"],
             "ready_domains": 0,
             "pending_domains": 1,
             "blocked_domains": 3,
@@ -332,6 +333,11 @@ async def test_portfolio_readiness_success(async_test_client):
     assert response.json()["supportability"]["feature_key"] == (
         "core.observability.portfolio_supportability"
     )
+    assert response.json()["supportability"]["metric_labels"] == [
+        "state",
+        "reason",
+        "freshness_bucket",
+    ]
     assert response.json()["missing_historical_fx_dependencies"]["missing_count"] == 1
     mock_service.get_portfolio_readiness.assert_awaited_once_with(
         portfolio_id="P1",
@@ -358,6 +364,7 @@ async def test_portfolio_readiness_defaults_apply(async_test_client):
             "state": "ready",
             "reason": "portfolio_supportability_ready",
             "freshness_bucket": "current",
+            "metric_labels": ["state", "reason", "freshness_bucket"],
             "ready_domains": 4,
             "pending_domains": 0,
             "blocked_domains": 0,

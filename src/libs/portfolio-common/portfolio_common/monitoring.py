@@ -4,6 +4,8 @@ from collections import Counter as CollectionsCounter
 
 from prometheus_client import Counter, Gauge, Histogram
 
+from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
+
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------
@@ -411,7 +413,7 @@ FINANCIAL_RECONCILIATION_RUN_DURATION_SECONDS = Histogram(
 LOTUS_CORE_PORTFOLIO_SUPPORTABILITY_TOTAL = Counter(
     "lotus_core_portfolio_supportability_total",
     "Portfolio supportability readiness summaries emitted by lotus-core.",
-    ["state", "reason", "freshness_bucket"],
+    PORTFOLIO_SUPPORTABILITY_METRIC_LABELS,
 )
 
 

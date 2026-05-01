@@ -22,6 +22,16 @@ The current runtime centers on:
 
 This makes it a contract and operations plane, not a generic duplicate of the read API.
 
+## Current feature state
+
+| Surface | What it provides today | What it does not own |
+| --- | --- | --- |
+| Support and lineage | Portfolio readiness, support overview, control-stage evidence, replay evidence, reconciliation evidence, and lineage drill-through. | Performance, risk, or advisory business conclusions. |
+| Analytics inputs | Portfolio and position timeseries inputs, analytics references, and export-job lifecycle for large-window retrieval. | Calculated performance or risk metrics. |
+| Integration contracts | Policy-aware snapshots, benchmark/reference contracts, enrichment contracts, taxonomy and market/reference coverage diagnostics. | Raw ad hoc table access or unmanaged compatibility aliases. |
+| Capabilities and policy | Consumer-aware capability and policy discovery using canonical snake_case query parameters. | Client-specific entitlement adjudication outside the governed policy contract. |
+| Simulation | Deterministic source-owned simulation sessions and projected state. | Recommendation, suitability, or advisor decisioning logic. |
+
 ## Runtime role
 
 The service groups several related surfaces:
@@ -42,6 +52,34 @@ The service groups several related surfaces:
 
 The key design rule is that these APIs publish governed source state, support evidence, or control
 policy. They do not own downstream analytics conclusions or advisory decisioning.
+
+## Integration flow
+
+```mermaid
+flowchart TB
+    QS[query_service canonical reads] --> QCP[query_control_plane_service]
+    QCP --> GW[lotus-gateway experience API]
+    QCP --> PERF[lotus-performance analytics inputs]
+    QCP --> RISK[lotus-risk analytics inputs]
+    QCP --> ADV[lotus-advise source context]
+    QCP --> OPS[Operations and support tooling]
+    GW --> WB[lotus-workbench]
+```
+
+The service boundary exists to prevent downstream consumers from binding to accidental internal
+read shapes. It gives integrations a stable contract for source data, readiness, supportability,
+policy, and simulation while keeping analytics conclusions in their owning services.
+
+## Boundary decision guide
+
+Use `query_service` when the route is a canonical operational read model.
+
+Use `query_control_plane_service` when the route is mainly for downstream systems, support,
+simulation, governed paging/export, policy, lineage, or diagnostics.
+
+Use downstream services when the route returns performance, risk, attribution, active-risk, or
+advisory interpretation. `lotus-core` may publish the source inputs and readiness evidence for
+those workflows, but it must not publish the downstream conclusion itself.
 
 ## Data and contract surfaces it owns
 

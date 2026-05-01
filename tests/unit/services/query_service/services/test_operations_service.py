@@ -2,7 +2,9 @@ from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
 from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLETE, PARTIAL, UNKNOWN
+from prometheus_client import REGISTRY, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.operations_repository import (
@@ -18,6 +20,17 @@ from src.services.query_service.app.services.operations_service import Operation
 pytestmark = pytest.mark.asyncio
 
 FIXED_GENERATED_AT = datetime(2026, 4, 18, 8, 10, tzinfo=timezone.utc)
+FORBIDDEN_SUPPORTABILITY_METRIC_LABELS = (
+    "portfolio_id",
+    "account_id",
+    "client_id",
+    "correlation_id",
+    "trace_id",
+    "transaction_id",
+    "security_id",
+    "request_body",
+    "response_body",
+)
 
 
 class _FixedDateTime(datetime):
@@ -26,6 +39,15 @@ class _FixedDateTime(datetime):
         if tz is None:
             return FIXED_GENERATED_AT.replace(tzinfo=None)
         return FIXED_GENERATED_AT.astimezone(tz)
+
+
+def _portfolio_supportability_metric_lines() -> list[str]:
+    metrics_text = generate_latest(REGISTRY).decode("utf-8")
+    return [
+        line
+        for line in metrics_text.splitlines()
+        if line.startswith("lotus_core_portfolio_supportability_total{")
+    ]
 
 
 @pytest.fixture
@@ -2494,7 +2516,17 @@ async def test_get_portfolio_readiness_surfaces_missing_historical_fx_as_blockin
     assert response.supportability.state == "degraded"
     assert response.supportability.reason == "portfolio_supportability_blocked"
     assert response.supportability.freshness_bucket == "stale"
+    assert response.supportability.metric_labels == PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
     assert response.supportability.blocked_domains == 4
+    supportability_metric_line = next(
+        line
+        for line in _portfolio_supportability_metric_lines()
+        if 'reason="portfolio_supportability_blocked"' in line
+        and 'state="degraded"' in line
+        and 'freshness_bucket="stale"' in line
+    )
+    for forbidden_label in FORBIDDEN_SUPPORTABILITY_METRIC_LABELS:
+        assert f'{forbidden_label}="' not in supportability_metric_line
     assert response.missing_historical_fx_dependencies.missing_count == 2
     assert response.missing_historical_fx_dependencies.sample_records[0].transaction_id == "TXN-1"
     assert any(
@@ -2588,6 +2620,7 @@ async def test_get_portfolio_readiness_marks_pending_when_snapshots_lag_transact
     assert response.transactions.status == "READY"
     assert response.supportability.state == "degraded"
     assert response.supportability.reason == "portfolio_supportability_pending"
+    assert response.supportability.metric_labels == PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
     assert response.supportability.ready_domains == 1
     assert response.supportability.pending_domains == 3
     assert response.snapshot_valuation_unvalued_positions == 1

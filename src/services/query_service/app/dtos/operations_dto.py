@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from typing import Any, Literal, Optional
 
+from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
 from pydantic import BaseModel, Field
 
 from ..support_policy import (
@@ -1123,6 +1124,15 @@ class PortfolioSupportabilitySummary(BaseModel):
         ...,
         description="Freshness bucket derived from resolved source-owned as-of evidence.",
         examples=["current"],
+    )
+    metric_labels: tuple[str, ...] = Field(
+        PORTFOLIO_SUPPORTABILITY_METRIC_LABELS,
+        description=(
+            "Bounded Prometheus label keys emitted by "
+            "lotus_core_portfolio_supportability_total; identifiers and request payload "
+            "fields must not be added as metric labels."
+        ),
+        examples=[["state", "reason", "freshness_bucket"]],
     )
     ready_domains: int = Field(
         ...,
