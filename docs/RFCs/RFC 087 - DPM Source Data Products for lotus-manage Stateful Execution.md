@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Implemented |
 | Created | 2026-05-02 |
 | Last Updated | 2026-05-02 |
 | Owners | lotus-core engineering; lotus-manage engineering |
@@ -1188,7 +1188,7 @@ gateway/workbench integration work.
 | Slice 10 - Managed mandate canonical automation | Complete and live-proven | Seed data exists for source-product validation, and canonical core/manage live evidence passed for `PB_SG_GLOBAL_BAL_001`. |
 | Slice 11 - Implementation proof | Complete | Local tests, guards, remote Feature Lane evidence, and live canonical evidence through `make live-dpm-source-validate` all passed. |
 | Slice 12 - Second-last hardening and review | Complete for RFC-087 scope | Swagger, route-family metadata, source-product metadata, endpoint behavior, readiness, and downstream manage integration were reviewed against live deployed responses. |
-| Slice 13 - Final closure | Complete for branch source | Wiki source, supported-features status, RFC closure, context posture, and downstream `lotus-manage` proof are current. GitHub wiki publication remains the governed post-merge synchronization step. |
+| Slice 13 - Final closure | Complete | Wiki source, supported-features status, RFC closure, context posture, downstream `lotus-manage` proof, GitHub wiki publication, branch hygiene, and PR merge closure are complete. |
 
 ### What Was Truly Completed
 
