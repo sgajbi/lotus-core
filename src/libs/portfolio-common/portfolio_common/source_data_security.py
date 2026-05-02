@@ -182,6 +182,15 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         audit_requirement=AUDIT_SYSTEM_ACCESS,
     ),
     SourceDataSecurityProfile(
+        product_name="DpmModelPortfolioTarget",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=REFERENCE_INTERNAL,
+        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+    ),
+    SourceDataSecurityProfile(
         product_name="ReconciliationEvidenceBundle",
         tenant_required=True,
         entitlement_required=True,
@@ -217,15 +226,6 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
 )
 
 DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
-    SourceDataSecurityProfile(
-        product_name="DpmModelPortfolioTarget",
-        tenant_required=True,
-        entitlement_required=True,
-        access_classification=SYSTEM_ACCESS,
-        sensitivity_classification=REFERENCE_INTERNAL,
-        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
-        audit_requirement=AUDIT_SYSTEM_ACCESS,
-    ),
     SourceDataSecurityProfile(
         product_name="DiscretionaryMandateBinding",
         tenant_required=True,

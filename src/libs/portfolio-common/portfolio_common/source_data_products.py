@@ -199,6 +199,18 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Canonical risk-free rate source series for excess-return workflows.",
     ),
     SourceDataProductDefinition(
+        product_name="DpmModelPortfolioTarget",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/model-portfolios/{model_portfolio_id}/targets",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes="DPM source product for approved model target weights, bands, and cash reserve policy.",
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
@@ -244,18 +256,6 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
 )
 
 DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
-    SourceDataProductDefinition(
-        product_name="DpmModelPortfolioTarget",
-        product_version="v1",
-        route_family=ANALYTICS_INPUT,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
-        owner="lotus-core",
-        consumers=("lotus-manage",),
-        current_routes=("/integration/model-portfolios/{model_portfolio_id}/targets",),
-        paging_mode=NOT_APPLICABLE,
-        export_mode=NOT_APPLICABLE,
-        notes="Planned DPM source product for model target weights, bands, and cash reserve policy.",
-    ),
     SourceDataProductDefinition(
         product_name="DiscretionaryMandateBinding",
         product_version="v1",

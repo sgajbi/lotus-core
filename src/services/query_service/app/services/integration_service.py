@@ -6,9 +6,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any, Literal
 
 from portfolio_common.market_reference_quality import (
     BLOCKING_QUALITY_STATUSES,
@@ -17,6 +15,7 @@ from portfolio_common.market_reference_quality import (
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyProvenanceMetadata
 from ..dtos.reference_integration_dto import (
@@ -41,6 +40,10 @@ from ..dtos.reference_integration_dto import (
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
     IntegrationWindow,
+    ModelPortfolioSupportability,
+    ModelPortfolioTargetRequest,
+    ModelPortfolioTargetResponse,
+    ModelPortfolioTargetRow,
     ReferencePageMetadata,
     RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
@@ -381,6 +384,88 @@ class IntegrationService:
             **self._runtime_metadata_for_existing_as_of_date(
                 as_of_date,
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+            ),
+        )
+
+    async def resolve_model_portfolio_targets(
+        self,
+        model_portfolio_id: str,
+        request: ModelPortfolioTargetRequest,
+    ) -> ModelPortfolioTargetResponse | None:
+        definition = await self._reference_repository.resolve_model_portfolio_definition(
+            model_portfolio_id=model_portfolio_id,
+            as_of_date=request.as_of_date,
+        )
+        if definition is None:
+            return None
+
+        targets = await self._reference_repository.list_model_portfolio_targets(
+            model_portfolio_id=model_portfolio_id,
+            model_portfolio_version=definition.model_portfolio_version,
+            as_of_date=request.as_of_date,
+            include_inactive_targets=request.include_inactive_targets,
+        )
+        target_rows = [
+            ModelPortfolioTargetRow(
+                instrument_id=row.instrument_id,
+                target_weight=self._as_decimal(row.target_weight),
+                min_weight=(
+                    self._as_decimal(row.min_weight) if row.min_weight is not None else None
+                ),
+                max_weight=(
+                    self._as_decimal(row.max_weight) if row.max_weight is not None else None
+                ),
+                target_status=row.target_status,
+                quality_status=row.quality_status,
+                source_record_id=row.source_record_id,
+            )
+            for row in targets
+        ]
+        total_weight = sum((row.target_weight for row in target_rows), Decimal("0"))
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "MODEL_TARGETS_READY"
+        if not target_rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "MODEL_TARGETS_EMPTY"
+        elif total_weight != Decimal("1.0000000000"):
+            supportability_state = "DEGRADED"
+            supportability_reason = "MODEL_TARGET_WEIGHTS_NOT_ONE"
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(
+            [definition],
+            targets,
+        )
+        return ModelPortfolioTargetResponse(
+            model_portfolio_id=definition.model_portfolio_id,
+            model_portfolio_version=definition.model_portfolio_version,
+            display_name=definition.display_name,
+            base_currency=definition.base_currency,
+            risk_profile=definition.risk_profile,
+            mandate_type=definition.mandate_type,
+            rebalance_frequency=definition.rebalance_frequency,
+            approval_status=definition.approval_status,
+            approved_at=definition.approved_at,
+            effective_from=definition.effective_from,
+            effective_to=definition.effective_to,
+            targets=target_rows,
+            supportability=ModelPortfolioSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                target_count=len(target_rows),
+                total_target_weight=total_weight,
+            ),
+            lineage={
+                "source_system": definition.source_system or "unknown",
+                "source_record_id": definition.source_record_id or "unknown",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata(
+                request.as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    targets,
+                    required_count=len(target_rows),
+                ),
+                latest_evidence_timestamp=latest_evidence_timestamp,
             ),
         )
 

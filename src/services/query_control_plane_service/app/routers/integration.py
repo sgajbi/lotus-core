@@ -37,6 +37,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
+    ModelPortfolioTargetRequest,
+    ModelPortfolioTargetResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
@@ -49,6 +51,7 @@ from src.services.query_service.app.services.core_snapshot_service import (
     SnapshotGovernanceContext,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+
 from .response_helpers import problem_response
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
@@ -68,6 +71,9 @@ INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
 }
 BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark assignment found for portfolio and as_of_date."
+}
+MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = {
+    "detail": "No approved model portfolio target found for model_portfolio_id and as_of_date."
 }
 BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
@@ -338,6 +344,55 @@ async def resolve_portfolio_benchmark_assignment(
 
 
 @router.post(
+    "/model-portfolios/{model_portfolio_id}/targets",
+    response_model=ModelPortfolioTargetResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No approved model portfolio target found.",
+            MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve approved DPM model portfolio targets",
+    description=(
+        "What: Return the approved effective-dated model portfolio target weights and "
+        "instrument bands required by discretionary mandate portfolio management.\n"
+        "How: Resolves the latest approved model version for `model_portfolio_id` and "
+        "`as_of_date`, filters inactive targets by default, returns deterministic "
+        "instrument ordering, and includes source-data runtime metadata, supportability, "
+        "and lineage.\n"
+        "When: Use this endpoint when lotus-manage needs governed target allocation input "
+        "for stateful DPM analysis, simulation, or rebalance execution. Do not use it as "
+        "a general advisory proposal simulator or as a replacement for portfolio holdings."
+    ),
+    openapi_extra=source_data_product_openapi_extra("DpmModelPortfolioTarget"),
+)
+async def resolve_model_portfolio_targets(
+    request: ModelPortfolioTargetRequest,
+    model_portfolio_id: str = Path(
+        ...,
+        description="Canonical model portfolio identifier whose targets are requested.",
+        examples=["MODEL_SG_BALANCED_DPM"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ModelPortfolioTargetResponse:
+    response = cast(
+        ModelPortfolioTargetResponse | None,
+        await integration_service.resolve_model_portfolio_targets(
+            model_portfolio_id=model_portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No approved model portfolio target found for model_portfolio_id and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
     "/benchmarks/{benchmark_id}/composition-window",
     response_model=BenchmarkCompositionWindowResponse,
     responses={
@@ -353,11 +408,12 @@ async def resolve_portfolio_benchmark_assignment(
     description=(
         "What: Return all effective benchmark composition segments overlapping a "
         "requested window.\n"
-        "How: Resolves overlapping benchmark definition and composition records with deterministic "
-        "ordering and without daily-expanding weights.\n"
+        "How: Resolves overlapping benchmark definition and composition records with "
+        "deterministic ordering and without daily-expanding weights.\n"
         "When: Used by lotus-performance and other downstream consumers to calculate benchmark "
-        "returns across rebalance windows. This is the strategic cross-rebalance source contract; "
-        "single-date benchmark definition reads are not a substitute for long-window benchmark math."
+        "returns across rebalance windows. This is the strategic cross-rebalance source "
+        "contract; single-date benchmark definition reads are not a substitute for "
+        "long-window benchmark math."
     ),
     openapi_extra=source_data_product_openapi_extra("BenchmarkConstituentWindow"),
 )

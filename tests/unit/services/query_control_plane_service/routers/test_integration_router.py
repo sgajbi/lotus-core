@@ -22,6 +22,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_instrument_enrichment_bulk,
     get_integration_service,
     get_risk_free_coverage,
+    resolve_model_portfolio_targets,
     resolve_portfolio_benchmark_assignment,
 )
 from src.services.query_service.app.dtos.core_snapshot_dto import (
@@ -46,6 +47,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexCatalogRequest,
     IndexSeriesRequest,
     IntegrationWindow,
+    ModelPortfolioTargetRequest,
     RiskFreeSeriesRequest,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
@@ -513,6 +515,68 @@ async def test_resolve_portfolio_benchmark_assignment_success_path() -> None:
 
     assert response["portfolio_id"] == "DEMO_DPM_EUR_001"
     assert response["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_model_portfolio_targets = AsyncMock(
+        return_value={
+            "product_name": "DpmModelPortfolioTarget",
+            "product_version": "v1",
+            "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+            "model_portfolio_version": "2026.03",
+            "display_name": "Singapore Balanced DPM Model",
+            "base_currency": "SGD",
+            "risk_profile": "balanced",
+            "mandate_type": "discretionary",
+            "rebalance_frequency": "monthly",
+            "approval_status": "approved",
+            "approved_at": None,
+            "effective_from": "2026-03-25",
+            "effective_to": None,
+            "targets": [],
+            "supportability": {
+                "state": "INCOMPLETE",
+                "reason": "MODEL_TARGETS_EMPTY",
+                "target_count": 0,
+                "total_target_weight": "0",
+            },
+            "lineage": {
+                "source_system": "investment_office_model_system",
+                "source_record_id": "model_sg_balanced_202603",
+                "contract_version": "rfc_087_v1",
+            },
+        }
+    )
+    request = ModelPortfolioTargetRequest(as_of_date="2026-03-31")
+
+    response = await resolve_model_portfolio_targets(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "DpmModelPortfolioTarget"
+    mock_service.resolve_model_portfolio_targets.assert_awaited_once_with(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_model_portfolio_targets = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_model_portfolio_targets(
+            model_portfolio_id="MODEL_MISSING",
+            request=ModelPortfolioTargetRequest(as_of_date="2026-03-31"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,8 @@ import pytest
 import tools.front_office_seed_contract as front_office_seed_contract_module
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
+    DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+    DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_SEED_CONTRACT,
     _collect_front_office_readiness_diagnostics,
@@ -14,6 +16,7 @@ from tools.front_office_portfolio_seed import (
     _extract_support_overview_summary,
     _front_office_analytics_are_fresh,
     _ingest_front_office_core_data,
+    _ingest_reference_data,
     _reprocess_front_office_transactions,
     _required_cross_currency_fx_windows,
     _validate_front_office_cash_transactions,
@@ -279,6 +282,44 @@ def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
     assert all(price_date == bundle["as_of_date"] for price_date in last_price_by_security.values())
 
 
+def test_front_office_bundle_includes_dpm_model_portfolio_targets():
+    bundle = _build_bundle()
+
+    assert bundle["model_portfolios"] == [
+        {
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "model_portfolio_version": DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
+            "display_name": "Private Banking Singapore Global Balanced DPM Model",
+            "base_currency": "USD",
+            "risk_profile": "balanced",
+            "mandate_type": "discretionary",
+            "rebalance_frequency": "monthly",
+            "approval_status": "approved",
+            "approved_at": "2026-04-10T09:00:00Z",
+            "effective_from": "2026-04-01",
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": "model_pb_sg_global_bal_dpm_2026_04",
+            "source_timestamp": "2026-04-10T09:00:00Z",
+            "quality_status": "accepted",
+        }
+    ]
+    target_weight_total = sum(
+        Decimal(target["target_weight"]) for target in bundle["model_portfolio_targets"]
+    )
+    assert target_weight_total == Decimal("1.0000000000")
+    assert {target["instrument_id"] for target in bundle["model_portfolio_targets"]} == {
+        instrument["security_id"]
+        for instrument in bundle["instruments"]
+        if instrument["asset_class"] != "Cash"
+    }
+    assert all(
+        Decimal(target["min_weight"])
+        <= Decimal(target["target_weight"])
+        <= Decimal(target["max_weight"])
+        for target in bundle["model_portfolio_targets"]
+    )
+
+
 def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     bundle = _build_bundle()
     cash_security_ids = {
@@ -396,10 +437,13 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "delete from index_price_series where index_id in" in sql
     assert "delete from index_return_series where index_id in" in sql
     assert "delete from index_definitions where index_id in" in sql
+    assert "delete from model_portfolio_targets" in sql
+    assert "delete from model_portfolio_definitions" in sql
     assert "IDX_GLOBAL_EQUITY_TR" in sql
     assert "IDX_GLOBAL_BOND_TR" in sql
     assert "PB_SG_GLOBAL_BAL_001" in sql
     assert DEFAULT_BENCHMARK_ID in sql
+    assert DEFAULT_DPM_MODEL_PORTFOLIO_ID in sql
 
 
 def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed():
@@ -504,6 +548,37 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
             "poll_interval_seconds": 3,
         }
     ]
+
+
+def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatch):
+    bundle = _build_bundle()
+    calls = []
+
+    def capture_request(method, url, *, payload=None):
+        calls.append((method, url, payload))
+        return 202, {"accepted_count": 1}
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", capture_request)
+
+    _ingest_reference_data("http://ingestion.dev.lotus", bundle)
+
+    assert [call[1] for call in calls] == [
+        "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
+        "http://ingestion.dev.lotus/ingest/indices",
+        "http://ingestion.dev.lotus/ingest/index-price-series",
+        "http://ingestion.dev.lotus/ingest/index-return-series",
+        "http://ingestion.dev.lotus/ingest/benchmark-definitions",
+        "http://ingestion.dev.lotus/ingest/benchmark-compositions",
+        "http://ingestion.dev.lotus/ingest/benchmark-return-series",
+        "http://ingestion.dev.lotus/ingest/benchmark-assignments",
+        "http://ingestion.dev.lotus/ingest/model-portfolios",
+        "http://ingestion.dev.lotus/ingest/model-portfolio-targets",
+        "http://ingestion.dev.lotus/ingest/risk-free-series",
+    ]
+    assert calls[8][2]["model_portfolios"][0]["model_portfolio_id"] == (
+        DEFAULT_DPM_MODEL_PORTFOLIO_ID
+    )
+    assert calls[9][2]["model_portfolio_targets"]
 
 
 def test_front_office_seed_derives_required_cross_currency_fx_windows():
@@ -852,7 +927,7 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
                 "positions": [
                     {"security_id": "SEC-1", "valuation": {"market_value": "100"}},
                     {"security_id": "SEC-2", "valuation": {"market_value": "200"}},
-                ]
+                ],
             },
         ),
         "http://query.dev/portfolios/P1/transactions?limit=300&include_projected=true": (

@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, condecimal
+from pydantic import BaseModel, ConfigDict, Field, condecimal, model_validator
 
 
 class PortfolioBenchmarkAssignmentRecord(BaseModel):
@@ -52,6 +52,166 @@ class PortfolioBenchmarkAssignmentRecord(BaseModel):
         examples=[1],
         ge=1,
     )
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioDefinitionRecord(BaseModel):
+    model_portfolio_id: str = Field(
+        ...,
+        description="Canonical model portfolio identifier.",
+        examples=["MODEL_SG_BALANCED_DPM"],
+    )
+    model_portfolio_version: str = Field(
+        ...,
+        description="Approved model portfolio version.",
+        examples=["2026.03"],
+    )
+    display_name: str = Field(
+        ...,
+        description="Business display name for the model portfolio.",
+        examples=["Singapore Balanced DPM Model"],
+    )
+    base_currency: str = Field(..., description="Model base currency.", examples=["SGD"])
+    risk_profile: str = Field(
+        ...,
+        description="Mandate risk profile aligned to this model.",
+        examples=["balanced"],
+    )
+    mandate_type: str = Field(
+        ...,
+        description="Mandate type for which this model is approved.",
+        examples=["discretionary"],
+    )
+    rebalance_frequency: str | None = Field(
+        None,
+        description="Expected rebalance cadence.",
+        examples=["monthly"],
+    )
+    approval_status: Literal["approved", "draft", "retired", "suspended"] = Field(
+        "approved",
+        description="Model approval lifecycle status.",
+        examples=["approved"],
+    )
+    approved_at: datetime | None = Field(
+        None,
+        description="Timestamp at which the model version was approved.",
+        examples=["2026-03-20T09:00:00Z"],
+    )
+    effective_from: date = Field(
+        ...,
+        description="Model version effective start date.",
+        examples=["2026-03-25"],
+    )
+    effective_to: date | None = Field(
+        None,
+        description="Model version effective end date, null when open-ended.",
+        examples=["2026-12-31"],
+    )
+    source_system: str | None = Field(
+        None,
+        description="Upstream model portfolio source system.",
+        examples=["investment_office_model_system"],
+    )
+    source_record_id: str | None = Field(
+        None,
+        description="Source record identifier for deterministic replay.",
+        examples=["model_sg_balanced_202603"],
+    )
+    source_timestamp: datetime | None = Field(
+        None,
+        description="Source publication timestamp.",
+        examples=["2026-03-20T09:00:00Z"],
+    )
+    quality_status: str = Field(
+        "accepted",
+        description="Data quality status for the model definition.",
+        examples=["accepted"],
+    )
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioTargetRecord(BaseModel):
+    model_portfolio_id: str = Field(
+        ...,
+        description="Canonical model portfolio identifier.",
+        examples=["MODEL_SG_BALANCED_DPM"],
+    )
+    model_portfolio_version: str = Field(
+        ...,
+        description="Approved model portfolio version.",
+        examples=["2026.03"],
+    )
+    instrument_id: str = Field(
+        ...,
+        description="Canonical instrument identifier.",
+        examples=["EQ_US_AAPL"],
+    )
+    target_weight: condecimal(ge=Decimal(0), le=Decimal(1)) = Field(
+        ...,
+        description="Target instrument weight as a decimal ratio between 0 and 1.",
+        examples=["0.1200000000"],
+    )
+    min_weight: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(
+        None,
+        description="Optional minimum policy band for the instrument.",
+        examples=["0.0800000000"],
+    )
+    max_weight: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(
+        None,
+        description="Optional maximum policy band for the instrument.",
+        examples=["0.1600000000"],
+    )
+    target_status: Literal["active", "inactive"] = Field(
+        "active",
+        description="Target lifecycle status.",
+        examples=["active"],
+    )
+    effective_from: date = Field(
+        ...,
+        description="Target effective start date.",
+        examples=["2026-03-25"],
+    )
+    effective_to: date | None = Field(
+        None,
+        description="Target effective end date, null when open-ended.",
+        examples=["2026-12-31"],
+    )
+    source_system: str | None = Field(
+        None,
+        description="Upstream model target source system.",
+        examples=["investment_office_model_system"],
+    )
+    source_record_id: str | None = Field(
+        None,
+        description="Source record identifier for deterministic replay.",
+        examples=["model_sg_balanced_202603_eq_us_aapl"],
+    )
+    source_timestamp: datetime | None = Field(
+        None,
+        description="Source publication timestamp.",
+        examples=["2026-03-20T09:00:00Z"],
+    )
+    quality_status: str = Field(
+        "accepted",
+        description="Data quality status for the model target.",
+        examples=["accepted"],
+    )
+
+    @model_validator(mode="after")
+    def validate_bands(self) -> "ModelPortfolioTargetRecord":
+        if self.min_weight is not None and self.min_weight > self.target_weight:
+            raise ValueError("min_weight must be less than or equal to target_weight")
+        if self.max_weight is not None and self.max_weight < self.target_weight:
+            raise ValueError("max_weight must be greater than or equal to target_weight")
+        if (
+            self.min_weight is not None
+            and self.max_weight is not None
+            and self.min_weight > self.max_weight
+        ):
+            raise ValueError("min_weight must be less than or equal to max_weight")
+        return self
 
     model_config = ConfigDict()
 
@@ -361,7 +521,11 @@ class CashAccountMasterRecord(BaseModel):
     cash_account_id: str = Field(
         ..., description="Canonical Lotus cash account identifier.", examples=["CASH-ACC-USD-001"]
     )
-    portfolio_id: str = Field(..., description="Owning portfolio identifier.", examples=["PORT-001"])
+    portfolio_id: str = Field(
+        ...,
+        description="Owning portfolio identifier.",
+        examples=["PORT-001"],
+    )
     security_id: str = Field(
         ...,
         description="Linked cash instrument/security identifier.",
@@ -464,6 +628,70 @@ class PortfolioBenchmarkAssignmentIngestionRequest(BaseModel):
             ]
         ],
     )
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioDefinitionIngestionRequest(BaseModel):
+    model_portfolios: list[ModelPortfolioDefinitionRecord] = Field(
+        ...,
+        description="Model portfolio definition records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "display_name": "Singapore Balanced DPM Model",
+                    "base_currency": "SGD",
+                    "risk_profile": "balanced",
+                    "mandate_type": "discretionary",
+                    "rebalance_frequency": "monthly",
+                    "approval_status": "approved",
+                    "effective_from": "2026-03-25",
+                }
+            ]
+        ],
+    )
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioTargetIngestionRequest(BaseModel):
+    model_portfolio_targets: list[ModelPortfolioTargetRecord] = Field(
+        ...,
+        description="Model portfolio target records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "instrument_id": "EQ_US_AAPL",
+                    "target_weight": "0.1200000000",
+                    "min_weight": "0.0800000000",
+                    "max_weight": "0.1600000000",
+                    "target_status": "active",
+                    "effective_from": "2026-03-25",
+                }
+            ]
+        ],
+    )
+
+    @model_validator(mode="after")
+    def validate_target_uniqueness(self) -> "ModelPortfolioTargetIngestionRequest":
+        keys = [
+            (
+                target.model_portfolio_id,
+                target.model_portfolio_version,
+                target.instrument_id,
+                target.effective_from,
+            )
+            for target in self.model_portfolio_targets
+        ]
+        if len(keys) != len(set(keys)):
+            raise ValueError("model_portfolio_targets contains duplicate target records")
+        return self
 
     model_config = ConfigDict()
 

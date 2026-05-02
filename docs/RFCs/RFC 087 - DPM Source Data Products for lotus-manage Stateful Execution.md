@@ -530,7 +530,7 @@ evidence.
 | --- | --- | --- |
 | Composed DPM source-data architecture with no monolithic context endpoint | Planned | RFC-0036 and core docs reference composed products, and no route or doc claims one all-in-one source endpoint. |
 | DPM source-data governance scaffold | Planned | Planned products, domain-product declarations, source-security profiles, route-family posture, and validation evidence exist before runtime routes are exposed. |
-| Governed model portfolio target source product | Planned | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, and canonical proof exist. |
+| Governed model portfolio target source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Governed discretionary mandate binding source product | Planned | Portfolio-to-mandate/model/policy binding is effective-dated, tested, supportable, and source-lineage-backed. |
 | Governed instrument eligibility and settlement profile source product | Planned | Eligibility, restriction reasons, shelf flags, settlement profile, and unknown-record behavior are API-backed and tested. |
 | Bulk portfolio tax-lot source product | Planned | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly. |
@@ -778,6 +778,19 @@ Exit evidence:
 2. target weights validate to expected tolerances and preserve ordering,
 3. missing, stale, unapproved, and overlapping-effective-date model data are source-safe and tested,
 4. `lotus-manage` can consume the product in a mocked integration test.
+
+Current implementation evidence:
+
+1. `DpmModelPortfolioTarget:v1` is active in the source-data catalog, source-security profile,
+   route-family registry, and repo-native domain-product declaration.
+2. Model portfolio definition and target ingestion routes, persistence, resolver, and control-plane
+   API are implemented.
+3. The canonical front-office seed now publishes `MODEL_PB_SG_GLOBAL_BAL_DPM` version `2026.04`
+   with target weights summing to `1.0000000000`.
+4. Local proof is recorded in
+   `docs/RFCs/RFC-087-slice-4-model-portfolio-target-evidence.md`.
+5. Live canonical stack proof remains pending until the running stack is refreshed with this
+   branch.
 
 ### Slice 5 - Discretionary mandate binding pipeline and API
 

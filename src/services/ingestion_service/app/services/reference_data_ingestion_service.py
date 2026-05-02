@@ -14,6 +14,8 @@ from portfolio_common.database_models import (
     IndexPriceSeries,
     IndexReturnSeries,
     InstrumentLookthroughComponent,
+    ModelPortfolioDefinition,
+    ModelPortfolioTarget,
     PortfolioBenchmarkAssignment,
     RiskFreeSeries,
 )
@@ -50,6 +52,54 @@ class ReferenceDataIngestionService:
                 "policy_pack_id",
                 "source_system",
                 "assignment_recorded_at",
+            ],
+        )
+
+    async def upsert_model_portfolio_definitions(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=ModelPortfolioDefinition,
+            records=records,
+            conflict_columns=[
+                "model_portfolio_id",
+                "model_portfolio_version",
+                "effective_from",
+            ],
+            update_columns=[
+                "display_name",
+                "base_currency",
+                "risk_profile",
+                "mandate_type",
+                "rebalance_frequency",
+                "approval_status",
+                "approved_at",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "source_timestamp",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_model_portfolio_targets(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=ModelPortfolioTarget,
+            records=records,
+            conflict_columns=[
+                "model_portfolio_id",
+                "model_portfolio_version",
+                "instrument_id",
+                "effective_from",
+            ],
+            update_columns=[
+                "target_weight",
+                "min_weight",
+                "max_weight",
+                "target_status",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "source_timestamp",
+                "quality_status",
             ],
         )
 
@@ -223,9 +273,7 @@ class ReferenceDataIngestionService:
             ],
         )
 
-    async def upsert_instrument_lookthrough_components(
-        self, records: list[dict[str, Any]]
-    ) -> None:
+    async def upsert_instrument_lookthrough_components(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=InstrumentLookthroughComponent,
             records=records,

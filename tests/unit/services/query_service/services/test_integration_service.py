@@ -7,11 +7,18 @@ import pytest
 from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, STALE, UNRECONCILED
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dtos.reference_integration_dto import (
+    ModelPortfolioTargetRequest,
+)
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 
 def make_service() -> IntegrationService:
     return IntegrationService(AsyncMock(spec=AsyncSession))
+
+
+def model_portfolio_target_request(as_of_date: date) -> ModelPortfolioTargetRequest:
+    return ModelPortfolioTargetRequest(as_of_date=as_of_date)
 
 
 def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
@@ -138,6 +145,132 @@ def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps()
         )
         == latest_updated_at
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_returns_ready_supportability() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    source_timestamp = datetime(2026, 3, 20, 9, 0, tzinfo=UTC)
+    service._reference_repository.resolve_model_portfolio_definition.return_value = SimpleNamespace(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        display_name="Singapore Balanced DPM Model",
+        base_currency="SGD",
+        risk_profile="balanced",
+        mandate_type="discretionary",
+        rebalance_frequency="monthly",
+        approval_status="approved",
+        approved_at=source_timestamp,
+        effective_from=date(2026, 3, 25),
+        effective_to=None,
+        source_system="investment_office_model_system",
+        source_record_id="model_sg_balanced_202603",
+        source_timestamp=source_timestamp,
+    )
+    service._reference_repository.list_model_portfolio_targets.return_value = [
+        SimpleNamespace(
+            instrument_id="EQ_US_AAPL",
+            target_weight=Decimal("0.6000000000"),
+            min_weight=Decimal("0.5500000000"),
+            max_weight=Decimal("0.6500000000"),
+            target_status="active",
+            quality_status="accepted",
+            source_record_id="target_aapl",
+            source_timestamp=source_timestamp,
+        ),
+        SimpleNamespace(
+            instrument_id="FI_US_TREASURY_10Y",
+            target_weight=Decimal("0.4000000000"),
+            min_weight=Decimal("0.3500000000"),
+            max_weight=Decimal("0.4500000000"),
+            target_status="active",
+            quality_status="accepted",
+            source_record_id="target_tsy",
+            source_timestamp=source_timestamp,
+        ),
+    ]
+
+    response = await service.resolve_model_portfolio_targets(
+        "MODEL_SG_BALANCED_DPM",
+        request=model_portfolio_target_request(as_of_date=date(2026, 3, 31)),
+    )
+
+    assert response is not None
+    assert response.product_name == "DpmModelPortfolioTarget"
+    assert response.model_portfolio_version == "2026.03"
+    assert response.supportability.state == "READY"
+    assert response.supportability.total_target_weight == Decimal("1.0000000000")
+    assert [target.instrument_id for target in response.targets] == [
+        "EQ_US_AAPL",
+        "FI_US_TREASURY_10Y",
+    ]
+    assert response.lineage["source_system"] == "investment_office_model_system"
+    assert response.latest_evidence_timestamp == source_timestamp
+    service._reference_repository.list_model_portfolio_targets.assert_awaited_once_with(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        as_of_date=date(2026, 3, 31),
+        include_inactive_targets=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_maps_missing_definition_to_none() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_model_portfolio_definition.return_value = None
+
+    response = await service.resolve_model_portfolio_targets(
+        "MODEL_MISSING",
+        request=model_portfolio_target_request(as_of_date=date(2026, 3, 31)),
+    )
+
+    assert response is None
+    service._reference_repository.list_model_portfolio_targets.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_degrades_when_weights_do_not_sum_to_one() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_model_portfolio_definition.return_value = SimpleNamespace(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        display_name="Singapore Balanced DPM Model",
+        base_currency="SGD",
+        risk_profile="balanced",
+        mandate_type="discretionary",
+        rebalance_frequency="monthly",
+        approval_status="approved",
+        approved_at=None,
+        effective_from=date(2026, 3, 25),
+        effective_to=None,
+        source_system="investment_office_model_system",
+        source_record_id="model_sg_balanced_202603",
+        source_timestamp=None,
+    )
+    service._reference_repository.list_model_portfolio_targets.return_value = [
+        SimpleNamespace(
+            instrument_id="EQ_US_AAPL",
+            target_weight=Decimal("0.5000000000"),
+            min_weight=None,
+            max_weight=None,
+            target_status="active",
+            quality_status="accepted",
+            source_record_id="target_aapl",
+        )
+    ]
+
+    response = await service.resolve_model_portfolio_targets(
+        "MODEL_SG_BALANCED_DPM",
+        request=model_portfolio_target_request(as_of_date=date(2026, 3, 31)),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "MODEL_TARGET_WEIGHTS_NOT_ONE"
+    assert response.supportability.total_target_weight == Decimal("0.5000000000")
 
 
 def test_canonical_consumer_system_mappings() -> None:

@@ -36,6 +36,8 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
     "IDX_GLOBAL_EQUITY_TR",
     "IDX_GLOBAL_BOND_TR",
 )
+DEFAULT_DPM_MODEL_PORTFOLIO_ID = "MODEL_PB_SG_GLOBAL_BAL_DPM"
+DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
 FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
     "persistence-business-dates",
     "persistence-fx-rates",
@@ -206,6 +208,16 @@ def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str)
     return "\n".join(
         [
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
+            (
+                "delete from model_portfolio_targets "
+                f"where model_portfolio_id = '{DEFAULT_DPM_MODEL_PORTFOLIO_ID}' "
+                f"and model_portfolio_version = '{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION}';"
+            ),
+            (
+                "delete from model_portfolio_definitions "
+                f"where model_portfolio_id = '{DEFAULT_DPM_MODEL_PORTFOLIO_ID}' "
+                f"and model_portfolio_version = '{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION}';"
+            ),
             f"delete from benchmark_composition_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_return_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_definitions where benchmark_id = '{benchmark_id}';",
@@ -1309,6 +1321,59 @@ def build_front_office_portfolio_bundle(
         source_prefix="front_office_risk_free",
     )
 
+    model_portfolios = [
+        {
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "model_portfolio_version": DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
+            "display_name": "Private Banking Singapore Global Balanced DPM Model",
+            "base_currency": "USD",
+            "risk_profile": "balanced",
+            "mandate_type": "discretionary",
+            "rebalance_frequency": "monthly",
+            "approval_status": "approved",
+            "approved_at": _iso_utc_timestamp(end_date, hour=9),
+            "effective_from": "2026-04-01",
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": (
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_ID.lower()}_"
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION.replace('.', '_')}"
+            ),
+            "source_timestamp": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+    ]
+    model_target_weights = {
+        "FO_EQ_AAPL_US": Decimal("0.1400000000"),
+        "FO_EQ_MSFT_US": Decimal("0.1300000000"),
+        "FO_EQ_SAP_DE": Decimal("0.0800000000"),
+        "FO_ETF_MSCI_WORLD": Decimal("0.2400000000"),
+        "FO_FUND_BLK_ALLOC": Decimal("0.1000000000"),
+        "FO_FUND_PIMCO_INC": Decimal("0.1000000000"),
+        "FO_BOND_UST_2030": Decimal("0.1100000000"),
+        "FO_BOND_SIEMENS_2031": Decimal("0.0700000000"),
+        "FO_PRIV_PRIVATE_CREDIT_A": Decimal("0.0300000000"),
+    }
+    model_portfolio_targets = [
+        {
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "model_portfolio_version": DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
+            "instrument_id": security_id,
+            "target_weight": format(weight, "f"),
+            "min_weight": format(max(weight - Decimal("0.0250000000"), Decimal("0")), "f"),
+            "max_weight": format(min(weight + Decimal("0.0250000000"), Decimal("1")), "f"),
+            "target_status": "active",
+            "effective_from": "2026-04-01",
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": (
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_ID.lower()}_"
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION.replace('.', '_')}_{security_id.lower()}"
+            ),
+            "source_timestamp": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+        for security_id, weight in model_target_weights.items()
+    ]
+
     market_price_specs = {
         "FO_EQ_AAPL_US": (Decimal("184.00"), Decimal("212.00")),
         "FO_EQ_MSFT_US": (Decimal("398.00"), Decimal("428.00")),
@@ -1392,6 +1457,8 @@ def build_front_office_portfolio_bundle(
         "market_prices": market_prices,
         "fx_rates": fx_rates,
         "as_of_date": as_of_date,
+        "model_portfolios": model_portfolios,
+        "model_portfolio_targets": model_portfolio_targets,
         **benchmark_reference,
         **risk_free_reference,
     }
@@ -1444,6 +1511,14 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         (
             "/ingest/benchmark-assignments",
             {"benchmark_assignments": bundle["benchmark_assignments"]},
+        ),
+        (
+            "/ingest/model-portfolios",
+            {"model_portfolios": bundle["model_portfolios"]},
+        ),
+        (
+            "/ingest/model-portfolio-targets",
+            {"model_portfolio_targets": bundle["model_portfolio_targets"]},
         ),
         ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )

@@ -13,6 +13,13 @@ BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS = {
     "IntegrationPolicyContext",
 }
 
+DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS = {
+    "ModelPortfolioTargetRequest",
+    "ModelPortfolioTargetRow",
+    "ModelPortfolioSupportability",
+    "ModelPortfolioTargetResponse",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",
@@ -200,5 +207,6 @@ def assert_schema_properties_are_documented_and_exampled(
             )
             if property_schema.get("type") != "array":
                 assert has_example_signal, (
-                    f"{schema_name}.{property_name} is missing an OpenAPI example/default/enum signal"
+                    f"{schema_name}.{property_name} is missing an OpenAPI "
+                    "example/default/enum signal"
                 )

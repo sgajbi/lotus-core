@@ -14,6 +14,8 @@ from portfolio_common.database_models import (
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
+    ModelPortfolioDefinition,
+    ModelPortfolioTarget,
     PortfolioBenchmarkAssignment,
     RiskFreeSeries,
 )
@@ -88,6 +90,67 @@ class ReferenceDataRepository:
         )
         result = await self._db.execute(stmt)
         return result.scalars().first()
+
+    async def resolve_model_portfolio_definition(
+        self,
+        model_portfolio_id: str,
+        as_of_date: date,
+    ):
+        stmt = (
+            select(ModelPortfolioDefinition)
+            .where(
+                ModelPortfolioDefinition.model_portfolio_id == model_portfolio_id,
+                ModelPortfolioDefinition.approval_status == "approved",
+                _effective_filter(
+                    ModelPortfolioDefinition.effective_from,
+                    ModelPortfolioDefinition.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ModelPortfolioDefinition.effective_from.desc(),
+                ModelPortfolioDefinition.approved_at.desc().nulls_last(),
+                ModelPortfolioDefinition.updated_at.desc(),
+            )
+            .limit(1)
+        )
+        result = await self._db.execute(stmt)
+        return result.scalars().first()
+
+    async def list_model_portfolio_targets(
+        self,
+        model_portfolio_id: str,
+        model_portfolio_version: str,
+        as_of_date: date,
+        *,
+        include_inactive_targets: bool = False,
+    ) -> list[ModelPortfolioTarget]:
+        stmt = (
+            select(ModelPortfolioTarget)
+            .where(
+                ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
+                ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
+                _effective_filter(
+                    ModelPortfolioTarget.effective_from,
+                    ModelPortfolioTarget.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ModelPortfolioTarget.instrument_id.asc(),
+                ModelPortfolioTarget.effective_from.desc(),
+            )
+        )
+        if not include_inactive_targets:
+            stmt = stmt.where(ModelPortfolioTarget.target_status == "active")
+        result = await self._db.execute(stmt)
+        rows = list(result.scalars().all())
+        return _latest_effective_rows(
+            rows,
+            "model_portfolio_id",
+            "model_portfolio_version",
+            "instrument_id",
+        )
 
     async def get_benchmark_definition(self, benchmark_id: str, as_of_date: date):
         stmt = (

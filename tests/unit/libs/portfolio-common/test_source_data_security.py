@@ -30,7 +30,6 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     expected_profiles = {
-        "DpmModelPortfolioTarget",
         "DiscretionaryMandateBinding",
         "InstrumentEligibilityProfile",
         "PortfolioTaxLotWindow",
@@ -89,6 +88,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "InstrumentReferenceBundle",
         "BenchmarkAssignment",
         "BenchmarkConstituentWindow",
+        "DpmModelPortfolioTarget",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):

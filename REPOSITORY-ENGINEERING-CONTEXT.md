@@ -227,6 +227,12 @@ Most relevant current governance:
     institutional sign-off pack aggregates artifacts,
 29. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
+30. RFC-087 DPM source-data work now has the first active source product,
+    `DpmModelPortfolioTarget:v1`, exposed through
+    `POST /integration/model-portfolios/{model_portfolio_id}/targets` with model portfolio
+    definition/target ingestion, persistence, route-family metadata, source-data security,
+    domain-product declaration, OpenAPI proof, and canonical front-office seed support for
+    `MODEL_PB_SG_GLOBAL_BAL_DPM` version `2026.04`.
 
 ## Context Maintenance Rule
 

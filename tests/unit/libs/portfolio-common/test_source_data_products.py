@@ -37,6 +37,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "InstrumentReferenceBundle",
         "BenchmarkAssignment",
         "BenchmarkConstituentWindow",
+        "DpmModelPortfolioTarget",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
         "ReconciliationEvidenceBundle",
@@ -52,7 +53,6 @@ def test_dpm_planned_source_products_are_governed_but_not_active_routes() -> Non
     }
 
     assert planned_products.keys() == {
-        "DpmModelPortfolioTarget",
         "DiscretionaryMandateBinding",
         "InstrumentEligibilityProfile",
         "PortfolioTaxLotWindow",
@@ -82,7 +82,6 @@ def test_dpm_planned_source_products_are_reserved_for_lotus_manage() -> None:
     }
 
     assert product_names == {
-        "DpmModelPortfolioTarget",
         "DiscretionaryMandateBinding",
         "InstrumentEligibilityProfile",
         "PortfolioTaxLotWindow",

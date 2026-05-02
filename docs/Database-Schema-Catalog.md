@@ -214,6 +214,63 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `model_portfolio_definitions`
+
+- **Purpose**: Effective-dated model portfolio master for discretionary mandate source products.
+- **Description**: Stores approved model versions, risk profile, mandate type, rebalance cadence,
+  and source lineage used by `DpmModelPortfolioTarget:v1`.
+- **Relationships**: No explicit foreign-key relationships declared.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Approved effective-date lookup by `model_portfolio_id` and
+  `as_of_date`; idempotent upsert by model id, version, and effective start date.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `model_portfolio_id` (String): Canonical model portfolio identifier.
+  - `model_portfolio_version` (String): Approved model version.
+  - `display_name` (String): Business display name.
+  - `base_currency` (String): Model base currency.
+  - `risk_profile` (String): Risk profile aligned to the model.
+  - `mandate_type` (String): Mandate type for which the model is approved.
+  - `rebalance_frequency` (String): Expected rebalance cadence.
+  - `approval_status` (String): Model lifecycle approval status.
+  - `approved_at` (DateTime): Timestamp at which the model version was approved.
+  - `effective_from` (Date): Model effective start date.
+  - `effective_to` (Date): Optional model effective end date.
+  - `source_system` (String): Upstream model source system.
+  - `source_record_id` (String): Source record identifier.
+  - `source_timestamp` (DateTime): Source publication timestamp.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `model_portfolio_targets`
+
+- **Purpose**: Effective-dated target weights and policy bands for discretionary model portfolios.
+- **Description**: Stores instrument target rows for `DpmModelPortfolioTarget:v1`, including
+  target weight, min/max bands, lifecycle status, and source lineage.
+- **Relationships**: No explicit foreign-key relationships declared.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by model id, model version, and instrument;
+  active-target filtering by default; idempotent upsert by model id, version, instrument, and
+  effective start date.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `model_portfolio_id` (String): Canonical model portfolio identifier.
+  - `model_portfolio_version` (String): Approved model version.
+  - `instrument_id` (String): Canonical instrument identifier.
+  - `target_weight` (Numeric): Target instrument weight as a decimal ratio.
+  - `min_weight` (Numeric): Optional minimum policy band.
+  - `max_weight` (Numeric): Optional maximum policy band.
+  - `target_status` (String): Target lifecycle status.
+  - `effective_from` (Date): Target effective start date.
+  - `effective_to` (Date): Optional target effective end date.
+  - `source_system` (String): Upstream target source system.
+  - `source_record_id` (String): Source record identifier.
+  - `source_timestamp` (DateTime): Source publication timestamp.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `benchmark_definitions`
 
 - **Purpose**: Benchmark reference master with versioned effective dating.

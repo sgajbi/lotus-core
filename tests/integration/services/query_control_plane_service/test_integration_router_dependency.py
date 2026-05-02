@@ -10,18 +10,18 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_core_snapshot_service,
     get_integration_service,
 )
-from src.services.query_service.app.services.core_snapshot_service import (
-    CoreSnapshotBadRequestError,
-    CoreSnapshotConflictError,
-    CoreSnapshotNotFoundError,
-    CoreSnapshotUnavailableSectionError,
-)
 from src.services.query_service.app.dtos.integration_dto import (
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
 )
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
+)
+from src.services.query_service.app.services.core_snapshot_service import (
+    CoreSnapshotBadRequestError,
+    CoreSnapshotConflictError,
+    CoreSnapshotNotFoundError,
+    CoreSnapshotUnavailableSectionError,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -122,6 +122,58 @@ async def async_test_client():
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 1, 31),
                 generated_at=datetime(2026, 1, 31, 9, 15, 0, tzinfo=UTC),
+            ),
+        }
+    )
+    mock_integration_service.resolve_model_portfolio_targets = AsyncMock(
+        return_value={
+            "product_name": "DpmModelPortfolioTarget",
+            "product_version": "v1",
+            "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+            "model_portfolio_version": "2026.03",
+            "display_name": "Singapore Balanced DPM Model",
+            "base_currency": "SGD",
+            "risk_profile": "balanced",
+            "mandate_type": "discretionary",
+            "rebalance_frequency": "monthly",
+            "approval_status": "approved",
+            "approved_at": "2026-03-20T09:00:00Z",
+            "effective_from": "2026-03-25",
+            "effective_to": None,
+            "targets": [
+                {
+                    "instrument_id": "EQ_US_AAPL",
+                    "target_weight": "0.6000000000",
+                    "min_weight": "0.5500000000",
+                    "max_weight": "0.6500000000",
+                    "target_status": "active",
+                    "quality_status": "accepted",
+                    "source_record_id": "target_aapl",
+                },
+                {
+                    "instrument_id": "FI_US_TREASURY_10Y",
+                    "target_weight": "0.4000000000",
+                    "min_weight": "0.3500000000",
+                    "max_weight": "0.4500000000",
+                    "target_status": "active",
+                    "quality_status": "accepted",
+                    "source_record_id": "target_tsy",
+                },
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "MODEL_TARGETS_READY",
+                "target_count": 2,
+                "total_target_weight": "1.0000000000",
+            },
+            "lineage": {
+                "source_system": "investment_office_model_system",
+                "source_record_id": "model_sg_balanced_202603",
+                "contract_version": "rfc_087_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 3, 31),
+                generated_at=datetime(2026, 3, 31, 10, 0, 0, tzinfo=UTC),
             ),
         }
     )
@@ -669,6 +721,49 @@ async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
     assert response.status_code == 404
     assert response.json()["detail"] == (
         "No effective benchmark assignment found for portfolio and as_of_date."
+    )
+
+
+async def test_model_portfolio_targets_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/model-portfolios/MODEL_SG_BALANCED_DPM/targets",
+        json={"as_of_date": "2026-03-31"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "DpmModelPortfolioTarget"
+    assert body["product_version"] == "v1"
+    assert body["model_portfolio_id"] == "MODEL_SG_BALANCED_DPM"
+    assert body["model_portfolio_version"] == "2026.03"
+    assert body["supportability"]["state"] == "READY"
+    assert body["supportability"]["total_target_weight"] == "1.0000000000"
+    assert [target["instrument_id"] for target in body["targets"]] == [
+        "EQ_US_AAPL",
+        "FI_US_TREASURY_10Y",
+    ]
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    call = mock_integration_service.resolve_model_portfolio_targets.await_args.kwargs
+    assert call["model_portfolio_id"] == "MODEL_SG_BALANCED_DPM"
+    assert call["request"].as_of_date == date(2026, 3, 31)
+    assert call["request"].include_inactive_targets is False
+
+
+async def test_model_portfolio_targets_not_found_maps_to_404(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.resolve_model_portfolio_targets = AsyncMock(return_value=None)
+
+    response = await client.post(
+        "/integration/model-portfolios/MODEL_MISSING/targets",
+        json={"as_of_date": "2026-03-31"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "No approved model portfolio target found for model_portfolio_id and as_of_date."
     )
 
 

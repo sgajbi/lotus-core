@@ -15,6 +15,8 @@ from ..DTOs.reference_data_dto import (
     IndexPriceSeriesIngestionRequest,
     IndexReturnSeriesIngestionRequest,
     InstrumentLookthroughComponentIngestionRequest,
+    ModelPortfolioDefinitionIngestionRequest,
+    ModelPortfolioTargetIngestionRequest,
     PortfolioBenchmarkAssignmentIngestionRequest,
     RiskFreeSeriesIngestionRequest,
 )
@@ -185,6 +187,80 @@ async def ingest_benchmark_assignments(
         request_payload=request.model_dump(mode="json"),
         persist_fn=lambda: reference_data_service.upsert_portfolio_benchmark_assignments(
             [item.model_dump() for item in request.benchmark_assignments]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/model-portfolios",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest model portfolio definitions",
+    description=(
+        "What: Accept approved model portfolio master/version records for discretionary "
+        "mandate management.\n"
+        "How: Validate canonical model identity, approval, effective-date, lineage, and "
+        "quality fields, then upsert durable versioned records.\n"
+        "When: Use when the investment office publishes a new model portfolio version, "
+        "approval update, retirement, or correction required by lotus-manage stateful DPM."
+    ),
+)
+async def ingest_model_portfolios(
+    request: ModelPortfolioDefinitionIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/model-portfolios",
+        entity_type="model_portfolio",
+        accepted_count=len(request.model_portfolios),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_model_portfolio_definitions(
+            [item.model_dump() for item in request.model_portfolios]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/model-portfolio-targets",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest model portfolio targets",
+    description=(
+        "What: Accept effective-dated instrument target rows for approved model portfolio "
+        "versions.\n"
+        "How: Validate instrument-level target weights and optional min/max bands, preserve "
+        "source lineage, and upsert deterministic target rows.\n"
+        "When: Use after model portfolio approval or correction so lotus-manage can resolve "
+        "DPM target allocation from governed core source data instead of local fallback truth."
+    ),
+)
+async def ingest_model_portfolio_targets(
+    request: ModelPortfolioTargetIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/model-portfolio-targets",
+        entity_type="model_portfolio_target",
+        accepted_count=len(request.model_portfolio_targets),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_model_portfolio_targets(
+            [item.model_dump() for item in request.model_portfolio_targets]
         ),
         ingestion_job_service=ingestion_job_service,
     )

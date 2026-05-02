@@ -71,7 +71,12 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
 
         assert declared["product_version"] == source_product.product_version
         assert declared["owner_repository"] == source_product.owner
-        assert declared["product_family"] == family_map[source_product.route_family]
+        expected_family = (
+            "dpm_source_data"
+            if source_product.product_name.startswith("Dpm")
+            else family_map[source_product.route_family]
+        )
+        assert declared["product_family"] == expected_family
         assert declared["approved_consumers"] == list(source_product.consumers)
         assert declared["required_trust_metadata"] == list(source_product.required_metadata_fields)
         assert declared["serving_plane"] == source_product.serving_plane

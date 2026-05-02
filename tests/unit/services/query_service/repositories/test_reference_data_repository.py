@@ -314,6 +314,87 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
 
 
 @pytest.mark.asyncio
+async def test_resolve_model_portfolio_definition_uses_approved_effective_model() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [SimpleNamespace(model_portfolio_id="MODEL_SG_BALANCED_DPM")]
+    )
+    repo = ReferenceDataRepository(db)
+
+    row = await repo.resolve_model_portfolio_definition(
+        "MODEL_SG_BALANCED_DPM",
+        date(2026, 3, 31),
+    )
+
+    assert row.model_portfolio_id == "MODEL_SG_BALANCED_DPM"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "model_portfolio_definitions.model_portfolio_id = 'MODEL_SG_BALANCED_DPM'" in compiled
+    assert "model_portfolio_definitions.approval_status = 'approved'" in compiled
+    assert "model_portfolio_definitions.effective_from <= '2026-03-31'" in compiled
+
+
+@pytest.mark.asyncio
+async def test_list_model_portfolio_targets_returns_latest_active_targets_by_default() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                model_portfolio_id="MODEL_SG_BALANCED_DPM",
+                model_portfolio_version="2026.03",
+                instrument_id="EQ_US_AAPL",
+                effective_from=date(2026, 3, 25),
+                target_weight=Decimal("0.55"),
+            ),
+            SimpleNamespace(
+                model_portfolio_id="MODEL_SG_BALANCED_DPM",
+                model_portfolio_version="2026.03",
+                instrument_id="EQ_US_AAPL",
+                effective_from=date(2026, 4, 1),
+                target_weight=Decimal("0.60"),
+            ),
+            SimpleNamespace(
+                model_portfolio_id="MODEL_SG_BALANCED_DPM",
+                model_portfolio_version="2026.03",
+                instrument_id="FI_US_TREASURY_10Y",
+                effective_from=date(2026, 3, 25),
+                target_weight=Decimal("0.40"),
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_model_portfolio_targets(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        as_of_date=date(2026, 4, 30),
+    )
+
+    assert [(row.instrument_id, row.target_weight) for row in rows] == [
+        ("EQ_US_AAPL", Decimal("0.60")),
+        ("FI_US_TREASURY_10Y", Decimal("0.40")),
+    ]
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "model_portfolio_targets.target_status = 'active'" in compiled
+
+
+@pytest.mark.asyncio
+async def test_list_model_portfolio_targets_can_include_inactive_targets() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_model_portfolio_targets(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        as_of_date=date(2026, 4, 30),
+        include_inactive_targets=True,
+    )
+
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "model_portfolio_targets.target_status =" not in compiled
+
+
+@pytest.mark.asyncio
 async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing() -> None:
     repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
     repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]

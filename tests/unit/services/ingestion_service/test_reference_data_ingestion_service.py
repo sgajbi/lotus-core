@@ -17,6 +17,54 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
     ("method_name", "records", "conflict_columns", "update_columns"),
     [
         (
+            "upsert_model_portfolio_definitions",
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "effective_from": "2026-03-25",
+                }
+            ],
+            ["model_portfolio_id", "model_portfolio_version", "effective_from"],
+            [
+                "display_name",
+                "base_currency",
+                "risk_profile",
+                "mandate_type",
+                "rebalance_frequency",
+                "approval_status",
+                "approved_at",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "source_timestamp",
+                "quality_status",
+            ],
+        ),
+        (
+            "upsert_model_portfolio_targets",
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "instrument_id": "EQ_US_AAPL",
+                    "effective_from": "2026-03-25",
+                }
+            ],
+            ["model_portfolio_id", "model_portfolio_version", "instrument_id", "effective_from"],
+            [
+                "target_weight",
+                "min_weight",
+                "max_weight",
+                "target_status",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "source_timestamp",
+                "quality_status",
+            ],
+        ),
+        (
             "upsert_benchmark_definitions",
             [{"benchmark_id": "BMK_001", "effective_from": "2026-01-01"}],
             ["benchmark_id", "effective_from"],

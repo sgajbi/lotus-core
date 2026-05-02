@@ -21,6 +21,7 @@ from tests.integration.services.query_control_plane_service.openapi_schema_contr
     CAPABILITIES_SCHEMA_ROOTS,
     CLASSIFICATION_TAXONOMY_SCHEMA_ROOTS,
     CORE_SNAPSHOT_SCHEMA_ROOTS,
+    DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS,
     INGESTION_EVIDENCE_SCHEMA_ROOTS,
     INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS,
     INTEGRATION_POLICY_SCHEMA_ROOTS,
@@ -184,6 +185,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/simulation-sessions/{session_id}" in paths
     assert "/integration/advisory/proposals/simulate-execution" in paths
     analytics_input_routes = {
+        "/integration/model-portfolios/{model_portfolio_id}/targets",
         "/integration/portfolios/{portfolio_id}/analytics/reference",
         "/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
         "/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
@@ -200,6 +202,9 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     portfolio_reference = paths["/integration/portfolios/{portfolio_id}/analytics/reference"][
         "post"
     ]
+    model_portfolio_targets = paths["/integration/model-portfolios/{model_portfolio_id}/targets"][
+        "post"
+    ]
     assert (
         "lotus-performance and other governed downstream analytics consumers"
         in (portfolio_timeseries["description"])
@@ -211,6 +216,8 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "historical risk attribution" in position_timeseries["description"]
     assert "lotus-performance analytics pipelines" in portfolio_reference["description"]
     assert "lotus-gateway workspace source context flows" in portfolio_reference["description"]
+    assert "discretionary mandate portfolio management" in model_portfolio_targets["description"]
+    assert "stateful DPM analysis" in model_portfolio_targets["description"]
 
     assert "/integration/portfolios/{portfolio_id}/timeseries" not in paths
     assert "/integration/positions/{portfolio_id}/timeseries" not in paths
@@ -2012,6 +2019,19 @@ async def test_openapi_fully_documents_benchmark_assignment_schema_family(async_
     schema = response.json()
 
     assert_schema_properties_are_documented_and_exampled(schema, BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS)
+
+
+async def test_openapi_fully_documents_dpm_model_portfolio_target_schema_family(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(
+        schema,
+        DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS,
+    )
 
 
 async def test_openapi_fully_documents_benchmark_source_schema_family(async_test_client):
