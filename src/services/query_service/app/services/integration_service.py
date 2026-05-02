@@ -35,6 +35,11 @@ from ..dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
     DiscretionaryMandateBindingSupportability,
+    DpmSourceFamilyReadiness,
+    DpmSourceFamilyState,
+    DpmSourceReadinessRequest,
+    DpmSourceReadinessResponse,
+    DpmSourceReadinessSupportability,
     IndexCatalogResponse,
     IndexDefinitionResponse,
     IndexPriceSeriesPoint,
@@ -42,11 +47,11 @@ from ..dtos.reference_integration_dto import (
     IndexReturnSeriesPoint,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
-    IntegrationWindow,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
     InstrumentEligibilityRecord,
     InstrumentEligibilitySupportability,
+    IntegrationWindow,
     MarketDataCoverageRequest,
     MarketDataCoverageSupportability,
     MarketDataCoverageWindowResponse,
@@ -60,8 +65,8 @@ from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
-    ReferencePageMetadata,
     RebalanceBandContext,
+    ReferencePageMetadata,
     RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
@@ -907,6 +912,268 @@ class IntegrationService:
                     fx_rows,
                 ),
             ),
+        )
+
+    async def get_dpm_source_readiness(
+        self,
+        *,
+        portfolio_id: str,
+        request: DpmSourceReadinessRequest,
+    ) -> DpmSourceReadinessResponse:
+        families: list[DpmSourceFamilyReadiness] = []
+        resolved_mandate_id: str | None = request.mandate_id
+        resolved_model_portfolio_id: str | None = request.model_portfolio_id
+
+        mandate_response: DiscretionaryMandateBindingResponse | None = None
+        try:
+            mandate_response = await self.resolve_discretionary_mandate_binding(
+                portfolio_id,
+                DiscretionaryMandateBindingRequest(
+                    as_of_date=request.as_of_date,
+                    tenant_id=request.tenant_id,
+                    mandate_id=request.mandate_id,
+                    include_policy_pack=True,
+                ),
+            )
+        except (LookupError, ValueError):
+            mandate_response = None
+        if mandate_response is None:
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="mandate",
+                    product_name="DiscretionaryMandateBinding",
+                    state="UNAVAILABLE",
+                    reason="MANDATE_BINDING_UNAVAILABLE",
+                    missing_items=["mandate_binding"],
+                )
+            )
+        else:
+            resolved_mandate_id = mandate_response.mandate_id
+            resolved_model_portfolio_id = (
+                resolved_model_portfolio_id or mandate_response.model_portfolio_id
+            )
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="mandate",
+                    product_name="DiscretionaryMandateBinding",
+                    state=mandate_response.supportability.state,
+                    reason=mandate_response.supportability.reason,
+                    missing_items=mandate_response.supportability.missing_data_families,
+                    evidence_count=1,
+                )
+            )
+
+        target_instrument_ids: list[str] = []
+        if resolved_model_portfolio_id is None:
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="model_targets",
+                    product_name="DpmModelPortfolioTarget",
+                    state="UNAVAILABLE",
+                    reason="MODEL_PORTFOLIO_ID_UNAVAILABLE",
+                    missing_items=["model_portfolio_id"],
+                )
+            )
+        else:
+            try:
+                model_response = await self.resolve_model_portfolio_targets(
+                    resolved_model_portfolio_id,
+                    ModelPortfolioTargetRequest(
+                        as_of_date=request.as_of_date,
+                        include_inactive_targets=False,
+                        tenant_id=request.tenant_id,
+                    ),
+                )
+            except (LookupError, ValueError):
+                model_response = None
+            if model_response is None:
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="model_targets",
+                        product_name="DpmModelPortfolioTarget",
+                        state="UNAVAILABLE",
+                        reason="MODEL_TARGETS_UNAVAILABLE",
+                        missing_items=[resolved_model_portfolio_id],
+                    )
+                )
+            else:
+                target_instrument_ids = [target.instrument_id for target in model_response.targets]
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="model_targets",
+                        product_name="DpmModelPortfolioTarget",
+                        state=model_response.supportability.state,
+                        reason=model_response.supportability.reason,
+                        evidence_count=model_response.supportability.target_count,
+                    )
+                )
+
+        evaluated_instrument_ids = sorted({*request.instrument_ids, *target_instrument_ids})
+        if evaluated_instrument_ids:
+            try:
+                eligibility = await self.resolve_instrument_eligibility_bulk(
+                    InstrumentEligibilityBulkRequest(
+                        as_of_date=request.as_of_date,
+                        security_ids=evaluated_instrument_ids,
+                        tenant_id=request.tenant_id,
+                        include_restricted_rationale=False,
+                    )
+                )
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="eligibility",
+                        product_name="InstrumentEligibilityProfile",
+                        state=eligibility.supportability.state,
+                        reason=eligibility.supportability.reason,
+                        missing_items=eligibility.supportability.missing_security_ids,
+                        evidence_count=eligibility.supportability.resolved_count,
+                    )
+                )
+            except (LookupError, ValueError):
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="eligibility",
+                        product_name="InstrumentEligibilityProfile",
+                        state="UNAVAILABLE",
+                        reason="INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
+                        missing_items=evaluated_instrument_ids[:10],
+                    )
+                )
+        else:
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="eligibility",
+                    product_name="InstrumentEligibilityProfile",
+                    state="UNAVAILABLE",
+                    reason="DPM_INSTRUMENT_UNIVERSE_EMPTY",
+                    missing_items=["instrument_ids"],
+                )
+            )
+
+        try:
+            tax_lots = await self.get_portfolio_tax_lot_window(
+                portfolio_id=portfolio_id,
+                request=PortfolioTaxLotWindowRequest(
+                    as_of_date=request.as_of_date,
+                    security_ids=evaluated_instrument_ids or None,
+                    tenant_id=request.tenant_id,
+                ),
+            )
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="tax_lots",
+                    product_name="PortfolioTaxLotWindow",
+                    state=tax_lots.supportability.state,
+                    reason=tax_lots.supportability.reason,
+                    missing_items=tax_lots.supportability.missing_security_ids,
+                    evidence_count=tax_lots.supportability.returned_lot_count,
+                )
+            )
+        except (LookupError, ValueError):
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="tax_lots",
+                    product_name="PortfolioTaxLotWindow",
+                    state="UNAVAILABLE",
+                    reason="PORTFOLIO_TAX_LOTS_UNAVAILABLE",
+                    missing_items=[portfolio_id],
+                )
+            )
+
+        try:
+            market_data = await self.get_market_data_coverage(
+                MarketDataCoverageRequest(
+                    as_of_date=request.as_of_date,
+                    instrument_ids=evaluated_instrument_ids,
+                    currency_pairs=request.currency_pairs,
+                    valuation_currency=request.valuation_currency,
+                    max_staleness_days=request.max_staleness_days,
+                    tenant_id=request.tenant_id,
+                )
+            )
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="market_data",
+                    product_name="MarketDataCoverageWindow",
+                    state=market_data.supportability.state,
+                    reason=market_data.supportability.reason,
+                    missing_items=[
+                        *market_data.supportability.missing_instrument_ids,
+                        *market_data.supportability.missing_currency_pairs,
+                    ],
+                    stale_items=[
+                        *market_data.supportability.stale_instrument_ids,
+                        *market_data.supportability.stale_currency_pairs,
+                    ],
+                    evidence_count=(
+                        market_data.supportability.resolved_price_count
+                        + market_data.supportability.resolved_fx_count
+                    ),
+                )
+            )
+        except (LookupError, ValueError):
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="market_data",
+                    product_name="MarketDataCoverageWindow",
+                    state="UNAVAILABLE",
+                    reason="MARKET_DATA_COVERAGE_UNAVAILABLE",
+                    missing_items=["market_data_coverage"],
+                )
+            )
+
+        supportability = self._dpm_source_readiness_supportability(families)
+        return DpmSourceReadinessResponse(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=resolved_mandate_id,
+            model_portfolio_id=resolved_model_portfolio_id,
+            evaluated_instrument_ids=evaluated_instrument_ids,
+            families=families,
+            supportability=supportability,
+            lineage={
+                "source_system": "lotus-core",
+                "contract_version": "rfc_087_v1",
+                "readiness_scope": "dpm_source_family",
+            },
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status=("COMPLETE" if supportability.state == "READY" else "PARTIAL"),
+                latest_evidence_timestamp=None,
+            ),
+        )
+
+    @staticmethod
+    def _dpm_source_readiness_supportability(
+        families: list[DpmSourceFamilyReadiness],
+    ) -> DpmSourceReadinessSupportability:
+        counts: dict[DpmSourceFamilyState, int] = {
+            "READY": 0,
+            "DEGRADED": 0,
+            "INCOMPLETE": 0,
+            "UNAVAILABLE": 0,
+        }
+        for family in families:
+            counts[family.state] += 1
+        if counts["UNAVAILABLE"]:
+            state: DpmSourceFamilyState = "UNAVAILABLE"
+            reason = "DPM_SOURCE_READINESS_UNAVAILABLE"
+        elif counts["INCOMPLETE"]:
+            state = "INCOMPLETE"
+            reason = "DPM_SOURCE_READINESS_INCOMPLETE"
+        elif counts["DEGRADED"]:
+            state = "DEGRADED"
+            reason = "DPM_SOURCE_READINESS_DEGRADED"
+        else:
+            state = "READY"
+            reason = "DPM_SOURCE_READINESS_READY"
+        return DpmSourceReadinessSupportability(
+            state=state,
+            reason=reason,
+            ready_family_count=counts["READY"],
+            degraded_family_count=counts["DEGRADED"],
+            incomplete_family_count=counts["INCOMPLETE"],
+            unavailable_family_count=counts["UNAVAILABLE"],
         )
 
     async def get_benchmark_definition(

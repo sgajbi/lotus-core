@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
+    DpmSourceReadinessRequest,
     InstrumentEligibilityBulkRequest,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
@@ -1576,6 +1577,184 @@ async def test_market_data_coverage_reports_stale_without_missing_as_degraded() 
     assert response.supportability.reason == "MARKET_DATA_STALE"
     assert response.supportability.stale_instrument_ids == ["EQ_US_AAPL"]
     assert response.supportability.missing_instrument_ids == []
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> None:
+    service = make_service()
+    service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value=SimpleNamespace(
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_BINDING_READY",
+                missing_data_families=[],
+            ),
+        )
+    )
+    service.resolve_model_portfolio_targets = AsyncMock(
+        return_value=SimpleNamespace(
+            targets=[
+                SimpleNamespace(instrument_id="FO_EQ_AAPL_US"),
+                SimpleNamespace(instrument_id="FO_BOND_UST_2030"),
+            ],
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MODEL_TARGETS_READY",
+                target_count=2,
+            ),
+        )
+    )
+    service.resolve_instrument_eligibility_bulk = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="INSTRUMENT_ELIGIBILITY_READY",
+                missing_security_ids=[],
+                resolved_count=2,
+            )
+        )
+    )
+    service.get_portfolio_tax_lot_window = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="TAX_LOTS_READY",
+                missing_security_ids=[],
+                returned_lot_count=2,
+            )
+        )
+    )
+    service.get_market_data_coverage = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MARKET_DATA_READY",
+                missing_instrument_ids=[],
+                missing_currency_pairs=[],
+                stale_instrument_ids=[],
+                stale_currency_pairs=[],
+                resolved_price_count=2,
+                resolved_fx_count=1,
+            )
+        )
+    )
+
+    response = await service.get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            tenant_id="tenant_sg_pb",
+            currency_pairs=[{"from_currency": "EUR", "to_currency": "USD"}],
+            valuation_currency="USD",
+        ),
+    )
+
+    assert response.product_name == "DpmSourceReadiness"
+    assert response.supportability.state == "READY"
+    assert response.supportability.ready_family_count == 5
+    assert response.evaluated_instrument_ids == ["FO_BOND_UST_2030", "FO_EQ_AAPL_US"]
+    assert [family.family for family in response.families] == [
+        "mandate",
+        "model_targets",
+        "eligibility",
+        "tax_lots",
+        "market_data",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_blocks_when_key_families_unavailable() -> None:
+    service = make_service()
+    service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
+    service.resolve_instrument_eligibility_bulk = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="INSTRUMENT_ELIGIBILITY_READY",
+                missing_security_ids=[],
+                resolved_count=1,
+            )
+        )
+    )
+    service.get_portfolio_tax_lot_window = AsyncMock(side_effect=LookupError("missing"))
+    service.get_market_data_coverage = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="INCOMPLETE",
+                reason="MARKET_DATA_MISSING",
+                missing_instrument_ids=["FO_EQ_AAPL_US"],
+                missing_currency_pairs=[],
+                stale_instrument_ids=[],
+                stale_currency_pairs=[],
+                resolved_price_count=0,
+                resolved_fx_count=0,
+            )
+        )
+    )
+
+    response = await service.get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["FO_EQ_AAPL_US"],
+        ),
+    )
+
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.unavailable_family_count == 3
+    assert response.supportability.incomplete_family_count == 1
+    reasons = {family.family: family.reason for family in response.families}
+    assert reasons["mandate"] == "MANDATE_BINDING_UNAVAILABLE"
+    assert reasons["model_targets"] == "MODEL_PORTFOLIO_ID_UNAVAILABLE"
+    assert reasons["tax_lots"] == "PORTFOLIO_TAX_LOTS_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_degrades_source_family_exceptions() -> None:
+    service = make_service()
+    service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value=SimpleNamespace(
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_BINDING_READY",
+                missing_data_families=[],
+            ),
+        )
+    )
+    service.resolve_model_portfolio_targets = AsyncMock(
+        side_effect=ValueError("model source unavailable")
+    )
+    service.resolve_instrument_eligibility_bulk = AsyncMock(
+        side_effect=ValueError("eligibility source unavailable")
+    )
+    service.get_portfolio_tax_lot_window = AsyncMock(
+        side_effect=ValueError("tax lot source unavailable")
+    )
+    service.get_market_data_coverage = AsyncMock(
+        side_effect=ValueError("market source unavailable")
+    )
+
+    response = await service.get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["FO_EQ_AAPL_US"],
+        ),
+    )
+
+    assert response.supportability.state == "UNAVAILABLE"
+    reasons = {family.family: family.reason for family in response.families}
+    assert reasons == {
+        "mandate": "MANDATE_BINDING_READY",
+        "model_targets": "MODEL_TARGETS_UNAVAILABLE",
+        "eligibility": "INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
+        "tax_lots": "PORTFOLIO_TAX_LOTS_UNAVAILABLE",
+        "market_data": "MARKET_DATA_COVERAGE_UNAVAILABLE",
+    }
 
 
 @pytest.mark.asyncio

@@ -52,6 +52,14 @@ DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS = {
     "MarketDataCoverageWindowResponse",
 }
 
+DPM_SOURCE_READINESS_SCHEMA_ROOTS = {
+    "DpmSourceReadinessRequest",
+    "DpmSourceFamilyReadiness",
+    "DpmSourceReadinessSupportability",
+    "DpmSourceReadinessResponse",
+    "MarketDataCurrencyPair",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",

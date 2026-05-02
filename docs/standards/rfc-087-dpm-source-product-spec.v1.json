@@ -143,6 +143,29 @@
         "source lineage"
       ],
       "implementation_slice": "Slice 8"
+    },
+    {
+      "product_name": "DpmSourceReadiness",
+      "product_version": "v1",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_management",
+      "proposed_route": {
+        "method": "POST",
+        "path": "/integration/portfolios/{portfolio_id}/dpm-source-readiness"
+      },
+      "required_ingestion": [
+        "uses implemented DPM source products and existing canonical front-office seed data"
+      ],
+      "minimum_response_families": [
+        "source-data product envelope",
+        "portfolio and as-of identity",
+        "mandate and model identity when resolved",
+        "per-family readiness states",
+        "bounded missing and stale item diagnostics",
+        "overall promotion supportability",
+        "operator lineage"
+      ],
+      "implementation_slice": "Slice 9"
     }
   ]
 }

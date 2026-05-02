@@ -23,6 +23,7 @@ EXPECTED_OPENAPI_PATHS = {
     "/integration/instruments/eligibility-bulk",
     "/integration/portfolios/{portfolio_id}/tax-lots",
     "/integration/market-data/coverage",
+    "/integration/portfolios/{portfolio_id}/dpm-source-readiness",
 }
 
 
@@ -181,7 +182,7 @@ def _probe_instrument_eligibility(
     )
     body = _json_body(response)
     body_dict = _dict_body(body)
-    rows = body_dict.get("eligibility", [])
+    rows = body_dict.get("records", body_dict.get("eligibility", []))
     rows = rows if isinstance(rows, list) else []
     by_id = {row.get("security_id"): row for row in rows if isinstance(row, dict)}
     restricted = by_id.get("FO_PRIV_PRIVATE_CREDIT_A", {})
@@ -305,6 +306,66 @@ def _probe_market_data_coverage(
     )
 
 
+def _probe_dpm_source_readiness(
+    client: httpx.Client,
+    *,
+    portfolio_id: str,
+    mandate_id: str,
+    model_portfolio_id: str,
+    as_of_date: str,
+    tenant_id: str,
+    instrument_ids: tuple[str, ...],
+    fx_pairs: tuple[tuple[str, str], ...],
+) -> ProbeResult:
+    response = client.post(
+        f"/integration/portfolios/{portfolio_id}/dpm-source-readiness",
+        json={
+            "as_of_date": as_of_date,
+            "tenant_id": tenant_id,
+            "mandate_id": mandate_id,
+            "model_portfolio_id": model_portfolio_id,
+            "instrument_ids": list(instrument_ids),
+            "currency_pairs": [
+                {"from_currency": from_currency, "to_currency": to_currency}
+                for from_currency, to_currency in fx_pairs
+            ],
+            "valuation_currency": "USD",
+            "max_staleness_days": 5,
+        },
+    )
+    body = _json_body(response)
+    body_dict = _dict_body(body)
+    supportability = _dict_body(body_dict.get("supportability"))
+    families = body_dict.get("families", [])
+    families = families if isinstance(families, list) else []
+    family_states = {
+        family.get("family"): family.get("state") for family in families if isinstance(family, dict)
+    }
+    ok = (
+        response.status_code == 200
+        and body_dict.get("product_name") == "DpmSourceReadiness"
+        and supportability.get("state") == "READY"
+        and supportability.get("ready_family_count") == 5
+        and family_states.get("mandate") == "READY"
+        and family_states.get("model_targets") == "READY"
+        and family_states.get("eligibility") == "READY"
+        and family_states.get("tax_lots") == "READY"
+        and family_states.get("market_data") == "READY"
+    )
+    return _result(
+        "dpm_source_readiness_ready",
+        ok,
+        {
+            "status_code": response.status_code,
+            "product_name": body_dict.get("product_name"),
+            "supportability_state": supportability.get("state"),
+            "supportability_reason": supportability.get("reason"),
+            "ready_family_count": supportability.get("ready_family_count"),
+            "family_states": family_states,
+        },
+    )
+
+
 def run_validation(
     control_base_url: str,
     *,
@@ -361,6 +422,19 @@ def run_validation(
                 "dpm_market_data_coverage_ready",
                 lambda: _probe_market_data_coverage(
                     client,
+                    as_of_date=as_of_date,
+                    tenant_id=tenant_id,
+                    instrument_ids=DEFAULT_MARKET_IDS,
+                    fx_pairs=DEFAULT_FX_PAIRS,
+                ),
+            ),
+            (
+                "dpm_source_readiness_ready",
+                lambda: _probe_dpm_source_readiness(
+                    client,
+                    portfolio_id=portfolio_id,
+                    mandate_id=mandate_id,
+                    model_portfolio_id=model_portfolio_id,
                     as_of_date=as_of_date,
                     tenant_id=tenant_id,
                     instrument_ids=DEFAULT_MARKET_IDS,

@@ -18,6 +18,7 @@ EXPECTED_PRODUCTS = {
     "InstrumentEligibilityProfile": "Slice 6",
     "PortfolioTaxLotWindow": "Slice 7",
     "MarketDataCoverageWindow": "Slice 8",
+    "DpmSourceReadiness": "Slice 9",
 }
 
 

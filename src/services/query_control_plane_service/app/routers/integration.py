@@ -34,6 +34,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
+    DpmSourceReadinessRequest,
+    DpmSourceReadinessResponse,
     IndexCatalogRequest,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
@@ -407,6 +409,44 @@ async def get_market_data_coverage(
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> MarketDataCoverageWindowResponse:
     return await integration_service.get_market_data_coverage(request)
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/dpm-source-readiness",
+    response_model=DpmSourceReadinessResponse,
+    summary="Evaluate DPM source-family readiness",
+    description=(
+        "What: Return a control-plane readiness summary across the governed source families "
+        "required before lotus-manage may promote stateful discretionary mandate execution.\n"
+        "How: Evaluates mandate binding, model targets, instrument eligibility, portfolio tax "
+        "lots, and market-data/FX coverage through the product-specific core source APIs, then "
+        "returns bounded source-family states and reason codes. It does not return a composed "
+        "execution context or duplicate the detailed source products.\n"
+        "When: Use this endpoint as the promotion gate for lotus-manage stateful `portfolio_id` "
+        "execution and as the operator supportability summary for DPM source-data incidents. Do "
+        "not use it as an all-in-one data feed; call the individual source products for data."
+    ),
+    responses={
+        422: problem_response(
+            "Invalid DPM source-readiness request",
+            {"detail": "instrument_ids must not contain duplicates"},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("DpmSourceReadiness"),
+)
+async def get_dpm_source_readiness(
+    request: DpmSourceReadinessRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose DPM source-family readiness is evaluated.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> DpmSourceReadinessResponse:
+    return await integration_service.get_dpm_source_readiness(
+        portfolio_id=portfolio_id,
+        request=request,
+    )
 
 
 @router.post(

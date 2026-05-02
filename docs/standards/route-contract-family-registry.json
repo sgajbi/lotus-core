@@ -118,6 +118,7 @@
         "GET /support/portfolios/{portfolio_id}/reprocessing-keys",
         "GET /support/portfolios/{portfolio_id}/valuation-jobs",
         "POST /integration/benchmarks/{benchmark_id}/coverage",
+        "POST /integration/portfolios/{portfolio_id}/dpm-source-readiness",
         "POST /integration/reference/risk-free-series/coverage"
       ],
       "Snapshot And Simulation": [

@@ -229,6 +229,17 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         audit_requirement=AUDIT_SYSTEM_ACCESS,
     ),
     SourceDataSecurityProfile(
+        product_name="DpmSourceReadiness",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=OPERATOR_ACCESS,
+        sensitivity_classification=INTERNAL_OPERATIONAL,
+        retention_requirement=RETAIN_FOR_OPERATIONAL_AUDIT,
+        audit_requirement=AUDIT_OPERATOR_ACCESS,
+        pii_fields=("portfolio_id",),
+        operator_only=True,
+    ),
+    SourceDataSecurityProfile(
         product_name="ReconciliationEvidenceBundle",
         tenant_required=True,
         entitlement_required=True,

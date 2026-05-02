@@ -18,14 +18,15 @@ from src.services.query_control_plane_service.app.routers.integration import (
     fetch_risk_free_series,
     get_benchmark_coverage,
     get_core_snapshot_service,
+    get_dpm_source_readiness,
     get_effective_integration_policy,
     get_instrument_enrichment_bulk,
     get_integration_service,
     get_market_data_coverage,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
-    resolve_instrument_eligibility_bulk,
     resolve_discretionary_mandate_binding,
+    resolve_instrument_eligibility_bulk,
     resolve_model_portfolio_targets,
     resolve_portfolio_benchmark_assignment,
 )
@@ -49,6 +50,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
+    DpmSourceReadinessRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
@@ -865,6 +867,58 @@ async def test_get_market_data_coverage_router_function() -> None:
 
     assert response["product_name"] == "MarketDataCoverageWindow"
     mock_service.get_market_data_coverage.assert_awaited_once_with(request)
+
+
+@pytest.mark.asyncio
+async def test_get_dpm_source_readiness_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_dpm_source_readiness = AsyncMock(
+        return_value={
+            "product_name": "DpmSourceReadiness",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-04-10",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+            "evaluated_instrument_ids": ["FO_EQ_AAPL_US"],
+            "families": [
+                {
+                    "family": "market_data",
+                    "product_name": "MarketDataCoverageWindow",
+                    "state": "READY",
+                    "reason": "MARKET_DATA_READY",
+                    "missing_items": [],
+                    "stale_items": [],
+                    "evidence_count": 1,
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "DPM_SOURCE_READINESS_READY",
+                "ready_family_count": 5,
+                "degraded_family_count": 0,
+                "incomplete_family_count": 0,
+                "unavailable_family_count": 0,
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = DpmSourceReadinessRequest(
+        as_of_date="2026-04-10",
+        instrument_ids=["FO_EQ_AAPL_US"],
+    )
+
+    response = await get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "DpmSourceReadiness"
+    mock_service.get_dpm_source_readiness.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
 
 
 @pytest.mark.asyncio

@@ -259,6 +259,21 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="DPM source product for bounded held and target universe price and FX coverage diagnostics.",
     ),
     SourceDataProductDefinition(
+        product_name="DpmSourceReadiness",
+        product_version="v1",
+        route_family=CONTROL_PLANE_AND_POLICY,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage", "lotus-gateway"),
+        current_routes=("/integration/portfolios/{portfolio_id}/dpm-source-readiness",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Control-plane readiness summary for DPM source families before lotus-manage "
+            "promotes stateful portfolio_id execution."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,

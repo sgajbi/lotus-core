@@ -44,7 +44,7 @@ def _eligibility() -> dict:
     return {
         "product_name": "InstrumentEligibilityProfile",
         "supportability": {"state": "READY"},
-        "eligibility": [
+        "records": [
             {
                 "security_id": "FO_EQ_AAPL_US",
                 "found": True,
@@ -87,6 +87,27 @@ def _market_data() -> dict:
     }
 
 
+def _source_readiness() -> dict:
+    return {
+        "product_name": "DpmSourceReadiness",
+        "supportability": {
+            "state": "READY",
+            "reason": "DPM_SOURCE_READINESS_READY",
+            "ready_family_count": 5,
+            "degraded_family_count": 0,
+            "incomplete_family_count": 0,
+            "unavailable_family_count": 0,
+        },
+        "families": [
+            {"family": "mandate", "state": "READY"},
+            {"family": "model_targets", "state": "READY"},
+            {"family": "eligibility", "state": "READY"},
+            {"family": "tax_lots", "state": "READY"},
+            {"family": "market_data", "state": "READY"},
+        ],
+    }
+
+
 def _handler(overrides: dict[str, tuple[int, dict | str]] | None = None) -> Callable:
     responses: dict[tuple[str, str], tuple[int, dict | str]] = {
         ("GET", "/openapi.json"): (200, _openapi()),
@@ -104,6 +125,10 @@ def _handler(overrides: dict[str, tuple[int, dict | str]] | None = None) -> Call
             f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/tax-lots",
         ): (200, _tax_lots()),
         ("POST", "/integration/market-data/coverage"): (200, _market_data()),
+        (
+            "POST",
+            f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/dpm-source-readiness",
+        ): (200, _source_readiness()),
     }
     for path, response in (overrides or {}).items():
         responses[("GET" if path == "/openapi.json" else "POST", path)] = response
@@ -135,6 +160,7 @@ def test_live_dpm_source_validator_accepts_ready_canonical_products() -> None:
         "dpm_instrument_eligibility_ready",
         "dpm_tax_lots_ready",
         "dpm_market_data_coverage_ready",
+        "dpm_source_readiness_ready",
     ]
 
 

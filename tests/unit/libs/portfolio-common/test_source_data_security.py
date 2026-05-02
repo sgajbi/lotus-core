@@ -61,6 +61,7 @@ def test_client_source_products_classify_sensitive_identifiers() -> None:
 
 def test_operator_evidence_products_require_operator_access_and_operational_retention() -> None:
     for product_name in (
+        "DpmSourceReadiness",
         "ReconciliationEvidenceBundle",
         "DataQualityCoverageReport",
         "IngestionEvidenceBundle",

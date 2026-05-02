@@ -13,14 +13,15 @@
 
 ## Active DPM Source Products
 
-RFC-087 Slices 4 through 8 promote the first DPM source products for `lotus-manage` discretionary
+RFC-087 Slices 4 through 9 promote the first DPM source products for `lotus-manage` discretionary
 mandate portfolio management.
 
 These products support discretionary mandate portfolio management rather than advisor proposal
 generation. In business terms, `lotus-core` supplies the governed facts that a portfolio manager
 needs before `lotus-manage` can calculate a rebalance: the approved model, the mandate authority,
-the investable/restricted universe, tax lots, market prices, and FX coverage. `lotus-manage` remains
-the execution and decisioning application; `lotus-core` remains the source-data authority.
+the investable/restricted universe, tax lots, market prices, FX coverage, and an operator-grade
+source-family readiness decision. `lotus-manage` remains the execution and decisioning application;
+`lotus-core` remains the source-data authority.
 
 | Product | Route | Purpose | Current proof |
 | --- | --- | --- | --- |
@@ -29,6 +30,7 @@ the execution and decisioning application; `lotus-core` remains the source-data 
 | `InstrumentEligibilityProfile:v1` | `/integration/instruments/eligibility-bulk` | Bulk product-shelf, restriction, liquidity, issuer, and settlement eligibility for held and target instruments. | Implemented in core with ingestion, persistence, OpenAPI, source-product metadata, tests, and canonical seed data. Live canonical runtime proof is pending stack refresh. |
 | `PortfolioTaxLotWindow:v1` | `/integration/portfolios/{portfolio_id}/tax-lots` | Portfolio-window tax lots and cost-basis state for tax-aware DPM sell decisions without production per-security fan-out. | Implemented in core using `position_lot_state`, deterministic cursor paging, OpenAPI, source-product metadata, supportability, and tests. Live canonical runtime proof is pending stack refresh. |
 | `MarketDataCoverageWindow:v1` | `/integration/market-data/coverage` | Held and target universe price and FX coverage diagnostics for valuation, drift, cash conversion, and rebalance sizing. | Implemented in core using `market_prices` and `fx_rates`, stale/missing supportability, OpenAPI, source-product metadata, and tests. Live canonical runtime proof is pending stack refresh. |
+| `DpmSourceReadiness:v1` | `/integration/portfolios/{portfolio_id}/dpm-source-readiness` | Operator-grade readiness summary for mandate, model target, eligibility, tax-lot, and market-data source families before stateful DPM promotion. | Implemented in core by composing product-specific source checks with bounded missing/stale diagnostics, OpenAPI, source-product metadata, domain-product declaration, and tests. Live canonical runtime proof is pending stack refresh. |
 
 ```mermaid
 flowchart LR
@@ -45,11 +47,17 @@ flowchart LR
     EligibilityStore --> EligibilityAPI[core-control InstrumentEligibilityProfile:v1]
     LotState --> TaxLotAPI[core-control PortfolioTaxLotWindow:v1]
     MarketStore --> MarketAPI[core-control MarketDataCoverageWindow:v1]
+    API --> Readiness[core-control DpmSourceReadiness:v1]
+    BindingAPI --> Readiness
+    EligibilityAPI --> Readiness
+    TaxLotAPI --> Readiness
+    MarketAPI --> Readiness
     API --> Manage[lotus-manage DPM source assembler]
     BindingAPI --> Manage
     EligibilityAPI --> Manage
     TaxLotAPI --> Manage
     MarketAPI --> Manage
+    Readiness --> Manage
 ```
 
 ## Audience Guide
@@ -67,19 +75,19 @@ Current implementation proof is local and CI-backed, with live canonical proof p
 
 | Proof area | Current state |
 | --- | --- |
-| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, and market-data/FX coverage. |
+| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, market-data/FX coverage, and DPM source-family readiness. |
 | Local validation | Source-data product guard, domain-product validation, focused validator tests, OpenAPI contract tests, and product-specific service/router tests exist. |
 | Reusable live validation | `make live-dpm-source-validate` runs `scripts/validate_live_dpm_source_products.py` against `core-control.dev.lotus`. |
 | Latest live attempt | Blocked: `core-control.dev.lotus` refused connections on 2026-05-02, so no endpoint-level live proof was accepted. |
-| Stateful `lotus-manage` promotion | Blocked until all five products pass live validation, a source-family readiness/supportability product is available, and `lotus-manage` proves stateful source assembly end to end. |
+| Stateful `lotus-manage` promotion | Blocked until all source products, including `DpmSourceReadiness:v1`, pass live validation and `lotus-manage` proves stateful source assembly end to end. |
 
 ```mermaid
 flowchart TD
-    Seed[Canonical front-office seed PB_SG_GLOBAL_BAL_001] --> CoreProducts[Five DPM source products]
+    Seed[Canonical front-office seed PB_SG_GLOBAL_BAL_001] --> CoreProducts[Six DPM source products]
     CoreProducts --> LiveValidator[make live-dpm-source-validate]
     LiveValidator --> Evidence{Live evidence accepted?}
     Evidence -->|No, runtime unavailable or data incomplete| Blocked[Keep stateful manage promotion blocked]
-    Evidence -->|Yes| Readiness[DPM source-family readiness/supportability]
+    Evidence -->|Yes| Readiness[DpmSourceReadiness:v1]
     Readiness --> ManageProof[lotus-manage stateful source assembly proof]
     ManageProof --> Promote[Capability truth may advertise stateful portfolio_id execution]
 ```
