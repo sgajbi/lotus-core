@@ -664,7 +664,8 @@ Scope:
 Exit evidence:
 
 1. RFC-087 merged or explicitly approved as the active implementation guide,
-2. existing route/product inventory attached to the RFC or companion evidence,
+2. existing route/product inventory attached to the RFC or companion evidence
+   (`docs/RFCs/RFC-087-slice-0-inventory-and-rebaseline-evidence.md`),
 3. `lotus-manage` RFC-0036 has the correct composed-source dependency model,
 4. no active docs claim that `lotus-core` should expose one all-in-one DPM context endpoint.
 
