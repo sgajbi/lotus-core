@@ -28,6 +28,47 @@ class _FakeExecuteResult:
 
 
 @pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_market_data_windows() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(
+                    from_currency="USD",
+                    to_currency="SGD",
+                    rate_date=date(2026, 4, 10),
+                    rate=Decimal("1.3521000000"),
+                )
+            ]
+        ),
+    ]
+    repo = ReferenceDataRepository(db)
+
+    price_rows = await repo.list_latest_market_prices(
+        security_ids=["EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+    fx_rows = await repo.list_latest_fx_rates(
+        currency_pairs=[("USD", "SGD")],
+        as_of_date=date(2026, 4, 10),
+    )
+
+    assert price_rows[0].security_id == "EQ_US_AAPL"
+    assert fx_rows[0].from_currency == "USD"
+    assert db.execute.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_reference_data_repository_methods_cover_query_contracts() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [

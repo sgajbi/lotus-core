@@ -247,6 +247,18 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="DPM source product for portfolio-window tax-lot and cost-basis state used by tax-aware sells.",
     ),
     SourceDataProductDefinition(
+        product_name="MarketDataCoverageWindow",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/market-data/coverage",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes="DPM source product for bounded held and target universe price and FX coverage diagnostics.",
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
@@ -291,20 +303,7 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
     ),
 )
 
-DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
-    SourceDataProductDefinition(
-        product_name="MarketDataCoverageWindow",
-        product_version="v1",
-        route_family=ANALYTICS_INPUT,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
-        owner="lotus-core",
-        consumers=("lotus-manage",),
-        current_routes=("/integration/market-data/coverage",),
-        paging_mode=INLINE_PAGED,
-        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
-        notes="Planned DPM source product for bounded price and FX coverage diagnostics.",
-    ),
-)
+DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = ()
 
 
 def get_source_data_product(product_name: str) -> SourceDataProductDefinition:

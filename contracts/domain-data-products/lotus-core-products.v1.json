@@ -1025,7 +1025,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "daily",
-        "max_allowed_age_description": "Planned DPM model target weights, bands, and cash reserve policy."
+        "max_allowed_age_description": "Approved DPM model target weights, bands, and cash reserve policy."
       },
       "completeness_policy": {
         "default_status": "complete",
@@ -1244,7 +1244,7 @@
       "owner_repository": "lotus-core",
       "product_family": "dpm_source_data",
       "authoritative_domain": "market_reference_data",
-      "lifecycle_status": "proposed",
+      "lifecycle_status": "active",
       "request_scope": {
         "scope_level": "instrument",
         "supports_bulk": true
@@ -1275,7 +1275,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "daily",
-        "max_allowed_age_description": "Planned DPM price and FX coverage diagnostics for target-universe valuation."
+        "max_allowed_age_description": "DPM price and FX coverage diagnostics for target-universe valuation."
       },
       "completeness_policy": {
         "default_status": "complete",

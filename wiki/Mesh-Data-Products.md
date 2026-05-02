@@ -13,7 +13,7 @@
 
 ## Active DPM Source Products
 
-RFC-087 Slices 4 through 7 promote the first DPM source products for `lotus-manage` discretionary
+RFC-087 Slices 4 through 8 promote the first DPM source products for `lotus-manage` discretionary
 mandate portfolio management.
 
 | Product | Route | Purpose | Current proof |
@@ -22,6 +22,7 @@ mandate portfolio management.
 | `DiscretionaryMandateBinding:v1` | `/integration/portfolios/{portfolio_id}/mandate-binding` | Effective-dated portfolio mandate, model, policy, authority, jurisdiction, booking center, tax-awareness, settlement-awareness, and rebalance constraints. | Implemented in core with ingestion, persistence, OpenAPI, source-product metadata, tests, and canonical seed data. Live canonical runtime proof is pending stack refresh. |
 | `InstrumentEligibilityProfile:v1` | `/integration/instruments/eligibility-bulk` | Bulk product-shelf, restriction, liquidity, issuer, and settlement eligibility for held and target instruments. | Implemented in core with ingestion, persistence, OpenAPI, source-product metadata, tests, and canonical seed data. Live canonical runtime proof is pending stack refresh. |
 | `PortfolioTaxLotWindow:v1` | `/integration/portfolios/{portfolio_id}/tax-lots` | Portfolio-window tax lots and cost-basis state for tax-aware DPM sell decisions without production per-security fan-out. | Implemented in core using `position_lot_state`, deterministic cursor paging, OpenAPI, source-product metadata, supportability, and tests. Live canonical runtime proof is pending stack refresh. |
+| `MarketDataCoverageWindow:v1` | `/integration/market-data/coverage` | Held and target universe price and FX coverage diagnostics for valuation, drift, cash conversion, and rebalance sizing. | Implemented in core using `market_prices` and `fx_rates`, stale/missing supportability, OpenAPI, source-product metadata, and tests. Live canonical runtime proof is pending stack refresh. |
 
 ```mermaid
 flowchart LR
@@ -29,6 +30,7 @@ flowchart LR
     Mandate[Mandate administration and policy engine] --> BindIngest[core ingest mandate-bindings]
     Eligibility[Product shelf, restriction, issuer, liquidity, and settlement sources] --> EligibilityIngest[core ingest instrument-eligibility]
     Booking[Booking and transaction processing] --> LotState[(position_lot_state)]
+    Market[Market price and FX sources] --> MarketStore[(market_prices and fx_rates)]
     Ingest --> Store[(model_portfolio_definitions and model_portfolio_targets)]
     BindIngest --> BindingStore[(portfolio_mandate_bindings)]
     EligibilityIngest --> EligibilityStore[(instrument_eligibility_profiles)]
@@ -36,26 +38,20 @@ flowchart LR
     BindingStore --> BindingAPI[core-control DiscretionaryMandateBinding:v1]
     EligibilityStore --> EligibilityAPI[core-control InstrumentEligibilityProfile:v1]
     LotState --> TaxLotAPI[core-control PortfolioTaxLotWindow:v1]
+    MarketStore --> MarketAPI[core-control MarketDataCoverageWindow:v1]
     API --> Manage[lotus-manage DPM source assembler]
     BindingAPI --> Manage
     EligibilityAPI --> Manage
     TaxLotAPI --> Manage
+    MarketAPI --> Manage
 ```
 
-## Proposed DPM Source Products
+## Future DPM Source Products
 
-RFC-087 adds proposed source-product declarations for `lotus-manage` discretionary mandate
-portfolio management. These products are not runtime APIs until their endpoint slices are
-implemented and promoted to active status.
+All first-wave RFC-087 DPM source-product declarations are now active. New proposed products should
+be added only through a follow-up RFC or explicit RFC-087 extension with implementation evidence.
 
-| Product | Planned route | Purpose |
-| --- | --- | --- |
-| `MarketDataCoverageWindow:v1` | `/integration/market-data/coverage` | Price and FX coverage diagnostics for the held and target mandate universe. |
-
-This proposed product is declared in
-`contracts/domain-data-products/lotus-core-products.v1.json` with lifecycle status `proposed`.
-Its planned in-code product catalog and source-security posture live in
-`portfolio_common.source_data_products` and `portfolio_common.source_data_security`.
+There are currently no remaining planned DPM source products in the in-code planned catalog.
 
 ## Platform relationship
 

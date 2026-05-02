@@ -43,6 +43,15 @@ DPM_PORTFOLIO_TAX_LOT_SCHEMA_ROOTS = {
     "ReferencePageMetadata",
 }
 
+DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS = {
+    "MarketDataCurrencyPair",
+    "MarketDataCoverageRequest",
+    "MarketDataPriceCoverageRecord",
+    "MarketDataFxCoverageRecord",
+    "MarketDataCoverageSupportability",
+    "MarketDataCoverageWindowResponse",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",

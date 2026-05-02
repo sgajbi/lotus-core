@@ -534,7 +534,7 @@ evidence.
 | Governed discretionary mandate binding source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Governed instrument eligibility and settlement profile source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Bulk portfolio tax-lot source product | Implemented pending live proof | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly; local API, catalog, OpenAPI, paging, supportability, and contract evidence exist. Live canonical stack proof remains pending until the refreshed runtime is available. |
-| Bulk market-data and FX coverage products | Planned | Held and target universe prices/FX can be fetched with bounded calls and coverage diagnostics. |
+| Bulk market-data and FX coverage products | Implemented pending live proof | Held and target universe prices/FX coverage can be fetched with one bounded call; local API, catalog, OpenAPI, supportability, stale/missing diagnostics, and contract evidence exist. Live canonical stack proof remains pending until the refreshed runtime is available. |
 | DPM source readiness and supportability | Planned | Operators can explain ready, partial, stale, and blocked DPM source states by source family. |
 | Canonical seeded managed mandate portfolio | Planned | Front-office canonical stack seeds complete DPM source families and validates live core/manage integration. |
 | API certification and Swagger quality for all DPM source APIs | Planned | Each endpoint is certified with complete descriptions, examples, errors, extensions, and tests. |
@@ -914,6 +914,22 @@ Exit evidence:
 2. missing target price/FX cases are deterministic and supportability-visible,
 3. request-size limits, paging behavior, and latency-sensitive query paths are tested,
 4. `lotus-manage` source assembly no longer needs N price or M FX serial loops.
+
+Current implementation evidence:
+
+1. `MarketDataCoverageWindow:v1` is active in the source-data catalog, source-security profile,
+   route-family registry, and repo-native domain-product declaration.
+2. `POST /integration/market-data/coverage` resolves latest available instrument prices and FX
+   rates on or before `as_of_date` from existing `market_prices` and `fx_rates` source tables.
+3. The API supports bounded instrument and FX-pair requests, `valuation_currency`,
+   `max_staleness_days`, tenant lineage context, source-data runtime metadata, and supportability
+   diagnostics for missing and stale observations.
+4. Missing observations return `INCOMPLETE` with `MARKET_DATA_MISSING`; stale-only observations
+   return `DEGRADED` with `MARKET_DATA_STALE`; complete fresh coverage returns `READY`.
+5. Focused unit, router, OpenAPI, source-data-product, route-family, and domain-product gates pass
+   locally. Evidence is recorded in
+   `docs/RFCs/RFC-087-slice-8-market-data-coverage-evidence.md`.
+6. Live canonical stack proof remains pending until the running stack is refreshed with this branch.
 
 ### Slice 9 - DPM source readiness, observability, and supportability
 

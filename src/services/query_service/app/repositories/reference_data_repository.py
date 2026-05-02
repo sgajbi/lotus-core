@@ -14,6 +14,7 @@ from portfolio_common.database_models import (
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
+    MarketPrice,
     InstrumentEligibilityProfile,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
@@ -21,7 +22,7 @@ from portfolio_common.database_models import (
     PortfolioMandateBinding,
     RiskFreeSeries,
 )
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -650,3 +651,76 @@ class ReferenceDataRepository:
         result = await self._db.execute(stmt)
         rows = result.scalars().all()
         return {row.rate_date: Decimal(row.rate) for row in rows}
+
+    async def list_latest_market_prices(
+        self,
+        *,
+        security_ids: list[str],
+        as_of_date: date,
+    ) -> list[MarketPrice]:
+        if not security_ids:
+            return []
+
+        latest_price_dates = (
+            select(
+                MarketPrice.security_id,
+                func.max(MarketPrice.price_date).label("latest_price_date"),
+            )
+            .where(
+                MarketPrice.security_id.in_(security_ids),
+                MarketPrice.price_date <= as_of_date,
+            )
+            .group_by(MarketPrice.security_id)
+            .subquery()
+        )
+        stmt = (
+            select(MarketPrice)
+            .join(
+                latest_price_dates,
+                and_(
+                    MarketPrice.security_id == latest_price_dates.c.security_id,
+                    MarketPrice.price_date == latest_price_dates.c.latest_price_date,
+                ),
+            )
+            .order_by(MarketPrice.security_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_latest_fx_rates(
+        self,
+        *,
+        currency_pairs: list[tuple[str, str]],
+        as_of_date: date,
+    ) -> list[FxRate]:
+        if not currency_pairs:
+            return []
+
+        normalized_pairs = [(base.upper(), quote.upper()) for base, quote in currency_pairs]
+        latest_rate_dates = (
+            select(
+                FxRate.from_currency,
+                FxRate.to_currency,
+                func.max(FxRate.rate_date).label("latest_rate_date"),
+            )
+            .where(
+                tuple_(FxRate.from_currency, FxRate.to_currency).in_(normalized_pairs),
+                FxRate.rate_date <= as_of_date,
+            )
+            .group_by(FxRate.from_currency, FxRate.to_currency)
+            .subquery()
+        )
+        stmt = (
+            select(FxRate)
+            .join(
+                latest_rate_dates,
+                and_(
+                    FxRate.from_currency == latest_rate_dates.c.from_currency,
+                    FxRate.to_currency == latest_rate_dates.c.to_currency,
+                    FxRate.rate_date == latest_rate_dates.c.latest_rate_date,
+                ),
+            )
+            .order_by(FxRate.from_currency.asc(), FxRate.to_currency.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())

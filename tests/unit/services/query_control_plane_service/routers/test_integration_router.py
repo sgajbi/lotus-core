@@ -21,6 +21,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_effective_integration_policy,
     get_instrument_enrichment_bulk,
     get_integration_service,
+    get_market_data_coverage,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
     resolve_instrument_eligibility_bulk,
@@ -52,6 +53,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     IntegrationWindow,
+    MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
@@ -801,6 +803,68 @@ async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
         )
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_market_data_coverage_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_market_data_coverage = AsyncMock(
+        return_value={
+            "product_name": "MarketDataCoverageWindow",
+            "product_version": "v1",
+            "as_of_date": "2026-04-10",
+            "valuation_currency": "SGD",
+            "price_coverage": [
+                {
+                    "instrument_id": "EQ_US_AAPL",
+                    "found": True,
+                    "price_date": "2026-04-10",
+                    "price": "187.1200000000",
+                    "currency": "USD",
+                    "age_days": 0,
+                    "quality_status": "READY",
+                }
+            ],
+            "fx_coverage": [
+                {
+                    "from_currency": "USD",
+                    "to_currency": "SGD",
+                    "found": True,
+                    "rate_date": "2026-04-10",
+                    "rate": "1.3521000000",
+                    "age_days": 0,
+                    "quality_status": "READY",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "MARKET_DATA_READY",
+                "requested_price_count": 1,
+                "resolved_price_count": 1,
+                "requested_fx_count": 1,
+                "resolved_fx_count": 1,
+                "missing_instrument_ids": [],
+                "stale_instrument_ids": [],
+                "missing_currency_pairs": [],
+                "stale_currency_pairs": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = MarketDataCoverageRequest(
+        as_of_date="2026-04-10",
+        instrument_ids=["EQ_US_AAPL"],
+        currency_pairs=[{"from_currency": "USD", "to_currency": "SGD"}],
+        valuation_currency="SGD",
+    )
+
+    response = await get_market_data_coverage(
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "MarketDataCoverageWindow"
+    mock_service.get_market_data_coverage.assert_awaited_once_with(request)
 
 
 @pytest.mark.asyncio

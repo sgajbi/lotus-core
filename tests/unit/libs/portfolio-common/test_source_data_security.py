@@ -29,9 +29,7 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
-    expected_profiles = {
-        "MarketDataCoverageWindow",
-    }
+    expected_profiles = set()
     profiles = {
         profile.product_name: profile for profile in DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES
     }
@@ -88,6 +86,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "DiscretionaryMandateBinding",
         "InstrumentEligibilityProfile",
         "PortfolioTaxLotWindow",
+        "MarketDataCoverageWindow",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):

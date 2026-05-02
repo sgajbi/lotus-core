@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     InstrumentEligibilityBulkRequest,
+    MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
     PortfolioTaxLotWindowRequest,
 )
@@ -1479,6 +1480,102 @@ async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> N
                 page={"page_token": token},
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_returns_price_and_fx_supportability() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                    updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                ),
+                SimpleNamespace(
+                    security_id="FI_US_TREASURY_10Y",
+                    price_date=date(2026, 4, 1),
+                    price=Decimal("98.5000000000"),
+                    currency="USD",
+                    updated_at=datetime(2026, 4, 1, 9, tzinfo=UTC),
+                ),
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    from_currency="USD",
+                    to_currency="SGD",
+                    rate_date=date(2026, 4, 10),
+                    rate=Decimal("1.3521000000"),
+                    updated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL", "FI_US_TREASURY_10Y", "UNKNOWN_SEC"],
+            currency_pairs=[{"from_currency": "USD", "to_currency": "SGD"}],
+            valuation_currency="SGD",
+            max_staleness_days=5,
+            tenant_id="tenant_sg_pb",
+        )
+    )
+
+    assert response.product_name == "MarketDataCoverageWindow"
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "MARKET_DATA_MISSING"
+    assert response.supportability.missing_instrument_ids == ["UNKNOWN_SEC"]
+    assert response.supportability.stale_instrument_ids == ["FI_US_TREASURY_10Y"]
+    assert response.price_coverage[0].quality_status == "READY"
+    assert response.price_coverage[1].quality_status == "STALE"
+    assert response.fx_coverage[0].rate == Decimal("1.3521000000")
+    assert response.data_quality_status == "PARTIAL"
+    service._reference_repository.list_latest_market_prices.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL", "FI_US_TREASURY_10Y", "UNKNOWN_SEC"],
+        as_of_date=date(2026, 4, 10),
+    )
+    service._reference_repository.list_latest_fx_rates.assert_awaited_once_with(
+        currency_pairs=[("USD", "SGD")],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_reports_stale_without_missing_as_degraded() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 1),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL"],
+            max_staleness_days=5,
+        )
+    )
+
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "MARKET_DATA_STALE"
+    assert response.supportability.stale_instrument_ids == ["EQ_US_AAPL"]
+    assert response.supportability.missing_instrument_ids == []
 
 
 @pytest.mark.asyncio

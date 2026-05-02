@@ -220,6 +220,15 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         pii_fields=("portfolio_id", "lot_id", "source_transaction_id"),
     ),
     SourceDataSecurityProfile(
+        product_name="MarketDataCoverageWindow",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=REFERENCE_INTERNAL,
+        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+    ),
+    SourceDataSecurityProfile(
         product_name="ReconciliationEvidenceBundle",
         tenant_required=True,
         entitlement_required=True,
@@ -254,17 +263,7 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
     ),
 )
 
-DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
-    SourceDataSecurityProfile(
-        product_name="MarketDataCoverageWindow",
-        tenant_required=True,
-        entitlement_required=True,
-        access_classification=SYSTEM_ACCESS,
-        sensitivity_classification=REFERENCE_INTERNAL,
-        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
-        audit_requirement=AUDIT_SYSTEM_ACCESS,
-    ),
-)
+DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = ()
 
 
 def get_source_data_security_profile(product_name: str) -> SourceDataSecurityProfile:

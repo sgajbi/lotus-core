@@ -47,6 +47,11 @@ from ..dtos.reference_integration_dto import (
     InstrumentEligibilityBulkResponse,
     InstrumentEligibilityRecord,
     InstrumentEligibilitySupportability,
+    MarketDataCoverageRequest,
+    MarketDataCoverageSupportability,
+    MarketDataCoverageWindowResponse,
+    MarketDataFxCoverageRecord,
+    MarketDataPriceCoverageRecord,
     ModelPortfolioSupportability,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
@@ -774,6 +779,132 @@ class IntegrationService:
                 data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
                     [lot for lot, _ in page_rows]
+                ),
+            ),
+        )
+
+    async def get_market_data_coverage(
+        self,
+        request: MarketDataCoverageRequest,
+    ) -> MarketDataCoverageWindowResponse:
+        price_rows = await self._reference_repository.list_latest_market_prices(
+            security_ids=request.instrument_ids,
+            as_of_date=request.as_of_date,
+        )
+        fx_pairs = [(pair.from_currency, pair.to_currency) for pair in request.currency_pairs]
+        fx_rows = await self._reference_repository.list_latest_fx_rates(
+            currency_pairs=fx_pairs,
+            as_of_date=request.as_of_date,
+        )
+
+        price_by_instrument = {row.security_id: row for row in price_rows}
+        fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
+
+        price_coverage: list[MarketDataPriceCoverageRecord] = []
+        missing_instrument_ids: list[str] = []
+        stale_instrument_ids: list[str] = []
+        for instrument_id in request.instrument_ids:
+            row = price_by_instrument.get(instrument_id)
+            if row is None:
+                missing_instrument_ids.append(instrument_id)
+                price_coverage.append(
+                    MarketDataPriceCoverageRecord(
+                        instrument_id=instrument_id,
+                        found=False,
+                        quality_status="MISSING",
+                    )
+                )
+                continue
+
+            age_days = (request.as_of_date - row.price_date).days
+            quality_status: Literal["READY", "STALE", "MISSING"] = (
+                "STALE" if age_days > request.max_staleness_days else "READY"
+            )
+            if quality_status == "STALE":
+                stale_instrument_ids.append(instrument_id)
+            price_coverage.append(
+                MarketDataPriceCoverageRecord(
+                    instrument_id=instrument_id,
+                    found=True,
+                    price_date=row.price_date,
+                    price=self._as_decimal(row.price),
+                    currency=row.currency,
+                    age_days=age_days,
+                    quality_status=quality_status,
+                )
+            )
+
+        fx_coverage: list[MarketDataFxCoverageRecord] = []
+        missing_currency_pairs: list[str] = []
+        stale_currency_pairs: list[str] = []
+        for pair in request.currency_pairs:
+            pair_key = (pair.from_currency, pair.to_currency)
+            pair_label = f"{pair.from_currency}/{pair.to_currency}"
+            row = fx_by_pair.get(pair_key)
+            if row is None:
+                missing_currency_pairs.append(pair_label)
+                fx_coverage.append(
+                    MarketDataFxCoverageRecord(
+                        from_currency=pair.from_currency,
+                        to_currency=pair.to_currency,
+                        found=False,
+                        quality_status="MISSING",
+                    )
+                )
+                continue
+
+            age_days = (request.as_of_date - row.rate_date).days
+            quality_status = "STALE" if age_days > request.max_staleness_days else "READY"
+            if quality_status == "STALE":
+                stale_currency_pairs.append(pair_label)
+            fx_coverage.append(
+                MarketDataFxCoverageRecord(
+                    from_currency=pair.from_currency,
+                    to_currency=pair.to_currency,
+                    found=True,
+                    rate_date=row.rate_date,
+                    rate=self._as_decimal(row.rate),
+                    age_days=age_days,
+                    quality_status=quality_status,
+                )
+            )
+
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "MARKET_DATA_READY"
+        if missing_instrument_ids or missing_currency_pairs:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "MARKET_DATA_MISSING"
+        elif stale_instrument_ids or stale_currency_pairs:
+            supportability_state = "DEGRADED"
+            supportability_reason = "MARKET_DATA_STALE"
+
+        return MarketDataCoverageWindowResponse(
+            as_of_date=request.as_of_date,
+            valuation_currency=request.valuation_currency,
+            price_coverage=price_coverage,
+            fx_coverage=fx_coverage,
+            supportability=MarketDataCoverageSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requested_price_count=len(request.instrument_ids),
+                resolved_price_count=sum(1 for record in price_coverage if record.found),
+                requested_fx_count=len(request.currency_pairs),
+                resolved_fx_count=sum(1 for record in fx_coverage if record.found),
+                missing_instrument_ids=missing_instrument_ids,
+                stale_instrument_ids=stale_instrument_ids,
+                missing_currency_pairs=missing_currency_pairs,
+                stale_currency_pairs=stale_currency_pairs,
+            ),
+            lineage={
+                "source_system": "market_prices+fx_rates",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status=("COMPLETE" if supportability_state == "READY" else "PARTIAL"),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                    price_rows,
+                    fx_rows,
                 ),
             ),
         )

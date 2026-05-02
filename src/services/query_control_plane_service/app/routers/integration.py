@@ -41,6 +41,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
+    MarketDataCoverageRequest,
+    MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
     PortfolioTaxLotWindowRequest,
@@ -376,6 +378,35 @@ async def get_portfolio_tax_lot_window(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/market-data/coverage",
+    response_model=MarketDataCoverageWindowResponse,
+    summary="Resolve DPM market-data and FX coverage",
+    description=(
+        "What: Return latest available price and FX coverage for the held and target DPM "
+        "universe in one bounded request.\n"
+        "How: Resolves latest market price and FX observations on or before as_of_date, classifies "
+        "missing and stale observations, and returns supportability diagnostics for downstream "
+        "source assembly.\n"
+        "When: Use this endpoint when lotus-manage assembles stateful DPM market-data inputs for "
+        "valuation, drift, cash conversion, and rebalance sizing. Do not use it as a historical "
+        "price or FX series API."
+    ),
+    responses={
+        422: problem_response(
+            "Invalid market-data coverage request",
+            {"detail": "instrument_ids must not contain duplicates"},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("MarketDataCoverageWindow"),
+)
+async def get_market_data_coverage(
+    request: MarketDataCoverageRequest = Body(...),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> MarketDataCoverageWindowResponse:
+    return await integration_service.get_market_data_coverage(request)
 
 
 @router.post(
