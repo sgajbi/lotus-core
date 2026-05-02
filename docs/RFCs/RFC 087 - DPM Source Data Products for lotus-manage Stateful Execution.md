@@ -538,7 +538,7 @@ evidence.
 | DPM source readiness and supportability | Implemented and live-proven | `DpmSourceReadiness:v1` exposes operator-grade source-family supportability for mandate, model target, eligibility, tax-lot, and market-data readiness; live proof returned READY across all five families. |
 | Canonical seeded managed mandate portfolio | Implemented and live-proven | Front-office seed includes model target, mandate binding, eligibility, tax-lot, market-price, and FX inputs for `PB_SG_GLOBAL_BAL_001`; live core and manage proof both passed on 2026-05-02. |
 | API certification and Swagger quality for all DPM source APIs | Implemented for RFC-087 scope | Each endpoint is certified through route metadata, OpenAPI publication, examples, tests, source-data product metadata, and live route proof. |
-| Wiki and demo-ready product material | Implemented pending publication | Repo-local wiki source describes implemented DPM source products with diagrams, current proof posture, and audience-specific guidance; GitHub wiki publication follows merge. |
+| Wiki and demo-ready product material | Implemented and published | Repo-local wiki source describes implemented DPM source products with diagrams, current proof posture, and audience-specific guidance; GitHub wiki publication from repo-local source has completed. |
 
 The final closure slice must update this ledger to distinguish `Implemented`, `Deferred`, and
 `Rejected` items. Any deferred item must include a reason, owner, follow-up issue or RFC, and impact
@@ -790,8 +790,8 @@ Current implementation evidence:
    with target weights summing to `1.0000000000`.
 4. Local proof is recorded in
    `docs/RFCs/RFC-087-slice-4-model-portfolio-target-evidence.md`.
-5. Live canonical stack proof remains pending until the running stack is refreshed with this
-   branch.
+5. Live canonical stack proof passed through `make live-dpm-source-validate`; the canonical
+   response returned READY source-family evidence with nine targets totaling `1.0000000000`.
 
 ### Slice 5 - Discretionary mandate binding pipeline and API
 
@@ -823,8 +823,8 @@ Current implementation evidence:
    `POLICY_DPM_SG_BALANCED_V1`.
 4. Local proof is recorded in
    `docs/RFCs/RFC-087-slice-5-discretionary-mandate-binding-evidence.md`.
-5. Live canonical stack proof remains pending until the running stack is refreshed with this
-   branch.
+5. Live canonical stack proof passed through `make live-dpm-source-validate`; the canonical
+   response returned the discretionary mandate binding for `MODEL_PB_SG_GLOBAL_BAL_DPM`.
 
 ### Slice 6 - Instrument eligibility, restrictions, and settlement pipeline and API
 
@@ -859,7 +859,8 @@ Current implementation evidence:
    eligibility instead of allowing downstream local fallback truth.
 5. Local proof is recorded in
    `docs/RFCs/RFC-087-slice-6-instrument-eligibility-evidence.md`.
-6. Live canonical stack proof remains pending until the running stack is refreshed with this branch.
+6. Live canonical stack proof passed through `make live-dpm-source-validate`; the canonical
+   response returned READY eligibility including the expected restricted private-credit buy block.
 
 ### Slice 7 - Bulk tax-lot pipeline and API
 
@@ -895,7 +896,8 @@ Current implementation evidence:
 5. Focused unit, router, OpenAPI, source-data-product, route-family, and domain-product gates pass
    locally. Evidence is recorded in
    `docs/RFCs/RFC-087-slice-7-portfolio-tax-lot-evidence.md`.
-6. Live canonical stack proof remains pending until the running stack is refreshed with this branch.
+6. Live canonical stack proof passed through `make live-dpm-source-validate`; the canonical
+   response returned READY portfolio tax-lot coverage for the managed mandate portfolio.
 
 ### Slice 8 - Bulk market-data and FX coverage pipeline and APIs
 
@@ -930,7 +932,8 @@ Current implementation evidence:
 5. Focused unit, router, OpenAPI, source-data-product, route-family, and domain-product gates pass
    locally. Evidence is recorded in
    `docs/RFCs/RFC-087-slice-8-market-data-coverage-evidence.md`.
-6. Live canonical stack proof remains pending until the running stack is refreshed with this branch.
+6. Live canonical stack proof passed through `make live-dpm-source-validate`; the canonical
+   response returned READY market-data and FX coverage for the held and target universe.
 
 ### Slice 9 - DPM source readiness, observability, and supportability
 
@@ -1257,8 +1260,8 @@ The implemented first-wave source products have reached the RFC-087 gold-standar
 canonical core runtime is reachable, all source-product routes are live-proven with realistic
 managed mandate data, source-family readiness/supportability is exposed, `lotus-manage` stateful
 source assembly is proven end to end, and deployed Swagger/live responses are covered by executable
-validators. The remaining work is operational closure only: merge hygiene and post-merge GitHub
-wiki publication from repo-local wiki source.
+validators. Operational closure is also complete: merge hygiene passed and GitHub wiki publication
+from repo-local wiki source is complete.
 
 ### Documentation And Skill Review
 
