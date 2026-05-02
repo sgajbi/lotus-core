@@ -15,7 +15,9 @@
 - `make ci`
   PR merge gate parity
 - `make ci-main`
-  main releasability parity
+  main push releasability parity
+- `make test-institutional-release-gates`
+  scheduled/manual institutional completion and sign-off parity
 
 ## Important gates
 

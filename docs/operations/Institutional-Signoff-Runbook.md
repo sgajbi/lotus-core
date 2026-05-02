@@ -35,15 +35,17 @@ reconciliation for the exact generated `run_id`, producing both:
 
 ## CI Enforcement
 1. GitHub Actions job `Institutional Sign-Off Pack` runs on:
-   1. `main` pushes,
-   2. scheduled pipelines,
-   3. manual workflow dispatch.
+   1. scheduled pipelines,
+   2. manual workflow dispatch.
 2. The job is a required production-readiness gate and fails when:
    1. any required artifact is missing,
    2. any gate status is failed,
    3. any required artifact is older than 24 hours (`--max-age-hours 24`).
-3. The main releasability workflow now generates RFC-086 completion evidence through
+3. The scheduled/manual main releasability workflow generates RFC-086 completion evidence through
    `Main Releasability / Institutional Completion Gate` before sign-off aggregation.
+4. Routine `main` push runs intentionally skip the approval-grade institutional completion and
+   sign-off jobs so post-merge health remains governed by the faster release gates. Use a scheduled
+   or manually dispatched run for institutional release evidence.
 
 ## Go-Live Checklist
 All items must be `yes`:
