@@ -71,25 +71,26 @@ flowchart LR
 
 ## Proof Posture
 
-Current implementation proof is local and CI-backed, with live canonical proof pending.
+Current implementation proof is local, CI-backed, and live-proven on the canonical core/manage
+proof path.
 
 | Proof area | Current state |
 | --- | --- |
 | Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, market-data/FX coverage, and DPM source-family readiness. |
 | Local validation | Source-data product guard, domain-product validation, focused validator tests, OpenAPI contract tests, and product-specific service/router tests exist. |
 | Reusable live validation | `make live-dpm-source-validate` runs `scripts/validate_live_dpm_source_products.py` against `core-control.dev.lotus`. |
-| Latest live attempt | Blocked: `core-control.dev.lotus` refused connections on 2026-05-02, so no endpoint-level live proof was accepted. |
-| Stateful `lotus-manage` promotion | Blocked until all source products, including `DpmSourceReadiness:v1`, pass live validation and `lotus-manage` proves stateful source assembly end to end. |
+| Latest live attempt | Passed: `make live-dpm-source-validate` returned 7/7 probes with READY source-family evidence on 2026-05-02. |
+| Stateful `lotus-manage` promotion | Service-level proof passed: `make live-api-validate-core` in `lotus-manage` returned 11/11 probes with stateful core sourcing available. Runtime publication remains controlled by explicit feature gates. |
 
 ```mermaid
 flowchart TD
     Seed[Canonical front-office seed PB_SG_GLOBAL_BAL_001] --> CoreProducts[Six DPM source products]
     CoreProducts --> LiveValidator[make live-dpm-source-validate]
     LiveValidator --> Evidence{Live evidence accepted?}
-    Evidence -->|No, runtime unavailable or data incomplete| Blocked[Keep stateful manage promotion blocked]
-    Evidence -->|Yes| Readiness[DpmSourceReadiness:v1]
+    Evidence -->|No, runtime unavailable or data incomplete| Blocked[Keep stateful capability hidden]
+    Evidence -->|Yes, 7/7 READY| Readiness[DpmSourceReadiness:v1]
     Readiness --> ManageProof[lotus-manage stateful source assembly proof]
-    ManageProof --> Promote[Capability truth may advertise stateful portfolio_id execution]
+    ManageProof --> Promote[Capability truth may advertise stateful portfolio_id execution when feature gates are enabled]
 ```
 
 ## Future DPM Source Products
