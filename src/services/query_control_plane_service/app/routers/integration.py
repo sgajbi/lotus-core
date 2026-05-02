@@ -39,6 +39,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
+    InstrumentEligibilityBulkRequest,
+    InstrumentEligibilityBulkResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
     RiskFreeSeriesRequest,
@@ -300,6 +302,29 @@ async def get_instrument_enrichment_bulk(
         return InstrumentEnrichmentBulkResponse(records=records)
     except CoreSnapshotBadRequestError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post(
+    "/instruments/eligibility-bulk",
+    response_model=InstrumentEligibilityBulkResponse,
+    summary="Resolve DPM instrument eligibility profiles",
+    description=(
+        "What: Return effective DPM instrument eligibility, product shelf, restriction code, "
+        "liquidity, issuer, and settlement profile records for a caller-provided security list.\n"
+        "How: Resolves effective-dated eligibility records in one deterministic batch, preserves "
+        "request order, and returns explicit UNKNOWN records for missing securities instead of "
+        "inventing local fallback truth.\n"
+        "When: Use this endpoint when lotus-manage assembles stateful DPM shelf inputs for held "
+        "and target instruments. Do not use it as a general instrument search API or to retrieve "
+        "operator-only free-text restriction rationale."
+    ),
+    openapi_extra=source_data_product_openapi_extra("InstrumentEligibilityProfile"),
+)
+async def resolve_instrument_eligibility_bulk(
+    request: InstrumentEligibilityBulkRequest,
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> InstrumentEligibilityBulkResponse:
+    return await integration_service.resolve_instrument_eligibility_bulk(request)
 
 
 @router.post(

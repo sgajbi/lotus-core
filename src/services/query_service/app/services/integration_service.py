@@ -43,6 +43,10 @@ from ..dtos.reference_integration_dto import (
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
     IntegrationWindow,
+    InstrumentEligibilityBulkRequest,
+    InstrumentEligibilityBulkResponse,
+    InstrumentEligibilityRecord,
+    InstrumentEligibilitySupportability,
     ModelPortfolioSupportability,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
@@ -543,6 +547,101 @@ class IntegrationService:
                 request.as_of_date,
                 data_quality_status=str(row.quality_status).upper(),
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+            ),
+        )
+
+    async def resolve_instrument_eligibility_bulk(
+        self,
+        request: InstrumentEligibilityBulkRequest,
+    ) -> InstrumentEligibilityBulkResponse:
+        rows = await self._reference_repository.list_instrument_eligibility_profiles(
+            security_ids=request.security_ids,
+            as_of_date=request.as_of_date,
+        )
+        rows_by_security_id = {row.security_id: row for row in rows}
+
+        records: list[InstrumentEligibilityRecord] = []
+        missing_security_ids: list[str] = []
+        for security_id in request.security_ids:
+            row = rows_by_security_id.get(security_id)
+            if row is None:
+                missing_security_ids.append(security_id)
+                records.append(
+                    InstrumentEligibilityRecord(
+                        security_id=security_id,
+                        found=False,
+                        eligibility_status="UNKNOWN",
+                        product_shelf_status="UNKNOWN",
+                        buy_allowed=False,
+                        sell_allowed=False,
+                        restriction_reason_codes=["ELIGIBILITY_PROFILE_MISSING"],
+                        settlement_days=None,
+                        settlement_calendar_id=None,
+                        liquidity_tier=None,
+                        issuer_id=None,
+                        issuer_name=None,
+                        ultimate_parent_issuer_id=None,
+                        ultimate_parent_issuer_name=None,
+                        asset_class=None,
+                        country_of_risk=None,
+                        effective_from=None,
+                        effective_to=None,
+                        quality_status="MISSING",
+                        source_record_id=None,
+                    )
+                )
+                continue
+            records.append(
+                InstrumentEligibilityRecord(
+                    security_id=row.security_id,
+                    found=True,
+                    eligibility_status=str(row.eligibility_status).upper(),
+                    product_shelf_status=str(row.product_shelf_status).upper(),
+                    buy_allowed=bool(row.buy_allowed),
+                    sell_allowed=bool(row.sell_allowed),
+                    restriction_reason_codes=list(row.restriction_reason_codes or []),
+                    settlement_days=int(row.settlement_days),
+                    settlement_calendar_id=row.settlement_calendar_id,
+                    liquidity_tier=row.liquidity_tier,
+                    issuer_id=row.issuer_id,
+                    issuer_name=row.issuer_name,
+                    ultimate_parent_issuer_id=row.ultimate_parent_issuer_id,
+                    ultimate_parent_issuer_name=row.ultimate_parent_issuer_name,
+                    asset_class=row.asset_class,
+                    country_of_risk=row.country_of_risk,
+                    effective_from=row.effective_from,
+                    effective_to=row.effective_to,
+                    quality_status=str(row.quality_status).upper(),
+                    source_record_id=row.source_record_id,
+                )
+            )
+
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "INSTRUMENT_ELIGIBILITY_READY"
+        if missing_security_ids:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "INSTRUMENT_ELIGIBILITY_MISSING"
+
+        return InstrumentEligibilityBulkResponse(
+            records=records,
+            supportability=InstrumentEligibilitySupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requested_count=len(request.security_ids),
+                resolved_count=len(request.security_ids) - len(missing_security_ids),
+                missing_security_ids=missing_security_ids,
+            ),
+            lineage={
+                "source_system": "instrument_eligibility",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata(
+                request.as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    rows,
+                    required_count=len(request.security_ids),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
             ),
         )
 

@@ -220,6 +220,41 @@ async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> No
 
 
 @pytest.mark.asyncio
+async def test_list_instrument_eligibility_profiles_returns_latest_effective_rows() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                security_id="AAPL",
+                effective_from=date(2026, 1, 1),
+                eligibility_status="RESTRICTED",
+            ),
+            SimpleNamespace(
+                security_id="AAPL",
+                effective_from=date(2026, 4, 1),
+                eligibility_status="APPROVED",
+            ),
+            SimpleNamespace(
+                security_id="MSFT",
+                effective_from=date(2026, 4, 1),
+                eligibility_status="APPROVED",
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_instrument_eligibility_profiles(
+        ["AAPL", "MSFT"],
+        date(2026, 4, 10),
+    )
+
+    assert [(row.security_id, row.eligibility_status) for row in rows] == [
+        ("AAPL", "APPROVED"),
+        ("MSFT", "APPROVED"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_catalog_methods_return_latest_effective_row_per_business_key() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [

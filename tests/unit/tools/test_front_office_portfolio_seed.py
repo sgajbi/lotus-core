@@ -354,6 +354,27 @@ def test_front_office_bundle_includes_dpm_mandate_binding():
     ]
 
 
+def test_front_office_bundle_includes_dpm_instrument_eligibility_profiles():
+    bundle = _build_bundle()
+    profiles = {
+        profile["security_id"]: profile for profile in bundle["instrument_eligibility_profiles"]
+    }
+
+    assert set(profiles) == {instrument["security_id"] for instrument in bundle["instruments"]}
+    assert profiles["FO_EQ_AAPL_US"]["eligibility_status"] == "APPROVED"
+    assert profiles["FO_EQ_AAPL_US"]["buy_allowed"] is True
+    assert profiles["FO_EQ_AAPL_US"]["settlement_calendar_id"] == "US_NYSE"
+    assert profiles["CASH_EUR_BOOK_OPERATING"]["settlement_days"] == 0
+    assert profiles["CASH_EUR_BOOK_OPERATING"]["settlement_calendar_id"] == "TARGET2"
+    assert profiles["FO_PRIV_PRIVATE_CREDIT_A"]["eligibility_status"] == "RESTRICTED"
+    assert profiles["FO_PRIV_PRIVATE_CREDIT_A"]["buy_allowed"] is False
+    assert profiles["FO_PRIV_PRIVATE_CREDIT_A"]["sell_allowed"] is True
+    assert profiles["FO_PRIV_PRIVATE_CREDIT_A"]["restriction_reason_codes"] == [
+        "PRIVATE_ASSET_REVIEW",
+        "ILLIQUID_ALTERNATIVE",
+    ]
+
+
 def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     bundle = _build_bundle()
     cash_security_ids = {
@@ -489,6 +510,7 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert (
         "delete from portfolio_mandate_bindings where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     )
+    assert "delete from instrument_eligibility_profiles" in sql
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
     assert "delete from reprocessing_jobs;" not in sql
@@ -611,6 +633,7 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
         "http://ingestion.dev.lotus/ingest/model-portfolios",
         "http://ingestion.dev.lotus/ingest/model-portfolio-targets",
         "http://ingestion.dev.lotus/ingest/mandate-bindings",
+        "http://ingestion.dev.lotus/ingest/instrument-eligibility",
         "http://ingestion.dev.lotus/ingest/risk-free-series",
     ]
     assert calls[8][2]["model_portfolios"][0]["model_portfolio_id"] == (
@@ -618,6 +641,7 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
     )
     assert calls[9][2]["model_portfolio_targets"]
     assert calls[10][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert calls[11][2]["eligibility_profiles"]
 
 
 def test_front_office_seed_derives_required_cross_currency_fx_windows():

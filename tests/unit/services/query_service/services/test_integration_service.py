@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
+    InstrumentEligibilityBulkRequest,
     ModelPortfolioTargetRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -24,6 +25,13 @@ def model_portfolio_target_request(as_of_date: date) -> ModelPortfolioTargetRequ
 
 def mandate_binding_request(as_of_date: date) -> DiscretionaryMandateBindingRequest:
     return DiscretionaryMandateBindingRequest(as_of_date=as_of_date)
+
+
+def instrument_eligibility_request(
+    security_ids: list[str],
+    as_of_date: date,
+) -> InstrumentEligibilityBulkRequest:
+    return InstrumentEligibilityBulkRequest(security_ids=security_ids, as_of_date=as_of_date)
 
 
 def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
@@ -391,6 +399,87 @@ async def test_resolve_discretionary_mandate_binding_maps_missing_row_to_none() 
     )
 
     assert response is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_records() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    observed_at = datetime(2026, 4, 1, 9, 0, tzinfo=UTC)
+    service._reference_repository.list_instrument_eligibility_profiles.return_value = [
+        SimpleNamespace(
+            security_id="MSFT",
+            eligibility_status="RESTRICTED",
+            product_shelf_status="RESTRICTED",
+            buy_allowed=False,
+            sell_allowed=True,
+            restriction_reason_codes=["CONCENTRATION_REVIEW"],
+            settlement_days=2,
+            settlement_calendar_id="US_NYSE",
+            liquidity_tier="L1",
+            issuer_id="MICROSOFT",
+            issuer_name="Microsoft Corporation",
+            ultimate_parent_issuer_id="MICROSOFT_PARENT",
+            ultimate_parent_issuer_name="Microsoft Corporation",
+            asset_class="Equity",
+            country_of_risk="US",
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            source_record_id="MSFT-elig",
+            observed_at=observed_at,
+            quality_status="accepted",
+        ),
+        SimpleNamespace(
+            security_id="AAPL",
+            eligibility_status="APPROVED",
+            product_shelf_status="APPROVED",
+            buy_allowed=True,
+            sell_allowed=True,
+            restriction_reason_codes=[],
+            settlement_days=2,
+            settlement_calendar_id="US_NYSE",
+            liquidity_tier="L1",
+            issuer_id="APPLE",
+            issuer_name="Apple Inc.",
+            ultimate_parent_issuer_id="APPLE_PARENT",
+            ultimate_parent_issuer_name="Apple Inc.",
+            asset_class="Equity",
+            country_of_risk="US",
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            source_record_id="AAPL-elig",
+            observed_at=observed_at,
+            quality_status="accepted",
+        ),
+    ]
+
+    response = await service.resolve_instrument_eligibility_bulk(
+        instrument_eligibility_request(
+            ["AAPL", "UNKNOWN_SEC", "MSFT"],
+            date(2026, 4, 10),
+        )
+    )
+
+    assert response.product_name == "InstrumentEligibilityProfile"
+    assert [record.security_id for record in response.records] == [
+        "AAPL",
+        "UNKNOWN_SEC",
+        "MSFT",
+    ]
+    assert response.records[0].buy_allowed is True
+    assert response.records[1].found is False
+    assert response.records[1].restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
+    assert response.records[2].restriction_reason_codes == ["CONCENTRATION_REVIEW"]
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "INSTRUMENT_ELIGIBILITY_MISSING"
+    assert response.supportability.requested_count == 3
+    assert response.supportability.resolved_count == 2
+    assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert response.latest_evidence_timestamp == observed_at
+    service._reference_repository.list_instrument_eligibility_profiles.assert_awaited_once_with(
+        security_ids=["AAPL", "UNKNOWN_SEC", "MSFT"],
+        as_of_date=date(2026, 4, 10),
+    )
 
 
 def test_canonical_consumer_system_mappings() -> None:

@@ -185,6 +185,7 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
     fx_rates = paths["/ingest/fx-rates"]["post"]
     business_dates = paths["/ingest/business-dates"]["post"]
     benchmark_assignments = paths["/ingest/benchmark-assignments"]["post"]
+    instrument_eligibility = paths["/ingest/instrument-eligibility"]["post"]
 
     assert (
         portfolios["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
@@ -293,6 +294,12 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
     )
     assert (
         benchmark_assignments["responses"]["500"]["content"]["application/json"]["example"][
+            "detail"
+        ]["code"]
+        == "REFERENCE_DATA_PERSIST_FAILED"
+    )
+    assert (
+        instrument_eligibility["responses"]["500"]["content"]["application/json"]["example"][
             "detail"
         ]["code"]
         == "REFERENCE_DATA_PERSIST_FAILED"

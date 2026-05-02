@@ -15,6 +15,7 @@ from ..DTOs.reference_data_dto import (
     IndexDefinitionIngestionRequest,
     IndexPriceSeriesIngestionRequest,
     IndexReturnSeriesIngestionRequest,
+    InstrumentEligibilityProfileIngestionRequest,
     InstrumentLookthroughComponentIngestionRequest,
     ModelPortfolioDefinitionIngestionRequest,
     ModelPortfolioTargetIngestionRequest,
@@ -262,6 +263,43 @@ async def ingest_model_portfolio_targets(
         request_payload=request.model_dump(mode="json"),
         persist_fn=lambda: reference_data_service.upsert_model_portfolio_targets(
             [item.model_dump() for item in request.model_portfolio_targets]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/instrument-eligibility",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest instrument eligibility profiles",
+    description=(
+        "What: Accept effective-dated DPM instrument eligibility, product shelf, restriction, "
+        "liquidity, and settlement profiles.\n"
+        "How: Validate eligibility flags and source lineage, then upsert durable records keyed "
+        "by security_id, effective_from, and eligibility_version.\n"
+        "When: Use when product shelf, compliance restriction, or settlement master data changes "
+        "so lotus-manage can build DPM shelf inputs from governed core source data."
+    ),
+)
+async def ingest_instrument_eligibility_profiles(
+    request: InstrumentEligibilityProfileIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/instrument-eligibility",
+        entity_type="instrument_eligibility_profile",
+        accepted_count=len(request.eligibility_profiles),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_instrument_eligibility_profiles(
+            [item.model_dump() for item in request.eligibility_profiles]
         ),
         ingestion_job_service=ingestion_job_service,
     )

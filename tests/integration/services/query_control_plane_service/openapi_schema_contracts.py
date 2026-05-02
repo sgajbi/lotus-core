@@ -27,6 +27,13 @@ DPM_MANDATE_BINDING_SCHEMA_ROOTS = {
     "DiscretionaryMandateBindingResponse",
 }
 
+DPM_INSTRUMENT_ELIGIBILITY_SCHEMA_ROOTS = {
+    "InstrumentEligibilityBulkRequest",
+    "InstrumentEligibilityRecord",
+    "InstrumentEligibilitySupportability",
+    "InstrumentEligibilityBulkResponse",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",

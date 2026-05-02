@@ -195,6 +195,8 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_mandate_bindings where portfolio_id = '{portfolio_id}';",
+            "delete from instrument_eligibility_profiles "
+            "where source_system = 'LOTUS_FRONT_OFFICE_SEED';",
             f"delete from transactions where portfolio_id = '{portfolio_id}';",
             f"delete from instruments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolios where portfolio_id = '{portfolio_id}';",
@@ -1403,6 +1405,57 @@ def build_front_office_portfolio_bundle(
             "quality_status": "accepted",
         }
     ]
+    restricted_instrument_reason_codes = {
+        "FO_PRIV_PRIVATE_CREDIT_A": ["PRIVATE_ASSET_REVIEW", "ILLIQUID_ALTERNATIVE"],
+    }
+    settlement_calendar_by_currency = {
+        "EUR": "TARGET2",
+        "SGD": "SGX",
+        "USD": "US_NYSE",
+    }
+    instrument_eligibility_profiles = [
+        {
+            "security_id": instrument["security_id"],
+            "eligibility_status": (
+                "RESTRICTED"
+                if instrument["security_id"] in restricted_instrument_reason_codes
+                else "APPROVED"
+            ),
+            "product_shelf_status": (
+                "RESTRICTED"
+                if instrument["security_id"] in restricted_instrument_reason_codes
+                else "APPROVED"
+            ),
+            "buy_allowed": instrument["security_id"] not in restricted_instrument_reason_codes,
+            "sell_allowed": True,
+            "restriction_reason_codes": restricted_instrument_reason_codes.get(
+                instrument["security_id"], []
+            ),
+            "restriction_rationale": (
+                "Private asset requires investment-office review before additional buys."
+                if instrument["security_id"] in restricted_instrument_reason_codes
+                else None
+            ),
+            "settlement_days": 0 if instrument["asset_class"] == "Cash" else 2,
+            "settlement_calendar_id": settlement_calendar_by_currency.get(
+                instrument["currency"], "GLOBAL"
+            ),
+            "liquidity_tier": instrument.get("liquidity_tier"),
+            "issuer_id": instrument.get("issuer_id"),
+            "issuer_name": instrument.get("issuer_name"),
+            "ultimate_parent_issuer_id": instrument.get("ultimate_parent_issuer_id"),
+            "ultimate_parent_issuer_name": instrument.get("ultimate_parent_issuer_name"),
+            "asset_class": instrument.get("asset_class"),
+            "country_of_risk": instrument.get("country_of_risk"),
+            "effective_from": "2026-04-01",
+            "eligibility_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": f"{instrument['security_id'].lower()}_eligibility_v1",
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+        for instrument in instruments
+    ]
 
     market_price_specs = {
         "FO_EQ_AAPL_US": (Decimal("184.00"), Decimal("212.00")),
@@ -1490,6 +1543,7 @@ def build_front_office_portfolio_bundle(
         "model_portfolios": model_portfolios,
         "model_portfolio_targets": model_portfolio_targets,
         "mandate_bindings": mandate_bindings,
+        "instrument_eligibility_profiles": instrument_eligibility_profiles,
         **benchmark_reference,
         **risk_free_reference,
     }
@@ -1554,6 +1608,10 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         (
             "/ingest/mandate-bindings",
             {"mandate_bindings": bundle["mandate_bindings"]},
+        ),
+        (
+            "/ingest/instrument-eligibility",
+            {"eligibility_profiles": bundle["instrument_eligibility_profiles"]},
         ),
         ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )

@@ -532,7 +532,7 @@ evidence.
 | DPM source-data governance scaffold | Planned | Planned products, domain-product declarations, source-security profiles, route-family posture, and validation evidence exist before runtime routes are exposed. |
 | Governed model portfolio target source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Governed discretionary mandate binding source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
-| Governed instrument eligibility and settlement profile source product | Planned | Eligibility, restriction reasons, shelf flags, settlement profile, and unknown-record behavior are API-backed and tested. |
+| Governed instrument eligibility and settlement profile source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Bulk portfolio tax-lot source product | Planned | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly. |
 | Bulk market-data and FX coverage products | Planned | Held and target universe prices/FX can be fetched with bounded calls and coverage diagnostics. |
 | DPM source readiness and supportability | Planned | Operators can explain ready, partial, stale, and blocked DPM source states by source family. |
@@ -844,6 +844,21 @@ Exit evidence:
 2. missing eligibility produces bounded supportability rather than local fallback truth,
 3. DPM shelf construction can be proven without advisory-era assumptions,
 4. sensitive restriction rationale is protected by source-data security and capability rules.
+
+Current implementation evidence:
+
+1. `InstrumentEligibilityProfile:v1` is active in the source-data catalog, source-security profile,
+   route-family registry, and repo-native domain-product declaration.
+2. Instrument eligibility ingestion, persistence, effective-dated resolver, and control-plane bulk
+   API are implemented.
+3. The canonical front-office seed now publishes eligibility profiles for every held and model
+   target instrument in `PB_SG_GLOBAL_BAL_001`, including an explicit restricted private-credit
+   instrument for supportability and explainability proof.
+4. The bulk API preserves request order and returns explicit `UNKNOWN` records for missing
+   eligibility instead of allowing downstream local fallback truth.
+5. Local proof is recorded in
+   `docs/RFCs/RFC-087-slice-6-instrument-eligibility-evidence.md`.
+6. Live canonical stack proof remains pending until the running stack is refreshed with this branch.
 
 ### Slice 7 - Bulk tax-lot pipeline and API
 

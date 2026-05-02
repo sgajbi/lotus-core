@@ -50,7 +50,12 @@ Current repository posture:
 18. RFC-0087 trust telemetry proof for `PortfolioStateSnapshot` now lives under
     `contracts/trust-telemetry/` and is validated by `tests/unit/test_trust_telemetry.py` against
     the platform trust telemetry validator when `lotus-platform` is available.
-19. RFC-0108 portfolio readiness supportability now publishes the bounded
+19. RFC-0087 now promotes the first three DPM source-data products for `lotus-manage` stateful
+    discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
+    `DiscretionaryMandateBinding:v1`, and `InstrumentEligibilityProfile:v1`. They are declared in
+    the active source-data catalog, route-family registry, source-security profiles, and
+    domain-product declaration, with canonical front-office seed payloads pending live stack proof.
+20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared
     `portfolio_common.observability_contracts.PORTFOLIO_SUPPORTABILITY_METRIC_LABELS` tuple for the

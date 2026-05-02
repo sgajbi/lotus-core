@@ -22,6 +22,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_instrument_enrichment_bulk,
     get_integration_service,
     get_risk_free_coverage,
+    resolve_instrument_eligibility_bulk,
     resolve_discretionary_mandate_binding,
     resolve_model_portfolio_targets,
     resolve_portfolio_benchmark_assignment,
@@ -48,6 +49,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
+    InstrumentEligibilityBulkRequest,
     IntegrationWindow,
     ModelPortfolioTargetRequest,
     RiskFreeSeriesRequest,
@@ -647,6 +649,71 @@ async def test_resolve_discretionary_mandate_binding_maps_not_found_to_404() -> 
         )
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_instrument_eligibility_bulk_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_instrument_eligibility_bulk = AsyncMock(
+        return_value={
+            "product_name": "InstrumentEligibilityProfile",
+            "product_version": "v1",
+            "as_of_date": "2026-04-10",
+            "generated_at": "2026-04-10T09:00:00Z",
+            "restatement_version": "current",
+            "reconciliation_status": "NOT_ASSESSED",
+            "data_quality_status": "COMPLETE",
+            "latest_evidence_timestamp": "2026-04-10T09:00:00Z",
+            "source_batch_fingerprint": "abc",
+            "snapshot_id": "snap",
+            "policy_version": "default",
+            "correlation_id": None,
+            "records": [
+                {
+                    "security_id": "AAPL",
+                    "found": True,
+                    "eligibility_status": "APPROVED",
+                    "product_shelf_status": "APPROVED",
+                    "buy_allowed": True,
+                    "sell_allowed": True,
+                    "restriction_reason_codes": [],
+                    "settlement_days": 2,
+                    "settlement_calendar_id": "US_NYSE",
+                    "liquidity_tier": "L1",
+                    "issuer_id": "APPLE",
+                    "issuer_name": "Apple Inc.",
+                    "ultimate_parent_issuer_id": "APPLE_PARENT",
+                    "ultimate_parent_issuer_name": "Apple Inc.",
+                    "asset_class": "Equity",
+                    "country_of_risk": "US",
+                    "effective_from": "2026-04-01",
+                    "effective_to": None,
+                    "quality_status": "ACCEPTED",
+                    "source_record_id": "AAPL-elig",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "INSTRUMENT_ELIGIBILITY_READY",
+                "requested_count": 1,
+                "resolved_count": 1,
+                "missing_security_ids": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = InstrumentEligibilityBulkRequest(
+        as_of_date="2026-04-10",
+        security_ids=["AAPL"],
+    )
+
+    response = await resolve_instrument_eligibility_bulk(
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "InstrumentEligibilityProfile"
+    mock_service.resolve_instrument_eligibility_bulk.assert_awaited_once_with(request)
 
 
 @pytest.mark.asyncio

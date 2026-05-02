@@ -74,7 +74,11 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
         expected_family = (
             "dpm_source_data"
             if source_product.product_name
-            in {"DpmModelPortfolioTarget", "DiscretionaryMandateBinding"}
+            in {
+                "DpmModelPortfolioTarget",
+                "DiscretionaryMandateBinding",
+                "InstrumentEligibilityProfile",
+            }
             else family_map[source_product.route_family]
         )
         assert declared["product_family"] == expected_family

@@ -1119,7 +1119,7 @@
       "owner_repository": "lotus-core",
       "product_family": "dpm_source_data",
       "authoritative_domain": "instrument_reference",
-      "lifecycle_status": "proposed",
+      "lifecycle_status": "active",
       "request_scope": {
         "scope_level": "instrument",
         "supports_bulk": true
@@ -1150,7 +1150,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "daily",
-        "max_allowed_age_description": "Planned DPM instrument shelf, restriction, liquidity, and settlement eligibility."
+        "max_allowed_age_description": "DPM instrument shelf, restriction, liquidity, and settlement eligibility."
       },
       "completeness_policy": {
         "default_status": "complete",

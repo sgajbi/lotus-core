@@ -282,6 +282,48 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `instrument_eligibility_profiles`
+
+- **Purpose**: Effective-dated DPM instrument eligibility, restriction, shelf, liquidity, issuer,
+  and settlement profile source data.
+- **Description**: Stores the source records behind `InstrumentEligibilityProfile:v1`. The table
+  supports bulk stateful DPM source assembly without per-instrument product shelf lookups or local
+  fallback truth in `lotus-manage`.
+- **Relationships**: `security_id` references `instruments.security_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Bulk effective-date lookup by requested security ids and as-of date;
+  response ordering is reconstructed to match request order and missing records are returned
+  explicitly as `UNKNOWN`.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `security_id` (String): Canonical instrument/security identifier.
+  - `eligibility_status` (String): DPM eligibility status such as `APPROVED`, `RESTRICTED`,
+    `SELL_ONLY`, `BANNED`, or `UNKNOWN`.
+  - `product_shelf_status` (String): Product shelf status used by DPM execution.
+  - `buy_allowed` (Boolean): Whether DPM may create buy orders for this instrument.
+  - `sell_allowed` (Boolean): Whether DPM may create sell orders for this instrument.
+  - `restriction_reason_codes` (JSON): Bounded restriction codes exposed downstream.
+  - `restriction_rationale` (Text): Operator-only source rationale retained for audit and not
+    exposed by the DPM source API.
+  - `settlement_days` (Integer): Expected settlement cycle in business days.
+  - `settlement_calendar_id` (String): Settlement calendar identifier.
+  - `liquidity_tier` (String): Liquidity tier used by DPM controls.
+  - `issuer_id` (String): Direct issuer identifier.
+  - `issuer_name` (String): Direct issuer name.
+  - `ultimate_parent_issuer_id` (String): Ultimate parent issuer identifier.
+  - `ultimate_parent_issuer_name` (String): Ultimate parent issuer name.
+  - `asset_class` (String): Asset class label.
+  - `country_of_risk` (String): Country of risk.
+  - `effective_from` (Date): Eligibility effective start date.
+  - `effective_to` (Date): Optional eligibility effective end date.
+  - `eligibility_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream shelf/compliance source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the profile.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `model_portfolio_targets`
 
 - **Purpose**: Effective-dated target weights and policy bands for discretionary model portfolios.

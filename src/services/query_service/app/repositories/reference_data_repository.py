@@ -14,6 +14,7 @@ from portfolio_common.database_models import (
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
+    InstrumentEligibilityProfile,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
     PortfolioBenchmarkAssignment,
@@ -186,6 +187,34 @@ class ReferenceDataRepository:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         result = await self._db.execute(stmt)
         return result.scalars().first()
+
+    async def list_instrument_eligibility_profiles(
+        self,
+        security_ids: list[str],
+        as_of_date: date,
+    ) -> list[InstrumentEligibilityProfile]:
+        if not security_ids:
+            return []
+        stmt = (
+            select(InstrumentEligibilityProfile)
+            .where(
+                InstrumentEligibilityProfile.security_id.in_(security_ids),
+                _effective_filter(
+                    InstrumentEligibilityProfile.effective_from,
+                    InstrumentEligibilityProfile.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                InstrumentEligibilityProfile.security_id.asc(),
+                InstrumentEligibilityProfile.effective_from.desc(),
+                InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
+                InstrumentEligibilityProfile.eligibility_version.desc(),
+                InstrumentEligibilityProfile.updated_at.desc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(list(result.scalars().all()), "security_id")
 
     async def get_benchmark_definition(self, benchmark_id: str, as_of_date: date):
         stmt = (

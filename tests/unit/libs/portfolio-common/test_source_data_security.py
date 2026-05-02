@@ -30,7 +30,6 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     expected_profiles = {
-        "InstrumentEligibilityProfile",
         "PortfolioTaxLotWindow",
         "MarketDataCoverageWindow",
     }

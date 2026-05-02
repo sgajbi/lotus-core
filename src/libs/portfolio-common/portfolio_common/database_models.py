@@ -320,6 +320,54 @@ class PortfolioMandateBinding(Base):
     )
 
 
+class InstrumentEligibilityProfile(Base):
+    __tablename__ = "instrument_eligibility_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    security_id = Column(String, ForeignKey("instruments.security_id"), nullable=False, index=True)
+    eligibility_status = Column(String, nullable=False, index=True)
+    product_shelf_status = Column(String, nullable=False, index=True)
+    buy_allowed = Column(Boolean, nullable=False, server_default="false")
+    sell_allowed = Column(Boolean, nullable=False, server_default="true")
+    restriction_reason_codes = Column(JSON, nullable=False, server_default="[]")
+    restriction_rationale = Column(Text, nullable=True)
+    settlement_days = Column(Integer, nullable=False, server_default="2")
+    settlement_calendar_id = Column(String, nullable=False, server_default="GLOBAL")
+    liquidity_tier = Column(String, nullable=True)
+    issuer_id = Column(String, nullable=True, index=True)
+    issuer_name = Column(String, nullable=True)
+    ultimate_parent_issuer_id = Column(String, nullable=True, index=True)
+    ultimate_parent_issuer_name = Column(String, nullable=True)
+    asset_class = Column(String, nullable=True)
+    country_of_risk = Column(String, nullable=True)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    eligibility_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "security_id",
+            "effective_from",
+            "eligibility_version",
+            name="_instrument_eligibility_profile_uc",
+        ),
+        Index(
+            "ix_instrument_eligibility_effective_window",
+            "security_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class ModelPortfolioDefinition(Base):
     __tablename__ = "model_portfolio_definitions"
 
