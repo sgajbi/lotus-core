@@ -536,9 +536,9 @@ evidence.
 | Bulk portfolio tax-lot source product | Implemented pending live proof | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly; local API, catalog, OpenAPI, paging, supportability, and contract evidence exist. Live canonical stack proof remains pending until the refreshed runtime is available. |
 | Bulk market-data and FX coverage products | Implemented pending live proof | Held and target universe prices/FX coverage can be fetched with one bounded call; local API, catalog, OpenAPI, supportability, stale/missing diagnostics, and contract evidence exist. Live canonical stack proof remains pending until the refreshed runtime is available. |
 | DPM source readiness and supportability | Planned | Operators can explain ready, partial, stale, and blocked DPM source states by source family. |
-| Canonical seeded managed mandate portfolio | Planned | Front-office canonical stack seeds complete DPM source families and validates live core/manage integration. |
+| Canonical seeded managed mandate portfolio | Partially implemented pending live proof | Front-office seed includes model target, mandate binding, eligibility, tax-lot, market-price, and FX inputs for `PB_SG_GLOBAL_BAL_001`; live canonical runtime proof is blocked until core-control is reachable with this branch. |
 | API certification and Swagger quality for all DPM source APIs | Planned | Each endpoint is certified with complete descriptions, examples, errors, extensions, and tests. |
-| Wiki and demo-ready product material | Planned | Repo-local wiki source describes only implemented features with diagrams and live evidence links. |
+| Wiki and demo-ready product material | Implemented pending publication | Repo-local wiki source describes implemented DPM source products with diagrams, current proof posture, and audience-specific guidance; GitHub wiki publication follows merge. |
 
 The final closure slice must update this ledger to distinguish `Implemented`, `Deferred`, and
 `Rejected` items. Any deferred item must include a reason, owner, follow-up issue or RFC, and impact
@@ -1161,8 +1161,107 @@ This RFC is complete only when:
 11. platform automation/scaffolding improvements are implemented or consciously dispositioned,
 12. final review records whether agent context, skills, or guidance changed and why.
 
-## No-Wiki-Change Decision For This Draft
+## Gold-Pass Assessment
 
-This draft RFC changes planned implementation direction but does not change current deployed
-`lotus-core` behavior. Repo-local wiki source should be updated in the implementation slices when
-the API surface or current supported products actually change.
+Date: 2026-05-02
+
+Assessment decision: first-wave DPM source products are implemented to a strong local and CI-backed
+standard, but RFC-087 is not fully closed. Final gold-standard closure remains blocked by live
+canonical runtime proof, DPM source-family readiness/supportability publication, downstream
+stateful `lotus-manage` proof, and post-merge wiki publication.
+
+### Slice-By-Slice Audit
+
+| Slice | Audit outcome | Evidence and remaining work |
+| --- | --- | --- |
+| Slice 0 - RFC review and target architecture | Complete | RFC-087 rejects a monolithic DPM context endpoint and defines product-specific core source products consumed by `lotus-manage`. |
+| Slice 1 - Platform automation and scaffolding | Partially complete | Existing platform guards cover route families, source-data catalog metadata, domain products, OpenAPI, and wiki checks. The reusable RFC-087 live validator added in this pass should be considered as a candidate pattern for future app scaffolding rather than staying a one-off script forever. |
+| Slice 2 - Cleanup and structure | Complete for current source-product scope | First-wave DPM products are no longer in the planned in-code catalog; route metadata, source-security profiles, domain declaration, wiki, and RFC status align with implemented products. |
+| Slice 3 - Source inventory and canonical seed contract | Partially complete | Canonical front-office seed includes the managed mandate model, binding, eligibility, tax lots through existing transaction/lot state, prices, and FX inputs. Live proof is blocked while `core-control.dev.lotus` is unreachable. |
+| Slice 4 - Model portfolio targets | Complete pending live proof | Ingestion, persistence, API, supportability, source-data metadata, OpenAPI, tests, canonical seed, and manage client integration exist. |
+| Slice 5 - Mandate binding | Complete pending live proof | Effective mandate, model, policy, authority, booking center, jurisdiction, tax-awareness, settlement-awareness, and rebalance constraints are modeled and exposed. |
+| Slice 6 - Instrument eligibility | Complete pending live proof | Bulk eligibility and restriction sourcing exists with canonical proof data including a restricted private-credit instrument. |
+| Slice 7 - Portfolio tax lots | Complete pending live proof | Bulk portfolio-window tax-lot API avoids per-security fan-out and exposes paging/supportability for tax-aware sell allocation. |
+| Slice 8 - Market data and FX coverage | Complete pending live proof | Bulk market-data/FX coverage API exposes missing and stale diagnostics for held and target universe validation. |
+| Slice 9 - DPM source readiness/supportability | Not complete | A source-family readiness product or equivalent supportability summary remains required before `lotus-manage` can promote stateful execution. |
+| Slice 10 - Managed mandate canonical automation | Partially complete | Seed data exists for source-product validation; canonical live evidence is not captured because the current `core-control.dev.lotus` endpoint refuses connections. |
+| Slice 11 - Implementation proof | Partially complete | Local tests, guards, and remote Feature Lane evidence exist. Live canonical evidence is now executable through `make live-dpm-source-validate` but currently fails on runtime availability. |
+| Slice 12 - Second-last hardening and review | Not complete | Must run after live proof and readiness are implemented; Swagger and endpoint certification for the five current products are locally covered but still need live deployed review. |
+| Slice 13 - Final closure | Not complete | Wiki source is updated in-repo; publication, final supported-features closure, agent context review, downstream `lotus-manage` proof, and branch hygiene remain. |
+
+### What Was Truly Completed
+
+1. Five product-specific DPM source APIs are implemented in `lotus-core`:
+   `DpmModelPortfolioTarget:v1`, `DiscretionaryMandateBinding:v1`,
+   `InstrumentEligibilityProfile:v1`, `PortfolioTaxLotWindow:v1`, and
+   `MarketDataCoverageWindow:v1`.
+2. Each product is wired through route metadata, source-data product catalog metadata,
+   source-security profiles, domain-product declarations, OpenAPI contract shape, tests, and
+   canonical seed data where applicable.
+3. `lotus-manage` RFC-0036 now has typed client integration for all five first-wave products and
+   remains correctly feature-gated until live source-family readiness is available.
+4. A reusable live validator now probes OpenAPI publication and all five source-product routes
+   against canonical managed mandate identifiers.
+
+### Quality Improvements Made
+
+1. The architecture now uses independently governed source products instead of a hidden all-in-one
+   DPM context route.
+2. Bulk eligibility, tax-lot, and market-data requests reduce production fan-out and give clearer
+   failure diagnostics.
+3. Supportability state, missing/stale diagnostics, product identity, and canonical totals are
+   asserted in executable validation instead of relying on prose.
+4. Wiki material separates developer API truth, business meaning, operating posture, and
+   client-demo readiness.
+
+### Debt Removed
+
+1. The first-wave DPM source products were removed from the planned in-code catalog after
+   implementation.
+2. The old design assumption that core would expose one composed DPM context route is no longer
+   treated as the target state.
+3. Prose-only live proof has been replaced with `scripts/validate_live_dpm_source_products.py` and
+   `make live-dpm-source-validate`.
+
+### Testing And Evidence
+
+Local validation evidence captured in this audit:
+
+1. `python -m pytest tests/unit/scripts/test_validate_live_dpm_source_products.py -q` passed with
+   5 tests.
+2. `python -m ruff check scripts/validate_live_dpm_source_products.py tests/unit/scripts/test_validate_live_dpm_source_products.py` passed.
+3. `python -m ruff format --check scripts/validate_live_dpm_source_products.py tests/unit/scripts/test_validate_live_dpm_source_products.py` passed.
+4. `make source-data-product-contract-guard` passed.
+5. `make domain-product-validate` passed.
+
+Remote evidence already available before this audit:
+
+1. `lotus-core` Feature Lane run `25244226940` passed for commit `0cb8cb6a`.
+2. `lotus-manage` Feature Lane run `25244329249` passed for commit `b7ce8a1`.
+
+Live evidence captured in this audit:
+
+1. `python scripts/validate_live_dpm_source_products.py --control-base-url http://core-control.dev.lotus --json-output output/rfc-087-gold-pass/live-dpm-source-products.json`
+   executed and produced a 6/6 failure summary because `core-control.dev.lotus` refused the
+   connection with `[WinError 10061]`.
+2. This is not endpoint-level proof or business validation. It is truthful evidence that the
+   canonical runtime was not reachable for this branch at audit time.
+
+### Standard Assessment
+
+The implemented first-wave source products are strong enough for continued hardening and downstream
+integration work, but the overall RFC has not yet reached final gold standard. The remaining
+production-grade blockers are explicit: make the canonical core runtime reachable with this branch,
+prove all five source-product routes live with realistic managed mandate data, add or expose
+source-family readiness/supportability, prove `lotus-manage` stateful source assembly end to end,
+complete endpoint certification against deployed Swagger and live responses, then publish the wiki
+after merge.
+
+### Documentation And Skill Review
+
+Documentation required improvement in this audit because the prior wiki/RFC state was accurate for
+engineering but not polished enough for business, sales, marketing, operations, and client-demo
+reuse. Repo-local wiki source is the authored current-state product material, while RFCs carry
+delivery evidence, trade-offs, and closure decisions. No new local agent skill is required yet; the
+existing Lotus README/wiki governance skill is sufficient if future contributors keep
+business-facing wiki prose distinct from implementation RFC evidence.
