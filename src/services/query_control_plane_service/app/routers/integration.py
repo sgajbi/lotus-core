@@ -32,6 +32,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
+    DiscretionaryMandateBindingRequest,
+    DiscretionaryMandateBindingResponse,
     IndexCatalogRequest,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
@@ -74,6 +76,9 @@ BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
 }
 MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = {
     "detail": "No approved model portfolio target found for model_portfolio_id and as_of_date."
+}
+MANDATE_BINDING_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
@@ -387,6 +392,56 @@ async def resolve_model_portfolio_targets(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
                 "No approved model portfolio target found for model_portfolio_id and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/mandate-binding",
+    response_model=DiscretionaryMandateBindingResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            MANDATE_BINDING_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective DPM mandate binding",
+    description=(
+        "What: Return the effective discretionary mandate binding that connects a portfolio "
+        "to its mandate, model portfolio, policy pack, jurisdiction, booking center, authority "
+        "status, and rebalance constraints.\n"
+        "How: Applies effective-date, optional mandate, optional booking-center, and binding "
+        "version ordering to return one deterministic source record with source-data runtime "
+        "metadata, supportability, and lineage.\n"
+        "When: Use this endpoint before lotus-manage stateful DPM source assembly so model "
+        "target sourcing, policy checks, tax-aware mode, and settlement-aware mode are driven "
+        "by governed core source data. Do not use it for advisory proposal simulation or as a "
+        "general benchmark assignment replacement."
+    ),
+    openapi_extra=source_data_product_openapi_extra("DiscretionaryMandateBinding"),
+)
+async def resolve_discretionary_mandate_binding(
+    request: DiscretionaryMandateBindingRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose discretionary mandate binding is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> DiscretionaryMandateBindingResponse:
+    response = cast(
+        DiscretionaryMandateBindingResponse | None,
+        await integration_service.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
             ),
         )
     return response

@@ -30,7 +30,6 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     expected_profiles = {
-        "DiscretionaryMandateBinding",
         "InstrumentEligibilityProfile",
         "PortfolioTaxLotWindow",
         "MarketDataCoverageWindow",
@@ -40,9 +39,7 @@ def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     }
 
     assert set(profiles) == expected_profiles
-    assert profiles["DiscretionaryMandateBinding"].sensitivity_classification == CLIENT_CONFIDENTIAL
     assert profiles["PortfolioTaxLotWindow"].sensitivity_classification == CLIENT_SENSITIVE
-    assert {"portfolio_id", "client_id"} <= set(profiles["DiscretionaryMandateBinding"].pii_fields)
     assert "tax_lot_id" in profiles["PortfolioTaxLotWindow"].pii_fields
     for profile in profiles.values():
         assert profile.access_classification == SYSTEM_ACCESS
@@ -89,6 +86,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "BenchmarkAssignment",
         "BenchmarkConstituentWindow",
         "DpmModelPortfolioTarget",
+        "DiscretionaryMandateBinding",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):
@@ -142,6 +140,15 @@ def test_portfolio_analytics_reference_profile_is_system_client_confidential() -
     assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
     assert {"portfolio_id", "client_id"} <= set(profile.pii_fields)
     assert profile.operator_only is False
+
+
+def test_discretionary_mandate_binding_profile_is_client_confidential_system_access() -> None:
+    profile = get_source_data_security_profile("DiscretionaryMandateBinding")
+
+    assert profile.access_classification == SYSTEM_ACCESS
+    assert profile.sensitivity_classification == CLIENT_CONFIDENTIAL
+    assert {"portfolio_id", "client_id"} <= set(profile.pii_fields)
+    assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
 
 
 def test_source_data_security_openapi_extra_exposes_governed_profile() -> None:

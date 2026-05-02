@@ -22,6 +22,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_instrument_enrichment_bulk,
     get_integration_service,
     get_risk_free_coverage,
+    resolve_discretionary_mandate_binding,
     resolve_model_portfolio_targets,
     resolve_portfolio_benchmark_assignment,
 )
@@ -44,6 +45,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
+    DiscretionaryMandateBindingRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
     IntegrationWindow,
@@ -573,6 +575,74 @@ async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
         await resolve_model_portfolio_targets(
             model_portfolio_id="MODEL_MISSING",
             request=ModelPortfolioTargetRequest(as_of_date="2026-03-31"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value={
+            "product_name": "DiscretionaryMandateBinding",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_type": "discretionary",
+            "discretionary_authority_status": "active",
+            "booking_center_code": "Singapore",
+            "jurisdiction_code": "SG",
+            "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+            "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+            "risk_profile": "balanced",
+            "investment_horizon": "long_term",
+            "leverage_allowed": False,
+            "tax_awareness_allowed": True,
+            "settlement_awareness_required": True,
+            "rebalance_frequency": "monthly",
+            "rebalance_bands": {
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            "effective_from": "2026-04-01",
+            "effective_to": None,
+            "binding_version": 1,
+            "supportability": {
+                "state": "READY",
+                "reason": "MANDATE_BINDING_READY",
+                "missing_data_families": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = DiscretionaryMandateBindingRequest(as_of_date="2026-04-10")
+
+    response = await resolve_discretionary_mandate_binding(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "DiscretionaryMandateBinding"
+    assert response["model_portfolio_id"] == "MODEL_PB_SG_GLOBAL_BAL_DPM"
+    mock_service.resolve_discretionary_mandate_binding.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_maps_not_found_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_discretionary_mandate_binding(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=DiscretionaryMandateBindingRequest(as_of_date="2026-04-10"),
             integration_service=mock_service,
         )
 

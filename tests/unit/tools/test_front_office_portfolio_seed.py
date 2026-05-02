@@ -320,6 +320,40 @@ def test_front_office_bundle_includes_dpm_model_portfolio_targets():
     )
 
 
+def test_front_office_bundle_includes_dpm_mandate_binding():
+    bundle = _build_bundle()
+
+    assert bundle["mandate_bindings"] == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_type": "discretionary",
+            "discretionary_authority_status": "active",
+            "booking_center_code": "Singapore",
+            "jurisdiction_code": "SG",
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+            "risk_profile": "balanced",
+            "investment_horizon": "long_term",
+            "leverage_allowed": False,
+            "tax_awareness_allowed": True,
+            "settlement_awareness_required": True,
+            "rebalance_frequency": "monthly",
+            "rebalance_bands": {
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            "effective_from": "2026-04-01",
+            "binding_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": "pb_sg_global_bal_001_mandate_binding_v1",
+            "observed_at": "2026-04-10T09:00:00Z",
+            "quality_status": "accepted",
+        }
+    ]
+
+
 def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     bundle = _build_bundle()
     cash_security_ids = {
@@ -452,6 +486,9 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from transactions where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from position_timeseries where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert (
+        "delete from portfolio_mandate_bindings where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    )
     assert "delete from portfolios where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from transaction_costs where transaction_id in" in sql
     assert "delete from reprocessing_jobs;" not in sql
@@ -573,12 +610,14 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
         "http://ingestion.dev.lotus/ingest/benchmark-assignments",
         "http://ingestion.dev.lotus/ingest/model-portfolios",
         "http://ingestion.dev.lotus/ingest/model-portfolio-targets",
+        "http://ingestion.dev.lotus/ingest/mandate-bindings",
         "http://ingestion.dev.lotus/ingest/risk-free-series",
     ]
     assert calls[8][2]["model_portfolios"][0]["model_portfolio_id"] == (
         DEFAULT_DPM_MODEL_PORTFOLIO_ID
     )
     assert calls[9][2]["model_portfolio_targets"]
+    assert calls[10][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
 
 
 def test_front_office_seed_derives_required_cross_currency_fx_windows():

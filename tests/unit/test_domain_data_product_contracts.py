@@ -73,7 +73,8 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
         assert declared["owner_repository"] == source_product.owner
         expected_family = (
             "dpm_source_data"
-            if source_product.product_name.startswith("Dpm")
+            if source_product.product_name
+            in {"DpmModelPortfolioTarget", "DiscretionaryMandateBinding"}
             else family_map[source_product.route_family]
         )
         assert declared["product_family"] == expected_family

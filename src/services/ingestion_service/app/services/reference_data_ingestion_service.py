@@ -17,6 +17,7 @@ from portfolio_common.database_models import (
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
     PortfolioBenchmarkAssignment,
+    PortfolioMandateBinding,
     RiskFreeSeries,
 )
 from portfolio_common.db import get_async_db_session
@@ -95,6 +96,39 @@ class ReferenceDataIngestionService:
                 "min_weight",
                 "max_weight",
                 "target_status",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_discretionary_mandate_bindings(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=PortfolioMandateBinding,
+            records=records,
+            conflict_columns=[
+                "portfolio_id",
+                "mandate_id",
+                "effective_from",
+                "binding_version",
+            ],
+            update_columns=[
+                "client_id",
+                "mandate_type",
+                "discretionary_authority_status",
+                "booking_center_code",
+                "jurisdiction_code",
+                "model_portfolio_id",
+                "policy_pack_id",
+                "risk_profile",
+                "investment_horizon",
+                "leverage_allowed",
+                "tax_awareness_allowed",
+                "settlement_awareness_required",
+                "rebalance_frequency",
+                "rebalance_bands",
                 "effective_to",
                 "source_system",
                 "source_record_id",

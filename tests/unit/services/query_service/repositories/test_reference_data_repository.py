@@ -395,6 +395,30 @@ async def test_list_model_portfolio_targets_can_include_inactive_targets() -> No
 
 
 @pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_uses_effective_filters() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [SimpleNamespace(portfolio_id="PB_SG_GLOBAL_BAL_001")]
+    )
+    repo = ReferenceDataRepository(db)
+
+    row = await repo.resolve_discretionary_mandate_binding(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 4, 10),
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        booking_center_code="Singapore",
+    )
+
+    assert row.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_mandate_bindings.portfolio_id = 'PB_SG_GLOBAL_BAL_001'" in compiled
+    assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
+    assert "portfolio_mandate_bindings.effective_from <= '2026-04-10'" in compiled
+    assert "portfolio_mandate_bindings.mandate_id = 'MANDATE_PB_SG_GLOBAL_BAL_001'" in compiled
+    assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
+
+
+@pytest.mark.asyncio
 async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing() -> None:
     repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
     repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]

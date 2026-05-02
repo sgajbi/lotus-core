@@ -8,6 +8,7 @@ from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
+    DiscretionaryMandateBindingRequest,
     ModelPortfolioTargetRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -19,6 +20,10 @@ def make_service() -> IntegrationService:
 
 def model_portfolio_target_request(as_of_date: date) -> ModelPortfolioTargetRequest:
     return ModelPortfolioTargetRequest(as_of_date=as_of_date)
+
+
+def mandate_binding_request(as_of_date: date) -> DiscretionaryMandateBindingRequest:
+    return DiscretionaryMandateBindingRequest(as_of_date=as_of_date)
 
 
 def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
@@ -271,6 +276,121 @@ async def test_resolve_model_portfolio_targets_degrades_when_weights_do_not_sum_
     assert response.supportability.state == "DEGRADED"
     assert response.supportability.reason == "MODEL_TARGET_WEIGHTS_NOT_ONE"
     assert response.supportability.total_target_weight == Decimal("0.5000000000")
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    observed_at = datetime(2026, 4, 1, 9, 0, tzinfo=UTC)
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="active",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=observed_at,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.product_name == "DiscretionaryMandateBinding"
+    assert response.model_portfolio_id == "MODEL_PB_SG_GLOBAL_BAL_DPM"
+    assert response.policy_pack_id == "POLICY_DPM_SG_BALANCED_V1"
+    assert response.rebalance_bands.default_band == Decimal("0.0250000000")
+    assert response.rebalance_bands.cash_reserve_weight == Decimal("0.0200000000")
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_data_families == []
+    assert response.latest_evidence_timestamp == observed_at
+    service._reference_repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 4, 10),
+        mandate_id=None,
+        booking_center_code=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_blocks_inactive_authority() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="suspended",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={"default_band": "0.0250000000"},
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=None,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
+    assert response.supportability.missing_data_families == ["active_discretionary_authority"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_maps_missing_row_to_none() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is None
 
 
 def test_canonical_consumer_system_mappings() -> None:

@@ -11,6 +11,7 @@ from ..DTOs.reference_data_dto import (
     BenchmarkReturnSeriesIngestionRequest,
     CashAccountMasterIngestionRequest,
     ClassificationTaxonomyIngestionRequest,
+    DiscretionaryMandateBindingIngestionRequest,
     IndexDefinitionIngestionRequest,
     IndexPriceSeriesIngestionRequest,
     IndexReturnSeriesIngestionRequest,
@@ -261,6 +262,44 @@ async def ingest_model_portfolio_targets(
         request_payload=request.model_dump(mode="json"),
         persist_fn=lambda: reference_data_service.upsert_model_portfolio_targets(
             [item.model_dump() for item in request.model_portfolio_targets]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/mandate-bindings",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest discretionary mandate bindings",
+    description=(
+        "What: Accept effective-dated portfolio-to-mandate/model/policy bindings for "
+        "discretionary portfolio management.\n"
+        "How: Validate authority status, model and policy selectors, rebalance constraints, "
+        "lineage, and quality fields, then upsert durable binding records.\n"
+        "When: Use when mandate administration, investment policy, or model assignment "
+        "systems publish a new discretionary authority binding or correction required by "
+        "lotus-manage stateful DPM."
+    ),
+)
+async def ingest_mandate_bindings(
+    request: DiscretionaryMandateBindingIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/mandate-bindings",
+        entity_type="mandate_binding",
+        accepted_count=len(request.mandate_bindings),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_discretionary_mandate_bindings(
+            [item.model_dump() for item in request.mandate_bindings]
         ),
         ingestion_job_service=ingestion_job_service,
     )

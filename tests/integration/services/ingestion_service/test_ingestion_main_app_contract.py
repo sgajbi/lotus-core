@@ -857,8 +857,10 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     components = response.json()["components"]["schemas"]
 
     benchmark_definition = components["BenchmarkDefinitionRecord"]
+    mandate_binding = components["DiscretionaryMandateBindingRecord"]
     index_price_series = components["IndexPriceSeriesRecord"]
     benchmark_definition_request = components["BenchmarkDefinitionIngestionRequest"]
+    mandate_binding_request = components["DiscretionaryMandateBindingIngestionRequest"]
     index_definition_request = components["IndexDefinitionIngestionRequest"]
     classification_request = components["ClassificationTaxonomyIngestionRequest"]
 
@@ -871,6 +873,12 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     assert (
         benchmark_definition_request["properties"]["benchmark_definitions"]["description"]
         == "Benchmark definition records to ingest or upsert."
+    )
+    assert mandate_binding["properties"]["discretionary_authority_status"]["description"] == (
+        "Authority lifecycle status that determines DPM execution supportability."
+    )
+    assert mandate_binding_request["properties"]["mandate_bindings"]["description"] == (
+        "Effective-dated discretionary mandate binding records to ingest or upsert."
     )
     assert index_definition_request["properties"]["indices"]["examples"] == [
         [

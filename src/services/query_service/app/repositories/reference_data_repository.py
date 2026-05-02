@@ -17,6 +17,7 @@ from portfolio_common.database_models import (
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
     PortfolioBenchmarkAssignment,
+    PortfolioMandateBinding,
     RiskFreeSeries,
 )
 from sqlalchemy import and_, or_, select
@@ -151,6 +152,40 @@ class ReferenceDataRepository:
             "model_portfolio_version",
             "instrument_id",
         )
+
+    async def resolve_discretionary_mandate_binding(
+        self,
+        portfolio_id: str,
+        as_of_date: date,
+        *,
+        mandate_id: str | None = None,
+        booking_center_code: str | None = None,
+    ):
+        stmt = (
+            select(PortfolioMandateBinding)
+            .where(
+                PortfolioMandateBinding.portfolio_id == portfolio_id,
+                PortfolioMandateBinding.mandate_type == "discretionary",
+                _effective_filter(
+                    PortfolioMandateBinding.effective_from,
+                    PortfolioMandateBinding.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                PortfolioMandateBinding.effective_from.desc(),
+                PortfolioMandateBinding.observed_at.desc().nulls_last(),
+                PortfolioMandateBinding.binding_version.desc(),
+                PortfolioMandateBinding.updated_at.desc(),
+            )
+            .limit(1)
+        )
+        if mandate_id:
+            stmt = stmt.where(PortfolioMandateBinding.mandate_id == mandate_id)
+        if booking_center_code:
+            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        result = await self._db.execute(stmt)
+        return result.scalars().first()
 
     async def get_benchmark_definition(self, benchmark_id: str, as_of_date: date):
         stmt = (

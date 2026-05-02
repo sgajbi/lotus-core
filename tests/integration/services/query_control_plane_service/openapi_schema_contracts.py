@@ -20,6 +20,13 @@ DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS = {
     "ModelPortfolioTargetResponse",
 }
 
+DPM_MANDATE_BINDING_SCHEMA_ROOTS = {
+    "DiscretionaryMandateBindingRequest",
+    "RebalanceBandContext",
+    "DiscretionaryMandateBindingSupportability",
+    "DiscretionaryMandateBindingResponse",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",

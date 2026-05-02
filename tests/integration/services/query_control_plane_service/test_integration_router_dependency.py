@@ -177,6 +177,48 @@ async def async_test_client():
             ),
         }
     )
+    mock_integration_service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value={
+            "product_name": "DiscretionaryMandateBinding",
+            "product_version": "v1",
+            "portfolio_id": "PORT-INT-001",
+            "mandate_id": "MANDATE_PB_SG_BALANCED_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_type": "discretionary",
+            "discretionary_authority_status": "active",
+            "booking_center_code": "Singapore",
+            "jurisdiction_code": "SG",
+            "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+            "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+            "risk_profile": "balanced",
+            "investment_horizon": "long_term",
+            "leverage_allowed": False,
+            "tax_awareness_allowed": True,
+            "settlement_awareness_required": True,
+            "rebalance_frequency": "monthly",
+            "rebalance_bands": {
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            "effective_from": "2026-04-01",
+            "effective_to": None,
+            "binding_version": 1,
+            "supportability": {
+                "state": "READY",
+                "reason": "MANDATE_BINDING_READY",
+                "missing_data_families": [],
+            },
+            "lineage": {
+                "source_system": "mandate_admin",
+                "source_record_id": "mandate_binding_v1",
+                "contract_version": "rfc_087_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 4, 10),
+                generated_at=datetime(2026, 4, 10, 10, 0, 0, tzinfo=UTC),
+            ),
+        }
+    )
     mock_integration_service.get_benchmark_definition = AsyncMock(
         return_value={
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
@@ -764,6 +806,47 @@ async def test_model_portfolio_targets_not_found_maps_to_404(async_test_client):
     assert response.status_code == 404
     assert response.json()["detail"] == (
         "No approved model portfolio target found for model_portfolio_id and as_of_date."
+    )
+
+
+async def test_mandate_binding_success(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/mandate-binding",
+        json={"as_of_date": "2026-04-10"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["product_name"] == "DiscretionaryMandateBinding"
+    assert body["product_version"] == "v1"
+    assert body["portfolio_id"] == "PORT-INT-001"
+    assert body["mandate_id"] == "MANDATE_PB_SG_BALANCED_001"
+    assert body["model_portfolio_id"] == "MODEL_SG_BALANCED_DPM"
+    assert body["policy_pack_id"] == "POLICY_DPM_SG_BALANCED_V1"
+    assert body["supportability"]["state"] == "READY"
+    assert body["rebalance_bands"]["default_band"] == "0.0250000000"
+    assert body["reconciliation_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "UNKNOWN"
+    call = mock_integration_service.resolve_discretionary_mandate_binding.await_args.kwargs
+    assert call["portfolio_id"] == "PORT-INT-001"
+    assert call["request"].as_of_date == date(2026, 4, 10)
+    assert call["request"].include_policy_pack is True
+
+
+async def test_mandate_binding_not_found_maps_to_404(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
+
+    response = await client.post(
+        "/integration/portfolios/PORT-INT-001/mandate-binding",
+        json={"as_of_date": "2026-04-10"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "No effective discretionary mandate binding found for portfolio and as_of_date."
     )
 
 

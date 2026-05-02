@@ -32,6 +32,9 @@ from ..dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ComponentSeriesResponse,
     CoverageResponse,
+    DiscretionaryMandateBindingRequest,
+    DiscretionaryMandateBindingResponse,
+    DiscretionaryMandateBindingSupportability,
     IndexCatalogResponse,
     IndexDefinitionResponse,
     IndexPriceSeriesPoint,
@@ -45,6 +48,7 @@ from ..dtos.reference_integration_dto import (
     ModelPortfolioTargetResponse,
     ModelPortfolioTargetRow,
     ReferencePageMetadata,
+    RebalanceBandContext,
     RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
@@ -467,6 +471,78 @@ class IntegrationService:
                     required_count=len(target_rows),
                 ),
                 latest_evidence_timestamp=latest_evidence_timestamp,
+            ),
+        )
+
+    async def resolve_discretionary_mandate_binding(
+        self,
+        portfolio_id: str,
+        request: DiscretionaryMandateBindingRequest,
+    ) -> DiscretionaryMandateBindingResponse | None:
+        row = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+            booking_center_code=request.booking_center_code,
+        )
+        if row is None:
+            return None
+
+        missing_data_families: list[str] = []
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "MANDATE_BINDING_READY"
+        if str(row.discretionary_authority_status).lower() != "active":
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
+            missing_data_families.append("active_discretionary_authority")
+        if request.include_policy_pack and not row.policy_pack_id:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "MANDATE_POLICY_PACK_MISSING"
+            missing_data_families.append("policy_pack")
+
+        bands = dict(row.rebalance_bands or {})
+        default_band = self._as_decimal(bands.get("default_band", "0"))
+        cash_reserve_raw = bands.get("cash_reserve_weight")
+
+        return DiscretionaryMandateBindingResponse(
+            portfolio_id=row.portfolio_id,
+            mandate_id=row.mandate_id,
+            client_id=row.client_id,
+            mandate_type=row.mandate_type,
+            discretionary_authority_status=row.discretionary_authority_status,
+            booking_center_code=row.booking_center_code,
+            jurisdiction_code=row.jurisdiction_code,
+            model_portfolio_id=row.model_portfolio_id,
+            policy_pack_id=row.policy_pack_id if request.include_policy_pack else None,
+            risk_profile=row.risk_profile,
+            investment_horizon=row.investment_horizon,
+            leverage_allowed=bool(row.leverage_allowed),
+            tax_awareness_allowed=bool(row.tax_awareness_allowed),
+            settlement_awareness_required=bool(row.settlement_awareness_required),
+            rebalance_frequency=row.rebalance_frequency,
+            rebalance_bands=RebalanceBandContext(
+                default_band=default_band,
+                cash_reserve_weight=(
+                    self._as_decimal(cash_reserve_raw) if cash_reserve_raw is not None else None
+                ),
+            ),
+            effective_from=row.effective_from,
+            effective_to=row.effective_to,
+            binding_version=int(row.binding_version),
+            supportability=DiscretionaryMandateBindingSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": row.source_system or "unknown",
+                "source_record_id": row.source_record_id or "unknown",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata(
+                request.as_of_date,
+                data_quality_status=str(row.quality_status).upper(),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
             ),
         )
 

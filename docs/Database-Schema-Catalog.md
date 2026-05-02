@@ -214,6 +214,45 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `portfolio_mandate_bindings`
+
+- **Purpose**: Effective-dated discretionary mandate binding for stateful DPM source assembly.
+- **Description**: Stores portfolio-to-mandate/model/policy bindings, authority status,
+  jurisdiction, booking center, rebalance constraints, and lineage for
+  `DiscretionaryMandateBinding:v1`.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id and as-of date with optional
+  mandate id and booking-center filters; idempotent upsert by portfolio id, mandate id, effective
+  start date, and binding version.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Canonical discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the mandate.
+  - `mandate_type` (String): Mandate type; Slice 5 supports discretionary bindings.
+  - `discretionary_authority_status` (String): Authority lifecycle state.
+  - `booking_center_code` (String): Booking center governing the mandate.
+  - `jurisdiction_code` (String): Legal or regulatory jurisdiction code.
+  - `model_portfolio_id` (String): Approved model portfolio selected for the mandate.
+  - `policy_pack_id` (String): Policy pack applied to DPM checks.
+  - `risk_profile` (String): Mandate risk profile.
+  - `investment_horizon` (String): Mandate investment horizon classification.
+  - `leverage_allowed` (Boolean): Whether leverage is permitted by the mandate.
+  - `tax_awareness_allowed` (Boolean): Whether tax-aware DPM execution is allowed.
+  - `settlement_awareness_required` (Boolean): Whether settlement-aware DPM execution is required.
+  - `rebalance_frequency` (String): Expected rebalance cadence.
+  - `rebalance_bands` (JSON): Mandate-level rebalance bands and cash reserve policy.
+  - `effective_from` (Date): Binding effective start date.
+  - `effective_to` (Date): Optional binding effective end date.
+  - `binding_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream mandate administration source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the binding.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `model_portfolio_definitions`
 
 - **Purpose**: Effective-dated model portfolio master for discretionary mandate source products.

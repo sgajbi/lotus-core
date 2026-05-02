@@ -57,6 +57,7 @@
         "POST /ingest/indices",
         "POST /ingest/instruments",
         "POST /ingest/market-prices",
+        "POST /ingest/mandate-bindings",
         "POST /ingest/model-portfolio-targets",
         "POST /ingest/model-portfolios",
         "POST /ingest/portfolio-bundle",
@@ -91,6 +92,7 @@
         "POST /integration/portfolios/{portfolio_id}/analytics/position-timeseries",
         "POST /integration/portfolios/{portfolio_id}/analytics/reference",
         "POST /integration/portfolios/{portfolio_id}/benchmark-assignment",
+        "POST /integration/portfolios/{portfolio_id}/mandate-binding",
         "POST /integration/reference/classification-taxonomy",
         "POST /integration/reference/risk-free-series"
       ],

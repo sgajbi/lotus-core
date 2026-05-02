@@ -271,6 +271,55 @@ class PortfolioBenchmarkAssignment(Base):
     )
 
 
+class PortfolioMandateBinding(Base):
+    __tablename__ = "portfolio_mandate_bindings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=False, index=True)
+    client_id = Column(String, nullable=False, index=True)
+    mandate_type = Column(String, nullable=False, index=True)
+    discretionary_authority_status = Column(String, nullable=False, index=True)
+    booking_center_code = Column(String, nullable=False, index=True)
+    jurisdiction_code = Column(String, nullable=False, index=True)
+    model_portfolio_id = Column(String, nullable=False, index=True)
+    policy_pack_id = Column(String, nullable=True, index=True)
+    risk_profile = Column(String, nullable=False)
+    investment_horizon = Column(String, nullable=False)
+    leverage_allowed = Column(Boolean, nullable=False, server_default="f")
+    tax_awareness_allowed = Column(Boolean, nullable=False, server_default="f")
+    settlement_awareness_required = Column(Boolean, nullable=False, server_default="f")
+    rebalance_frequency = Column(String, nullable=False)
+    rebalance_bands = Column(JSON, nullable=False)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    binding_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "portfolio_id",
+            "mandate_id",
+            "effective_from",
+            "binding_version",
+            name="_portfolio_mandate_binding_effective_uc",
+        ),
+        Index(
+            "ix_portfolio_mandate_binding_effective_window",
+            "portfolio_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class ModelPortfolioDefinition(Base):
     __tablename__ = "model_portfolio_definitions"
 

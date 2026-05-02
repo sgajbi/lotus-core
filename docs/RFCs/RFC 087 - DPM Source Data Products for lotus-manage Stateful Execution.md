@@ -531,7 +531,7 @@ evidence.
 | Composed DPM source-data architecture with no monolithic context endpoint | Planned | RFC-0036 and core docs reference composed products, and no route or doc claims one all-in-one source endpoint. |
 | DPM source-data governance scaffold | Planned | Planned products, domain-product declarations, source-security profiles, route-family posture, and validation evidence exist before runtime routes are exposed. |
 | Governed model portfolio target source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
-| Governed discretionary mandate binding source product | Planned | Portfolio-to-mandate/model/policy binding is effective-dated, tested, supportable, and source-lineage-backed. |
+| Governed discretionary mandate binding source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Governed instrument eligibility and settlement profile source product | Planned | Eligibility, restriction reasons, shelf flags, settlement profile, and unknown-record behavior are API-backed and tested. |
 | Bulk portfolio tax-lot source product | Planned | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly. |
 | Bulk market-data and FX coverage products | Planned | Held and target universe prices/FX can be fetched with bounded calls and coverage diagnostics. |
@@ -810,6 +810,20 @@ Exit evidence:
    tested,
 3. `lotus-manage` does not infer mandate truth locally,
 4. OpenAPI examples clearly explain when to use and when not to use this endpoint.
+
+Current implementation evidence:
+
+1. `DiscretionaryMandateBinding:v1` is active in the source-data catalog, source-security profile,
+   route-family registry, and repo-native domain-product declaration.
+2. Mandate binding ingestion, persistence, effective-dated resolver, and control-plane API are
+   implemented.
+3. The canonical front-office seed now publishes `MANDATE_PB_SG_GLOBAL_BAL_001` for
+   `PB_SG_GLOBAL_BAL_001`, binding it to `MODEL_PB_SG_GLOBAL_BAL_DPM` and
+   `POLICY_DPM_SG_BALANCED_V1`.
+4. Local proof is recorded in
+   `docs/RFCs/RFC-087-slice-5-discretionary-mandate-binding-evidence.md`.
+5. Live canonical stack proof remains pending until the running stack is refreshed with this
+   branch.
 
 ### Slice 6 - Instrument eligibility, restrictions, and settlement pipeline and API
 

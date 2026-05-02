@@ -194,6 +194,7 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_mandate_bindings where portfolio_id = '{portfolio_id}';",
             f"delete from transactions where portfolio_id = '{portfolio_id}';",
             f"delete from instruments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolios where portfolio_id = '{portfolio_id}';",
@@ -1373,6 +1374,35 @@ def build_front_office_portfolio_bundle(
         }
         for security_id, weight in model_target_weights.items()
     ]
+    mandate_bindings = [
+        {
+            "portfolio_id": portfolio_id,
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_type": "discretionary",
+            "discretionary_authority_status": "active",
+            "booking_center_code": "Singapore",
+            "jurisdiction_code": "SG",
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+            "risk_profile": "balanced",
+            "investment_horizon": "long_term",
+            "leverage_allowed": False,
+            "tax_awareness_allowed": True,
+            "settlement_awareness_required": True,
+            "rebalance_frequency": "monthly",
+            "rebalance_bands": {
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            "effective_from": "2026-04-01",
+            "binding_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": f"{portfolio_id.lower()}_mandate_binding_v1",
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+    ]
 
     market_price_specs = {
         "FO_EQ_AAPL_US": (Decimal("184.00"), Decimal("212.00")),
@@ -1459,6 +1489,7 @@ def build_front_office_portfolio_bundle(
         "as_of_date": as_of_date,
         "model_portfolios": model_portfolios,
         "model_portfolio_targets": model_portfolio_targets,
+        "mandate_bindings": mandate_bindings,
         **benchmark_reference,
         **risk_free_reference,
     }
@@ -1519,6 +1550,10 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         (
             "/ingest/model-portfolio-targets",
             {"model_portfolio_targets": bundle["model_portfolio_targets"]},
+        ),
+        (
+            "/ingest/mandate-bindings",
+            {"mandate_bindings": bundle["mandate_bindings"]},
         ),
         ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
