@@ -701,7 +701,9 @@ Exit evidence:
    as a prerequisite PR,
 2. new scaffolding can produce or validate the baseline artifacts needed by the DPM source products,
 3. platform automation tests pass,
-4. RFC-087 implementation no longer relies on avoidable local boilerplate.
+4. RFC-087 implementation no longer relies on avoidable local boilerplate,
+5. Slice evidence is recorded in
+   `docs/RFCs/RFC-087-slice-1-platform-scaffold-evidence.md`.
 
 ### Slice 2 - Cleanup and structure
 
