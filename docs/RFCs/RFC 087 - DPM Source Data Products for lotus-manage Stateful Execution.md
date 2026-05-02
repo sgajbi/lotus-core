@@ -131,6 +131,10 @@ enough as an implementation guide. This gold-standard revision tightens the RFC 
 7. **Certification standard:** every new endpoint must pass endpoint certification, OpenAPI quality,
    route-family, source-data-product, domain-product, observability, error handling, and live proof
    expectations before the slice is closed.
+8. **Single product specification:** the implementation product list is guarded in
+   `docs/standards/rfc-087-dpm-source-product-spec.v1.json` so endpoint slices use one
+   machine-readable source for product names, routes, ingestion dependencies, certification
+   controls, and slice alignment.
 
 The implementation must not start until this RFC is reviewed as the authoritative delivery guide
 for `lotus-core` work required to unblock `lotus-manage` RFC-0036.
@@ -727,7 +731,11 @@ Exit evidence:
 2. stale references removed or explicitly dispositioned,
 3. wiki source is updated where current implementation truth changed, or a deliberate no-wiki-change
    decision is recorded,
-4. repository docs and RFC index remain navigable and non-duplicative.
+4. repository docs and RFC index remain navigable and non-duplicative,
+5. DPM source-product implementation structure is guarded by
+   `docs/standards/rfc-087-dpm-source-product-spec.v1.json`,
+6. Slice evidence is recorded in
+   `docs/RFCs/RFC-087-slice-2-cleanup-structure-evidence.md`.
 
 ### Slice 3 - Product catalog, route-family, and governance scaffolding
 

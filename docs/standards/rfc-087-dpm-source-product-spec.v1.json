@@ -1,0 +1,148 @@
+{
+  "contract_id": "lotus-core-rfc-087-dpm-source-product-spec",
+  "contract_version": "1.0.0",
+  "governed_by_rfc": "RFC-087",
+  "purpose": "Machine-readable implementation structure for DPM source-data products required by lotus-manage stateful discretionary mandate execution.",
+  "architecture_decisions": {
+    "monolithic_execution_context_route_allowed": false,
+    "source_composition_model": "lotus-manage composes multiple lotus-core source-data products rather than calling one all-in DPM context endpoint.",
+    "serving_plane": "query_control_plane_service",
+    "approved_initial_consumer": "lotus-manage",
+    "gateway_integration_required_in_rfc_087": false
+  },
+  "certification_requirements": {
+    "api_certification_required": true,
+    "openapi_quality_required": true,
+    "source_data_product_contract_guard_required": true,
+    "domain_product_validation_required": true,
+    "trust_telemetry_required": true,
+    "mesh_certification_required": true,
+    "live_canonical_evidence_required": true,
+    "duplicate_endpoint_review_required": true
+  },
+  "products": [
+    {
+      "product_name": "DpmModelPortfolioTarget",
+      "product_version": "v1",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_management",
+      "proposed_route": {
+        "method": "POST",
+        "path": "/integration/model-portfolios/{model_portfolio_id}/targets"
+      },
+      "required_ingestion": [
+        "POST /ingest/model-portfolios",
+        "POST /ingest/model-portfolio-targets"
+      ],
+      "minimum_response_families": [
+        "source-data product envelope",
+        "model portfolio identity",
+        "target instrument rows",
+        "target and tolerance weights",
+        "cash reserve policy",
+        "source lineage"
+      ],
+      "implementation_slice": "Slice 4"
+    },
+    {
+      "product_name": "DiscretionaryMandateBinding",
+      "product_version": "v1",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_management",
+      "proposed_route": {
+        "method": "POST",
+        "path": "/integration/portfolios/{portfolio_id}/mandate-binding"
+      },
+      "required_ingestion": [
+        "enhance POST /ingest/portfolios",
+        "POST /ingest/mandate-bindings"
+      ],
+      "minimum_response_families": [
+        "source-data product envelope",
+        "portfolio and mandate identity",
+        "discretionary authority status",
+        "model and policy pack binding",
+        "risk profile and investment horizon",
+        "rebalance constraints",
+        "source lineage"
+      ],
+      "implementation_slice": "Slice 5"
+    },
+    {
+      "product_name": "InstrumentEligibilityProfile",
+      "product_version": "v1",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "instrument_reference",
+      "proposed_route": {
+        "method": "POST",
+        "path": "/integration/instruments/eligibility-bulk"
+      },
+      "required_ingestion": [
+        "enhance POST /ingest/instruments",
+        "POST /ingest/instrument-eligibility",
+        "optional enhance POST /ingest/reference/classification-taxonomy"
+      ],
+      "minimum_response_families": [
+        "source-data product envelope",
+        "request-order preserving eligibility rows",
+        "buy and sell eligibility",
+        "restriction reason codes",
+        "instrument taxonomy",
+        "liquidity and settlement profile",
+        "per-record supportability",
+        "source lineage"
+      ],
+      "implementation_slice": "Slice 6"
+    },
+    {
+      "product_name": "PortfolioTaxLotWindow",
+      "product_version": "v1",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_state",
+      "proposed_route": {
+        "method": "POST",
+        "path": "/integration/portfolios/{portfolio_id}/tax-lots"
+      },
+      "required_ingestion": [
+        "use existing BUY/cost-basis pipeline for first implementation",
+        "later POST /ingest/tax-lots only if an external tax-lot feed becomes authoritative"
+      ],
+      "minimum_response_families": [
+        "source-data product envelope",
+        "portfolio and as-of identity",
+        "tax lot rows",
+        "open quantity",
+        "acquisition date",
+        "local and base cost basis",
+        "source transaction identity",
+        "paging",
+        "source lineage"
+      ],
+      "implementation_slice": "Slice 7"
+    },
+    {
+      "product_name": "MarketDataCoverageWindow",
+      "product_version": "v1",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "market_reference_data",
+      "proposed_route": {
+        "method": "POST",
+        "path": "/integration/market-data/coverage"
+      },
+      "required_ingestion": [
+        "enhance existing market price ingestion where needed",
+        "add or expose FX bulk coverage when missing"
+      ],
+      "minimum_response_families": [
+        "source-data product envelope",
+        "price coverage rows",
+        "FX coverage rows",
+        "freshness diagnostics",
+        "missing data diagnostics",
+        "valuation currency",
+        "source lineage"
+      ],
+      "implementation_slice": "Slice 8"
+    }
+  ]
+}
