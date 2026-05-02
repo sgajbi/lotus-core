@@ -37,7 +37,7 @@ def _effective_filter(
 def _latest_reference_evidence_timestamp(rows: list[Any]) -> datetime | None:
     timestamps: list[datetime] = []
     for row in rows:
-        for field_name in ("source_timestamp", "updated_at", "created_at"):
+        for field_name in ("observed_at", "source_timestamp", "updated_at", "created_at"):
             value = getattr(row, field_name, None)
             if isinstance(value, datetime):
                 timestamps.append(value)

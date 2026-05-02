@@ -118,9 +118,9 @@ class ModelPortfolioDefinitionRecord(BaseModel):
         description="Source record identifier for deterministic replay.",
         examples=["model_sg_balanced_202603"],
     )
-    source_timestamp: datetime | None = Field(
+    observed_at: datetime | None = Field(
         None,
-        description="Source publication timestamp.",
+        description="Timestamp when the upstream source observed or published the model definition.",
         examples=["2026-03-20T09:00:00Z"],
     )
     quality_status: str = Field(
@@ -188,9 +188,9 @@ class ModelPortfolioTargetRecord(BaseModel):
         description="Source record identifier for deterministic replay.",
         examples=["model_sg_balanced_202603_eq_us_aapl"],
     )
-    source_timestamp: datetime | None = Field(
+    observed_at: datetime | None = Field(
         None,
-        description="Source publication timestamp.",
+        description="Timestamp when the upstream source observed or published the model target.",
         examples=["2026-03-20T09:00:00Z"],
     )
     quality_status: str = Field(

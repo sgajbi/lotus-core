@@ -238,7 +238,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `effective_to` (Date): Optional model effective end date.
   - `source_system` (String): Upstream model source system.
   - `source_record_id` (String): Source record identifier.
-  - `source_timestamp` (DateTime): Source publication timestamp.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the model definition.
   - `quality_status` (String): Data quality status.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
@@ -266,7 +266,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `effective_to` (Date): Optional target effective end date.
   - `source_system` (String): Upstream target source system.
   - `source_record_id` (String): Source record identifier.
-  - `source_timestamp` (DateTime): Source publication timestamp.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the model target.
   - `quality_status` (String): Data quality status.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.

@@ -119,6 +119,7 @@ class IntegrationService:
         for rows in row_groups:
             for row in rows:
                 for field_name in (
+                    "observed_at",
                     "source_timestamp",
                     "assignment_recorded_at",
                     "updated_at",

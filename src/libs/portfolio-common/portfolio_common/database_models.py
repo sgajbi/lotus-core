@@ -288,7 +288,7 @@ class ModelPortfolioDefinition(Base):
     effective_to = Column(Date, nullable=True, index=True)
     source_system = Column(String, nullable=True)
     source_record_id = Column(String, nullable=True)
-    source_timestamp = Column(DateTime(timezone=True), nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
     quality_status = Column(String, nullable=False, server_default="accepted", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -326,7 +326,7 @@ class ModelPortfolioTarget(Base):
     effective_to = Column(Date, nullable=True, index=True)
     source_system = Column(String, nullable=True)
     source_record_id = Column(String, nullable=True)
-    source_timestamp = Column(DateTime(timezone=True), nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
     quality_status = Column(String, nullable=False, server_default="accepted", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(

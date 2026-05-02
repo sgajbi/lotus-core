@@ -75,7 +75,7 @@ class ReferenceDataIngestionService:
                 "effective_to",
                 "source_system",
                 "source_record_id",
-                "source_timestamp",
+                "observed_at",
                 "quality_status",
             ],
         )
@@ -98,7 +98,7 @@ class ReferenceDataIngestionService:
                 "effective_to",
                 "source_system",
                 "source_record_id",
-                "source_timestamp",
+                "observed_at",
                 "quality_status",
             ],
         )

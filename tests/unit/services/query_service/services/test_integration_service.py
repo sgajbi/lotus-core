@@ -151,7 +151,7 @@ def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps()
 async def test_resolve_model_portfolio_targets_returns_ready_supportability() -> None:
     service = make_service()
     service._reference_repository = AsyncMock()  # type: ignore[method-assign]
-    source_timestamp = datetime(2026, 3, 20, 9, 0, tzinfo=UTC)
+    observed_at = datetime(2026, 3, 20, 9, 0, tzinfo=UTC)
     service._reference_repository.resolve_model_portfolio_definition.return_value = SimpleNamespace(
         model_portfolio_id="MODEL_SG_BALANCED_DPM",
         model_portfolio_version="2026.03",
@@ -161,12 +161,12 @@ async def test_resolve_model_portfolio_targets_returns_ready_supportability() ->
         mandate_type="discretionary",
         rebalance_frequency="monthly",
         approval_status="approved",
-        approved_at=source_timestamp,
+        approved_at=observed_at,
         effective_from=date(2026, 3, 25),
         effective_to=None,
         source_system="investment_office_model_system",
         source_record_id="model_sg_balanced_202603",
-        source_timestamp=source_timestamp,
+        observed_at=observed_at,
     )
     service._reference_repository.list_model_portfolio_targets.return_value = [
         SimpleNamespace(
@@ -177,7 +177,7 @@ async def test_resolve_model_portfolio_targets_returns_ready_supportability() ->
             target_status="active",
             quality_status="accepted",
             source_record_id="target_aapl",
-            source_timestamp=source_timestamp,
+            observed_at=observed_at,
         ),
         SimpleNamespace(
             instrument_id="FI_US_TREASURY_10Y",
@@ -187,7 +187,7 @@ async def test_resolve_model_portfolio_targets_returns_ready_supportability() ->
             target_status="active",
             quality_status="accepted",
             source_record_id="target_tsy",
-            source_timestamp=source_timestamp,
+            observed_at=observed_at,
         ),
     ]
 
@@ -206,7 +206,7 @@ async def test_resolve_model_portfolio_targets_returns_ready_supportability() ->
         "FI_US_TREASURY_10Y",
     ]
     assert response.lineage["source_system"] == "investment_office_model_system"
-    assert response.latest_evidence_timestamp == source_timestamp
+    assert response.latest_evidence_timestamp == observed_at
     service._reference_repository.list_model_portfolio_targets.assert_awaited_once_with(
         model_portfolio_id="MODEL_SG_BALANCED_DPM",
         model_portfolio_version="2026.03",
@@ -248,7 +248,7 @@ async def test_resolve_model_portfolio_targets_degrades_when_weights_do_not_sum_
         effective_to=None,
         source_system="investment_office_model_system",
         source_record_id="model_sg_balanced_202603",
-        source_timestamp=None,
+        observed_at=None,
     )
     service._reference_repository.list_model_portfolio_targets.return_value = [
         SimpleNamespace(

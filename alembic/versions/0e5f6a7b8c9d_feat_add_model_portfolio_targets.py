@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column("effective_to", sa.Date(), nullable=True),
         sa.Column("source_system", sa.String(), nullable=True),
         sa.Column("source_record_id", sa.String(), nullable=True),
-        sa.Column("source_timestamp", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("quality_status", sa.String(), server_default="accepted", nullable=False),
         sa.Column(
             "created_at",
@@ -91,7 +91,7 @@ def upgrade() -> None:
         sa.Column("effective_to", sa.Date(), nullable=True),
         sa.Column("source_system", sa.String(), nullable=True),
         sa.Column("source_record_id", sa.String(), nullable=True),
-        sa.Column("source_timestamp", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("quality_status", sa.String(), server_default="accepted", nullable=False),
         sa.Column(
             "created_at",

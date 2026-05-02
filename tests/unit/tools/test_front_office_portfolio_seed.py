@@ -299,7 +299,7 @@ def test_front_office_bundle_includes_dpm_model_portfolio_targets():
             "effective_from": "2026-04-01",
             "source_system": "LOTUS_FRONT_OFFICE_SEED",
             "source_record_id": "model_pb_sg_global_bal_dpm_2026_04",
-            "source_timestamp": "2026-04-10T09:00:00Z",
+            "observed_at": "2026-04-10T09:00:00Z",
             "quality_status": "accepted",
         }
     ]

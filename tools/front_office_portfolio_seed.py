@@ -1338,7 +1338,7 @@ def build_front_office_portfolio_bundle(
                 f"{DEFAULT_DPM_MODEL_PORTFOLIO_ID.lower()}_"
                 f"{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION.replace('.', '_')}"
             ),
-            "source_timestamp": _iso_utc_timestamp(end_date, hour=9),
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
             "quality_status": "accepted",
         }
     ]
@@ -1368,7 +1368,7 @@ def build_front_office_portfolio_bundle(
                 f"{DEFAULT_DPM_MODEL_PORTFOLIO_ID.lower()}_"
                 f"{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION.replace('.', '_')}_{security_id.lower()}"
             ),
-            "source_timestamp": _iso_utc_timestamp(end_date, hour=9),
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
             "quality_status": "accepted",
         }
         for security_id, weight in model_target_weights.items()
