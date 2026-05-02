@@ -6,13 +6,17 @@ import pytest
 from portfolio_common.source_data_products import (
     ANALYTICS_INPUT,
     CONTROL_PLANE_AND_POLICY,
+    DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG,
     OPERATIONAL_READ,
     QUERY_CONTROL_PLANE_SERVICE,
     QUERY_SERVICE,
     SNAPSHOT_AND_SIMULATION,
     SOURCE_DATA_PRODUCT_CATALOG,
 )
-from portfolio_common.source_data_security import get_source_data_security_profile
+from portfolio_common.source_data_security import (
+    DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES,
+    get_source_data_security_profile,
+)
 from scripts.validate_domain_data_product_contracts import (
     LOCAL_DECLARATION_DIR,
     platform_validation_dependencies_available,
@@ -43,6 +47,11 @@ def test_repo_native_domain_data_product_directory_contains_core_declaration() -
 def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() -> None:
     declaration = _load_declaration()
     declared_by_name = {product["product_name"]: product for product in declaration["products"]}
+    active_declared_by_name = {
+        product_name: product
+        for product_name, product in declared_by_name.items()
+        if product["lifecycle_status"] == "active"
+    }
     family_map = {
         OPERATIONAL_READ: "operational_source_data",
         SNAPSHOT_AND_SIMULATION: "simulation_and_projected_state",
@@ -52,17 +61,62 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
 
     assert declaration["producer_repository"] == "lotus-core"
     assert declaration["authoritative_domain"] == "portfolio_state"
-    assert set(declared_by_name) == {
+    assert set(active_declared_by_name) == {
         product.product_name for product in SOURCE_DATA_PRODUCT_CATALOG
     }
 
     for source_product in SOURCE_DATA_PRODUCT_CATALOG:
-        declared = declared_by_name[source_product.product_name]
+        declared = active_declared_by_name[source_product.product_name]
         profile = get_source_data_security_profile(source_product.product_name)
 
         assert declared["product_version"] == source_product.product_version
         assert declared["owner_repository"] == source_product.owner
-        assert declared["product_family"] == family_map[source_product.route_family]
+        expected_family = (
+            "dpm_source_data"
+            if source_product.product_name
+            in {
+                "DpmModelPortfolioTarget",
+                "DiscretionaryMandateBinding",
+                "InstrumentEligibilityProfile",
+                "PortfolioTaxLotWindow",
+                "MarketDataCoverageWindow",
+                "DpmSourceReadiness",
+            }
+            else family_map[source_product.route_family]
+        )
+        assert declared["product_family"] == expected_family
+        assert declared["approved_consumers"] == list(source_product.consumers)
+        assert declared["required_trust_metadata"] == list(source_product.required_metadata_fields)
+        assert declared["serving_plane"] == source_product.serving_plane
+        assert declared["current_routes"] == list(source_product.current_routes)
+        assert declared["security_profile_ref"] == (
+            f"{profile.access_classification}:{profile.sensitivity_classification}:"
+            f"{profile.retention_requirement}:{profile.audit_requirement}"
+        )
+
+
+def test_core_domain_product_declaration_aligns_to_planned_dpm_source_products() -> None:
+    declaration = _load_declaration()
+    proposed_declared_by_name = {
+        product["product_name"]: product
+        for product in declaration["products"]
+        if product["lifecycle_status"] == "proposed"
+    }
+    profiles = {
+        profile.product_name: profile for profile in DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES
+    }
+
+    assert set(proposed_declared_by_name) == {
+        product.product_name for product in DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG
+    }
+
+    for source_product in DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG:
+        declared = proposed_declared_by_name[source_product.product_name]
+        profile = profiles[source_product.product_name]
+
+        assert declared["product_version"] == source_product.product_version
+        assert declared["owner_repository"] == source_product.owner
+        assert declared["product_family"] == "dpm_source_data"
         assert declared["approved_consumers"] == list(source_product.consumers)
         assert declared["required_trust_metadata"] == list(source_product.required_metadata_fields)
         assert declared["serving_plane"] == source_product.serving_plane

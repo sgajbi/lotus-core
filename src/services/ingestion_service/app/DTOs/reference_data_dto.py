@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, condecimal
+from pydantic import BaseModel, ConfigDict, Field, condecimal, model_validator
 
 
 class PortfolioBenchmarkAssignmentRecord(BaseModel):
@@ -52,6 +52,357 @@ class PortfolioBenchmarkAssignmentRecord(BaseModel):
         examples=[1],
         ge=1,
     )
+
+    model_config = ConfigDict()
+
+
+class DiscretionaryMandateBindingRecord(BaseModel):
+    portfolio_id: str = Field(
+        ..., description="Canonical portfolio identifier.", examples=["PB_SG_GLOBAL_BAL_001"]
+    )
+    mandate_id: str = Field(
+        ...,
+        description="Canonical discretionary mandate identifier.",
+        examples=["MANDATE_PB_SG_GLOBAL_BAL_001"],
+    )
+    client_id: str = Field(
+        ...,
+        description="Canonical client identifier bound to the mandate.",
+        examples=["CIF_SG_000184"],
+    )
+    mandate_type: Literal["discretionary"] = Field(
+        "discretionary",
+        description="Mandate type. Slice 5 supports discretionary mandate bindings only.",
+        examples=["discretionary"],
+    )
+    discretionary_authority_status: Literal["active", "pending", "suspended", "terminated"] = Field(
+        ...,
+        description="Authority lifecycle status that determines DPM execution supportability.",
+        examples=["active"],
+    )
+    booking_center_code: str = Field(
+        ..., description="Booking center governing the mandate.", examples=["Singapore"]
+    )
+    jurisdiction_code: str = Field(
+        ..., description="Legal or regulatory jurisdiction code for the mandate.", examples=["SG"]
+    )
+    model_portfolio_id: str = Field(
+        ...,
+        description="Approved model portfolio identifier selected for the mandate.",
+        examples=["MODEL_PB_SG_GLOBAL_BAL_DPM"],
+    )
+    policy_pack_id: str | None = Field(
+        None,
+        description="Policy pack identifier applied to DPM checks for this mandate.",
+        examples=["POLICY_DPM_SG_BALANCED_V1"],
+    )
+    risk_profile: str = Field(..., description="Mandate risk profile.", examples=["balanced"])
+    investment_horizon: str = Field(
+        ..., description="Mandate investment horizon classification.", examples=["long_term"]
+    )
+    leverage_allowed: bool = Field(
+        False, description="Whether leverage is permitted by the mandate.", examples=[False]
+    )
+    tax_awareness_allowed: bool = Field(
+        False, description="Whether tax-aware DPM execution is allowed.", examples=[True]
+    )
+    settlement_awareness_required: bool = Field(
+        False,
+        description="Whether DPM execution must account for settlement constraints.",
+        examples=[True],
+    )
+    rebalance_frequency: str = Field(
+        ..., description="Expected rebalance cadence.", examples=["monthly"]
+    )
+    rebalance_bands: dict[str, str] = Field(
+        ...,
+        description=(
+            "Mandate-level rebalance band settings. Values are decimal strings to preserve "
+            "source precision."
+        ),
+        examples=[{"default_band": "0.0250000000", "cash_reserve_weight": "0.0200000000"}],
+    )
+    effective_from: date = Field(
+        ..., description="Binding effective start date.", examples=["2026-04-01"]
+    )
+    effective_to: date | None = Field(
+        None,
+        description="Binding effective end date, null when open-ended.",
+        examples=["2026-12-31"],
+    )
+    binding_version: int = Field(
+        1, description="Binding version used for deterministic effective-date tie-breaks.", ge=1
+    )
+    source_system: str | None = Field(
+        None,
+        description="Upstream mandate administration source system.",
+        examples=["mandate_admin"],
+    )
+    source_record_id: str | None = Field(
+        None,
+        description="Source record identifier for deterministic replay.",
+        examples=["mandate_001_v1"],
+    )
+    observed_at: datetime | None = Field(
+        None,
+        description="Timestamp when the upstream source observed or published the binding.",
+        examples=["2026-04-01T09:00:00Z"],
+    )
+    quality_status: str = Field(
+        "accepted",
+        description="Data quality status for the mandate binding.",
+        examples=["accepted"],
+    )
+
+    @model_validator(mode="after")
+    def validate_effective_window(self) -> "DiscretionaryMandateBindingRecord":
+        if self.effective_to is not None and self.effective_to < self.effective_from:
+            raise ValueError("effective_to must be on or after effective_from")
+        return self
+
+    model_config = ConfigDict()
+
+
+class InstrumentEligibilityProfileRecord(BaseModel):
+    security_id: str = Field(
+        ..., description="Canonical instrument/security identifier.", examples=["AAPL"]
+    )
+    eligibility_status: Literal["APPROVED", "RESTRICTED", "SELL_ONLY", "BANNED", "UNKNOWN"] = Field(
+        ..., description="DPM eligibility status for this instrument.", examples=["APPROVED"]
+    )
+    product_shelf_status: Literal["APPROVED", "RESTRICTED", "SELL_ONLY", "BANNED", "SUSPENDED"] = (
+        Field(..., description="Product shelf status used by DPM execution.", examples=["APPROVED"])
+    )
+    buy_allowed: bool = Field(
+        ..., description="Whether DPM may create buy orders for this instrument.", examples=[True]
+    )
+    sell_allowed: bool = Field(
+        ..., description="Whether DPM may create sell orders for this instrument.", examples=[True]
+    )
+    restriction_reason_codes: list[str] = Field(
+        default_factory=list,
+        description="Bounded restriction codes. Sensitive free-text rationale is not returned by the DPM API.",
+        examples=[["PRIVATE_ASSET_REVIEW"]],
+    )
+    restriction_rationale: str | None = Field(
+        None,
+        description="Operator-only source rationale retained for audit; not exposed downstream.",
+        examples=["Investment office review required before new buys."],
+    )
+    settlement_days: int = Field(
+        ..., description="Expected settlement cycle in business days.", ge=0, examples=[2]
+    )
+    settlement_calendar_id: str = Field(
+        ..., description="Settlement calendar identifier.", examples=["US_NYSE"]
+    )
+    liquidity_tier: Literal["L1", "L2", "L3", "L4", "L5"] | None = Field(
+        None, description="Liquidity tier used by DPM controls.", examples=["L1"]
+    )
+    issuer_id: str | None = Field(None, description="Direct issuer identifier.", examples=["APPLE"])
+    issuer_name: str | None = Field(
+        None, description="Direct issuer name.", examples=["Apple Inc."]
+    )
+    ultimate_parent_issuer_id: str | None = Field(
+        None, description="Ultimate parent issuer identifier.", examples=["APPLE_PARENT"]
+    )
+    ultimate_parent_issuer_name: str | None = Field(
+        None, description="Ultimate parent issuer name.", examples=["Apple Inc."]
+    )
+    asset_class: str | None = Field(None, description="Asset class label.", examples=["Equity"])
+    country_of_risk: str | None = Field(None, description="Country of risk.", examples=["US"])
+    effective_from: date = Field(
+        ..., description="Eligibility effective start date.", examples=["2026-04-01"]
+    )
+    effective_to: date | None = Field(
+        None, description="Eligibility effective end date, null when open-ended.", examples=None
+    )
+    eligibility_version: int = Field(
+        1, description="Eligibility version used for effective-date tie-breaks.", ge=1
+    )
+    source_system: str | None = Field(
+        None, description="Upstream shelf/compliance source system.", examples=["product_shelf"]
+    )
+    source_record_id: str | None = Field(
+        None, description="Source record identifier for replay.", examples=["AAPL-elig-20260401"]
+    )
+    observed_at: datetime | None = Field(
+        None, description="Timestamp when the source observed or published this profile."
+    )
+    quality_status: str = Field(
+        "accepted",
+        description="Data quality status for the eligibility profile.",
+        examples=["accepted"],
+    )
+
+    @model_validator(mode="after")
+    def validate_effective_window(self) -> "InstrumentEligibilityProfileRecord":
+        if self.effective_to is not None and self.effective_to < self.effective_from:
+            raise ValueError("effective_to must be on or after effective_from")
+        if self.product_shelf_status in {"BANNED", "SUSPENDED"} and self.buy_allowed:
+            raise ValueError("buy_allowed must be false for banned or suspended instruments")
+        if self.product_shelf_status == "BANNED" and self.sell_allowed:
+            raise ValueError("sell_allowed must be false for banned instruments")
+        return self
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioDefinitionRecord(BaseModel):
+    model_portfolio_id: str = Field(
+        ...,
+        description="Canonical model portfolio identifier.",
+        examples=["MODEL_SG_BALANCED_DPM"],
+    )
+    model_portfolio_version: str = Field(
+        ...,
+        description="Approved model portfolio version.",
+        examples=["2026.03"],
+    )
+    display_name: str = Field(
+        ...,
+        description="Business display name for the model portfolio.",
+        examples=["Singapore Balanced DPM Model"],
+    )
+    base_currency: str = Field(..., description="Model base currency.", examples=["SGD"])
+    risk_profile: str = Field(
+        ...,
+        description="Mandate risk profile aligned to this model.",
+        examples=["balanced"],
+    )
+    mandate_type: str = Field(
+        ...,
+        description="Mandate type for which this model is approved.",
+        examples=["discretionary"],
+    )
+    rebalance_frequency: str | None = Field(
+        None,
+        description="Expected rebalance cadence.",
+        examples=["monthly"],
+    )
+    approval_status: Literal["approved", "draft", "retired", "suspended"] = Field(
+        "approved",
+        description="Model approval lifecycle status.",
+        examples=["approved"],
+    )
+    approved_at: datetime | None = Field(
+        None,
+        description="Timestamp at which the model version was approved.",
+        examples=["2026-03-20T09:00:00Z"],
+    )
+    effective_from: date = Field(
+        ...,
+        description="Model version effective start date.",
+        examples=["2026-03-25"],
+    )
+    effective_to: date | None = Field(
+        None,
+        description="Model version effective end date, null when open-ended.",
+        examples=["2026-12-31"],
+    )
+    source_system: str | None = Field(
+        None,
+        description="Upstream model portfolio source system.",
+        examples=["investment_office_model_system"],
+    )
+    source_record_id: str | None = Field(
+        None,
+        description="Source record identifier for deterministic replay.",
+        examples=["model_sg_balanced_202603"],
+    )
+    observed_at: datetime | None = Field(
+        None,
+        description="Timestamp when the upstream source observed or published the model definition.",
+        examples=["2026-03-20T09:00:00Z"],
+    )
+    quality_status: str = Field(
+        "accepted",
+        description="Data quality status for the model definition.",
+        examples=["accepted"],
+    )
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioTargetRecord(BaseModel):
+    model_portfolio_id: str = Field(
+        ...,
+        description="Canonical model portfolio identifier.",
+        examples=["MODEL_SG_BALANCED_DPM"],
+    )
+    model_portfolio_version: str = Field(
+        ...,
+        description="Approved model portfolio version.",
+        examples=["2026.03"],
+    )
+    instrument_id: str = Field(
+        ...,
+        description="Canonical instrument identifier.",
+        examples=["EQ_US_AAPL"],
+    )
+    target_weight: condecimal(ge=Decimal(0), le=Decimal(1)) = Field(
+        ...,
+        description="Target instrument weight as a decimal ratio between 0 and 1.",
+        examples=["0.1200000000"],
+    )
+    min_weight: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(
+        None,
+        description="Optional minimum policy band for the instrument.",
+        examples=["0.0800000000"],
+    )
+    max_weight: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(
+        None,
+        description="Optional maximum policy band for the instrument.",
+        examples=["0.1600000000"],
+    )
+    target_status: Literal["active", "inactive"] = Field(
+        "active",
+        description="Target lifecycle status.",
+        examples=["active"],
+    )
+    effective_from: date = Field(
+        ...,
+        description="Target effective start date.",
+        examples=["2026-03-25"],
+    )
+    effective_to: date | None = Field(
+        None,
+        description="Target effective end date, null when open-ended.",
+        examples=["2026-12-31"],
+    )
+    source_system: str | None = Field(
+        None,
+        description="Upstream model target source system.",
+        examples=["investment_office_model_system"],
+    )
+    source_record_id: str | None = Field(
+        None,
+        description="Source record identifier for deterministic replay.",
+        examples=["model_sg_balanced_202603_eq_us_aapl"],
+    )
+    observed_at: datetime | None = Field(
+        None,
+        description="Timestamp when the upstream source observed or published the model target.",
+        examples=["2026-03-20T09:00:00Z"],
+    )
+    quality_status: str = Field(
+        "accepted",
+        description="Data quality status for the model target.",
+        examples=["accepted"],
+    )
+
+    @model_validator(mode="after")
+    def validate_bands(self) -> "ModelPortfolioTargetRecord":
+        if self.min_weight is not None and self.min_weight > self.target_weight:
+            raise ValueError("min_weight must be less than or equal to target_weight")
+        if self.max_weight is not None and self.max_weight < self.target_weight:
+            raise ValueError("max_weight must be greater than or equal to target_weight")
+        if (
+            self.min_weight is not None
+            and self.max_weight is not None
+            and self.min_weight > self.max_weight
+        ):
+            raise ValueError("min_weight must be less than or equal to max_weight")
+        return self
 
     model_config = ConfigDict()
 
@@ -361,7 +712,11 @@ class CashAccountMasterRecord(BaseModel):
     cash_account_id: str = Field(
         ..., description="Canonical Lotus cash account identifier.", examples=["CASH-ACC-USD-001"]
     )
-    portfolio_id: str = Field(..., description="Owning portfolio identifier.", examples=["PORT-001"])
+    portfolio_id: str = Field(
+        ...,
+        description="Owning portfolio identifier.",
+        examples=["PORT-001"],
+    )
     security_id: str = Field(
         ...,
         description="Linked cash instrument/security identifier.",
@@ -464,6 +819,140 @@ class PortfolioBenchmarkAssignmentIngestionRequest(BaseModel):
             ]
         ],
     )
+
+    model_config = ConfigDict()
+
+
+class DiscretionaryMandateBindingIngestionRequest(BaseModel):
+    mandate_bindings: list[DiscretionaryMandateBindingRecord] = Field(
+        ...,
+        description="Effective-dated discretionary mandate binding records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                    "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+                    "client_id": "CIF_SG_000184",
+                    "mandate_type": "discretionary",
+                    "discretionary_authority_status": "active",
+                    "booking_center_code": "Singapore",
+                    "jurisdiction_code": "SG",
+                    "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+                    "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+                    "risk_profile": "balanced",
+                    "investment_horizon": "long_term",
+                    "tax_awareness_allowed": True,
+                    "settlement_awareness_required": True,
+                    "rebalance_frequency": "monthly",
+                    "rebalance_bands": {
+                        "default_band": "0.0250000000",
+                        "cash_reserve_weight": "0.0200000000",
+                    },
+                    "effective_from": "2026-04-01",
+                }
+            ]
+        ],
+    )
+
+    @model_validator(mode="after")
+    def validate_binding_uniqueness(self) -> "DiscretionaryMandateBindingIngestionRequest":
+        keys = [
+            (
+                binding.portfolio_id,
+                binding.mandate_id,
+                binding.effective_from,
+                binding.binding_version,
+            )
+            for binding in self.mandate_bindings
+        ]
+        if len(keys) != len(set(keys)):
+            raise ValueError("mandate_bindings contains duplicate binding records")
+        return self
+
+    model_config = ConfigDict()
+
+
+class InstrumentEligibilityProfileIngestionRequest(BaseModel):
+    eligibility_profiles: list[InstrumentEligibilityProfileRecord] = Field(
+        ...,
+        description="Effective-dated instrument eligibility profiles to ingest or upsert.",
+        min_length=1,
+    )
+
+    @model_validator(mode="after")
+    def validate_profile_uniqueness(self) -> "InstrumentEligibilityProfileIngestionRequest":
+        keys = [
+            (profile.security_id, profile.effective_from, profile.eligibility_version)
+            for profile in self.eligibility_profiles
+        ]
+        if len(keys) != len(set(keys)):
+            raise ValueError("eligibility_profiles contains duplicate effective records")
+        return self
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioDefinitionIngestionRequest(BaseModel):
+    model_portfolios: list[ModelPortfolioDefinitionRecord] = Field(
+        ...,
+        description="Model portfolio definition records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "display_name": "Singapore Balanced DPM Model",
+                    "base_currency": "SGD",
+                    "risk_profile": "balanced",
+                    "mandate_type": "discretionary",
+                    "rebalance_frequency": "monthly",
+                    "approval_status": "approved",
+                    "effective_from": "2026-03-25",
+                }
+            ]
+        ],
+    )
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioTargetIngestionRequest(BaseModel):
+    model_portfolio_targets: list[ModelPortfolioTargetRecord] = Field(
+        ...,
+        description="Model portfolio target records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "instrument_id": "EQ_US_AAPL",
+                    "target_weight": "0.1200000000",
+                    "min_weight": "0.0800000000",
+                    "max_weight": "0.1600000000",
+                    "target_status": "active",
+                    "effective_from": "2026-03-25",
+                }
+            ]
+        ],
+    )
+
+    @model_validator(mode="after")
+    def validate_target_uniqueness(self) -> "ModelPortfolioTargetIngestionRequest":
+        keys = [
+            (
+                target.model_portfolio_id,
+                target.model_portfolio_version,
+                target.instrument_id,
+                target.effective_from,
+            )
+            for target in self.model_portfolio_targets
+        ]
+        if len(keys) != len(set(keys)):
+            raise ValueError("model_portfolio_targets contains duplicate target records")
+        return self
 
     model_config = ConfigDict()
 

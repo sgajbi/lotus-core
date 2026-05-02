@@ -13,8 +13,12 @@ from portfolio_common.database_models import (
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
+    InstrumentEligibilityProfile,
     InstrumentLookthroughComponent,
+    ModelPortfolioDefinition,
+    ModelPortfolioTarget,
     PortfolioBenchmarkAssignment,
+    PortfolioMandateBinding,
     RiskFreeSeries,
 )
 from portfolio_common.db import get_async_db_session
@@ -50,6 +54,120 @@ class ReferenceDataIngestionService:
                 "policy_pack_id",
                 "source_system",
                 "assignment_recorded_at",
+            ],
+        )
+
+    async def upsert_model_portfolio_definitions(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=ModelPortfolioDefinition,
+            records=records,
+            conflict_columns=[
+                "model_portfolio_id",
+                "model_portfolio_version",
+                "effective_from",
+            ],
+            update_columns=[
+                "display_name",
+                "base_currency",
+                "risk_profile",
+                "mandate_type",
+                "rebalance_frequency",
+                "approval_status",
+                "approved_at",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_model_portfolio_targets(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=ModelPortfolioTarget,
+            records=records,
+            conflict_columns=[
+                "model_portfolio_id",
+                "model_portfolio_version",
+                "instrument_id",
+                "effective_from",
+            ],
+            update_columns=[
+                "target_weight",
+                "min_weight",
+                "max_weight",
+                "target_status",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_discretionary_mandate_bindings(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=PortfolioMandateBinding,
+            records=records,
+            conflict_columns=[
+                "portfolio_id",
+                "mandate_id",
+                "effective_from",
+                "binding_version",
+            ],
+            update_columns=[
+                "client_id",
+                "mandate_type",
+                "discretionary_authority_status",
+                "booking_center_code",
+                "jurisdiction_code",
+                "model_portfolio_id",
+                "policy_pack_id",
+                "risk_profile",
+                "investment_horizon",
+                "leverage_allowed",
+                "tax_awareness_allowed",
+                "settlement_awareness_required",
+                "rebalance_frequency",
+                "rebalance_bands",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_instrument_eligibility_profiles(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=InstrumentEligibilityProfile,
+            records=records,
+            conflict_columns=[
+                "security_id",
+                "effective_from",
+                "eligibility_version",
+            ],
+            update_columns=[
+                "eligibility_status",
+                "product_shelf_status",
+                "buy_allowed",
+                "sell_allowed",
+                "restriction_reason_codes",
+                "restriction_rationale",
+                "settlement_days",
+                "settlement_calendar_id",
+                "liquidity_tier",
+                "issuer_id",
+                "issuer_name",
+                "ultimate_parent_issuer_id",
+                "ultimate_parent_issuer_name",
+                "asset_class",
+                "country_of_risk",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
             ],
         )
 
@@ -223,9 +341,7 @@ class ReferenceDataIngestionService:
             ],
         )
 
-    async def upsert_instrument_lookthrough_components(
-        self, records: list[dict[str, Any]]
-    ) -> None:
+    async def upsert_instrument_lookthrough_components(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=InstrumentLookthroughComponent,
             records=records,

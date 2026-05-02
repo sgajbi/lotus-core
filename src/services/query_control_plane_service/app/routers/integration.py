@@ -32,11 +32,23 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
+    DiscretionaryMandateBindingRequest,
+    DiscretionaryMandateBindingResponse,
+    DpmSourceReadinessRequest,
+    DpmSourceReadinessResponse,
     IndexCatalogRequest,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
+    InstrumentEligibilityBulkRequest,
+    InstrumentEligibilityBulkResponse,
+    MarketDataCoverageRequest,
+    MarketDataCoverageWindowResponse,
+    ModelPortfolioTargetRequest,
+    ModelPortfolioTargetResponse,
+    PortfolioTaxLotWindowRequest,
+    PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
@@ -49,6 +61,7 @@ from src.services.query_service.app.services.core_snapshot_service import (
     SnapshotGovernanceContext,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+
 from .response_helpers import problem_response
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
@@ -68,6 +81,15 @@ INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
 }
 BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark assignment found for portfolio and as_of_date."
+}
+MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = {
+    "detail": "No approved model portfolio target found for model_portfolio_id and as_of_date."
+}
+MANDATE_BINDING_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = {
+    "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
 }
 BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
@@ -292,6 +314,142 @@ async def get_instrument_enrichment_bulk(
 
 
 @router.post(
+    "/instruments/eligibility-bulk",
+    response_model=InstrumentEligibilityBulkResponse,
+    summary="Resolve DPM instrument eligibility profiles",
+    description=(
+        "What: Return effective DPM instrument eligibility, product shelf, restriction code, "
+        "liquidity, issuer, and settlement profile records for a caller-provided security list.\n"
+        "How: Resolves effective-dated eligibility records in one deterministic batch, preserves "
+        "request order, and returns explicit UNKNOWN records for missing securities instead of "
+        "inventing local fallback truth.\n"
+        "When: Use this endpoint when lotus-manage assembles stateful DPM shelf inputs for held "
+        "and target instruments. Do not use it as a general instrument search API or to retrieve "
+        "operator-only free-text restriction rationale."
+    ),
+    openapi_extra=source_data_product_openapi_extra("InstrumentEligibilityProfile"),
+)
+async def resolve_instrument_eligibility_bulk(
+    request: InstrumentEligibilityBulkRequest,
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> InstrumentEligibilityBulkResponse:
+    return await integration_service.resolve_instrument_eligibility_bulk(request)
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/tax-lots",
+    response_model=PortfolioTaxLotWindowResponse,
+    summary="Resolve DPM portfolio tax-lot window",
+    description=(
+        "What: Return current tax-lot and cost-basis state for all or selected securities in a "
+        "portfolio window.\n"
+        "How: Reads the authoritative `position_lot_state` records in one paged portfolio-window "
+        "call, preserving acquisition-date ordering for tax-aware sell allocation and avoiding "
+        "per-security production fan-out.\n"
+        "When: Use this endpoint when lotus-manage assembles tax-aware DPM sell context for a "
+        "governed portfolio. Do not use it as a general transaction history endpoint; use the "
+        "operational transaction routes for ledger browsing."
+    ),
+    responses={
+        404: problem_response(
+            "Portfolio not found",
+            PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE,
+        ),
+        400: problem_response(
+            "Invalid page token",
+            {"detail": "Portfolio tax-lot page token does not match request scope."},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("PortfolioTaxLotWindow"),
+)
+async def get_portfolio_tax_lot_window(
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose tax-lot window should be returned.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    request: PortfolioTaxLotWindowRequest = Body(...),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> PortfolioTaxLotWindowResponse:
+    try:
+        return await integration_service.get_portfolio_tax_lot_window(
+            portfolio_id=portfolio_id,
+            request=request,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/market-data/coverage",
+    response_model=MarketDataCoverageWindowResponse,
+    summary="Resolve DPM market-data and FX coverage",
+    description=(
+        "What: Return latest available price and FX coverage for the held and target DPM "
+        "universe in one bounded request.\n"
+        "How: Resolves latest market price and FX observations on or before as_of_date, classifies "
+        "missing and stale observations, and returns supportability diagnostics for downstream "
+        "source assembly.\n"
+        "When: Use this endpoint when lotus-manage assembles stateful DPM market-data inputs for "
+        "valuation, drift, cash conversion, and rebalance sizing. Do not use it as a historical "
+        "price or FX series API."
+    ),
+    responses={
+        422: problem_response(
+            "Invalid market-data coverage request",
+            {"detail": "instrument_ids must not contain duplicates"},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("MarketDataCoverageWindow"),
+)
+async def get_market_data_coverage(
+    request: MarketDataCoverageRequest = Body(...),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> MarketDataCoverageWindowResponse:
+    return await integration_service.get_market_data_coverage(request)
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/dpm-source-readiness",
+    response_model=DpmSourceReadinessResponse,
+    summary="Evaluate DPM source-family readiness",
+    description=(
+        "What: Return a control-plane readiness summary across the governed source families "
+        "required before lotus-manage may promote stateful discretionary mandate execution.\n"
+        "How: Evaluates mandate binding, model targets, instrument eligibility, portfolio tax "
+        "lots, and market-data/FX coverage through the product-specific core source APIs, then "
+        "returns bounded source-family states and reason codes. It does not return a composed "
+        "execution context or duplicate the detailed source products.\n"
+        "When: Use this endpoint as the promotion gate for lotus-manage stateful `portfolio_id` "
+        "execution and as the operator supportability summary for DPM source-data incidents. Do "
+        "not use it as an all-in-one data feed; call the individual source products for data."
+    ),
+    responses={
+        422: problem_response(
+            "Invalid DPM source-readiness request",
+            {"detail": "instrument_ids must not contain duplicates"},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("DpmSourceReadiness"),
+)
+async def get_dpm_source_readiness(
+    request: DpmSourceReadinessRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose DPM source-family readiness is evaluated.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> DpmSourceReadinessResponse:
+    return await integration_service.get_dpm_source_readiness(
+        portfolio_id=portfolio_id,
+        request=request,
+    )
+
+
+@router.post(
     "/portfolios/{portfolio_id}/benchmark-assignment",
     response_model=BenchmarkAssignmentResponse,
     responses={
@@ -338,6 +496,105 @@ async def resolve_portfolio_benchmark_assignment(
 
 
 @router.post(
+    "/model-portfolios/{model_portfolio_id}/targets",
+    response_model=ModelPortfolioTargetResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No approved model portfolio target found.",
+            MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve approved DPM model portfolio targets",
+    description=(
+        "What: Return the approved effective-dated model portfolio target weights and "
+        "instrument bands required by discretionary mandate portfolio management.\n"
+        "How: Resolves the latest approved model version for `model_portfolio_id` and "
+        "`as_of_date`, filters inactive targets by default, returns deterministic "
+        "instrument ordering, and includes source-data runtime metadata, supportability, "
+        "and lineage.\n"
+        "When: Use this endpoint when lotus-manage needs governed target allocation input "
+        "for stateful DPM analysis, simulation, or rebalance execution. Do not use it as "
+        "a general advisory proposal simulator or as a replacement for portfolio holdings."
+    ),
+    openapi_extra=source_data_product_openapi_extra("DpmModelPortfolioTarget"),
+)
+async def resolve_model_portfolio_targets(
+    request: ModelPortfolioTargetRequest,
+    model_portfolio_id: str = Path(
+        ...,
+        description="Canonical model portfolio identifier whose targets are requested.",
+        examples=["MODEL_SG_BALANCED_DPM"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ModelPortfolioTargetResponse:
+    response = cast(
+        ModelPortfolioTargetResponse | None,
+        await integration_service.resolve_model_portfolio_targets(
+            model_portfolio_id=model_portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No approved model portfolio target found for model_portfolio_id and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/mandate-binding",
+    response_model=DiscretionaryMandateBindingResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            MANDATE_BINDING_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective DPM mandate binding",
+    description=(
+        "What: Return the effective discretionary mandate binding that connects a portfolio "
+        "to its mandate, model portfolio, policy pack, jurisdiction, booking center, authority "
+        "status, and rebalance constraints.\n"
+        "How: Applies effective-date, optional mandate, optional booking-center, and binding "
+        "version ordering to return one deterministic source record with source-data runtime "
+        "metadata, supportability, and lineage.\n"
+        "When: Use this endpoint before lotus-manage stateful DPM source assembly so model "
+        "target sourcing, policy checks, tax-aware mode, and settlement-aware mode are driven "
+        "by governed core source data. Do not use it for advisory proposal simulation or as a "
+        "general benchmark assignment replacement."
+    ),
+    openapi_extra=source_data_product_openapi_extra("DiscretionaryMandateBinding"),
+)
+async def resolve_discretionary_mandate_binding(
+    request: DiscretionaryMandateBindingRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose discretionary mandate binding is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> DiscretionaryMandateBindingResponse:
+    response = cast(
+        DiscretionaryMandateBindingResponse | None,
+        await integration_service.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
     "/benchmarks/{benchmark_id}/composition-window",
     response_model=BenchmarkCompositionWindowResponse,
     responses={
@@ -353,11 +610,12 @@ async def resolve_portfolio_benchmark_assignment(
     description=(
         "What: Return all effective benchmark composition segments overlapping a "
         "requested window.\n"
-        "How: Resolves overlapping benchmark definition and composition records with deterministic "
-        "ordering and without daily-expanding weights.\n"
+        "How: Resolves overlapping benchmark definition and composition records with "
+        "deterministic ordering and without daily-expanding weights.\n"
         "When: Used by lotus-performance and other downstream consumers to calculate benchmark "
-        "returns across rebalance windows. This is the strategic cross-rebalance source contract; "
-        "single-date benchmark definition reads are not a substitute for long-window benchmark math."
+        "returns across rebalance windows. This is the strategic cross-rebalance source "
+        "contract; single-date benchmark definition reads are not a substitute for "
+        "long-window benchmark math."
     ),
     openapi_extra=source_data_product_openapi_extra("BenchmarkConstituentWindow"),
 )

@@ -50,7 +50,13 @@ Current repository posture:
 18. RFC-0087 trust telemetry proof for `PortfolioStateSnapshot` now lives under
     `contracts/trust-telemetry/` and is validated by `tests/unit/test_trust_telemetry.py` against
     the platform trust telemetry validator when `lotus-platform` is available.
-19. RFC-0108 portfolio readiness supportability now publishes the bounded
+19. RFC-0087 now promotes the first five DPM source-data products for `lotus-manage` stateful
+    discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
+    `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
+    `PortfolioTaxLotWindow:v1`, and `MarketDataCoverageWindow:v1`. They are declared in the
+    active source-data catalog, route-family registry, source-security profiles, and
+    domain-product declaration, with canonical front-office seed payloads pending live stack proof.
+20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared
     `portfolio_common.observability_contracts.PORTFOLIO_SUPPORTABILITY_METRIC_LABELS` tuple for the
@@ -227,6 +233,12 @@ Most relevant current governance:
     institutional sign-off pack aggregates artifacts,
 29. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
+30. RFC-087 DPM source-data work now has the first active source product,
+    `DpmModelPortfolioTarget:v1`, exposed through
+    `POST /integration/model-portfolios/{model_portfolio_id}/targets` with model portfolio
+    definition/target ingestion, persistence, route-family metadata, source-data security,
+    domain-product declaration, OpenAPI proof, and canonical front-office seed support for
+    `MODEL_PB_SG_GLOBAL_BAL_DPM` version `2026.04`.
 
 ## Context Maintenance Rule
 

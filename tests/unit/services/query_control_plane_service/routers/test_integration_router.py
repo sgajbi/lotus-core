@@ -18,10 +18,16 @@ from src.services.query_control_plane_service.app.routers.integration import (
     fetch_risk_free_series,
     get_benchmark_coverage,
     get_core_snapshot_service,
+    get_dpm_source_readiness,
     get_effective_integration_policy,
     get_instrument_enrichment_bulk,
     get_integration_service,
+    get_market_data_coverage,
+    get_portfolio_tax_lot_window,
     get_risk_free_coverage,
+    resolve_discretionary_mandate_binding,
+    resolve_instrument_eligibility_bulk,
+    resolve_model_portfolio_targets,
     resolve_portfolio_benchmark_assignment,
 )
 from src.services.query_service.app.dtos.core_snapshot_dto import (
@@ -43,9 +49,15 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
+    DiscretionaryMandateBindingRequest,
+    DpmSourceReadinessRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
+    InstrumentEligibilityBulkRequest,
     IntegrationWindow,
+    MarketDataCoverageRequest,
+    ModelPortfolioTargetRequest,
+    PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
@@ -513,6 +525,400 @@ async def test_resolve_portfolio_benchmark_assignment_success_path() -> None:
 
     assert response["portfolio_id"] == "DEMO_DPM_EUR_001"
     assert response["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_model_portfolio_targets = AsyncMock(
+        return_value={
+            "product_name": "DpmModelPortfolioTarget",
+            "product_version": "v1",
+            "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+            "model_portfolio_version": "2026.03",
+            "display_name": "Singapore Balanced DPM Model",
+            "base_currency": "SGD",
+            "risk_profile": "balanced",
+            "mandate_type": "discretionary",
+            "rebalance_frequency": "monthly",
+            "approval_status": "approved",
+            "approved_at": None,
+            "effective_from": "2026-03-25",
+            "effective_to": None,
+            "targets": [],
+            "supportability": {
+                "state": "INCOMPLETE",
+                "reason": "MODEL_TARGETS_EMPTY",
+                "target_count": 0,
+                "total_target_weight": "0",
+            },
+            "lineage": {
+                "source_system": "investment_office_model_system",
+                "source_record_id": "model_sg_balanced_202603",
+                "contract_version": "rfc_087_v1",
+            },
+        }
+    )
+    request = ModelPortfolioTargetRequest(as_of_date="2026-03-31")
+
+    response = await resolve_model_portfolio_targets(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "DpmModelPortfolioTarget"
+    mock_service.resolve_model_portfolio_targets.assert_awaited_once_with(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_model_portfolio_targets = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_model_portfolio_targets(
+            model_portfolio_id="MODEL_MISSING",
+            request=ModelPortfolioTargetRequest(as_of_date="2026-03-31"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value={
+            "product_name": "DiscretionaryMandateBinding",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_type": "discretionary",
+            "discretionary_authority_status": "active",
+            "booking_center_code": "Singapore",
+            "jurisdiction_code": "SG",
+            "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+            "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+            "risk_profile": "balanced",
+            "investment_horizon": "long_term",
+            "leverage_allowed": False,
+            "tax_awareness_allowed": True,
+            "settlement_awareness_required": True,
+            "rebalance_frequency": "monthly",
+            "rebalance_bands": {
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            "effective_from": "2026-04-01",
+            "effective_to": None,
+            "binding_version": 1,
+            "supportability": {
+                "state": "READY",
+                "reason": "MANDATE_BINDING_READY",
+                "missing_data_families": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = DiscretionaryMandateBindingRequest(as_of_date="2026-04-10")
+
+    response = await resolve_discretionary_mandate_binding(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "DiscretionaryMandateBinding"
+    assert response["model_portfolio_id"] == "MODEL_PB_SG_GLOBAL_BAL_DPM"
+    mock_service.resolve_discretionary_mandate_binding.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_maps_not_found_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_discretionary_mandate_binding(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=DiscretionaryMandateBindingRequest(as_of_date="2026-04-10"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_instrument_eligibility_bulk_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_instrument_eligibility_bulk = AsyncMock(
+        return_value={
+            "product_name": "InstrumentEligibilityProfile",
+            "product_version": "v1",
+            "as_of_date": "2026-04-10",
+            "generated_at": "2026-04-10T09:00:00Z",
+            "restatement_version": "current",
+            "reconciliation_status": "NOT_ASSESSED",
+            "data_quality_status": "COMPLETE",
+            "latest_evidence_timestamp": "2026-04-10T09:00:00Z",
+            "source_batch_fingerprint": "abc",
+            "snapshot_id": "snap",
+            "policy_version": "default",
+            "correlation_id": None,
+            "records": [
+                {
+                    "security_id": "AAPL",
+                    "found": True,
+                    "eligibility_status": "APPROVED",
+                    "product_shelf_status": "APPROVED",
+                    "buy_allowed": True,
+                    "sell_allowed": True,
+                    "restriction_reason_codes": [],
+                    "settlement_days": 2,
+                    "settlement_calendar_id": "US_NYSE",
+                    "liquidity_tier": "L1",
+                    "issuer_id": "APPLE",
+                    "issuer_name": "Apple Inc.",
+                    "ultimate_parent_issuer_id": "APPLE_PARENT",
+                    "ultimate_parent_issuer_name": "Apple Inc.",
+                    "asset_class": "Equity",
+                    "country_of_risk": "US",
+                    "effective_from": "2026-04-01",
+                    "effective_to": None,
+                    "quality_status": "ACCEPTED",
+                    "source_record_id": "AAPL-elig",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "INSTRUMENT_ELIGIBILITY_READY",
+                "requested_count": 1,
+                "resolved_count": 1,
+                "missing_security_ids": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = InstrumentEligibilityBulkRequest(
+        as_of_date="2026-04-10",
+        security_ids=["AAPL"],
+    )
+
+    response = await resolve_instrument_eligibility_bulk(
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "InstrumentEligibilityProfile"
+    mock_service.resolve_instrument_eligibility_bulk.assert_awaited_once_with(request)
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_tax_lot_window_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_portfolio_tax_lot_window = AsyncMock(
+        return_value={
+            "product_name": "PortfolioTaxLotWindow",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-04-10",
+            "generated_at": "2026-04-10T09:00:00Z",
+            "restatement_version": "current",
+            "reconciliation_status": "NOT_ASSESSED",
+            "data_quality_status": "COMPLETE",
+            "latest_evidence_timestamp": "2026-04-10T09:00:00Z",
+            "source_batch_fingerprint": "abc",
+            "snapshot_id": "snap",
+            "policy_version": "default",
+            "correlation_id": None,
+            "lots": [
+                {
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                    "security_id": "EQ_US_AAPL",
+                    "instrument_id": "EQ_US_AAPL",
+                    "lot_id": "LOT-TXN-BUY-AAPL-001",
+                    "open_quantity": "100.0000000000",
+                    "original_quantity": "100.0000000000",
+                    "acquisition_date": "2026-03-25",
+                    "cost_basis_base": "15005.5000000000",
+                    "cost_basis_local": "15005.5000000000",
+                    "local_currency": "USD",
+                    "tax_lot_status": "OPEN",
+                    "source_transaction_id": "TXN-BUY-AAPL-001",
+                    "source_lineage": {"source_system": "front_office_portfolio_seed"},
+                }
+            ],
+            "page": {
+                "page_size": 250,
+                "sort_key": "acquisition_date:asc,lot_id:asc",
+                "returned_component_count": 1,
+                "request_scope_fingerprint": "fp",
+                "next_page_token": None,
+            },
+            "supportability": {
+                "state": "READY",
+                "reason": "TAX_LOTS_READY",
+                "requested_security_count": 1,
+                "returned_lot_count": 1,
+                "missing_security_ids": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = PortfolioTaxLotWindowRequest(
+        as_of_date="2026-04-10",
+        security_ids=["EQ_US_AAPL"],
+    )
+
+    response = await get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "PortfolioTaxLotWindow"
+    mock_service.get_portfolio_tax_lot_window.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_portfolio_tax_lot_window = AsyncMock(side_effect=LookupError("missing"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_portfolio_tax_lot_window(
+            portfolio_id="P404",
+            request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_market_data_coverage_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_market_data_coverage = AsyncMock(
+        return_value={
+            "product_name": "MarketDataCoverageWindow",
+            "product_version": "v1",
+            "as_of_date": "2026-04-10",
+            "valuation_currency": "SGD",
+            "price_coverage": [
+                {
+                    "instrument_id": "EQ_US_AAPL",
+                    "found": True,
+                    "price_date": "2026-04-10",
+                    "price": "187.1200000000",
+                    "currency": "USD",
+                    "age_days": 0,
+                    "quality_status": "READY",
+                }
+            ],
+            "fx_coverage": [
+                {
+                    "from_currency": "USD",
+                    "to_currency": "SGD",
+                    "found": True,
+                    "rate_date": "2026-04-10",
+                    "rate": "1.3521000000",
+                    "age_days": 0,
+                    "quality_status": "READY",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "MARKET_DATA_READY",
+                "requested_price_count": 1,
+                "resolved_price_count": 1,
+                "requested_fx_count": 1,
+                "resolved_fx_count": 1,
+                "missing_instrument_ids": [],
+                "stale_instrument_ids": [],
+                "missing_currency_pairs": [],
+                "stale_currency_pairs": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = MarketDataCoverageRequest(
+        as_of_date="2026-04-10",
+        instrument_ids=["EQ_US_AAPL"],
+        currency_pairs=[{"from_currency": "USD", "to_currency": "SGD"}],
+        valuation_currency="SGD",
+    )
+
+    response = await get_market_data_coverage(
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "MarketDataCoverageWindow"
+    mock_service.get_market_data_coverage.assert_awaited_once_with(request)
+
+
+@pytest.mark.asyncio
+async def test_get_dpm_source_readiness_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_dpm_source_readiness = AsyncMock(
+        return_value={
+            "product_name": "DpmSourceReadiness",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-04-10",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+            "evaluated_instrument_ids": ["FO_EQ_AAPL_US"],
+            "families": [
+                {
+                    "family": "market_data",
+                    "product_name": "MarketDataCoverageWindow",
+                    "state": "READY",
+                    "reason": "MARKET_DATA_READY",
+                    "missing_items": [],
+                    "stale_items": [],
+                    "evidence_count": 1,
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "DPM_SOURCE_READINESS_READY",
+                "ready_family_count": 5,
+                "degraded_family_count": 0,
+                "incomplete_family_count": 0,
+                "unavailable_family_count": 0,
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = DpmSourceReadinessRequest(
+        as_of_date="2026-04-10",
+        instrument_ids=["FO_EQ_AAPL_US"],
+    )
+
+    response = await get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "DpmSourceReadiness"
+    mock_service.get_dpm_source_readiness.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
 
 
 @pytest.mark.asyncio

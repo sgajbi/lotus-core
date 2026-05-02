@@ -199,6 +199,81 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Canonical risk-free rate source series for excess-return workflows.",
     ),
     SourceDataProductDefinition(
+        product_name="DpmModelPortfolioTarget",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/model-portfolios/{model_portfolio_id}/targets",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes="DPM source product for approved model target weights, bands, and cash reserve policy.",
+    ),
+    SourceDataProductDefinition(
+        product_name="DiscretionaryMandateBinding",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/mandate-binding",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes="DPM source product for mandate, model, policy, jurisdiction, and rebalance constraints.",
+    ),
+    SourceDataProductDefinition(
+        product_name="InstrumentEligibilityProfile",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/instruments/eligibility-bulk",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes="DPM source product for instrument shelf, restriction, liquidity, and settlement eligibility.",
+    ),
+    SourceDataProductDefinition(
+        product_name="PortfolioTaxLotWindow",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/tax-lots",),
+        paging_mode=INLINE_PAGED,
+        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
+        notes="DPM source product for portfolio-window tax-lot and cost-basis state used by tax-aware sells.",
+    ),
+    SourceDataProductDefinition(
+        product_name="MarketDataCoverageWindow",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/market-data/coverage",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes="DPM source product for bounded held and target universe price and FX coverage diagnostics.",
+    ),
+    SourceDataProductDefinition(
+        product_name="DpmSourceReadiness",
+        product_version="v1",
+        route_family=CONTROL_PLANE_AND_POLICY,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage", "lotus-gateway"),
+        current_routes=("/integration/portfolios/{portfolio_id}/dpm-source-readiness",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Control-plane readiness summary for DPM source families before lotus-manage "
+            "promotes stateful portfolio_id execution."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
@@ -243,6 +318,8 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
     ),
 )
 
+DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = ()
+
 
 def get_source_data_product(product_name: str) -> SourceDataProductDefinition:
     requested = _normalize_required_text(product_name, "product_name")
@@ -283,6 +360,14 @@ def products_for_consumer(
     return tuple(
         product for product in catalog if requested in {item.upper() for item in product.consumers}
     )
+
+
+def planned_products_for_consumer(
+    consumer: str,
+    *,
+    catalog: tuple[SourceDataProductDefinition, ...] = DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG,
+) -> tuple[SourceDataProductDefinition, ...]:
+    return products_for_consumer(consumer, catalog=catalog)
 
 
 def validate_source_data_product_catalog(

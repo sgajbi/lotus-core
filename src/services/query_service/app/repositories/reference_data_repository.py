@@ -14,10 +14,15 @@ from portfolio_common.database_models import (
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
+    MarketPrice,
+    InstrumentEligibilityProfile,
+    ModelPortfolioDefinition,
+    ModelPortfolioTarget,
     PortfolioBenchmarkAssignment,
+    PortfolioMandateBinding,
     RiskFreeSeries,
 )
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -35,7 +40,7 @@ def _effective_filter(
 def _latest_reference_evidence_timestamp(rows: list[Any]) -> datetime | None:
     timestamps: list[datetime] = []
     for row in rows:
-        for field_name in ("source_timestamp", "updated_at", "created_at"):
+        for field_name in ("observed_at", "source_timestamp", "updated_at", "created_at"):
             value = getattr(row, field_name, None)
             if isinstance(value, datetime):
                 timestamps.append(value)
@@ -88,6 +93,129 @@ class ReferenceDataRepository:
         )
         result = await self._db.execute(stmt)
         return result.scalars().first()
+
+    async def resolve_model_portfolio_definition(
+        self,
+        model_portfolio_id: str,
+        as_of_date: date,
+    ):
+        stmt = (
+            select(ModelPortfolioDefinition)
+            .where(
+                ModelPortfolioDefinition.model_portfolio_id == model_portfolio_id,
+                ModelPortfolioDefinition.approval_status == "approved",
+                _effective_filter(
+                    ModelPortfolioDefinition.effective_from,
+                    ModelPortfolioDefinition.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ModelPortfolioDefinition.effective_from.desc(),
+                ModelPortfolioDefinition.approved_at.desc().nulls_last(),
+                ModelPortfolioDefinition.updated_at.desc(),
+            )
+            .limit(1)
+        )
+        result = await self._db.execute(stmt)
+        return result.scalars().first()
+
+    async def list_model_portfolio_targets(
+        self,
+        model_portfolio_id: str,
+        model_portfolio_version: str,
+        as_of_date: date,
+        *,
+        include_inactive_targets: bool = False,
+    ) -> list[ModelPortfolioTarget]:
+        stmt = (
+            select(ModelPortfolioTarget)
+            .where(
+                ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
+                ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
+                _effective_filter(
+                    ModelPortfolioTarget.effective_from,
+                    ModelPortfolioTarget.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ModelPortfolioTarget.instrument_id.asc(),
+                ModelPortfolioTarget.effective_from.desc(),
+            )
+        )
+        if not include_inactive_targets:
+            stmt = stmt.where(ModelPortfolioTarget.target_status == "active")
+        result = await self._db.execute(stmt)
+        rows = list(result.scalars().all())
+        return _latest_effective_rows(
+            rows,
+            "model_portfolio_id",
+            "model_portfolio_version",
+            "instrument_id",
+        )
+
+    async def resolve_discretionary_mandate_binding(
+        self,
+        portfolio_id: str,
+        as_of_date: date,
+        *,
+        mandate_id: str | None = None,
+        booking_center_code: str | None = None,
+    ):
+        stmt = (
+            select(PortfolioMandateBinding)
+            .where(
+                PortfolioMandateBinding.portfolio_id == portfolio_id,
+                PortfolioMandateBinding.mandate_type == "discretionary",
+                _effective_filter(
+                    PortfolioMandateBinding.effective_from,
+                    PortfolioMandateBinding.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                PortfolioMandateBinding.effective_from.desc(),
+                PortfolioMandateBinding.observed_at.desc().nulls_last(),
+                PortfolioMandateBinding.binding_version.desc(),
+                PortfolioMandateBinding.updated_at.desc(),
+            )
+            .limit(1)
+        )
+        if mandate_id:
+            stmt = stmt.where(PortfolioMandateBinding.mandate_id == mandate_id)
+        if booking_center_code:
+            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        result = await self._db.execute(stmt)
+        return result.scalars().first()
+
+    async def list_instrument_eligibility_profiles(
+        self,
+        security_ids: list[str],
+        as_of_date: date,
+    ) -> list[InstrumentEligibilityProfile]:
+        if not security_ids:
+            return []
+        stmt = (
+            select(InstrumentEligibilityProfile)
+            .where(
+                InstrumentEligibilityProfile.security_id.in_(security_ids),
+                _effective_filter(
+                    InstrumentEligibilityProfile.effective_from,
+                    InstrumentEligibilityProfile.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                InstrumentEligibilityProfile.security_id.asc(),
+                InstrumentEligibilityProfile.effective_from.desc(),
+                InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
+                InstrumentEligibilityProfile.eligibility_version.desc(),
+                InstrumentEligibilityProfile.updated_at.desc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(list(result.scalars().all()), "security_id")
 
     async def get_benchmark_definition(self, benchmark_id: str, as_of_date: date):
         stmt = (
@@ -523,3 +651,76 @@ class ReferenceDataRepository:
         result = await self._db.execute(stmt)
         rows = result.scalars().all()
         return {row.rate_date: Decimal(row.rate) for row in rows}
+
+    async def list_latest_market_prices(
+        self,
+        *,
+        security_ids: list[str],
+        as_of_date: date,
+    ) -> list[MarketPrice]:
+        if not security_ids:
+            return []
+
+        latest_price_dates = (
+            select(
+                MarketPrice.security_id,
+                func.max(MarketPrice.price_date).label("latest_price_date"),
+            )
+            .where(
+                MarketPrice.security_id.in_(security_ids),
+                MarketPrice.price_date <= as_of_date,
+            )
+            .group_by(MarketPrice.security_id)
+            .subquery()
+        )
+        stmt = (
+            select(MarketPrice)
+            .join(
+                latest_price_dates,
+                and_(
+                    MarketPrice.security_id == latest_price_dates.c.security_id,
+                    MarketPrice.price_date == latest_price_dates.c.latest_price_date,
+                ),
+            )
+            .order_by(MarketPrice.security_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_latest_fx_rates(
+        self,
+        *,
+        currency_pairs: list[tuple[str, str]],
+        as_of_date: date,
+    ) -> list[FxRate]:
+        if not currency_pairs:
+            return []
+
+        normalized_pairs = [(base.upper(), quote.upper()) for base, quote in currency_pairs]
+        latest_rate_dates = (
+            select(
+                FxRate.from_currency,
+                FxRate.to_currency,
+                func.max(FxRate.rate_date).label("latest_rate_date"),
+            )
+            .where(
+                tuple_(FxRate.from_currency, FxRate.to_currency).in_(normalized_pairs),
+                FxRate.rate_date <= as_of_date,
+            )
+            .group_by(FxRate.from_currency, FxRate.to_currency)
+            .subquery()
+        )
+        stmt = (
+            select(FxRate)
+            .join(
+                latest_rate_dates,
+                and_(
+                    FxRate.from_currency == latest_rate_dates.c.from_currency,
+                    FxRate.to_currency == latest_rate_dates.c.to_currency,
+                    FxRate.rate_date == latest_rate_dates.c.latest_rate_date,
+                ),
+            )
+            .order_by(FxRate.from_currency.asc(), FxRate.to_currency.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())

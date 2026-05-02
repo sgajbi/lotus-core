@@ -6,11 +6,13 @@ from portfolio_common.source_data_products import (
     ANALYTICS_INPUT,
     CONTROL_PLANE_AND_POLICY,
     DEFAULT_REQUIRED_METADATA_FIELDS,
+    DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG,
     OPERATIONAL_READ,
     QUERY_CONTROL_PLANE_SERVICE,
     SOURCE_DATA_PRODUCT_CATALOG,
     SourceDataProductDefinition,
     get_source_data_product,
+    planned_products_for_consumer,
     products_for_consumer,
     source_data_product_openapi_extra,
     validate_source_data_product_catalog,
@@ -35,12 +37,52 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "InstrumentReferenceBundle",
         "BenchmarkAssignment",
         "BenchmarkConstituentWindow",
+        "DpmModelPortfolioTarget",
+        "DiscretionaryMandateBinding",
+        "InstrumentEligibilityProfile",
+        "PortfolioTaxLotWindow",
+        "MarketDataCoverageWindow",
+        "DpmSourceReadiness",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
         "ReconciliationEvidenceBundle",
         "DataQualityCoverageReport",
         "IngestionEvidenceBundle",
     } <= product_names
+
+
+def test_dpm_planned_source_products_are_governed_but_not_active_routes() -> None:
+    active_product_names = {product.product_name for product in SOURCE_DATA_PRODUCT_CATALOG}
+    planned_products = {
+        product.product_name: product for product in DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG
+    }
+
+    assert planned_products.keys() == set()
+    assert not set(planned_products) & active_product_names
+    assert all(product.owner == "lotus-core" for product in planned_products.values())
+    assert all(product.consumers == ("lotus-manage",) for product in planned_products.values())
+    assert all(
+        product.serving_plane == QUERY_CONTROL_PLANE_SERVICE
+        for product in planned_products.values()
+    )
+    assert all(product.route_family == ANALYTICS_INPUT for product in planned_products.values())
+    assert all(
+        route.startswith("/integration/")
+        and "execution-context" not in route
+        and "dpm-execution-context" not in route
+        for product in planned_products.values()
+        for route in product.current_routes
+    )
+    validate_source_data_product_catalog(DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG)
+
+
+def test_dpm_planned_source_products_are_reserved_for_lotus_manage() -> None:
+    product_names = {
+        product.product_name for product in planned_products_for_consumer("lotus-manage")
+    }
+
+    assert product_names == set()
+    assert planned_products_for_consumer("lotus-performance") == ()
 
 
 def test_get_source_data_product_is_case_insensitive() -> None:

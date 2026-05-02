@@ -4,6 +4,8 @@ from portfolio_common.source_data_security import (
     AUDIT_OPERATOR_ACCESS,
     AUDIT_SYSTEM_ACCESS,
     CLIENT_CONFIDENTIAL,
+    CLIENT_SENSITIVE,
+    DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES,
     OPERATOR_ACCESS,
     RETAIN_FOR_OPERATIONAL_AUDIT,
     SYSTEM_ACCESS,
@@ -13,12 +15,30 @@ from portfolio_common.source_data_security import (
     required_source_data_capability,
     source_data_capability_rules,
     source_data_security_openapi_extra,
+    validate_dpm_planned_source_data_security_profiles,
     validate_source_data_security_profiles,
 )
 
 
 def test_source_data_security_profiles_cover_product_catalog() -> None:
     validate_source_data_security_profiles()
+
+
+def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> None:
+    validate_dpm_planned_source_data_security_profiles()
+
+
+def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
+    expected_profiles = set()
+    profiles = {
+        profile.product_name: profile for profile in DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES
+    }
+
+    assert set(profiles) == expected_profiles
+    for profile in profiles.values():
+        assert profile.access_classification == SYSTEM_ACCESS
+        assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
+        assert profile.operator_only is False
 
 
 def test_every_source_data_product_has_tenant_and_entitlement_profile() -> None:
@@ -34,10 +54,14 @@ def test_client_source_products_classify_sensitive_identifiers() -> None:
 
     assert profile.sensitivity_classification == "client_sensitive"
     assert {"portfolio_id", "client_id", "transaction_id"} <= set(profile.pii_fields)
+    tax_lot_profile = get_source_data_security_profile("PortfolioTaxLotWindow")
+    assert tax_lot_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert {"portfolio_id", "lot_id", "source_transaction_id"} <= set(tax_lot_profile.pii_fields)
 
 
 def test_operator_evidence_products_require_operator_access_and_operational_retention() -> None:
     for product_name in (
+        "DpmSourceReadiness",
         "ReconciliationEvidenceBundle",
         "DataQualityCoverageReport",
         "IngestionEvidenceBundle",
@@ -59,6 +83,11 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "InstrumentReferenceBundle",
         "BenchmarkAssignment",
         "BenchmarkConstituentWindow",
+        "DpmModelPortfolioTarget",
+        "DiscretionaryMandateBinding",
+        "InstrumentEligibilityProfile",
+        "PortfolioTaxLotWindow",
+        "MarketDataCoverageWindow",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):
@@ -112,6 +141,15 @@ def test_portfolio_analytics_reference_profile_is_system_client_confidential() -
     assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
     assert {"portfolio_id", "client_id"} <= set(profile.pii_fields)
     assert profile.operator_only is False
+
+
+def test_discretionary_mandate_binding_profile_is_client_confidential_system_access() -> None:
+    profile = get_source_data_security_profile("DiscretionaryMandateBinding")
+
+    assert profile.access_classification == SYSTEM_ACCESS
+    assert profile.sensitivity_classification == CLIENT_CONFIDENTIAL
+    assert {"portfolio_id", "client_id"} <= set(profile.pii_fields)
+    assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
 
 
 def test_source_data_security_openapi_extra_exposes_governed_profile() -> None:

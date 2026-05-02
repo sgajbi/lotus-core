@@ -7,11 +7,34 @@ import pytest
 from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, STALE, UNRECONCILED
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dtos.reference_integration_dto import (
+    DiscretionaryMandateBindingRequest,
+    DpmSourceReadinessRequest,
+    InstrumentEligibilityBulkRequest,
+    MarketDataCoverageRequest,
+    ModelPortfolioTargetRequest,
+    PortfolioTaxLotWindowRequest,
+)
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 
 def make_service() -> IntegrationService:
     return IntegrationService(AsyncMock(spec=AsyncSession))
+
+
+def model_portfolio_target_request(as_of_date: date) -> ModelPortfolioTargetRequest:
+    return ModelPortfolioTargetRequest(as_of_date=as_of_date)
+
+
+def mandate_binding_request(as_of_date: date) -> DiscretionaryMandateBindingRequest:
+    return DiscretionaryMandateBindingRequest(as_of_date=as_of_date)
+
+
+def instrument_eligibility_request(
+    security_ids: list[str],
+    as_of_date: date,
+) -> InstrumentEligibilityBulkRequest:
+    return InstrumentEligibilityBulkRequest(security_ids=security_ids, as_of_date=as_of_date)
 
 
 def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
@@ -137,6 +160,328 @@ def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps()
             ]
         )
         == latest_updated_at
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_returns_ready_supportability() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    observed_at = datetime(2026, 3, 20, 9, 0, tzinfo=UTC)
+    service._reference_repository.resolve_model_portfolio_definition.return_value = SimpleNamespace(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        display_name="Singapore Balanced DPM Model",
+        base_currency="SGD",
+        risk_profile="balanced",
+        mandate_type="discretionary",
+        rebalance_frequency="monthly",
+        approval_status="approved",
+        approved_at=observed_at,
+        effective_from=date(2026, 3, 25),
+        effective_to=None,
+        source_system="investment_office_model_system",
+        source_record_id="model_sg_balanced_202603",
+        observed_at=observed_at,
+    )
+    service._reference_repository.list_model_portfolio_targets.return_value = [
+        SimpleNamespace(
+            instrument_id="EQ_US_AAPL",
+            target_weight=Decimal("0.6000000000"),
+            min_weight=Decimal("0.5500000000"),
+            max_weight=Decimal("0.6500000000"),
+            target_status="active",
+            quality_status="accepted",
+            source_record_id="target_aapl",
+            observed_at=observed_at,
+        ),
+        SimpleNamespace(
+            instrument_id="FI_US_TREASURY_10Y",
+            target_weight=Decimal("0.4000000000"),
+            min_weight=Decimal("0.3500000000"),
+            max_weight=Decimal("0.4500000000"),
+            target_status="active",
+            quality_status="accepted",
+            source_record_id="target_tsy",
+            observed_at=observed_at,
+        ),
+    ]
+
+    response = await service.resolve_model_portfolio_targets(
+        "MODEL_SG_BALANCED_DPM",
+        request=model_portfolio_target_request(as_of_date=date(2026, 3, 31)),
+    )
+
+    assert response is not None
+    assert response.product_name == "DpmModelPortfolioTarget"
+    assert response.model_portfolio_version == "2026.03"
+    assert response.supportability.state == "READY"
+    assert response.supportability.total_target_weight == Decimal("1.0000000000")
+    assert [target.instrument_id for target in response.targets] == [
+        "EQ_US_AAPL",
+        "FI_US_TREASURY_10Y",
+    ]
+    assert response.lineage["source_system"] == "investment_office_model_system"
+    assert response.latest_evidence_timestamp == observed_at
+    service._reference_repository.list_model_portfolio_targets.assert_awaited_once_with(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        as_of_date=date(2026, 3, 31),
+        include_inactive_targets=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_maps_missing_definition_to_none() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_model_portfolio_definition.return_value = None
+
+    response = await service.resolve_model_portfolio_targets(
+        "MODEL_MISSING",
+        request=model_portfolio_target_request(as_of_date=date(2026, 3, 31)),
+    )
+
+    assert response is None
+    service._reference_repository.list_model_portfolio_targets.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_portfolio_targets_degrades_when_weights_do_not_sum_to_one() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_model_portfolio_definition.return_value = SimpleNamespace(
+        model_portfolio_id="MODEL_SG_BALANCED_DPM",
+        model_portfolio_version="2026.03",
+        display_name="Singapore Balanced DPM Model",
+        base_currency="SGD",
+        risk_profile="balanced",
+        mandate_type="discretionary",
+        rebalance_frequency="monthly",
+        approval_status="approved",
+        approved_at=None,
+        effective_from=date(2026, 3, 25),
+        effective_to=None,
+        source_system="investment_office_model_system",
+        source_record_id="model_sg_balanced_202603",
+        observed_at=None,
+    )
+    service._reference_repository.list_model_portfolio_targets.return_value = [
+        SimpleNamespace(
+            instrument_id="EQ_US_AAPL",
+            target_weight=Decimal("0.5000000000"),
+            min_weight=None,
+            max_weight=None,
+            target_status="active",
+            quality_status="accepted",
+            source_record_id="target_aapl",
+        )
+    ]
+
+    response = await service.resolve_model_portfolio_targets(
+        "MODEL_SG_BALANCED_DPM",
+        request=model_portfolio_target_request(as_of_date=date(2026, 3, 31)),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "MODEL_TARGET_WEIGHTS_NOT_ONE"
+    assert response.supportability.total_target_weight == Decimal("0.5000000000")
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    observed_at = datetime(2026, 4, 1, 9, 0, tzinfo=UTC)
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="active",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=observed_at,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.product_name == "DiscretionaryMandateBinding"
+    assert response.model_portfolio_id == "MODEL_PB_SG_GLOBAL_BAL_DPM"
+    assert response.policy_pack_id == "POLICY_DPM_SG_BALANCED_V1"
+    assert response.rebalance_bands.default_band == Decimal("0.0250000000")
+    assert response.rebalance_bands.cash_reserve_weight == Decimal("0.0200000000")
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_data_families == []
+    assert response.latest_evidence_timestamp == observed_at
+    service._reference_repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 4, 10),
+        mandate_id=None,
+        booking_center_code=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_blocks_inactive_authority() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="suspended",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={"default_band": "0.0250000000"},
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=None,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
+    assert response.supportability.missing_data_families == ["active_discretionary_authority"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_maps_missing_row_to_none() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_records() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    observed_at = datetime(2026, 4, 1, 9, 0, tzinfo=UTC)
+    service._reference_repository.list_instrument_eligibility_profiles.return_value = [
+        SimpleNamespace(
+            security_id="MSFT",
+            eligibility_status="RESTRICTED",
+            product_shelf_status="RESTRICTED",
+            buy_allowed=False,
+            sell_allowed=True,
+            restriction_reason_codes=["CONCENTRATION_REVIEW"],
+            settlement_days=2,
+            settlement_calendar_id="US_NYSE",
+            liquidity_tier="L1",
+            issuer_id="MICROSOFT",
+            issuer_name="Microsoft Corporation",
+            ultimate_parent_issuer_id="MICROSOFT_PARENT",
+            ultimate_parent_issuer_name="Microsoft Corporation",
+            asset_class="Equity",
+            country_of_risk="US",
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            source_record_id="MSFT-elig",
+            observed_at=observed_at,
+            quality_status="accepted",
+        ),
+        SimpleNamespace(
+            security_id="AAPL",
+            eligibility_status="APPROVED",
+            product_shelf_status="APPROVED",
+            buy_allowed=True,
+            sell_allowed=True,
+            restriction_reason_codes=[],
+            settlement_days=2,
+            settlement_calendar_id="US_NYSE",
+            liquidity_tier="L1",
+            issuer_id="APPLE",
+            issuer_name="Apple Inc.",
+            ultimate_parent_issuer_id="APPLE_PARENT",
+            ultimate_parent_issuer_name="Apple Inc.",
+            asset_class="Equity",
+            country_of_risk="US",
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            source_record_id="AAPL-elig",
+            observed_at=observed_at,
+            quality_status="accepted",
+        ),
+    ]
+
+    response = await service.resolve_instrument_eligibility_bulk(
+        instrument_eligibility_request(
+            ["AAPL", "UNKNOWN_SEC", "MSFT"],
+            date(2026, 4, 10),
+        )
+    )
+
+    assert response.product_name == "InstrumentEligibilityProfile"
+    assert [record.security_id for record in response.records] == [
+        "AAPL",
+        "UNKNOWN_SEC",
+        "MSFT",
+    ]
+    assert response.records[0].buy_allowed is True
+    assert response.records[1].found is False
+    assert response.records[1].restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
+    assert response.records[2].restriction_reason_codes == ["CONCENTRATION_REVIEW"]
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "INSTRUMENT_ELIGIBILITY_MISSING"
+    assert response.supportability.requested_count == 3
+    assert response.supportability.resolved_count == 2
+    assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert response.latest_evidence_timestamp == observed_at
+    service._reference_repository.list_instrument_eligibility_profiles.assert_awaited_once_with(
+        security_ids=["AAPL", "UNKNOWN_SEC", "MSFT"],
+        as_of_date=date(2026, 4, 10),
     )
 
 
@@ -1017,6 +1362,399 @@ async def test_benchmark_market_series_rejects_page_token_scope_mismatch() -> No
                 page=SimpleNamespace(page_size=2, page_token=token),
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_returns_paged_portfolio_lots() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(
+            return_value=[
+                (
+                    SimpleNamespace(
+                        portfolio_id="PB_SG_GLOBAL_BAL_001",
+                        security_id="EQ_US_AAPL",
+                        instrument_id="EQ_US_AAPL",
+                        lot_id="LOT-AAPL-001",
+                        open_quantity=Decimal("100.0000000000"),
+                        original_quantity=Decimal("100.0000000000"),
+                        acquisition_date=date(2026, 3, 25),
+                        lot_cost_base=Decimal("15005.5000000000"),
+                        lot_cost_local=Decimal("15005.5000000000"),
+                        source_transaction_id="TXN-BUY-AAPL-001",
+                        source_system="front_office_portfolio_seed",
+                        calculation_policy_id="BUY_DEFAULT_POLICY",
+                        calculation_policy_version="1.0.0",
+                        updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    ),
+                    "USD",
+                ),
+                (
+                    SimpleNamespace(
+                        portfolio_id="PB_SG_GLOBAL_BAL_001",
+                        security_id="FI_US_TREASURY_10Y",
+                        instrument_id="FI_US_TREASURY_10Y",
+                        lot_id="LOT-UST-001",
+                        open_quantity=Decimal("200.0000000000"),
+                        original_quantity=Decimal("200.0000000000"),
+                        acquisition_date=date(2026, 3, 26),
+                        lot_cost_base=Decimal("20000.0000000000"),
+                        lot_cost_local=Decimal("20000.0000000000"),
+                        source_transaction_id="TXN-BUY-UST-001",
+                        source_system="front_office_portfolio_seed",
+                        calculation_policy_id="BUY_DEFAULT_POLICY",
+                        calculation_policy_version="1.0.0",
+                        updated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
+                    ),
+                    "USD",
+                ),
+            ]
+        ),
+    )
+
+    response = await service.get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["EQ_US_AAPL"],
+            page={"page_size": 1},
+        ),
+    )
+
+    assert [lot.lot_id for lot in response.lots] == ["LOT-AAPL-001"]
+    assert response.lots[0].local_currency == "USD"
+    assert response.lots[0].tax_lot_status == "OPEN"
+    assert response.lots[0].source_lineage["calculation_policy_id"] == "BUY_DEFAULT_POLICY"
+    assert response.page.next_page_token is not None
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "TAX_LOTS_PAGE_PARTIAL"
+    service._buy_state_repository.list_portfolio_tax_lots.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 4, 10),
+        security_ids=["EQ_US_AAPL"],
+        include_closed_lots=False,
+        lot_status_filter=None,
+        after_sort_key=None,
+        limit=2,
+    )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_reports_missing_requested_security() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["UNKNOWN_SEC"],
+        ),
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
+    assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert response.data_quality_status == "PARTIAL"
+
+
+@pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(return_value=[]),
+    )
+    token = service._encode_page_token(  # pylint: disable=protected-access
+        {"scope_fingerprint": "other-scope", "last_lot_id": "LOT-AAPL-001"}
+    )
+
+    with pytest.raises(ValueError, match="page token does not match request scope"):
+        await service.get_portfolio_tax_lot_window(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PortfolioTaxLotWindowRequest(
+                as_of_date=date(2026, 4, 10),
+                page={"page_token": token},
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_returns_price_and_fx_supportability() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                    updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                ),
+                SimpleNamespace(
+                    security_id="FI_US_TREASURY_10Y",
+                    price_date=date(2026, 4, 1),
+                    price=Decimal("98.5000000000"),
+                    currency="USD",
+                    updated_at=datetime(2026, 4, 1, 9, tzinfo=UTC),
+                ),
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    from_currency="USD",
+                    to_currency="SGD",
+                    rate_date=date(2026, 4, 10),
+                    rate=Decimal("1.3521000000"),
+                    updated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL", "FI_US_TREASURY_10Y", "UNKNOWN_SEC"],
+            currency_pairs=[{"from_currency": "USD", "to_currency": "SGD"}],
+            valuation_currency="SGD",
+            max_staleness_days=5,
+            tenant_id="tenant_sg_pb",
+        )
+    )
+
+    assert response.product_name == "MarketDataCoverageWindow"
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "MARKET_DATA_MISSING"
+    assert response.supportability.missing_instrument_ids == ["UNKNOWN_SEC"]
+    assert response.supportability.stale_instrument_ids == ["FI_US_TREASURY_10Y"]
+    assert response.price_coverage[0].quality_status == "READY"
+    assert response.price_coverage[1].quality_status == "STALE"
+    assert response.fx_coverage[0].rate == Decimal("1.3521000000")
+    assert response.data_quality_status == "PARTIAL"
+    service._reference_repository.list_latest_market_prices.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL", "FI_US_TREASURY_10Y", "UNKNOWN_SEC"],
+        as_of_date=date(2026, 4, 10),
+    )
+    service._reference_repository.list_latest_fx_rates.assert_awaited_once_with(
+        currency_pairs=[("USD", "SGD")],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_reports_stale_without_missing_as_degraded() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 1),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL"],
+            max_staleness_days=5,
+        )
+    )
+
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "MARKET_DATA_STALE"
+    assert response.supportability.stale_instrument_ids == ["EQ_US_AAPL"]
+    assert response.supportability.missing_instrument_ids == []
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> None:
+    service = make_service()
+    service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value=SimpleNamespace(
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_BINDING_READY",
+                missing_data_families=[],
+            ),
+        )
+    )
+    service.resolve_model_portfolio_targets = AsyncMock(
+        return_value=SimpleNamespace(
+            targets=[
+                SimpleNamespace(instrument_id="FO_EQ_AAPL_US"),
+                SimpleNamespace(instrument_id="FO_BOND_UST_2030"),
+            ],
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MODEL_TARGETS_READY",
+                target_count=2,
+            ),
+        )
+    )
+    service.resolve_instrument_eligibility_bulk = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="INSTRUMENT_ELIGIBILITY_READY",
+                missing_security_ids=[],
+                resolved_count=2,
+            )
+        )
+    )
+    service.get_portfolio_tax_lot_window = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="TAX_LOTS_READY",
+                missing_security_ids=[],
+                returned_lot_count=2,
+            )
+        )
+    )
+    service.get_market_data_coverage = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MARKET_DATA_READY",
+                missing_instrument_ids=[],
+                missing_currency_pairs=[],
+                stale_instrument_ids=[],
+                stale_currency_pairs=[],
+                resolved_price_count=2,
+                resolved_fx_count=1,
+            )
+        )
+    )
+
+    response = await service.get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            tenant_id="tenant_sg_pb",
+            currency_pairs=[{"from_currency": "EUR", "to_currency": "USD"}],
+            valuation_currency="USD",
+        ),
+    )
+
+    assert response.product_name == "DpmSourceReadiness"
+    assert response.supportability.state == "READY"
+    assert response.supportability.ready_family_count == 5
+    assert response.evaluated_instrument_ids == ["FO_BOND_UST_2030", "FO_EQ_AAPL_US"]
+    assert [family.family for family in response.families] == [
+        "mandate",
+        "model_targets",
+        "eligibility",
+        "tax_lots",
+        "market_data",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_blocks_when_key_families_unavailable() -> None:
+    service = make_service()
+    service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
+    service.resolve_instrument_eligibility_bulk = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="INSTRUMENT_ELIGIBILITY_READY",
+                missing_security_ids=[],
+                resolved_count=1,
+            )
+        )
+    )
+    service.get_portfolio_tax_lot_window = AsyncMock(side_effect=LookupError("missing"))
+    service.get_market_data_coverage = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="INCOMPLETE",
+                reason="MARKET_DATA_MISSING",
+                missing_instrument_ids=["FO_EQ_AAPL_US"],
+                missing_currency_pairs=[],
+                stale_instrument_ids=[],
+                stale_currency_pairs=[],
+                resolved_price_count=0,
+                resolved_fx_count=0,
+            )
+        )
+    )
+
+    response = await service.get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["FO_EQ_AAPL_US"],
+        ),
+    )
+
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.unavailable_family_count == 3
+    assert response.supportability.incomplete_family_count == 1
+    reasons = {family.family: family.reason for family in response.families}
+    assert reasons["mandate"] == "MANDATE_BINDING_UNAVAILABLE"
+    assert reasons["model_targets"] == "MODEL_PORTFOLIO_ID_UNAVAILABLE"
+    assert reasons["tax_lots"] == "PORTFOLIO_TAX_LOTS_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_degrades_source_family_exceptions() -> None:
+    service = make_service()
+    service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value=SimpleNamespace(
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_BINDING_READY",
+                missing_data_families=[],
+            ),
+        )
+    )
+    service.resolve_model_portfolio_targets = AsyncMock(
+        side_effect=ValueError("model source unavailable")
+    )
+    service.resolve_instrument_eligibility_bulk = AsyncMock(
+        side_effect=ValueError("eligibility source unavailable")
+    )
+    service.get_portfolio_tax_lot_window = AsyncMock(
+        side_effect=ValueError("tax lot source unavailable")
+    )
+    service.get_market_data_coverage = AsyncMock(
+        side_effect=ValueError("market source unavailable")
+    )
+
+    response = await service.get_dpm_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["FO_EQ_AAPL_US"],
+        ),
+    )
+
+    assert response.supportability.state == "UNAVAILABLE"
+    reasons = {family.family: family.reason for family in response.families}
+    assert reasons == {
+        "mandate": "MANDATE_BINDING_READY",
+        "model_targets": "MODEL_TARGETS_UNAVAILABLE",
+        "eligibility": "INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
+        "tax_lots": "PORTFOLIO_TAX_LOTS_UNAVAILABLE",
+        "market_data": "MARKET_DATA_COVERAGE_UNAVAILABLE",
+    }
 
 
 @pytest.mark.asyncio

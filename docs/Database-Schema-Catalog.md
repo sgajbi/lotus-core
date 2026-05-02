@@ -214,6 +214,144 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `portfolio_mandate_bindings`
+
+- **Purpose**: Effective-dated discretionary mandate binding for stateful DPM source assembly.
+- **Description**: Stores portfolio-to-mandate/model/policy bindings, authority status,
+  jurisdiction, booking center, rebalance constraints, and lineage for
+  `DiscretionaryMandateBinding:v1`.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id and as-of date with optional
+  mandate id and booking-center filters; idempotent upsert by portfolio id, mandate id, effective
+  start date, and binding version.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Canonical discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the mandate.
+  - `mandate_type` (String): Mandate type; Slice 5 supports discretionary bindings.
+  - `discretionary_authority_status` (String): Authority lifecycle state.
+  - `booking_center_code` (String): Booking center governing the mandate.
+  - `jurisdiction_code` (String): Legal or regulatory jurisdiction code.
+  - `model_portfolio_id` (String): Approved model portfolio selected for the mandate.
+  - `policy_pack_id` (String): Policy pack applied to DPM checks.
+  - `risk_profile` (String): Mandate risk profile.
+  - `investment_horizon` (String): Mandate investment horizon classification.
+  - `leverage_allowed` (Boolean): Whether leverage is permitted by the mandate.
+  - `tax_awareness_allowed` (Boolean): Whether tax-aware DPM execution is allowed.
+  - `settlement_awareness_required` (Boolean): Whether settlement-aware DPM execution is required.
+  - `rebalance_frequency` (String): Expected rebalance cadence.
+  - `rebalance_bands` (JSON): Mandate-level rebalance bands and cash reserve policy.
+  - `effective_from` (Date): Binding effective start date.
+  - `effective_to` (Date): Optional binding effective end date.
+  - `binding_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream mandate administration source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the binding.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `model_portfolio_definitions`
+
+- **Purpose**: Effective-dated model portfolio master for discretionary mandate source products.
+- **Description**: Stores approved model versions, risk profile, mandate type, rebalance cadence,
+  and source lineage used by `DpmModelPortfolioTarget:v1`.
+- **Relationships**: No explicit foreign-key relationships declared.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Approved effective-date lookup by `model_portfolio_id` and
+  `as_of_date`; idempotent upsert by model id, version, and effective start date.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `model_portfolio_id` (String): Canonical model portfolio identifier.
+  - `model_portfolio_version` (String): Approved model version.
+  - `display_name` (String): Business display name.
+  - `base_currency` (String): Model base currency.
+  - `risk_profile` (String): Risk profile aligned to the model.
+  - `mandate_type` (String): Mandate type for which the model is approved.
+  - `rebalance_frequency` (String): Expected rebalance cadence.
+  - `approval_status` (String): Model lifecycle approval status.
+  - `approved_at` (DateTime): Timestamp at which the model version was approved.
+  - `effective_from` (Date): Model effective start date.
+  - `effective_to` (Date): Optional model effective end date.
+  - `source_system` (String): Upstream model source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the model definition.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `instrument_eligibility_profiles`
+
+- **Purpose**: Effective-dated DPM instrument eligibility, restriction, shelf, liquidity, issuer,
+  and settlement profile source data.
+- **Description**: Stores the source records behind `InstrumentEligibilityProfile:v1`. The table
+  supports bulk stateful DPM source assembly without per-instrument product shelf lookups or local
+  fallback truth in `lotus-manage`.
+- **Relationships**: `security_id` references `instruments.security_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Bulk effective-date lookup by requested security ids and as-of date;
+  response ordering is reconstructed to match request order and missing records are returned
+  explicitly as `UNKNOWN`.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `security_id` (String): Canonical instrument/security identifier.
+  - `eligibility_status` (String): DPM eligibility status such as `APPROVED`, `RESTRICTED`,
+    `SELL_ONLY`, `BANNED`, or `UNKNOWN`.
+  - `product_shelf_status` (String): Product shelf status used by DPM execution.
+  - `buy_allowed` (Boolean): Whether DPM may create buy orders for this instrument.
+  - `sell_allowed` (Boolean): Whether DPM may create sell orders for this instrument.
+  - `restriction_reason_codes` (JSON): Bounded restriction codes exposed downstream.
+  - `restriction_rationale` (Text): Operator-only source rationale retained for audit and not
+    exposed by the DPM source API.
+  - `settlement_days` (Integer): Expected settlement cycle in business days.
+  - `settlement_calendar_id` (String): Settlement calendar identifier.
+  - `liquidity_tier` (String): Liquidity tier used by DPM controls.
+  - `issuer_id` (String): Direct issuer identifier.
+  - `issuer_name` (String): Direct issuer name.
+  - `ultimate_parent_issuer_id` (String): Ultimate parent issuer identifier.
+  - `ultimate_parent_issuer_name` (String): Ultimate parent issuer name.
+  - `asset_class` (String): Asset class label.
+  - `country_of_risk` (String): Country of risk.
+  - `effective_from` (Date): Eligibility effective start date.
+  - `effective_to` (Date): Optional eligibility effective end date.
+  - `eligibility_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream shelf/compliance source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the profile.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `model_portfolio_targets`
+
+- **Purpose**: Effective-dated target weights and policy bands for discretionary model portfolios.
+- **Description**: Stores instrument target rows for `DpmModelPortfolioTarget:v1`, including
+  target weight, min/max bands, lifecycle status, and source lineage.
+- **Relationships**: No explicit foreign-key relationships declared.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by model id, model version, and instrument;
+  active-target filtering by default; idempotent upsert by model id, version, instrument, and
+  effective start date.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `model_portfolio_id` (String): Canonical model portfolio identifier.
+  - `model_portfolio_version` (String): Approved model version.
+  - `instrument_id` (String): Canonical instrument identifier.
+  - `target_weight` (Numeric): Target instrument weight as a decimal ratio.
+  - `min_weight` (Numeric): Optional minimum policy band.
+  - `max_weight` (Numeric): Optional maximum policy band.
+  - `target_status` (String): Target lifecycle status.
+  - `effective_from` (Date): Target effective start date.
+  - `effective_to` (Date): Optional target effective end date.
+  - `source_system` (String): Upstream target source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the model target.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `benchmark_definitions`
 
 - **Purpose**: Benchmark reference master with versioned effective dating.

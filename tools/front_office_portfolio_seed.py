@@ -36,6 +36,8 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
     "IDX_GLOBAL_EQUITY_TR",
     "IDX_GLOBAL_BOND_TR",
 )
+DEFAULT_DPM_MODEL_PORTFOLIO_ID = "MODEL_PB_SG_GLOBAL_BAL_DPM"
+DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
 FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
     "persistence-business-dates",
     "persistence-fx-rates",
@@ -192,6 +194,9 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_mandate_bindings where portfolio_id = '{portfolio_id}';",
+            "delete from instrument_eligibility_profiles "
+            "where source_system = 'LOTUS_FRONT_OFFICE_SEED';",
             f"delete from transactions where portfolio_id = '{portfolio_id}';",
             f"delete from instruments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolios where portfolio_id = '{portfolio_id}';",
@@ -206,6 +211,16 @@ def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str)
     return "\n".join(
         [
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
+            (
+                "delete from model_portfolio_targets "
+                f"where model_portfolio_id = '{DEFAULT_DPM_MODEL_PORTFOLIO_ID}' "
+                f"and model_portfolio_version = '{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION}';"
+            ),
+            (
+                "delete from model_portfolio_definitions "
+                f"where model_portfolio_id = '{DEFAULT_DPM_MODEL_PORTFOLIO_ID}' "
+                f"and model_portfolio_version = '{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION}';"
+            ),
             f"delete from benchmark_composition_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_return_series where benchmark_id = '{benchmark_id}';",
             f"delete from benchmark_definitions where benchmark_id = '{benchmark_id}';",
@@ -1309,6 +1324,139 @@ def build_front_office_portfolio_bundle(
         source_prefix="front_office_risk_free",
     )
 
+    model_portfolios = [
+        {
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "model_portfolio_version": DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
+            "display_name": "Private Banking Singapore Global Balanced DPM Model",
+            "base_currency": "USD",
+            "risk_profile": "balanced",
+            "mandate_type": "discretionary",
+            "rebalance_frequency": "monthly",
+            "approval_status": "approved",
+            "approved_at": _iso_utc_timestamp(end_date, hour=9),
+            "effective_from": "2026-04-01",
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": (
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_ID.lower()}_"
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION.replace('.', '_')}"
+            ),
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+    ]
+    model_target_weights = {
+        "FO_EQ_AAPL_US": Decimal("0.1400000000"),
+        "FO_EQ_MSFT_US": Decimal("0.1300000000"),
+        "FO_EQ_SAP_DE": Decimal("0.0800000000"),
+        "FO_ETF_MSCI_WORLD": Decimal("0.2400000000"),
+        "FO_FUND_BLK_ALLOC": Decimal("0.1000000000"),
+        "FO_FUND_PIMCO_INC": Decimal("0.1000000000"),
+        "FO_BOND_UST_2030": Decimal("0.1100000000"),
+        "FO_BOND_SIEMENS_2031": Decimal("0.0700000000"),
+        "FO_PRIV_PRIVATE_CREDIT_A": Decimal("0.0300000000"),
+    }
+    model_portfolio_targets = [
+        {
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "model_portfolio_version": DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
+            "instrument_id": security_id,
+            "target_weight": format(weight, "f"),
+            "min_weight": format(max(weight - Decimal("0.0250000000"), Decimal("0")), "f"),
+            "max_weight": format(min(weight + Decimal("0.0250000000"), Decimal("1")), "f"),
+            "target_status": "active",
+            "effective_from": "2026-04-01",
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": (
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_ID.lower()}_"
+                f"{DEFAULT_DPM_MODEL_PORTFOLIO_VERSION.replace('.', '_')}_{security_id.lower()}"
+            ),
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+        for security_id, weight in model_target_weights.items()
+    ]
+    mandate_bindings = [
+        {
+            "portfolio_id": portfolio_id,
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_type": "discretionary",
+            "discretionary_authority_status": "active",
+            "booking_center_code": "Singapore",
+            "jurisdiction_code": "SG",
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+            "risk_profile": "balanced",
+            "investment_horizon": "long_term",
+            "leverage_allowed": False,
+            "tax_awareness_allowed": True,
+            "settlement_awareness_required": True,
+            "rebalance_frequency": "monthly",
+            "rebalance_bands": {
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            "effective_from": "2026-04-01",
+            "binding_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": f"{portfolio_id.lower()}_mandate_binding_v1",
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+    ]
+    restricted_instrument_reason_codes = {
+        "FO_PRIV_PRIVATE_CREDIT_A": ["PRIVATE_ASSET_REVIEW", "ILLIQUID_ALTERNATIVE"],
+    }
+    settlement_calendar_by_currency = {
+        "EUR": "TARGET2",
+        "SGD": "SGX",
+        "USD": "US_NYSE",
+    }
+    instrument_eligibility_profiles = [
+        {
+            "security_id": instrument["security_id"],
+            "eligibility_status": (
+                "RESTRICTED"
+                if instrument["security_id"] in restricted_instrument_reason_codes
+                else "APPROVED"
+            ),
+            "product_shelf_status": (
+                "RESTRICTED"
+                if instrument["security_id"] in restricted_instrument_reason_codes
+                else "APPROVED"
+            ),
+            "buy_allowed": instrument["security_id"] not in restricted_instrument_reason_codes,
+            "sell_allowed": True,
+            "restriction_reason_codes": restricted_instrument_reason_codes.get(
+                instrument["security_id"], []
+            ),
+            "restriction_rationale": (
+                "Private asset requires investment-office review before additional buys."
+                if instrument["security_id"] in restricted_instrument_reason_codes
+                else None
+            ),
+            "settlement_days": 0 if instrument["asset_class"] == "Cash" else 2,
+            "settlement_calendar_id": settlement_calendar_by_currency.get(
+                instrument["currency"], "GLOBAL"
+            ),
+            "liquidity_tier": instrument.get("liquidity_tier"),
+            "issuer_id": instrument.get("issuer_id"),
+            "issuer_name": instrument.get("issuer_name"),
+            "ultimate_parent_issuer_id": instrument.get("ultimate_parent_issuer_id"),
+            "ultimate_parent_issuer_name": instrument.get("ultimate_parent_issuer_name"),
+            "asset_class": instrument.get("asset_class"),
+            "country_of_risk": instrument.get("country_of_risk"),
+            "effective_from": "2026-04-01",
+            "eligibility_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": f"{instrument['security_id'].lower()}_eligibility_v1",
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+        for instrument in instruments
+    ]
+
     market_price_specs = {
         "FO_EQ_AAPL_US": (Decimal("184.00"), Decimal("212.00")),
         "FO_EQ_MSFT_US": (Decimal("398.00"), Decimal("428.00")),
@@ -1392,6 +1540,10 @@ def build_front_office_portfolio_bundle(
         "market_prices": market_prices,
         "fx_rates": fx_rates,
         "as_of_date": as_of_date,
+        "model_portfolios": model_portfolios,
+        "model_portfolio_targets": model_portfolio_targets,
+        "mandate_bindings": mandate_bindings,
+        "instrument_eligibility_profiles": instrument_eligibility_profiles,
         **benchmark_reference,
         **risk_free_reference,
     }
@@ -1444,6 +1596,22 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         (
             "/ingest/benchmark-assignments",
             {"benchmark_assignments": bundle["benchmark_assignments"]},
+        ),
+        (
+            "/ingest/model-portfolios",
+            {"model_portfolios": bundle["model_portfolios"]},
+        ),
+        (
+            "/ingest/model-portfolio-targets",
+            {"model_portfolio_targets": bundle["model_portfolio_targets"]},
+        ),
+        (
+            "/ingest/mandate-bindings",
+            {"mandate_bindings": bundle["mandate_bindings"]},
+        ),
+        (
+            "/ingest/instrument-eligibility",
+            {"eligibility_profiles": bundle["instrument_eligibility_profiles"]},
         ),
         ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )

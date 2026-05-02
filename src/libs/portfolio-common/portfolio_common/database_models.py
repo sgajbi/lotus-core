@@ -271,6 +271,183 @@ class PortfolioBenchmarkAssignment(Base):
     )
 
 
+class PortfolioMandateBinding(Base):
+    __tablename__ = "portfolio_mandate_bindings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=False, index=True)
+    client_id = Column(String, nullable=False, index=True)
+    mandate_type = Column(String, nullable=False, index=True)
+    discretionary_authority_status = Column(String, nullable=False, index=True)
+    booking_center_code = Column(String, nullable=False, index=True)
+    jurisdiction_code = Column(String, nullable=False, index=True)
+    model_portfolio_id = Column(String, nullable=False, index=True)
+    policy_pack_id = Column(String, nullable=True, index=True)
+    risk_profile = Column(String, nullable=False)
+    investment_horizon = Column(String, nullable=False)
+    leverage_allowed = Column(Boolean, nullable=False, server_default="f")
+    tax_awareness_allowed = Column(Boolean, nullable=False, server_default="f")
+    settlement_awareness_required = Column(Boolean, nullable=False, server_default="f")
+    rebalance_frequency = Column(String, nullable=False)
+    rebalance_bands = Column(JSON, nullable=False)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    binding_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "portfolio_id",
+            "mandate_id",
+            "effective_from",
+            "binding_version",
+            name="_portfolio_mandate_binding_effective_uc",
+        ),
+        Index(
+            "ix_portfolio_mandate_binding_effective_window",
+            "portfolio_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class InstrumentEligibilityProfile(Base):
+    __tablename__ = "instrument_eligibility_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    security_id = Column(String, ForeignKey("instruments.security_id"), nullable=False, index=True)
+    eligibility_status = Column(String, nullable=False, index=True)
+    product_shelf_status = Column(String, nullable=False, index=True)
+    buy_allowed = Column(Boolean, nullable=False, server_default="false")
+    sell_allowed = Column(Boolean, nullable=False, server_default="true")
+    restriction_reason_codes = Column(JSON, nullable=False, server_default="[]")
+    restriction_rationale = Column(Text, nullable=True)
+    settlement_days = Column(Integer, nullable=False, server_default="2")
+    settlement_calendar_id = Column(String, nullable=False, server_default="GLOBAL")
+    liquidity_tier = Column(String, nullable=True)
+    issuer_id = Column(String, nullable=True, index=True)
+    issuer_name = Column(String, nullable=True)
+    ultimate_parent_issuer_id = Column(String, nullable=True, index=True)
+    ultimate_parent_issuer_name = Column(String, nullable=True)
+    asset_class = Column(String, nullable=True)
+    country_of_risk = Column(String, nullable=True)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    eligibility_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "security_id",
+            "effective_from",
+            "eligibility_version",
+            name="_instrument_eligibility_profile_uc",
+        ),
+        Index(
+            "ix_instrument_eligibility_effective_window",
+            "security_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class ModelPortfolioDefinition(Base):
+    __tablename__ = "model_portfolio_definitions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    model_portfolio_id = Column(String, nullable=False, index=True)
+    model_portfolio_version = Column(String, nullable=False, index=True)
+    display_name = Column(String, nullable=False)
+    base_currency = Column(String(3), nullable=False)
+    risk_profile = Column(String, nullable=False)
+    mandate_type = Column(String, nullable=False)
+    rebalance_frequency = Column(String, nullable=True)
+    approval_status = Column(String, nullable=False, server_default="approved", index=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "model_portfolio_id",
+            "model_portfolio_version",
+            "effective_from",
+            name="_model_portfolio_definition_version_effective_uc",
+        ),
+        Index(
+            "ix_model_portfolio_definition_effective_window",
+            "model_portfolio_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class ModelPortfolioTarget(Base):
+    __tablename__ = "model_portfolio_targets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    model_portfolio_id = Column(String, nullable=False, index=True)
+    model_portfolio_version = Column(String, nullable=False, index=True)
+    instrument_id = Column(String, nullable=False, index=True)
+    target_weight = Column(Numeric(18, 10), nullable=False)
+    min_weight = Column(Numeric(18, 10), nullable=True)
+    max_weight = Column(Numeric(18, 10), nullable=True)
+    target_status = Column(String, nullable=False, server_default="active", index=True)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "model_portfolio_id",
+            "model_portfolio_version",
+            "instrument_id",
+            "effective_from",
+            name="_model_portfolio_target_instrument_effective_uc",
+        ),
+        Index(
+            "ix_model_portfolio_target_effective_window",
+            "model_portfolio_id",
+            "model_portfolio_version",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class BenchmarkDefinition(Base):
     __tablename__ = "benchmark_definitions"
 

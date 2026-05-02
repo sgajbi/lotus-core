@@ -6,9 +6,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any, Literal
 
 from portfolio_common.market_reference_quality import (
     BLOCKING_QUALITY_STATUSES,
@@ -17,6 +15,7 @@ from portfolio_common.market_reference_quality import (
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyProvenanceMetadata
 from ..dtos.reference_integration_dto import (
@@ -33,6 +32,14 @@ from ..dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ComponentSeriesResponse,
     CoverageResponse,
+    DiscretionaryMandateBindingRequest,
+    DiscretionaryMandateBindingResponse,
+    DiscretionaryMandateBindingSupportability,
+    DpmSourceFamilyReadiness,
+    DpmSourceFamilyState,
+    DpmSourceReadinessRequest,
+    DpmSourceReadinessResponse,
+    DpmSourceReadinessSupportability,
     IndexCatalogResponse,
     IndexDefinitionResponse,
     IndexPriceSeriesPoint,
@@ -40,7 +47,25 @@ from ..dtos.reference_integration_dto import (
     IndexReturnSeriesPoint,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
+    InstrumentEligibilityBulkRequest,
+    InstrumentEligibilityBulkResponse,
+    InstrumentEligibilityRecord,
+    InstrumentEligibilitySupportability,
     IntegrationWindow,
+    MarketDataCoverageRequest,
+    MarketDataCoverageSupportability,
+    MarketDataCoverageWindowResponse,
+    MarketDataFxCoverageRecord,
+    MarketDataPriceCoverageRecord,
+    ModelPortfolioSupportability,
+    ModelPortfolioTargetRequest,
+    ModelPortfolioTargetResponse,
+    ModelPortfolioTargetRow,
+    PortfolioTaxLotRecord,
+    PortfolioTaxLotWindowRequest,
+    PortfolioTaxLotWindowResponse,
+    PortfolioTaxLotWindowSupportability,
+    RebalanceBandContext,
     ReferencePageMetadata,
     RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
@@ -48,6 +73,7 @@ from ..dtos.reference_integration_dto import (
     SeriesPoint,
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..settings import load_query_service_settings
 
@@ -74,6 +100,7 @@ class IntegrationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self._reference_repository = ReferenceDataRepository(db)
+        self._buy_state_repository = BuyStateRepository(db)
         self._page_token_secret = load_query_service_settings().page_token_secret
 
     @staticmethod
@@ -116,6 +143,7 @@ class IntegrationService:
         for rows in row_groups:
             for row in rows:
                 for field_name in (
+                    "observed_at",
                     "source_timestamp",
                     "assignment_recorded_at",
                     "updated_at",
@@ -382,6 +410,770 @@ class IntegrationService:
                 as_of_date,
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
             ),
+        )
+
+    async def resolve_model_portfolio_targets(
+        self,
+        model_portfolio_id: str,
+        request: ModelPortfolioTargetRequest,
+    ) -> ModelPortfolioTargetResponse | None:
+        definition = await self._reference_repository.resolve_model_portfolio_definition(
+            model_portfolio_id=model_portfolio_id,
+            as_of_date=request.as_of_date,
+        )
+        if definition is None:
+            return None
+
+        targets = await self._reference_repository.list_model_portfolio_targets(
+            model_portfolio_id=model_portfolio_id,
+            model_portfolio_version=definition.model_portfolio_version,
+            as_of_date=request.as_of_date,
+            include_inactive_targets=request.include_inactive_targets,
+        )
+        target_rows = [
+            ModelPortfolioTargetRow(
+                instrument_id=row.instrument_id,
+                target_weight=self._as_decimal(row.target_weight),
+                min_weight=(
+                    self._as_decimal(row.min_weight) if row.min_weight is not None else None
+                ),
+                max_weight=(
+                    self._as_decimal(row.max_weight) if row.max_weight is not None else None
+                ),
+                target_status=row.target_status,
+                quality_status=row.quality_status,
+                source_record_id=row.source_record_id,
+            )
+            for row in targets
+        ]
+        total_weight = sum((row.target_weight for row in target_rows), Decimal("0"))
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "MODEL_TARGETS_READY"
+        if not target_rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "MODEL_TARGETS_EMPTY"
+        elif total_weight != Decimal("1.0000000000"):
+            supportability_state = "DEGRADED"
+            supportability_reason = "MODEL_TARGET_WEIGHTS_NOT_ONE"
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(
+            [definition],
+            targets,
+        )
+        return ModelPortfolioTargetResponse(
+            model_portfolio_id=definition.model_portfolio_id,
+            model_portfolio_version=definition.model_portfolio_version,
+            display_name=definition.display_name,
+            base_currency=definition.base_currency,
+            risk_profile=definition.risk_profile,
+            mandate_type=definition.mandate_type,
+            rebalance_frequency=definition.rebalance_frequency,
+            approval_status=definition.approval_status,
+            approved_at=definition.approved_at,
+            effective_from=definition.effective_from,
+            effective_to=definition.effective_to,
+            targets=target_rows,
+            supportability=ModelPortfolioSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                target_count=len(target_rows),
+                total_target_weight=total_weight,
+            ),
+            lineage={
+                "source_system": definition.source_system or "unknown",
+                "source_record_id": definition.source_record_id or "unknown",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata(
+                request.as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    targets,
+                    required_count=len(target_rows),
+                ),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+            ),
+        )
+
+    async def resolve_discretionary_mandate_binding(
+        self,
+        portfolio_id: str,
+        request: DiscretionaryMandateBindingRequest,
+    ) -> DiscretionaryMandateBindingResponse | None:
+        row = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+            booking_center_code=request.booking_center_code,
+        )
+        if row is None:
+            return None
+
+        missing_data_families: list[str] = []
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "MANDATE_BINDING_READY"
+        if str(row.discretionary_authority_status).lower() != "active":
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
+            missing_data_families.append("active_discretionary_authority")
+        if request.include_policy_pack and not row.policy_pack_id:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "MANDATE_POLICY_PACK_MISSING"
+            missing_data_families.append("policy_pack")
+
+        bands = dict(row.rebalance_bands or {})
+        default_band = self._as_decimal(bands.get("default_band", "0"))
+        cash_reserve_raw = bands.get("cash_reserve_weight")
+
+        return DiscretionaryMandateBindingResponse(
+            portfolio_id=row.portfolio_id,
+            mandate_id=row.mandate_id,
+            client_id=row.client_id,
+            mandate_type=row.mandate_type,
+            discretionary_authority_status=row.discretionary_authority_status,
+            booking_center_code=row.booking_center_code,
+            jurisdiction_code=row.jurisdiction_code,
+            model_portfolio_id=row.model_portfolio_id,
+            policy_pack_id=row.policy_pack_id if request.include_policy_pack else None,
+            risk_profile=row.risk_profile,
+            investment_horizon=row.investment_horizon,
+            leverage_allowed=bool(row.leverage_allowed),
+            tax_awareness_allowed=bool(row.tax_awareness_allowed),
+            settlement_awareness_required=bool(row.settlement_awareness_required),
+            rebalance_frequency=row.rebalance_frequency,
+            rebalance_bands=RebalanceBandContext(
+                default_band=default_band,
+                cash_reserve_weight=(
+                    self._as_decimal(cash_reserve_raw) if cash_reserve_raw is not None else None
+                ),
+            ),
+            effective_from=row.effective_from,
+            effective_to=row.effective_to,
+            binding_version=int(row.binding_version),
+            supportability=DiscretionaryMandateBindingSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": row.source_system or "unknown",
+                "source_record_id": row.source_record_id or "unknown",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata(
+                request.as_of_date,
+                data_quality_status=str(row.quality_status).upper(),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+            ),
+        )
+
+    async def resolve_instrument_eligibility_bulk(
+        self,
+        request: InstrumentEligibilityBulkRequest,
+    ) -> InstrumentEligibilityBulkResponse:
+        rows = await self._reference_repository.list_instrument_eligibility_profiles(
+            security_ids=request.security_ids,
+            as_of_date=request.as_of_date,
+        )
+        rows_by_security_id = {row.security_id: row for row in rows}
+
+        records: list[InstrumentEligibilityRecord] = []
+        missing_security_ids: list[str] = []
+        for security_id in request.security_ids:
+            row = rows_by_security_id.get(security_id)
+            if row is None:
+                missing_security_ids.append(security_id)
+                records.append(
+                    InstrumentEligibilityRecord(
+                        security_id=security_id,
+                        found=False,
+                        eligibility_status="UNKNOWN",
+                        product_shelf_status="UNKNOWN",
+                        buy_allowed=False,
+                        sell_allowed=False,
+                        restriction_reason_codes=["ELIGIBILITY_PROFILE_MISSING"],
+                        settlement_days=None,
+                        settlement_calendar_id=None,
+                        liquidity_tier=None,
+                        issuer_id=None,
+                        issuer_name=None,
+                        ultimate_parent_issuer_id=None,
+                        ultimate_parent_issuer_name=None,
+                        asset_class=None,
+                        country_of_risk=None,
+                        effective_from=None,
+                        effective_to=None,
+                        quality_status="MISSING",
+                        source_record_id=None,
+                    )
+                )
+                continue
+            records.append(
+                InstrumentEligibilityRecord(
+                    security_id=row.security_id,
+                    found=True,
+                    eligibility_status=str(row.eligibility_status).upper(),
+                    product_shelf_status=str(row.product_shelf_status).upper(),
+                    buy_allowed=bool(row.buy_allowed),
+                    sell_allowed=bool(row.sell_allowed),
+                    restriction_reason_codes=list(row.restriction_reason_codes or []),
+                    settlement_days=int(row.settlement_days),
+                    settlement_calendar_id=row.settlement_calendar_id,
+                    liquidity_tier=row.liquidity_tier,
+                    issuer_id=row.issuer_id,
+                    issuer_name=row.issuer_name,
+                    ultimate_parent_issuer_id=row.ultimate_parent_issuer_id,
+                    ultimate_parent_issuer_name=row.ultimate_parent_issuer_name,
+                    asset_class=row.asset_class,
+                    country_of_risk=row.country_of_risk,
+                    effective_from=row.effective_from,
+                    effective_to=row.effective_to,
+                    quality_status=str(row.quality_status).upper(),
+                    source_record_id=row.source_record_id,
+                )
+            )
+
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "INSTRUMENT_ELIGIBILITY_READY"
+        if missing_security_ids:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "INSTRUMENT_ELIGIBILITY_MISSING"
+
+        return InstrumentEligibilityBulkResponse(
+            records=records,
+            supportability=InstrumentEligibilitySupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requested_count=len(request.security_ids),
+                resolved_count=len(request.security_ids) - len(missing_security_ids),
+                missing_security_ids=missing_security_ids,
+            ),
+            lineage={
+                "source_system": "instrument_eligibility",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata(
+                request.as_of_date,
+                data_quality_status=self._market_reference_data_quality_status(
+                    rows,
+                    required_count=len(request.security_ids),
+                ),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+            ),
+        )
+
+    async def get_portfolio_tax_lot_window(
+        self,
+        *,
+        portfolio_id: str,
+        request: PortfolioTaxLotWindowRequest,
+    ) -> PortfolioTaxLotWindowResponse:
+        if not await self._buy_state_repository.portfolio_exists(portfolio_id):
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "security_ids": sorted(request.security_ids or []),
+                "lot_status_filter": request.lot_status_filter,
+                "include_closed_lots": request.include_closed_lots,
+                "tenant_id": request.tenant_id,
+            }
+        )
+        cursor = self._decode_page_token(request.page.page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope and token_scope != request_scope_fingerprint:
+            raise ValueError("Portfolio tax-lot page token does not match request scope.")
+
+        after_sort_key: tuple[date, str] | None = None
+        if cursor.get("last_acquisition_date") and cursor.get("last_lot_id"):
+            after_sort_key = (
+                date.fromisoformat(str(cursor["last_acquisition_date"])),
+                str(cursor["last_lot_id"]),
+            )
+
+        rows = await self._buy_state_repository.list_portfolio_tax_lots(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            security_ids=request.security_ids,
+            include_closed_lots=request.include_closed_lots,
+            lot_status_filter=request.lot_status_filter,
+            after_sort_key=after_sort_key,
+            limit=request.page.page_size + 1,
+        )
+        has_more = len(rows) > request.page.page_size
+        page_rows = rows[: request.page.page_size]
+
+        lots: list[PortfolioTaxLotRecord] = []
+        for lot, local_currency in page_rows:
+            open_quantity = self._as_decimal(lot.open_quantity)
+            lots.append(
+                PortfolioTaxLotRecord(
+                    portfolio_id=lot.portfolio_id,
+                    security_id=lot.security_id,
+                    instrument_id=lot.instrument_id,
+                    lot_id=lot.lot_id,
+                    open_quantity=open_quantity,
+                    original_quantity=self._as_decimal(lot.original_quantity),
+                    acquisition_date=lot.acquisition_date,
+                    cost_basis_base=self._as_decimal(lot.lot_cost_base),
+                    cost_basis_local=self._as_decimal(lot.lot_cost_local),
+                    local_currency=local_currency,
+                    tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
+                    source_transaction_id=lot.source_transaction_id,
+                    source_lineage={
+                        "source_system": lot.source_system or "position_lot_state",
+                        "source_transaction_id": lot.source_transaction_id,
+                        "calculation_policy_id": lot.calculation_policy_id or "UNKNOWN",
+                        "calculation_policy_version": lot.calculation_policy_version or "UNKNOWN",
+                    },
+                )
+            )
+
+        next_page_token: str | None = None
+        if has_more and lots:
+            last_lot = lots[-1]
+            next_page_token = self._encode_page_token(
+                {
+                    "scope_fingerprint": request_scope_fingerprint,
+                    "last_acquisition_date": last_lot.acquisition_date.isoformat(),
+                    "last_lot_id": last_lot.lot_id,
+                }
+            )
+
+        requested_security_ids = set(request.security_ids or [])
+        returned_security_ids = {lot.security_id for lot in lots}
+        missing_security_ids = (
+            [] if has_more else sorted(requested_security_ids - returned_security_ids)
+        )
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "TAX_LOTS_READY"
+        if has_more:
+            supportability_state = "DEGRADED"
+            supportability_reason = "TAX_LOTS_PAGE_PARTIAL"
+        elif request.security_ids and missing_security_ids:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
+
+        return PortfolioTaxLotWindowResponse(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            lots=lots,
+            page=ReferencePageMetadata(
+                page_size=request.page.page_size,
+                sort_key="acquisition_date:asc,lot_id:asc",
+                returned_component_count=len(lots),
+                request_scope_fingerprint=request_scope_fingerprint,
+                next_page_token=next_page_token,
+            ),
+            supportability=PortfolioTaxLotWindowSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requested_security_count=(
+                    len(request.security_ids) if request.security_ids is not None else None
+                ),
+                returned_lot_count=len(lots),
+                missing_security_ids=missing_security_ids,
+            ),
+            lineage={
+                "source_system": "position_lot_state",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                    [lot for lot, _ in page_rows]
+                ),
+            ),
+        )
+
+    async def get_market_data_coverage(
+        self,
+        request: MarketDataCoverageRequest,
+    ) -> MarketDataCoverageWindowResponse:
+        price_rows = await self._reference_repository.list_latest_market_prices(
+            security_ids=request.instrument_ids,
+            as_of_date=request.as_of_date,
+        )
+        fx_pairs = [(pair.from_currency, pair.to_currency) for pair in request.currency_pairs]
+        fx_rows = await self._reference_repository.list_latest_fx_rates(
+            currency_pairs=fx_pairs,
+            as_of_date=request.as_of_date,
+        )
+
+        price_by_instrument = {row.security_id: row for row in price_rows}
+        fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
+
+        price_coverage: list[MarketDataPriceCoverageRecord] = []
+        missing_instrument_ids: list[str] = []
+        stale_instrument_ids: list[str] = []
+        for instrument_id in request.instrument_ids:
+            row = price_by_instrument.get(instrument_id)
+            if row is None:
+                missing_instrument_ids.append(instrument_id)
+                price_coverage.append(
+                    MarketDataPriceCoverageRecord(
+                        instrument_id=instrument_id,
+                        found=False,
+                        quality_status="MISSING",
+                    )
+                )
+                continue
+
+            age_days = (request.as_of_date - row.price_date).days
+            quality_status: Literal["READY", "STALE", "MISSING"] = (
+                "STALE" if age_days > request.max_staleness_days else "READY"
+            )
+            if quality_status == "STALE":
+                stale_instrument_ids.append(instrument_id)
+            price_coverage.append(
+                MarketDataPriceCoverageRecord(
+                    instrument_id=instrument_id,
+                    found=True,
+                    price_date=row.price_date,
+                    price=self._as_decimal(row.price),
+                    currency=row.currency,
+                    age_days=age_days,
+                    quality_status=quality_status,
+                )
+            )
+
+        fx_coverage: list[MarketDataFxCoverageRecord] = []
+        missing_currency_pairs: list[str] = []
+        stale_currency_pairs: list[str] = []
+        for pair in request.currency_pairs:
+            pair_key = (pair.from_currency, pair.to_currency)
+            pair_label = f"{pair.from_currency}/{pair.to_currency}"
+            row = fx_by_pair.get(pair_key)
+            if row is None:
+                missing_currency_pairs.append(pair_label)
+                fx_coverage.append(
+                    MarketDataFxCoverageRecord(
+                        from_currency=pair.from_currency,
+                        to_currency=pair.to_currency,
+                        found=False,
+                        quality_status="MISSING",
+                    )
+                )
+                continue
+
+            age_days = (request.as_of_date - row.rate_date).days
+            quality_status = "STALE" if age_days > request.max_staleness_days else "READY"
+            if quality_status == "STALE":
+                stale_currency_pairs.append(pair_label)
+            fx_coverage.append(
+                MarketDataFxCoverageRecord(
+                    from_currency=pair.from_currency,
+                    to_currency=pair.to_currency,
+                    found=True,
+                    rate_date=row.rate_date,
+                    rate=self._as_decimal(row.rate),
+                    age_days=age_days,
+                    quality_status=quality_status,
+                )
+            )
+
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "MARKET_DATA_READY"
+        if missing_instrument_ids or missing_currency_pairs:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "MARKET_DATA_MISSING"
+        elif stale_instrument_ids or stale_currency_pairs:
+            supportability_state = "DEGRADED"
+            supportability_reason = "MARKET_DATA_STALE"
+
+        return MarketDataCoverageWindowResponse(
+            as_of_date=request.as_of_date,
+            valuation_currency=request.valuation_currency,
+            price_coverage=price_coverage,
+            fx_coverage=fx_coverage,
+            supportability=MarketDataCoverageSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requested_price_count=len(request.instrument_ids),
+                resolved_price_count=sum(1 for record in price_coverage if record.found),
+                requested_fx_count=len(request.currency_pairs),
+                resolved_fx_count=sum(1 for record in fx_coverage if record.found),
+                missing_instrument_ids=missing_instrument_ids,
+                stale_instrument_ids=stale_instrument_ids,
+                missing_currency_pairs=missing_currency_pairs,
+                stale_currency_pairs=stale_currency_pairs,
+            ),
+            lineage={
+                "source_system": "market_prices+fx_rates",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status=("COMPLETE" if supportability_state == "READY" else "PARTIAL"),
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                    price_rows,
+                    fx_rows,
+                ),
+            ),
+        )
+
+    async def get_dpm_source_readiness(
+        self,
+        *,
+        portfolio_id: str,
+        request: DpmSourceReadinessRequest,
+    ) -> DpmSourceReadinessResponse:
+        families: list[DpmSourceFamilyReadiness] = []
+        resolved_mandate_id: str | None = request.mandate_id
+        resolved_model_portfolio_id: str | None = request.model_portfolio_id
+
+        mandate_response: DiscretionaryMandateBindingResponse | None = None
+        try:
+            mandate_response = await self.resolve_discretionary_mandate_binding(
+                portfolio_id,
+                DiscretionaryMandateBindingRequest(
+                    as_of_date=request.as_of_date,
+                    tenant_id=request.tenant_id,
+                    mandate_id=request.mandate_id,
+                    include_policy_pack=True,
+                ),
+            )
+        except (LookupError, ValueError):
+            mandate_response = None
+        if mandate_response is None:
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="mandate",
+                    product_name="DiscretionaryMandateBinding",
+                    state="UNAVAILABLE",
+                    reason="MANDATE_BINDING_UNAVAILABLE",
+                    missing_items=["mandate_binding"],
+                )
+            )
+        else:
+            resolved_mandate_id = mandate_response.mandate_id
+            resolved_model_portfolio_id = (
+                resolved_model_portfolio_id or mandate_response.model_portfolio_id
+            )
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="mandate",
+                    product_name="DiscretionaryMandateBinding",
+                    state=mandate_response.supportability.state,
+                    reason=mandate_response.supportability.reason,
+                    missing_items=mandate_response.supportability.missing_data_families,
+                    evidence_count=1,
+                )
+            )
+
+        target_instrument_ids: list[str] = []
+        if resolved_model_portfolio_id is None:
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="model_targets",
+                    product_name="DpmModelPortfolioTarget",
+                    state="UNAVAILABLE",
+                    reason="MODEL_PORTFOLIO_ID_UNAVAILABLE",
+                    missing_items=["model_portfolio_id"],
+                )
+            )
+        else:
+            try:
+                model_response = await self.resolve_model_portfolio_targets(
+                    resolved_model_portfolio_id,
+                    ModelPortfolioTargetRequest(
+                        as_of_date=request.as_of_date,
+                        include_inactive_targets=False,
+                        tenant_id=request.tenant_id,
+                    ),
+                )
+            except (LookupError, ValueError):
+                model_response = None
+            if model_response is None:
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="model_targets",
+                        product_name="DpmModelPortfolioTarget",
+                        state="UNAVAILABLE",
+                        reason="MODEL_TARGETS_UNAVAILABLE",
+                        missing_items=[resolved_model_portfolio_id],
+                    )
+                )
+            else:
+                target_instrument_ids = [target.instrument_id for target in model_response.targets]
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="model_targets",
+                        product_name="DpmModelPortfolioTarget",
+                        state=model_response.supportability.state,
+                        reason=model_response.supportability.reason,
+                        evidence_count=model_response.supportability.target_count,
+                    )
+                )
+
+        evaluated_instrument_ids = sorted({*request.instrument_ids, *target_instrument_ids})
+        if evaluated_instrument_ids:
+            try:
+                eligibility = await self.resolve_instrument_eligibility_bulk(
+                    InstrumentEligibilityBulkRequest(
+                        as_of_date=request.as_of_date,
+                        security_ids=evaluated_instrument_ids,
+                        tenant_id=request.tenant_id,
+                        include_restricted_rationale=False,
+                    )
+                )
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="eligibility",
+                        product_name="InstrumentEligibilityProfile",
+                        state=eligibility.supportability.state,
+                        reason=eligibility.supportability.reason,
+                        missing_items=eligibility.supportability.missing_security_ids,
+                        evidence_count=eligibility.supportability.resolved_count,
+                    )
+                )
+            except (LookupError, ValueError):
+                families.append(
+                    DpmSourceFamilyReadiness(
+                        family="eligibility",
+                        product_name="InstrumentEligibilityProfile",
+                        state="UNAVAILABLE",
+                        reason="INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
+                        missing_items=evaluated_instrument_ids[:10],
+                    )
+                )
+        else:
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="eligibility",
+                    product_name="InstrumentEligibilityProfile",
+                    state="UNAVAILABLE",
+                    reason="DPM_INSTRUMENT_UNIVERSE_EMPTY",
+                    missing_items=["instrument_ids"],
+                )
+            )
+
+        try:
+            tax_lots = await self.get_portfolio_tax_lot_window(
+                portfolio_id=portfolio_id,
+                request=PortfolioTaxLotWindowRequest(
+                    as_of_date=request.as_of_date,
+                    security_ids=evaluated_instrument_ids or None,
+                    tenant_id=request.tenant_id,
+                ),
+            )
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="tax_lots",
+                    product_name="PortfolioTaxLotWindow",
+                    state=tax_lots.supportability.state,
+                    reason=tax_lots.supportability.reason,
+                    missing_items=tax_lots.supportability.missing_security_ids,
+                    evidence_count=tax_lots.supportability.returned_lot_count,
+                )
+            )
+        except (LookupError, ValueError):
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="tax_lots",
+                    product_name="PortfolioTaxLotWindow",
+                    state="UNAVAILABLE",
+                    reason="PORTFOLIO_TAX_LOTS_UNAVAILABLE",
+                    missing_items=[portfolio_id],
+                )
+            )
+
+        try:
+            market_data = await self.get_market_data_coverage(
+                MarketDataCoverageRequest(
+                    as_of_date=request.as_of_date,
+                    instrument_ids=evaluated_instrument_ids,
+                    currency_pairs=request.currency_pairs,
+                    valuation_currency=request.valuation_currency,
+                    max_staleness_days=request.max_staleness_days,
+                    tenant_id=request.tenant_id,
+                )
+            )
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="market_data",
+                    product_name="MarketDataCoverageWindow",
+                    state=market_data.supportability.state,
+                    reason=market_data.supportability.reason,
+                    missing_items=[
+                        *market_data.supportability.missing_instrument_ids,
+                        *market_data.supportability.missing_currency_pairs,
+                    ],
+                    stale_items=[
+                        *market_data.supportability.stale_instrument_ids,
+                        *market_data.supportability.stale_currency_pairs,
+                    ],
+                    evidence_count=(
+                        market_data.supportability.resolved_price_count
+                        + market_data.supportability.resolved_fx_count
+                    ),
+                )
+            )
+        except (LookupError, ValueError):
+            families.append(
+                DpmSourceFamilyReadiness(
+                    family="market_data",
+                    product_name="MarketDataCoverageWindow",
+                    state="UNAVAILABLE",
+                    reason="MARKET_DATA_COVERAGE_UNAVAILABLE",
+                    missing_items=["market_data_coverage"],
+                )
+            )
+
+        supportability = self._dpm_source_readiness_supportability(families)
+        return DpmSourceReadinessResponse(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=resolved_mandate_id,
+            model_portfolio_id=resolved_model_portfolio_id,
+            evaluated_instrument_ids=evaluated_instrument_ids,
+            families=families,
+            supportability=supportability,
+            lineage={
+                "source_system": "lotus-core",
+                "contract_version": "rfc_087_v1",
+                "readiness_scope": "dpm_source_family",
+            },
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status=("COMPLETE" if supportability.state == "READY" else "PARTIAL"),
+                latest_evidence_timestamp=None,
+            ),
+        )
+
+    @staticmethod
+    def _dpm_source_readiness_supportability(
+        families: list[DpmSourceFamilyReadiness],
+    ) -> DpmSourceReadinessSupportability:
+        counts: dict[DpmSourceFamilyState, int] = {
+            "READY": 0,
+            "DEGRADED": 0,
+            "INCOMPLETE": 0,
+            "UNAVAILABLE": 0,
+        }
+        for family in families:
+            counts[family.state] += 1
+        if counts["UNAVAILABLE"]:
+            state: DpmSourceFamilyState = "UNAVAILABLE"
+            reason = "DPM_SOURCE_READINESS_UNAVAILABLE"
+        elif counts["INCOMPLETE"]:
+            state = "INCOMPLETE"
+            reason = "DPM_SOURCE_READINESS_INCOMPLETE"
+        elif counts["DEGRADED"]:
+            state = "DEGRADED"
+            reason = "DPM_SOURCE_READINESS_DEGRADED"
+        else:
+            state = "READY"
+            reason = "DPM_SOURCE_READINESS_READY"
+        return DpmSourceReadinessSupportability(
+            state=state,
+            reason=reason,
+            ready_family_count=counts["READY"],
+            degraded_family_count=counts["DEGRADED"],
+            incomplete_family_count=counts["INCOMPLETE"],
+            unavailable_family_count=counts["UNAVAILABLE"],
         )
 
     async def get_benchmark_definition(

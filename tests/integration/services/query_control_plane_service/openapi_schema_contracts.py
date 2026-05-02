@@ -13,6 +13,53 @@ BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS = {
     "IntegrationPolicyContext",
 }
 
+DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS = {
+    "ModelPortfolioTargetRequest",
+    "ModelPortfolioTargetRow",
+    "ModelPortfolioSupportability",
+    "ModelPortfolioTargetResponse",
+}
+
+DPM_MANDATE_BINDING_SCHEMA_ROOTS = {
+    "DiscretionaryMandateBindingRequest",
+    "RebalanceBandContext",
+    "DiscretionaryMandateBindingSupportability",
+    "DiscretionaryMandateBindingResponse",
+}
+
+DPM_INSTRUMENT_ELIGIBILITY_SCHEMA_ROOTS = {
+    "InstrumentEligibilityBulkRequest",
+    "InstrumentEligibilityRecord",
+    "InstrumentEligibilitySupportability",
+    "InstrumentEligibilityBulkResponse",
+}
+
+DPM_PORTFOLIO_TAX_LOT_SCHEMA_ROOTS = {
+    "PortfolioTaxLotPageRequest",
+    "PortfolioTaxLotWindowRequest",
+    "PortfolioTaxLotRecord",
+    "PortfolioTaxLotWindowSupportability",
+    "PortfolioTaxLotWindowResponse",
+    "ReferencePageMetadata",
+}
+
+DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS = {
+    "MarketDataCurrencyPair",
+    "MarketDataCoverageRequest",
+    "MarketDataPriceCoverageRecord",
+    "MarketDataFxCoverageRecord",
+    "MarketDataCoverageSupportability",
+    "MarketDataCoverageWindowResponse",
+}
+
+DPM_SOURCE_READINESS_SCHEMA_ROOTS = {
+    "DpmSourceReadinessRequest",
+    "DpmSourceFamilyReadiness",
+    "DpmSourceReadinessSupportability",
+    "DpmSourceReadinessResponse",
+    "MarketDataCurrencyPair",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",
@@ -200,5 +247,6 @@ def assert_schema_properties_are_documented_and_exampled(
             )
             if property_schema.get("type") != "array":
                 assert has_example_signal, (
-                    f"{schema_name}.{property_name} is missing an OpenAPI example/default/enum signal"
+                    f"{schema_name}.{property_name} is missing an OpenAPI "
+                    "example/default/enum signal"
                 )
