@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from portfolio_common.source_data_products import (
     ANALYTICS_INPUT,
     CONTROL_PLANE_AND_POLICY,
+    DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG,
     OPERATIONAL_READ,
     SOURCE_DATA_PRODUCT_CATALOG,
     SNAPSHOT_AND_SIMULATION,
+    SourceDataProductDefinition,
 )
 
 
@@ -214,6 +216,56 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
     ),
 )
 
+DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
+    SourceDataSecurityProfile(
+        product_name="DpmModelPortfolioTarget",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=REFERENCE_INTERNAL,
+        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+    ),
+    SourceDataSecurityProfile(
+        product_name="DiscretionaryMandateBinding",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id", "client_id"),
+    ),
+    SourceDataSecurityProfile(
+        product_name="InstrumentEligibilityProfile",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=REFERENCE_INTERNAL,
+        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+    ),
+    SourceDataSecurityProfile(
+        product_name="PortfolioTaxLotWindow",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id", "tax_lot_id"),
+    ),
+    SourceDataSecurityProfile(
+        product_name="MarketDataCoverageWindow",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=REFERENCE_INTERNAL,
+        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+    ),
+)
+
 
 def get_source_data_security_profile(product_name: str) -> SourceDataSecurityProfile:
     requested = _normalize_required_text(product_name, "product_name")
@@ -260,9 +312,24 @@ def source_data_capability_rules() -> dict[str, str]:
 def validate_source_data_security_profiles(
     profiles: tuple[SourceDataSecurityProfile, ...] = SOURCE_DATA_SECURITY_PROFILES,
 ) -> None:
-    catalog_products = {
-        product.product_name.upper(): product for product in SOURCE_DATA_PRODUCT_CATALOG
-    }
+    _validate_source_data_security_profiles(profiles, catalog=SOURCE_DATA_PRODUCT_CATALOG)
+
+
+def validate_dpm_planned_source_data_security_profiles(
+    profiles: tuple[SourceDataSecurityProfile, ...] = DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES,
+) -> None:
+    _validate_source_data_security_profiles(
+        profiles,
+        catalog=DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG,
+    )
+
+
+def _validate_source_data_security_profiles(
+    profiles: tuple[SourceDataSecurityProfile, ...],
+    *,
+    catalog: tuple[SourceDataProductDefinition, ...],
+) -> None:
+    catalog_products = {product.product_name.upper(): product for product in catalog}
     catalog_product_names = {
         product_name: product.product_name for product_name, product in catalog_products.items()
     }

@@ -529,6 +529,7 @@ evidence.
 | Feature | Status at RFC approval | Implementation-backed when |
 | --- | --- | --- |
 | Composed DPM source-data architecture with no monolithic context endpoint | Planned | RFC-0036 and core docs reference composed products, and no route or doc claims one all-in-one source endpoint. |
+| DPM source-data governance scaffold | Planned | Planned products, domain-product declarations, source-security profiles, route-family posture, and validation evidence exist before runtime routes are exposed. |
 | Governed model portfolio target source product | Planned | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, and canonical proof exist. |
 | Governed discretionary mandate binding source product | Planned | Portfolio-to-mandate/model/policy binding is effective-dated, tested, supportable, and source-lineage-backed. |
 | Governed instrument eligibility and settlement profile source product | Planned | Eligibility, restriction reasons, shelf flags, settlement profile, and unknown-record behavior are API-backed and tested. |
@@ -743,7 +744,8 @@ Scope:
 
 1. Add planned products to `source_data_products.py`.
 2. Add source-data security profiles.
-3. Add route-family registry entries according to local guard conventions.
+3. Add route-family posture according to local guard conventions. Planned routes must not be
+   added to the active route-family registry until the router exists and is tested.
 4. Add repo-native producer declarations and trust telemetry placeholders.
 5. Add supported-features entries with `Planned` status only.
 6. Add tests that prevent product-name, route-family, OpenAPI-extension, source-security, and
@@ -754,7 +756,9 @@ Exit evidence:
 1. `make source-data-product-contract-guard` passes,
 2. `make route-contract-family-guard` passes,
 3. `make domain-product-validate` passes when platform sibling checkout is available,
-4. no new endpoint is exposed before the catalog and governance scaffolding is in place.
+4. no new endpoint is exposed before the catalog and governance scaffolding is in place,
+5. completed evidence is recorded in
+   `docs/RFCs/RFC-087-slice-3-governance-scaffold-evidence.md`.
 
 ### Slice 4 - Model portfolio target pipeline and API
 
