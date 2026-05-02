@@ -533,7 +533,7 @@ evidence.
 | Governed model portfolio target source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Governed discretionary mandate binding source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
 | Governed instrument eligibility and settlement profile source product | Implemented pending live proof | Ingestion, persistence, API, catalog metadata, OpenAPI, tests, canonical seed data, and local evidence exist; live canonical stack proof remains pending until the refreshed runtime is available. |
-| Bulk portfolio tax-lot source product | Planned | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly. |
+| Bulk portfolio tax-lot source product | Implemented pending live proof | Portfolio-window lot API replaces production per-security fan-out for tax-aware DPM source assembly; local API, catalog, OpenAPI, paging, supportability, and contract evidence exist. Live canonical stack proof remains pending until the refreshed runtime is available. |
 | Bulk market-data and FX coverage products | Planned | Held and target universe prices/FX can be fetched with bounded calls and coverage diagnostics. |
 | DPM source readiness and supportability | Planned | Operators can explain ready, partial, stale, and blocked DPM source states by source family. |
 | Canonical seeded managed mandate portfolio | Planned | Front-office canonical stack seeds complete DPM source families and validates live core/manage integration. |
@@ -878,6 +878,23 @@ Exit evidence:
 2. page boundaries are deterministic and tested,
 3. empty, incomplete, closed, and stale lots are visible through supportability,
 4. query shape and pagination are covered by repository or integration tests.
+
+Current implementation evidence:
+
+1. `PortfolioTaxLotWindow:v1` is active in the source-data catalog, source-security profile,
+   route-family registry, and repo-native domain-product declaration.
+2. `POST /integration/portfolios/{portfolio_id}/tax-lots` resolves portfolio-window tax lots from
+   `position_lot_state`, preserving core as the source of cost-basis and lot lineage.
+3. The API supports bounded cursor paging, deterministic ordering by `acquisition_date` and
+   `lot_id`, optional security filtering, open/closed status filtering, closed-lot inclusion, source
+   lineage, data-quality metadata, and page-scope supportability.
+4. Pagination supportability avoids false missing-security claims while more pages remain by
+   returning `DEGRADED` with `TAX_LOTS_PAGE_PARTIAL`; missing requested securities are reported as
+   `INCOMPLETE` only after the page scope is exhausted.
+5. Focused unit, router, OpenAPI, source-data-product, route-family, and domain-product gates pass
+   locally. Evidence is recorded in
+   `docs/RFCs/RFC-087-slice-7-portfolio-tax-lot-evidence.md`.
+6. Live canonical stack proof remains pending until the running stack is refreshed with this branch.
 
 ### Slice 8 - Bulk market-data and FX coverage pipeline and APIs
 

@@ -51,6 +51,10 @@ from ..dtos.reference_integration_dto import (
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
     ModelPortfolioTargetRow,
+    PortfolioTaxLotRecord,
+    PortfolioTaxLotWindowRequest,
+    PortfolioTaxLotWindowResponse,
+    PortfolioTaxLotWindowSupportability,
     ReferencePageMetadata,
     RebalanceBandContext,
     RiskFreeSeriesPoint,
@@ -59,6 +63,7 @@ from ..dtos.reference_integration_dto import (
     SeriesPoint,
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..settings import load_query_service_settings
 
@@ -85,6 +90,7 @@ class IntegrationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self._reference_repository = ReferenceDataRepository(db)
+        self._buy_state_repository = BuyStateRepository(db)
         self._page_token_secret = load_query_service_settings().page_token_secret
 
     @staticmethod
@@ -642,6 +648,133 @@ class IntegrationService:
                     required_count=len(request.security_ids),
                 ),
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+            ),
+        )
+
+    async def get_portfolio_tax_lot_window(
+        self,
+        *,
+        portfolio_id: str,
+        request: PortfolioTaxLotWindowRequest,
+    ) -> PortfolioTaxLotWindowResponse:
+        if not await self._buy_state_repository.portfolio_exists(portfolio_id):
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "security_ids": sorted(request.security_ids or []),
+                "lot_status_filter": request.lot_status_filter,
+                "include_closed_lots": request.include_closed_lots,
+                "tenant_id": request.tenant_id,
+            }
+        )
+        cursor = self._decode_page_token(request.page.page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope and token_scope != request_scope_fingerprint:
+            raise ValueError("Portfolio tax-lot page token does not match request scope.")
+
+        after_sort_key: tuple[date, str] | None = None
+        if cursor.get("last_acquisition_date") and cursor.get("last_lot_id"):
+            after_sort_key = (
+                date.fromisoformat(str(cursor["last_acquisition_date"])),
+                str(cursor["last_lot_id"]),
+            )
+
+        rows = await self._buy_state_repository.list_portfolio_tax_lots(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            security_ids=request.security_ids,
+            include_closed_lots=request.include_closed_lots,
+            lot_status_filter=request.lot_status_filter,
+            after_sort_key=after_sort_key,
+            limit=request.page.page_size + 1,
+        )
+        has_more = len(rows) > request.page.page_size
+        page_rows = rows[: request.page.page_size]
+
+        lots: list[PortfolioTaxLotRecord] = []
+        for lot, local_currency in page_rows:
+            open_quantity = self._as_decimal(lot.open_quantity)
+            lots.append(
+                PortfolioTaxLotRecord(
+                    portfolio_id=lot.portfolio_id,
+                    security_id=lot.security_id,
+                    instrument_id=lot.instrument_id,
+                    lot_id=lot.lot_id,
+                    open_quantity=open_quantity,
+                    original_quantity=self._as_decimal(lot.original_quantity),
+                    acquisition_date=lot.acquisition_date,
+                    cost_basis_base=self._as_decimal(lot.lot_cost_base),
+                    cost_basis_local=self._as_decimal(lot.lot_cost_local),
+                    local_currency=local_currency,
+                    tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
+                    source_transaction_id=lot.source_transaction_id,
+                    source_lineage={
+                        "source_system": lot.source_system or "position_lot_state",
+                        "source_transaction_id": lot.source_transaction_id,
+                        "calculation_policy_id": lot.calculation_policy_id or "UNKNOWN",
+                        "calculation_policy_version": lot.calculation_policy_version or "UNKNOWN",
+                    },
+                )
+            )
+
+        next_page_token: str | None = None
+        if has_more and lots:
+            last_lot = lots[-1]
+            next_page_token = self._encode_page_token(
+                {
+                    "scope_fingerprint": request_scope_fingerprint,
+                    "last_acquisition_date": last_lot.acquisition_date.isoformat(),
+                    "last_lot_id": last_lot.lot_id,
+                }
+            )
+
+        requested_security_ids = set(request.security_ids or [])
+        returned_security_ids = {lot.security_id for lot in lots}
+        missing_security_ids = (
+            [] if has_more else sorted(requested_security_ids - returned_security_ids)
+        )
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "TAX_LOTS_READY"
+        if has_more:
+            supportability_state = "DEGRADED"
+            supportability_reason = "TAX_LOTS_PAGE_PARTIAL"
+        elif request.security_ids and missing_security_ids:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
+
+        return PortfolioTaxLotWindowResponse(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            lots=lots,
+            page=ReferencePageMetadata(
+                page_size=request.page.page_size,
+                sort_key="acquisition_date:asc,lot_id:asc",
+                returned_component_count=len(lots),
+                request_scope_fingerprint=request_scope_fingerprint,
+                next_page_token=next_page_token,
+            ),
+            supportability=PortfolioTaxLotWindowSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requested_security_count=(
+                    len(request.security_ids) if request.security_ids is not None else None
+                ),
+                returned_lot_count=len(lots),
+                missing_security_ids=missing_security_ids,
+            ),
+            lineage={
+                "source_system": "position_lot_state",
+                "contract_version": "rfc_087_v1",
+            },
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                    [lot for lot, _ in page_rows]
+                ),
             ),
         )
 

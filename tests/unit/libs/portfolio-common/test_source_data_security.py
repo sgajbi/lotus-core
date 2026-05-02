@@ -30,7 +30,6 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     expected_profiles = {
-        "PortfolioTaxLotWindow",
         "MarketDataCoverageWindow",
     }
     profiles = {
@@ -38,8 +37,6 @@ def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     }
 
     assert set(profiles) == expected_profiles
-    assert profiles["PortfolioTaxLotWindow"].sensitivity_classification == CLIENT_SENSITIVE
-    assert "tax_lot_id" in profiles["PortfolioTaxLotWindow"].pii_fields
     for profile in profiles.values():
         assert profile.access_classification == SYSTEM_ACCESS
         assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
@@ -59,6 +56,9 @@ def test_client_source_products_classify_sensitive_identifiers() -> None:
 
     assert profile.sensitivity_classification == "client_sensitive"
     assert {"portfolio_id", "client_id", "transaction_id"} <= set(profile.pii_fields)
+    tax_lot_profile = get_source_data_security_profile("PortfolioTaxLotWindow")
+    assert tax_lot_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert {"portfolio_id", "lot_id", "source_transaction_id"} <= set(tax_lot_profile.pii_fields)
 
 
 def test_operator_evidence_products_require_operator_access_and_operational_retention() -> None:
@@ -86,6 +86,8 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "BenchmarkConstituentWindow",
         "DpmModelPortfolioTarget",
         "DiscretionaryMandateBinding",
+        "InstrumentEligibilityProfile",
+        "PortfolioTaxLotWindow",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):

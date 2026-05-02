@@ -1181,7 +1181,7 @@
       "owner_repository": "lotus-core",
       "product_family": "dpm_source_data",
       "authoritative_domain": "portfolio_state",
-      "lifecycle_status": "proposed",
+      "lifecycle_status": "active",
       "request_scope": {
         "scope_level": "portfolio",
         "supports_bulk": true
@@ -1212,7 +1212,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "daily",
-        "max_allowed_age_description": "Planned DPM tax-lot and cost-basis state for tax-aware sells."
+        "max_allowed_age_description": "DPM tax-lot and cost-basis state for tax-aware sells."
       },
       "completeness_policy": {
         "default_status": "complete",

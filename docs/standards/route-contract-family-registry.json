@@ -95,6 +95,7 @@
         "POST /integration/portfolios/{portfolio_id}/analytics/reference",
         "POST /integration/portfolios/{portfolio_id}/benchmark-assignment",
         "POST /integration/portfolios/{portfolio_id}/mandate-binding",
+        "POST /integration/portfolios/{portfolio_id}/tax-lots",
         "POST /integration/reference/classification-taxonomy",
         "POST /integration/reference/risk-free-series"
       ],

@@ -11,6 +11,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     InstrumentEligibilityBulkRequest,
     ModelPortfolioTargetRequest,
+    PortfolioTaxLotWindowRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -1357,6 +1358,125 @@ async def test_benchmark_market_series_rejects_page_token_scope_mismatch() -> No
                 target_currency=None,
                 series_fields=["index_price"],
                 page=SimpleNamespace(page_size=2, page_token=token),
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_returns_paged_portfolio_lots() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(
+            return_value=[
+                (
+                    SimpleNamespace(
+                        portfolio_id="PB_SG_GLOBAL_BAL_001",
+                        security_id="EQ_US_AAPL",
+                        instrument_id="EQ_US_AAPL",
+                        lot_id="LOT-AAPL-001",
+                        open_quantity=Decimal("100.0000000000"),
+                        original_quantity=Decimal("100.0000000000"),
+                        acquisition_date=date(2026, 3, 25),
+                        lot_cost_base=Decimal("15005.5000000000"),
+                        lot_cost_local=Decimal("15005.5000000000"),
+                        source_transaction_id="TXN-BUY-AAPL-001",
+                        source_system="front_office_portfolio_seed",
+                        calculation_policy_id="BUY_DEFAULT_POLICY",
+                        calculation_policy_version="1.0.0",
+                        updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    ),
+                    "USD",
+                ),
+                (
+                    SimpleNamespace(
+                        portfolio_id="PB_SG_GLOBAL_BAL_001",
+                        security_id="FI_US_TREASURY_10Y",
+                        instrument_id="FI_US_TREASURY_10Y",
+                        lot_id="LOT-UST-001",
+                        open_quantity=Decimal("200.0000000000"),
+                        original_quantity=Decimal("200.0000000000"),
+                        acquisition_date=date(2026, 3, 26),
+                        lot_cost_base=Decimal("20000.0000000000"),
+                        lot_cost_local=Decimal("20000.0000000000"),
+                        source_transaction_id="TXN-BUY-UST-001",
+                        source_system="front_office_portfolio_seed",
+                        calculation_policy_id="BUY_DEFAULT_POLICY",
+                        calculation_policy_version="1.0.0",
+                        updated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
+                    ),
+                    "USD",
+                ),
+            ]
+        ),
+    )
+
+    response = await service.get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["EQ_US_AAPL"],
+            page={"page_size": 1},
+        ),
+    )
+
+    assert [lot.lot_id for lot in response.lots] == ["LOT-AAPL-001"]
+    assert response.lots[0].local_currency == "USD"
+    assert response.lots[0].tax_lot_status == "OPEN"
+    assert response.lots[0].source_lineage["calculation_policy_id"] == "BUY_DEFAULT_POLICY"
+    assert response.page.next_page_token is not None
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "TAX_LOTS_PAGE_PARTIAL"
+    service._buy_state_repository.list_portfolio_tax_lots.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 4, 10),
+        security_ids=["EQ_US_AAPL"],
+        include_closed_lots=False,
+        lot_status_filter=None,
+        after_sort_key=None,
+        limit=2,
+    )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_reports_missing_requested_security() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["UNKNOWN_SEC"],
+        ),
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
+    assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert response.data_quality_status == "PARTIAL"
+
+
+@pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(return_value=[]),
+    )
+    token = service._encode_page_token(  # pylint: disable=protected-access
+        {"scope_fingerprint": "other-scope", "last_lot_id": "LOT-AAPL-001"}
+    )
+
+    with pytest.raises(ValueError, match="page token does not match request scope"):
+        await service.get_portfolio_tax_lot_window(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PortfolioTaxLotWindowRequest(
+                as_of_date=date(2026, 4, 10),
+                page={"page_token": token},
             ),
         )
 

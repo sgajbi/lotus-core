@@ -43,6 +43,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     InstrumentEligibilityBulkResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
+    PortfolioTaxLotWindowRequest,
+    PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
@@ -81,6 +83,9 @@ MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = {
 }
 MANDATE_BINDING_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = {
+    "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
 }
 BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
@@ -325,6 +330,52 @@ async def resolve_instrument_eligibility_bulk(
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> InstrumentEligibilityBulkResponse:
     return await integration_service.resolve_instrument_eligibility_bulk(request)
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/tax-lots",
+    response_model=PortfolioTaxLotWindowResponse,
+    summary="Resolve DPM portfolio tax-lot window",
+    description=(
+        "What: Return current tax-lot and cost-basis state for all or selected securities in a "
+        "portfolio window.\n"
+        "How: Reads the authoritative `position_lot_state` records in one paged portfolio-window "
+        "call, preserving acquisition-date ordering for tax-aware sell allocation and avoiding "
+        "per-security production fan-out.\n"
+        "When: Use this endpoint when lotus-manage assembles tax-aware DPM sell context for a "
+        "governed portfolio. Do not use it as a general transaction history endpoint; use the "
+        "operational transaction routes for ledger browsing."
+    ),
+    responses={
+        404: problem_response(
+            "Portfolio not found",
+            PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE,
+        ),
+        400: problem_response(
+            "Invalid page token",
+            {"detail": "Portfolio tax-lot page token does not match request scope."},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("PortfolioTaxLotWindow"),
+)
+async def get_portfolio_tax_lot_window(
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose tax-lot window should be returned.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    request: PortfolioTaxLotWindowRequest = Body(...),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> PortfolioTaxLotWindowResponse:
+    try:
+        return await integration_service.get_portfolio_tax_lot_window(
+            portfolio_id=portfolio_id,
+            request=request,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post(

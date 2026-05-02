@@ -21,6 +21,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_effective_integration_policy,
     get_instrument_enrichment_bulk,
     get_integration_service,
+    get_portfolio_tax_lot_window,
     get_risk_free_coverage,
     resolve_instrument_eligibility_bulk,
     resolve_discretionary_mandate_binding,
@@ -52,6 +53,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     InstrumentEligibilityBulkRequest,
     IntegrationWindow,
     ModelPortfolioTargetRequest,
+    PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
@@ -714,6 +716,91 @@ async def test_resolve_instrument_eligibility_bulk_success_path() -> None:
 
     assert response["product_name"] == "InstrumentEligibilityProfile"
     mock_service.resolve_instrument_eligibility_bulk.assert_awaited_once_with(request)
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_tax_lot_window_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_portfolio_tax_lot_window = AsyncMock(
+        return_value={
+            "product_name": "PortfolioTaxLotWindow",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-04-10",
+            "generated_at": "2026-04-10T09:00:00Z",
+            "restatement_version": "current",
+            "reconciliation_status": "NOT_ASSESSED",
+            "data_quality_status": "COMPLETE",
+            "latest_evidence_timestamp": "2026-04-10T09:00:00Z",
+            "source_batch_fingerprint": "abc",
+            "snapshot_id": "snap",
+            "policy_version": "default",
+            "correlation_id": None,
+            "lots": [
+                {
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                    "security_id": "EQ_US_AAPL",
+                    "instrument_id": "EQ_US_AAPL",
+                    "lot_id": "LOT-TXN-BUY-AAPL-001",
+                    "open_quantity": "100.0000000000",
+                    "original_quantity": "100.0000000000",
+                    "acquisition_date": "2026-03-25",
+                    "cost_basis_base": "15005.5000000000",
+                    "cost_basis_local": "15005.5000000000",
+                    "local_currency": "USD",
+                    "tax_lot_status": "OPEN",
+                    "source_transaction_id": "TXN-BUY-AAPL-001",
+                    "source_lineage": {"source_system": "front_office_portfolio_seed"},
+                }
+            ],
+            "page": {
+                "page_size": 250,
+                "sort_key": "acquisition_date:asc,lot_id:asc",
+                "returned_component_count": 1,
+                "request_scope_fingerprint": "fp",
+                "next_page_token": None,
+            },
+            "supportability": {
+                "state": "READY",
+                "reason": "TAX_LOTS_READY",
+                "requested_security_count": 1,
+                "returned_lot_count": 1,
+                "missing_security_ids": [],
+            },
+            "lineage": {"contract_version": "rfc_087_v1"},
+        }
+    )
+    request = PortfolioTaxLotWindowRequest(
+        as_of_date="2026-04-10",
+        security_ids=["EQ_US_AAPL"],
+    )
+
+    response = await get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "PortfolioTaxLotWindow"
+    mock_service.get_portfolio_tax_lot_window.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_portfolio_tax_lot_window = AsyncMock(side_effect=LookupError("missing"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_portfolio_tax_lot_window(
+            portfolio_id="P404",
+            request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio

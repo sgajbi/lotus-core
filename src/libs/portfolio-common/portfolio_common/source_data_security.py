@@ -210,6 +210,16 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         audit_requirement=AUDIT_SYSTEM_ACCESS,
     ),
     SourceDataSecurityProfile(
+        product_name="PortfolioTaxLotWindow",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id", "lot_id", "source_transaction_id"),
+    ),
+    SourceDataSecurityProfile(
         product_name="ReconciliationEvidenceBundle",
         tenant_required=True,
         entitlement_required=True,
@@ -245,16 +255,6 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
 )
 
 DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
-    SourceDataSecurityProfile(
-        product_name="PortfolioTaxLotWindow",
-        tenant_required=True,
-        entitlement_required=True,
-        access_classification=SYSTEM_ACCESS,
-        sensitivity_classification=CLIENT_SENSITIVE,
-        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
-        audit_requirement=AUDIT_SYSTEM_ACCESS,
-        pii_fields=("portfolio_id", "tax_lot_id"),
-    ),
     SourceDataSecurityProfile(
         product_name="MarketDataCoverageWindow",
         tenant_required=True,

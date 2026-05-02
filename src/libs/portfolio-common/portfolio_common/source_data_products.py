@@ -235,6 +235,18 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="DPM source product for instrument shelf, restriction, liquidity, and settlement eligibility.",
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioTaxLotWindow",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/tax-lots",),
+        paging_mode=INLINE_PAGED,
+        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
+        notes="DPM source product for portfolio-window tax-lot and cost-basis state used by tax-aware sells.",
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
@@ -280,18 +292,6 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
 )
 
 DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
-    SourceDataProductDefinition(
-        product_name="PortfolioTaxLotWindow",
-        product_version="v1",
-        route_family=ANALYTICS_INPUT,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
-        owner="lotus-core",
-        consumers=("lotus-manage",),
-        current_routes=("/integration/portfolios/{portfolio_id}/tax-lots",),
-        paging_mode=INLINE_PAGED,
-        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
-        notes="Planned DPM source product for tax-lot and cost-basis state used by tax-aware sells.",
-    ),
     SourceDataProductDefinition(
         product_name="MarketDataCoverageWindow",
         product_version="v1",

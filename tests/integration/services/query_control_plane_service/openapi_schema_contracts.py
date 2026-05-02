@@ -34,6 +34,15 @@ DPM_INSTRUMENT_ELIGIBILITY_SCHEMA_ROOTS = {
     "InstrumentEligibilityBulkResponse",
 }
 
+DPM_PORTFOLIO_TAX_LOT_SCHEMA_ROOTS = {
+    "PortfolioTaxLotPageRequest",
+    "PortfolioTaxLotWindowRequest",
+    "PortfolioTaxLotRecord",
+    "PortfolioTaxLotWindowSupportability",
+    "PortfolioTaxLotWindowResponse",
+    "ReferencePageMetadata",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",
