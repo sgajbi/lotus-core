@@ -421,6 +421,10 @@ jobs:
 
   institutional-completion-gate:
     name: Main Releasability / Institutional Completion Gate
+    # This approval-grade 100k-transaction bank-day run is intentionally kept
+    # off every main push. It remains available for scheduled and manual
+    # release-readiness validation without blocking routine post-merge health.
+    if: github.event_name != 'push'
     needs: [coverage-gate, failure-recovery-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -462,6 +466,7 @@ jobs:
 
   institutional-signoff-pack:
     name: Main Releasability / Institutional Sign-Off Pack
+    if: github.event_name != 'push'
     needs:
       [docker-smoke-contract, latency-gate, performance-load-gate, failure-recovery-gate, institutional-completion-gate]
     runs-on: ubuntu-latest

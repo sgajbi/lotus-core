@@ -194,6 +194,8 @@ test-release-gates:
 	$(MAKE) test-e2e-all
 	$(MAKE) test-performance-load-gate-full
 	$(MAKE) test-failure-recovery-gate
+
+test-institutional-release-gates:
 	$(MAKE) test-institutional-completion-gate
 	$(MAKE) test-institutional-signoff-pack
 

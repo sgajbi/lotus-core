@@ -229,9 +229,11 @@ Most relevant current governance:
     the newest artifact timestamp: use `full` profile-tier performance-load artifacts ahead of
     newer `fast` artifacts, and prefer exhaustive bank-day reconciliation artifacts where
     `portfolio_count_evaluated == portfolios_ingested` ahead of newer sampled refresh artifacts,
-28. main releasability now owns a governed RFC-086 institutional completion gate that runs the
-    bank-day load scenario and then exhaustive reconciliation for the generated run before the
-    institutional sign-off pack aggregates artifacts,
+28. scheduled and manually dispatched main releasability runs own the governed RFC-086
+    institutional completion gate that runs the bank-day load scenario and then exhaustive
+    reconciliation for the generated run before the institutional sign-off pack aggregates
+    artifacts; routine `main` push runs keep the lighter release gates blocking and leave the
+    approval-grade institutional lane to the scheduled/manual path,
 29. legacy PAS-era wiki material should be filtered through the platform migration ledger before
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 30. RFC-087 DPM source-data work is implemented for `DpmModelPortfolioTarget:v1`,
