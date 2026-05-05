@@ -10,6 +10,7 @@ from tools.front_office_portfolio_seed import (
     DEFAULT_DPM_MODEL_PORTFOLIO_ID,
     DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
     FRONT_OFFICE_EXPECTATION,
+    FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
     FRONT_OFFICE_SEED_CONTRACT,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
@@ -1074,8 +1075,12 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         ),
     }
 
-    def fake_request(method, url, *, payload=None):
+    gateway_header_calls: list[dict[str, str]] = []
+
+    def fake_request(method, url, *, payload=None, headers=None):
         requested_urls.append(url)
+        if url.startswith("http://gateway.dev/"):
+            gateway_header_calls.append(headers or {})
         return responses[url]
 
     monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", fake_request)
@@ -1107,3 +1112,4 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
     assert all("activity-summary/query" not in url for url in requested_urls)
+    assert gateway_header_calls == [FRONT_OFFICE_GATEWAY_CALLER_HEADERS]
