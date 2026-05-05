@@ -1137,12 +1137,20 @@ def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any])
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
 
 
-def _request_json(method: str, url: str, payload: dict[str, Any] | None = None) -> tuple[int, Any]:
+def _request_json(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, Any]:
+    request_headers = {"Content-Type": "application/json"}
+    if headers:
+        request_headers.update(headers)
     req = request.Request(
         url=url,
         method=method.upper(),
         data=(None if payload is None else json.dumps(payload).encode("utf-8")),
-        headers={"Content-Type": "application/json"},
+        headers=request_headers,
     )
     try:
         with request.urlopen(req, timeout=15) as response:

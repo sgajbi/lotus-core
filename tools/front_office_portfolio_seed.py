@@ -38,6 +38,11 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
 )
 DEFAULT_DPM_MODEL_PORTFOLIO_ID = "MODEL_PB_SG_GLOBAL_BAL_DPM"
 DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
+FRONT_OFFICE_GATEWAY_CALLER_HEADERS = {
+    "X-Actor-Id": "workbench-system",
+    "X-Tenant-Id": "tenant-sg",
+    "X-Region": "APAC",
+}
 FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
     "persistence-business-dates",
     "persistence-fx-rates",
@@ -1984,9 +1989,10 @@ def _verify_front_office_portfolio(
                 f"{gateway_base_url}/api/v1/workbench/{expected.portfolio_id}/performance/summary"
                 f"?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class"
                 f"&attribution_dimension=asset_class&detail_basis=NET",
+                headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
             )
-        except RuntimeError:
-            LOGGER.info("Verification still waiting on downstream services.")
+        except RuntimeError as exc:
+            LOGGER.info("Verification still waiting on downstream services: %s", exc)
             continue
 
         positions = positions_payload.get("positions") or []
