@@ -50,6 +50,14 @@ class CashflowProjectionResponse(SourceDataProductRuntimeMetadata):
         ),
         examples=[True],
     )
+    portfolio_currency: str = Field(
+        ...,
+        description=(
+            "ISO currency code for net_cashflow, projected_cumulative_cashflow, "
+            "and total_net_cashflow. Sourced from the portfolio base currency."
+        ),
+        examples=["USD"],
+    )
     points: List[CashflowProjectionPoint] = Field(
         ..., description="Daily projection points in ascending date order."
     )

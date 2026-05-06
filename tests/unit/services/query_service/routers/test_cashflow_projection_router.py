@@ -28,6 +28,7 @@ async def test_get_cashflow_projection_success() -> None:
             range_start_date=date(2026, 3, 1),
             range_end_date=date(2026, 3, 11),
             include_projected=True,
+            portfolio_currency="USD",
             points=[
                 CashflowProjectionPoint(
                     projection_date=date(2026, 3, 2),

@@ -26,7 +26,8 @@ class CashflowProjectionService:
         as_of_date: Optional[date] = None,
         include_projected: bool = True,
     ) -> CashflowProjectionResponse:
-        if not await self.repo.portfolio_exists(portfolio_id):
+        portfolio_currency = await self.repo.get_portfolio_currency(portfolio_id)
+        if portfolio_currency is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
         effective_as_of_date = as_of_date
@@ -79,6 +80,7 @@ class CashflowProjectionService:
             range_start_date=range_start_date,
             range_end_date=query_end_date,
             include_projected=include_projected,
+            portfolio_currency=portfolio_currency,
             points=points,
             total_net_cashflow=running,
             projection_days=horizon_days,

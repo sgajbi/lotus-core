@@ -17,6 +17,7 @@ pytestmark = pytest.mark.asyncio
 def mock_repo() -> AsyncMock:
     repo = AsyncMock(spec=CashflowRepository)
     repo.portfolio_exists.return_value = True
+    repo.get_portfolio_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2026, 3, 1)
 
     async def _series(
@@ -57,6 +58,7 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert response.total_net_cashflow == Decimal("-750")
         assert response.product_name == "PortfolioCashflowProjection"
         assert response.product_version == "v1"
+        assert response.portfolio_currency == "USD"
         assert response.data_quality_status == "COMPLETE"
         assert response.latest_evidence_timestamp == datetime(2026, 3, 3, 12, 30, tzinfo=UTC)
         assert response.source_batch_fingerprint == (
@@ -107,7 +109,7 @@ async def test_projection_raises_when_portfolio_missing(mock_repo: AsyncMock):
         "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
         return_value=mock_repo,
     ):
-        mock_repo.portfolio_exists.return_value = False
+        mock_repo.get_portfolio_currency.return_value = None
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_cashflow_projection(portfolio_id="P404")

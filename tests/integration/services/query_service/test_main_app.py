@@ -589,8 +589,7 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert "Use `as_of_date` for booked historical state" in latest_positions["description"]
     assert (
         "Do not treat this route as a substitute for performance, risk, "
-        "or reporting-specific aggregation contracts"
-        in latest_positions["description"]
+        "or reporting-specific aggregation contracts" in latest_positions["description"]
     )
 
     include_projected = next(
@@ -623,8 +622,7 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     )
     assert (
         "holdings drill-down, lineage-aware troubleshooting, and historical "
-        "security-level state inspection"
-        in (position_history["description"])
+        "security-level state inspection" in (position_history["description"])
     )
     assert (
         "do not use it as a substitute for the strategic latest-holdings read"
@@ -659,8 +657,7 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     assert "portfolio-level daily net cashflow projection" in projection["description"]
     assert (
         "forecasting, performance analytics, and advisory recommendation logic "
-        "outside this contract"
-        in projection["description"]
+        "outside this contract" in projection["description"]
     )
 
     portfolio_id = next(
@@ -685,6 +682,11 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
 
     not_found = projection["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-CF-001 not found"
+    projection_response = schema["components"]["schemas"]["CashflowProjectionResponse"]
+    assert projection_response["properties"]["portfolio_currency"]["description"] == (
+        "ISO currency code for net_cashflow, projected_cumulative_cashflow, "
+        "and total_net_cashflow. Sourced from the portfolio base currency."
+    )
 
 
 async def test_openapi_describes_portfolio_discovery_contract_examples(async_test_client):
