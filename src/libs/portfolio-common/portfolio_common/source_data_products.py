@@ -89,6 +89,18 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Deterministically ordered transaction and income ledger window.",
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioCashflowProjection",
+        product_version="v1",
+        route_family=OPERATIONAL_READ,
+        serving_plane=QUERY_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-gateway", "lotus-report", "lotus-manage"),
+        current_routes=("/portfolios/{portfolio_id}/cashflow-projection",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes="Core-derived daily net cashflow projection for operational liquidity planning.",
+    ),
+    SourceDataProductDefinition(
         product_name="PositionTimeseriesInput",
         product_version="v1",
         route_family=ANALYTICS_INPUT,
@@ -208,7 +220,9 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=("/integration/model-portfolios/{model_portfolio_id}/targets",),
         paging_mode=NOT_APPLICABLE,
         export_mode=NOT_APPLICABLE,
-        notes="DPM source product for approved model target weights, bands, and cash reserve policy.",
+        notes=(
+            "DPM source product for approved model target weights, bands, and cash reserve policy."
+        ),
     ),
     SourceDataProductDefinition(
         product_name="DiscretionaryMandateBinding",
@@ -220,7 +234,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=("/integration/portfolios/{portfolio_id}/mandate-binding",),
         paging_mode=NOT_APPLICABLE,
         export_mode=NOT_APPLICABLE,
-        notes="DPM source product for mandate, model, policy, jurisdiction, and rebalance constraints.",
+        notes=(
+            "DPM source product for mandate, model, policy, jurisdiction, and rebalance "
+            "constraints."
+        ),
     ),
     SourceDataProductDefinition(
         product_name="InstrumentEligibilityProfile",
@@ -232,7 +249,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=("/integration/instruments/eligibility-bulk",),
         paging_mode=INLINE_PAGED,
         export_mode=NOT_APPLICABLE,
-        notes="DPM source product for instrument shelf, restriction, liquidity, and settlement eligibility.",
+        notes=(
+            "DPM source product for instrument shelf, restriction, liquidity, and settlement "
+            "eligibility."
+        ),
     ),
     SourceDataProductDefinition(
         product_name="PortfolioTaxLotWindow",
@@ -244,7 +264,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=("/integration/portfolios/{portfolio_id}/tax-lots",),
         paging_mode=INLINE_PAGED,
         export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
-        notes="DPM source product for portfolio-window tax-lot and cost-basis state used by tax-aware sells.",
+        notes=(
+            "DPM source product for portfolio-window tax-lot and cost-basis state used by "
+            "tax-aware sells."
+        ),
     ),
     SourceDataProductDefinition(
         product_name="MarketDataCoverageWindow",
@@ -256,7 +279,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=("/integration/market-data/coverage",),
         paging_mode=NOT_APPLICABLE,
         export_mode=NOT_APPLICABLE,
-        notes="DPM source product for bounded held and target universe price and FX coverage diagnostics.",
+        notes=(
+            "DPM source product for bounded held and target universe price and FX coverage "
+            "diagnostics."
+        ),
     ),
     SourceDataProductDefinition(
         product_name="DpmSourceReadiness",

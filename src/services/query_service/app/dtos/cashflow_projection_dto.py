@@ -1,14 +1,18 @@
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from .source_data_product_identity import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
+
 
 class CashflowProjectionPoint(BaseModel):
-    projection_date: date = Field(
-        ..., description="Projection date.", examples=["2026-03-05"]
-    )
+    projection_date: date = Field(..., description="Projection date.", examples=["2026-03-05"])
     net_cashflow: Decimal = Field(
         ...,
         description="Net portfolio cashflow for the date in portfolio base currency.",
@@ -21,7 +25,11 @@ class CashflowProjectionPoint(BaseModel):
     )
 
 
-class CashflowProjectionResponse(BaseModel):
+class CashflowProjectionResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["PortfolioCashflowProjection"] = product_name_field(
+        "PortfolioCashflowProjection"
+    )
+    product_version: Literal["v1"] = product_version_field()
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     as_of_date: date = Field(
         ...,
@@ -41,6 +49,14 @@ class CashflowProjectionResponse(BaseModel):
             "When false, returns booked flows only up to as_of_date."
         ),
         examples=[True],
+    )
+    portfolio_currency: str = Field(
+        ...,
+        description=(
+            "ISO currency code for net_cashflow, projected_cumulative_cashflow, "
+            "and total_net_cashflow. Sourced from the portfolio base currency."
+        ),
+        examples=["USD"],
     )
     points: List[CashflowProjectionPoint] = Field(
         ..., description="Daily projection points in ascending date order."

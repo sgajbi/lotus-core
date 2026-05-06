@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -33,8 +33,7 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
 
     assert "transactions.transaction_type IN ('DEPOSIT', 'WITHDRAWAL')" in compiled_query
     assert (
-        "date(transactions.settlement_date) BETWEEN '2026-04-18' AND '2026-04-28'"
-        in compiled_query
+        "date(transactions.settlement_date) BETWEEN '2026-04-18' AND '2026-04-28'" in compiled_query
     )
     assert "date(transactions.transaction_date) < '2026-04-18'" in compiled_query
     assert "transactions.transaction_type = 'BUY'" not in compiled_query
@@ -62,6 +61,22 @@ async def test_cashflow_repository_portfolio_exists_uses_limit_one(
     assert exists is True
     stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
+    assert "LIMIT 1" in compiled_query
+
+
+async def test_cashflow_repository_portfolio_currency_uses_base_currency(
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: "USD")
+    repository = CashflowRepository(mock_db_session)
+
+    portfolio_currency = await repository.get_portfolio_currency("P1")
+
+    assert portfolio_currency == "USD"
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.base_currency" in compiled_query
     assert "portfolios.portfolio_id = 'P1'" in compiled_query
     assert "LIMIT 1" in compiled_query
 
@@ -102,6 +117,71 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
     assert "anon_1.cashflow_date BETWEEN '2026-04-18' AND '2026-04-28'" in compiled_query
     assert "anon_1.is_portfolio_flow" in compiled_query
     assert "sum(anon_1.amount)" in compiled_query.lower()
+
+
+async def test_latest_cashflow_evidence_timestamp_uses_booked_and_projected_sources(
+    mock_db_session: AsyncMock,
+) -> None:
+    booked_timestamp = datetime(2026, 4, 18, 9, 15, tzinfo=UTC)
+    projected_timestamp = datetime(2026, 4, 19, 10, 45, tzinfo=UTC)
+    mock_db_session.execute.side_effect = [
+        MagicMock(scalar_one_or_none=lambda: booked_timestamp),
+        MagicMock(scalar_one_or_none=lambda: projected_timestamp),
+    ]
+    repository = CashflowRepository(mock_db_session)
+
+    latest = await repository.get_latest_cashflow_evidence_timestamp(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 18),
+        end_date=date(2026, 4, 28),
+        include_projected=True,
+    )
+
+    assert latest == projected_timestamp
+    booked_stmt = mock_db_session.execute.call_args_list[0][0][0]
+    projected_stmt = mock_db_session.execute.call_args_list[1][0][0]
+    booked_query = str(booked_stmt.compile(compile_kwargs={"literal_binds": True}))
+    projected_query = str(projected_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "max(anon_1.updated_at)" in booked_query.lower()
+    assert "anon_1.portfolio_id = 'P1'" in booked_query
+    assert "anon_1.cashflow_date BETWEEN '2026-04-18' AND '2026-04-28'" in booked_query
+    assert "max(transactions.updated_at)" in projected_query.lower()
+    assert "transactions.transaction_type IN ('DEPOSIT', 'WITHDRAWAL')" in projected_query
+    assert "date(transactions.transaction_date) < '2026-04-18'" in projected_query
+
+
+async def test_latest_cashflow_evidence_timestamp_skips_projected_query_for_booked_only(
+    mock_db_session: AsyncMock,
+) -> None:
+    booked_timestamp = datetime(2026, 4, 18, 9, 15, tzinfo=UTC)
+    mock_db_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: booked_timestamp)
+    repository = CashflowRepository(mock_db_session)
+
+    latest = await repository.get_latest_cashflow_evidence_timestamp(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 18),
+        end_date=date(2026, 4, 28),
+        include_projected=False,
+    )
+
+    assert latest == booked_timestamp
+    assert mock_db_session.execute.await_count == 1
+
+
+async def test_latest_cashflow_evidence_timestamp_returns_none_when_no_evidence(
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)
+    repository = CashflowRepository(mock_db_session)
+
+    latest = await repository.get_latest_cashflow_evidence_timestamp(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 18),
+        end_date=date(2026, 4, 28),
+        include_projected=False,
+    )
+
+    assert latest is None
 
 
 async def test_cashflow_repository_external_flows_limits_to_investor_movements(

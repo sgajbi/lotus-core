@@ -10,11 +10,10 @@ from portfolio_common.source_data_products import (
     CONTROL_PLANE_AND_POLICY,
     DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG,
     OPERATIONAL_READ,
-    SOURCE_DATA_PRODUCT_CATALOG,
     SNAPSHOT_AND_SIMULATION,
+    SOURCE_DATA_PRODUCT_CATALOG,
     SourceDataProductDefinition,
 )
-
 
 CLIENT_CONFIDENTIAL = "client_confidential"
 CLIENT_SENSITIVE = "client_sensitive"
@@ -95,6 +94,16 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         retention_requirement=RETAIN_FOR_CLIENT_RECORD,
         audit_requirement=AUDIT_READ_AND_EXPORT,
         pii_fields=("portfolio_id", "client_id", "transaction_id"),
+    ),
+    SourceDataSecurityProfile(
+        product_name="PortfolioCashflowProjection",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=BUSINESS_CONSUMER_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_READ_AND_EXPORT,
+        pii_fields=("portfolio_id", "client_id"),
     ),
     SourceDataSecurityProfile(
         product_name="PositionTimeseriesInput",
