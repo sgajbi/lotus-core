@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,6 +22,7 @@ async def test_get_cashflow_projection_success() -> None:
     service = MagicMock(spec=CashflowProjectionService)
     service.get_cashflow_projection = AsyncMock(
         return_value=CashflowProjectionResponse(
+            generated_at=datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
             portfolio_id="P1",
             as_of_date=date(2026, 3, 1),
             range_start_date=date(2026, 3, 1),

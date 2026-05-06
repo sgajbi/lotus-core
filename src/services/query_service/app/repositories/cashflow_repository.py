@@ -1,6 +1,6 @@
 # src/services/query_service/app/repositories/cashflow_repository.py
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
@@ -29,18 +29,15 @@ class CashflowRepository:
 
     @staticmethod
     def _latest_cashflows_subquery():
-        ranked_cashflows = (
-            select(
-                Cashflow.id.label("id"),
-                func.row_number()
-                .over(
-                    partition_by=Cashflow.transaction_id,
-                    order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
-                )
-                .label("rn"),
+        ranked_cashflows = select(
+            Cashflow.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=Cashflow.transaction_id,
+                order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
             )
-            .subquery()
-        )
+            .label("rn"),
+        ).subquery()
         return (
             select(Cashflow)
             .join(ranked_cashflows, ranked_cashflows.c.id == Cashflow.id)
@@ -115,6 +112,45 @@ class CashflowRepository:
             .order_by(settlement_date.asc())
         )
         return (await self.db.execute(stmt)).all()
+
+    @async_timed(
+        repository="CashflowRepository",
+        method="get_latest_cashflow_evidence_timestamp",
+    )
+    async def get_latest_cashflow_evidence_timestamp(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        include_projected: bool,
+    ) -> datetime | None:
+        """Return the latest source timestamp across booked and projected cashflow evidence."""
+
+        latest_cashflows = self._latest_cashflows_subquery()
+        booked_stmt = select(func.max(latest_cashflows.c.updated_at)).where(
+            latest_cashflows.c.portfolio_id == portfolio_id,
+            latest_cashflows.c.cashflow_date.between(start_date, end_date),
+            latest_cashflows.c.is_portfolio_flow,
+        )
+        latest_booked = (await self.db.execute(booked_stmt)).scalar_one_or_none()
+
+        latest_projected = None
+        if include_projected:
+            settlement_date = func.date(Transaction.settlement_date)
+            projected_stmt = select(func.max(Transaction.updated_at)).where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_type.in_(("DEPOSIT", "WITHDRAWAL")),
+                Transaction.settlement_date.is_not(None),
+                settlement_date.between(start_date, end_date),
+                func.date(Transaction.transaction_date) < start_date,
+            )
+            latest_projected = (await self.db.execute(projected_stmt)).scalar_one_or_none()
+
+        timestamps = [value for value in (latest_booked, latest_projected) if value is not None]
+        if not timestamps:
+            return None
+        return max(timestamps)
 
     @async_timed(repository="CashflowRepository", method="get_external_flows")
     async def get_external_flows(

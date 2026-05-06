@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -30,6 +30,9 @@ def mock_repo() -> AsyncMock:
 
     repo.get_portfolio_cashflow_series.side_effect = _series
     repo.get_projected_settlement_cashflow_series.return_value = []
+    repo.get_latest_cashflow_evidence_timestamp.return_value = datetime(
+        2026, 3, 3, 12, 30, tzinfo=UTC
+    )
     return repo
 
 
@@ -52,6 +55,13 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
             end_date=date(2026, 3, 11),
         )
         assert response.total_net_cashflow == Decimal("-750")
+        assert response.product_name == "PortfolioCashflowProjection"
+        assert response.product_version == "v1"
+        assert response.data_quality_status == "COMPLETE"
+        assert response.latest_evidence_timestamp == datetime(2026, 3, 3, 12, 30, tzinfo=UTC)
+        assert response.source_batch_fingerprint == (
+            "cashflow_projection:P1:2026-03-01:2026-03-11:include_projected=true"
+        )
         assert response.points[0].projected_cumulative_cashflow == Decimal("-1000")
         assert response.points[1].net_cashflow == Decimal("0")
         assert response.points[1].projected_cumulative_cashflow == Decimal("-1000")
@@ -78,6 +88,12 @@ async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
             end_date=date(2026, 3, 2),
         )
         mock_repo.get_projected_settlement_cashflow_series.assert_not_awaited()
+        mock_repo.get_latest_cashflow_evidence_timestamp.assert_awaited_once_with(
+            portfolio_id="P1",
+            start_date=date(2026, 3, 2),
+            end_date=date(2026, 3, 2),
+            include_projected=False,
+        )
         assert response.include_projected is False
         assert response.range_end_date == date(2026, 3, 2)
         assert len(response.points) == 1

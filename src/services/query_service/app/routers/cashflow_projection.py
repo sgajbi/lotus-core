@@ -3,6 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.cashflow_projection_dto import CashflowProjectionResponse
@@ -38,6 +39,7 @@ def get_cashflow_projection_service(
         "instead of broad portfolio state or performance interpretation. Keep forecasting, "
         "performance analytics, and advisory recommendation logic outside this contract."
     ),
+    openapi_extra=source_data_product_openapi_extra("PortfolioCashflowProjection"),
 )
 async def get_cashflow_projection(
     portfolio_id: str = Path(

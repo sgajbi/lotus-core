@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock
 
 import httpx
@@ -11,6 +11,15 @@ from src.services.query_service.app.routers.cashflow_projection import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _source_metadata(as_of_date: date) -> dict[str, object]:
+    return {
+        "generated_at": datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
+        "data_quality_status": "COMPLETE",
+        "latest_evidence_timestamp": datetime(2026, 3, 1, 1, 4, tzinfo=UTC),
+        "source_batch_fingerprint": f"cashflow_projection:P1:{as_of_date}:fixture",
+    }
 
 
 @pytest_asyncio.fixture
@@ -26,6 +35,7 @@ async def async_test_client():
 async def test_cashflow_projection_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_cashflow_projection.return_value = {
+        **_source_metadata(date(2026, 3, 1)),
         "portfolio_id": "P1",
         "as_of_date": date(2026, 3, 1),
         "range_start_date": date(2026, 3, 1),
@@ -51,6 +61,7 @@ async def test_cashflow_projection_success(async_test_client):
 async def test_cashflow_projection_forwards_params(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_cashflow_projection.return_value = {
+        **_source_metadata(date(2026, 3, 1)),
         "portfolio_id": "P1",
         "as_of_date": date(2026, 3, 1),
         "range_start_date": date(2026, 3, 1),

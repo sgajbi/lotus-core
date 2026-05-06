@@ -3,9 +3,11 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
+from portfolio_common.reconciliation_quality import COMPLETE
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.cashflow_repository import CashflowRepository
 
 logger = logging.getLogger(__name__)
@@ -47,12 +49,16 @@ class CashflowProjectionService:
                 start_date=range_start_date,
                 end_date=query_end_date,
             )
+        latest_evidence_timestamp = await self.repo.get_latest_cashflow_evidence_timestamp(
+            portfolio_id=portfolio_id,
+            start_date=range_start_date,
+            end_date=query_end_date,
+            include_projected=include_projected,
+        )
 
         net_by_date: dict[date, Decimal] = {}
         for flow_date, amount in [*rows, *projected_rows]:
-            net_by_date[flow_date] = net_by_date.get(flow_date, Decimal("0")) + Decimal(
-                str(amount)
-            )
+            net_by_date[flow_date] = net_by_date.get(flow_date, Decimal("0")) + Decimal(str(amount))
         running = Decimal("0")
         points: list[CashflowProjectionPoint] = []
         cursor = range_start_date
@@ -70,7 +76,6 @@ class CashflowProjectionService:
 
         return CashflowProjectionResponse(
             portfolio_id=portfolio_id,
-            as_of_date=effective_as_of_date,
             range_start_date=range_start_date,
             range_end_date=query_end_date,
             include_projected=include_projected,
@@ -81,5 +86,15 @@ class CashflowProjectionService:
                 "Projected window includes settlement-dated future external cash movements."
                 if include_projected
                 else "Booked-only view capped at as_of_date."
+            ),
+            **source_data_product_runtime_metadata(
+                as_of_date=effective_as_of_date,
+                data_quality_status=COMPLETE,
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=(
+                    "cashflow_projection:"
+                    f"{portfolio_id}:{effective_as_of_date}:{query_end_date}:"
+                    f"include_projected={str(include_projected).lower()}"
+                ),
             ),
         )
