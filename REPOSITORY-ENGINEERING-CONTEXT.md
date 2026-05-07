@@ -50,13 +50,16 @@ Current repository posture:
 18. RFC-0087 trust telemetry proof for `PortfolioStateSnapshot` now lives under
     `contracts/trust-telemetry/` and is validated by `tests/unit/test_trust_telemetry.py` against
     the platform trust telemetry validator when `lotus-platform` is available.
-19. RFC-0087 now promotes the first five DPM source-data products for `lotus-manage` stateful
+19. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
     discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
-    `PortfolioTaxLotWindow:v1`, and `MarketDataCoverageWindow:v1`. They are declared in the
-    active source-data catalog, route-family registry, source-security profiles, and
-    domain-product declaration, backed by canonical front-office seed payloads, and live-proven
-    through `make live-dpm-source-validate`.
+    `PortfolioTaxLotWindow:v1`, `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`, and
+    `PortfolioManagerBookMembership:v1`. They are declared in the active source-data catalog,
+    route-family registry, source-security profiles, and domain-product declaration, backed by
+    canonical front-office seed payloads where applicable, and live-proven for the RFC-0087 source
+    family through `make live-dpm-source-validate`. `PortfolioManagerBookMembership:v1` is the
+    first RFC41-WTBD-001 source-owner foundation and resolves portfolio master rows by
+    `advisor_id` without claiming a broader relationship-householding hierarchy.
 20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared
@@ -238,11 +241,11 @@ Most relevant current governance:
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 30. RFC-087 DPM source-data work is implemented for `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`,
-    `PortfolioTaxLotWindow:v1`, `MarketDataCoverageWindow:v1`, and
-    `DpmSourceReadiness:v1`, with product-specific APIs, ingestion/persistence support where core
-    owns source state, route-family metadata, source-data security, domain-product declarations,
-    OpenAPI proof, live validator coverage, and canonical front-office seed support for
-    `PB_SG_GLOBAL_BAL_001`.
+    `PortfolioTaxLotWindow:v1`, `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`, and
+    `PortfolioManagerBookMembership:v1`, with product-specific APIs, ingestion/persistence support
+    where core owns source state, route-family metadata, source-data security, domain-product
+    declarations, OpenAPI proof, live validator coverage where applicable, and canonical
+    front-office seed support for `PB_SG_GLOBAL_BAL_001`.
 
 ## Context Maintenance Rule
 

@@ -300,6 +300,21 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioManagerBookMembership",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolio-manager-books/{portfolio_manager_id}/memberships",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for first-wave portfolio-manager book membership, backed by "
+            "core portfolio master advisor_id membership."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,

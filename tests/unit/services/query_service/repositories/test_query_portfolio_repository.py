@@ -1,4 +1,5 @@
 # tests/unit/services/query_service/repositories/test_portfolio_repository.py
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -126,3 +127,44 @@ async def test_get_by_id_returns_none_when_missing(
     portfolio = await repository.get_by_id("P404")
 
     assert portfolio is None
+
+
+async def test_list_portfolio_manager_book_members_filters_active_membership(
+    repository: PortfolioRepository, mock_db_session: AsyncMock
+):
+    await repository.list_portfolio_manager_book_members(
+        portfolio_manager_id="PM_SG_DPM_001",
+        as_of_date=date(2026, 5, 3),
+        booking_center_code="Singapore",
+        portfolio_types=["DISCRETIONARY"],
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "portfolios.advisor_id = 'PM_SG_DPM_001'" in compiled_query
+    assert "portfolios.booking_center_code = 'Singapore'" in compiled_query
+    assert "portfolios.portfolio_type IN ('DISCRETIONARY')" in compiled_query
+    assert "portfolios.open_date <= '2026-05-03'" in compiled_query
+    assert (
+        "portfolios.close_date IS NULL OR portfolios.close_date >= '2026-05-03'" in compiled_query
+    )
+    assert "portfolios.status = 'ACTIVE'" in compiled_query
+    assert "ORDER BY portfolios.portfolio_id ASC" in compiled_query
+
+
+async def test_list_portfolio_manager_book_members_can_include_inactive(
+    repository: PortfolioRepository, mock_db_session: AsyncMock
+):
+    await repository.list_portfolio_manager_book_members(
+        portfolio_manager_id="PM_SG_DPM_001",
+        as_of_date=date(2026, 5, 3),
+        include_inactive=True,
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "portfolios.advisor_id = 'PM_SG_DPM_001'" in compiled_query
+    assert "portfolios.status = 'ACTIVE'" not in compiled_query
+    assert "portfolios.open_date <=" not in compiled_query

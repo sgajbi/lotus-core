@@ -29,6 +29,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     resolve_instrument_eligibility_bulk,
     resolve_model_portfolio_targets,
     resolve_portfolio_benchmark_assignment,
+    resolve_portfolio_manager_book_membership,
 )
 from src.services.query_service.app.dtos.core_snapshot_dto import (
     CoreSnapshotMode,
@@ -57,6 +58,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IntegrationWindow,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
+    PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
 )
@@ -583,6 +585,71 @@ async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
         await resolve_model_portfolio_targets(
             model_portfolio_id="MODEL_MISSING",
             request=ModelPortfolioTargetRequest(as_of_date="2026-03-31"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_portfolio_manager_book_membership_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_portfolio_manager_book_membership = AsyncMock(
+        return_value={
+            "product_name": "PortfolioManagerBookMembership",
+            "product_version": "v1",
+            "portfolio_manager_id": "PM_SG_DPM_001",
+            "as_of_date": "2026-05-03",
+            "booking_center_code": "Singapore",
+            "members": [
+                {
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                    "client_id": "CIF_SG_GLOBAL_BAL_001",
+                    "booking_center_code": "Singapore",
+                    "portfolio_type": "DISCRETIONARY",
+                    "status": "ACTIVE",
+                    "open_date": "2025-03-31",
+                    "close_date": None,
+                    "base_currency": "USD",
+                    "source_record_id": "portfolio:PB_SG_GLOBAL_BAL_001",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "PM_BOOK_MEMBERSHIP_READY",
+                "returned_portfolio_count": 1,
+                "filters_applied": ["portfolio_manager_id", "as_of_date"],
+            },
+            "lineage": {"source_field": "advisor_id"},
+        }
+    )
+    request = PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03")
+
+    response = await resolve_portfolio_manager_book_membership(
+        portfolio_manager_id="PM_SG_DPM_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "PortfolioManagerBookMembership"
+    assert response["members"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
+    mock_service.resolve_portfolio_manager_book_membership.assert_awaited_once_with(
+        portfolio_manager_id="PM_SG_DPM_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_portfolio_manager_book_membership = AsyncMock(
+        return_value=MagicMock(members=[])
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_portfolio_manager_book_membership(
+            portfolio_manager_id="PM_EMPTY",
+            request=PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03"),
             integration_service=mock_service,
         )
 

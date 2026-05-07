@@ -47,6 +47,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
+    PortfolioManagerBookMembershipRequest,
+    PortfolioManagerBookMembershipResponse,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
@@ -84,6 +86,9 @@ BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
 }
 MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = {
     "detail": "No approved model portfolio target found for model_portfolio_id and as_of_date."
+}
+PORTFOLIO_MANAGER_BOOK_EMPTY_EXAMPLE = {
+    "detail": "No portfolio memberships found for portfolio_manager_id and request filters."
 }
 MANDATE_BINDING_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
@@ -409,6 +414,56 @@ async def get_market_data_coverage(
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> MarketDataCoverageWindowResponse:
     return await integration_service.get_market_data_coverage(request)
+
+
+@router.post(
+    "/portfolio-manager-books/{portfolio_manager_id}/memberships",
+    response_model=PortfolioManagerBookMembershipResponse,
+    summary="Resolve portfolio-manager book membership",
+    description=(
+        "What: Return source-owned portfolio memberships for a portfolio-manager book.\n"
+        "How: Resolves core portfolio master rows where `advisor_id` matches the requested "
+        "portfolio_manager_id, applies as-of lifecycle, active-status, booking-center, and "
+        "portfolio-type filters, and returns deterministic membership rows with supportability "
+        "and lineage.\n"
+        "When: Use this endpoint when lotus-manage needs automatic PM-book cohort discovery for "
+        "DPM rebalance waves. Do not use it as a general staff hierarchy, entitlement, or "
+        "relationship-householding API; richer relationship-book ownership remains a separate "
+        "source product."
+    ),
+    responses={
+        404: problem_response(
+            "No portfolio memberships found.",
+            PORTFOLIO_MANAGER_BOOK_EMPTY_EXAMPLE,
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("PortfolioManagerBookMembership"),
+)
+async def resolve_portfolio_manager_book_membership(
+    request: PortfolioManagerBookMembershipRequest,
+    portfolio_manager_id: str = Path(
+        ...,
+        description=(
+            "Portfolio-manager or relationship-manager identifier backed by core portfolio "
+            "master `advisor_id` in the first-wave contract."
+        ),
+        examples=["PM_SG_DPM_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> PortfolioManagerBookMembershipResponse:
+    response = await integration_service.resolve_portfolio_manager_book_membership(
+        portfolio_manager_id=portfolio_manager_id,
+        request=request,
+    )
+    members = getattr(response, "members", None)
+    if members is None and isinstance(response, dict):
+        members = response.get("members", [])
+    if not members:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No portfolio memberships found for portfolio_manager_id and request filters.",
+        )
+    return response
 
 
 @router.post(

@@ -13,15 +13,16 @@
 
 ## Active DPM Source Products
 
-RFC-087 Slices 4 through 9 promote the first DPM source products for `lotus-manage` discretionary
-mandate portfolio management.
+RFC-087 Slices 4 through 9 and the RFC41-WTBD-001 source-owner foundation promote the first DPM
+source products for `lotus-manage` discretionary mandate portfolio management.
 
 These products support discretionary mandate portfolio management rather than advisor proposal
 generation. In business terms, `lotus-core` supplies the governed facts that a portfolio manager
 needs before `lotus-manage` can calculate a rebalance: the approved model, the mandate authority,
-the investable/restricted universe, tax lots, market prices, FX coverage, and an operator-grade
-source-family readiness decision. `lotus-manage` remains the execution and decisioning application;
-`lotus-core` remains the source-data authority.
+the investable/restricted universe, tax lots, market prices, FX coverage, an operator-grade
+source-family readiness decision, and first-wave PM-book membership from portfolio master data.
+`lotus-manage` remains the execution and decisioning application; `lotus-core` remains the
+source-data authority.
 
 | Product | Route | Purpose | Current proof |
 | --- | --- | --- | --- |
@@ -31,6 +32,7 @@ source-family readiness decision. `lotus-manage` remains the execution and decis
 | `PortfolioTaxLotWindow:v1` | `/integration/portfolios/{portfolio_id}/tax-lots` | Portfolio-window tax lots and cost-basis state for tax-aware DPM sell decisions without production per-security fan-out. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY portfolio tax-lot coverage for the managed mandate portfolio. |
 | `MarketDataCoverageWindow:v1` | `/integration/market-data/coverage` | Held and target universe price and FX coverage diagnostics for valuation, drift, cash conversion, and rebalance sizing. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY market-data and FX coverage for the held and target universe. |
 | `DpmSourceReadiness:v1` | `/integration/portfolios/{portfolio_id}/dpm-source-readiness` | Operator-grade readiness summary for mandate, model target, eligibility, tax-lot, and market-data source families before stateful DPM promotion. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY across all five source families. |
+| `PortfolioManagerBookMembership:v1` | `/integration/portfolio-manager-books/{portfolio_manager_id}/memberships` | Source-owned PM-book membership resolved from core portfolio master `advisor_id`, as-of lifecycle, active status, booking center, and portfolio type filters. | Implemented and locally proven for RFC41-WTBD-001 source ownership. It deliberately does not claim a full relationship-householding hierarchy or entitlement model. |
 | `PortfolioCashflowProjection:v1` | `/portfolios/{portfolio_id}/cashflow-projection` | Core-derived daily net cashflow projection for operational liquidity planning. It exposes source-data product identity, portfolio base currency, runtime metadata, data-quality posture, latest evidence timestamp, and deterministic projection fingerprint for downstream outcome and liquidity consumers. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening; live front-office proof remains part of the consuming manage slice. |
 
 ```mermaid
@@ -40,6 +42,7 @@ flowchart LR
     Eligibility[Product shelf, restriction, issuer, liquidity, and settlement sources] --> EligibilityIngest[core ingest instrument-eligibility]
     Booking[Booking and transaction processing] --> LotState[(position_lot_state)]
     Market[Market price and FX sources] --> MarketStore[(market_prices and fx_rates)]
+    PortfolioMaster[Portfolio master] --> BookAPI[core-control PortfolioManagerBookMembership:v1]
     Ingest --> Store[(model_portfolio_definitions and model_portfolio_targets)]
     BindIngest --> BindingStore[(portfolio_mandate_bindings)]
     EligibilityIngest --> EligibilityStore[(instrument_eligibility_profiles)]
@@ -48,6 +51,7 @@ flowchart LR
     EligibilityStore --> EligibilityAPI[core-control InstrumentEligibilityProfile:v1]
     LotState --> TaxLotAPI[core-control PortfolioTaxLotWindow:v1]
     MarketStore --> MarketAPI[core-control MarketDataCoverageWindow:v1]
+    BookAPI --> Manage
     API --> Readiness[core-control DpmSourceReadiness:v1]
     BindingAPI --> Readiness
     EligibilityAPI --> Readiness
@@ -77,7 +81,7 @@ proof path.
 
 | Proof area | Current state |
 | --- | --- |
-| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, market-data/FX coverage, and DPM source-family readiness. |
+| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, market-data/FX coverage, DPM source-family readiness, and first-wave PM-book membership. |
 | Local validation | Source-data product guard, domain-product validation, focused validator tests, OpenAPI contract tests, and product-specific service/router tests exist. |
 | Reusable live validation | `make live-dpm-source-validate` runs `scripts/validate_live_dpm_source_products.py` against `core-control.dev.lotus`. |
 | Latest live attempt | Passed: `make live-dpm-source-validate` returned 7/7 probes with READY source-family evidence on 2026-05-02. |
@@ -85,7 +89,7 @@ proof path.
 
 ```mermaid
 flowchart TD
-    Seed[Canonical front-office seed PB_SG_GLOBAL_BAL_001] --> CoreProducts[Six DPM source products]
+    Seed[Canonical front-office seed PB_SG_GLOBAL_BAL_001] --> CoreProducts[Seven DPM source products]
     CoreProducts --> LiveValidator[make live-dpm-source-validate]
     LiveValidator --> Evidence{Live evidence accepted?}
     Evidence -->|No, runtime unavailable or data incomplete| Blocked[Keep stateful capability hidden]
@@ -96,8 +100,10 @@ flowchart TD
 
 ## Future DPM Source Products
 
-All first-wave RFC-087 DPM source-product declarations are now active. New proposed products should
-be added only through a follow-up RFC or explicit RFC-087 extension with implementation evidence.
+All first-wave RFC-087 DPM source-product declarations are now active, and the RFC41-WTBD-001
+source-owner foundation adds PM-book membership without promoting manage automatic wave discovery
+until the consuming manage slice is merged and proven. New proposed products should be added only
+through a follow-up RFC or explicit RFC extension with implementation evidence.
 
 There are currently no remaining planned DPM source products in the in-code planned catalog.
 
