@@ -8,8 +8,8 @@ from portfolio_common.source_data_security import (
     DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES,
     OPERATOR_ACCESS,
     RETAIN_FOR_OPERATIONAL_AUDIT,
-    SYSTEM_ACCESS,
     SOURCE_DATA_SECURITY_PROFILES,
+    SYSTEM_ACCESS,
     SourceDataSecurityProfile,
     get_source_data_security_profile,
     required_source_data_capability,
@@ -88,6 +88,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "InstrumentEligibilityProfile",
         "PortfolioTaxLotWindow",
         "MarketDataCoverageWindow",
+        "PortfolioManagerBookMembership",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):

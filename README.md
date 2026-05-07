@@ -58,6 +58,9 @@ Boundary rules that matter:
    warning, coverage, runtime, and operational gates.
 5. App-local compose remains available for isolated development, but shared platform runtime support
    is owned centrally in `lotus-platform`.
+6. DPM source-data products for `lotus-manage` now include the first source-owned
+   `PortfolioManagerBookMembership:v1` contract for automatic PM-book cohort discovery, resolved
+   from core portfolio master membership without making core a rebalance decisioning service.
 
 ## Architecture At A Glance
 

@@ -44,6 +44,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "PortfolioTaxLotWindow",
         "MarketDataCoverageWindow",
         "DpmSourceReadiness",
+        "PortfolioManagerBookMembership",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
         "ReconciliationEvidenceBundle",
