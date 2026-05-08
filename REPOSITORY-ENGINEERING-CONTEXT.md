@@ -53,13 +53,17 @@ Current repository posture:
 19. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
     discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
-    `PortfolioTaxLotWindow:v1`, `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`, and
-    `PortfolioManagerBookMembership:v1`. They are declared in the active source-data catalog,
+    `PortfolioTaxLotWindow:v1`, `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`,
+    `PortfolioManagerBookMembership:v1`, and `CioModelChangeAffectedCohort:v1`. They are declared
+    in the active source-data catalog,
     route-family registry, source-security profiles, and domain-product declaration, backed by
     canonical front-office seed payloads where applicable, and live-proven for the RFC-0087 source
     family through `make live-dpm-source-validate`. `PortfolioManagerBookMembership:v1` is the
     first RFC41-WTBD-001 source-owner foundation and resolves portfolio master rows by
     `advisor_id` without claiming a broader relationship-householding hierarchy.
+    `CioModelChangeAffectedCohort:v1` is the RFC41-WTBD-002 source-owner foundation and resolves
+    affected discretionary mandates from approved model definitions and effective mandate bindings
+    without moving rebalance decisioning into core.
 20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared

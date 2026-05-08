@@ -89,6 +89,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "PortfolioTaxLotWindow",
         "MarketDataCoverageWindow",
         "PortfolioManagerBookMembership",
+        "CioModelChangeAffectedCohort",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):

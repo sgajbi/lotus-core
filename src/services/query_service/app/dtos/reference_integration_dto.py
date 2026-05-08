@@ -195,6 +195,145 @@ class PortfolioManagerBookMembershipResponse(SourceDataProductRuntimeMetadata):
     model_config = ConfigDict()
 
 
+class CioModelChangeAffectedCohortRequest(BaseModel):
+    as_of_date: date = Field(
+        ...,
+        description="Business date used to resolve the approved model version and mandate cohort.",
+        examples=["2026-05-03"],
+    )
+    tenant_id: str | None = Field(
+        None,
+        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
+        examples=["default"],
+    )
+    booking_center_code: str | None = Field(
+        None,
+        description="Optional booking-center filter for regional CIO model-change rollout.",
+        examples=["Singapore"],
+    )
+    include_inactive_mandates: bool = Field(
+        False,
+        description=(
+            "When false, only active discretionary authority bindings are returned. Inactive "
+            "bindings remain source-visible future scope for exception dashboards."
+        ),
+    )
+
+    model_config = ConfigDict()
+
+
+class CioModelChangeAffectedMandate(BaseModel):
+    portfolio_id: str = Field(..., description="Affected portfolio identifier.")
+    mandate_id: str = Field(..., description="Affected discretionary mandate identifier.")
+    client_id: str = Field(..., description="Client identifier bound to the mandate.")
+    booking_center_code: str = Field(..., description="Booking center governing the mandate.")
+    jurisdiction_code: str = Field(..., description="Jurisdiction governing the mandate.")
+    discretionary_authority_status: str = Field(
+        ..., description="Discretionary authority status selected by the source product."
+    )
+    model_portfolio_id: str = Field(..., description="Approved model portfolio identifier.")
+    policy_pack_id: str | None = Field(
+        None,
+        description="Policy pack associated with the mandate binding, when available.",
+    )
+    risk_profile: str = Field(..., description="Mandate risk profile.")
+    effective_from: date = Field(..., description="Binding effective start date.")
+    effective_to: date | None = Field(
+        None,
+        description="Binding effective end date, null when open-ended.",
+    )
+    binding_version: int = Field(..., description="Selected binding version.")
+    source_record_id: str | None = Field(
+        None,
+        description="Source record id for mandate-cohort audit and replay.",
+    )
+
+    model_config = ConfigDict()
+
+
+class CioModelChangeAffectedCohortSupportability(BaseModel):
+    state: Literal["READY", "INCOMPLETE"] = Field(
+        ...,
+        description="Supportability state for CIO model-change cohort consumption.",
+        examples=["READY"],
+    )
+    reason: str = Field(
+        ...,
+        description="Machine-readable supportability reason.",
+        examples=["CIO_MODEL_CHANGE_COHORT_READY"],
+    )
+    returned_mandate_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of affected mandate bindings returned.",
+        examples=[1],
+    )
+    filters_applied: list[str] = Field(
+        default_factory=list,
+        description="Filters applied by the source product.",
+        examples=[["model_portfolio_id", "as_of_date", "active_discretionary_authority"]],
+    )
+
+    model_config = ConfigDict()
+
+
+class CioModelChangeAffectedCohortResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["CioModelChangeAffectedCohort"] = product_name_field(
+        "CioModelChangeAffectedCohort"
+    )
+    product_version: Literal["v1"] = product_version_field()
+    model_portfolio_id: str = Field(
+        ...,
+        description="Approved model portfolio identifier used to discover affected mandates.",
+        examples=["MODEL_PB_SG_GLOBAL_BAL_DPM"],
+    )
+    model_portfolio_version: str = Field(
+        ...,
+        description="Approved model portfolio version selected for the as-of date.",
+        examples=["2026.05"],
+    )
+    model_change_event_id: str = Field(
+        ...,
+        description=(
+            "Deterministic source-owned event identity for this approved model version and "
+            "affected cohort scope."
+        ),
+        examples=["cio_model_change:MODEL_PB_SG_GLOBAL_BAL_DPM:2026.05:2026-05-03"],
+    )
+    approval_state: str = Field(
+        ...,
+        description="Model definition approval state selected by the source product.",
+        examples=["approved"],
+    )
+    approved_at: datetime | None = Field(
+        None,
+        description="Timestamp when the selected model version was approved, if available.",
+    )
+    effective_from: date = Field(
+        ...,
+        description="Selected model version effective start date.",
+        examples=["2026-05-01"],
+    )
+    effective_to: date | None = Field(
+        None,
+        description="Selected model version effective end date, null when open-ended.",
+    )
+    affected_mandates: list[CioModelChangeAffectedMandate] = Field(
+        default_factory=list,
+        description="Deterministically ordered affected discretionary mandates.",
+    )
+    supportability: CioModelChangeAffectedCohortSupportability = Field(
+        ...,
+        description="Readiness posture for automatic CIO model-change wave discovery.",
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Source lineage for model definition and mandate binding discovery.",
+    )
+
+    model_config = ConfigDict()
+
+
 class BenchmarkAssignmentRequest(BaseModel):
     as_of_date: date = Field(
         ...,

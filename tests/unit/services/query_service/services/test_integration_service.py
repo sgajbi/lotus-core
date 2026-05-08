@@ -8,6 +8,7 @@ from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
+    CioModelChangeAffectedCohortRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
     InstrumentEligibilityBulkRequest,
@@ -34,6 +35,14 @@ def mandate_binding_request(as_of_date: date) -> DiscretionaryMandateBindingRequ
 def portfolio_manager_book_request(as_of_date: date) -> PortfolioManagerBookMembershipRequest:
     return PortfolioManagerBookMembershipRequest(
         as_of_date=as_of_date,
+        booking_center_code="Singapore",
+    )
+
+
+def cio_model_change_request(as_of_date: date) -> CioModelChangeAffectedCohortRequest:
+    return CioModelChangeAffectedCohortRequest(
+        as_of_date=as_of_date,
+        tenant_id="default",
         booking_center_code="Singapore",
     )
 
@@ -122,6 +131,116 @@ async def test_resolve_portfolio_manager_book_membership_marks_empty_book_incomp
     assert response.supportability.reason == "PM_BOOK_MEMBERSHIP_EMPTY"
     assert response.members == []
     assert response.data_quality_status == "MISSING"
+
+
+@pytest.mark.asyncio
+async def test_resolve_cio_model_change_affected_cohort_returns_source_owned_mandates():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_model_portfolio_definition.return_value = SimpleNamespace(  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        model_portfolio_version="2026.05",
+        approval_status="approved",
+        approved_at=datetime(2026, 5, 1, 8, 0, tzinfo=UTC),
+        effective_from=date(2026, 5, 1),
+        effective_to=None,
+        source_system="cio_model_admin",
+        source_record_id="model-def-2026-05",
+        observed_at=datetime(2026, 5, 1, 8, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 5, 1, 8, 2, tzinfo=UTC),
+    )
+    service._reference_repository.list_model_portfolio_affected_mandates.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            discretionary_authority_status="active",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            risk_profile="balanced",
+            effective_from=date(2026, 5, 1),
+            effective_to=None,
+            binding_version=3,
+            source_record_id="mandate-binding-001",
+            observed_at=datetime(2026, 5, 1, 8, 3, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 1, 8, 4, tzinfo=UTC),
+        )
+    ]
+
+    response = await service.resolve_cio_model_change_affected_cohort(
+        "MODEL_PB_SG_GLOBAL_BAL_DPM",
+        cio_model_change_request(date(2026, 5, 3)),
+    )
+
+    service._reference_repository.resolve_model_portfolio_definition.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        as_of_date=date(2026, 5, 3),
+    )
+    service._reference_repository.list_model_portfolio_affected_mandates.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        as_of_date=date(2026, 5, 3),
+        booking_center_code="Singapore",
+        include_inactive_mandates=False,
+    )
+    assert response is not None
+    assert response.product_name == "CioModelChangeAffectedCohort"
+    assert response.model_change_event_id.startswith(
+        "cio_model_change:MODEL_PB_SG_GLOBAL_BAL_DPM:2026.05:2026-05-03:"
+    )
+    assert response.supportability.state == "READY"
+    assert response.supportability.returned_mandate_count == 1
+    assert response.affected_mandates[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.affected_mandates[0].mandate_id == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert response.lineage["model_definition_source_record_id"] == "model-def-2026-05"
+    assert response.snapshot_id is not None
+    assert response.snapshot_id.startswith("cio_model_change_cohort:")
+
+
+@pytest.mark.asyncio
+async def test_resolve_cio_model_change_affected_cohort_marks_empty_cohort_incomplete():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_model_portfolio_definition.return_value = SimpleNamespace(  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        model_portfolio_id="MODEL_EMPTY",
+        model_portfolio_version="2026.05",
+        approval_status="approved",
+        approved_at=None,
+        effective_from=date(2026, 5, 1),
+        effective_to=None,
+        source_system=None,
+        source_record_id=None,
+        observed_at=None,
+        updated_at=None,
+    )
+    service._reference_repository.list_model_portfolio_affected_mandates.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.resolve_cio_model_change_affected_cohort(
+        "MODEL_EMPTY",
+        cio_model_change_request(date(2026, 5, 3)),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "CIO_MODEL_CHANGE_COHORT_EMPTY"
+    assert response.affected_mandates == []
+    assert response.data_quality_status == "MISSING"
+
+
+@pytest.mark.asyncio
+async def test_resolve_cio_model_change_affected_cohort_returns_none_without_approved_model():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_model_portfolio_definition.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.resolve_cio_model_change_affected_cohort(
+        "MODEL_MISSING",
+        cio_model_change_request(date(2026, 5, 3)),
+    )
+
+    assert response is None
+    service._reference_repository.list_model_portfolio_affected_mandates.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
 
 
 @pytest.mark.parametrize(
