@@ -229,6 +229,16 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         pii_fields=("portfolio_id", "lot_id", "source_transaction_id"),
     ),
     SourceDataSecurityProfile(
+        product_name="TransactionCostCurve",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id", "transaction_id"),
+    ),
+    SourceDataSecurityProfile(
         product_name="MarketDataCoverageWindow",
         tenant_required=True,
         entitlement_required=True,

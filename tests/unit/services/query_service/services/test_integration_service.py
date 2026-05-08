@@ -16,12 +16,38 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ModelPortfolioTargetRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
+    TransactionCostCurveRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 
 def make_service() -> IntegrationService:
     return IntegrationService(AsyncMock(spec=AsyncSession))
+
+
+def transaction_cost_row(
+    *,
+    transaction_id: str,
+    security_id: str,
+    transaction_type: str = "BUY",
+    currency: str = "USD",
+    gross_transaction_amount: Decimal | None = Decimal("10000.00"),
+    trade_fee: Decimal | None = Decimal("10.00"),
+    costs: list[SimpleNamespace] | None = None,
+    transaction_date: datetime = datetime(2026, 4, 1, 10, tzinfo=UTC),
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transaction_id=transaction_id,
+        security_id=security_id,
+        transaction_type=transaction_type,
+        currency=currency,
+        gross_transaction_amount=gross_transaction_amount,
+        trade_fee=trade_fee,
+        transaction_date=transaction_date,
+        updated_at=transaction_date,
+        costs=costs if costs is not None else [],
+    )
 
 
 def model_portfolio_target_request(as_of_date: date) -> ModelPortfolioTargetRequest:
@@ -1664,6 +1690,251 @@ async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> N
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PortfolioTaxLotWindowRequest(
                 as_of_date=date(2026, 4, 10),
+                page={"page_token": token},
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_returns_ready_observed_fee_evidence() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-001",
+                    security_id="EQ_US_AAPL",
+                    gross_transaction_amount=Decimal("10000.00"),
+                    trade_fee=Decimal("999.99"),
+                    costs=[
+                        SimpleNamespace(amount=Decimal("6.00")),
+                        SimpleNamespace(amount=Decimal("4.00")),
+                    ],
+                ),
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-002",
+                    security_id="EQ_US_AAPL",
+                    gross_transaction_amount=Decimal("20000.00"),
+                    trade_fee=Decimal("20.00"),
+                    transaction_date=datetime(2026, 4, 2, 10, tzinfo=UTC),
+                ),
+            ]
+        ),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL"],
+            transaction_types=["buy"],
+            min_observation_count=2,
+        ),
+    )
+
+    assert response.product_name == "TransactionCostCurve"
+    assert response.supportability.state == "READY"
+    assert response.data_quality_status == COMPLETE
+    assert response.latest_evidence_timestamp == datetime(2026, 4, 2, 10, tzinfo=UTC)
+    assert len(response.curve_points) == 1
+    point = response.curve_points[0]
+    assert point.security_id == "EQ_US_AAPL"
+    assert point.transaction_type == "BUY"
+    assert point.observation_count == 2
+    assert point.total_cost == Decimal("30.00")
+    assert point.total_notional == Decimal("30000.00")
+    assert point.average_cost_bps == Decimal("10.0000")
+    assert point.min_cost_bps == Decimal("10.0000")
+    assert point.max_cost_bps == Decimal("10.0000")
+    assert point.sample_transaction_ids == ["TXN-AAPL-001", "TXN-AAPL-002"]
+    assert point.source_lineage["source_table"] == "transactions,transaction_costs"
+    service._transaction_repository.list_transaction_cost_evidence.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        security_ids=["EQ_US_AAPL"],
+        transaction_types=["BUY"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_rejects_unknown_portfolio() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=False),
+        list_transaction_cost_evidence=AsyncMock(),
+    )
+
+    with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
+        await service.get_transaction_cost_curve(
+            portfolio_id="P404",
+            request=TransactionCostCurveRequest(
+                as_of_date=date(2026, 5, 3),
+                window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            ),
+        )
+
+    service._transaction_repository.list_transaction_cost_evidence.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_filters_unusable_and_insufficient_evidence() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                transaction_cost_row(
+                    transaction_id="TXN-NOFEE-001",
+                    security_id="EQ_US_AAPL",
+                    trade_fee=None,
+                    costs=[],
+                ),
+                transaction_cost_row(
+                    transaction_id="TXN-ZERO-001",
+                    security_id="EQ_US_MSFT",
+                    gross_transaction_amount=Decimal("0.00"),
+                    trade_fee=Decimal("10.00"),
+                ),
+                transaction_cost_row(
+                    transaction_id="TXN-SINGLE-001",
+                    security_id="EQ_US_NVDA",
+                    trade_fee=Decimal("10.00"),
+                ),
+            ]
+        ),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            min_observation_count=2,
+        ),
+    )
+
+    assert response.curve_points == []
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
+    assert response.data_quality_status == PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_reports_incomplete_requested_security_coverage() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-001",
+                    security_id="EQ_US_AAPL",
+                    trade_fee=Decimal("10.00"),
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+        ),
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "TRANSACTION_COST_EVIDENCE_MISSING_FOR_SECURITIES"
+    assert response.supportability.missing_security_ids == ["EQ_US_MSFT"]
+    assert response.data_quality_status == PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_pages_observed_points_deterministically() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                transaction_cost_row(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL"),
+                transaction_cost_row(transaction_id="TXN-MSFT-001", security_id="EQ_US_MSFT"),
+            ]
+        ),
+    )
+
+    first_page = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            page={"page_size": 1},
+        ),
+    )
+
+    assert [point.security_id for point in first_page.curve_points] == ["EQ_US_AAPL"]
+    assert first_page.supportability.state == "DEGRADED"
+    assert first_page.supportability.reason == "TRANSACTION_COST_CURVE_PAGE_PARTIAL"
+    assert first_page.page.next_page_token is not None
+
+    second_page = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            page={"page_size": 1, "page_token": first_page.page.next_page_token},
+        ),
+    )
+
+    assert [point.security_id for point in second_page.curve_points] == ["EQ_US_MSFT"]
+    assert second_page.page.next_page_token is None
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_reports_missing_requested_security() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL"],
+        ),
+    )
+
+    assert response.curve_points == []
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
+    assert response.supportability.missing_security_ids == ["EQ_US_AAPL"]
+    assert response.data_quality_status == PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_rejects_page_token_scope_mismatch() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(return_value=[]),
+    )
+    token = service._encode_page_token(  # pylint: disable=protected-access
+        {"scope_fingerprint": "different-curve-scope", "last_curve_key": ["A", "BUY", "USD"]}
+    )
+
+    with pytest.raises(ValueError, match="page token does not match request scope"):
+        await service.get_transaction_cost_curve(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=TransactionCostCurveRequest(
+                as_of_date=date(2026, 5, 3),
+                window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
                 page={"page_token": token},
             ),
         )

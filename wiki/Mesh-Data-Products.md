@@ -19,7 +19,8 @@ source products for `lotus-manage` discretionary mandate portfolio management.
 These products support discretionary mandate portfolio management rather than advisor proposal
 generation. In business terms, `lotus-core` supplies the governed facts that a portfolio manager
 needs before `lotus-manage` can calculate a rebalance: the approved model, the mandate authority,
-the investable/restricted universe, tax lots, market prices, FX coverage, an operator-grade
+the investable/restricted universe, tax lots, observed transaction-cost evidence, market prices,
+FX coverage, an operator-grade
 source-family readiness decision, first-wave PM-book membership from portfolio master data, and
 CIO model-change affected-mandate discovery from approved model and mandate-binding data.
 `lotus-manage` remains the execution and decisioning application; `lotus-core` remains the
@@ -31,6 +32,7 @@ source-data authority.
 | `DiscretionaryMandateBinding:v1` | `/integration/portfolios/{portfolio_id}/mandate-binding` | Effective-dated portfolio mandate, model, policy, authority, jurisdiction, booking center, tax-awareness, settlement-awareness, and rebalance constraints. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned the discretionary mandate binding to `MODEL_PB_SG_GLOBAL_BAL_DPM`. |
 | `InstrumentEligibilityProfile:v1` | `/integration/instruments/eligibility-bulk` | Bulk product-shelf, restriction, liquidity, issuer, and settlement eligibility for held and target instruments. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY eligibility, including the expected restricted private-credit buy block. |
 | `PortfolioTaxLotWindow:v1` | `/integration/portfolios/{portfolio_id}/tax-lots` | Portfolio-window tax lots and cost-basis state for tax-aware DPM sell decisions without production per-security fan-out. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY portfolio tax-lot coverage for the managed mandate portfolio. |
+| `TransactionCostCurve:v1` | `/integration/portfolios/{portfolio_id}/transaction-cost-curve` | Source-owned observed booked transaction-fee evidence grouped by security, transaction type, and currency so proof packs can distinguish source-backed costs from local estimates. This is not a predictive market-impact quote. | Implemented and locally proven for RFC40-WTBD-007 source ownership. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed transaction-cost curves. |
 | `MarketDataCoverageWindow:v1` | `/integration/market-data/coverage` | Held and target universe price and FX coverage diagnostics for valuation, drift, cash conversion, and rebalance sizing. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY market-data and FX coverage for the held and target universe. |
 | `DpmSourceReadiness:v1` | `/integration/portfolios/{portfolio_id}/dpm-source-readiness` | Operator-grade readiness summary for mandate, model target, eligibility, tax-lot, and market-data source families before stateful DPM promotion. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY across all five source families. |
 | `PortfolioManagerBookMembership:v1` | `/integration/portfolio-manager-books/{portfolio_manager_id}/memberships` | Source-owned PM-book membership resolved from core portfolio master `advisor_id`, as-of lifecycle, active status, booking center, and portfolio type filters. | Implemented and locally proven for RFC41-WTBD-001 source ownership. It deliberately does not claim a full relationship-householding hierarchy or entitlement model. |
@@ -43,6 +45,7 @@ flowchart LR
     Mandate[Mandate administration and policy engine] --> BindIngest[core ingest mandate-bindings]
     Eligibility[Product shelf, restriction, issuer, liquidity, and settlement sources] --> EligibilityIngest[core ingest instrument-eligibility]
     Booking[Booking and transaction processing] --> LotState[(position_lot_state)]
+    Booking --> Transactions[(transactions and transaction_costs)]
     Market[Market price and FX sources] --> MarketStore[(market_prices and fx_rates)]
     PortfolioMaster[Portfolio master] --> BookAPI[core-control PortfolioManagerBookMembership:v1]
     Store --> CioCohort[core-control CioModelChangeAffectedCohort:v1]
@@ -54,6 +57,7 @@ flowchart LR
     BindingStore --> BindingAPI[core-control DiscretionaryMandateBinding:v1]
     EligibilityStore --> EligibilityAPI[core-control InstrumentEligibilityProfile:v1]
     LotState --> TaxLotAPI[core-control PortfolioTaxLotWindow:v1]
+    Transactions --> CostCurveAPI[core-control TransactionCostCurve:v1]
     MarketStore --> MarketAPI[core-control MarketDataCoverageWindow:v1]
     BookAPI --> Manage
     API --> Readiness[core-control DpmSourceReadiness:v1]
@@ -65,6 +69,7 @@ flowchart LR
     BindingAPI --> Manage
     EligibilityAPI --> Manage
     TaxLotAPI --> Manage
+    CostCurveAPI --> Manage
     MarketAPI --> Manage
     Readiness --> Manage
     CioCohort --> Manage
@@ -86,7 +91,7 @@ proof path.
 
 | Proof area | Current state |
 | --- | --- |
-| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, market-data/FX coverage, DPM source-family readiness, first-wave PM-book membership, and first-wave CIO model-change affected-cohort discovery. |
+| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, observed transaction-cost curves, market-data/FX coverage, DPM source-family readiness, first-wave PM-book membership, and first-wave CIO model-change affected-cohort discovery. |
 | Local validation | Source-data product guard, domain-product validation, focused validator tests, OpenAPI contract tests, and product-specific service/router tests exist. |
 | Reusable live validation | `make live-dpm-source-validate` runs `scripts/validate_live_dpm_source_products.py` against `core-control.dev.lotus`. |
 | Latest live attempt | Passed: `make live-dpm-source-validate` returned 7/7 probes with READY source-family evidence on 2026-05-02. |
@@ -106,8 +111,9 @@ flowchart TD
 ## Future DPM Source Products
 
 All first-wave RFC-087 DPM source-product declarations are now active. RFC41-WTBD-001 adds
-PM-book membership and RFC41-WTBD-002 adds CIO model-change affected-mandate discovery without
-moving rebalance decisioning into core. New proposed products should be added only through a
+PM-book membership, RFC41-WTBD-002 adds CIO model-change affected-mandate discovery, and
+RFC40-WTBD-007 adds observed transaction-cost curve source ownership without moving rebalance
+decisioning or execution pricing into core. New proposed products should be added only through a
 follow-up RFC or explicit RFC extension with implementation evidence.
 
 There are currently no remaining planned DPM source products in the in-code planned catalog.

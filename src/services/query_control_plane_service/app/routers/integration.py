@@ -28,10 +28,10 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
-    ClassificationTaxonomyRequest,
-    ClassificationTaxonomyResponse,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
+    ClassificationTaxonomyRequest,
+    ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -55,6 +55,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
+    TransactionCostCurveRequest,
+    TransactionCostCurveResponse,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
@@ -103,6 +105,9 @@ BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
 }
 BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = {
     "detail": "No overlapping benchmark definition found for benchmark_id and requested window."
+}
+TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE = {
+    "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
 }
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 
@@ -380,6 +385,51 @@ async def get_portfolio_tax_lot_window(
 ) -> PortfolioTaxLotWindowResponse:
     try:
         return await integration_service.get_portfolio_tax_lot_window(
+            portfolio_id=portfolio_id,
+            request=request,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/transaction-cost-curve",
+    response_model=TransactionCostCurveResponse,
+    summary="Resolve observed transaction-cost curve",
+    description=(
+        "What: Return source-owned observed transaction-cost evidence for a portfolio window.\n"
+        "How: Reads booked transaction fees and fee components from lotus-core transactions, "
+        "groups them by security, transaction type, and currency, and publishes observed "
+        "basis-point cost points with lineage. The response is evidence from booked data, not "
+        "a predictive market-impact quote or execution promise.\n"
+        "When: Use this endpoint when lotus-manage needs to distinguish source-backed transaction "
+        "cost evidence from local estimated construction cost in DPM proof packs."
+    ),
+    responses={
+        404: problem_response(
+            "Portfolio not found",
+            TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE,
+        ),
+        400: problem_response(
+            "Invalid transaction-cost curve request",
+            {"detail": "Transaction cost curve page token does not match request scope."},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("TransactionCostCurve"),
+)
+async def get_transaction_cost_curve(
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose observed transaction-cost evidence is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    request: TransactionCostCurveRequest = Body(...),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> TransactionCostCurveResponse:
+    try:
+        return await integration_service.get_transaction_cost_curve(
             portfolio_id=portfolio_id,
             request=request,
         )

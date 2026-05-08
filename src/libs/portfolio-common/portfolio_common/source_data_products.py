@@ -270,6 +270,22 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="TransactionCostCurve",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/transaction-cost-curve",),
+        paging_mode=INLINE_PAGED,
+        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
+        notes=(
+            "DPM source product for observed booked transaction-fee evidence by security, "
+            "transaction type, and currency. It is source-backed cost evidence, not a "
+            "predictive market-impact quote."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="MarketDataCoverageWindow",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

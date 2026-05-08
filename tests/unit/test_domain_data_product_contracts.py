@@ -79,6 +79,7 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
                 "DiscretionaryMandateBinding",
                 "InstrumentEligibilityProfile",
                 "PortfolioTaxLotWindow",
+                "TransactionCostCurve",
                 "MarketDataCoverageWindow",
                 "DpmSourceReadiness",
                 "PortfolioManagerBookMembership",
