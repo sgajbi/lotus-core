@@ -25,6 +25,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_market_data_coverage,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
+    get_transaction_cost_curve,
     resolve_cio_model_change_affected_cohort,
     resolve_discretionary_mandate_binding,
     resolve_instrument_eligibility_bulk,
@@ -49,8 +50,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkDefinitionRequest,
     BenchmarkMarketSeriesRequest,
     BenchmarkReturnSeriesRequest,
-    ClassificationTaxonomyRequest,
     CioModelChangeAffectedCohortRequest,
+    ClassificationTaxonomyRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
@@ -63,6 +64,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
+    TransactionCostCurveRequest,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
@@ -962,6 +964,97 @@ async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
         )
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_transaction_cost_curve_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_transaction_cost_curve = AsyncMock(
+        return_value={
+            "product_name": "TransactionCostCurve",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
+            "generated_at": "2026-05-03T09:00:00Z",
+            "restatement_version": "current",
+            "reconciliation_status": "NOT_ASSESSED",
+            "data_quality_status": "COMPLETE",
+            "latest_evidence_timestamp": "2026-04-30T09:00:00Z",
+            "source_batch_fingerprint": "abc",
+            "snapshot_id": "snap",
+            "policy_version": "default",
+            "correlation_id": None,
+            "curve_points": [
+                {
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                    "security_id": "EQ_US_AAPL",
+                    "transaction_type": "BUY",
+                    "currency": "USD",
+                    "observation_count": 2,
+                    "total_notional": "30000.0000000000",
+                    "total_cost": "30.0000000000",
+                    "average_cost_bps": "10.0000",
+                    "min_cost_bps": "10.0000",
+                    "max_cost_bps": "10.0000",
+                    "first_observed_date": "2026-04-01",
+                    "last_observed_date": "2026-04-30",
+                    "sample_transaction_ids": ["TXN-AAPL-001"],
+                    "source_lineage": {"contract_version": "rfc_040_wtbd_007_v1"},
+                }
+            ],
+            "page": {
+                "page_size": 250,
+                "sort_key": "security_id:asc,transaction_type:asc,currency:asc",
+                "returned_component_count": 1,
+                "request_scope_fingerprint": "fp",
+                "next_page_token": None,
+            },
+            "supportability": {
+                "state": "READY",
+                "reason": "TRANSACTION_COST_CURVE_READY",
+                "requested_security_count": 1,
+                "returned_curve_point_count": 1,
+                "missing_security_ids": [],
+            },
+            "lineage": {"contract_version": "rfc_040_wtbd_007_v1"},
+        }
+    )
+    request = TransactionCostCurveRequest(
+        as_of_date="2026-05-03",
+        window={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+        security_ids=["EQ_US_AAPL"],
+    )
+
+    response = await get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "TransactionCostCurve"
+    mock_service.get_transaction_cost_curve.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_transaction_cost_curve_maps_bad_token_to_400() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_transaction_cost_curve = AsyncMock(side_effect=ValueError("bad token"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_transaction_cost_curve(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=TransactionCostCurveRequest(
+                as_of_date="2026-05-03",
+                window={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+            ),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio

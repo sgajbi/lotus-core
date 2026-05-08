@@ -58,6 +58,7 @@ evidence reference rather than omitting the concept.
 | `IndexSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/indices/{index_id}/price-series`, `/integration/indices/{index_id}/return-series` |
 | `RiskFreeSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/reference/risk-free-series` |
 | `PortfolioManagerBookMembership` | Analytics input | `query_control_plane_service` | manage | `/integration/portfolio-manager-books/{portfolio_manager_id}/memberships` |
+| `TransactionCostCurve` | Analytics input | `query_control_plane_service` | manage | `/integration/portfolios/{portfolio_id}/transaction-cost-curve` |
 | `ReconciliationEvidenceBundle` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/support/portfolios/{portfolio_id}/reconciliation-runs`, `/support/portfolios/{portfolio_id}/reconciliation-runs/{run_id}/findings` |
 | `DataQualityCoverageReport` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/integration/benchmarks/{benchmark_id}/coverage`, `/integration/reference/risk-free-series/coverage` |
 | `IngestionEvidenceBundle` | Control-plane and policy | `query_control_plane_service` | gateway, manage, report | `/lineage/portfolios/{portfolio_id}/keys`, `/support/portfolios/{portfolio_id}/reprocessing-keys`, `/support/portfolios/{portfolio_id}/reprocessing-jobs` |

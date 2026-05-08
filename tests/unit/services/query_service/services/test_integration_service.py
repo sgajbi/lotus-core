@@ -16,6 +16,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ModelPortfolioTargetRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
+    TransactionCostCurveRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -1664,6 +1665,127 @@ async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> N
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PortfolioTaxLotWindowRequest(
                 as_of_date=date(2026, 4, 10),
+                page={"page_token": token},
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_returns_ready_observed_fee_evidence() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    portfolio_id="PB_SG_GLOBAL_BAL_001",
+                    transaction_id="TXN-AAPL-001",
+                    security_id="EQ_US_AAPL",
+                    transaction_type="BUY",
+                    currency="USD",
+                    gross_transaction_amount=Decimal("10000.00"),
+                    trade_fee=Decimal("999.99"),
+                    transaction_date=datetime(2026, 4, 1, 10, tzinfo=UTC),
+                    updated_at=datetime(2026, 4, 1, 10, tzinfo=UTC),
+                    costs=[
+                        SimpleNamespace(amount=Decimal("6.00")),
+                        SimpleNamespace(amount=Decimal("4.00")),
+                    ],
+                ),
+                SimpleNamespace(
+                    portfolio_id="PB_SG_GLOBAL_BAL_001",
+                    transaction_id="TXN-AAPL-002",
+                    security_id="EQ_US_AAPL",
+                    transaction_type="BUY",
+                    currency="USD",
+                    gross_transaction_amount=Decimal("20000.00"),
+                    trade_fee=Decimal("20.00"),
+                    transaction_date=datetime(2026, 4, 2, 10, tzinfo=UTC),
+                    updated_at=datetime(2026, 4, 2, 10, tzinfo=UTC),
+                    costs=[],
+                ),
+            ]
+        ),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL"],
+            transaction_types=["buy"],
+            min_observation_count=2,
+        ),
+    )
+
+    assert response.product_name == "TransactionCostCurve"
+    assert response.supportability.state == "READY"
+    assert response.data_quality_status == COMPLETE
+    assert response.latest_evidence_timestamp == datetime(2026, 4, 2, 10, tzinfo=UTC)
+    assert len(response.curve_points) == 1
+    point = response.curve_points[0]
+    assert point.security_id == "EQ_US_AAPL"
+    assert point.transaction_type == "BUY"
+    assert point.observation_count == 2
+    assert point.total_cost == Decimal("30.00")
+    assert point.total_notional == Decimal("30000.00")
+    assert point.average_cost_bps == Decimal("10.0000")
+    assert point.min_cost_bps == Decimal("10.0000")
+    assert point.max_cost_bps == Decimal("10.0000")
+    assert point.sample_transaction_ids == ["TXN-AAPL-001", "TXN-AAPL-002"]
+    assert point.source_lineage["source_table"] == "transactions,transaction_costs"
+    service._transaction_repository.list_transaction_cost_evidence.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        security_ids=["EQ_US_AAPL"],
+        transaction_types=["BUY"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_reports_missing_requested_security() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL"],
+        ),
+    )
+
+    assert response.curve_points == []
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
+    assert response.supportability.missing_security_ids == ["EQ_US_AAPL"]
+    assert response.data_quality_status == PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_rejects_page_token_scope_mismatch() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(return_value=[]),
+    )
+    token = service._encode_page_token(  # pylint: disable=protected-access
+        {"scope_fingerprint": "different-curve-scope", "last_curve_key": ["A", "BUY", "USD"]}
+    )
+
+    with pytest.raises(ValueError, match="page token does not match request scope"):
+        await service.get_transaction_cost_curve(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=TransactionCostCurveRequest(
+                as_of_date=date(2026, 5, 3),
+                window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
                 page={"page_token": token},
             ),
         )

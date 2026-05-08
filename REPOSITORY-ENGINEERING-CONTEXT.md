@@ -53,7 +53,8 @@ Current repository posture:
 19. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
     discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
-    `PortfolioTaxLotWindow:v1`, `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`,
+    `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`,
+    `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`,
     `PortfolioManagerBookMembership:v1`, and `CioModelChangeAffectedCohort:v1`. They are declared
     in the active source-data catalog,
     route-family registry, source-security profiles, and domain-product declaration, backed by
@@ -245,7 +246,8 @@ Most relevant current governance:
     reuse; cross-cutting investor, GTM, or ecosystem rationale now belongs in `lotus-platform`.
 30. RFC-087 DPM source-data work is implemented for `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`,
-    `PortfolioTaxLotWindow:v1`, `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`, and
+    `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`,
+    `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`, and
     `PortfolioManagerBookMembership:v1`, with product-specific APIs, ingestion/persistence support
     where core owns source state, route-family metadata, source-data security, domain-product
     declarations, OpenAPI proof, live validator coverage where applicable, and canonical

@@ -43,6 +43,15 @@ DPM_PORTFOLIO_TAX_LOT_SCHEMA_ROOTS = {
     "ReferencePageMetadata",
 }
 
+DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS = {
+    "TransactionCostCurvePageRequest",
+    "TransactionCostCurveRequest",
+    "TransactionCostCurvePoint",
+    "TransactionCostCurveSupportability",
+    "TransactionCostCurveResponse",
+    "ReferencePageMetadata",
+}
+
 DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS = {
     "MarketDataCurrencyPair",
     "MarketDataCoverageRequest",

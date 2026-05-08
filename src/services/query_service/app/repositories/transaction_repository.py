@@ -248,6 +248,40 @@ class TransactionRepository:
         count = (await self.db.execute(stmt)).scalar() or 0
         return count
 
+    async def list_transaction_cost_evidence(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        as_of_date: date,
+        security_ids: list[str] | None = None,
+        transaction_types: list[str] | None = None,
+    ) -> List[Transaction]:
+        stmt = (
+            select(Transaction)
+            .options(joinedload(Transaction.costs))
+            .where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_date >= start_of_day(start_date),
+                Transaction.transaction_date < start_of_next_day(end_date),
+                Transaction.transaction_date < start_of_next_day(as_of_date),
+            )
+        )
+        if security_ids:
+            stmt = stmt.where(Transaction.security_id.in_(security_ids))
+        if transaction_types:
+            stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
+        stmt = stmt.order_by(
+            Transaction.security_id.asc(),
+            Transaction.transaction_type.asc(),
+            Transaction.currency.asc(),
+            Transaction.transaction_date.asc(),
+            Transaction.transaction_id.asc(),
+        )
+        results = await self.db.execute(stmt)
+        return list(results.scalars().unique().all())
+
     async def get_latest_evidence_timestamp(
         self,
         portfolio_id: str,

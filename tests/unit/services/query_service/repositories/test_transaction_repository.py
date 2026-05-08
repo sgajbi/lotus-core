@@ -295,6 +295,35 @@ async def test_get_transactions_count_with_as_of_date(
     assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
 
 
+async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loads_costs(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_rows = MagicMock()
+    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    mock_db_session.execute = AsyncMock(return_value=mock_rows)
+
+    rows = await repository.list_transaction_cost_evidence(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        security_ids=["EQ_US_AAPL", "FI_US_TREASURY_10Y"],
+        transaction_types=["BUY", "SELL"],
+    )
+
+    assert len(rows) == 1
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.portfolio_id = 'P1'" in compiled_query
+    assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
+    assert "transactions.security_id IN ('EQ_US_AAPL', 'FI_US_TREASURY_10Y')" in compiled_query
+    assert "transactions.transaction_type IN ('BUY', 'SELL')" in compiled_query
+    assert "LEFT OUTER JOIN transaction_costs" in compiled_query
+    assert "ORDER BY transactions.security_id ASC" in compiled_query
+
+
 async def test_get_transactions_count_applies_instrument_filter(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):

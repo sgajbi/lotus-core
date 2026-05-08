@@ -28,12 +28,12 @@ from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
-    ClassificationTaxonomyEntry,
-    ClassificationTaxonomyResponse,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     CioModelChangeAffectedCohortSupportability,
     CioModelChangeAffectedMandate,
+    ClassificationTaxonomyEntry,
+    ClassificationTaxonomyResponse,
     ComponentSeriesResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -79,11 +79,16 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
     SeriesPoint,
+    TransactionCostCurvePoint,
+    TransactionCostCurveRequest,
+    TransactionCostCurveResponse,
+    TransactionCostCurveSupportability,
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
+from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 
 logger = logging.getLogger(__name__)
@@ -111,6 +116,7 @@ class IntegrationService:
         self._reference_repository = ReferenceDataRepository(db)
         self._buy_state_repository = BuyStateRepository(db)
         self._portfolio_repository = PortfolioRepository(db)
+        self._transaction_repository = TransactionRepository(db)
         self._page_token_secret = load_query_service_settings().page_token_secret
 
     @staticmethod
@@ -979,6 +985,190 @@ class IntegrationService:
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
                     [lot for lot, _ in page_rows]
                 ),
+            ),
+        )
+
+    @staticmethod
+    def _transaction_fee_amount(transaction: Any) -> Decimal:
+        costs = list(getattr(transaction, "costs", None) or [])
+        if costs:
+            return sum(
+                (IntegrationService._as_decimal(getattr(cost, "amount", Decimal("0"))))
+                for cost in costs
+            )
+        trade_fee = getattr(transaction, "trade_fee", None)
+        if trade_fee is None:
+            return Decimal("0")
+        return IntegrationService._as_decimal(trade_fee)
+
+    async def get_transaction_cost_curve(
+        self,
+        *,
+        portfolio_id: str,
+        request: TransactionCostCurveRequest,
+    ) -> TransactionCostCurveResponse:
+        if not await self._transaction_repository.portfolio_exists(portfolio_id):
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "window": {
+                    "start_date": request.window.start_date.isoformat(),
+                    "end_date": request.window.end_date.isoformat(),
+                },
+                "security_ids": sorted(request.security_ids or []),
+                "transaction_types": sorted(request.transaction_types or []),
+                "min_observation_count": request.min_observation_count,
+                "tenant_id": request.tenant_id,
+            }
+        )
+        cursor = self._decode_page_token(request.page.page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope and token_scope != request_scope_fingerprint:
+            raise ValueError("Transaction cost curve page token does not match request scope.")
+        after_key = tuple(cursor.get("last_curve_key") or ())
+
+        transactions = await self._transaction_repository.list_transaction_cost_evidence(
+            portfolio_id=portfolio_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+            as_of_date=request.as_of_date,
+            security_ids=request.security_ids,
+            transaction_types=request.transaction_types,
+        )
+
+        grouped: dict[tuple[str, str, str], list[Any]] = {}
+        for transaction in transactions:
+            fee_amount = self._transaction_fee_amount(transaction)
+            notional = abs(self._as_decimal(transaction.gross_transaction_amount))
+            if fee_amount <= 0 or notional <= 0:
+                continue
+            key = (
+                str(transaction.security_id),
+                str(transaction.transaction_type).upper(),
+                str(transaction.currency).upper(),
+            )
+            grouped.setdefault(key, []).append(transaction)
+
+        all_points: list[TransactionCostCurvePoint] = []
+        for key in sorted(grouped):
+            rows = grouped[key]
+            if len(rows) < request.min_observation_count:
+                continue
+            security_id, transaction_type, currency = key
+            total_cost = sum(self._transaction_fee_amount(row) for row in rows)
+            total_notional = sum(
+                abs(self._as_decimal(row.gross_transaction_amount)) for row in rows
+            )
+            cost_bps_values = [
+                (
+                    self._transaction_fee_amount(row)
+                    / abs(self._as_decimal(row.gross_transaction_amount))
+                )
+                * Decimal("10000")
+                for row in rows
+                if abs(self._as_decimal(row.gross_transaction_amount)) > 0
+            ]
+            if not cost_bps_values:
+                continue
+            observed_dates = [row.transaction_date.date() for row in rows]
+            all_points.append(
+                TransactionCostCurvePoint(
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    transaction_type=transaction_type,
+                    currency=currency,
+                    observation_count=len(rows),
+                    total_notional=total_notional,
+                    total_cost=total_cost,
+                    average_cost_bps=(total_cost / total_notional * Decimal("10000")).quantize(
+                        Decimal("0.0001")
+                    ),
+                    min_cost_bps=min(cost_bps_values).quantize(Decimal("0.0001")),
+                    max_cost_bps=max(cost_bps_values).quantize(Decimal("0.0001")),
+                    first_observed_date=min(observed_dates),
+                    last_observed_date=max(observed_dates),
+                    sample_transaction_ids=[
+                        str(row.transaction_id)
+                        for row in sorted(rows, key=lambda row: row.transaction_id)[:5]
+                    ],
+                    source_lineage={
+                        "source_system": "transactions",
+                        "source_table": "transactions,transaction_costs",
+                        "contract_version": "rfc_040_wtbd_007_v1",
+                    },
+                )
+            )
+
+        paged_candidates = [
+            point
+            for point in all_points
+            if not after_key
+            or (point.security_id, point.transaction_type, point.currency) > after_key
+        ]
+        has_more = len(paged_candidates) > request.page.page_size
+        curve_points = paged_candidates[: request.page.page_size]
+        next_page_token: str | None = None
+        if has_more and curve_points:
+            last_point = curve_points[-1]
+            next_page_token = self._encode_page_token(
+                {
+                    "scope_fingerprint": request_scope_fingerprint,
+                    "last_curve_key": [
+                        last_point.security_id,
+                        last_point.transaction_type,
+                        last_point.currency,
+                    ],
+                }
+            )
+
+        requested_security_ids = set(request.security_ids or [])
+        returned_security_ids = {point.security_id for point in all_points}
+        missing_security_ids = sorted(requested_security_ids - returned_security_ids)
+
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "TRANSACTION_COST_CURVE_READY"
+        if not all_points:
+            supportability_state = "UNAVAILABLE"
+            supportability_reason = "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
+        elif missing_security_ids:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "TRANSACTION_COST_EVIDENCE_MISSING_FOR_SECURITIES"
+        elif has_more:
+            supportability_state = "DEGRADED"
+            supportability_reason = "TRANSACTION_COST_CURVE_PAGE_PARTIAL"
+
+        return TransactionCostCurveResponse(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            window=request.window,
+            curve_points=curve_points,
+            page=ReferencePageMetadata(
+                page_size=request.page.page_size,
+                sort_key="security_id:asc,transaction_type:asc,currency:asc",
+                returned_component_count=len(curve_points),
+                request_scope_fingerprint=request_scope_fingerprint,
+                next_page_token=next_page_token,
+            ),
+            supportability=TransactionCostCurveSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requested_security_count=(
+                    len(request.security_ids) if request.security_ids is not None else None
+                ),
+                returned_curve_point_count=len(curve_points),
+                missing_security_ids=missing_security_ids,
+            ),
+            lineage={
+                "source_system": "transactions",
+                "contract_version": "rfc_040_wtbd_007_v1",
+            },
+            **self._runtime_metadata_for_existing_as_of_date(
+                request.as_of_date,
+                data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(transactions),
             ),
         )
 
