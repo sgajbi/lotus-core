@@ -259,6 +259,16 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         pii_fields=("portfolio_manager_id", "portfolio_id", "client_id"),
     ),
     SourceDataSecurityProfile(
+        product_name="CioModelChangeAffectedCohort",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_CONFIDENTIAL,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id", "mandate_id", "client_id"),
+    ),
+    SourceDataSecurityProfile(
         product_name="ReconciliationEvidenceBundle",
         tenant_required=True,
         entitlement_required=True,

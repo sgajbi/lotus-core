@@ -25,6 +25,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_market_data_coverage,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
+    resolve_cio_model_change_affected_cohort,
     resolve_discretionary_mandate_binding,
     resolve_instrument_eligibility_bulk,
     resolve_model_portfolio_targets,
@@ -49,6 +50,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
+    CioModelChangeAffectedCohortRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
@@ -650,6 +652,94 @@ async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404(
         await resolve_portfolio_manager_book_membership(
             portfolio_manager_id="PM_EMPTY",
             request=PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_cio_model_change_affected_cohort_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_cio_model_change_affected_cohort = AsyncMock(
+        return_value={
+            "product_name": "CioModelChangeAffectedCohort",
+            "product_version": "v1",
+            "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+            "model_portfolio_version": "2026.05",
+            "model_change_event_id": "cio_model_change:MODEL_PB_SG_GLOBAL_BAL_DPM:2026.05",
+            "approval_state": "approved",
+            "approved_at": "2026-05-01T08:00:00Z",
+            "effective_from": "2026-05-01",
+            "effective_to": None,
+            "affected_mandates": [
+                {
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                    "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+                    "client_id": "CIF_SG_000184",
+                    "booking_center_code": "Singapore",
+                    "jurisdiction_code": "SG",
+                    "discretionary_authority_status": "active",
+                    "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+                    "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+                    "risk_profile": "balanced",
+                    "effective_from": "2026-05-01",
+                    "effective_to": None,
+                    "binding_version": 3,
+                    "source_record_id": "mandate-binding-001",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "CIO_MODEL_CHANGE_COHORT_READY",
+                "returned_mandate_count": 1,
+                "filters_applied": ["model_portfolio_id", "as_of_date"],
+            },
+            "lineage": {"contract_version": "rfc_041_cio_model_change_cohort_v1"},
+        }
+    )
+    request = CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03")
+
+    response = await resolve_cio_model_change_affected_cohort(
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "CioModelChangeAffectedCohort"
+    assert response["affected_mandates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
+    mock_service.resolve_cio_model_change_affected_cohort.assert_awaited_once_with(
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_cio_model_change_affected_cohort_maps_missing_model_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_cio_model_change_affected_cohort = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_cio_model_change_affected_cohort(
+            model_portfolio_id="MODEL_MISSING",
+            request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_cio_model_change_affected_cohort = AsyncMock(
+        return_value=MagicMock(affected_mandates=[])
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_cio_model_change_affected_cohort(
+            model_portfolio_id="MODEL_EMPTY",
+            request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
             integration_service=mock_service,
         )
 

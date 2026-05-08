@@ -155,6 +155,45 @@ class ReferenceDataRepository:
             "instrument_id",
         )
 
+    async def list_model_portfolio_affected_mandates(
+        self,
+        model_portfolio_id: str,
+        as_of_date: date,
+        *,
+        booking_center_code: str | None = None,
+        include_inactive_mandates: bool = False,
+    ) -> list[PortfolioMandateBinding]:
+        stmt = (
+            select(PortfolioMandateBinding)
+            .where(
+                PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
+                PortfolioMandateBinding.mandate_type == "discretionary",
+                _effective_filter(
+                    PortfolioMandateBinding.effective_from,
+                    PortfolioMandateBinding.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                PortfolioMandateBinding.portfolio_id.asc(),
+                PortfolioMandateBinding.mandate_id.asc(),
+                PortfolioMandateBinding.effective_from.desc(),
+                PortfolioMandateBinding.observed_at.desc().nulls_last(),
+                PortfolioMandateBinding.binding_version.desc(),
+                PortfolioMandateBinding.updated_at.desc(),
+            )
+        )
+        if booking_center_code:
+            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        if not include_inactive_mandates:
+            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(
+            list(result.scalars().all()),
+            "portfolio_id",
+            "mandate_id",
+        )
+
     async def resolve_discretionary_mandate_binding(
         self,
         portfolio_id: str,

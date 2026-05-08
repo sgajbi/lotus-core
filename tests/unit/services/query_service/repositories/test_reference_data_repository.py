@@ -471,6 +471,53 @@ async def test_list_model_portfolio_targets_can_include_inactive_targets() -> No
 
 
 @pytest.mark.asyncio
+async def test_list_model_portfolio_affected_mandates_uses_source_filters() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                portfolio_id="PB_SG_GLOBAL_BAL_001",
+                mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+                effective_from=date(2026, 5, 1),
+                updated_at=None,
+                created_at=None,
+            )
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_model_portfolio_affected_mandates(
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        as_of_date=date(2026, 5, 3),
+        booking_center_code="Singapore",
+    )
+
+    assert rows[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_mandate_bindings.model_portfolio_id = 'MODEL_PB_SG_GLOBAL_BAL_DPM'" in compiled
+    assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
+    assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
+    assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
+    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
+
+
+@pytest.mark.asyncio
+async def test_list_model_portfolio_affected_mandates_can_include_inactive_authority() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_model_portfolio_affected_mandates(
+        model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+        as_of_date=date(2026, 5, 3),
+        include_inactive_mandates=True,
+    )
+
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "discretionary_authority_status =" not in compiled
+
+
+@pytest.mark.asyncio
 async def test_resolve_discretionary_mandate_binding_uses_effective_filters() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(

@@ -30,6 +30,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
+    CioModelChangeAffectedCohortRequest,
+    CioModelChangeAffectedCohortResponse,
     CoverageRequest,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -462,6 +464,56 @@ async def resolve_portfolio_manager_book_membership(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No portfolio memberships found for portfolio_manager_id and request filters.",
+        )
+    return response
+
+
+@router.post(
+    "/model-portfolios/{model_portfolio_id}/affected-mandates",
+    response_model=CioModelChangeAffectedCohortResponse,
+    summary="Resolve CIO model-change affected mandate cohort",
+    description=(
+        "What: Return source-owned affected discretionary mandates for an approved CIO model "
+        "portfolio version.\n"
+        "How: Resolves the approved model definition for the as-of date, then selects effective "
+        "portfolio mandate bindings for the model, preserving booking-center filters, active "
+        "discretionary authority, supportability, event identity, and source lineage.\n"
+        "When: Use this endpoint when lotus-manage needs automatic CIO_MODEL_CHANGE wave "
+        "discovery. Do not infer affected cohorts inside consumers from a model id alone."
+    ),
+    responses={
+        404: problem_response(
+            "No affected mandates found.",
+            {"detail": "No affected mandates found for model_portfolio_id and request filters."},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("CioModelChangeAffectedCohort"),
+)
+async def resolve_cio_model_change_affected_cohort(
+    request: CioModelChangeAffectedCohortRequest,
+    model_portfolio_id: str = Path(
+        ...,
+        description="Approved model portfolio identifier whose affected mandate cohort is needed.",
+        examples=["MODEL_PB_SG_GLOBAL_BAL_DPM"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> CioModelChangeAffectedCohortResponse:
+    response = await integration_service.resolve_cio_model_change_affected_cohort(
+        model_portfolio_id=model_portfolio_id,
+        request=request,
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Approved model portfolio definition was not found for model_portfolio_id.",
+        )
+    affected_mandates = getattr(response, "affected_mandates", None)
+    if affected_mandates is None and isinstance(response, dict):
+        affected_mandates = response.get("affected_mandates", [])
+    if not affected_mandates:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No affected mandates found for model_portfolio_id and request filters.",
         )
     return response
 

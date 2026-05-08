@@ -315,6 +315,21 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="CioModelChangeAffectedCohort",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/model-portfolios/{model_portfolio_id}/affected-mandates",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for CIO model-change affected mandate discovery, backed by "
+            "approved model definitions and effective discretionary mandate bindings."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,

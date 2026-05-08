@@ -90,6 +90,7 @@
         "POST /integration/instruments/eligibility-bulk",
         "POST /integration/instruments/enrichment-bulk",
         "POST /integration/market-data/coverage",
+        "POST /integration/model-portfolios/{model_portfolio_id}/affected-mandates",
         "POST /integration/model-portfolios/{model_portfolio_id}/targets",
         "POST /integration/portfolio-manager-books/{portfolio_manager_id}/memberships",
         "POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
