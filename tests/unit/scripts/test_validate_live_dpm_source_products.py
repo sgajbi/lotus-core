@@ -62,6 +62,34 @@ def _eligibility() -> dict:
     }
 
 
+def _client_restrictions() -> dict:
+    return {
+        "product_name": "ClientRestrictionProfile",
+        "supportability": {"state": "READY", "restriction_count": 1},
+        "restrictions": [
+            {
+                "restriction_code": "NO_PRIVATE_CREDIT_BUY",
+                "restriction_scope": "asset_class",
+                "asset_classes": ["private_credit"],
+            }
+        ],
+    }
+
+
+def _sustainability_preferences() -> dict:
+    return {
+        "product_name": "SustainabilityPreferenceProfile",
+        "supportability": {"state": "READY", "preference_count": 1},
+        "preferences": [
+            {
+                "preference_code": "MIN_SUSTAINABLE_ALLOCATION",
+                "preference_framework": "LOTUS_SUSTAINABILITY_V1",
+                "minimum_allocation": "0.2000000000",
+            }
+        ],
+    }
+
+
 def _tax_lots() -> dict:
     return {
         "product_name": "PortfolioTaxLotWindow",
@@ -122,6 +150,14 @@ def _handler(overrides: dict[str, tuple[int, dict | str]] | None = None) -> Call
         ("POST", "/integration/instruments/eligibility-bulk"): (200, _eligibility()),
         (
             "POST",
+            f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/client-restriction-profile",
+        ): (200, _client_restrictions()),
+        (
+            "POST",
+            f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/sustainability-preference-profile",
+        ): (200, _sustainability_preferences()),
+        (
+            "POST",
             f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/tax-lots",
         ): (200, _tax_lots()),
         ("POST", "/integration/market-data/coverage"): (200, _market_data()),
@@ -158,6 +194,8 @@ def test_live_dpm_source_validator_accepts_ready_canonical_products() -> None:
         "dpm_model_targets_ready",
         "dpm_mandate_binding_ready",
         "dpm_instrument_eligibility_ready",
+        "dpm_client_restrictions_ready",
+        "dpm_sustainability_preferences_ready",
         "dpm_tax_lots_ready",
         "dpm_market_data_coverage_ready",
         "dpm_source_readiness_ready",

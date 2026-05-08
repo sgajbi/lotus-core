@@ -20,6 +20,8 @@ DEFAULT_FX_PAIRS = (("EUR", "USD"),)
 EXPECTED_OPENAPI_PATHS = {
     "/integration/model-portfolios/{model_portfolio_id}/targets",
     "/integration/portfolios/{portfolio_id}/mandate-binding",
+    "/integration/portfolios/{portfolio_id}/client-restriction-profile",
+    "/integration/portfolios/{portfolio_id}/sustainability-preference-profile",
     "/integration/instruments/eligibility-bulk",
     "/integration/portfolios/{portfolio_id}/tax-lots",
     "/integration/market-data/coverage",
@@ -206,6 +208,92 @@ def _probe_instrument_eligibility(
             "found_count": sum(1 for row in by_id.values() if row.get("found")),
             "restricted_buy_allowed": restricted.get("buy_allowed"),
             "restricted_sell_allowed": restricted.get("sell_allowed"),
+        },
+    )
+
+
+def _probe_client_restrictions(
+    client: httpx.Client,
+    *,
+    portfolio_id: str,
+    mandate_id: str,
+    as_of_date: str,
+    tenant_id: str,
+) -> ProbeResult:
+    response = client.post(
+        f"/integration/portfolios/{portfolio_id}/client-restriction-profile",
+        json={
+            "as_of_date": as_of_date,
+            "tenant_id": tenant_id,
+            "mandate_id": mandate_id,
+            "include_inactive_restrictions": False,
+        },
+    )
+    body = _json_body(response)
+    body_dict = _dict_body(body)
+    supportability = _dict_body(body_dict.get("supportability"))
+    restrictions = body_dict.get("restrictions", [])
+    restrictions = restrictions if isinstance(restrictions, list) else []
+    restriction_codes = {
+        row.get("restriction_code") for row in restrictions if isinstance(row, dict)
+    }
+    ok = (
+        response.status_code == 200
+        and body_dict.get("product_name") == "ClientRestrictionProfile"
+        and supportability.get("state") == "READY"
+        and "NO_PRIVATE_CREDIT_BUY" in restriction_codes
+    )
+    return _result(
+        "dpm_client_restrictions_ready",
+        ok,
+        {
+            "status_code": response.status_code,
+            "product_name": body_dict.get("product_name"),
+            "supportability_state": supportability.get("state"),
+            "restriction_count": supportability.get("restriction_count"),
+            "restriction_codes": sorted(code for code in restriction_codes if code),
+        },
+    )
+
+
+def _probe_sustainability_preferences(
+    client: httpx.Client,
+    *,
+    portfolio_id: str,
+    mandate_id: str,
+    as_of_date: str,
+    tenant_id: str,
+) -> ProbeResult:
+    response = client.post(
+        f"/integration/portfolios/{portfolio_id}/sustainability-preference-profile",
+        json={
+            "as_of_date": as_of_date,
+            "tenant_id": tenant_id,
+            "mandate_id": mandate_id,
+            "include_inactive_preferences": False,
+        },
+    )
+    body = _json_body(response)
+    body_dict = _dict_body(body)
+    supportability = _dict_body(body_dict.get("supportability"))
+    preferences = body_dict.get("preferences", [])
+    preferences = preferences if isinstance(preferences, list) else []
+    preference_codes = {row.get("preference_code") for row in preferences if isinstance(row, dict)}
+    ok = (
+        response.status_code == 200
+        and body_dict.get("product_name") == "SustainabilityPreferenceProfile"
+        and supportability.get("state") == "READY"
+        and "MIN_SUSTAINABLE_ALLOCATION" in preference_codes
+    )
+    return _result(
+        "dpm_sustainability_preferences_ready",
+        ok,
+        {
+            "status_code": response.status_code,
+            "product_name": body_dict.get("product_name"),
+            "supportability_state": supportability.get("state"),
+            "preference_count": supportability.get("preference_count"),
+            "preference_codes": sorted(code for code in preference_codes if code),
         },
     )
 
@@ -407,6 +495,26 @@ def run_validation(
                     as_of_date=as_of_date,
                     tenant_id=tenant_id,
                     security_ids=DEFAULT_ELIGIBILITY_IDS,
+                ),
+            ),
+            (
+                "dpm_client_restrictions_ready",
+                lambda: _probe_client_restrictions(
+                    client,
+                    portfolio_id=portfolio_id,
+                    mandate_id=mandate_id,
+                    as_of_date=as_of_date,
+                    tenant_id=tenant_id,
+                ),
+            ),
+            (
+                "dpm_sustainability_preferences_ready",
+                lambda: _probe_sustainability_preferences(
+                    client,
+                    portfolio_id=portfolio_id,
+                    mandate_id=mandate_id,
+                    as_of_date=as_of_date,
+                    tenant_id=tenant_id,
                 ),
             ),
             (

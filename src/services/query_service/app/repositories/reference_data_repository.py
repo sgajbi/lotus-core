@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     BenchmarkDefinition,
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
+    ClientRestrictionProfile,
     FxRate,
     IndexDefinition,
     IndexPriceSeries,
@@ -21,6 +22,7 @@ from portfolio_common.database_models import (
     PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
     RiskFreeSeries,
+    SustainabilityPreferenceProfile,
 )
 from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -227,6 +229,96 @@ class ReferenceDataRepository:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         result = await self._db.execute(stmt)
         return result.scalars().first()
+
+    async def list_client_restriction_profiles(
+        self,
+        *,
+        portfolio_id: str,
+        client_id: str,
+        as_of_date: date,
+        mandate_id: str | None = None,
+        include_inactive_restrictions: bool = False,
+    ) -> list[ClientRestrictionProfile]:
+        stmt = (
+            select(ClientRestrictionProfile)
+            .where(
+                ClientRestrictionProfile.portfolio_id == portfolio_id,
+                ClientRestrictionProfile.client_id == client_id,
+                _effective_filter(
+                    ClientRestrictionProfile.effective_from,
+                    ClientRestrictionProfile.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ClientRestrictionProfile.restriction_scope.asc(),
+                ClientRestrictionProfile.restriction_code.asc(),
+                ClientRestrictionProfile.effective_from.desc(),
+                ClientRestrictionProfile.observed_at.desc().nulls_last(),
+                ClientRestrictionProfile.restriction_version.desc(),
+                ClientRestrictionProfile.updated_at.desc(),
+            )
+        )
+        if mandate_id:
+            stmt = stmt.where(
+                or_(
+                    ClientRestrictionProfile.mandate_id.is_(None),
+                    ClientRestrictionProfile.mandate_id == mandate_id,
+                )
+            )
+        if not include_inactive_restrictions:
+            stmt = stmt.where(ClientRestrictionProfile.restriction_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(
+            list(result.scalars().all()),
+            "restriction_scope",
+            "restriction_code",
+        )
+
+    async def list_sustainability_preference_profiles(
+        self,
+        *,
+        portfolio_id: str,
+        client_id: str,
+        as_of_date: date,
+        mandate_id: str | None = None,
+        include_inactive_preferences: bool = False,
+    ) -> list[SustainabilityPreferenceProfile]:
+        stmt = (
+            select(SustainabilityPreferenceProfile)
+            .where(
+                SustainabilityPreferenceProfile.portfolio_id == portfolio_id,
+                SustainabilityPreferenceProfile.client_id == client_id,
+                _effective_filter(
+                    SustainabilityPreferenceProfile.effective_from,
+                    SustainabilityPreferenceProfile.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                SustainabilityPreferenceProfile.preference_framework.asc(),
+                SustainabilityPreferenceProfile.preference_code.asc(),
+                SustainabilityPreferenceProfile.effective_from.desc(),
+                SustainabilityPreferenceProfile.observed_at.desc().nulls_last(),
+                SustainabilityPreferenceProfile.preference_version.desc(),
+                SustainabilityPreferenceProfile.updated_at.desc(),
+            )
+        )
+        if mandate_id:
+            stmt = stmt.where(
+                or_(
+                    SustainabilityPreferenceProfile.mandate_id.is_(None),
+                    SustainabilityPreferenceProfile.mandate_id == mandate_id,
+                )
+            )
+        if not include_inactive_preferences:
+            stmt = stmt.where(SustainabilityPreferenceProfile.preference_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(
+            list(result.scalars().all()),
+            "preference_framework",
+            "preference_code",
+        )
 
     async def list_instrument_eligibility_profiles(
         self,

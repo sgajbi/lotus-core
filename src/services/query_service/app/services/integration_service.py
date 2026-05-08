@@ -28,6 +28,10 @@ from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
+    ClientRestrictionProfileEntry,
+    ClientRestrictionProfileRequest,
+    ClientRestrictionProfileResponse,
+    ClientRestrictionProfileSupportability,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     CioModelChangeAffectedCohortSupportability,
@@ -79,6 +83,10 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
     SeriesPoint,
+    SustainabilityPreferenceProfileEntry,
+    SustainabilityPreferenceProfileRequest,
+    SustainabilityPreferenceProfileResponse,
+    SustainabilityPreferenceProfileSupportability,
     TransactionCostCurvePoint,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
@@ -124,6 +132,12 @@ class IntegrationService:
         if isinstance(value, Decimal):
             return value
         return Decimal(str(value))
+
+    @staticmethod
+    def _string_list(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value if str(item).strip()]
 
     @staticmethod
     def _runtime_metadata(
@@ -763,6 +777,197 @@ class IntegrationService:
                 request.as_of_date,
                 data_quality_status=str(row.quality_status).upper(),
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+            ),
+        )
+
+    async def get_client_restriction_profile(
+        self,
+        portfolio_id: str,
+        request: ClientRestrictionProfileRequest,
+    ) -> ClientRestrictionProfileResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        rows = await self._reference_repository.list_client_restriction_profiles(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            as_of_date=request.as_of_date,
+            mandate_id=binding.mandate_id,
+            include_inactive_restrictions=request.include_inactive_restrictions,
+        )
+        entries = [
+            ClientRestrictionProfileEntry(
+                restriction_scope=row.restriction_scope,
+                restriction_code=row.restriction_code,
+                restriction_status=row.restriction_status,
+                restriction_source=row.restriction_source,
+                applies_to_buy=bool(row.applies_to_buy),
+                applies_to_sell=bool(row.applies_to_sell),
+                instrument_ids=self._string_list(row.instrument_ids),
+                asset_classes=self._string_list(row.asset_classes),
+                issuer_ids=self._string_list(row.issuer_ids),
+                country_codes=self._string_list(row.country_codes),
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
+                restriction_version=int(row.restriction_version),
+                source_record_id=row.source_record_id,
+            )
+            for row in rows
+        ]
+        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "CLIENT_RESTRICTION_PROFILE_READY"
+        missing_data_families: list[str] = []
+        if not rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "CLIENT_RESTRICTION_PROFILE_EMPTY"
+            missing_data_families.append("client_restrictions")
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        return ClientRestrictionProfileResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            restrictions=entries,
+            supportability=ClientRestrictionProfileSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                restriction_count=len(entries),
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": "lotus-core-query-service",
+                "source_table": "client_restriction_profiles,portfolio_mandate_bindings",
+                "contract_version": "rfc_040_client_restriction_profile_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=("ACCEPTED" if rows else "MISSING"),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "ClientRestrictionProfile",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "row_count": len(rows),
+                    }
+                ),
+                snapshot_id=(
+                    "client_restriction_profile:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                        }
+                    )
+                ),
+            ),
+        )
+
+    async def get_sustainability_preference_profile(
+        self,
+        portfolio_id: str,
+        request: SustainabilityPreferenceProfileRequest,
+    ) -> SustainabilityPreferenceProfileResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        rows = await self._reference_repository.list_sustainability_preference_profiles(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            as_of_date=request.as_of_date,
+            mandate_id=binding.mandate_id,
+            include_inactive_preferences=request.include_inactive_preferences,
+        )
+        entries = [
+            SustainabilityPreferenceProfileEntry(
+                preference_framework=row.preference_framework,
+                preference_code=row.preference_code,
+                preference_status=row.preference_status,
+                preference_source=row.preference_source,
+                minimum_allocation=(
+                    self._as_decimal(row.minimum_allocation)
+                    if row.minimum_allocation is not None
+                    else None
+                ),
+                maximum_allocation=(
+                    self._as_decimal(row.maximum_allocation)
+                    if row.maximum_allocation is not None
+                    else None
+                ),
+                applies_to_asset_classes=self._string_list(row.applies_to_asset_classes),
+                exclusion_codes=self._string_list(row.exclusion_codes),
+                positive_tilt_codes=self._string_list(row.positive_tilt_codes),
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
+                preference_version=int(row.preference_version),
+                source_record_id=row.source_record_id,
+            )
+            for row in rows
+        ]
+        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_READY"
+        missing_data_families: list[str] = []
+        if not rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_EMPTY"
+            missing_data_families.append("sustainability_preferences")
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        return SustainabilityPreferenceProfileResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            preferences=entries,
+            supportability=SustainabilityPreferenceProfileSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                preference_count=len(entries),
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": "lotus-core-query-service",
+                "source_table": "sustainability_preference_profiles,portfolio_mandate_bindings",
+                "contract_version": "rfc_040_sustainability_preference_profile_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=("ACCEPTED" if rows else "MISSING"),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "SustainabilityPreferenceProfile",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "row_count": len(rows),
+                    }
+                ),
+                snapshot_id=(
+                    "sustainability_preference_profile:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                        }
+                    )
+                ),
             ),
         )
 

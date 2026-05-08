@@ -261,6 +261,84 @@ async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> No
 
 
 @pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_client_restriction_profiles() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                restriction_scope="asset_class",
+                restriction_code="NO_PRIVATE_CREDIT_BUY",
+                restriction_version=2,
+            ),
+            SimpleNamespace(
+                restriction_scope="asset_class",
+                restriction_code="NO_PRIVATE_CREDIT_BUY",
+                restriction_version=1,
+            ),
+            SimpleNamespace(
+                restriction_scope="country",
+                restriction_code="NO_SANCTIONED_MARKET_BUY",
+                restriction_version=1,
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_client_restriction_profiles(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 5, 3),
+    )
+
+    assert [row.restriction_code for row in rows] == [
+        "NO_PRIVATE_CREDIT_BUY",
+        "NO_SANCTIONED_MARKET_BUY",
+    ]
+    assert rows[0].restriction_version == 2
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_sustainability_preferences() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                preference_framework="LOTUS_SUSTAINABILITY_V1",
+                preference_code="MIN_SUSTAINABLE_ALLOCATION",
+                preference_version=2,
+            ),
+            SimpleNamespace(
+                preference_framework="LOTUS_SUSTAINABILITY_V1",
+                preference_code="MIN_SUSTAINABLE_ALLOCATION",
+                preference_version=1,
+            ),
+            SimpleNamespace(
+                preference_framework="LOTUS_SUSTAINABILITY_V1",
+                preference_code="THERMAL_COAL_EXCLUSION",
+                preference_version=1,
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_sustainability_preference_profiles(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 5, 3),
+    )
+
+    assert [row.preference_code for row in rows] == [
+        "MIN_SUSTAINABLE_ALLOCATION",
+        "THERMAL_COAL_EXCLUSION",
+    ]
+    assert rows[0].preference_version == 2
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_list_instrument_eligibility_profiles_returns_latest_effective_rows() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
@@ -494,7 +572,9 @@ async def test_list_model_portfolio_affected_mandates_uses_source_filters() -> N
 
     assert rows[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolio_mandate_bindings.model_portfolio_id = 'MODEL_PB_SG_GLOBAL_BAL_DPM'" in compiled
+    assert (
+        "portfolio_mandate_bindings.model_portfolio_id = 'MODEL_PB_SG_GLOBAL_BAL_DPM'" in compiled
+    )
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled

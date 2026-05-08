@@ -4,12 +4,16 @@ import pytest
 from pydantic import ValidationError
 
 from src.services.ingestion_service.app.DTOs.reference_data_dto import (
+    ClientRestrictionProfileIngestionRequest,
+    ClientRestrictionProfileRecord,
     DiscretionaryMandateBindingIngestionRequest,
     DiscretionaryMandateBindingRecord,
     InstrumentEligibilityProfileIngestionRequest,
     InstrumentEligibilityProfileRecord,
     ModelPortfolioTargetIngestionRequest,
     ModelPortfolioTargetRecord,
+    SustainabilityPreferenceProfileIngestionRequest,
+    SustainabilityPreferenceProfileRecord,
 )
 
 
@@ -71,6 +75,39 @@ def _eligibility_profile(**overrides: object) -> dict[str, object]:
         "ultimate_parent_issuer_name": "Apple Inc.",
         "asset_class": "Equity",
         "country_of_risk": "US",
+        "effective_from": "2026-04-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _restriction_profile(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "client_id": "CIF_SG_000184",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "restriction_scope": "asset_class",
+        "restriction_code": "NO_PRIVATE_CREDIT_BUY",
+        "restriction_status": "active",
+        "restriction_source": "client_mandate",
+        "asset_classes": ["private_credit"],
+        "effective_from": "2026-04-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _sustainability_profile(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "client_id": "CIF_SG_000184",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "preference_framework": "LOTUS_SUSTAINABILITY_V1",
+        "preference_code": "MIN_SUSTAINABLE_ALLOCATION",
+        "preference_status": "active",
+        "preference_source": "client_mandate",
+        "minimum_allocation": "0.2000000000",
+        "exclusion_codes": ["THERMAL_COAL"],
         "effective_from": "2026-04-01",
     }
     record.update(overrides)
@@ -169,4 +206,48 @@ def test_instrument_eligibility_ingestion_rejects_duplicate_effective_profiles()
     with pytest.raises(ValidationError, match="duplicate effective records"):
         InstrumentEligibilityProfileIngestionRequest.model_validate(
             {"eligibility_profiles": [duplicate, dict(duplicate)]}
+        )
+
+
+def test_client_restriction_profile_requires_scope_values_for_scoped_restrictions() -> None:
+    with pytest.raises(ValidationError, match="scoped restrictions"):
+        ClientRestrictionProfileRecord.model_validate(
+            _restriction_profile(restriction_scope="issuer", asset_classes=[])
+        )
+
+
+def test_client_restriction_profile_ingestion_rejects_duplicate_effective_profiles() -> None:
+    duplicate = _restriction_profile()
+
+    with pytest.raises(ValidationError, match="duplicate effective records"):
+        ClientRestrictionProfileIngestionRequest.model_validate(
+            {"restriction_profiles": [duplicate, dict(duplicate)]}
+        )
+
+
+def test_sustainability_preference_profile_validates_bounds_and_substance() -> None:
+    with pytest.raises(ValidationError, match="minimum_allocation"):
+        SustainabilityPreferenceProfileRecord.model_validate(
+            _sustainability_profile(
+                minimum_allocation="0.3000000000",
+                maximum_allocation="0.2000000000",
+            )
+        )
+
+    with pytest.raises(ValidationError, match="exclusion, tilt, or allocation"):
+        SustainabilityPreferenceProfileRecord.model_validate(
+            _sustainability_profile(
+                minimum_allocation=None,
+                exclusion_codes=[],
+                positive_tilt_codes=[],
+            )
+        )
+
+
+def test_sustainability_preference_ingestion_rejects_duplicate_effective_profiles() -> None:
+    duplicate = _sustainability_profile()
+
+    with pytest.raises(ValidationError, match="duplicate effective records"):
+        SustainabilityPreferenceProfileIngestionRequest.model_validate(
+            {"sustainability_preferences": [duplicate, dict(duplicate)]}
         )

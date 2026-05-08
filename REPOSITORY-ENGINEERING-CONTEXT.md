@@ -64,7 +64,10 @@ Current repository posture:
     `advisor_id` without claiming a broader relationship-householding hierarchy.
     `CioModelChangeAffectedCohort:v1` is the RFC41-WTBD-002 source-owner foundation and resolves
     affected discretionary mandates from approved model definitions and effective mandate bindings
-    without moving rebalance decisioning into core.
+    without moving rebalance decisioning into core. RFC40-WTBD-008 source-owner coverage adds
+    `ClientRestrictionProfile:v1` and `SustainabilityPreferenceProfile:v1` as effective-dated,
+    lineage-backed query-control-plane products and canonical front-office seed inputs; downstream
+    `lotus-manage` consumption remains a separate slice.
 20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared

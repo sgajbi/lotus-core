@@ -11,6 +11,7 @@ from ..DTOs.reference_data_dto import (
     BenchmarkReturnSeriesIngestionRequest,
     CashAccountMasterIngestionRequest,
     ClassificationTaxonomyIngestionRequest,
+    ClientRestrictionProfileIngestionRequest,
     DiscretionaryMandateBindingIngestionRequest,
     IndexDefinitionIngestionRequest,
     IndexPriceSeriesIngestionRequest,
@@ -21,6 +22,7 @@ from ..DTOs.reference_data_dto import (
     ModelPortfolioTargetIngestionRequest,
     PortfolioBenchmarkAssignmentIngestionRequest,
     RiskFreeSeriesIngestionRequest,
+    SustainabilityPreferenceProfileIngestionRequest,
 )
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..request_metadata import (
@@ -338,6 +340,81 @@ async def ingest_mandate_bindings(
         request_payload=request.model_dump(mode="json"),
         persist_fn=lambda: reference_data_service.upsert_discretionary_mandate_bindings(
             [item.model_dump() for item in request.mandate_bindings]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/client-restriction-profiles",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest client restriction profiles",
+    description=(
+        "What: Accept effective-dated client and mandate restriction records for DPM "
+        "construction.\n"
+        "How: Validate bounded restriction scopes, source lineage, effective dates, and "
+        "quality fields, then upsert durable restriction profile records.\n"
+        "When: Use when mandate administration, suitability, compliance, or client preference "
+        "systems publish restriction changes required by lotus-manage stateful DPM."
+    ),
+)
+async def ingest_client_restriction_profiles(
+    request: ClientRestrictionProfileIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/client-restriction-profiles",
+        entity_type="client_restriction_profile",
+        accepted_count=len(request.restriction_profiles),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_client_restriction_profiles(
+            [item.model_dump() for item in request.restriction_profiles]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/sustainability-preferences",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest sustainability preference profiles",
+    description=(
+        "What: Accept effective-dated client sustainability preference records for DPM "
+        "construction.\n"
+        "How: Validate bounded framework codes, allocation bounds, exclusions, positive tilts, "
+        "source lineage, effective dates, and quality fields, then upsert durable preference "
+        "profile records.\n"
+        "When: Use when client preference, suitability, or sustainability policy systems "
+        "publish changes required by lotus-manage stateful DPM."
+    ),
+)
+async def ingest_sustainability_preference_profiles(
+    request: SustainabilityPreferenceProfileIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/sustainability-preferences",
+        entity_type="sustainability_preference_profile",
+        accepted_count=len(request.sustainability_preferences),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_sustainability_preference_profiles(
+            [item.model_dump() for item in request.sustainability_preferences]
         ),
         ingestion_job_service=ingestion_job_service,
     )

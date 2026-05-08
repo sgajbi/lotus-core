@@ -376,6 +376,48 @@ def test_front_office_bundle_includes_dpm_instrument_eligibility_profiles():
     ]
 
 
+def test_front_office_bundle_includes_client_restriction_profiles():
+    bundle = _build_bundle()
+    profiles = {
+        profile["restriction_code"]: profile for profile in bundle["client_restriction_profiles"]
+    }
+
+    assert set(profiles) == {"NO_PRIVATE_CREDIT_BUY", "NO_SANCTIONED_MARKET_BUY"}
+    private_credit = profiles["NO_PRIVATE_CREDIT_BUY"]
+    assert private_credit["client_id"] == "CIF_SG_000184"
+    assert private_credit["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert private_credit["asset_classes"] == ["private_credit"]
+    assert private_credit["applies_to_buy"] is True
+    assert private_credit["source_system"] == "LOTUS_FRONT_OFFICE_SEED"
+
+
+def test_front_office_bundle_includes_sustainability_preference_profiles():
+    bundle = _build_bundle()
+
+    assert bundle["sustainability_preference_profiles"] == [
+        {
+            "client_id": "CIF_SG_000184",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "preference_framework": "LOTUS_SUSTAINABILITY_V1",
+            "preference_code": "MIN_SUSTAINABLE_ALLOCATION",
+            "preference_status": "active",
+            "preference_source": "client_mandate",
+            "minimum_allocation": "0.2000000000",
+            "maximum_allocation": None,
+            "applies_to_asset_classes": ["equity", "fixed_income"],
+            "exclusion_codes": ["THERMAL_COAL"],
+            "positive_tilt_codes": ["LOW_CARBON_TRANSITION"],
+            "effective_from": "2026-04-01",
+            "preference_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": ("pb_sg_global_bal_001_sustainability_min_allocation_v1"),
+            "observed_at": "2026-04-10T09:00:00Z",
+            "quality_status": "accepted",
+        }
+    ]
+
+
 def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     bundle = _build_bundle()
     cash_security_ids = {
@@ -509,6 +551,14 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from position_timeseries where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert (
+        "delete from client_restriction_profiles where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
+        in sql
+    )
+    assert (
+        "delete from sustainability_preference_profiles where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
+        in sql
+    )
+    assert (
         "delete from portfolio_mandate_bindings where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     )
     assert "delete from instrument_eligibility_profiles" in sql
@@ -634,6 +684,8 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
         "http://ingestion.dev.lotus/ingest/model-portfolios",
         "http://ingestion.dev.lotus/ingest/model-portfolio-targets",
         "http://ingestion.dev.lotus/ingest/mandate-bindings",
+        "http://ingestion.dev.lotus/ingest/client-restriction-profiles",
+        "http://ingestion.dev.lotus/ingest/sustainability-preferences",
         "http://ingestion.dev.lotus/ingest/instrument-eligibility",
         "http://ingestion.dev.lotus/ingest/risk-free-series",
     ]
@@ -642,7 +694,9 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
     )
     assert calls[9][2]["model_portfolio_targets"]
     assert calls[10][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
-    assert calls[11][2]["eligibility_profiles"]
+    assert calls[11][2]["restriction_profiles"]
+    assert calls[12][2]["sustainability_preferences"]
+    assert calls[13][2]["eligibility_profiles"]
 
 
 def test_front_office_seed_derives_required_cross_currency_fx_windows():

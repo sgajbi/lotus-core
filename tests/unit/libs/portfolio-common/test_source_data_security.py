@@ -60,6 +60,12 @@ def test_client_source_products_classify_sensitive_identifiers() -> None:
     transaction_cost_profile = get_source_data_security_profile("TransactionCostCurve")
     assert transaction_cost_profile.sensitivity_classification == CLIENT_SENSITIVE
     assert {"portfolio_id", "transaction_id"} <= set(transaction_cost_profile.pii_fields)
+    restriction_profile = get_source_data_security_profile("ClientRestrictionProfile")
+    assert restriction_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert {"portfolio_id", "mandate_id", "client_id"} <= set(restriction_profile.pii_fields)
+    sustainability_profile = get_source_data_security_profile("SustainabilityPreferenceProfile")
+    assert sustainability_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert {"portfolio_id", "mandate_id", "client_id"} <= set(sustainability_profile.pii_fields)
 
 
 def test_operator_evidence_products_require_operator_access_and_operational_retention() -> None:
@@ -94,6 +100,8 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "MarketDataCoverageWindow",
         "PortfolioManagerBookMembership",
         "CioModelChangeAffectedCohort",
+        "ClientRestrictionProfile",
+        "SustainabilityPreferenceProfile",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):
