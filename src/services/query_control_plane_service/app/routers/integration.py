@@ -28,6 +28,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
+    ClientRestrictionProfileRequest,
+    ClientRestrictionProfileResponse,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     ClassificationTaxonomyRequest,
@@ -55,6 +57,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
+    SustainabilityPreferenceProfileRequest,
+    SustainabilityPreferenceProfileResponse,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
 )
@@ -95,6 +99,12 @@ PORTFOLIO_MANAGER_BOOK_EMPTY_EXAMPLE = {
     "detail": "No portfolio memberships found for portfolio_manager_id and request filters."
 }
 MANDATE_BINDING_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+CLIENT_RESTRICTION_PROFILE_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+SUSTAINABILITY_PREFERENCE_PROFILE_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = {
@@ -737,6 +747,102 @@ async def resolve_discretionary_mandate_binding(
     response = cast(
         DiscretionaryMandateBindingResponse | None,
         await integration_service.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/client-restriction-profile",
+    response_model=ClientRestrictionProfileResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            CLIENT_RESTRICTION_PROFILE_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective client restriction profile",
+    description=(
+        "What: Return effective source-owned client and mandate restriction records for a "
+        "portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding first, then selects active "
+        "client restriction profile records by portfolio, client, mandate, and as-of date with "
+        "deterministic version ordering.\n"
+        "When: Use this endpoint when lotus-manage needs restriction-aware DPM construction "
+        "evidence. The response publishes bounded restriction codes and scopes only; sensitive "
+        "free-text suitability rationale remains out of this downstream source product."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ClientRestrictionProfile"),
+)
+async def get_client_restriction_profile(
+    request: ClientRestrictionProfileRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose client restriction profile is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ClientRestrictionProfileResponse:
+    response = cast(
+        ClientRestrictionProfileResponse | None,
+        await integration_service.get_client_restriction_profile(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/sustainability-preference-profile",
+    response_model=SustainabilityPreferenceProfileResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            SUSTAINABILITY_PREFERENCE_PROFILE_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective sustainability preference profile",
+    description=(
+        "What: Return effective source-owned sustainability preference records for a portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding first, then selects active "
+        "sustainability preference profile records by portfolio, client, mandate, framework, "
+        "preference code, and as-of date with deterministic version ordering.\n"
+        "When: Use this endpoint when lotus-manage needs sustainability-aware DPM construction "
+        "evidence. The response publishes bounded framework, preference, exclusion, positive "
+        "tilt, and allocation fields; downstream services must not infer unstated client "
+        "preferences."
+    ),
+    openapi_extra=source_data_product_openapi_extra("SustainabilityPreferenceProfile"),
+)
+async def get_sustainability_preference_profile(
+    request: SustainabilityPreferenceProfileRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose sustainability preference profile is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> SustainabilityPreferenceProfileResponse:
+    response = cast(
+        SustainabilityPreferenceProfileResponse | None,
+        await integration_service.get_sustainability_preference_profile(
             portfolio_id=portfolio_id,
             request=request,
         ),

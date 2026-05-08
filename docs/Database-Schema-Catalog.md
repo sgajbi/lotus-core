@@ -324,6 +324,82 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `client_restriction_profiles`
+
+- **Purpose**: Effective-dated client and mandate restriction source records for DPM buy/sell
+  controls.
+- **Description**: Stores the source records behind `ClientRestrictionProfile:v1`, including
+  restriction scope, code, lifecycle status, buy/sell applicability, scoped identifiers, version,
+  lineage, and quality status. The table lets `lotus-manage` consume source-owned restriction truth
+  instead of maintaining local fallback restriction fixtures.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
+  as-of date; active restrictions are returned by default and deterministic latest-version
+  selection is applied by scope and restriction code.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Optional discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the restriction profile.
+  - `restriction_scope` (String): Scope such as client, mandate, instrument, asset class, issuer,
+    or country.
+  - `restriction_code` (String): Machine-readable restriction code.
+  - `restriction_status` (String): Restriction lifecycle status.
+  - `restriction_source` (String): Upstream source channel or authority.
+  - `applies_to_buy` (Boolean): Whether the restriction blocks or constrains buys.
+  - `applies_to_sell` (Boolean): Whether the restriction blocks or constrains sells.
+  - `instrument_ids` (JSON): Instrument identifiers in scope.
+  - `asset_classes` (JSON): Asset classes in scope.
+  - `issuer_ids` (JSON): Issuer identifiers in scope.
+  - `country_codes` (JSON): Country codes in scope.
+  - `effective_from` (Date): Restriction effective start date.
+  - `effective_to` (Date): Optional restriction effective end date.
+  - `restriction_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream restriction or mandate source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the record.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `sustainability_preference_profiles`
+
+- **Purpose**: Effective-dated client and mandate sustainability preference source records for DPM
+  portfolio construction.
+- **Description**: Stores the source records behind `SustainabilityPreferenceProfile:v1`,
+  including framework, preference code, allocation bounds, asset-class scope, exclusions, positive
+  tilts, version, lineage, and quality status. The table is a source-owner contract and does not
+  perform suitability adjudication or rebalance decisioning.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
+  as-of date; active preferences are returned by default and deterministic latest-version
+  selection is applied by framework and preference code.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Optional discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the preference profile.
+  - `preference_framework` (String): Framework or policy vocabulary for the preference.
+  - `preference_code` (String): Machine-readable sustainability preference code.
+  - `preference_status` (String): Preference lifecycle status.
+  - `preference_source` (String): Upstream source channel or authority.
+  - `minimum_allocation` (Numeric): Minimum allocation ratio, when applicable.
+  - `maximum_allocation` (Numeric): Maximum allocation ratio, when applicable.
+  - `applies_to_asset_classes` (JSON): Asset classes in scope.
+  - `exclusion_codes` (JSON): Sustainability exclusion codes in scope.
+  - `positive_tilt_codes` (JSON): Sustainability positive-tilt codes in scope.
+  - `effective_from` (Date): Preference effective start date.
+  - `effective_to` (Date): Optional preference effective end date.
+  - `preference_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream sustainability-preference source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the record.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `model_portfolio_targets`
 
 - **Purpose**: Effective-dated target weights and policy bands for discretionary model portfolios.

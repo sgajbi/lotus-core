@@ -62,6 +62,9 @@ Boundary rules that matter:
    `PortfolioManagerBookMembership:v1` and `CioModelChangeAffectedCohort:v1` contracts for
    automatic PM-book and CIO model-change cohort discovery, resolved from core portfolio master,
    approved model, and mandate-binding truth without making core a rebalance decisioning service.
+   RFC40-WTBD-008 extends that source-owner boundary with `ClientRestrictionProfile:v1` and
+   `SustainabilityPreferenceProfile:v1` so downstream stateful construction can consume governed
+   mandate restrictions and sustainability preferences instead of local fallback truth.
 
 ## Architecture At A Glance
 

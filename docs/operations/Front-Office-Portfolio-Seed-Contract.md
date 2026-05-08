@@ -23,6 +23,7 @@ The seed must support:
 - benchmark-linked performance summary
 - benchmark-linked performance analysis
 - performance evidence expansion later
+- DPM source-owner proof for mandate restrictions and sustainability preferences
 
 ## Seed Design Principles
 
@@ -339,6 +340,9 @@ The seed is acceptable only if it supports these behaviors end to end.
 - projected cashflow is populated
 - readiness shows either zero or a small intentional number of explainable
   exceptions
+- DPM source routes expose the mandate binding, model targets, instrument eligibility, tax lots,
+  market-data coverage, client restrictions, and sustainability preferences needed by downstream
+  stateful portfolio-construction proof
 
 ### Drill-downs
 
@@ -364,7 +368,7 @@ It does not need:
 - proposal generation
 - suitability
 - recommendation engine outputs
-- `lotus-manage` workflows
+- `lotus-manage` workflows or rebalance decisioning
 - every possible transaction type in the platform
 
 It does need to cover the current gateway/UI build path honestly and
@@ -388,8 +392,11 @@ That tool should:
 3. seed historical transactions
 4. seed prices and FX with enough history depth
 5. seed benchmark definitions, compositions, return series, and assignments
-6. wait for downstream calculators
-7. run a governed validation checklist across core, performance, and gateway
+6. seed DPM source-owner records for mandate binding, model targets, eligibility, tax lots,
+   market-data coverage, client restrictions, and sustainability preferences
+7. wait for downstream calculators
+8. run a governed validation checklist across core, performance, gateway, and source-product
+   routes
 
 ## Validation Contract
 
@@ -403,6 +410,8 @@ The future seed tool should validate at least:
 - activity summary non-empty
 - projected cashflow non-empty
 - benchmark assignment non-empty
+- client restriction profile non-empty
+- sustainability preference profile non-empty
 - portfolio timeseries non-empty
 - gateway performance summary non-empty
 - gateway performance details non-empty

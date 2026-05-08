@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     BenchmarkReturnSeries,
     CashAccountMaster,
     ClassificationTaxonomy,
+    ClientRestrictionProfile,
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
@@ -20,6 +21,7 @@ from portfolio_common.database_models import (
     PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
     RiskFreeSeries,
+    SustainabilityPreferenceProfile,
 )
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.dialects.postgresql import insert
@@ -163,6 +165,67 @@ class ReferenceDataIngestionService:
                 "ultimate_parent_issuer_name",
                 "asset_class",
                 "country_of_risk",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_client_restriction_profiles(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=ClientRestrictionProfile,
+            records=records,
+            conflict_columns=[
+                "client_id",
+                "portfolio_id",
+                "restriction_code",
+                "effective_from",
+                "restriction_version",
+            ],
+            update_columns=[
+                "mandate_id",
+                "restriction_scope",
+                "restriction_status",
+                "restriction_source",
+                "applies_to_buy",
+                "applies_to_sell",
+                "instrument_ids",
+                "asset_classes",
+                "issuer_ids",
+                "country_codes",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_sustainability_preference_profiles(
+        self, records: list[dict[str, Any]]
+    ) -> None:
+        await self._upsert_many(
+            model=SustainabilityPreferenceProfile,
+            records=records,
+            conflict_columns=[
+                "client_id",
+                "portfolio_id",
+                "preference_framework",
+                "preference_code",
+                "effective_from",
+                "preference_version",
+            ],
+            update_columns=[
+                "mandate_id",
+                "preference_status",
+                "preference_source",
+                "minimum_allocation",
+                "maximum_allocation",
+                "applies_to_asset_classes",
+                "exclusion_codes",
+                "positive_tilt_codes",
                 "effective_to",
                 "source_system",
                 "source_record_id",

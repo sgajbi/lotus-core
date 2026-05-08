@@ -8,6 +8,7 @@ from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
+    ClientRestrictionProfileRequest,
     CioModelChangeAffectedCohortRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
@@ -16,6 +17,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ModelPortfolioTargetRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
+    SustainabilityPreferenceProfileRequest,
     TransactionCostCurveRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -70,6 +72,17 @@ def cio_model_change_request(as_of_date: date) -> CioModelChangeAffectedCohortRe
         as_of_date=as_of_date,
         tenant_id="default",
         booking_center_code="Singapore",
+    )
+
+
+def profile_binding_row(as_of_date: date) -> SimpleNamespace:
+    return SimpleNamespace(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        effective_from=as_of_date,
+        observed_at=datetime(2026, 5, 3, 8, tzinfo=UTC),
+        updated_at=datetime(2026, 5, 3, 8, tzinfo=UTC),
     )
 
 
@@ -267,6 +280,155 @@ async def test_resolve_cio_model_change_affected_cohort_returns_none_without_app
 
     assert response is None
     service._reference_repository.list_model_portfolio_affected_mandates.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+
+@pytest.mark.asyncio
+async def test_client_restriction_profile_returns_ready_source_records():
+    service = make_service()
+    as_of_date = date(2026, 5, 3)
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        profile_binding_row(as_of_date)
+    )
+    service._reference_repository.list_client_restriction_profiles.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        SimpleNamespace(
+            restriction_scope="asset_class",
+            restriction_code="NO_PRIVATE_CREDIT_BUY",
+            restriction_status="active",
+            restriction_source="client_mandate",
+            applies_to_buy=True,
+            applies_to_sell=False,
+            instrument_ids=[],
+            asset_classes=["private_credit"],
+            issuer_ids=[],
+            country_codes=[],
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            restriction_version=1,
+            source_record_id="client-restriction:1",
+            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
+        )
+    ]
+
+    response = await service.get_client_restriction_profile(
+        "PB_SG_GLOBAL_BAL_001",
+        ClientRestrictionProfileRequest(
+            as_of_date=as_of_date,
+            tenant_id="default",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        ),
+    )
+
+    assert response is not None
+    assert response.product_name == "ClientRestrictionProfile"
+    assert response.client_id == "CIF_SG_000184"
+    assert response.supportability.state == "READY"
+    assert response.supportability.restriction_count == 1
+    assert response.restrictions[0].restriction_code == "NO_PRIVATE_CREDIT_BUY"
+    assert response.restrictions[0].asset_classes == ["private_credit"]
+    assert response.lineage["source_table"] == (
+        "client_restriction_profiles,portfolio_mandate_bindings"
+    )
+    service._reference_repository.list_client_restriction_profiles.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        as_of_date=as_of_date,
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        include_inactive_restrictions=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_client_restriction_profile_marks_missing_profile_incomplete():
+    service = make_service()
+    as_of_date = date(2026, 5, 3)
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        profile_binding_row(as_of_date)
+    )
+    service._reference_repository.list_client_restriction_profiles.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.get_client_restriction_profile(
+        "PB_SG_GLOBAL_BAL_001",
+        ClientRestrictionProfileRequest(as_of_date=as_of_date, tenant_id="default"),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "CLIENT_RESTRICTION_PROFILE_EMPTY"
+    assert response.supportability.missing_data_families == ["client_restrictions"]
+    assert response.data_quality_status == "MISSING"
+
+
+@pytest.mark.asyncio
+async def test_sustainability_preference_profile_returns_ready_source_records():
+    service = make_service()
+    as_of_date = date(2026, 5, 3)
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        profile_binding_row(as_of_date)
+    )
+    service._reference_repository.list_sustainability_preference_profiles.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        SimpleNamespace(
+            preference_framework="LOTUS_SUSTAINABILITY_V1",
+            preference_code="MIN_SUSTAINABLE_ALLOCATION",
+            preference_status="active",
+            preference_source="client_mandate",
+            minimum_allocation=Decimal("0.2000000000"),
+            maximum_allocation=None,
+            applies_to_asset_classes=["equity", "fixed_income"],
+            exclusion_codes=["THERMAL_COAL"],
+            positive_tilt_codes=["LOW_CARBON_TRANSITION"],
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            preference_version=1,
+            source_record_id="sustainability:1",
+            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
+        )
+    ]
+
+    response = await service.get_sustainability_preference_profile(
+        "PB_SG_GLOBAL_BAL_001",
+        SustainabilityPreferenceProfileRequest(
+            as_of_date=as_of_date,
+            tenant_id="default",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        ),
+    )
+
+    assert response is not None
+    assert response.product_name == "SustainabilityPreferenceProfile"
+    assert response.supportability.state == "READY"
+    assert response.supportability.preference_count == 1
+    assert response.preferences[0].minimum_allocation == Decimal("0.2000000000")
+    assert response.preferences[0].exclusion_codes == ["THERMAL_COAL"]
+    assert response.lineage["source_table"] == (
+        "sustainability_preference_profiles,portfolio_mandate_bindings"
+    )
+    service._reference_repository.list_sustainability_preference_profiles.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        as_of_date=as_of_date,
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        include_inactive_preferences=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sustainability_preference_profile_returns_none_without_binding():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.get_sustainability_preference_profile(
+        "PB_MISSING",
+        SustainabilityPreferenceProfileRequest(as_of_date=date(2026, 5, 3)),
+    )
+
+    assert response is None
+    service._reference_repository.list_sustainability_preference_profiles.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
 
 
 @pytest.mark.parametrize(

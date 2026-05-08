@@ -320,6 +320,102 @@ class PortfolioMandateBinding(Base):
     )
 
 
+class ClientRestrictionProfile(Base):
+    __tablename__ = "client_restriction_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=True, index=True)
+    restriction_scope = Column(String, nullable=False, index=True)
+    restriction_code = Column(String, nullable=False, index=True)
+    restriction_status = Column(String, nullable=False, index=True)
+    restriction_source = Column(String, nullable=False)
+    applies_to_buy = Column(Boolean, nullable=False, server_default="true")
+    applies_to_sell = Column(Boolean, nullable=False, server_default="false")
+    instrument_ids = Column(JSON, nullable=False, server_default="[]")
+    asset_classes = Column(JSON, nullable=False, server_default="[]")
+    issuer_ids = Column(JSON, nullable=False, server_default="[]")
+    country_codes = Column(JSON, nullable=False, server_default="[]")
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    restriction_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "portfolio_id",
+            "restriction_code",
+            "effective_from",
+            "restriction_version",
+            name="_client_restriction_profile_effective_uc",
+        ),
+        Index(
+            "ix_client_restriction_profile_effective_window",
+            "portfolio_id",
+            "client_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class SustainabilityPreferenceProfile(Base):
+    __tablename__ = "sustainability_preference_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=True, index=True)
+    preference_framework = Column(String, nullable=False, index=True)
+    preference_code = Column(String, nullable=False, index=True)
+    preference_status = Column(String, nullable=False, index=True)
+    preference_source = Column(String, nullable=False)
+    minimum_allocation = Column(Numeric(18, 10), nullable=True)
+    maximum_allocation = Column(Numeric(18, 10), nullable=True)
+    applies_to_asset_classes = Column(JSON, nullable=False, server_default="[]")
+    exclusion_codes = Column(JSON, nullable=False, server_default="[]")
+    positive_tilt_codes = Column(JSON, nullable=False, server_default="[]")
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    preference_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "portfolio_id",
+            "preference_framework",
+            "preference_code",
+            "effective_from",
+            "preference_version",
+            name="_sustainability_preference_profile_effective_uc",
+        ),
+        Index(
+            "ix_sustainability_preference_effective_window",
+            "portfolio_id",
+            "client_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class InstrumentEligibilityProfile(Base):
     __tablename__ = "instrument_eligibility_profiles"
 

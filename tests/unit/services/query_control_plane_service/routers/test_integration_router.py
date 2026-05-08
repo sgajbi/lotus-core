@@ -17,6 +17,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     fetch_index_return_series,
     fetch_risk_free_series,
     get_benchmark_coverage,
+    get_client_restriction_profile,
     get_core_snapshot_service,
     get_dpm_source_readiness,
     get_effective_integration_policy,
@@ -25,6 +26,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_market_data_coverage,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
+    get_sustainability_preference_profile,
     get_transaction_cost_curve,
     resolve_cio_model_change_affected_cohort,
     resolve_discretionary_mandate_binding,
@@ -50,6 +52,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkDefinitionRequest,
     BenchmarkMarketSeriesRequest,
     BenchmarkReturnSeriesRequest,
+    ClientRestrictionProfileRequest,
     CioModelChangeAffectedCohortRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
@@ -64,6 +67,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
+    SustainabilityPreferenceProfileRequest,
     TransactionCostCurveRequest,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
@@ -1166,6 +1170,119 @@ async def test_get_dpm_source_readiness_router_function() -> None:
 
     assert response["product_name"] == "DpmSourceReadiness"
     mock_service.get_dpm_source_readiness.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_client_restriction_profile_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_client_restriction_profile = AsyncMock(
+        return_value={
+            "product_name": "ClientRestrictionProfile",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "restrictions": [
+                {
+                    "restriction_scope": "asset_class",
+                    "restriction_code": "NO_PRIVATE_CREDIT_BUY",
+                    "restriction_status": "active",
+                    "restriction_source": "client_mandate",
+                    "applies_to_buy": True,
+                    "applies_to_sell": False,
+                    "instrument_ids": [],
+                    "asset_classes": ["private_credit"],
+                    "issuer_ids": [],
+                    "country_codes": [],
+                    "effective_from": "2026-01-01",
+                    "effective_to": None,
+                    "restriction_version": 1,
+                    "source_record_id": "client-restriction:1",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "CLIENT_RESTRICTION_PROFILE_READY",
+                "restriction_count": 1,
+                "missing_data_families": [],
+            },
+            "lineage": {"contract_version": "rfc_040_client_restriction_profile_v1"},
+        }
+    )
+    request = ClientRestrictionProfileRequest(
+        as_of_date="2026-05-03",
+        tenant_id="default",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+    )
+
+    response = await get_client_restriction_profile(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "ClientRestrictionProfile"
+    mock_service.get_client_restriction_profile.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_sustainability_preference_profile_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_sustainability_preference_profile = AsyncMock(
+        return_value={
+            "product_name": "SustainabilityPreferenceProfile",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "preferences": [
+                {
+                    "preference_framework": "LOTUS_SUSTAINABILITY_V1",
+                    "preference_code": "MIN_SUSTAINABLE_ALLOCATION",
+                    "preference_status": "active",
+                    "preference_source": "client_mandate",
+                    "minimum_allocation": "0.2000000000",
+                    "maximum_allocation": None,
+                    "applies_to_asset_classes": ["equity", "fixed_income"],
+                    "exclusion_codes": ["THERMAL_COAL"],
+                    "positive_tilt_codes": ["LOW_CARBON_TRANSITION"],
+                    "effective_from": "2026-01-01",
+                    "effective_to": None,
+                    "preference_version": 1,
+                    "source_record_id": "sustainability:1",
+                }
+            ],
+            "supportability": {
+                "state": "READY",
+                "reason": "SUSTAINABILITY_PREFERENCE_PROFILE_READY",
+                "preference_count": 1,
+                "missing_data_families": [],
+            },
+            "lineage": {"contract_version": "rfc_040_sustainability_preference_profile_v1"},
+        }
+    )
+    request = SustainabilityPreferenceProfileRequest(
+        as_of_date="2026-05-03",
+        tenant_id="default",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+    )
+
+    response = await get_sustainability_preference_profile(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "SustainabilityPreferenceProfile"
+    mock_service.get_sustainability_preference_profile.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
     )

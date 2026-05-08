@@ -199,6 +199,8 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
+            f"delete from sustainability_preference_profiles where portfolio_id = '{portfolio_id}';",
+            f"delete from client_restriction_profiles where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_mandate_bindings where portfolio_id = '{portfolio_id}';",
             "delete from instrument_eligibility_profiles "
             "where source_system = 'LOTUS_FRONT_OFFICE_SEED';",
@@ -1461,6 +1463,72 @@ def build_front_office_portfolio_bundle(
         }
         for instrument in instruments
     ]
+    client_restriction_profiles = [
+        {
+            "client_id": "CIF_SG_000184",
+            "portfolio_id": portfolio_id,
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "restriction_scope": "asset_class",
+            "restriction_code": "NO_PRIVATE_CREDIT_BUY",
+            "restriction_status": "active",
+            "restriction_source": "client_mandate",
+            "applies_to_buy": True,
+            "applies_to_sell": False,
+            "instrument_ids": [],
+            "asset_classes": ["private_credit"],
+            "issuer_ids": [],
+            "country_codes": [],
+            "effective_from": "2026-04-01",
+            "restriction_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": f"{portfolio_id.lower()}_client_restriction_private_credit_v1",
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        },
+        {
+            "client_id": "CIF_SG_000184",
+            "portfolio_id": portfolio_id,
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "restriction_scope": "country",
+            "restriction_code": "NO_SANCTIONED_MARKET_BUY",
+            "restriction_status": "active",
+            "restriction_source": "booking_center_policy",
+            "applies_to_buy": True,
+            "applies_to_sell": False,
+            "instrument_ids": [],
+            "asset_classes": [],
+            "issuer_ids": [],
+            "country_codes": ["RU"],
+            "effective_from": "2026-04-01",
+            "restriction_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": f"{portfolio_id.lower()}_client_restriction_country_v1",
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        },
+    ]
+    sustainability_preference_profiles = [
+        {
+            "client_id": "CIF_SG_000184",
+            "portfolio_id": portfolio_id,
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "preference_framework": "LOTUS_SUSTAINABILITY_V1",
+            "preference_code": "MIN_SUSTAINABLE_ALLOCATION",
+            "preference_status": "active",
+            "preference_source": "client_mandate",
+            "minimum_allocation": "0.2000000000",
+            "maximum_allocation": None,
+            "applies_to_asset_classes": ["equity", "fixed_income"],
+            "exclusion_codes": ["THERMAL_COAL"],
+            "positive_tilt_codes": ["LOW_CARBON_TRANSITION"],
+            "effective_from": "2026-04-01",
+            "preference_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": f"{portfolio_id.lower()}_sustainability_min_allocation_v1",
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+    ]
 
     market_price_specs = {
         "FO_EQ_AAPL_US": (Decimal("184.00"), Decimal("212.00")),
@@ -1548,6 +1616,8 @@ def build_front_office_portfolio_bundle(
         "model_portfolios": model_portfolios,
         "model_portfolio_targets": model_portfolio_targets,
         "mandate_bindings": mandate_bindings,
+        "client_restriction_profiles": client_restriction_profiles,
+        "sustainability_preference_profiles": sustainability_preference_profiles,
         "instrument_eligibility_profiles": instrument_eligibility_profiles,
         **benchmark_reference,
         **risk_free_reference,
@@ -1613,6 +1683,14 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         (
             "/ingest/mandate-bindings",
             {"mandate_bindings": bundle["mandate_bindings"]},
+        ),
+        (
+            "/ingest/client-restriction-profiles",
+            {"restriction_profiles": bundle["client_restriction_profiles"]},
+        ),
+        (
+            "/ingest/sustainability-preferences",
+            {"sustainability_preferences": bundle["sustainability_preference_profiles"]},
         ),
         (
             "/ingest/instrument-eligibility",

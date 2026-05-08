@@ -14,6 +14,7 @@ Use this when you need one portfolio that exercises:
 - activity summary
 - benchmark-linked performance
 - forward projected cashflow
+- DPM source-owner client restrictions and sustainability preferences
 
 This runbook is local-only and does not depend on `lotus-manage`.
 
@@ -37,6 +38,8 @@ not part of canonical Workbench runtime bring-up.
 - equities, funds, and fixed income
 - 12 months of market prices and EUR/USD FX
 - benchmark assignment and benchmark reference data
+- discretionary mandate binding, model target, instrument eligibility, tax-lot, market-data,
+  client-restriction, and sustainability-preference source records for DPM assembly proof
 - income, fee, tax, sell, and withdrawal activity
 - one future-dated withdrawal inside the forward cashflow horizon
 - canonical paired product-and-cash transactions aligned with the core demo ingest pattern
@@ -45,6 +48,13 @@ not part of canonical Workbench runtime bring-up.
 - full valuation coverage through the report end date so performance analytics remain valid
 - FX and benchmark component coverage through the forward validation window so
   next-day analytics requests remain valid
+- client restriction records for:
+  - private-credit buys blocked by `NO_PRIVATE_CREDIT_BUY`
+  - sanctioned-market buys blocked by `NO_SANCTIONED_MARKET_BUY`
+- sustainability preference records for:
+  - minimum sustainable allocation `0.2000000000`
+  - thermal-coal exclusion `THERMAL_COAL`
+  - low-carbon-transition positive tilt `LOW_CARBON_TRANSITION`
 
 ## Operator Command
 
@@ -74,6 +84,8 @@ verifies:
 - activity summary is populated
 - projected cashflow contains at least one non-zero future point
 - benchmark assignment resolves
+- DPM client restriction and sustainability preference source records resolve through
+  query-control-plane integration routes
 - gateway performance summary resolves with benchmark-linked content
 - core analytics reference `performance_end_date` is at or after the seed end date
 - gateway performance `report_end_date` and return-path latest available date are
@@ -99,6 +111,8 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
 - `lotus-core query_control_plane`
   - benchmark assignment resolves to `BMK_PB_GLOBAL_BALANCED_60_40`
   - analytics reference `performance_end_date` resolves to `2026-04-10`
+  - DPM source products resolve client restriction and sustainability preference records for
+    `PB_SG_GLOBAL_BAL_001` when the RFC40-WTBD-008 source-owner slice is applied
 - `lotus-core portfolio_aggregation_service`
   - portfolio aggregation backlog for `PB_SG_GLOBAL_BAL_001`: `0` pending,
     `0` processing, `382` complete

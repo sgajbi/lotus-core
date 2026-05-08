@@ -334,6 +334,232 @@ class CioModelChangeAffectedCohortResponse(SourceDataProductRuntimeMetadata):
     model_config = ConfigDict()
 
 
+class ClientRestrictionProfileRequest(BaseModel):
+    as_of_date: date = Field(
+        ...,
+        description="Business date used to resolve effective client and mandate restrictions.",
+        examples=["2026-05-03"],
+    )
+    tenant_id: str | None = Field(
+        None,
+        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
+        examples=["default"],
+    )
+    mandate_id: str | None = Field(
+        None,
+        description="Optional mandate identifier used to disambiguate portfolio restrictions.",
+        examples=["MANDATE_PB_SG_GLOBAL_BAL_001"],
+    )
+    include_inactive_restrictions: bool = Field(
+        False,
+        description="When false, excludes inactive or expired restriction records.",
+    )
+
+    model_config = ConfigDict()
+
+
+class ClientRestrictionProfileEntry(BaseModel):
+    restriction_scope: str = Field(
+        ...,
+        description="Bounded scope for the restriction such as client, mandate, instrument, issuer, country, or asset_class.",
+        examples=["issuer"],
+    )
+    restriction_code: str = Field(
+        ...,
+        description="Machine-readable restriction code safe for downstream proof packs.",
+        examples=["NO_PRIVATE_CREDIT_BUY"],
+    )
+    restriction_status: str = Field(
+        ..., description="Restriction lifecycle status selected by the source product."
+    )
+    restriction_source: str = Field(
+        ..., description="Source channel that captured the restriction."
+    )
+    applies_to_buy: bool = Field(..., description="Whether the restriction applies to buy actions.")
+    applies_to_sell: bool = Field(
+        ..., description="Whether the restriction applies to sell actions."
+    )
+    instrument_ids: list[str] = Field(
+        default_factory=list, description="Instrument identifiers directly in scope."
+    )
+    asset_classes: list[str] = Field(
+        default_factory=list, description="Asset classes in scope for the restriction."
+    )
+    issuer_ids: list[str] = Field(
+        default_factory=list, description="Issuer identifiers in scope for the restriction."
+    )
+    country_codes: list[str] = Field(
+        default_factory=list, description="Country-of-risk codes in scope for the restriction."
+    )
+    effective_from: date = Field(..., description="Restriction effective start date.")
+    effective_to: date | None = Field(None, description="Restriction effective end date.")
+    restriction_version: int = Field(..., description="Selected restriction profile version.")
+    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
+
+    model_config = ConfigDict()
+
+
+class ClientRestrictionProfileSupportability(BaseModel):
+    state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = Field(
+        ...,
+        description="Supportability state for using the client restriction profile in DPM construction.",
+        examples=["READY"],
+    )
+    reason: str = Field(
+        ...,
+        description="Machine-readable supportability reason.",
+        examples=["CLIENT_RESTRICTION_PROFILE_READY"],
+    )
+    restriction_count: int = Field(
+        ..., ge=0, description="Number of effective restrictions returned."
+    )
+    missing_data_families: list[str] = Field(
+        default_factory=list,
+        description="Missing source families that block profile consumption.",
+    )
+
+    model_config = ConfigDict()
+
+
+class ClientRestrictionProfileResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["ClientRestrictionProfile"] = product_name_field(
+        "ClientRestrictionProfile"
+    )
+    product_version: Literal["v1"] = product_version_field()
+    portfolio_id: str = Field(..., description="Portfolio identifier for the profile.")
+    client_id: str = Field(..., description="Client identifier bound to the profile.")
+    mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
+    as_of_date: date = Field(..., description="Business date used for profile resolution.")
+    restrictions: list[ClientRestrictionProfileEntry] = Field(
+        default_factory=list,
+        description="Deterministically ordered effective client restriction records.",
+    )
+    supportability: ClientRestrictionProfileSupportability = Field(
+        ..., description="Supportability posture for restriction-aware construction."
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Source lineage for restriction profile resolution.",
+    )
+
+    model_config = ConfigDict()
+
+
+class SustainabilityPreferenceProfileRequest(BaseModel):
+    as_of_date: date = Field(
+        ...,
+        description="Business date used to resolve effective sustainability preferences.",
+        examples=["2026-05-03"],
+    )
+    tenant_id: str | None = Field(
+        None,
+        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
+        examples=["default"],
+    )
+    mandate_id: str | None = Field(
+        None,
+        description="Optional mandate identifier used to disambiguate portfolio preferences.",
+        examples=["MANDATE_PB_SG_GLOBAL_BAL_001"],
+    )
+    include_inactive_preferences: bool = Field(
+        False,
+        description="When false, excludes inactive or expired sustainability preference records.",
+    )
+
+    model_config = ConfigDict()
+
+
+class SustainabilityPreferenceProfileEntry(BaseModel):
+    preference_framework: str = Field(
+        ...,
+        description="Framework or policy vocabulary for the preference.",
+        examples=["LOTUS_SUSTAINABILITY_V1"],
+    )
+    preference_code: str = Field(
+        ...,
+        description="Machine-readable sustainability preference code.",
+        examples=["MIN_SUSTAINABLE_ALLOCATION"],
+    )
+    preference_status: str = Field(
+        ..., description="Preference lifecycle status selected by the source product."
+    )
+    preference_source: str = Field(..., description="Source channel that captured the preference.")
+    minimum_allocation: Decimal | None = Field(
+        None,
+        description="Minimum portfolio allocation ratio for the preference, if applicable.",
+        examples=["0.2000000000"],
+    )
+    maximum_allocation: Decimal | None = Field(
+        None,
+        description="Maximum portfolio allocation ratio for the preference, if applicable.",
+        examples=["0.0500000000"],
+    )
+    applies_to_asset_classes: list[str] = Field(
+        default_factory=list,
+        description="Asset classes in scope for the preference.",
+    )
+    exclusion_codes: list[str] = Field(
+        default_factory=list,
+        description="Sustainability exclusion codes in scope.",
+    )
+    positive_tilt_codes: list[str] = Field(
+        default_factory=list,
+        description="Positive sustainability tilt codes in scope.",
+    )
+    effective_from: date = Field(..., description="Preference effective start date.")
+    effective_to: date | None = Field(None, description="Preference effective end date.")
+    preference_version: int = Field(..., description="Selected preference profile version.")
+    source_record_id: str | None = Field(None, description="Source record id for audit replay.")
+
+    model_config = ConfigDict()
+
+
+class SustainabilityPreferenceProfileSupportability(BaseModel):
+    state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = Field(
+        ...,
+        description="Supportability state for using sustainability preferences in DPM construction.",
+        examples=["READY"],
+    )
+    reason: str = Field(
+        ...,
+        description="Machine-readable supportability reason.",
+        examples=["SUSTAINABILITY_PREFERENCE_PROFILE_READY"],
+    )
+    preference_count: int = Field(
+        ..., ge=0, description="Number of effective preferences returned."
+    )
+    missing_data_families: list[str] = Field(
+        default_factory=list,
+        description="Missing source families that block profile consumption.",
+    )
+
+    model_config = ConfigDict()
+
+
+class SustainabilityPreferenceProfileResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["SustainabilityPreferenceProfile"] = product_name_field(
+        "SustainabilityPreferenceProfile"
+    )
+    product_version: Literal["v1"] = product_version_field()
+    portfolio_id: str = Field(..., description="Portfolio identifier for the profile.")
+    client_id: str = Field(..., description="Client identifier bound to the profile.")
+    mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
+    as_of_date: date = Field(..., description="Business date used for profile resolution.")
+    preferences: list[SustainabilityPreferenceProfileEntry] = Field(
+        default_factory=list,
+        description="Deterministically ordered effective sustainability preference records.",
+    )
+    supportability: SustainabilityPreferenceProfileSupportability = Field(
+        ..., description="Supportability posture for sustainability-aware construction."
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Source lineage for sustainability preference profile resolution.",
+    )
+
+    model_config = ConfigDict()
+
+
 class BenchmarkAssignmentRequest(BaseModel):
     as_of_date: date = Field(
         ...,
