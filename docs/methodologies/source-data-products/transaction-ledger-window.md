@@ -8,7 +8,8 @@
 It returns governed booked transaction rows for one portfolio with source-data product identity,
 runtime metadata, optional filters, offset pagination, linked cost/cashflow evidence, and
 optional reporting-currency restatement fields. The product is source evidence for row-level
-portfolio activity. It is not a tax methodology, FX attribution methodology, cash-movement
+portfolio activity, including explicit FX-leg realized P&L fields when upstream transaction
+processing supplies them. It is not a tax methodology, FX attribution methodology, cash-movement
 aggregation methodology, transaction-cost curve methodology, execution-quality assessment, OMS
 acknowledgement, or client advice output.
 
@@ -19,7 +20,7 @@ acknowledgement, or client advice output.
 | Default booked ledger | No `as_of_date`, `include_projected=false` | Resolves `as_of_date` to the latest business date when available, otherwise the current application date. Returns rows with `transaction_date <= as_of_date`. |
 | Explicit as-of ledger | `as_of_date=<date>` | Returns rows with `transaction_date <= as_of_date`. |
 | Projected-inclusive ledger | `include_projected=true` | Does not apply the default business-date cap when `as_of_date` is omitted, allowing future-dated projected rows that match the other filters. |
-| Reporting-currency restated ledger | `reporting_currency=<ccy>` with an effective `as_of_date` | Adds reporting-currency monetary fields by applying the latest available FX rate on or before the effective `as_of_date`. Raw ledger monetary fields remain unchanged. |
+| Reporting-currency restated ledger | `reporting_currency=<ccy>` with an effective `as_of_date` | Adds reporting-currency monetary fields by applying the latest available FX rate on or before the effective `as_of_date`. Raw ledger monetary fields, including explicit FX realized-P&L fields, remain unchanged. |
 
 ## Inputs
 
@@ -64,6 +65,11 @@ latest FX rate with `rate_date <= as_of_date` from each row currency to the requ
 currency and populates only the `*_reporting_currency` fields. Same-currency restatement uses a
 rate of `1`.
 
+The route restates only row-level fields that already exist on the transaction record:
+`gross_transaction_amount`, `gross_cost`, `trade_fee`, `net_cost`, `realized_gain_loss`,
+`realized_capital_pnl_local`, `realized_fx_pnl_local`, `realized_total_pnl_local`,
+`withholding_tax_amount`, `other_interest_deductions_amount`, and `net_interest_amount`.
+
 No tax calculation, FX attribution, cash movement aggregation, transaction-cost curve aggregation,
 market-impact adjustment, execution-quality assessment, or OMS status inference is performed by
 this product.
@@ -84,6 +90,8 @@ this product.
 | `R` | `transactions[]` | Returned page of transaction rows. |
 | `Q` | `data_quality_status` | `COMPLETE`, `PARTIAL`, or `UNKNOWN` page quality posture. |
 | `X_c` | reporting FX rate | Latest FX rate from row currency to reporting currency on or before `A`. |
+| `FX_local` | `realized_fx_pnl_local` | Upstream-supplied row-level realized FX P&L in the transaction row currency. |
+| `FX_report` | `realized_fx_pnl_local_reporting_currency` | Optional reporting-currency restatement of `FX_local`; this is not portfolio-level FX attribution. |
 
 ## Methodology and Formulas
 
@@ -102,6 +110,10 @@ Date filters are applied as:
 Reporting-currency fields are computed independently for each populated raw monetary field:
 
 `amount_reporting_currency = amount * X_c`
+
+For explicit realized FX P&L local evidence:
+
+`FX_report = FX_local * X_c`
 
 The raw amount remains unchanged. The product does not derive cross-row measures from the returned
 page.
@@ -122,7 +134,8 @@ page.
 7. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
    records when present.
 8. If `reporting_currency` is supplied and `A` exists, populate supported
-   `*_reporting_currency` fields using the latest FX rate on or before `A`.
+   `*_reporting_currency` fields using the latest FX rate on or before `A`, including explicit
+   row-level `realized_*_pnl_local` fields when present.
 9. Compute `data_quality_status` from `total`, returned row count, and `skip`.
 10. Return source-data runtime metadata including product identity, version, effective as-of date,
     latest evidence timestamp, reconciliation status, restatement version, and data-quality status.
@@ -162,6 +175,7 @@ page.
 | `transactions[].costs[]` | Joined explicit transaction-cost rows without aggregation. |
 | `transactions[].cashflow` | Joined linked cashflow row when present. |
 | `*_reporting_currency` fields | Optional row-level restatement into requested reporting currency. |
+| `transactions[].realized_fx_pnl_local_reporting_currency` | Optional restatement of upstream-supplied row-level realized FX P&L evidence; not an FX attribution measure. |
 | `as_of_date` | Effective booked-state cap or fallback output date. |
 | `data_quality_status` | Page completeness posture for the returned ledger window. |
 | `latest_evidence_timestamp` | Latest durable transaction `updated_at` timestamp for the filtered ledger window. |
@@ -178,6 +192,7 @@ Source facts:
 | --- | --- | ---: | --- | ---: | --- | ---: |
 | T1 | `trade_fee` | 12.50 | USD | 1.36 | `trade_fee_reporting_currency` | 17.00 |
 | T1 | `realized_gain_loss` | 250.00 | USD | 1.36 | `realized_gain_loss_reporting_currency` | 340.00 |
+| T1 | `realized_fx_pnl_local` | 1250.00 | USD | 1.36 | `realized_fx_pnl_local_reporting_currency` | 1700.00 |
 | T2 | `withholding_tax_amount` | 10.00 | USD | 1.36 | `withholding_tax_amount_reporting_currency` | 13.60 |
 | T2 | `net_interest_amount` | 110.00 | USD | 1.36 | `net_interest_amount_reporting_currency` | 149.60 |
 
@@ -188,4 +203,5 @@ Final output mapping:
 | `total` | 2 |
 | `data_quality_status` | `COMPLETE` |
 | `transactions[0].trade_fee_reporting_currency` | 17.00 |
+| `transactions[0].realized_fx_pnl_local_reporting_currency` | 1700.00 |
 | `transactions[1].withholding_tax_amount_reporting_currency` | 13.60 |

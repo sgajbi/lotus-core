@@ -33,6 +33,9 @@ def mock_transaction_repo() -> AsyncMock:
             gross_cost=Decimal(1000),
             trade_fee=Decimal("12.5"),
             realized_gain_loss=Decimal("250"),
+            realized_capital_pnl_local=Decimal("0"),
+            realized_fx_pnl_local=Decimal("1250"),
+            realized_total_pnl_local=Decimal("1250"),
             trade_currency="USD",
             currency="USD",
             cash_entry_mode="AUTO_GENERATE",
@@ -371,6 +374,9 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert first_transaction.gross_cost_reporting_currency == Decimal("1360.00")
     assert first_transaction.trade_fee_reporting_currency == Decimal("17.000")
     assert first_transaction.realized_gain_loss_reporting_currency == Decimal("340.00")
+    assert first_transaction.realized_capital_pnl_local_reporting_currency == Decimal("0.00")
+    assert first_transaction.realized_fx_pnl_local_reporting_currency == Decimal("1700.00")
+    assert first_transaction.realized_total_pnl_local_reporting_currency == Decimal("1700.00")
     assert income_transaction.gross_transaction_amount_reporting_currency == Decimal("170.00")
     assert income_transaction.withholding_tax_amount_reporting_currency == Decimal("13.60")
     assert income_transaction.other_interest_deductions_amount_reporting_currency == Decimal("6.80")

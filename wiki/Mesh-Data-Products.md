@@ -95,9 +95,9 @@ liquidity, execution, or OMS truth.
 product filters booked transaction rows by portfolio, optional instrument/security, transaction
 type, FX/event linkage, date window, and effective as-of date; preserves joined row-level
 transaction-cost and cashflow evidence; optionally populates reporting-currency fields from latest
-available FX rates; and classifies empty, complete, and paged windows without deriving tax advice,
-FX attribution, cash-movement aggregation, transaction-cost curves, execution quality, or OMS
-acknowledgement.
+available FX rates, including explicit row-level realized FX P&L local evidence; and classifies
+empty, complete, and paged windows without deriving tax advice, FX attribution, cash-movement
+aggregation, transaction-cost curves, execution quality, or OMS acknowledgement.
 
 `PortfolioCashflowProjection:v1` is the governed source for daily net cashflow points, cumulative
 cashflow over the returned window, total net cashflow, portfolio currency, include-projected posture,

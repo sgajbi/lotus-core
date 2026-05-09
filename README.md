@@ -65,6 +65,9 @@ Boundary rules that matter:
    RFC40-WTBD-008 extends that source-owner boundary with `ClientRestrictionProfile:v1` and
    `SustainabilityPreferenceProfile:v1` so downstream stateful construction can consume governed
    mandate restrictions and sustainability preferences instead of local fallback truth.
+7. `TransactionLedgerWindow:v1` preserves explicit row-level realized FX P&L evidence and can
+   restate those local P&L fields into a requested reporting currency for downstream reporting
+   surfaces without promoting portfolio-level FX attribution.
 
 ## Architecture At A Glance
 
