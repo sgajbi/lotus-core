@@ -562,6 +562,14 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         == "Transaction-level realized gain/loss restated into the requested reporting "
         "currency when `reporting_currency` is supplied on the route."
     )
+    assert (
+        schema["components"]["schemas"]["TransactionRecord"]["properties"][
+            "realized_fx_pnl_local_reporting_currency"
+        ]["description"]
+        == "Transaction-level realized FX P&L local amount restated into the requested reporting "
+        "currency when `reporting_currency` is supplied on the route. This is row-level "
+        "source evidence, not portfolio-level FX attribution."
+    )
 
     bad_request = transactions["responses"]["400"]["content"]["application/json"]["example"]
     assert bad_request["detail"] == "FX rate not found for USD/SGD as of 2026-03-10."

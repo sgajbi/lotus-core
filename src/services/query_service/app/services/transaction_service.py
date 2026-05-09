@@ -144,6 +144,12 @@ class TransactionService:
             ("trade_fee", "trade_fee_reporting_currency"),
             ("net_cost", "net_cost_reporting_currency"),
             ("realized_gain_loss", "realized_gain_loss_reporting_currency"),
+            (
+                "realized_capital_pnl_local",
+                "realized_capital_pnl_local_reporting_currency",
+            ),
+            ("realized_fx_pnl_local", "realized_fx_pnl_local_reporting_currency"),
+            ("realized_total_pnl_local", "realized_total_pnl_local_reporting_currency"),
             ("withholding_tax_amount", "withholding_tax_amount_reporting_currency"),
             (
                 "other_interest_deductions_amount",

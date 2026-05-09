@@ -260,9 +260,10 @@ Most relevant current governance:
     `docs/methodologies/source-data-products/transaction-ledger-window.md`; it pins row filtering
     by portfolio, instrument/security, transaction type, FX/event linkage, date window, and
     effective as-of date; joined transaction-cost and cashflow row preservation; optional
-    reporting-currency restatement from latest available FX rates; empty, complete, and paged
-    window data-quality posture; and explicit boundaries from tax advice, FX attribution, cash
-    aggregation, transaction-cost methodology, execution quality, and OMS acknowledgement.
+    reporting-currency restatement from latest available FX rates, including explicit row-level
+    realized FX P&L local evidence; empty, complete, and paged window data-quality posture; and
+    explicit boundaries from tax advice, FX attribution, cash aggregation, transaction-cost
+    methodology, execution quality, and OMS acknowledgement.
 32. RFC42-WTBD-006 source-owner methodology depth now includes the implementation-backed
     `PortfolioCashflowProjection:v1` methodology under
     `docs/methodologies/source-data-products/portfolio-cashflow-projection.md`; it pins the

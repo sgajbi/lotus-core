@@ -34,6 +34,7 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "realized capital/FX/total P&L fields" in catalog
     assert "linked cashflow records" in catalog
     assert "transaction-ledger-window.md" in catalog
+    assert "realized_fx_pnl_local_reporting_currency" in catalog
     assert "must not aggregate rows into tax methodology" in catalog
     assert "FX attribution, cash movement methodology, transaction-cost methodology" in catalog
     assert "| `PortfolioCashflowProjection:v1` |" in catalog
@@ -71,6 +72,7 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     )
     assert "filters booked transaction rows by portfolio" in normalized_wiki
     assert "optional instrument/security, transaction type, FX/event linkage" in normalized_wiki
+    assert "row-level realized FX P&L local evidence" in wiki
     assert "classifies empty, complete, and paged windows" in normalized_wiki
     assert "settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements" in wiki
     assert "Same-day booked and projected movements are additive" in wiki
@@ -252,9 +254,15 @@ def test_transaction_ledger_window_methodology_is_implementation_backed() -> Non
     assert "Reporting-currency restated ledger" in methodology
     assert "transaction_date < start_of_next_day(A)" in methodology
     assert "amount_reporting_currency = amount * X_c" in methodology
+    assert "FX_report = FX_local * X_c" in methodology
     assert "row-level `cashflow` and `transaction_costs` evidence" in (normalized_methodology)
+    assert "realized_fx_pnl_local_reporting_currency" in methodology
+    assert "not an FX attribution measure" in methodology
     assert "No tax calculation, FX attribution" in normalized_methodology
     assert "| `transactions[1].withholding_tax_amount_reporting_currency` | 13.60 |" in (
+        methodology
+    )
+    assert "| `transactions[0].realized_fx_pnl_local_reporting_currency` | 1700.00 |" in (
         methodology
     )
 

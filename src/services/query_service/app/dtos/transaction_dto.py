@@ -232,6 +232,32 @@ class TransactionRecord(BaseModel):
         ),
         examples=[500.0],
     )
+    realized_capital_pnl_local_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Transaction-level realized capital P&L local amount restated into the requested "
+            "reporting currency when `reporting_currency` is supplied on the route. For FX "
+            "transactions this is expected to remain zero under the canonical FX model."
+        ),
+        examples=[0.0],
+    )
+    realized_fx_pnl_local_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Transaction-level realized FX P&L local amount restated into the requested reporting "
+            "currency when `reporting_currency` is supplied on the route. This is row-level "
+            "source evidence, not portfolio-level FX attribution."
+        ),
+        examples=[1700.0],
+    )
+    realized_total_pnl_local_reporting_currency: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Transaction-level total realized P&L local amount restated into the requested "
+            "reporting currency when `reporting_currency` is supplied on the route."
+        ),
+        examples=[1700.0],
+    )
     withholding_tax_amount_reporting_currency: Optional[Decimal] = Field(
         None,
         description=(
