@@ -67,6 +67,13 @@ cashflow over the returned window, total net cashflow, portfolio currency, inclu
 evidence timestamp, and deterministic source fingerprint. It is not a client income plan, liquidity
 ladder, funding recommendation, market-impact estimate, or OMS execution forecast.
 
+Its current implementation-backed methodology is deterministic: booked mode uses latest
+portfolio-flow cashflow rows through `as_of_date`; projected mode extends the returned date window
+and adds only settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements that were booked
+before the projection start date. Same-day booked and projected movements are additive, empty days
+carry forward the prior cumulative value, and all monetary fields remain in the portfolio base
+currency.
+
 ```mermaid
 flowchart LR
     CoreLedger[core TransactionLedgerWindow:v1<br/>row-level fees, withholding tax, realized FX P&L, linked cashflow]

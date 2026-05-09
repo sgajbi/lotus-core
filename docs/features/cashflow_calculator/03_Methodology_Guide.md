@@ -35,3 +35,12 @@ The service follows a standard financial sign convention: **inflows to the portf
 * For transactions classified as `INVESTMENT_INFLOW`, `INCOME`, `CASHFLOW_IN`, or `TRANSFER_IN`, the resulting amount is positive.
 * For all other classifications (`INVESTMENT_OUTFLOW`, `EXPENSE`, `CASHFLOW_OUT`, `TRANSFER_OUT`), the resulting amount is negative.
 * The `trade_fee` from the transaction is included in the calculation. For a `BUY`, the fee increases the outflow (making it more negative). For a `SELL`, the fee decreases the inflow.
+
+## 3. Portfolio Cashflow Projection Product
+
+`PortfolioCashflowProjection:v1` is the query-service source-data product for daily operational
+cashflow projection. Its implementation-backed methodology is maintained separately from this
+calculator overview because it is a downstream read product over persisted cashflow and transaction
+evidence:
+
+- [Portfolio Cashflow Projection Methodology](../../methodologies/source-data-products/portfolio-cashflow-projection.md)

@@ -255,6 +255,13 @@ Most relevant current governance:
     where core owns source state, route-family metadata, source-data security, domain-product
     declarations, OpenAPI proof, live validator coverage where applicable, and canonical
     front-office seed support for `PB_SG_GLOBAL_BAL_001`.
+31. RFC42-WTBD-006 source-owner methodology depth now includes the implementation-backed
+    `PortfolioCashflowProjection:v1` methodology under
+    `docs/methodologies/source-data-products/portfolio-cashflow-projection.md`; it pins the
+    booked-only versus projected modes, latest-cashflow-row selection, settlement-dated external
+    `DEPOSIT`/`WITHDRAWAL` inclusion rule, same-day booked/projected additivity, portfolio-base
+    currency convention, and explicit boundary from liquidity ladders, tax, performance,
+    market-impact, and OMS execution methodology.
 
 ## Context Maintenance Rule
 

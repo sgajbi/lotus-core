@@ -140,3 +140,32 @@ async def test_projection_includes_future_settlement_dated_external_flows(mock_r
             response.notes
             == "Projected window includes settlement-dated future external cash movements."
         )
+
+
+async def test_projection_adds_same_day_booked_and_projected_movements(
+    mock_repo: AsyncMock,
+) -> None:
+    mock_repo.get_portfolio_cashflow_series.side_effect = None
+    mock_repo.get_portfolio_cashflow_series.return_value = [(date(2026, 3, 2), Decimal("400.25"))]
+    mock_repo.get_projected_settlement_cashflow_series.return_value = [
+        (date(2026, 3, 2), Decimal("-150.10"))
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cashflow_projection(
+            portfolio_id="P1",
+            horizon_days=2,
+            as_of_date=date(2026, 3, 1),
+            include_projected=True,
+        )
+
+        points = {point.projection_date: point for point in response.points}
+        assert points[date(2026, 3, 1)].net_cashflow == Decimal("0")
+        assert points[date(2026, 3, 2)].net_cashflow == Decimal("250.15")
+        assert points[date(2026, 3, 2)].projected_cumulative_cashflow == Decimal("250.15")
+        assert points[date(2026, 3, 3)].projected_cumulative_cashflow == Decimal("250.15")
+        assert response.total_net_cashflow == Decimal("250.15")

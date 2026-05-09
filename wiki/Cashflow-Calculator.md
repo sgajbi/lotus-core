@@ -66,6 +66,9 @@ That is why cashflow normalization is part of the core system-of-record contract
 - cashflow rule governance remains part of `lotus-core`
 - cashflow calculator owns normalized cashflow materialization inside core
 - downstream performance and risk analytics may consume this state, but they do not redefine it
+- `PortfolioCashflowProjection:v1` has an implementation-backed methodology for daily operational
+  net cashflow and cumulative cashflow; it does not claim liquidity ladder, funding
+  recommendation, tax, performance, market-impact, or OMS execution methodology
 
 ## Operational hints
 
@@ -88,3 +91,4 @@ Check beyond this service when:
 - [Outbox Events](Outbox-Events)
 - [Timeseries Generator Service](Timeseries-Generator-Service)
 - [Operations Runbook](Operations-Runbook)
+- [Mesh Data Products](Mesh-Data-Products)
