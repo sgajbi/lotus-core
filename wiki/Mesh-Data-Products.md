@@ -33,7 +33,7 @@ source-data authority.
 | `InstrumentEligibilityProfile:v1` | `/integration/instruments/eligibility-bulk` | Bulk product-shelf, restriction, liquidity, issuer, and settlement eligibility for held and target instruments. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY eligibility, including the expected restricted private-credit buy block. |
 | `PortfolioTaxLotWindow:v1` | `/integration/portfolios/{portfolio_id}/tax-lots` | Portfolio-window tax lots and cost-basis state for tax-aware DPM sell decisions without production per-security fan-out. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY portfolio tax-lot coverage for the managed mandate portfolio. |
 | `TransactionCostCurve:v1` | `/integration/portfolios/{portfolio_id}/transaction-cost-curve` | Source-owned observed booked transaction-fee evidence grouped by security, transaction type, and currency so proof packs can distinguish source-backed costs from local estimates. This is not a predictive market-impact quote. | Implemented and locally proven for RFC40-WTBD-007 source ownership. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed transaction-cost curves. |
-| `MarketDataCoverageWindow:v1` | `/integration/market-data/coverage` | Held and target universe price and FX coverage diagnostics for valuation, drift, cash conversion, and rebalance sizing. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY market-data and FX coverage for the held and target universe. |
+| `MarketDataCoverageWindow:v1` | `/integration/market-data/coverage` | Held and target universe price and FX coverage diagnostics for valuation, drift, cash conversion, and rebalance sizing. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/market-data-coverage-window.md`. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY market-data and FX coverage for the held and target universe. The product supports readiness diagnostics only and does not claim valuation methodology, FX attribution, liquidity ladders, market impact, best execution, venue routing, or OMS acknowledgement. |
 | `DpmSourceReadiness:v1` | `/integration/portfolios/{portfolio_id}/dpm-source-readiness` | Operator-grade readiness summary for mandate, model target, eligibility, tax-lot, and market-data source families before stateful DPM promotion. | Implemented, CI-backed, and live-proven on 2026-05-02; canonical proof returned READY across all five source families. |
 | `PortfolioManagerBookMembership:v1` | `/integration/portfolio-manager-books/{portfolio_manager_id}/memberships` | Source-owned PM-book membership resolved from core portfolio master `advisor_id`, as-of lifecycle, active status, booking center, and portfolio type filters. | Implemented and locally proven for RFC41-WTBD-001 source ownership. It deliberately does not claim a full relationship-householding hierarchy or entitlement model. |
 | `CioModelChangeAffectedCohort:v1` | `/integration/model-portfolios/{model_portfolio_id}/affected-mandates` | Source-owned CIO model-change affected-mandate cohort resolved from the approved model definition and effective active discretionary mandate bindings, with deterministic event identity, snapshot identity, supportability, and lineage. | Implemented and locally proven for RFC41-WTBD-002 source ownership. It deliberately does not claim tactical house-view, risk-event, campaign, or OMS execution authority. |
@@ -52,7 +52,7 @@ or OMS acknowledgement methodology.
 | Audience | What this means |
 | --- | --- |
 | Business users | Core supplies recorded facts such as holdings, cash totals, transaction fees, withholding tax, realized FX P&L, linked cashflow rows, tax lots, observed fee evidence, and operational cashflow projections. Decisioning products can explain those facts but must not silently invent a broader methodology. |
-| Developers and architects | Use `HoldingsAsOf:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`, and `PortfolioCashflowProjection:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
+| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`, and `PortfolioCashflowProjection:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
 | Operations | Investigate stale, partial, or missing evidence at the owning source product before treating a manage/risk/performance surface as wrong. If a source product is unavailable or outside scope, downstream products should degrade rather than recalculate locally. |
 | Sales and client demos | Position the platform as source-governed: recorded ledger and portfolio facts are traceable to core, analytics are owned by their specialist services, and unsupported execution/tax/liquidity claims remain visibly outside the supported boundary. |
 
@@ -75,6 +75,14 @@ continuity for supplement rows, checks non-cash market-price freshness against t
 date, classifies unknown, partial, stale, and complete posture, and builds cash balances from cash
 snapshot rows plus cash-account master data without deriving downstream liquidity, risk,
 performance, tax, or execution conclusions.
+
+`MarketDataCoverageWindow:v1` is the governed source for DPM market-price and FX coverage
+diagnostics over an explicit held and target universe. It resolves latest market prices and FX
+rates on or before the requested as-of date, preserves per-instrument and per-pair status, reports
+missing and stale observations, and classifies batch readiness as ready, degraded, or incomplete.
+It is not a valuation engine, FX attribution method, liquidity ladder, cash forecast,
+market-impact model, execution-quality assessment, best-execution certification, venue-routing
+model, or OMS acknowledgement.
 
 `TransactionLedgerWindow:v1` current implementation-backed methodology is deterministic: the
 product filters booked transaction rows by portfolio, optional instrument/security, transaction
