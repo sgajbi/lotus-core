@@ -21,6 +21,10 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "| `HoldingsAsOf:v1` |" in catalog
     assert "holdings-as-of.md" in catalog
     assert "current-epoch snapshot reconciliation" in catalog
+    assert "| `MarketDataCoverageWindow:v1` |" in catalog
+    assert "market-data-coverage-window.md" in catalog
+    assert "missing and stale identifiers" in catalog
+    assert "must not infer portfolio valuation, FX attribution" in catalog
     assert "| `TransactionLedgerWindow:v1` |" in catalog
     assert "trade fees, transaction-cost records, withholding tax" in catalog
     assert "realized capital/FX/total P&L fields" in catalog
@@ -51,6 +55,7 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "Developers and architects" in wiki
     assert "Sales and client demos" in wiki
     assert "`TransactionLedgerWindow:v1`" in wiki
+    assert "`MarketDataCoverageWindow:v1`" in wiki
     assert "`PortfolioCashflowProjection:v1`" in wiki
     assert "`PortfolioTaxLotWindow:v1`" in wiki
     assert "snapshot-backed positions to latest current-epoch history quantity" in (normalized_wiki)
@@ -69,6 +74,10 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "observed booked transaction-fee evidence" in wiki
     assert "explicit `transaction_costs` rows when present" in wiki
     assert "best-execution, OMS acknowledgement" in normalized_wiki
+    assert "latest market prices and FX rates on or before the requested as-of date" in (
+        normalized_wiki
+    )
+    assert "not a valuation engine, FX attribution method, liquidity ladder" in normalized_wiki
     assert "flowchart LR" in wiki
 
 
@@ -103,6 +112,41 @@ def test_holdings_as_of_methodology_is_implementation_backed() -> None:
     assert "held_since_date" in methodology
     assert "No performance return, risk exposure, liquidity ladder" in normalized_methodology
     assert "| `data_quality_status` | `PARTIAL` |" in methodology
+
+
+def test_market_data_coverage_window_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/market-data-coverage-window.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Output Contract",
+        "## Worked Example",
+        "## Downstream Consumption Rules",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`MarketDataCoverageWindow:v1`" in methodology
+    assert "`POST /integration/market-data/coverage`" in methodology
+    assert "`market_prices`" in methodology
+    assert "`fx_rates`" in methodology
+    assert "age_days = as_of_date - observation_date" in methodology
+    assert "M_s = latest market_prices" in methodology
+    assert "F_c = latest fx_rates" in methodology
+    assert "INCOMPLETE` / `MARKET_DATA_MISSING`" in methodology
+    assert "DEGRADED` / `MARKET_DATA_STALE`" in methodology
+    assert "Batch supportability is `INCOMPLETE`" in methodology
+    assert "must not: 1. infer FX attribution" in normalized_methodology
+    assert "market-impact model, execution-quality assessment" in normalized_methodology
 
 
 def test_portfolio_cashflow_projection_methodology_is_implementation_backed() -> None:
@@ -239,11 +283,13 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     index = _read("docs/methodologies/README.md")
 
     assert "source-data-products/holdings-as-of.md" in index
+    assert "source-data-products/market-data-coverage-window.md" in index
     assert "source-data-products/transaction-ledger-window.md" in index
     assert "source-data-products/portfolio-cashflow-projection.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
     assert "source-data-products/transaction-cost-curve.md" in index
     assert "Effective-dated open and closed tax-lot state" in index
     assert "current-epoch snapshot reconciliation" in index
+    assert "Held and target universe price and FX coverage diagnostics" in index
     assert "Governed booked transaction-row windowing" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index
