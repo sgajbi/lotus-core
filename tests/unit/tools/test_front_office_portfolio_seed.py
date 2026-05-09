@@ -445,6 +445,32 @@ def test_front_office_bundle_cash_economics_are_plausible_by_currency():
     assert cash_balance_by_currency["EUR"] == Decimal("19805.50")
 
 
+def test_front_office_product_trades_include_observed_fee_evidence_for_cost_curve():
+    bundle = _build_bundle()
+
+    product_trade_ids = {
+        "TXN-BUY-AAPL-001",
+        "TXN-BUY-MSFT-001",
+        "TXN-BUY-SAP-001",
+        "TXN-BUY-WORLD-ETF-001",
+        "TXN-BUY-BLK-ALLOC-001",
+        "TXN-BUY-PIMCO-INC-001",
+        "TXN-BUY-UST-001",
+        "TXN-BUY-SIEMENS-BOND-001",
+        "TXN-BUY-PRIVCREDIT-001",
+    }
+    product_trades = [
+        transaction
+        for transaction in bundle["transactions"]
+        if transaction["transaction_id"] in product_trade_ids
+    ]
+
+    assert len(product_trades) == len(product_trade_ids)
+    assert all(
+        Decimal(str(transaction.get("trade_fee", "0"))) > 0 for transaction in product_trades
+    )
+
+
 def test_front_office_cash_transaction_validator_rejects_non_normalized_cash_rows():
     bundle = _build_bundle()
     advisory_fee = next(
@@ -555,8 +581,8 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
         in sql
     )
     assert (
-        "delete from sustainability_preference_profiles where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
-        in sql
+        "delete from sustainability_preference_profiles "
+        "where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     )
     assert (
         "delete from portfolio_mandate_bindings where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
