@@ -1837,6 +1837,26 @@ async def test_portfolio_tax_lot_window_reports_missing_requested_security() -> 
 
 
 @pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_marks_empty_full_portfolio_unavailable() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_portfolio_tax_lot_window(
+        portfolio_id="PB_EMPTY",
+        request=PortfolioTaxLotWindowRequest(as_of_date=date(2026, 4, 10)),
+    )
+
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "TAX_LOTS_EMPTY"
+    assert response.supportability.returned_lot_count == 0
+    assert response.supportability.missing_security_ids == []
+    assert response.data_quality_status == "MISSING"
+
+
+@pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> None:
     service = make_service()
     service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]

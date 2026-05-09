@@ -27,6 +27,9 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "| `PortfolioCashflowProjection:v1` |" in catalog
     assert "Daily net cashflow points, cumulative cashflow across the returned window" in catalog
     assert "must not treat the projection as a liquidity ladder" in catalog
+    assert "| `PortfolioTaxLotWindow:v1` |" in catalog
+    assert "portfolio-tax-lot-window.md" in catalog
+    assert "wash-sale treatment" in catalog
     assert "| `TransactionCostCurve:v1` |" in catalog
     assert "must not claim predictive market-impact, venue-routing, fill-quality" in catalog
     assert "transaction-cost-curve.md" in catalog
@@ -45,12 +48,15 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "Sales and client demos" in wiki
     assert "`TransactionLedgerWindow:v1`" in wiki
     assert "`PortfolioCashflowProjection:v1`" in wiki
+    assert "`PortfolioTaxLotWindow:v1`" in wiki
     assert "not an execution-quality, tax-advice, liquidity-planning" in normalized_wiki
     assert "Preserve the source measure, source unit, selected field, supportability state" in (
         normalized_wiki
     )
     assert "settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements" in wiki
     assert "Same-day booked and projected movements are additive" in wiki
+    assert "position_lot_state" in wiki
+    assert "wash-sale treatment" in wiki
     assert "observed booked transaction-fee evidence" in wiki
     assert "explicit `transaction_costs` rows when present" in wiki
     assert "best-execution, OMS acknowledgement" in normalized_wiki
@@ -123,9 +129,41 @@ def test_transaction_cost_curve_methodology_is_implementation_backed() -> None:
     assert "| `curve_points[0].average_cost_bps` | 13.3333 |" in methodology
 
 
+def test_portfolio_tax_lot_window_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/portfolio-tax-lot-window.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`PortfolioTaxLotWindow:v1`" in methodology
+    assert "`position_lot_state`" in methodology
+    assert "returns open lots by default" in normalized_methodology
+    assert "not recalculated, reallocated, or tax-optimized" in normalized_methodology
+    assert "TAX_LOTS_EMPTY" in methodology
+    assert "wash-sale treatment" in methodology
+    assert "| `lots[0].tax_lot_status` | `OPEN` |" in methodology
+
+
 def test_methodology_index_links_source_data_product_methodologies() -> None:
     index = _read("docs/methodologies/README.md")
 
     assert "source-data-products/portfolio-cashflow-projection.md" in index
+    assert "source-data-products/portfolio-tax-lot-window.md" in index
     assert "source-data-products/transaction-cost-curve.md" in index
+    assert "Effective-dated open and closed tax-lot state" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index
