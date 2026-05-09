@@ -47,4 +47,41 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "Preserve the source measure, source unit, selected field, supportability state" in (
         normalized_wiki
     )
+    assert "settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements" in wiki
+    assert "Same-day booked and projected movements are additive" in wiki
     assert "flowchart LR" in wiki
+
+
+def test_portfolio_cashflow_projection_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/portfolio-cashflow-projection.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`PortfolioCashflowProjection:v1`" in methodology
+    assert "Projected `DEPOSIT` amounts are `abs(gross_transaction_amount)`" in (
+        normalized_methodology
+    )
+    assert "Projected `WITHDRAWAL` amounts are `-abs(gross_transaction_amount)`" in (
+        normalized_methodology
+    )
+    assert "transaction dates before the projection start date" in methodology
+    assert "Only the latest cashflow row per transaction contributes to `B_d`" in methodology
+    assert "Same-day booked and projected movements exist" in methodology
+    assert "No FX conversion, tax methodology, liquidity bucketing" in normalized_methodology
+    assert "| `points[2026-03-04].net_cashflow` | -18000 |" in methodology
