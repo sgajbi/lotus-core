@@ -11,8 +11,8 @@ from portfolio_common.database_models import (
     PositionState,
 )
 
-from src.services.query_service.app.repositories.position_repository import PositionRepository
 from src.services.query_service.app.dtos.position_dto import Position
+from src.services.query_service.app.repositories.position_repository import PositionRepository
 from src.services.query_service.app.services.position_service import PositionService
 
 pytestmark = pytest.mark.asyncio
@@ -33,7 +33,6 @@ def mock_position_repo() -> AsyncMock:
     )
     repo.get_position_history_by_security.return_value = [(mock_history_obj, "CURRENT")]
 
-    # --- FIX: Return the correct 3-tuple structure ---
     mock_snapshot = DailyPositionSnapshot(
         security_id="S1",
         quantity=Decimal(100),
@@ -78,7 +77,6 @@ def mock_position_repo() -> AsyncMock:
     repo.get_latest_snapshot_valuation_map.return_value = {}
     repo.get_latest_snapshot_valuation_map_as_of_date.return_value = {}
     repo.get_latest_market_price_dates.return_value = {"S1": date(2025, 1, 1)}
-    # --- END FIX ---
     return repo
 
 

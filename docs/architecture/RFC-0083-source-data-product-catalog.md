@@ -115,7 +115,7 @@ following `lotus-core` products are the current source boundary for those dimens
 
 | Product | Source-owned evidence | Downstream rule | Explicit non-claim |
 | --- | --- | --- | --- |
-| `HoldingsAsOf:v1` | Portfolio positions, cash-balance totals, portfolio/base currency, as-of date, supportability metadata, and latest evidence timestamp. | Consumers may use returned cash totals and holdings rows as source facts with the product metadata attached. | Consumers must not infer liquidity ladders, income need, performance returns, or risk exposure methodology from holdings or cash totals alone. |
+| `HoldingsAsOf:v1` | Portfolio positions, cash-balance totals, portfolio/base currency, as-of date, supportability metadata, latest evidence timestamp, current-epoch snapshot reconciliation, history-backed supplement posture, and cash reporting-currency restatement. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/holdings-as-of.md`. | Consumers may use returned cash totals and holdings rows as source facts with the product metadata attached. | Consumers must not infer liquidity ladders, income need, performance returns, risk exposure methodology, tax advice, execution quality, or OMS acknowledgement from holdings or cash totals alone. |
 | `TransactionLedgerWindow:v1` | Deterministically ordered booked transaction rows, trade fees, transaction-cost records, withholding tax, other interest deductions, net interest, realized capital/FX/total P&L fields, linked cashflow records, FX/event linkage identifiers, and optional reporting-currency restatements. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/transaction-ledger-window.md`. | Consumers may preserve explicit row-level measures, lineage, supportability posture, source field, source unit, and selected row identity. | Consumers must not aggregate rows into tax methodology, FX attribution, cash movement methodology, transaction-cost methodology, or execution-quality conclusions unless a source owner publishes that methodology. |
 | `PortfolioCashflowProjection:v1` | Daily net cashflow points, cumulative cashflow across the returned window, total net cashflow, portfolio currency, include-projected posture, evidence timestamp, and deterministic source fingerprint. | Consumers may use the returned total and points as core-owned operational cashflow evidence. | Consumers must not treat the projection as a liquidity ladder, funding recommendation, income plan, OMS execution forecast, market-impact estimate, or client cash-need methodology. |
 | `PortfolioTaxLotWindow:v1` | Effective tax-lot and cost-basis state for tax-aware discretionary sell decisions. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/portfolio-tax-lot-window.md`. | Consumers may use lot quantity, acquisition date, cost basis, source transaction lineage, calculation policy metadata, and source supportability to explain candidate sell allocation. | Consumers must not claim complete jurisdiction-specific tax advice, realized-tax optimization, wash-sale treatment, client-tax approval, or tax-reporting certification from lot state alone. |
@@ -127,6 +127,15 @@ performance returns, risk methodology, client tax advice, liquidity planning, ex
 post-trade OMS acknowledgement methodology. Downstream products must carry source refs and
 supportability metadata and must degrade when a required source product is unavailable, partial,
 stale, or outside its explicit methodology boundary.
+
+`HoldingsAsOf:v1` now has implementation-backed methodology truth in
+`docs/methodologies/source-data-products/holdings-as-of.md`. The method resolves booked and
+projected-inclusive holdings modes, reconciles snapshot-backed positions to the latest
+current-epoch history quantity, supplements missing snapshot securities from position history,
+preserves valuation continuity for history-backed rows, computes weights from returned position
+values, derives `held_since_date` within the active epoch, classifies unknown, partial, stale, and
+complete data-quality posture, and restates cash balances into a requested reporting currency
+without claiming liquidity planning, performance, risk, tax, or execution methodology.
 
 `TransactionLedgerWindow:v1` now has implementation-backed methodology truth in
 `docs/methodologies/source-data-products/transaction-ledger-window.md`. The method filters booked
