@@ -199,7 +199,8 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
-            f"delete from sustainability_preference_profiles where portfolio_id = '{portfolio_id}';",
+            "delete from sustainability_preference_profiles "
+            f"where portfolio_id = '{portfolio_id}';",
             f"delete from client_restriction_profiles where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_mandate_bindings where portfolio_id = '{portfolio_id}';",
             "delete from instrument_eligibility_profiles "
@@ -809,6 +810,7 @@ def build_front_office_portfolio_bundle(
             price="184.50",
             gross="77490.00",
             trade_currency="USD",
+            trade_fee="38.75",
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-AAPL-001"),
         ),
@@ -840,6 +842,7 @@ def build_front_office_portfolio_bundle(
             price="401.25",
             gross="104325.00",
             trade_currency="USD",
+            trade_fee="52.16",
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-MSFT-001"),
         ),
@@ -871,6 +874,7 @@ def build_front_office_portfolio_bundle(
             price="121.40",
             gross="82552.00",
             trade_currency="EUR",
+            trade_fee="49.53",
             transaction_fx_rate=fx_rate_for_transaction(tx_dt(20), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-SAP-001"),
@@ -904,6 +908,7 @@ def build_front_office_portfolio_bundle(
             price="98.25",
             gross="90390.00",
             trade_currency="USD",
+            trade_fee="27.12",
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
                 portfolio_id=portfolio_id, event_code="BUY-WORLD-ETF-001"
@@ -939,6 +944,7 @@ def build_front_office_portfolio_bundle(
             price="107.25",
             gross="158730.00",
             trade_currency="EUR",
+            trade_fee="95.24",
             transaction_fx_rate=fx_rate_for_transaction(tx_dt(49), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
@@ -976,6 +982,7 @@ def build_front_office_portfolio_bundle(
             price="101.80",
             gross="244320.00",
             trade_currency="USD",
+            trade_fee="97.73",
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
                 portfolio_id=portfolio_id, event_code="BUY-PIMCO-INC-001"
@@ -1011,6 +1018,7 @@ def build_front_office_portfolio_bundle(
             price="992.80",
             gross="178704.00",
             trade_currency="USD",
+            trade_fee="71.48",
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(portfolio_id=portfolio_id, event_code="BUY-UST-001"),
         ),
@@ -1042,6 +1050,7 @@ def build_front_office_portfolio_bundle(
             price="985.50",
             gross="73912.50",
             trade_currency="EUR",
+            trade_fee="44.35",
             transaction_fx_rate=fx_rate_for_transaction(tx_dt(118), from_currency="EUR"),
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
@@ -1079,6 +1088,7 @@ def build_front_office_portfolio_bundle(
             price="100.00",
             gross="125000.00",
             trade_currency="USD",
+            trade_fee="87.50",
             source_system="LOTUS_FRONT_OFFICE_SEED",
             **_paired_internal_leg_metadata(
                 portfolio_id=portfolio_id, event_code="BUY-PRIVCREDIT-001"
