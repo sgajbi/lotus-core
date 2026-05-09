@@ -41,6 +41,52 @@ source-data authority.
 | `SustainabilityPreferenceProfile:v1` | `/integration/portfolios/{portfolio_id}/sustainability-preference-profile` | Effective-dated sustainability preference profile for mandate-aware portfolio construction, including allocation bounds, exclusions, positive tilts, framework, source, and lineage. | Implemented and locally proven for RFC40-WTBD-008 source ownership. Canonical seed coverage includes a minimum sustainable allocation, thermal-coal exclusion, and low-carbon-transition positive tilt. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed sustainability preference enforcement. |
 | `PortfolioCashflowProjection:v1` | `/portfolios/{portfolio_id}/cashflow-projection` | Core-derived daily net cashflow projection for operational liquidity planning. It exposes source-data product identity, portfolio base currency, runtime metadata, data-quality posture, latest evidence timestamp, and deterministic projection fingerprint for downstream outcome and liquidity consumers. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening; live front-office proof remains part of the consuming manage slice. |
 
+## Realized Outcome Evidence Boundaries
+
+Outcome review, proof-pack, and wave surfaces are bank-buyable only when they preserve the
+difference between source-owned evidence and downstream interpretation. `lotus-core` currently owns
+recorded portfolio, transaction, tax-lot, observed-fee, and operational cashflow facts. It does not
+own risk methodology, performance returns, client tax advice, liquidity planning, execution routing,
+or OMS acknowledgement methodology.
+
+| Audience | What this means |
+| --- | --- |
+| Business users | Core supplies recorded facts such as holdings, cash totals, transaction fees, withholding tax, realized FX P&L, linked cashflow rows, tax lots, observed fee evidence, and operational cashflow projections. Decisioning products can explain those facts but must not silently invent a broader methodology. |
+| Developers and architects | Use `HoldingsAsOf:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`, and `PortfolioCashflowProjection:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
+| Operations | Investigate stale, partial, or missing evidence at the owning source product before treating a manage/risk/performance surface as wrong. If a source product is unavailable or outside scope, downstream products should degrade rather than recalculate locally. |
+| Sales and client demos | Position the platform as source-governed: recorded ledger and portfolio facts are traceable to core, analytics are owned by their specialist services, and unsupported execution/tax/liquidity claims remain visibly outside the supported boundary. |
+
+`TransactionLedgerWindow:v1` is the governed source for explicit transaction-row measures such as
+trade fees, transaction-cost records, withholding tax, other deductions, net interest, realized
+capital/FX/total P&L fields, linked cashflow records, and FX/event linkage identifiers. It is not an
+execution-quality, tax-advice, liquidity-planning, cash-movement aggregation, FX-attribution, or
+transaction-cost methodology product.
+
+`PortfolioCashflowProjection:v1` is the governed source for daily net cashflow points, cumulative
+cashflow over the returned window, total net cashflow, portfolio currency, include-projected posture,
+evidence timestamp, and deterministic source fingerprint. It is not a client income plan, liquidity
+ladder, funding recommendation, market-impact estimate, or OMS execution forecast.
+
+```mermaid
+flowchart LR
+    CoreLedger[core TransactionLedgerWindow:v1<br/>row-level fees, withholding tax, realized FX P&L, linked cashflow]
+    CoreCash[core PortfolioCashflowProjection:v1<br/>daily and total operational cashflow evidence]
+    CoreLots[core PortfolioTaxLotWindow:v1<br/>lot and cost-basis state]
+    CoreFees[core TransactionCostCurve:v1<br/>observed booked fee evidence]
+    Manage[lotus-manage outcome/proof/wave consumers<br/>preserve source refs and supportability]
+    Perf[lotus-performance<br/>performance methodology]
+    Risk[lotus-risk<br/>risk methodology]
+    FutureOwners[future OMS/tax/liquidity owners<br/>execution, tax advice, liquidity ladders]
+
+    CoreLedger --> Manage
+    CoreCash --> Manage
+    CoreLots --> Manage
+    CoreFees --> Manage
+    Perf --> Manage
+    Risk --> Manage
+    FutureOwners -. unsupported until certified .-> Manage
+```
+
 ```mermaid
 flowchart LR
     Upstream[Investment office model system] --> Ingest[core ingest model-portfolios and targets]
