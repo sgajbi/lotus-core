@@ -19,7 +19,6 @@ def mock_transaction_repo() -> AsyncMock:
     """Provides a mock TransactionRepository."""
     repo = AsyncMock(spec=TransactionRepository)
     repo.portfolio_exists.return_value = True
-    # FIX: Provide full, valid data for the mock objects
     repo.get_transactions.return_value = [
         Transaction(
             transaction_id="T1",
@@ -373,13 +372,8 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert first_transaction.trade_fee_reporting_currency == Decimal("17.000")
     assert first_transaction.realized_gain_loss_reporting_currency == Decimal("340.00")
     assert income_transaction.gross_transaction_amount_reporting_currency == Decimal("170.00")
-    assert (
-        income_transaction.withholding_tax_amount_reporting_currency == Decimal("13.60")
-    )
-    assert (
-        income_transaction.other_interest_deductions_amount_reporting_currency
-        == Decimal("6.80")
-    )
+    assert income_transaction.withholding_tax_amount_reporting_currency == Decimal("13.60")
+    assert income_transaction.other_interest_deductions_amount_reporting_currency == Decimal("6.80")
     assert income_transaction.net_interest_amount_reporting_currency == Decimal("149.60")
     assert mock_transaction_repo.get_latest_fx_rate.await_count == 1
 
