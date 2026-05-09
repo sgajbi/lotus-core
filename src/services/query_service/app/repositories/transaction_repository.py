@@ -128,7 +128,6 @@ class TransactionRepository:
         """
         Constructs a base query with all the common filters.
         """
-        # FIX: Change from selectinload to joinedload for reliable eager loading
         stmt = select(Transaction).options(
             joinedload(Transaction.cashflow), joinedload(Transaction.costs)
         )
