@@ -3,6 +3,32 @@ from decimal import Decimal
 from .api_client import E2EApiClient
 
 
+def _dual_leg_timeseries_rows_are_reconciled(
+    data: dict, *, security_id: str, cash_security_id: str
+) -> bool:
+    rows = {
+        row.get("security_id"): row
+        for row in data.get("rows", [])
+        if row.get("valuation_date") == "2026-03-02"
+    }
+    if {security_id, cash_security_id} - set(rows):
+        return False
+
+    stock_row = rows[security_id]
+    cash_row = rows[cash_security_id]
+    stock_flow_total = sum(Decimal(str(flow["amount"])) for flow in stock_row["cash_flows"])
+    cash_flow_total = sum(Decimal(str(flow["amount"])) for flow in cash_row["cash_flows"])
+
+    return (
+        Decimal(str(stock_row["beginning_market_value_position_currency"])) == Decimal("1000")
+        and Decimal(str(stock_row["ending_market_value_position_currency"])) == Decimal("1000")
+        and Decimal(str(cash_row["beginning_market_value_position_currency"])) == Decimal("-1000")
+        and Decimal(str(cash_row["ending_market_value_position_currency"])) == Decimal("-1000")
+        and stock_flow_total == Decimal("1000")
+        and cash_flow_total == Decimal("-1000")
+    )
+
+
 def test_dual_leg_upstream_settlement_cashflow_authority(
     setup_dual_leg_settlement_scenario, e2e_api_client: E2EApiClient
 ):
@@ -67,16 +93,14 @@ def test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero(
     response_payload = e2e_api_client.poll_for_post_query_data(
         f"/integration/portfolios/{portfolio_id}/analytics/position-timeseries",
         payload,
-        lambda data: len(data.get("rows", [])) >= 2
-        and {
-            row.get("security_id")
-            for row in data.get("rows", [])
-            if row.get("valuation_date") == "2026-03-02"
-        }
-        >= {security_id, cash_security_id},
+        lambda data: _dual_leg_timeseries_rows_are_reconciled(
+            data,
+            security_id=security_id,
+            cash_security_id=cash_security_id,
+        ),
         timeout=240,
         fail_message=(
-            "Dual-leg position-timeseries rows were not available for acquisition-day validation."
+            "Dual-leg position-timeseries rows did not reconcile for acquisition-day validation."
         ),
     )
 
