@@ -18,6 +18,9 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     normalized_catalog = _single_line(catalog)
 
     assert "## Realized Outcome Source Boundaries" in catalog
+    assert "| `HoldingsAsOf:v1` |" in catalog
+    assert "holdings-as-of.md" in catalog
+    assert "current-epoch snapshot reconciliation" in catalog
     assert "| `TransactionLedgerWindow:v1` |" in catalog
     assert "trade fees, transaction-cost records, withholding tax" in catalog
     assert "realized capital/FX/total P&L fields" in catalog
@@ -50,6 +53,8 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "`TransactionLedgerWindow:v1`" in wiki
     assert "`PortfolioCashflowProjection:v1`" in wiki
     assert "`PortfolioTaxLotWindow:v1`" in wiki
+    assert "snapshot-backed positions to latest current-epoch history quantity" in (normalized_wiki)
+    assert "cash-account master data" in wiki
     assert "not an execution-quality, tax-advice, liquidity-planning" in normalized_wiki
     assert "Preserve the source measure, source unit, selected field, supportability state" in (
         normalized_wiki
@@ -65,6 +70,39 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "explicit `transaction_costs` rows when present" in wiki
     assert "best-execution, OMS acknowledgement" in normalized_wiki
     assert "flowchart LR" in wiki
+
+
+def test_holdings_as_of_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/holdings-as-of.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`HoldingsAsOf:v1`" in methodology
+    assert "`GET /portfolios/{portfolio_id}/positions`" in methodology
+    assert "`GET /portfolios/{portfolio_id}/cash-balances`" in methodology
+    assert "S_latest.quantity = H_latest.quantity" in methodology
+    assert "market_value = cost_basis" in methodology
+    assert "W_i = V_i / sum(V_i for all returned positions)" in methodology
+    assert "C_r = C_p * X_c" in methodology
+    assert "held_since_date" in methodology
+    assert "No performance return, risk exposure, liquidity ladder" in normalized_methodology
+    assert "| `data_quality_status` | `PARTIAL` |" in methodology
 
 
 def test_portfolio_cashflow_projection_methodology_is_implementation_backed() -> None:
@@ -200,10 +238,12 @@ def test_portfolio_tax_lot_window_methodology_is_implementation_backed() -> None
 def test_methodology_index_links_source_data_product_methodologies() -> None:
     index = _read("docs/methodologies/README.md")
 
+    assert "source-data-products/holdings-as-of.md" in index
     assert "source-data-products/transaction-ledger-window.md" in index
     assert "source-data-products/portfolio-cashflow-projection.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
     assert "source-data-products/transaction-cost-curve.md" in index
     assert "Effective-dated open and closed tax-lot state" in index
+    assert "current-epoch snapshot reconciliation" in index
     assert "Governed booked transaction-row windowing" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index

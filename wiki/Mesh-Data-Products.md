@@ -62,12 +62,27 @@ capital/FX/total P&L fields, linked cashflow records, and FX/event linkage ident
 execution-quality, tax-advice, liquidity-planning, cash-movement aggregation, FX-attribution, or
 transaction-cost methodology product.
 
-Its current implementation-backed methodology is deterministic: the product filters booked
-transaction rows by portfolio, optional instrument/security, transaction type, FX/event linkage,
-date window, and effective as-of date; preserves joined row-level transaction-cost and cashflow
-evidence; optionally populates reporting-currency fields from latest available FX rates; and
-classifies empty, complete, and paged windows without deriving tax advice, FX attribution,
-cash-movement aggregation, transaction-cost curves, execution quality, or OMS acknowledgement.
+`HoldingsAsOf:v1` is the governed source for position rows, position weights, current-epoch
+supportability, held-since dates, cash-account balances, portfolio/base currency, optional cash
+reporting-currency restatement, and holdings evidence timestamps. It is not a performance-return,
+risk-exposure, liquidity-ladder, income-need, tax-advice, execution-quality, or OMS acknowledgement
+product.
+
+Its current implementation-backed methodology is conservative: the product resolves booked and
+projected-inclusive holdings modes, reconciles snapshot-backed positions to latest current-epoch
+history quantity, supplements missing snapshot securities from position history, preserves valuation
+continuity for supplement rows, checks non-cash market-price freshness against the response as-of
+date, classifies unknown, partial, stale, and complete posture, and builds cash balances from cash
+snapshot rows plus cash-account master data without deriving downstream liquidity, risk,
+performance, tax, or execution conclusions.
+
+`TransactionLedgerWindow:v1` current implementation-backed methodology is deterministic: the
+product filters booked transaction rows by portfolio, optional instrument/security, transaction
+type, FX/event linkage, date window, and effective as-of date; preserves joined row-level
+transaction-cost and cashflow evidence; optionally populates reporting-currency fields from latest
+available FX rates; and classifies empty, complete, and paged windows without deriving tax advice,
+FX attribution, cash-movement aggregation, transaction-cost curves, execution quality, or OMS
+acknowledgement.
 
 `PortfolioCashflowProjection:v1` is the governed source for daily net cashflow points, cumulative
 cashflow over the returned window, total net cashflow, portfolio currency, include-projected posture,
@@ -97,6 +112,7 @@ acknowledgement, or minimum-cost execution methodology.
 
 ```mermaid
 flowchart LR
+    CoreHoldings[core HoldingsAsOf:v1<br/>positions, weights, cash balances, freshness]
     CoreLedger[core TransactionLedgerWindow:v1<br/>row-level fees, withholding tax, realized FX P&L, linked cashflow]
     CoreCash[core PortfolioCashflowProjection:v1<br/>daily and total operational cashflow evidence]
     CoreLots[core PortfolioTaxLotWindow:v1<br/>lot and cost-basis state]
@@ -106,6 +122,7 @@ flowchart LR
     Risk[lotus-risk<br/>risk methodology]
     FutureOwners[future OMS/tax/liquidity owners<br/>execution, tax advice, liquidity ladders]
 
+    CoreHoldings --> Manage
     CoreLedger --> Manage
     CoreCash --> Manage
     CoreLots --> Manage

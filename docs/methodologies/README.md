@@ -7,6 +7,7 @@ downstream applications need auditable formulas, boundaries, and non-claims.
 
 | Product | Methodology | Scope |
 | --- | --- | --- |
+| `HoldingsAsOf:v1` | [Holdings As Of](./source-data-products/holdings-as-of.md) | Governed position and cash-balance state, current-epoch snapshot reconciliation, history-backed supplement rows, valuation continuity, cash reporting-currency restatement, freshness posture, and non-claims for liquidity, performance, risk, tax, and execution methodology. |
 | `TransactionLedgerWindow:v1` | [Transaction Ledger Window](./source-data-products/transaction-ledger-window.md) | Governed booked transaction-row windowing, filters, linked row evidence, reporting-currency restatement, data-quality posture, and non-claims for tax, FX attribution, cash aggregation, transaction-cost methodology, and execution quality. |
 | `PortfolioCashflowProjection:v1` | [Portfolio Cashflow Projection](./source-data-products/portfolio-cashflow-projection.md) | Operational daily and total cashflow projection, booked-only/projected modes, and non-claims for liquidity ladders, tax, performance, market impact, and OMS execution. |
 | `PortfolioTaxLotWindow:v1` | [Portfolio Tax Lot Window](./source-data-products/portfolio-tax-lot-window.md) | Effective-dated open and closed tax-lot state, cost-basis evidence, deterministic paging, and non-claims for jurisdiction-specific tax advice, realized-tax optimization, and client-tax approval. |
