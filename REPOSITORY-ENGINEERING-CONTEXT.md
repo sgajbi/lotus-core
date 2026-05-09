@@ -262,6 +262,14 @@ Most relevant current governance:
     `DEPOSIT`/`WITHDRAWAL` inclusion rule, same-day booked/projected additivity, portfolio-base
     currency convention, and explicit boundary from liquidity ladders, tax, performance,
     market-impact, and OMS execution methodology.
+32. RFC42-WTBD-006 source-owner methodology depth now also includes the implementation-backed
+    `TransactionCostCurve:v1` methodology under
+    `docs/methodologies/source-data-products/transaction-cost-curve.md`; it pins observed
+    booked-fee grouping by security, transaction type, and currency; explicit transaction-cost row
+    precedence over `trade_fee`; zero-fee and zero-notional exclusion; notional-weighted average
+    cost bps; min/max cost bps; deterministic paging; and the explicit boundary from
+    market-impact, venue-routing, best-execution, OMS acknowledgement, and minimum-cost execution
+    methodology.
 
 ## Context Maintenance Rule
 

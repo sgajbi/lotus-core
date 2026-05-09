@@ -8,8 +8,8 @@ from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    ClientRestrictionProfileRequest,
     CioModelChangeAffectedCohortRequest,
+    ClientRestrictionProfileRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
     InstrumentEligibilityBulkRequest,
@@ -1920,6 +1920,75 @@ async def test_transaction_cost_curve_returns_ready_observed_fee_evidence() -> N
         security_ids=["EQ_US_AAPL"],
         transaction_types=["BUY"],
     )
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_groups_by_security_type_and_currency() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-BUY-USD-001",
+                    security_id="EQ_US_AAPL",
+                    transaction_type="BUY",
+                    currency="USD",
+                    gross_transaction_amount=Decimal("10000.00"),
+                    trade_fee=Decimal("10.00"),
+                ),
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-BUY-USD-002",
+                    security_id="EQ_US_AAPL",
+                    transaction_type="BUY",
+                    currency="USD",
+                    gross_transaction_amount=Decimal("20000.00"),
+                    trade_fee=Decimal("30.00"),
+                ),
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-SELL-USD-001",
+                    security_id="EQ_US_AAPL",
+                    transaction_type="SELL",
+                    currency="USD",
+                    gross_transaction_amount=Decimal("15000.00"),
+                    trade_fee=Decimal("15.00"),
+                ),
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-BUY-SGD-001",
+                    security_id="EQ_US_AAPL",
+                    transaction_type="BUY",
+                    currency="SGD",
+                    gross_transaction_amount=Decimal("12000.00"),
+                    trade_fee=Decimal("24.00"),
+                ),
+            ]
+        ),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+        ),
+    )
+
+    points = {
+        (point.security_id, point.transaction_type, point.currency): point
+        for point in response.curve_points
+    }
+
+    assert sorted(points) == [
+        ("EQ_US_AAPL", "BUY", "SGD"),
+        ("EQ_US_AAPL", "BUY", "USD"),
+        ("EQ_US_AAPL", "SELL", "USD"),
+    ]
+    assert points[("EQ_US_AAPL", "BUY", "USD")].observation_count == 2
+    assert points[("EQ_US_AAPL", "BUY", "USD")].average_cost_bps == Decimal("13.3333")
+    assert points[("EQ_US_AAPL", "BUY", "USD")].min_cost_bps == Decimal("10.0000")
+    assert points[("EQ_US_AAPL", "BUY", "USD")].max_cost_bps == Decimal("15.0000")
+    assert points[("EQ_US_AAPL", "BUY", "SGD")].average_cost_bps == Decimal("20.0000")
+    assert points[("EQ_US_AAPL", "SELL", "USD")].average_cost_bps == Decimal("10.0000")
 
 
 @pytest.mark.asyncio
