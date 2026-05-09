@@ -74,6 +74,12 @@ before the projection start date. Same-day booked and projected movements are ad
 carry forward the prior cumulative value, and all monetary fields remain in the portfolio base
 currency.
 
+`PortfolioTaxLotWindow:v1` is the governed source for effective-dated lot and cost-basis state from
+`position_lot_state`, including open/original quantity, acquisition date, base and local cost basis,
+local currency when source transaction currency is available, source transaction id, calculation
+policy id/version, and supportability. It is not jurisdiction-specific tax advice, realized-tax
+optimization, wash-sale treatment, client-tax approval, or tax-reporting certification.
+
 `TransactionCostCurve:v1` is the governed source for observed booked transaction-fee evidence
 grouped by security, transaction type, and fee currency. Its implementation-backed methodology uses
 explicit `transaction_costs` rows when present, falls back to `trade_fee` only when explicit cost

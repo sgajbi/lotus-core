@@ -1153,7 +1153,10 @@ class IntegrationService:
         )
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "TAX_LOTS_READY"
-        if has_more:
+        if not lots and not request.security_ids:
+            supportability_state = "UNAVAILABLE"
+            supportability_reason = "TAX_LOTS_EMPTY"
+        elif has_more:
             supportability_state = "DEGRADED"
             supportability_reason = "TAX_LOTS_PAGE_PARTIAL"
         elif request.security_ids and missing_security_ids:
@@ -1186,7 +1189,13 @@ class IntegrationService:
             },
             **self._runtime_metadata_for_existing_as_of_date(
                 request.as_of_date,
-                data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
+                data_quality_status=(
+                    "COMPLETE"
+                    if supportability_state == "READY"
+                    else "MISSING"
+                    if supportability_state == "UNAVAILABLE"
+                    else "PARTIAL"
+                ),
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
                     [lot for lot, _ in page_rows]
                 ),

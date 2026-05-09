@@ -118,7 +118,7 @@ following `lotus-core` products are the current source boundary for those dimens
 | `HoldingsAsOf:v1` | Portfolio positions, cash-balance totals, portfolio/base currency, as-of date, supportability metadata, and latest evidence timestamp. | Consumers may use returned cash totals and holdings rows as source facts with the product metadata attached. | Consumers must not infer liquidity ladders, income need, performance returns, or risk exposure methodology from holdings or cash totals alone. |
 | `TransactionLedgerWindow:v1` | Deterministically ordered booked transaction rows, trade fees, transaction-cost records, withholding tax, other interest deductions, net interest, realized capital/FX/total P&L fields, linked cashflow records, FX/event linkage identifiers, and optional reporting-currency restatements. | Consumers may preserve explicit row-level measures, lineage, supportability posture, source field, source unit, and selected row identity. | Consumers must not aggregate rows into tax methodology, FX attribution, cash movement methodology, transaction-cost methodology, or execution-quality conclusions unless a source owner publishes that methodology. |
 | `PortfolioCashflowProjection:v1` | Daily net cashflow points, cumulative cashflow across the returned window, total net cashflow, portfolio currency, include-projected posture, evidence timestamp, and deterministic source fingerprint. | Consumers may use the returned total and points as core-owned operational cashflow evidence. | Consumers must not treat the projection as a liquidity ladder, funding recommendation, income plan, OMS execution forecast, market-impact estimate, or client cash-need methodology. |
-| `PortfolioTaxLotWindow:v1` | Effective tax-lot and cost-basis state for tax-aware discretionary sell decisions. | Consumers may use lot quantity, acquisition date, cost basis, and source supportability to explain candidate sell allocation. | Consumers must not claim complete jurisdiction-specific tax advice, realized-tax optimization, or client-tax approval from lot state alone. |
+| `PortfolioTaxLotWindow:v1` | Effective tax-lot and cost-basis state for tax-aware discretionary sell decisions. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/portfolio-tax-lot-window.md`. | Consumers may use lot quantity, acquisition date, cost basis, source transaction lineage, calculation policy metadata, and source supportability to explain candidate sell allocation. | Consumers must not claim complete jurisdiction-specific tax advice, realized-tax optimization, wash-sale treatment, client-tax approval, or tax-reporting certification from lot state alone. |
 | `TransactionCostCurve:v1` | Observed booked fee evidence grouped by security, transaction type, and currency. | Consumers may distinguish source-backed observed cost context from local estimated construction cost. | Consumers must not claim predictive market-impact, venue-routing, fill-quality, best-execution, or minimum-cost execution methodology from observed fee evidence. |
 
 These boundaries are intentionally conservative. `lotus-core` is the source authority for recorded
@@ -135,6 +135,14 @@ rows ahead of `trade_fee`; excludes zero-fee and zero-notional observations; com
 notional-weighted average cost bps plus min/max per-transaction cost bps; and preserves the
 non-claim boundary from predictive market-impact, venue-routing, best-execution, OMS
 acknowledgement, and minimum-cost execution methodology.
+
+`PortfolioTaxLotWindow:v1` now has implementation-backed methodology truth in
+`docs/methodologies/source-data-products/portfolio-tax-lot-window.md`. The method selects
+effective-dated lots from `position_lot_state`, applies open/closed lot filtering, preserves
+base/local cost-basis fields, carries source transaction and calculation-policy lineage, uses
+deterministic paging, reports empty full-portfolio source evidence explicitly, and preserves the
+non-claim boundary from jurisdiction-specific tax advice, realized-tax optimization, wash-sale
+treatment, client-tax approval, and tax-reporting certification.
 
 ## Portfolio Performance Snapshot Boundary
 
