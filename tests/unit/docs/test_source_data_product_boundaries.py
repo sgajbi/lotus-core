@@ -25,6 +25,10 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "market-data-coverage-window.md" in catalog
     assert "missing and stale identifiers" in catalog
     assert "must not infer portfolio valuation, FX attribution" in catalog
+    assert "| `DpmSourceReadiness:v1` |" in catalog
+    assert "dpm-source-readiness.md" in catalog
+    assert "Fail-closed source-family readiness" in catalog
+    assert "must not infer mandate approval, suitability, valuation" in catalog
     assert "| `TransactionLedgerWindow:v1` |" in catalog
     assert "trade fees, transaction-cost records, withholding tax" in catalog
     assert "realized capital/FX/total P&L fields" in catalog
@@ -56,6 +60,7 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "Sales and client demos" in wiki
     assert "`TransactionLedgerWindow:v1`" in wiki
     assert "`MarketDataCoverageWindow:v1`" in wiki
+    assert "`DpmSourceReadiness:v1`" in wiki
     assert "`PortfolioCashflowProjection:v1`" in wiki
     assert "`PortfolioTaxLotWindow:v1`" in wiki
     assert "snapshot-backed positions to latest current-epoch history quantity" in (normalized_wiki)
@@ -78,6 +83,9 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
         normalized_wiki
     )
     assert "not a valuation engine, FX attribution method, liquidity ladder" in normalized_wiki
+    assert "composes mandate binding, model targets, instrument eligibility" in normalized_wiki
+    assert "`UNAVAILABLE` source families outrank `INCOMPLETE`" in normalized_wiki
+    assert "without reconstructing mandate, eligibility, tax, market-data" in normalized_wiki
     assert "flowchart LR" in wiki
 
 
@@ -147,6 +155,39 @@ def test_market_data_coverage_window_methodology_is_implementation_backed() -> N
     assert "Batch supportability is `INCOMPLETE`" in methodology
     assert "must not: 1. infer FX attribution" in normalized_methodology
     assert "market-impact model, execution-quality assessment" in normalized_methodology
+
+
+def test_dpm_source_readiness_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/dpm-source-readiness.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Purpose",
+        "## Supported Modes",
+        "## Inputs And Variables",
+        "## Source Tables And Products",
+        "## Methodology And Formulas",
+        "## Deterministic Steps",
+        "## Validation And Failure Behavior",
+        "## Output Contract Mapping",
+        "## Worked Examples",
+        "## Downstream Consumption Rule",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`DpmSourceReadiness:v1`" in methodology
+    assert "`POST /integration/portfolios/{portfolio_id}/dpm-source-readiness`" in methodology
+    assert "`DiscretionaryMandateBinding:v1`" in methodology
+    assert "`DpmModelPortfolioTarget:v1`" in methodology
+    assert "`InstrumentEligibilityProfile:v1`" in methodology
+    assert "`PortfolioTaxLotWindow:v1`" in methodology
+    assert "`MarketDataCoverageWindow:v1`" in methodology
+    assert "`I_eval = sort(unique(I_req union I_model))`" in methodology
+    assert "if any family is `UNAVAILABLE`" in methodology
+    assert "DPM_SOURCE_READINESS_READY" in methodology
+    assert "data_quality_status` is `COMPLETE` only when" in normalized_methodology
+    assert "must not: 1. infer mandate approval" in normalized_methodology
 
 
 def test_portfolio_cashflow_projection_methodology_is_implementation_backed() -> None:
@@ -284,6 +325,7 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
 
     assert "source-data-products/holdings-as-of.md" in index
     assert "source-data-products/market-data-coverage-window.md" in index
+    assert "source-data-products/dpm-source-readiness.md" in index
     assert "source-data-products/transaction-ledger-window.md" in index
     assert "source-data-products/portfolio-cashflow-projection.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
@@ -291,5 +333,6 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "Effective-dated open and closed tax-lot state" in index
     assert "current-epoch snapshot reconciliation" in index
     assert "Held and target universe price and FX coverage diagnostics" in index
+    assert "Fail-closed DPM source-family readiness" in index
     assert "Governed booked transaction-row windowing" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index
