@@ -128,6 +128,14 @@ post-trade OMS acknowledgement methodology. Downstream products must carry sourc
 supportability metadata and must degrade when a required source product is unavailable, partial,
 stale, or outside its explicit methodology boundary.
 
+`TransactionCostCurve:v1` now has implementation-backed methodology truth in
+`docs/methodologies/source-data-products/transaction-cost-curve.md`. The method groups observed
+booked-fee evidence by security, transaction type, and currency; uses explicit transaction-cost
+rows ahead of `trade_fee`; excludes zero-fee and zero-notional observations; computes
+notional-weighted average cost bps plus min/max per-transaction cost bps; and preserves the
+non-claim boundary from predictive market-impact, venue-routing, best-execution, OMS
+acknowledgement, and minimum-cost execution methodology.
+
 ## Portfolio Performance Snapshot Boundary
 
 The portfolio workspace performance snapshot is not a `lotus-core` source-data product.

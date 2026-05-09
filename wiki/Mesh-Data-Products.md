@@ -74,6 +74,14 @@ before the projection start date. Same-day booked and projected movements are ad
 carry forward the prior cumulative value, and all monetary fields remain in the portfolio base
 currency.
 
+`TransactionCostCurve:v1` is the governed source for observed booked transaction-fee evidence
+grouped by security, transaction type, and fee currency. Its implementation-backed methodology uses
+explicit `transaction_costs` rows when present, falls back to `trade_fee` only when explicit cost
+rows are absent, filters unusable zero-fee or zero-notional observations, and computes total cost,
+total absolute notional, notional-weighted average cost bps, min cost bps, and max cost bps for each
+group. It is not an execution-quality, market-impact, venue-routing, best-execution, OMS
+acknowledgement, or minimum-cost execution methodology.
+
 ```mermaid
 flowchart LR
     CoreLedger[core TransactionLedgerWindow:v1<br/>row-level fees, withholding tax, realized FX P&L, linked cashflow]

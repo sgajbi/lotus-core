@@ -28,16 +28,16 @@ from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
-    ClientRestrictionProfileEntry,
-    ClientRestrictionProfileRequest,
-    ClientRestrictionProfileResponse,
-    ClientRestrictionProfileSupportability,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     CioModelChangeAffectedCohortSupportability,
     CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
     ClassificationTaxonomyResponse,
+    ClientRestrictionProfileEntry,
+    ClientRestrictionProfileRequest,
+    ClientRestrictionProfileResponse,
+    ClientRestrictionProfileSupportability,
     ComponentSeriesResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -1206,6 +1206,70 @@ class IntegrationService:
             return Decimal("0")
         return IntegrationService._as_decimal(trade_fee)
 
+    @staticmethod
+    def _transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
+        return (
+            str(transaction.security_id),
+            str(transaction.transaction_type).upper(),
+            str(transaction.currency).upper(),
+        )
+
+    @classmethod
+    def _has_observed_transaction_cost_evidence(cls, transaction: Any) -> bool:
+        fee_amount = cls._transaction_fee_amount(transaction)
+        notional = abs(cls._as_decimal(transaction.gross_transaction_amount))
+        return fee_amount > 0 and notional > 0
+
+    @classmethod
+    def _build_transaction_cost_curve_point(
+        cls,
+        *,
+        portfolio_id: str,
+        key: tuple[str, str, str],
+        rows: list[Any],
+    ) -> TransactionCostCurvePoint | None:
+        security_id, transaction_type, currency = key
+        total_cost = sum(cls._transaction_fee_amount(row) for row in rows)
+        total_notional = sum(abs(cls._as_decimal(row.gross_transaction_amount)) for row in rows)
+        if total_cost <= 0 or total_notional <= 0:
+            return None
+
+        cost_bps_values = [
+            (cls._transaction_fee_amount(row) / abs(cls._as_decimal(row.gross_transaction_amount)))
+            * Decimal("10000")
+            for row in rows
+            if abs(cls._as_decimal(row.gross_transaction_amount)) > 0
+        ]
+        if not cost_bps_values:
+            return None
+
+        observed_dates = [row.transaction_date.date() for row in rows]
+        return TransactionCostCurvePoint(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            transaction_type=transaction_type,
+            currency=currency,
+            observation_count=len(rows),
+            total_notional=total_notional,
+            total_cost=total_cost,
+            average_cost_bps=(total_cost / total_notional * Decimal("10000")).quantize(
+                Decimal("0.0001")
+            ),
+            min_cost_bps=min(cost_bps_values).quantize(Decimal("0.0001")),
+            max_cost_bps=max(cost_bps_values).quantize(Decimal("0.0001")),
+            first_observed_date=min(observed_dates),
+            last_observed_date=max(observed_dates),
+            sample_transaction_ids=[
+                str(row.transaction_id)
+                for row in sorted(rows, key=lambda row: row.transaction_id)[:5]
+            ],
+            source_lineage={
+                "source_system": "transactions",
+                "source_table": "transactions,transaction_costs",
+                "contract_version": "rfc_040_wtbd_007_v1",
+            },
+        )
+
     async def get_transaction_cost_curve(
         self,
         *,
@@ -1246,66 +1310,24 @@ class IntegrationService:
 
         grouped: dict[tuple[str, str, str], list[Any]] = {}
         for transaction in transactions:
-            fee_amount = self._transaction_fee_amount(transaction)
-            notional = abs(self._as_decimal(transaction.gross_transaction_amount))
-            if fee_amount <= 0 or notional <= 0:
+            if not self._has_observed_transaction_cost_evidence(transaction):
                 continue
-            key = (
-                str(transaction.security_id),
-                str(transaction.transaction_type).upper(),
-                str(transaction.currency).upper(),
+            grouped.setdefault(self._transaction_cost_curve_key(transaction), []).append(
+                transaction
             )
-            grouped.setdefault(key, []).append(transaction)
 
         all_points: list[TransactionCostCurvePoint] = []
         for key in sorted(grouped):
             rows = grouped[key]
             if len(rows) < request.min_observation_count:
                 continue
-            security_id, transaction_type, currency = key
-            total_cost = sum(self._transaction_fee_amount(row) for row in rows)
-            total_notional = sum(
-                abs(self._as_decimal(row.gross_transaction_amount)) for row in rows
+            point = self._build_transaction_cost_curve_point(
+                portfolio_id=portfolio_id,
+                key=key,
+                rows=rows,
             )
-            cost_bps_values = [
-                (
-                    self._transaction_fee_amount(row)
-                    / abs(self._as_decimal(row.gross_transaction_amount))
-                )
-                * Decimal("10000")
-                for row in rows
-                if abs(self._as_decimal(row.gross_transaction_amount)) > 0
-            ]
-            if not cost_bps_values:
-                continue
-            observed_dates = [row.transaction_date.date() for row in rows]
-            all_points.append(
-                TransactionCostCurvePoint(
-                    portfolio_id=portfolio_id,
-                    security_id=security_id,
-                    transaction_type=transaction_type,
-                    currency=currency,
-                    observation_count=len(rows),
-                    total_notional=total_notional,
-                    total_cost=total_cost,
-                    average_cost_bps=(total_cost / total_notional * Decimal("10000")).quantize(
-                        Decimal("0.0001")
-                    ),
-                    min_cost_bps=min(cost_bps_values).quantize(Decimal("0.0001")),
-                    max_cost_bps=max(cost_bps_values).quantize(Decimal("0.0001")),
-                    first_observed_date=min(observed_dates),
-                    last_observed_date=max(observed_dates),
-                    sample_transaction_ids=[
-                        str(row.transaction_id)
-                        for row in sorted(rows, key=lambda row: row.transaction_id)[:5]
-                    ],
-                    source_lineage={
-                        "source_system": "transactions",
-                        "source_table": "transactions,transaction_costs",
-                        "contract_version": "rfc_040_wtbd_007_v1",
-                    },
-                )
-            )
+            if point is not None:
+                all_points.append(point)
 
         paged_candidates = [
             point
