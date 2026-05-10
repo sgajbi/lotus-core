@@ -492,6 +492,8 @@ def build_front_office_portfolio_bundle(
     as_of_date = end_date.isoformat()
     forward_withdrawal_date = end_date + timedelta(days=7)
     forward_withdrawal_settlement_date = end_date + timedelta(days=10)
+    current_horizon_planned_withdrawal_date = end_date + timedelta(days=20)
+    current_horizon_planned_withdrawal_settlement_date = end_date + timedelta(days=36)
 
     def tx_dt(day_offset: int, hour: int = 10) -> datetime:
         current = start_date + timedelta(days=day_offset)
@@ -1271,6 +1273,22 @@ def build_front_office_portfolio_bundle(
             quantity="18000",
             price="1",
             gross="18000",
+            trade_currency="USD",
+            settlement_cash_account_id="CASH-ACC-USD-001",
+            movement_direction="OUTFLOW",
+            source_system="LOTUS_FRONT_OFFICE_SEED",
+        ),
+        _tx(
+            "TXN-WITHDRAWAL-CURRENT-HORIZON-001",
+            portfolio_id=portfolio_id,
+            instrument_id="USD-CASH",
+            security_id="CASH_USD_BOOK_OPERATING",
+            when=date_dt(current_horizon_planned_withdrawal_date),
+            settlement_date=date_dt(current_horizon_planned_withdrawal_settlement_date, 16),
+            tx_type="WITHDRAWAL",
+            quantity="12000",
+            price="1",
+            gross="12000",
             trade_currency="USD",
             settlement_cash_account_id="CASH-ACC-USD-001",
             movement_direction="OUTFLOW",

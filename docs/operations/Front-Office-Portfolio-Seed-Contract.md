@@ -119,7 +119,8 @@ The seed must make the following product surfaces materially usable.
 ### Liquidity and cashflow
 
 - multiple cash accounts
-- projected cash movements over a forward window
+- projected cash movements over both the canonical contract window and the current Workbench
+  forward-liquidity horizon
 - future-dated settlement activity or projected cash events
 - benchmark and FX coverage through the forward validation horizon so next-day
   analytics requests do not fail on missing reference data
@@ -298,7 +299,8 @@ Recommended transaction storyline:
 - one coupon or interest receipt
 - one advisory or custody fee
 - one withholding-tax event
-- one future-dated settlement or projected cash event
+- future-dated settlement or projected cash events that keep both canonical and current
+  forward-liquidity windows non-empty
 
 Each transaction should carry meaningful values for all attributes that affect
 downstream surfaces, including where supported:

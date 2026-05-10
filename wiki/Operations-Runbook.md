@@ -83,6 +83,11 @@ clear known volatile replay fences for canonical seed topics when local Kafka of
 reset or reused, but it must not perform broad `processed_events` deletion. If broader local
 runtime state is polluted, reset the Docker-backed core runtime before reseeding.
 
+The canonical seed includes planned withdrawal evidence for both the fixed contract as-of window
+and the current Workbench forward-liquidity horizon. After reseeding, `PortfolioCashflowProjection`
+should show at least one non-zero point for the canonical window and one non-zero current-horizon
+planned settlement point.
+
 ## Startup checks
 
 When app-local runtime is unhealthy, check this order:
