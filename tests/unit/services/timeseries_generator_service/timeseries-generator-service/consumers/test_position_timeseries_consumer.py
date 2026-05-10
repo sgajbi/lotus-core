@@ -511,6 +511,7 @@ async def test_stage_aggregation_job_rearms_completed_job_for_late_material_inpu
     assert "DO UPDATE SET status" in compiled_stmt
     assert "correlation_id" in compiled_stmt
     assert "portfolio_aggregation_jobs.status !=" in compiled_stmt
+    assert "REPROCESS_REQUESTED" in compiled_stmt
     assert "coalesce(portfolio_aggregation_jobs.correlation_id" in compiled_stmt
 
 

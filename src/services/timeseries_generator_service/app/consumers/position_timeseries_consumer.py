@@ -21,7 +21,7 @@ from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
 from pydantic import ValidationError
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
@@ -31,6 +31,7 @@ from ..repositories.timeseries_repository import TimeseriesRepository
 
 logger = logging.getLogger(__name__)
 
+AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
 MAX_DEPENDENT_PROPAGATION_ROWS = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_BATCH_SIZE
 MAX_DEPENDENT_PROPAGATION_BATCHES_PER_MESSAGE = (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_MAX_BATCHES_PER_MESSAGE
@@ -93,6 +94,8 @@ class PositionTimeseriesConsumer(BaseConsumer):
 
         Material position-timeseries changes for a portfolio-day must re-arm aggregation,
         even when they arrive under the same correlation id as an earlier partial run.
+        If aggregation is already in flight, mark the job for deterministic reprocessing
+        instead of moving it out from under the worker that owns the PROCESSING claim.
         Duplicate timeseries writes are filtered before this method is called.
         """
         normalized_dates = sorted(set(aggregation_dates))
@@ -115,9 +118,22 @@ class PositionTimeseriesConsumer(BaseConsumer):
             .on_conflict_do_update(
                 index_elements=["portfolio_id", "aggregation_date"],
                 set_={
-                    "status": "PENDING",
+                    "status": case(
+                        (
+                            PortfolioAggregationJob.status == "PROCESSING",
+                            PortfolioAggregationJob.status,
+                        ),
+                        else_="PENDING",
+                    ),
                     "correlation_id": correlation_id,
                     "updated_at": func.now(),
+                    "failure_reason": case(
+                        (
+                            PortfolioAggregationJob.status == "PROCESSING",
+                            AGGREGATION_REPROCESS_REQUESTED,
+                        ),
+                        else_=None,
+                    ),
                 },
                 where=or_(
                     PortfolioAggregationJob.status != "PENDING",

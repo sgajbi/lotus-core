@@ -22,6 +22,8 @@ from ..repositories.timeseries_repository import TimeseriesRepository
 
 logger = logging.getLogger(__name__)
 
+AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
+
 
 class PortfolioTimeseriesConsumer(BaseConsumer):
     """
@@ -93,13 +95,18 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
                         repo=repo,
                     )
 
-                    claimed_terminal = await self._update_job_status(
+                    terminal_status = await self._complete_or_requeue_job(
                         portfolio_id,
                         a_date,
-                        "COMPLETE",
                         db_session=db,
                     )
-                    if not claimed_terminal:
+                    if terminal_status == "REQUEUED":
+                        logger.info(
+                            "Requeued aggregation job after late material input.",
+                            extra={"portfolio_id": portfolio_id, "aggregation_date": str(a_date)},
+                        )
+                        return
+                    if terminal_status != "COMPLETE":
                         logger.warning(
                             "Skipping aggregation completion side effects after losing "
                             "job ownership.",
@@ -139,6 +146,46 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
                 exc_info=True,
             )
             await self._update_job_status(portfolio_id, a_date, "FAILED")
+
+    async def _complete_or_requeue_job(
+        self, portfolio_id: str, a_date: date, db_session=None
+    ) -> str:
+        requeue_stmt = (
+            update(PortfolioAggregationJob)
+            .where(
+                PortfolioAggregationJob.portfolio_id == portfolio_id,
+                PortfolioAggregationJob.aggregation_date == a_date,
+                PortfolioAggregationJob.status == "PROCESSING",
+                PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED,
+            )
+            .values(status="PENDING", failure_reason=None, updated_at=func.now())
+        )
+        complete_stmt = (
+            update(PortfolioAggregationJob)
+            .where(
+                PortfolioAggregationJob.portfolio_id == portfolio_id,
+                PortfolioAggregationJob.aggregation_date == a_date,
+                PortfolioAggregationJob.status == "PROCESSING",
+            )
+            .values(status="COMPLETE", failure_reason=None, updated_at=func.now())
+        )
+
+        async def _execute(db) -> str:
+            requeue_result = await db.execute(requeue_stmt)
+            if requeue_result.rowcount == 1:
+                return "REQUEUED"
+            complete_result = await db.execute(complete_stmt)
+            if complete_result.rowcount == 1:
+                return "COMPLETE"
+            return "LOST_OWNERSHIP"
+
+        if db_session:
+            return await _execute(db_session)
+
+        async for db in get_async_db_session():
+            async with db.begin():
+                return await _execute(db)
+        return "LOST_OWNERSHIP"
 
     async def _update_job_status(
         self, portfolio_id: str, a_date: date, status: str, db_session=None

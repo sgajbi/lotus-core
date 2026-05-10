@@ -1377,7 +1377,7 @@ async def test_reference_contract_methods() -> None:
     assert assignment.generated_at.tzinfo is not None
     assert assignment.restatement_version == "current"
     assert assignment.reconciliation_status == "UNKNOWN"
-    assert assignment.data_quality_status == "UNKNOWN"
+    assert assignment.data_quality_status == "COMPLETE"
 
     definition = await service.get_benchmark_definition("B1", date(2026, 1, 1))
     assert definition is not None

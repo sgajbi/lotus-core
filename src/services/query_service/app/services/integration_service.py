@@ -438,6 +438,7 @@ class IntegrationService:
             assignment_version=int(row.assignment_version),
             **self._runtime_metadata_for_existing_as_of_date(
                 as_of_date,
+                data_quality_status="COMPLETE",
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
             ),
         )
