@@ -38,7 +38,8 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "must not aggregate rows into tax methodology" in catalog
     assert "FX attribution, cash movement methodology, transaction-cost methodology" in catalog
     assert "| `PortfolioCashflowProjection:v1` |" in catalog
-    assert "Daily net cashflow points, cumulative cashflow across the returned window" in catalog
+    assert "Daily booked cashflow, projected settlement cashflow, net cashflow points" in catalog
+    assert "booked/projected/net totals" in catalog
     assert "must not treat the projection as a liquidity ladder" in catalog
     assert "| `PortfolioTaxLotWindow:v1` |" in catalog
     assert "portfolio-tax-lot-window.md" in catalog
@@ -224,6 +225,8 @@ def test_portfolio_cashflow_projection_methodology_is_implementation_backed() ->
     assert "Only the latest cashflow row per transaction contributes to `B_d`" in methodology
     assert "Same-day booked and projected movements exist" in methodology
     assert "No FX conversion, tax methodology, liquidity bucketing" in normalized_methodology
+    assert "`points[].booked_net_cashflow`" in methodology
+    assert "`projected_settlement_total_cashflow`" in methodology
     assert "| `points[2026-03-04].net_cashflow` | -18000 |" in methodology
 
 

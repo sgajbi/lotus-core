@@ -68,6 +68,10 @@ Boundary rules that matter:
 7. `TransactionLedgerWindow:v1` preserves explicit row-level realized FX P&L evidence and can
    restate those local P&L fields into a requested reporting currency for downstream reporting
    surfaces without promoting portfolio-level FX attribution.
+8. `PortfolioCashflowProjection:v1` emits daily booked, projected-settlement, net, cumulative, and
+   component-total cashflow evidence in portfolio base currency so downstream outcome consumers can
+   preserve operational cash-movement components without deriving liquidity ladders, income-needs
+   advice, or OMS execution forecasts.
 
 ## Architecture At A Glance
 

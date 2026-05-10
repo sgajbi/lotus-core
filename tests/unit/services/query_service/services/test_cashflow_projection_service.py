@@ -56,6 +56,8 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
             end_date=date(2026, 3, 11),
         )
         assert response.total_net_cashflow == Decimal("-750")
+        assert response.booked_total_net_cashflow == Decimal("-750")
+        assert response.projected_settlement_total_cashflow == Decimal("0")
         assert response.product_name == "PortfolioCashflowProjection"
         assert response.product_version == "v1"
         assert response.portfolio_currency == "USD"
@@ -65,6 +67,8 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
             "cashflow_projection:P1:2026-03-01:2026-03-11:include_projected=true"
         )
         assert response.points[0].projected_cumulative_cashflow == Decimal("-1000")
+        assert response.points[0].booked_net_cashflow == Decimal("-1000")
+        assert response.points[0].projected_settlement_cashflow == Decimal("0")
         assert response.points[1].net_cashflow == Decimal("0")
         assert response.points[1].projected_cumulative_cashflow == Decimal("-1000")
         assert response.points[2].projected_cumulative_cashflow == Decimal("-750")
@@ -134,8 +138,12 @@ async def test_projection_includes_future_settlement_dated_external_flows(mock_r
 
         points = {point.projection_date: point for point in response.points}
         assert points[date(2026, 3, 4)].net_cashflow == Decimal("-18000")
+        assert points[date(2026, 3, 4)].booked_net_cashflow == Decimal("0")
+        assert points[date(2026, 3, 4)].projected_settlement_cashflow == Decimal("-18000")
         assert points[date(2026, 3, 4)].projected_cumulative_cashflow == Decimal("-18750")
         assert response.total_net_cashflow == Decimal("-18750")
+        assert response.booked_total_net_cashflow == Decimal("-750")
+        assert response.projected_settlement_total_cashflow == Decimal("-18000")
         assert (
             response.notes
             == "Projected window includes settlement-dated future external cash movements."
@@ -165,7 +173,13 @@ async def test_projection_adds_same_day_booked_and_projected_movements(
 
         points = {point.projection_date: point for point in response.points}
         assert points[date(2026, 3, 1)].net_cashflow == Decimal("0")
+        assert points[date(2026, 3, 1)].booked_net_cashflow == Decimal("0")
+        assert points[date(2026, 3, 1)].projected_settlement_cashflow == Decimal("0")
         assert points[date(2026, 3, 2)].net_cashflow == Decimal("250.15")
+        assert points[date(2026, 3, 2)].booked_net_cashflow == Decimal("400.25")
+        assert points[date(2026, 3, 2)].projected_settlement_cashflow == Decimal("-150.10")
         assert points[date(2026, 3, 2)].projected_cumulative_cashflow == Decimal("250.15")
         assert points[date(2026, 3, 3)].projected_cumulative_cashflow == Decimal("250.15")
         assert response.total_net_cashflow == Decimal("250.15")
+        assert response.booked_total_net_cashflow == Decimal("400.25")
+        assert response.projected_settlement_total_cashflow == Decimal("-150.10")
