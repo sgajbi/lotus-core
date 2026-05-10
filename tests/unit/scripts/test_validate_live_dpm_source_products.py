@@ -37,6 +37,12 @@ def _mandate_binding() -> dict:
         "mandate_type": "discretionary",
         "discretionary_authority_status": "active",
         "model_portfolio_id": validator.DEFAULT_MODEL_PORTFOLIO_ID,
+        "mandate_objective": (
+            "Preserve and grow global balanced wealth within controlled drawdown limits."
+        ),
+        "review_cadence": "quarterly",
+        "last_review_date": "2026-03-31",
+        "next_review_due_date": "2026-06-30",
     }
 
 
@@ -229,6 +235,27 @@ def test_live_dpm_source_validator_reports_stale_market_data_coverage() -> None:
     assert failure["name"] == "dpm_market_data_coverage_ready"
     assert failure["details"]["supportability_state"] == "STALE"
     assert failure["details"]["stale_instrument_ids"] == ["FO_EQ_SAP_DE"]
+
+
+def test_live_dpm_source_validator_requires_mandate_review_cycle_truth() -> None:
+    mandate_binding = _mandate_binding()
+    mandate_binding.pop("mandate_objective")
+    mandate_binding["next_review_due_date"] = None
+
+    summary = _run(
+        {
+            f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/mandate-binding": (
+                200,
+                mandate_binding,
+            )
+        }
+    )
+
+    assert summary["failed"] == 1
+    failure = summary["failures"][0]
+    assert failure["name"] == "dpm_mandate_binding_ready"
+    assert failure["details"]["mandate_objective_present"] is False
+    assert failure["details"]["next_review_due_date"] is None
 
 
 def test_live_dpm_source_validator_keeps_probe_name_on_bad_response_shape() -> None:
