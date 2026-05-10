@@ -217,8 +217,9 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## `portfolio_mandate_bindings`
 
 - **Purpose**: Effective-dated discretionary mandate binding for stateful DPM source assembly.
-- **Description**: Stores portfolio-to-mandate/model/policy bindings, authority status,
-  jurisdiction, booking center, rebalance constraints, and lineage for
+- **Description**: Stores portfolio-to-mandate/model/policy bindings, source-owned mandate
+  objective, authority status, jurisdiction, booking center, review cadence, review dates,
+  rebalance constraints, and lineage for
   `DiscretionaryMandateBinding:v1`.
 - **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
 - **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
@@ -236,8 +237,12 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `jurisdiction_code` (String): Legal or regulatory jurisdiction code.
   - `model_portfolio_id` (String): Approved model portfolio selected for the mandate.
   - `policy_pack_id` (String): Policy pack applied to DPM checks.
+  - `mandate_objective` (String): Source-owned discretionary mandate objective.
   - `risk_profile` (String): Mandate risk profile.
   - `investment_horizon` (String): Mandate investment horizon classification.
+  - `review_cadence` (String): Source-owned mandate review cadence.
+  - `last_review_date` (Date): Most recent completed discretionary mandate review date.
+  - `next_review_due_date` (Date): Next due discretionary mandate review date.
   - `leverage_allowed` (Boolean): Whether leverage is permitted by the mandate.
   - `tax_awareness_allowed` (Boolean): Whether tax-aware DPM execution is allowed.
   - `settlement_awareness_required` (Boolean): Whether settlement-aware DPM execution is required.

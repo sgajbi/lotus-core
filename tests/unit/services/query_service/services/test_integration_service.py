@@ -679,8 +679,14 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
             jurisdiction_code="SG",
             model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
             policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective=(
+                "Preserve and grow global balanced wealth within controlled drawdown limits."
+            ),
             risk_profile="balanced",
             investment_horizon="long_term",
+            review_cadence="quarterly",
+            last_review_date=date(2026, 3, 31),
+            next_review_due_date=date(2026, 6, 30),
             leverage_allowed=False,
             tax_awareness_allowed=True,
             settlement_awareness_required=True,
@@ -708,6 +714,12 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
     assert response.product_name == "DiscretionaryMandateBinding"
     assert response.model_portfolio_id == "MODEL_PB_SG_GLOBAL_BAL_DPM"
     assert response.policy_pack_id == "POLICY_DPM_SG_BALANCED_V1"
+    assert response.mandate_objective == (
+        "Preserve and grow global balanced wealth within controlled drawdown limits."
+    )
+    assert response.review_cadence == "quarterly"
+    assert response.last_review_date == date(2026, 3, 31)
+    assert response.next_review_due_date == date(2026, 6, 30)
     assert response.rebalance_bands.default_band == Decimal("0.0250000000")
     assert response.rebalance_bands.cash_reserve_weight == Decimal("0.0200000000")
     assert response.supportability.state == "READY"
@@ -736,8 +748,14 @@ async def test_resolve_discretionary_mandate_binding_blocks_inactive_authority()
             jurisdiction_code="SG",
             model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
             policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective=(
+                "Preserve and grow global balanced wealth within controlled drawdown limits."
+            ),
             risk_profile="balanced",
             investment_horizon="long_term",
+            review_cadence="quarterly",
+            last_review_date=date(2026, 3, 31),
+            next_review_due_date=date(2026, 6, 30),
             leverage_allowed=False,
             tax_awareness_allowed=True,
             settlement_awareness_required=True,
@@ -762,6 +780,102 @@ async def test_resolve_discretionary_mandate_binding_blocks_inactive_authority()
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.reason == "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
     assert response.supportability.missing_data_families == ["active_discretionary_authority"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_mandate_binding_flags_missing_objective_and_review_schedule() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="active",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective=None,
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            review_cadence=None,
+            last_review_date=None,
+            next_review_due_date=None,
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={"default_band": "0.0250000000"},
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=None,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "MANDATE_OBJECTIVE_MISSING"
+    assert response.supportability.missing_data_families == [
+        "mandate_objective",
+        "mandate_review_schedule",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_degrades_overdue_review() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="active",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective="Balanced discretionary growth",
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            review_cadence="quarterly",
+            last_review_date=date(2026, 1, 31),
+            next_review_due_date=date(2026, 3, 31),
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={"default_band": "0.0250000000"},
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=None,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "MANDATE_REVIEW_OVERDUE"
 
 
 @pytest.mark.asyncio

@@ -28,12 +28,12 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
-    ClientRestrictionProfileRequest,
-    ClientRestrictionProfileResponse,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
+    ClientRestrictionProfileRequest,
+    ClientRestrictionProfileResponse,
     CoverageRequest,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -723,8 +723,8 @@ async def resolve_model_portfolio_targets(
     summary="Resolve effective DPM mandate binding",
     description=(
         "What: Return the effective discretionary mandate binding that connects a portfolio "
-        "to its mandate, model portfolio, policy pack, jurisdiction, booking center, authority "
-        "status, and rebalance constraints.\n"
+        "to its mandate objective, model portfolio, policy pack, jurisdiction, booking center, "
+        "authority status, review cadence, review dates, and rebalance constraints.\n"
         "How: Applies effective-date, optional mandate, optional booking-center, and binding "
         "version ordering to return one deterministic source record with source-data runtime "
         "metadata, supportability, and lineage.\n"
