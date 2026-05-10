@@ -152,6 +152,10 @@ def _probe_mandate_binding(
         and body_dict.get("mandate_type") == "discretionary"
         and body_dict.get("discretionary_authority_status") == "active"
         and body_dict.get("model_portfolio_id") == model_portfolio_id
+        and bool(body_dict.get("mandate_objective"))
+        and bool(body_dict.get("review_cadence"))
+        and bool(body_dict.get("last_review_date"))
+        and bool(body_dict.get("next_review_due_date"))
     )
     return _result(
         "dpm_mandate_binding_ready",
@@ -162,6 +166,10 @@ def _probe_mandate_binding(
             "supportability_state": _supportability_state(body_dict),
             "mandate_type": body_dict.get("mandate_type"),
             "model_portfolio_id": body_dict.get("model_portfolio_id"),
+            "mandate_objective_present": bool(body_dict.get("mandate_objective")),
+            "review_cadence": body_dict.get("review_cadence"),
+            "last_review_date": body_dict.get("last_review_date"),
+            "next_review_due_date": body_dict.get("next_review_due_date"),
         },
     )
 
