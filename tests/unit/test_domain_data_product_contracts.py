@@ -144,6 +144,7 @@ def test_core_declaration_preserves_high_value_mesh_products_and_trust_posture()
     assert products["HoldingsAsOf"]["serving_plane"] == QUERY_SERVICE
     assert products["TransactionLedgerWindow"]["serving_plane"] == QUERY_SERVICE
     assert products["PortfolioCashflowProjection"]["serving_plane"] == QUERY_SERVICE
+    assert products["PortfolioLiquidityLadder"]["serving_plane"] == QUERY_SERVICE
     assert products["MarketDataWindow"]["temporal_semantics_ref"] == "valuation_date"
     assert products["RiskFreeSeriesWindow"]["request_scope"]["scope_level"] == "global"
     assert products["PortfolioTimeseriesInput"]["serving_plane"] == QUERY_CONTROL_PLANE_SERVICE

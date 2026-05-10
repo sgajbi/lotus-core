@@ -281,6 +281,7 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/reporting/portfolio-summary/query"]["post"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/cashflow-projection"]["get"]["responses"]
+    assert "404" in paths["/portfolios/{portfolio_id}/liquidity-ladder"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
 
 
@@ -292,6 +293,7 @@ async def test_openapi_includes_reporting_contracts(async_test_client):
     assert "/reporting/assets-under-management/query" in paths
     assert "/reporting/asset-allocation/query" in paths
     assert "/portfolios/{portfolio_id}/cash-balances" in paths
+    assert "/portfolios/{portfolio_id}/liquidity-ladder" in paths
     assert "/reporting/portfolio-summary/query" in paths
     assert "/portfolios/{portfolio_id}/cash-accounts" in paths
 
@@ -308,6 +310,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     portfolio_summary_query = paths["/reporting/portfolio-summary/query"]["post"]
     portfolios_query = paths["/portfolios/"]["get"]
     strategic_cash_balances_query = paths["/portfolios/{portfolio_id}/cash-balances"]["get"]
+    liquidity_ladder_query = paths["/portfolios/{portfolio_id}/liquidity-ladder"]["get"]
     cash_accounts_query = paths["/portfolios/{portfolio_id}/cash-accounts"]["get"]
 
     assert (
@@ -330,6 +333,8 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
         "Prefer this contract for new gateway, advise, or report integrations"
         in strategic_cash_balances_query["description"]
     )
+    assert "PortfolioLiquidityLadder source-data product" in liquidity_ladder_query["description"]
+    assert "Do not use it as an advice recommendation" in liquidity_ladder_query["description"]
     assert "strategic historical portfolio summary" in portfolio_summary_query["description"]
     assert (
         "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`"

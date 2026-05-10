@@ -101,6 +101,21 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Core-derived daily net cashflow projection for operational liquidity planning.",
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioLiquidityLadder",
+        product_version="v1",
+        route_family=OPERATIONAL_READ,
+        serving_plane=QUERY_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-gateway", "lotus-report", "lotus-manage", "lotus-advise"),
+        current_routes=("/portfolios/{portfolio_id}/liquidity-ladder",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Core-owned cash-availability ladder and asset liquidity-tier exposure evidence. "
+            "It is source evidence, not advice, OMS execution, or market-impact forecasting."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="PositionTimeseriesInput",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

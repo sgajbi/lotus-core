@@ -40,6 +40,7 @@ source-data authority.
 | `ClientRestrictionProfile:v1` | `/integration/portfolios/{portfolio_id}/client-restriction-profile` | Effective-dated client and mandate restriction profile for DPM buy/sell controls, including scoped instrument, asset-class, issuer, and country restrictions with lineage and supportability. | Implemented and locally proven for RFC40-WTBD-008 source ownership. Canonical seed coverage includes private-credit and sanctioned-market buy restrictions. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed restriction enforcement. |
 | `SustainabilityPreferenceProfile:v1` | `/integration/portfolios/{portfolio_id}/sustainability-preference-profile` | Effective-dated sustainability preference profile for mandate-aware portfolio construction, including allocation bounds, exclusions, positive tilts, framework, source, and lineage. | Implemented and locally proven for RFC40-WTBD-008 source ownership. Canonical seed coverage includes a minimum sustainable allocation, thermal-coal exclusion, and low-carbon-transition positive tilt. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed sustainability preference enforcement. |
 | `PortfolioCashflowProjection:v1` | `/portfolios/{portfolio_id}/cashflow-projection` | Core-derived daily cashflow projection for operational cash-movement evidence. It exposes daily booked cashflow, projected settlement cashflow, net cashflow, cumulative cashflow, booked/projected/net totals, source-data product identity, portfolio base currency, runtime metadata, data-quality posture, latest evidence timestamp, and deterministic projection fingerprint for downstream outcome and liquidity consumers. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening; live front-office proof remains part of the consuming manage slice. |
+| `PortfolioLiquidityLadder:v1` | `/portfolios/{portfolio_id}/liquidity-ladder` | Source-owned cash-availability ladder evidence. It exposes opening source cash, deterministic T0/T+1/T+2-to-T+7/T+8-to-T+30/T+31-to-horizon cash buckets, booked and projected settlement cashflow contributions, cumulative cash availability, maximum cash shortfall, non-cash exposure by instrument liquidity tier, runtime metadata, data-quality posture, evidence timestamp, and deterministic source fingerprint. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening. It is evidence for monitoring, reporting, DPM supportability, and client explanation; it is not an advice recommendation, income plan, funding recommendation, OMS execution forecast, tax methodology, best-execution assessment, or market-impact model. |
 
 ## Realized Outcome Evidence Boundaries
 
@@ -52,7 +53,7 @@ or OMS acknowledgement methodology.
 | Audience | What this means |
 | --- | --- |
 | Business users | Core supplies recorded facts such as holdings, cash totals, transaction fees, withholding tax, realized FX P&L, linked cashflow rows, tax lots, observed fee evidence, and operational cashflow projections. Decisioning products can explain those facts but must not silently invent a broader methodology. |
-| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`, and `PortfolioCashflowProjection:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
+| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`, `PortfolioCashflowProjection:v1`, and `PortfolioLiquidityLadder:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
 | Operations | Investigate stale, partial, or missing evidence at the owning source product before treating a manage/risk/performance surface as wrong. If a source product is unavailable or outside scope, downstream products should degrade rather than recalculate locally. |
 | Sales and client demos | Position the platform as source-governed: recorded ledger and portfolio facts are traceable to core, analytics are owned by their specialist services, and unsupported execution/tax/liquidity claims remain visibly outside the supported boundary. |
 
@@ -112,6 +113,15 @@ before the projection start date. Same-day booked and projected movements are ad
 separately visible through component fields, empty days carry forward the prior cumulative value, and
 all monetary fields remain in the portfolio base currency.
 
+`PortfolioLiquidityLadder:v1` is the governed source for cash-availability ladder evidence. It
+starts from source cash balances, overlays booked and optional projected settlement-dated external
+cashflows, groups the result into deterministic liquidity buckets, reports cumulative cash
+availability and maximum shortfall, and groups non-cash holdings by source-owned instrument
+liquidity tier. It is intentionally evidence-only: downstream consumers may use the facts for
+monitoring, reporting, DPM supportability, and client explanation, but must not present it as an
+advice recommendation, client income plan, funding recommendation, OMS execution forecast,
+best-execution assessment, tax methodology, or market-impact model.
+
 `PortfolioTaxLotWindow:v1` is the governed source for effective-dated lot and cost-basis state from
 `position_lot_state`, including open/original quantity, acquisition date, base and local cost basis,
 local currency when source transaction currency is available, source transaction id, calculation
@@ -131,6 +141,7 @@ flowchart LR
     CoreHoldings[core HoldingsAsOf:v1<br/>positions, weights, cash balances, freshness]
     CoreLedger[core TransactionLedgerWindow:v1<br/>row-level fees, withholding tax, realized FX P&L, linked cashflow]
     CoreCash[core PortfolioCashflowProjection:v1<br/>daily and total operational cashflow evidence]
+    CoreLiquidity[core PortfolioLiquidityLadder:v1<br/>cash availability buckets and liquidity-tier exposure]
     CoreLots[core PortfolioTaxLotWindow:v1<br/>lot and cost-basis state]
     CoreFees[core TransactionCostCurve:v1<br/>observed booked fee evidence]
     Manage[lotus-manage outcome/proof/wave consumers<br/>preserve source refs and supportability]
@@ -141,6 +152,7 @@ flowchart LR
     CoreHoldings --> Manage
     CoreLedger --> Manage
     CoreCash --> Manage
+    CoreLiquidity --> Manage
     CoreLots --> Manage
     CoreFees --> Manage
     Perf --> Manage
