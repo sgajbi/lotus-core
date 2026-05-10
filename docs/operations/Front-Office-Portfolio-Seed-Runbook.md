@@ -41,7 +41,7 @@ not part of canonical Workbench runtime bring-up.
 - discretionary mandate binding, model target, instrument eligibility, tax-lot, market-data,
   client-restriction, and sustainability-preference source records for DPM assembly proof
 - income, fee, tax, sell, and withdrawal activity
-- one future-dated withdrawal inside the forward cashflow horizon
+- two future/planned withdrawals covering both the canonical and current forward cashflow horizons
 - canonical paired product-and-cash transactions aligned with the core demo ingest pattern
 - normalized cash-book transaction rows with `price = 1` and
   `quantity = gross_transaction_amount`
@@ -99,11 +99,11 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
 - `lotus-core query_service`
   - positions: `11`
   - valued positions: `11`
-  - transactions: `30`, including future transaction
-    `TXN-WITHDRAWAL-FUTURE-001`
+  - transactions: `31`, including future/planned transactions
+    `TXN-WITHDRAWAL-FUTURE-001` and `TXN-WITHDRAWAL-CURRENT-HORIZON-001`
   - cash accounts: `2`
-  - cashflow projection: `31` points with one non-zero point on `2026-04-17`
-    for `-18000`
+  - cashflow projection: `31` points with non-zero planned withdrawal points on
+    `2026-04-17` for `-18000` and `2026-04-30` for `-12000`
   - allocation views: `asset_class`, `sector`, `region`, `currency`
   - market price coverage through `2026-04-10`
   - EUR/USD FX, benchmark return, and USD risk-free coverage through `2026-05-10`

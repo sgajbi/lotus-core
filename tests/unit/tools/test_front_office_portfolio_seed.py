@@ -101,6 +101,10 @@ def test_front_office_bundle_includes_income_and_paired_cash_transactions():
     assert future_withdrawal["transaction_type"] == "WITHDRAWAL"
     assert future_withdrawal["transaction_date"].startswith("2026-04-17")
     assert future_withdrawal["settlement_date"].startswith("2026-04-20")
+    current_horizon_withdrawal = by_txn["TXN-WITHDRAWAL-CURRENT-HORIZON-001"]
+    assert current_horizon_withdrawal["transaction_type"] == "WITHDRAWAL"
+    assert current_horizon_withdrawal["transaction_date"].startswith("2026-04-30")
+    assert current_horizon_withdrawal["settlement_date"].startswith("2026-05-16")
 
     assert by_txn["TXN-CASH-BUY-AAPL-001"]["transaction_type"] == "SELL"
     assert by_txn["TXN-CASH-SELL-AAPL-001"]["transaction_type"] == "BUY"
@@ -133,11 +137,18 @@ def test_front_office_bundle_honors_explicit_end_date_for_market_prices():
         for transaction in bundle["transactions"]
         if transaction["transaction_id"] == "TXN-WITHDRAWAL-FUTURE-001"
     )
+    current_horizon_withdrawal = next(
+        transaction
+        for transaction in bundle["transactions"]
+        if transaction["transaction_id"] == "TXN-WITHDRAWAL-CURRENT-HORIZON-001"
+    )
 
     assert max(aapl_prices) == "2026-04-17"
     assert max(cash_prices) == "2026-04-17"
     assert future_withdrawal["transaction_date"].startswith("2026-04-24")
     assert future_withdrawal["settlement_date"].startswith("2026-04-27")
+    assert current_horizon_withdrawal["transaction_date"].startswith("2026-05-07")
+    assert current_horizon_withdrawal["settlement_date"].startswith("2026-05-23")
 
 
 def test_front_office_bundle_pairs_internal_transactions_under_shared_event_linkage():
@@ -273,10 +284,18 @@ def test_front_office_bundle_includes_forward_cashflow_event_inside_projection_w
 
     assert future_txns
     assert {transaction["transaction_id"] for transaction in future_txns} == {
-        "TXN-WITHDRAWAL-FUTURE-001"
+        "TXN-WITHDRAWAL-FUTURE-001",
+        "TXN-WITHDRAWAL-CURRENT-HORIZON-001",
     }
-    assert future_txns[0]["transaction_date"].startswith("2026-04-17")
-    assert future_txns[0]["settlement_date"].startswith("2026-04-20")
+    future_by_id = {transaction["transaction_id"]: transaction for transaction in future_txns}
+    assert future_by_id["TXN-WITHDRAWAL-FUTURE-001"]["transaction_date"].startswith("2026-04-17")
+    assert future_by_id["TXN-WITHDRAWAL-FUTURE-001"]["settlement_date"].startswith("2026-04-20")
+    assert future_by_id["TXN-WITHDRAWAL-CURRENT-HORIZON-001"][
+        "transaction_date"
+    ].startswith("2026-04-30")
+    assert future_by_id["TXN-WITHDRAWAL-CURRENT-HORIZON-001"][
+        "settlement_date"
+    ].startswith("2026-05-16")
 
 
 def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
@@ -475,7 +494,7 @@ def test_front_office_bundle_cash_economics_are_plausible_by_currency():
 
     assert cash_balance_by_currency["USD"] > Decimal("0")
     assert cash_balance_by_currency["EUR"] > Decimal("0")
-    assert cash_balance_by_currency["USD"] == Decimal("101347.00")
+    assert cash_balance_by_currency["USD"] == Decimal("89347.00")
     assert cash_balance_by_currency["EUR"] == Decimal("19805.50")
 
 
