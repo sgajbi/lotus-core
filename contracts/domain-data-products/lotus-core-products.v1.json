@@ -271,6 +271,71 @@
       "temporal_semantics_ref": "as_of_date"
     },
     {
+      "product_name": "PortfolioLiquidityLadder",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "operational_source_data",
+      "authoritative_domain": "portfolio_state",
+      "lifecycle_status": "active",
+      "request_scope": {
+        "scope_level": "portfolio",
+        "supports_bulk": false
+      },
+      "temporal_scope": {
+        "primary_time_field": "as_of_date",
+        "freshness_basis": "as_of_date",
+        "supports_restatement": true
+      },
+      "required_trust_metadata": [
+        "product_name",
+        "product_version",
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "policy_version",
+        "correlation_id"
+      ],
+      "serving_plane": "query_service",
+      "current_routes": [
+        "/portfolios/{portfolio_id}/liquidity-ladder"
+      ],
+      "freshness_policy": {
+        "freshness_class": "daily",
+        "max_allowed_age_description": "Core-owned cash-availability ladder and asset liquidity-tier exposure evidence."
+      },
+      "completeness_policy": {
+        "default_status": "complete",
+        "partial_allowed": true
+      },
+      "lineage_policy": {
+        "lineage_required": true,
+        "evidence_bundle_required": false,
+        "evidence_access_class_ref": "customer_consumable"
+      },
+      "security_profile_ref": "business_consumer_access:client_sensitive:retain_for_client_record:audit_read_and_export",
+      "approved_consumers": [
+        "lotus-gateway",
+        "lotus-report",
+        "lotus-manage",
+        "lotus-advise"
+      ],
+      "deprecation_policy": {
+        "state": "not_deprecated",
+        "successor_product": null
+      },
+      "identifier_refs": [
+        "portfolio_id",
+        "tenant_id"
+      ],
+      "temporal_semantics_ref": "as_of_date"
+    },
+    {
       "product_name": "PositionTimeseriesInput",
       "product_version": "v1",
       "owner_repository": "lotus-core",

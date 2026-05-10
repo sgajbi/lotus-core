@@ -41,6 +41,11 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "Daily booked cashflow, projected settlement cashflow, net cashflow points" in catalog
     assert "booked/projected/net totals" in catalog
     assert "must not treat the projection as a liquidity ladder" in catalog
+    assert "| `PortfolioLiquidityLadder:v1` |" in catalog
+    assert "cash-availability buckets" in catalog
+    assert "asset exposure by source-owned instrument liquidity tier" in catalog
+    assert "portfolio-liquidity-ladder.md" in catalog
+    assert "must not treat the ladder as advice" in catalog
     assert "| `PortfolioTaxLotWindow:v1` |" in catalog
     assert "portfolio-tax-lot-window.md" in catalog
     assert "wash-sale treatment" in catalog
@@ -64,6 +69,7 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "`MarketDataCoverageWindow:v1`" in wiki
     assert "`DpmSourceReadiness:v1`" in wiki
     assert "`PortfolioCashflowProjection:v1`" in wiki
+    assert "`PortfolioLiquidityLadder:v1`" in wiki
     assert "`PortfolioTaxLotWindow:v1`" in wiki
     assert "snapshot-backed positions to latest current-epoch history quantity" in (normalized_wiki)
     assert "cash-account master data" in wiki
@@ -77,6 +83,9 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "classifies empty, complete, and paged windows" in normalized_wiki
     assert "settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements" in wiki
     assert "Same-day booked and projected movements are additive" in wiki
+    assert "deterministic T0/T+1/T+2-to-T+7" in wiki
+    assert "non-cash exposure by instrument liquidity tier" in wiki
+    assert "advice recommendation, client income plan" in wiki
     assert "position_lot_state" in wiki
     assert "wash-sale treatment" in wiki
     assert "observed booked transaction-fee evidence" in wiki
@@ -230,6 +239,38 @@ def test_portfolio_cashflow_projection_methodology_is_implementation_backed() ->
     assert "| `points[2026-03-04].net_cashflow` | -18000 |" in methodology
 
 
+def test_portfolio_liquidity_ladder_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/portfolio-liquidity-ladder.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`PortfolioLiquidityLadder:v1`" in methodology
+    assert "`GET /portfolios/{portfolio_id}/liquidity-ladder`" in methodology
+    assert "`horizon_days` is bounded from 0 to 366" in methodology
+    assert "`T_PLUS_31_TO_HORIZON`" in methodology
+    assert "CA_k = C0 + sum(N_i for i <= k)" in methodology
+    assert "`instrument.asset_class == CASH`" in methodology
+    assert "Missing tier values are grouped under `UNCLASSIFIED`" in methodology
+    assert "not a client advice recommendation" in normalized_methodology
+    assert "| `maximum_cash_shortfall_portfolio_currency` | 35000 |" in methodology
+
+
 def test_transaction_ledger_window_methodology_is_implementation_backed() -> None:
     methodology = _read("docs/methodologies/source-data-products/transaction-ledger-window.md")
     normalized_methodology = _single_line(methodology)
@@ -339,6 +380,7 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "source-data-products/dpm-source-readiness.md" in index
     assert "source-data-products/transaction-ledger-window.md" in index
     assert "source-data-products/portfolio-cashflow-projection.md" in index
+    assert "source-data-products/portfolio-liquidity-ladder.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
     assert "source-data-products/transaction-cost-curve.md" in index
     assert "Effective-dated open and closed tax-lot state" in index
@@ -346,4 +388,5 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "Held and target universe price and FX coverage diagnostics" in index
     assert "Fail-closed DPM source-family readiness" in index
     assert "Governed booked transaction-row windowing" in index
+    assert "Source-owned cash-availability buckets" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index
