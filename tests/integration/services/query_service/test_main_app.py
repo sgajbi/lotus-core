@@ -535,6 +535,7 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         "Use `reporting_currency` when a downstream reporting surface needs"
         in transactions["description"]
     )
+    assert "field-aware reporting-currency monetary restatement" in transactions["description"]
     assert (
         "Results default to latest-first ordering by `transaction_date` descending"
         in transactions["description"]
@@ -571,9 +572,9 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
         schema["components"]["schemas"]["TransactionRecord"]["properties"][
             "realized_fx_pnl_local_reporting_currency"
         ]["description"]
-        == "Transaction-level realized FX P&L local amount restated into the requested reporting "
-        "currency when `reporting_currency` is supplied on the route. This is row-level "
-        "source evidence, not portfolio-level FX attribution."
+        == "Transaction-level realized FX P&L local amount restated from trade_currency when "
+        "present, otherwise from book currency, into the requested reporting currency. This is "
+        "row-level source evidence, not portfolio-level FX attribution."
     )
 
     bad_request = transactions["responses"]["400"]["content"]["application/json"]["example"]

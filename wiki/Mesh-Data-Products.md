@@ -61,7 +61,9 @@ or OMS acknowledgement methodology.
 trade fees, transaction-cost records, withholding tax, other deductions, net interest, realized
 capital/FX/total P&L fields, linked cashflow records, and FX/event linkage identifiers. It is not an
 execution-quality, tax-advice, liquidity-planning, cash-movement aggregation, FX-attribution, or
-transaction-cost methodology product.
+transaction-cost methodology product. Reporting-currency fields use field-aware source currency:
+book-currency measures are restated from `currency`, while trade fees and local realized P&L fields
+are restated from `trade_currency` when present.
 
 `HoldingsAsOf:v1` is the governed source for position rows, position weights, current-epoch
 supportability, held-since dates, cash-account balances, portfolio/base currency, optional cash
@@ -96,9 +98,10 @@ liquidity, execution, or OMS truth.
 product filters booked transaction rows by portfolio, optional instrument/security, transaction
 type, FX/event linkage, date window, and effective as-of date; preserves joined row-level
 transaction-cost and cashflow evidence; optionally populates reporting-currency fields from latest
-available FX rates, including explicit row-level realized FX P&L local evidence; and classifies
-empty, complete, and paged windows without deriving tax advice, FX attribution, cash-movement
-aggregation, transaction-cost curves, execution quality, or OMS acknowledgement.
+available FX rates using book versus trade/local source-currency selection, including explicit
+row-level realized FX P&L local evidence; and classifies empty, complete, and paged windows without
+deriving tax advice, FX attribution, cash-movement aggregation, transaction-cost curves, execution
+quality, or OMS acknowledgement.
 
 `PortfolioCashflowProjection:v1` is the governed source for daily booked cashflow, projected
 settlement cashflow, net cashflow points, cumulative cashflow over the returned window,

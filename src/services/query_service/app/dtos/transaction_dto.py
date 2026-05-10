@@ -211,8 +211,9 @@ class TransactionRecord(BaseModel):
     trade_fee_reporting_currency: Optional[Decimal] = Field(
         None,
         description=(
-            "Trade fee restated into the requested reporting currency when "
-            "`reporting_currency` is supplied on the route."
+            "Trade fee restated from trade_currency when present, otherwise from book currency, "
+            "into the requested reporting currency when `reporting_currency` is supplied on the "
+            "route."
         ),
         examples=[3.42],
     )
@@ -235,8 +236,8 @@ class TransactionRecord(BaseModel):
     realized_capital_pnl_local_reporting_currency: Optional[Decimal] = Field(
         None,
         description=(
-            "Transaction-level realized capital P&L local amount restated into the requested "
-            "reporting currency when `reporting_currency` is supplied on the route. For FX "
+            "Transaction-level realized capital P&L local amount restated from trade_currency when "
+            "present, otherwise from book currency, into the requested reporting currency. For FX "
             "transactions this is expected to remain zero under the canonical FX model."
         ),
         examples=[0.0],
@@ -244,17 +245,17 @@ class TransactionRecord(BaseModel):
     realized_fx_pnl_local_reporting_currency: Optional[Decimal] = Field(
         None,
         description=(
-            "Transaction-level realized FX P&L local amount restated into the requested reporting "
-            "currency when `reporting_currency` is supplied on the route. This is row-level "
-            "source evidence, not portfolio-level FX attribution."
+            "Transaction-level realized FX P&L local amount restated from trade_currency when "
+            "present, otherwise from book currency, into the requested reporting currency. This is "
+            "row-level source evidence, not portfolio-level FX attribution."
         ),
         examples=[1700.0],
     )
     realized_total_pnl_local_reporting_currency: Optional[Decimal] = Field(
         None,
         description=(
-            "Transaction-level total realized P&L local amount restated into the requested "
-            "reporting currency when `reporting_currency` is supplied on the route."
+            "Transaction-level total realized P&L local amount restated from trade_currency when "
+            "present, otherwise from book currency, into the requested reporting currency."
         ),
         examples=[1700.0],
     )
