@@ -137,3 +137,14 @@ async def test_get_liquidity_ladder_maps_resolution_errors_to_400(async_test_cli
     assert (
         response.json()["detail"] == "No business date is available for liquidity ladder queries."
     )
+
+
+async def test_get_liquidity_ladder_unexpected_uses_global_500_envelope(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_liquidity_ladder.side_effect = RuntimeError("boom")
+
+    response = await client.get("/portfolios/P1/liquidity-ladder")
+
+    assert response.status_code == 500
+    assert response.json()["error"] == "Internal Server Error"
+    assert "correlation_id" in response.json()

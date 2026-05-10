@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
 from src.services.query_service.app.services.liquidity_ladder_service import (
+    MAX_HORIZON_DAYS,
     PortfolioLiquidityLadderService,
 )
 
@@ -177,3 +178,104 @@ async def test_liquidity_ladder_raises_when_portfolio_missing() -> None:
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_liquidity_ladder(portfolio_id="P404")
+
+
+async def test_liquidity_ladder_rejects_invalid_horizon_before_database_access() -> None:
+    service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+
+    with pytest.raises(
+        ValueError,
+        match=f"horizon_days must be between 0 and {MAX_HORIZON_DAYS}.",
+    ):
+        await service.get_liquidity_ladder(
+            portfolio_id="P1",
+            horizon_days=MAX_HORIZON_DAYS + 1,
+        )
+
+
+async def test_liquidity_ladder_raises_when_business_date_missing() -> None:
+    reporting_repo = AsyncMock()
+    reporting_repo.get_portfolio_by_id.return_value = _portfolio("P1")
+    reporting_repo.get_latest_business_date.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+        return_value=reporting_repo,
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(
+            ValueError,
+            match="No business date is available for liquidity ladder queries.",
+        ):
+            await service.get_liquidity_ladder(portfolio_id="P1")
+
+
+async def test_liquidity_ladder_returns_unknown_quality_for_empty_source_rows() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    portfolio = _portfolio("P1")
+    reporting_repo.get_portfolio_by_id.return_value = portfolio
+    reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    reporting_repo.list_latest_snapshot_rows.return_value = []
+    cashflow_repo.get_portfolio_cashflow_series.return_value = []
+    cashflow_repo.get_projected_settlement_cashflow_series.return_value = []
+    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.latest_evidence_timestamp is None
+    assert response.asset_liquidity_tiers == []
+    assert [bucket.bucket_code for bucket in response.buckets] == ["T0"]
+    assert response.totals.opening_cash_balance_portfolio_currency == Decimal("0")
+
+
+async def test_liquidity_ladder_classifies_unavailable_tier_and_missing_market_value() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    portfolio = _portfolio("P1")
+    reporting_repo.get_portfolio_by_id.return_value = portfolio
+    reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    reporting_repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=SimpleNamespace(
+                security_id="ALT1",
+                market_value=None,
+                updated_at=None,
+                created_at=datetime(2026, 3, 27, 8, 0, tzinfo=UTC),
+            ),
+            instrument=_instrument("ALT1", liquidity_tier=None),
+        )
+    ]
+    cashflow_repo.get_portfolio_cashflow_series.return_value = []
+    cashflow_repo.get_projected_settlement_cashflow_series.return_value = []
+    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+
+    assert response.asset_liquidity_tiers[0].liquidity_tier == "UNCLASSIFIED"
+    assert response.asset_liquidity_tiers[0].market_value_portfolio_currency == Decimal("0")
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 8, 0, tzinfo=UTC)
