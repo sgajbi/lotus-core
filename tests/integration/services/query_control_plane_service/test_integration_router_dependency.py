@@ -121,6 +121,7 @@ async def async_test_client():
             "contract_version": "rfc_062_v1",
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 1, 31),
+                data_quality_status="COMPLETE",
                 generated_at=datetime(2026, 1, 31, 9, 15, 0, tzinfo=UTC),
             ),
         }
@@ -744,7 +745,7 @@ async def test_benchmark_assignment_success(async_test_client):
     assert body["as_of_date"] == "2026-01-31"
     assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert body["reconciliation_status"] == "UNKNOWN"
-    assert body["data_quality_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "COMPLETE"
     mock_integration_service.resolve_benchmark_assignment.assert_awaited_once_with(
         portfolio_id="PORT-INT-001",
         as_of_date=date(2026, 1, 31),

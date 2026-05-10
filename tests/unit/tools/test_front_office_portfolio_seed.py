@@ -335,8 +335,14 @@ def test_front_office_bundle_includes_dpm_mandate_binding():
             "jurisdiction_code": "SG",
             "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
             "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+            "mandate_objective": (
+                "Preserve and grow global balanced wealth within controlled drawdown limits."
+            ),
             "risk_profile": "balanced",
             "investment_horizon": "long_term",
+            "review_cadence": "quarterly",
+            "last_review_date": "2026-03-31",
+            "next_review_due_date": "2026-06-30",
             "leverage_allowed": False,
             "tax_awareness_allowed": True,
             "settlement_awareness_required": True,

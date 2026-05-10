@@ -438,6 +438,7 @@ class IntegrationService:
             assignment_version=int(row.assignment_version),
             **self._runtime_metadata_for_existing_as_of_date(
                 as_of_date,
+                data_quality_status="COMPLETE",
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
             ),
         )
@@ -733,6 +734,23 @@ class IntegrationService:
             supportability_state = "INCOMPLETE"
             supportability_reason = "MANDATE_POLICY_PACK_MISSING"
             missing_data_families.append("policy_pack")
+        mandate_objective = getattr(row, "mandate_objective", None)
+        review_cadence = getattr(row, "review_cadence", None)
+        last_review_date = getattr(row, "last_review_date", None)
+        next_review_due_date = getattr(row, "next_review_due_date", None)
+        if not mandate_objective:
+            if supportability_state == "READY":
+                supportability_state = "INCOMPLETE"
+                supportability_reason = "MANDATE_OBJECTIVE_MISSING"
+            missing_data_families.append("mandate_objective")
+        if not review_cadence or last_review_date is None or next_review_due_date is None:
+            if supportability_state == "READY":
+                supportability_state = "INCOMPLETE"
+                supportability_reason = "MANDATE_REVIEW_SCHEDULE_MISSING"
+            missing_data_families.append("mandate_review_schedule")
+        elif next_review_due_date < request.as_of_date and supportability_state == "READY":
+            supportability_state = "DEGRADED"
+            supportability_reason = "MANDATE_REVIEW_OVERDUE"
 
         bands = dict(row.rebalance_bands or {})
         default_band = self._as_decimal(bands.get("default_band", "0"))
@@ -748,8 +766,12 @@ class IntegrationService:
             jurisdiction_code=row.jurisdiction_code,
             model_portfolio_id=row.model_portfolio_id,
             policy_pack_id=row.policy_pack_id if request.include_policy_pack else None,
+            mandate_objective=mandate_objective,
             risk_profile=row.risk_profile,
             investment_horizon=row.investment_horizon,
+            review_cadence=review_cadence,
+            last_review_date=last_review_date,
+            next_review_due_date=next_review_due_date,
             leverage_allowed=bool(row.leverage_allowed),
             tax_awareness_allowed=bool(row.tax_awareness_allowed),
             settlement_awareness_required=bool(row.settlement_awareness_required),

@@ -1217,7 +1217,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "daily",
-        "max_allowed_age_description": "DPM mandate, model, policy, jurisdiction, and rebalance constraints."
+        "max_allowed_age_description": "DPM mandate objective, model, policy, jurisdiction, review cadence, review dates, and rebalance constraints."
       },
       "completeness_policy": {
         "default_status": "complete",

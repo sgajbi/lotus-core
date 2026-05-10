@@ -361,7 +361,10 @@ class ClientRestrictionProfileRequest(BaseModel):
 class ClientRestrictionProfileEntry(BaseModel):
     restriction_scope: str = Field(
         ...,
-        description="Bounded scope for the restriction such as client, mandate, instrument, issuer, country, or asset_class.",
+        description=(
+            "Bounded scope for the restriction such as client, mandate, instrument, issuer, "
+            "country, or asset_class."
+        ),
         examples=["issuer"],
     )
     restriction_code: str = Field(
@@ -402,7 +405,9 @@ class ClientRestrictionProfileEntry(BaseModel):
 class ClientRestrictionProfileSupportability(BaseModel):
     state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = Field(
         ...,
-        description="Supportability state for using the client restriction profile in DPM construction.",
+        description=(
+            "Supportability state for using the client restriction profile in DPM construction."
+        ),
         examples=["READY"],
     )
     reason: str = Field(
@@ -517,7 +522,9 @@ class SustainabilityPreferenceProfileEntry(BaseModel):
 class SustainabilityPreferenceProfileSupportability(BaseModel):
     state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = Field(
         ...,
-        description="Supportability state for using sustainability preferences in DPM construction.",
+        description=(
+            "Supportability state for using sustainability preferences in DPM construction."
+        ),
         examples=["READY"],
     )
     reason: str = Field(
@@ -784,9 +791,32 @@ class DiscretionaryMandateBindingResponse(SourceDataProductRuntimeMetadata):
         description="Policy pack identifier used for downstream DPM constraints.",
         examples=["POLICY_DPM_SG_BALANCED_V1"],
     )
+    mandate_objective: str | None = Field(
+        None,
+        description=(
+            "Source-owned discretionary mandate objective for digital-twin and mandate-health "
+            "workflows. Null means no mandate administration source value was available."
+        ),
+        examples=["Preserve and grow global balanced wealth within controlled drawdown limits."],
+    )
     risk_profile: str = Field(..., description="Mandate risk profile.", examples=["balanced"])
     investment_horizon: str = Field(
         ..., description="Mandate investment horizon classification.", examples=["long_term"]
+    )
+    review_cadence: str | None = Field(
+        None,
+        description="Source-owned mandate review cadence used for review-cycle health evidence.",
+        examples=["quarterly"],
+    )
+    last_review_date: date | None = Field(
+        None,
+        description="Most recent completed discretionary mandate review date from source data.",
+        examples=["2026-03-31"],
+    )
+    next_review_due_date: date | None = Field(
+        None,
+        description="Next due discretionary mandate review date from source data.",
+        examples=["2026-06-30"],
     )
     leverage_allowed: bool = Field(
         ..., description="Whether leverage is permitted by the mandate.", examples=[False]

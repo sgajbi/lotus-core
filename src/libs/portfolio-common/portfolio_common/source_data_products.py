@@ -250,8 +250,8 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         paging_mode=NOT_APPLICABLE,
         export_mode=NOT_APPLICABLE,
         notes=(
-            "DPM source product for mandate, model, policy, jurisdiction, and rebalance "
-            "constraints."
+            "DPM source product for mandate objective, model, policy, jurisdiction, review "
+            "cadence, review dates, and rebalance constraints."
         ),
     ),
     SourceDataProductDefinition(

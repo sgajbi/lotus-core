@@ -96,9 +96,32 @@ class DiscretionaryMandateBindingRecord(BaseModel):
         description="Policy pack identifier applied to DPM checks for this mandate.",
         examples=["POLICY_DPM_SG_BALANCED_V1"],
     )
+    mandate_objective: str | None = Field(
+        None,
+        description=(
+            "Source-owned discretionary mandate objective used by mandate twins and health "
+            "checks. This is mandate administration truth, not a local portfolio default."
+        ),
+        examples=["Preserve and grow global balanced wealth within controlled drawdown limits."],
+    )
     risk_profile: str = Field(..., description="Mandate risk profile.", examples=["balanced"])
     investment_horizon: str = Field(
         ..., description="Mandate investment horizon classification.", examples=["long_term"]
+    )
+    review_cadence: str | None = Field(
+        None,
+        description="Mandate review cadence from the mandate administration source.",
+        examples=["quarterly"],
+    )
+    last_review_date: date | None = Field(
+        None,
+        description="Most recent completed discretionary mandate review date.",
+        examples=["2026-03-31"],
+    )
+    next_review_due_date: date | None = Field(
+        None,
+        description="Next due discretionary mandate review date.",
+        examples=["2026-06-30"],
     )
     leverage_allowed: bool = Field(
         False, description="Whether leverage is permitted by the mandate.", examples=[False]
@@ -277,7 +300,10 @@ class InstrumentEligibilityProfileRecord(BaseModel):
     )
     restriction_reason_codes: list[str] = Field(
         default_factory=list,
-        description="Bounded restriction codes. Sensitive free-text rationale is not returned by the DPM API.",
+        description=(
+            "Bounded restriction codes. Sensitive free-text rationale is not returned by the "
+            "DPM API."
+        ),
         examples=[["PRIVATE_ASSET_REVIEW"]],
     )
     restriction_rationale: str | None = Field(
@@ -407,7 +433,9 @@ class ModelPortfolioDefinitionRecord(BaseModel):
     )
     observed_at: datetime | None = Field(
         None,
-        description="Timestamp when the upstream source observed or published the model definition.",
+        description=(
+            "Timestamp when the upstream source observed or published the model definition."
+        ),
         examples=["2026-03-20T09:00:00Z"],
     )
     quality_status: str = Field(
@@ -998,7 +1026,9 @@ class ClientRestrictionProfileIngestionRequest(BaseModel):
 class SustainabilityPreferenceProfileIngestionRequest(BaseModel):
     sustainability_preferences: list[SustainabilityPreferenceProfileRecord] = Field(
         ...,
-        description="Effective-dated sustainability preference profile records to ingest or upsert.",
+        description=(
+            "Effective-dated sustainability preference profile records to ingest or upsert."
+        ),
         min_length=1,
     )
 

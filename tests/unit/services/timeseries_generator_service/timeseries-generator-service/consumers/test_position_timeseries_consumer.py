@@ -330,16 +330,16 @@ async def test_process_message_recalculates_dependent_next_day_bod(
         None,
     ]
     dependent_existing = MagicMock(
-            bod_market_value=Decimal("0"),
-            bod_cashflow_position=Decimal("0"),
-            eod_cashflow_position=Decimal("0"),
-            bod_cashflow_portfolio=Decimal("0"),
-            eod_cashflow_portfolio=Decimal("0"),
-            eod_market_value=Decimal("1150"),
-            fees=Decimal("0"),
-            quantity=Decimal("100"),
-            cost=Decimal("10"),
-        )
+        bod_market_value=Decimal("0"),
+        bod_cashflow_position=Decimal("0"),
+        eod_cashflow_position=Decimal("0"),
+        bod_cashflow_portfolio=Decimal("0"),
+        eod_cashflow_portfolio=Decimal("0"),
+        eod_market_value=Decimal("1150"),
+        fees=Decimal("0"),
+        quantity=Decimal("100"),
+        cost=Decimal("10"),
+    )
     mock_repo.get_position_timeseries_for_dates.return_value = {
         next_snapshot.date: dependent_existing
     }
@@ -504,13 +504,16 @@ async def test_stage_aggregation_job_rearms_completed_job_for_late_material_inpu
     )
 
     executed_stmt = mock_dependencies["db_session"].execute.call_args[0][0]
-    compiled_stmt = str(
-        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    compiled = executed_stmt.compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
     )
+    compiled_stmt = str(compiled)
+    compiled_values = set(compiled.params.values())
 
     assert "DO UPDATE SET status" in compiled_stmt
     assert "correlation_id" in compiled_stmt
     assert "portfolio_aggregation_jobs.status !=" in compiled_stmt
+    assert "REPROCESS_REQUESTED" in compiled_stmt or "REPROCESS_REQUESTED" in compiled_values
     assert "coalesce(portfolio_aggregation_jobs.correlation_id" in compiled_stmt
 
 
