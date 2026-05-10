@@ -57,19 +57,26 @@ class CashflowProjectionService:
             include_projected=include_projected,
         )
 
-        net_by_date: dict[date, Decimal] = {}
-        for flow_date, amount in [*rows, *projected_rows]:
-            net_by_date[flow_date] = net_by_date.get(flow_date, Decimal("0")) + Decimal(str(amount))
+        booked_by_date = self._sum_by_date(rows)
+        projected_by_date = self._sum_by_date(projected_rows)
+        booked_total = Decimal("0")
+        projected_total = Decimal("0")
         running = Decimal("0")
         points: list[CashflowProjectionPoint] = []
         cursor = range_start_date
         while cursor <= query_end_date:
-            amount_decimal = net_by_date.get(cursor, Decimal("0"))
-            running += amount_decimal
+            booked_amount = booked_by_date.get(cursor, Decimal("0"))
+            projected_amount = projected_by_date.get(cursor, Decimal("0"))
+            net_amount = booked_amount + projected_amount
+            booked_total += booked_amount
+            projected_total += projected_amount
+            running += net_amount
             points.append(
                 CashflowProjectionPoint(
                     projection_date=cursor,
-                    net_cashflow=amount_decimal,
+                    booked_net_cashflow=booked_amount,
+                    projected_settlement_cashflow=projected_amount,
+                    net_cashflow=net_amount,
                     projected_cumulative_cashflow=running,
                 )
             )
@@ -83,6 +90,8 @@ class CashflowProjectionService:
             portfolio_currency=portfolio_currency,
             points=points,
             total_net_cashflow=running,
+            booked_total_net_cashflow=booked_total,
+            projected_settlement_total_cashflow=projected_total,
             projection_days=horizon_days,
             notes=(
                 "Projected window includes settlement-dated future external cash movements."
@@ -100,3 +109,10 @@ class CashflowProjectionService:
                 ),
             ),
         )
+
+    @staticmethod
+    def _sum_by_date(rows: list[tuple[date, Decimal]]) -> dict[date, Decimal]:
+        totals: dict[date, Decimal] = {}
+        for flow_date, amount in rows:
+            totals[flow_date] = totals.get(flow_date, Decimal("0")) + Decimal(str(amount))
+        return totals

@@ -44,6 +44,8 @@ async def test_cashflow_projection_success(async_test_client):
         "portfolio_currency": "USD",
         "points": [],
         "total_net_cashflow": 0,
+        "booked_total_net_cashflow": 0,
+        "projected_settlement_total_cashflow": 0,
         "projection_days": 10,
         "notes": "Projected window includes settlement-dated future external cash movements.",
     }
@@ -71,6 +73,8 @@ async def test_cashflow_projection_forwards_params(async_test_client):
         "portfolio_currency": "USD",
         "points": [],
         "total_net_cashflow": 0,
+        "booked_total_net_cashflow": 0,
+        "projected_settlement_total_cashflow": 0,
         "projection_days": 5,
         "notes": "Booked-only view capped at as_of_date.",
     }

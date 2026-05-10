@@ -39,7 +39,7 @@ source-data authority.
 | `CioModelChangeAffectedCohort:v1` | `/integration/model-portfolios/{model_portfolio_id}/affected-mandates` | Source-owned CIO model-change affected-mandate cohort resolved from the approved model definition and effective active discretionary mandate bindings, with deterministic event identity, snapshot identity, supportability, and lineage. | Implemented and locally proven for RFC41-WTBD-002 source ownership. It deliberately does not claim tactical house-view, risk-event, campaign, or OMS execution authority. |
 | `ClientRestrictionProfile:v1` | `/integration/portfolios/{portfolio_id}/client-restriction-profile` | Effective-dated client and mandate restriction profile for DPM buy/sell controls, including scoped instrument, asset-class, issuer, and country restrictions with lineage and supportability. | Implemented and locally proven for RFC40-WTBD-008 source ownership. Canonical seed coverage includes private-credit and sanctioned-market buy restrictions. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed restriction enforcement. |
 | `SustainabilityPreferenceProfile:v1` | `/integration/portfolios/{portfolio_id}/sustainability-preference-profile` | Effective-dated sustainability preference profile for mandate-aware portfolio construction, including allocation bounds, exclusions, positive tilts, framework, source, and lineage. | Implemented and locally proven for RFC40-WTBD-008 source ownership. Canonical seed coverage includes a minimum sustainable allocation, thermal-coal exclusion, and low-carbon-transition positive tilt. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed sustainability preference enforcement. |
-| `PortfolioCashflowProjection:v1` | `/portfolios/{portfolio_id}/cashflow-projection` | Core-derived daily net cashflow projection for operational liquidity planning. It exposes source-data product identity, portfolio base currency, runtime metadata, data-quality posture, latest evidence timestamp, and deterministic projection fingerprint for downstream outcome and liquidity consumers. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening; live front-office proof remains part of the consuming manage slice. |
+| `PortfolioCashflowProjection:v1` | `/portfolios/{portfolio_id}/cashflow-projection` | Core-derived daily cashflow projection for operational cash-movement evidence. It exposes daily booked cashflow, projected settlement cashflow, net cashflow, cumulative cashflow, booked/projected/net totals, source-data product identity, portfolio base currency, runtime metadata, data-quality posture, latest evidence timestamp, and deterministic projection fingerprint for downstream outcome and liquidity consumers. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening; live front-office proof remains part of the consuming manage slice. |
 
 ## Realized Outcome Evidence Boundaries
 
@@ -99,17 +99,18 @@ available FX rates, including explicit row-level realized FX P&L local evidence;
 empty, complete, and paged windows without deriving tax advice, FX attribution, cash-movement
 aggregation, transaction-cost curves, execution quality, or OMS acknowledgement.
 
-`PortfolioCashflowProjection:v1` is the governed source for daily net cashflow points, cumulative
-cashflow over the returned window, total net cashflow, portfolio currency, include-projected posture,
-evidence timestamp, and deterministic source fingerprint. It is not a client income plan, liquidity
-ladder, funding recommendation, market-impact estimate, or OMS execution forecast.
+`PortfolioCashflowProjection:v1` is the governed source for daily booked cashflow, projected
+settlement cashflow, net cashflow points, cumulative cashflow over the returned window,
+booked/projected/net totals, portfolio currency, include-projected posture, evidence timestamp, and
+deterministic source fingerprint. It is not a client income plan, liquidity ladder, funding
+recommendation, market-impact estimate, or OMS execution forecast.
 
 Its current implementation-backed methodology is deterministic: booked mode uses latest
 portfolio-flow cashflow rows through `as_of_date`; projected mode extends the returned date window
 and adds only settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements that were booked
-before the projection start date. Same-day booked and projected movements are additive, empty days
-carry forward the prior cumulative value, and all monetary fields remain in the portfolio base
-currency.
+before the projection start date. Same-day booked and projected movements are additive but remain
+separately visible through component fields, empty days carry forward the prior cumulative value, and
+all monetary fields remain in the portfolio base currency.
 
 `PortfolioTaxLotWindow:v1` is the governed source for effective-dated lot and cost-basis state from
 `position_lot_state`, including open/original quantity, acquisition date, base and local cost basis,

@@ -5,10 +5,10 @@
 `PortfolioCashflowProjection:v1` is the core-owned operational cashflow projection product exposed
 by `GET /portfolios/{portfolio_id}/cashflow-projection`.
 
-It returns daily net portfolio cashflow points, a running cumulative cashflow, and the total net
-cashflow over the returned window in the portfolio base currency. The product is source evidence for
-operational cash movement, not a liquidity ladder, funding recommendation, income plan, performance
-return, market-impact estimate, or OMS execution forecast.
+It returns daily booked cashflow, projected settlement cashflow, net portfolio cashflow, running
+cumulative cashflow, and component totals over the returned window in the portfolio base currency.
+The product is source evidence for operational cash movement, not a liquidity ladder, funding
+recommendation, income plan, performance return, market-impact estimate, or OMS execution forecast.
 
 ## Endpoint and Mode Coverage
 
@@ -60,6 +60,8 @@ performed by this product.
 | `E` | `range_end_date` | `A + H` when `I=true`; `A` when `I=false`. |
 | `B_d` | booked cashflows | Sum of latest booked portfolio cashflow amounts on date `d`. |
 | `S_d` | projected settlement movements | Sum of projected `DEPOSIT`/`WITHDRAWAL` settlement movements on date `d`; zero when `I=false`. |
+| `BT` | `booked_total_net_cashflow` | Sum of `B_d` across the returned range. |
+| `ST` | `projected_settlement_total_cashflow` | Sum of `S_d` across the returned range. |
 | `N_d` | `points[].net_cashflow` | Daily net cashflow for date `d`: `B_d + S_d`. |
 | `C_d` | `points[].projected_cumulative_cashflow` | Running cumulative cashflow through date `d`. |
 | `T` | `total_net_cashflow` | Final cumulative cashflow for the returned range. |
@@ -70,9 +72,13 @@ For every calendar date `d` in the returned range `[A, E]`:
 
 `N_d = B_d + S_d`
 
+`BT = sum(B_i for each returned date i where A <= i <= E)`
+
+`ST = sum(S_i for each returned date i where A <= i <= E)`
+
 `C_d = sum(N_i for each returned date i where A <= i <= d)`
 
-`T = C_E`
+`T = BT + ST = C_E`
 
 Booked cashflows and projected settlement movements on the same date are additive. Dates with no
 booked or projected movement return `net_cashflow = 0` and carry the prior cumulative value forward.
@@ -88,12 +94,14 @@ booked or projected movement return `net_cashflow = 0` and carry the prior cumul
 5. In projected mode only, query settlement-dated future external cash movements where:
    `transaction_type in ("DEPOSIT", "WITHDRAWAL")`, `settlement_date` falls between `A` and `E`,
    and `transaction_date < A`.
-6. Add booked and projected amounts by date.
+6. Add booked and projected amounts by date while preserving each component separately.
 7. Walk every calendar date from `A` through `E` in ascending order, emitting one
-   `CashflowProjectionPoint` per date.
+   `CashflowProjectionPoint` per date with `booked_net_cashflow`,
+   `projected_settlement_cashflow`, `net_cashflow`, and `projected_cumulative_cashflow`.
 8. Maintain the running cumulative amount and assign it to
    `points[].projected_cumulative_cashflow`.
-9. Return `total_net_cashflow` as the final running cumulative value.
+9. Return `booked_total_net_cashflow`, `projected_settlement_total_cashflow`, and
+   `total_net_cashflow`.
 10. Return source-data runtime metadata with `product_name`, `product_version`,
     `data_quality_status`, `latest_evidence_timestamp`, and `source_batch_fingerprint`.
 
@@ -128,8 +136,12 @@ tax, execution, or performance certification.
 | --- | --- |
 | `portfolio_currency` | Portfolio base currency used for all monetary outputs. |
 | `points[].projection_date` | Each calendar date from `range_start_date` through `range_end_date`. |
+| `points[].booked_net_cashflow` | `B_d`. |
+| `points[].projected_settlement_cashflow` | `S_d`. |
 | `points[].net_cashflow` | `N_d`. |
 | `points[].projected_cumulative_cashflow` | `C_d`. |
+| `booked_total_net_cashflow` | `BT`. |
+| `projected_settlement_total_cashflow` | `ST`. |
 | `total_net_cashflow` | `T`. |
 | `notes` | Projected mode or booked-only mode explanation. |
 | `source_batch_fingerprint` | Deterministic fingerprint containing portfolio, start date, end date, and projected-mode flag. |
@@ -154,6 +166,10 @@ Final output mapping:
 
 | Response field | Value |
 | --- | ---: |
+| `points[2026-03-04].booked_net_cashflow` | 0 |
+| `points[2026-03-04].projected_settlement_cashflow` | -18000 |
 | `points[2026-03-04].net_cashflow` | -18000 |
 | `points[2026-03-04].projected_cumulative_cashflow` | -18750 |
+| `booked_total_net_cashflow` | -750 |
+| `projected_settlement_total_cashflow` | -18000 |
 | `total_net_cashflow` | -18750 |

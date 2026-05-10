@@ -32,11 +32,15 @@ async def test_get_cashflow_projection_success() -> None:
             points=[
                 CashflowProjectionPoint(
                     projection_date=date(2026, 3, 2),
+                    booked_net_cashflow=1,
+                    projected_settlement_cashflow=0,
                     net_cashflow=1,
                     projected_cumulative_cashflow=1,
                 )
             ],
             total_net_cashflow=1,
+            booked_total_net_cashflow=1,
+            projected_settlement_total_cashflow=0,
             projection_days=10,
         )
     )

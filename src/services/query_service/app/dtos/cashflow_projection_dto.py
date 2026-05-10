@@ -13,9 +13,28 @@ from .source_data_product_identity import (
 
 class CashflowProjectionPoint(BaseModel):
     projection_date: date = Field(..., description="Projection date.", examples=["2026-03-05"])
+    booked_net_cashflow: Decimal = Field(
+        ...,
+        description=(
+            "Booked portfolio-level cashflow for the date in portfolio base currency, "
+            "selected from latest cashflow source rows."
+        ),
+        examples=[2500],
+    )
+    projected_settlement_cashflow: Decimal = Field(
+        ...,
+        description=(
+            "Projected settlement-dated external deposit or withdrawal movement for the date "
+            "in portfolio base currency."
+        ),
+        examples=[-15000],
+    )
     net_cashflow: Decimal = Field(
         ...,
-        description="Net portfolio cashflow for the date in portfolio base currency.",
+        description=(
+            "Net portfolio cashflow for the date in portfolio base currency, equal to "
+            "booked_net_cashflow plus projected_settlement_cashflow."
+        ),
         examples=[-12500.50],
     )
     projected_cumulative_cashflow: Decimal = Field(
@@ -65,6 +84,19 @@ class CashflowProjectionResponse(SourceDataProductRuntimeMetadata):
         ...,
         description="Total net cashflow across returned projection points.",
         examples=[-48750.25],
+    )
+    booked_total_net_cashflow: Decimal = Field(
+        ...,
+        description="Total booked portfolio-level cashflow across returned projection points.",
+        examples=[2500],
+    )
+    projected_settlement_total_cashflow: Decimal = Field(
+        ...,
+        description=(
+            "Total projected settlement-dated external deposit and withdrawal movement across "
+            "returned projection points."
+        ),
+        examples=[-51250.25],
     )
     projection_days: int = Field(
         ..., description="Projection window length in days.", examples=[10]

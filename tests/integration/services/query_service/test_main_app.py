@@ -695,6 +695,14 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
         "ISO currency code for net_cashflow, projected_cumulative_cashflow, "
         "and total_net_cashflow. Sourced from the portfolio base currency."
     )
+    assert projection_response["properties"]["booked_total_net_cashflow"]["description"] == (
+        "Total booked portfolio-level cashflow across returned projection points."
+    )
+    point_schema = schema["components"]["schemas"]["CashflowProjectionPoint"]
+    assert (
+        "booked_net_cashflow plus projected_settlement_cashflow"
+        in (point_schema["properties"]["net_cashflow"]["description"])
+    )
 
 
 async def test_openapi_describes_portfolio_discovery_contract_examples(async_test_client):

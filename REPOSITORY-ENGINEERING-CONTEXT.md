@@ -268,9 +268,10 @@ Most relevant current governance:
     `PortfolioCashflowProjection:v1` methodology under
     `docs/methodologies/source-data-products/portfolio-cashflow-projection.md`; it pins the
     booked-only versus projected modes, latest-cashflow-row selection, settlement-dated external
-    `DEPOSIT`/`WITHDRAWAL` inclusion rule, same-day booked/projected additivity, portfolio-base
-    currency convention, and explicit boundary from liquidity ladders, tax, performance,
-    market-impact, and OMS execution methodology.
+    `DEPOSIT`/`WITHDRAWAL` inclusion rule, same-day booked/projected additivity with separate
+    booked and projected component fields, portfolio-base currency convention, and explicit
+    boundary from liquidity ladders, tax, performance, market-impact, and OMS execution
+    methodology.
 33. RFC42-WTBD-006 source-owner methodology depth now also includes the implementation-backed
     `TransactionCostCurve:v1` methodology under
     `docs/methodologies/source-data-products/transaction-cost-curve.md`; it pins observed
