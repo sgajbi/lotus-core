@@ -36,7 +36,7 @@ def mock_transaction_repo() -> AsyncMock:
             realized_capital_pnl_local=Decimal("0"),
             realized_fx_pnl_local=Decimal("1250"),
             realized_total_pnl_local=Decimal("1250"),
-            trade_currency="USD",
+            trade_currency="EUR",
             currency="USD",
             cash_entry_mode="AUTO_GENERATE",
         ),
@@ -61,7 +61,16 @@ def mock_transaction_repo() -> AsyncMock:
     repo.get_transactions_count.return_value = 25
     repo.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
-    repo.get_latest_fx_rate.return_value = Decimal("1.36")
+
+    async def _fx_rate(*, from_currency: str, to_currency: str, as_of_date: date) -> Decimal | None:
+        assert to_currency == "SGD"
+        assert as_of_date == date(2025, 1, 15)
+        return {
+            "USD": Decimal("1.36"),
+            "EUR": Decimal("1.50"),
+        }.get(from_currency)
+
+    repo.get_latest_fx_rate.side_effect = _fx_rate
     return repo
 
 
@@ -142,7 +151,7 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.transactions[0].transaction_id == "T1"
         assert response_dto.transactions[0].settlement_date == datetime(2025, 1, 12)
         assert response_dto.transactions[0].trade_fee == Decimal("12.5")
-        assert response_dto.transactions[0].trade_currency == "USD"
+        assert response_dto.transactions[0].trade_currency == "EUR"
         assert response_dto.transactions[0].cash_entry_mode == "AUTO_GENERATE"
         assert response_dto.transactions[1].settlement_date is None
         assert response_dto.transactions[1].cash_entry_mode == "UPSTREAM_PROVIDED"
@@ -372,21 +381,22 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert response_dto.reporting_currency == "SGD"
     assert first_transaction.gross_transaction_amount_reporting_currency == Decimal("1360.00")
     assert first_transaction.gross_cost_reporting_currency == Decimal("1360.00")
-    assert first_transaction.trade_fee_reporting_currency == Decimal("17.000")
+    assert first_transaction.trade_fee_reporting_currency == Decimal("18.750")
     assert first_transaction.realized_gain_loss_reporting_currency == Decimal("340.00")
     assert first_transaction.realized_capital_pnl_local_reporting_currency == Decimal("0.00")
-    assert first_transaction.realized_fx_pnl_local_reporting_currency == Decimal("1700.00")
-    assert first_transaction.realized_total_pnl_local_reporting_currency == Decimal("1700.00")
+    assert first_transaction.realized_fx_pnl_local_reporting_currency == Decimal("1875.00")
+    assert first_transaction.realized_total_pnl_local_reporting_currency == Decimal("1875.00")
     assert income_transaction.gross_transaction_amount_reporting_currency == Decimal("170.00")
     assert income_transaction.withholding_tax_amount_reporting_currency == Decimal("13.60")
     assert income_transaction.other_interest_deductions_amount_reporting_currency == Decimal("6.80")
     assert income_transaction.net_interest_amount_reporting_currency == Decimal("149.60")
-    assert mock_transaction_repo.get_latest_fx_rate.await_count == 1
+    assert mock_transaction_repo.get_latest_fx_rate.await_count == 2
 
 
 async def test_get_transactions_raises_when_reporting_currency_rate_missing(
     mock_transaction_repo: AsyncMock,
 ) -> None:
+    mock_transaction_repo.get_latest_fx_rate.side_effect = None
     mock_transaction_repo.get_latest_fx_rate.return_value = None
 
     with patch(

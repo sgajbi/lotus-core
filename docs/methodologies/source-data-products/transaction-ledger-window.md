@@ -61,14 +61,16 @@ Raw monetary fields remain in the transaction row currency conventions already s
 ledger row. The response does not convert or overwrite raw ledger values.
 
 When `reporting_currency` is supplied and an effective `as_of_date` exists, the service applies the
-latest FX rate with `rate_date <= as_of_date` from each row currency to the requested reporting
-currency and populates only the `*_reporting_currency` fields. Same-currency restatement uses a
-rate of `1`.
+latest FX rate with `rate_date <= as_of_date` from the source currency of each monetary field to the
+requested reporting currency and populates only the `*_reporting_currency` fields. Same-currency
+restatement uses a rate of `1`.
 
-The route restates only row-level fields that already exist on the transaction record:
-`gross_transaction_amount`, `gross_cost`, `trade_fee`, `net_cost`, `realized_gain_loss`,
-`realized_capital_pnl_local`, `realized_fx_pnl_local`, `realized_total_pnl_local`,
-`withholding_tax_amount`, `other_interest_deductions_amount`, and `net_interest_amount`.
+The route restates only row-level fields that already exist on the transaction record. Book-currency
+fields use `currency` as the source currency: `gross_transaction_amount`, `gross_cost`, `net_cost`,
+`realized_gain_loss`, `withholding_tax_amount`, `other_interest_deductions_amount`, and
+`net_interest_amount`. Trade/local fields use `trade_currency` when populated and otherwise fall
+back to `currency`: `trade_fee`, `realized_capital_pnl_local`, `realized_fx_pnl_local`, and
+`realized_total_pnl_local`.
 
 No tax calculation, FX attribution, cash movement aggregation, transaction-cost curve aggregation,
 market-impact adjustment, execution-quality assessment, or OMS status inference is performed by
@@ -89,7 +91,8 @@ this product.
 | `L` | `limit` | Maximum returned rows. |
 | `R` | `transactions[]` | Returned page of transaction rows. |
 | `Q` | `data_quality_status` | `COMPLETE`, `PARTIAL`, or `UNKNOWN` page quality posture. |
-| `X_c` | reporting FX rate | Latest FX rate from row currency to reporting currency on or before `A`. |
+| `X_book` | reporting FX rate for book-currency fields | Latest FX rate from `currency` to reporting currency on or before `A`. |
+| `X_trade` | reporting FX rate for trade/local fields | Latest FX rate from `trade_currency` to reporting currency on or before `A`, falling back to `currency` when `trade_currency` is absent. |
 | `FX_local` | `realized_fx_pnl_local` | Upstream-supplied row-level realized FX P&L in the transaction row currency. |
 | `FX_report` | `realized_fx_pnl_local_reporting_currency` | Optional reporting-currency restatement of `FX_local`; this is not portfolio-level FX attribution. |
 
@@ -109,11 +112,13 @@ Date filters are applied as:
 
 Reporting-currency fields are computed independently for each populated raw monetary field:
 
-`amount_reporting_currency = amount * X_c`
+`book_amount_reporting_currency = book_amount * X_book`
+
+`trade_or_local_amount_reporting_currency = trade_or_local_amount * X_trade`
 
 For explicit realized FX P&L local evidence:
 
-`FX_report = FX_local * X_c`
+`FX_report = FX_local * X_trade`
 
 The raw amount remains unchanged. The product does not derive cross-row measures from the returned
 page.
@@ -134,8 +139,9 @@ page.
 7. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
    records when present.
 8. If `reporting_currency` is supplied and `A` exists, populate supported
-   `*_reporting_currency` fields using the latest FX rate on or before `A`, including explicit
-   row-level `realized_*_pnl_local` fields when present.
+   `*_reporting_currency` fields using the latest FX rate on or before `A`; book-currency fields
+   use `currency`, and trade/local fields use `trade_currency` when available, including explicit
+   row-level `realized_*_pnl_local` fields.
 9. Compute `data_quality_status` from `total`, returned row count, and `skip`.
 10. Return source-data runtime metadata including product identity, version, effective as-of date,
     latest evidence timestamp, reconciliation status, restatement version, and data-quality status.
@@ -145,7 +151,7 @@ page.
 | Condition | Behavior |
 | --- | --- |
 | Portfolio id does not exist | Service raises `LookupError`; the API maps it to HTTP `404`. |
-| `reporting_currency` is supplied but no FX rate exists for a row currency as of `A` | Service raises `ValueError`; the API maps it to HTTP `400`. |
+| `reporting_currency` is supplied but no FX rate exists for a required field source currency as of `A` | Service raises `ValueError`; the API maps it to HTTP `400`. |
 | No rows match the filters | Returns an empty page with `total=0` and `data_quality_status=UNKNOWN`. |
 | Returned page is smaller than all matching rows or `skip > 0` | Returns `data_quality_status=PARTIAL`. |
 | Returned page contains all matching rows from offset zero | Returns `data_quality_status=COMPLETE`. |
@@ -190,9 +196,9 @@ Source facts:
 
 | Row | Raw field | Raw amount | Currency | FX rate to SGD | Restated field | Restated amount |
 | --- | --- | ---: | --- | ---: | --- | ---: |
-| T1 | `trade_fee` | 12.50 | USD | 1.36 | `trade_fee_reporting_currency` | 17.00 |
+| T1 | `trade_fee` | 12.50 | EUR | 1.50 | `trade_fee_reporting_currency` | 18.75 |
 | T1 | `realized_gain_loss` | 250.00 | USD | 1.36 | `realized_gain_loss_reporting_currency` | 340.00 |
-| T1 | `realized_fx_pnl_local` | 1250.00 | USD | 1.36 | `realized_fx_pnl_local_reporting_currency` | 1700.00 |
+| T1 | `realized_fx_pnl_local` | 1250.00 | EUR | 1.50 | `realized_fx_pnl_local_reporting_currency` | 1875.00 |
 | T2 | `withholding_tax_amount` | 10.00 | USD | 1.36 | `withholding_tax_amount_reporting_currency` | 13.60 |
 | T2 | `net_interest_amount` | 110.00 | USD | 1.36 | `net_interest_amount_reporting_currency` | 149.60 |
 
@@ -202,6 +208,6 @@ Final output mapping:
 | --- | ---: |
 | `total` | 2 |
 | `data_quality_status` | `COMPLETE` |
-| `transactions[0].trade_fee_reporting_currency` | 17.00 |
-| `transactions[0].realized_fx_pnl_local_reporting_currency` | 1700.00 |
+| `transactions[0].trade_fee_reporting_currency` | 18.75 |
+| `transactions[0].realized_fx_pnl_local_reporting_currency` | 1875.00 |
 | `transactions[1].withholding_tax_amount_reporting_currency` | 13.60 |

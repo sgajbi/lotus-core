@@ -66,8 +66,8 @@ Boundary rules that matter:
    `SustainabilityPreferenceProfile:v1` so downstream stateful construction can consume governed
    mandate restrictions and sustainability preferences instead of local fallback truth.
 7. `TransactionLedgerWindow:v1` preserves explicit row-level realized FX P&L evidence and can
-   restate those local P&L fields into a requested reporting currency for downstream reporting
-   surfaces without promoting portfolio-level FX attribution.
+   restate book-currency and trade/local-currency fields into a requested reporting currency with
+   field-aware source-currency selection, without promoting portfolio-level FX attribution.
 8. `PortfolioCashflowProjection:v1` emits daily booked, projected-settlement, net, cumulative, and
    component-total cashflow evidence in portfolio base currency so downstream outcome consumers can
    preserve operational cash-movement components without deriving liquidity ladders, income-needs

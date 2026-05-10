@@ -297,8 +297,11 @@ def test_transaction_ledger_window_methodology_is_implementation_backed() -> Non
     assert "Projected-inclusive ledger" in methodology
     assert "Reporting-currency restated ledger" in methodology
     assert "transaction_date < start_of_next_day(A)" in methodology
-    assert "amount_reporting_currency = amount * X_c" in methodology
-    assert "FX_report = FX_local * X_c" in methodology
+    assert "book_amount_reporting_currency = book_amount * X_book" in methodology
+    assert (
+        "trade_or_local_amount_reporting_currency = trade_or_local_amount * X_trade" in methodology
+    )
+    assert "FX_report = FX_local * X_trade" in methodology
     assert "row-level `cashflow` and `transaction_costs` evidence" in (normalized_methodology)
     assert "realized_fx_pnl_local_reporting_currency" in methodology
     assert "not an FX attribution measure" in methodology
@@ -306,7 +309,7 @@ def test_transaction_ledger_window_methodology_is_implementation_backed() -> Non
     assert "| `transactions[1].withholding_tax_amount_reporting_currency` | 13.60 |" in (
         methodology
     )
-    assert "| `transactions[0].realized_fx_pnl_local_reporting_currency` | 1700.00 |" in (
+    assert "| `transactions[0].realized_fx_pnl_local_reporting_currency` | 1875.00 |" in (
         methodology
     )
 

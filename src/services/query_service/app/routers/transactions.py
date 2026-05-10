@@ -24,17 +24,18 @@ INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
     response_model=PaginatedTransactionResponse,
     responses={
         status.HTTP_400_BAD_REQUEST: {
-            "description": "Invalid transaction-ledger query, including unsupported reporting-currency restatement.",
+            "description": (
+                "Invalid transaction-ledger query, including unsupported reporting-currency "
+                "restatement."
+            ),
             "content": {
-                "application/json": {
-                    "example": INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE
-                }
+                "application/json": {"example": INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE}
             },
         },
         status.HTTP_404_NOT_FOUND: {
             "description": "Portfolio not found.",
             "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
-        }
+        },
     },
     summary="Get Portfolio Transactions",
     description=(
@@ -48,8 +49,8 @@ INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
         "`component_type`, `linked_transaction_group_id`, `fx_contract_id`, `swap_event_id`, "
         "`near_leg_group_id`, or `far_leg_group_id` when the consumer needs multi-row economic "
         "event analysis. Use `reporting_currency` when a downstream reporting surface needs "
-        "ledger rows and reporting-currency monetary restatement without falling back to "
-        "deprecated reporting summary routes. Results default to latest-first ordering by "
+        "ledger rows and field-aware reporting-currency monetary restatement without falling back "
+        "to deprecated reporting summary routes. Results default to latest-first ordering by "
         "`transaction_date` descending unless `sort_by` and `sort_order` are provided explicitly."
     ),
     openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),

@@ -534,6 +534,12 @@ def build_front_office_portfolio_bundle(
         end_price=Decimal("1.110000"),
         precision="0.000001",
     )
+    usd_sgd = _interpolate_prices(
+        dates=fx_calendar_dates,
+        start_price=Decimal("1.352000"),
+        end_price=Decimal("1.361000"),
+        precision="0.000001",
+    )
     eur_usd_by_date = dict(zip(fx_calendar_dates, eur_usd, strict=True))
 
     def fx_rate_for_transaction(
@@ -1599,8 +1605,13 @@ def build_front_office_portfolio_bundle(
             )
 
     fx_rates: list[dict[str, Any]] = []
-    for current_date, eur_usd_rate in zip(fx_calendar_dates, eur_usd, strict=True):
-        inverse_rate = _invert_rate(eur_usd_rate)
+    for current_date, eur_usd_rate, usd_sgd_rate in zip(
+        fx_calendar_dates, eur_usd, usd_sgd, strict=True
+    ):
+        usd_eur_rate = _invert_rate(eur_usd_rate)
+        sgd_usd_rate = _invert_rate(usd_sgd_rate)
+        eur_sgd_rate = (Decimal(eur_usd_rate) * Decimal(usd_sgd_rate)).quantize(Decimal("0.000001"))
+        sgd_eur_rate = _invert_rate(eur_sgd_rate)
         fx_rates.extend(
             [
                 {
@@ -1613,7 +1624,31 @@ def build_front_office_portfolio_bundle(
                     "from_currency": "USD",
                     "to_currency": "EUR",
                     "rate_date": current_date,
-                    "rate": inverse_rate,
+                    "rate": usd_eur_rate,
+                },
+                {
+                    "from_currency": "USD",
+                    "to_currency": "SGD",
+                    "rate_date": current_date,
+                    "rate": usd_sgd_rate,
+                },
+                {
+                    "from_currency": "SGD",
+                    "to_currency": "USD",
+                    "rate_date": current_date,
+                    "rate": sgd_usd_rate,
+                },
+                {
+                    "from_currency": "EUR",
+                    "to_currency": "SGD",
+                    "rate_date": current_date,
+                    "rate": str(eur_sgd_rate),
+                },
+                {
+                    "from_currency": "SGD",
+                    "to_currency": "EUR",
+                    "rate_date": current_date,
+                    "rate": sgd_eur_rate,
                 },
             ]
         )

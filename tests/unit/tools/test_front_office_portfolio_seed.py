@@ -223,6 +223,34 @@ def test_front_office_bundle_populates_historical_fx_on_cross_currency_transacti
         assert Decimal(by_txn[transaction_id]["transaction_fx_rate"]) > Decimal("0")
 
 
+def test_front_office_bundle_includes_reporting_currency_fx_for_transaction_restatement():
+    bundle = _build_bundle()
+    fx_pairs = {
+        (row["from_currency"], row["to_currency"])
+        for row in bundle["fx_rates"]
+        if row["rate_date"] == bundle["as_of_date"]
+    }
+
+    assert {("USD", "SGD"), ("EUR", "SGD")} <= fx_pairs
+
+    eur_sgd = next(
+        row
+        for row in bundle["fx_rates"]
+        if row["from_currency"] == "EUR"
+        and row["to_currency"] == "SGD"
+        and row["rate_date"] == bundle["as_of_date"]
+    )
+    usd_sgd = next(
+        row
+        for row in bundle["fx_rates"]
+        if row["from_currency"] == "USD"
+        and row["to_currency"] == "SGD"
+        and row["rate_date"] == bundle["as_of_date"]
+    )
+
+    assert Decimal(eur_sgd["rate"]) > Decimal(usd_sgd["rate"])
+
+
 def test_front_office_bundle_places_income_and_activity_inside_current_reporting_window():
     bundle = _build_bundle()
     by_txn = {transaction["transaction_id"]: transaction for transaction in bundle["transactions"]}
