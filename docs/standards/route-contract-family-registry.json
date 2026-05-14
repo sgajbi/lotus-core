@@ -168,6 +168,7 @@
         "GET /portfolios/{portfolio_id}/positions/{security_id}/accrued-offsets",
         "GET /portfolios/{portfolio_id}/positions/{security_id}/lots",
         "GET /portfolios/{portfolio_id}/positions/{security_id}/sell-disposals",
+        "GET /portfolios/{portfolio_id}/realized-tax-summary",
         "GET /portfolios/{portfolio_id}/transactions",
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage",
         "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage",

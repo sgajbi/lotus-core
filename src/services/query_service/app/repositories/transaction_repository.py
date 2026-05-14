@@ -37,6 +37,12 @@ class TransactionRepository:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
+    async def get_portfolio_base_currency(self, portfolio_id: str) -> Optional[str]:
+        stmt = (
+            select(Portfolio.base_currency).where(Portfolio.portfolio_id == portfolio_id).limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def get_latest_business_date(self) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
             BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
@@ -317,3 +323,28 @@ class TransactionRepository:
             as_of_date=as_of_date,
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def list_realized_tax_evidence_transactions(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        as_of_date: Optional[date] = None,
+    ) -> List[Transaction]:
+        stmt = self._apply_filters(
+            select(Transaction).where(
+                (Transaction.withholding_tax_amount.is_not(None))
+                | (Transaction.other_interest_deductions_amount.is_not(None))
+            ),
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=as_of_date,
+        ).order_by(
+            Transaction.currency.asc(),
+            Transaction.transaction_date.asc(),
+            Transaction.transaction_id.asc(),
+        )
+        results = await self.db.execute(stmt)
+        return list(results.scalars().all())

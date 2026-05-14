@@ -89,6 +89,22 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Deterministically ordered transaction and income ledger window.",
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioRealizedTaxSummary",
+        product_version="v1",
+        route_family=OPERATIONAL_READ,
+        serving_plane=QUERY_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-gateway", "lotus-report", "lotus-manage"),
+        current_routes=("/portfolios/{portfolio_id}/realized-tax-summary",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Portfolio-level summary of explicit source-recorded withholding tax and tax "
+            "deduction evidence. It is not tax advice, after-tax optimization, or "
+            "tax-reporting certification."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="PortfolioCashflowProjection",
         product_version="v1",
         route_family=OPERATIONAL_READ,

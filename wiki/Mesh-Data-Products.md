@@ -45,21 +45,22 @@ source-data authority.
 | `LiquidityReserveRequirement:v1` | `/integration/portfolios/{portfolio_id}/liquidity-reserve-requirement` | Effective-dated liquidity reserve requirement facts, including reserve type/status, amount, currency, horizon, priority, policy source, lineage, and supportability. | Implemented locally for RFC42-WTBD-006 source ownership. It is reference evidence only and does not claim cash-reserve recommendations, financial-planning advice, suitability approval, treasury instructions, or OMS acknowledgement. |
 | `PlannedWithdrawalSchedule:v1` | `/integration/portfolios/{portfolio_id}/planned-withdrawal-schedule` | Horizon-bounded planned withdrawal facts, including withdrawal type/status, amount, currency, scheduled date, recurrence, purpose code, lineage, and supportability. | Implemented locally for RFC42-WTBD-006 source ownership. It is reference evidence only and does not claim cashflow forecasting, financial-planning advice, suitability approval, funding recommendations, treasury instructions, or OMS acknowledgement. |
 | `PortfolioCashflowProjection:v1` | `/portfolios/{portfolio_id}/cashflow-projection` | Core-derived daily cashflow projection for operational cash-movement evidence. It exposes daily booked cashflow, projected settlement cashflow, net cashflow, cumulative cashflow, booked/projected/net totals, source-data product identity, portfolio base currency, runtime metadata, data-quality posture, latest evidence timestamp, and deterministic projection fingerprint for downstream outcome and liquidity consumers. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening; live front-office proof remains part of the consuming manage slice. |
+| `PortfolioRealizedTaxSummary:v1` | `/portfolios/{portfolio_id}/realized-tax-summary` | Source-owned portfolio realized-tax evidence summarized from booked transaction rows. It aggregates explicit withholding-tax and other-interest-deduction fields by ledger currency, exposes evidence-row counts and source-window counts, and can restate totals into a requested reporting currency. | Implemented locally for RFC42-WTBD-006 source-owner methodology depth. It is evidence only and does not claim tax advice, after-tax optimization, tax-loss harvesting suitability, client-tax approval, jurisdiction-specific recommendations, tax-reporting certification, execution quality, or OMS acknowledgement. |
 | `PortfolioLiquidityLadder:v1` | `/portfolios/{portfolio_id}/liquidity-ladder` | Source-owned cash-availability ladder evidence. It exposes opening source cash, deterministic T0/T+1/T+2-to-T+7/T+8-to-T+30/T+31-to-horizon cash buckets, booked and projected settlement cashflow contributions, cumulative cash availability, maximum cash shortfall, non-cash exposure by instrument liquidity tier, runtime metadata, data-quality posture, evidence timestamp, and deterministic source fingerprint. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening. It is evidence for monitoring, reporting, DPM supportability, and client explanation; it is not an advice recommendation, income plan, funding recommendation, OMS execution forecast, tax methodology, best-execution assessment, or market-impact model. |
 
 ## Realized Outcome Evidence Boundaries
 
 Outcome review, proof-pack, and wave surfaces are bank-buyable only when they preserve the
 difference between source-owned evidence and downstream interpretation. `lotus-core` currently owns
-recorded portfolio, transaction, tax-lot, client tax-reference, income-needs, liquidity-reserve,
-planned-withdrawal, observed-fee, and operational cashflow facts. It does not
+recorded portfolio, transaction, realized-tax summary, tax-lot, client tax-reference, income-needs,
+liquidity-reserve, planned-withdrawal, observed-fee, and operational cashflow facts. It does not
 own risk methodology, performance returns, client tax advice, liquidity planning, execution routing,
 or OMS acknowledgement methodology.
 
 | Audience | What this means |
 | --- | --- |
-| Business users | Core supplies recorded facts such as holdings, cash totals, transaction fees, withholding tax, realized FX P&L, linked cashflow rows, tax lots, observed fee evidence, and operational cashflow projections. Decisioning products can explain those facts but must not silently invent a broader methodology. |
-| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `ClientTaxProfile:v1`, `ClientTaxRuleSet:v1`, `ClientIncomeNeedsSchedule:v1`, `LiquidityReserveRequirement:v1`, `PlannedWithdrawalSchedule:v1`, `TransactionCostCurve:v1`, `PortfolioCashflowProjection:v1`, and `PortfolioLiquidityLadder:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
+| Business users | Core supplies recorded facts such as holdings, cash totals, transaction fees, withholding tax, other tax deductions, realized FX P&L, linked cashflow rows, tax lots, observed fee evidence, and operational cashflow projections. Decisioning products can explain those facts but must not silently invent a broader methodology. |
+| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioRealizedTaxSummary:v1`, `PortfolioTaxLotWindow:v1`, `ClientTaxProfile:v1`, `ClientTaxRuleSet:v1`, `ClientIncomeNeedsSchedule:v1`, `LiquidityReserveRequirement:v1`, `PlannedWithdrawalSchedule:v1`, `TransactionCostCurve:v1`, `PortfolioCashflowProjection:v1`, and `PortfolioLiquidityLadder:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
 | Operations | Investigate stale, partial, or missing evidence at the owning source product before treating a manage/risk/performance surface as wrong. If a source product is unavailable or outside scope, downstream products should degrade rather than recalculate locally. |
 | Sales and client demos | Position the platform as source-governed: recorded ledger and portfolio facts are traceable to core, analytics are owned by their specialist services, and unsupported execution/tax/liquidity claims remain visibly outside the supported boundary. |
 
@@ -137,6 +138,14 @@ local currency when source transaction currency is available, source transaction
 policy id/version, and supportability. It is not jurisdiction-specific tax advice, realized-tax
 optimization, wash-sale treatment, client-tax approval, or tax-reporting certification.
 
+`PortfolioRealizedTaxSummary:v1` is the governed source for portfolio-level realized-tax evidence
+summarized from booked transaction rows. It includes only explicit `withholding_tax_amount` and
+`other_interest_deductions_amount` source fields, groups totals by ledger currency, reports
+evidence-row counts and source-window counts, and can optionally restate totals to reporting
+currency using latest available FX rates. It is not tax advice, after-tax optimization,
+tax-loss harvesting suitability, jurisdiction-specific recommendation, client-tax approval,
+tax-reporting certification, execution quality, or OMS acknowledgement.
+
 `ClientTaxProfile:v1` and `ClientTaxRuleSet:v1` are governed sources for bounded client
 tax-reference evidence from bank tax, client master, mandate, or rules source systems. They expose
 effective-dated profile and rule rows with lineage, supportability, latest evidence timestamps, and
@@ -159,6 +168,7 @@ flowchart LR
     CoreCash[core PortfolioCashflowProjection:v1<br/>daily and total operational cashflow evidence]
     CoreLiquidity[core PortfolioLiquidityLadder:v1<br/>cash availability buckets and liquidity-tier exposure]
     CoreLots[core PortfolioTaxLotWindow:v1<br/>lot and cost-basis state]
+    CoreRealizedTax[core PortfolioRealizedTaxSummary:v1<br/>explicit realized-tax evidence totals]
     CoreTax[core ClientTaxProfile/RuleSet:v1<br/>tax-reference evidence]
     CoreFees[core TransactionCostCurve:v1<br/>observed booked fee evidence]
     Manage[lotus-manage outcome/proof/wave consumers<br/>preserve source refs and supportability]
@@ -171,6 +181,7 @@ flowchart LR
     CoreCash --> Manage
     CoreLiquidity --> Manage
     CoreLots --> Manage
+    CoreRealizedTax --> Manage
     CoreTax --> Manage
     CoreFees --> Manage
     Perf --> Manage

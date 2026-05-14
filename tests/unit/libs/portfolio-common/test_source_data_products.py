@@ -30,6 +30,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "PortfolioStateSnapshot",
         "HoldingsAsOf",
         "TransactionLedgerWindow",
+        "PortfolioRealizedTaxSummary",
         "PortfolioCashflowProjection",
         "PortfolioLiquidityLadder",
         "PositionTimeseriesInput",

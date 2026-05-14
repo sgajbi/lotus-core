@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,
+    PortfolioRealizedTaxSummaryResponse,
+    RealizedTaxCurrencyTotal,
     TransactionCostRecord,
     TransactionRecord,
 )
@@ -65,6 +67,29 @@ async def async_test_client():
                 )
             ],
             **source_data_product_runtime_metadata(as_of_date=date(2025, 8, 1)),
+        )
+    )
+    mock_transaction_service.get_realized_tax_summary = AsyncMock(
+        return_value=PortfolioRealizedTaxSummaryResponse(
+            portfolio_id="P1",
+            base_currency="USD",
+            reporting_currency="SGD",
+            start_date=date(2025, 8, 1),
+            end_date=date(2025, 8, 31),
+            source_transaction_count=3,
+            tax_evidence_transaction_count=1,
+            currency_totals=[
+                RealizedTaxCurrencyTotal(
+                    currency="USD",
+                    transaction_count=1,
+                    withholding_tax_amount=Decimal("10.00"),
+                    other_tax_deductions_amount=Decimal("5.00"),
+                    total_tax_amount=Decimal("15.00"),
+                )
+            ],
+            reporting_currency_total_tax_amount=Decimal("20.40"),
+            reason_codes=["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"],
+            **source_data_product_runtime_metadata(as_of_date=date(2025, 8, 31)),
         )
     )
 
@@ -359,3 +384,50 @@ async def test_get_transactions_preserves_settlement_date_for_trade_cash_and_inc
     assert transactions[0]["settlement_date"] == "2025-08-03T00:00:00"
     assert transactions[1]["settlement_date"] == "2025-08-02T12:00:00"
     assert transactions[2]["settlement_date"] == "2025-08-05T00:00:00"
+
+
+async def test_get_realized_tax_summary_returns_source_product(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/portfolios/P1/realized-tax-summary",
+        params={
+            "start_date": "2025-08-01",
+            "end_date": "2025-08-31",
+            "as_of_date": "2025-08-31",
+            "reporting_currency": "SGD",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["product_name"] == "PortfolioRealizedTaxSummary"
+    assert payload["portfolio_id"] == "P1"
+    assert payload["currency_totals"][0]["withholding_tax_amount"] == "10.00"
+    assert payload["reporting_currency_total_tax_amount"] == "20.40"
+    assert payload["reason_codes"] == ["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"]
+    mock_service.get_realized_tax_summary.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=datetime(2025, 8, 1, 0, 0).date(),
+        end_date=datetime(2025, 8, 31, 0, 0).date(),
+        as_of_date=datetime(2025, 8, 31, 0, 0).date(),
+        reporting_currency="SGD",
+    )
+
+
+async def test_get_realized_tax_summary_maps_not_found_and_validation_errors(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_realized_tax_summary.side_effect = LookupError("portfolio missing")
+
+    not_found = await client.get("/portfolios/P404/realized-tax-summary")
+
+    assert not_found.status_code == 404
+    assert "portfolio missing" in not_found.json()["detail"].lower()
+
+    mock_service.get_realized_tax_summary.reset_mock()
+    mock_service.get_realized_tax_summary.side_effect = ValueError("FX rate not found for USD/SGD")
+
+    invalid = await client.get("/portfolios/P1/realized-tax-summary?reporting_currency=SGD")
+
+    assert invalid.status_code == 400
+    assert "fx rate not found" in invalid.json()["detail"].lower()

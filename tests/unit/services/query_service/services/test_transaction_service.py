@@ -61,6 +61,10 @@ def mock_transaction_repo() -> AsyncMock:
     repo.get_transactions_count.return_value = 25
     repo.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
+    repo.get_portfolio_base_currency.return_value = "USD"
+    repo.list_realized_tax_evidence_transactions.return_value = [
+        repo.get_transactions.return_value[1]
+    ]
 
     async def _fx_rate(*, from_currency: str, to_currency: str, as_of_date: date) -> Decimal | None:
         assert to_currency == "SGD"
@@ -412,3 +416,97 @@ async def test_get_transactions_raises_when_reporting_currency_rate_missing(
                 limit=10,
                 reporting_currency="SGD",
             )
+
+
+async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        summary = await service.get_realized_tax_summary(
+            portfolio_id="P1",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+            reporting_currency="SGD",
+        )
+
+    mock_transaction_repo.get_portfolio_base_currency.assert_awaited_once_with("P1")
+    mock_transaction_repo.list_realized_tax_evidence_transactions.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        as_of_date=date(2025, 1, 15),
+    )
+    assert summary.product_name == "PortfolioRealizedTaxSummary"
+    assert summary.product_version == "v1"
+    assert summary.portfolio_id == "P1"
+    assert summary.base_currency == "USD"
+    assert summary.reporting_currency == "SGD"
+    assert summary.source_transaction_count == 25
+    assert summary.tax_evidence_transaction_count == 1
+    assert summary.currency_totals[0].currency == "USD"
+    assert summary.currency_totals[0].withholding_tax_amount == Decimal("10")
+    assert summary.currency_totals[0].other_tax_deductions_amount == Decimal("5")
+    assert summary.currency_totals[0].total_tax_amount == Decimal("15")
+    assert summary.reporting_currency_total_tax_amount == Decimal("20.40")
+    assert summary.reason_codes == ["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"]
+    assert summary.data_quality_status == COMPLETE
+    assert summary.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+
+
+async def test_get_realized_tax_summary_reports_empty_evidence_without_fabrication(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transactions_count.return_value = 0
+    mock_transaction_repo.list_realized_tax_evidence_transactions.return_value = []
+    mock_transaction_repo.get_latest_evidence_timestamp.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        summary = await service.get_realized_tax_summary(portfolio_id="P1")
+
+    assert summary.currency_totals == []
+    assert summary.reporting_currency_total_tax_amount is None
+    assert summary.reason_codes == ["PORTFOLIO_REALIZED_TAX_EVIDENCE_EMPTY"]
+    assert summary.data_quality_status == UNKNOWN
+
+
+async def test_get_realized_tax_summary_uses_identity_fx_for_same_reporting_currency(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        summary = await service.get_realized_tax_summary(
+            portfolio_id="P1",
+            reporting_currency="USD",
+        )
+
+    assert summary.reporting_currency_total_tax_amount == Decimal("15")
+    mock_transaction_repo.get_latest_fx_rate.assert_not_awaited()
+
+
+async def test_get_realized_tax_summary_raises_when_portfolio_missing(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_portfolio_base_currency.return_value = None
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
+            await service.get_realized_tax_summary(portfolio_id="P404")

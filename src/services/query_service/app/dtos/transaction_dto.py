@@ -549,3 +549,96 @@ class PaginatedTransactionResponse(SourceDataProductRuntimeMetadata):
     transactions: List[TransactionRecord] = Field(
         ..., description="The list of transaction records for the current page."
     )
+
+
+class RealizedTaxCurrencyTotal(BaseModel):
+    currency: str = Field(
+        ...,
+        description="Source currency for the aggregated explicit tax evidence.",
+        examples=["USD"],
+    )
+    transaction_count: int = Field(
+        ...,
+        description="Number of booked transaction rows contributing explicit tax evidence.",
+        examples=[3],
+    )
+    withholding_tax_amount: Decimal = Field(
+        ...,
+        description="Sum of source-recorded withholding tax amounts in this currency.",
+        examples=[125.5],
+    )
+    other_tax_deductions_amount: Decimal = Field(
+        ...,
+        description=(
+            "Sum of other source-recorded tax or interest deduction amounts in this currency."
+        ),
+        examples=[12.75],
+    )
+    total_tax_amount: Decimal = Field(
+        ...,
+        description=(
+            "Sum of explicit source-recorded withholding tax and other deduction amounts in this "
+            "currency. This is recorded evidence, not tax advice or tax-reporting certification."
+        ),
+        examples=[138.25],
+    )
+
+
+class PortfolioRealizedTaxSummaryResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["PortfolioRealizedTaxSummary"] = product_name_field(
+        "PortfolioRealizedTaxSummary"
+    )
+    product_version: Literal["v1"] = product_version_field()
+    portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-TXN-001"])
+    base_currency: str = Field(
+        ...,
+        description="Portfolio base currency recorded in core portfolio master data.",
+        examples=["USD"],
+    )
+    reporting_currency: Optional[str] = Field(
+        None,
+        description=(
+            "Optional reporting currency used to restate source currency totals. Omitted when no "
+            "reporting currency was requested."
+        ),
+        examples=["SGD"],
+    )
+    start_date: Optional[date] = Field(
+        None,
+        description="Inclusive transaction-date lower bound used for the summary.",
+        examples=["2026-01-01"],
+    )
+    end_date: Optional[date] = Field(
+        None,
+        description="Inclusive transaction-date upper bound used for the summary.",
+        examples=["2026-03-31"],
+    )
+    source_transaction_count: int = Field(
+        ...,
+        description="Booked transaction rows in scope before explicit tax evidence filtering.",
+        examples=[25],
+    )
+    tax_evidence_transaction_count: int = Field(
+        ...,
+        description="Booked transaction rows with explicit tax or deduction evidence.",
+        examples=[4],
+    )
+    currency_totals: list[RealizedTaxCurrencyTotal] = Field(
+        ...,
+        description="Explicit source tax evidence aggregated by source transaction currency.",
+    )
+    reporting_currency_total_tax_amount: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Total explicit tax amount restated into reporting_currency when requested. This is "
+            "source-recorded tax evidence only; it is not tax advice, after-tax optimization, "
+            "tax-loss harvesting, jurisdiction-specific recommendation, or tax-reporting "
+            "certification."
+        ),
+        examples=[188.02],
+    )
+    reason_codes: list[str] = Field(
+        default_factory=list,
+        description="Supportability reason codes for the realized-tax summary.",
+        examples=[["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"]],
+    )

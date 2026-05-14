@@ -37,6 +37,10 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "realized_fx_pnl_local_reporting_currency" in catalog
     assert "must not aggregate rows into tax methodology" in catalog
     assert "FX attribution, cash movement methodology, transaction-cost methodology" in catalog
+    assert "| `PortfolioRealizedTaxSummary:v1` |" in catalog
+    assert "portfolio-realized-tax-summary.md" in catalog
+    assert "explicit booked withholding-tax and other-interest-deduction evidence" in catalog
+    assert "must not claim tax advice, after-tax optimization" in catalog
     assert "| `PortfolioCashflowProjection:v1` |" in catalog
     assert "Daily booked cashflow, projected settlement cashflow, net cashflow points" in catalog
     assert "booked/projected/net totals" in catalog
@@ -66,6 +70,7 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "Developers and architects" in wiki
     assert "Sales and client demos" in wiki
     assert "`TransactionLedgerWindow:v1`" in wiki
+    assert "`PortfolioRealizedTaxSummary:v1`" in wiki
     assert "`MarketDataCoverageWindow:v1`" in wiki
     assert "`DpmSourceReadiness:v1`" in wiki
     assert "`PortfolioCashflowProjection:v1`" in wiki
@@ -80,6 +85,8 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "filters booked transaction rows by portfolio" in normalized_wiki
     assert "optional instrument/security, transaction type, FX/event linkage" in normalized_wiki
     assert "row-level realized FX P&L local evidence" in wiki
+    assert "groups totals by ledger currency" in normalized_wiki
+    assert "jurisdiction-specific recommendation, client-tax approval" in normalized_wiki
     assert "classifies empty, complete, and paged windows" in normalized_wiki
     assert "settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements" in wiki
     assert "Same-day booked and projected movements are additive" in wiki
@@ -375,6 +382,39 @@ def test_portfolio_tax_lot_window_methodology_is_implementation_backed() -> None
     assert "| `lots[0].tax_lot_status` | `OPEN` |" in methodology
 
 
+def test_portfolio_realized_tax_summary_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/portfolio-realized-tax-summary.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`PortfolioRealizedTaxSummary:v1`" in methodology
+    assert "`GET /portfolios/{portfolio_id}/realized-tax-summary`" in methodology
+    assert "`withholding_tax_amount`" in methodology
+    assert "`other_interest_deductions_amount`" in methodology
+    assert "W_c = sum(coalesce(row.withholding_tax_amount, 0)" in methodology
+    assert "D_c = sum(coalesce(row.other_interest_deductions_amount, 0)" in methodology
+    assert "`PORTFOLIO_REALIZED_TAX_EVIDENCE_EMPTY`" in methodology
+    assert "does not fabricate zero-tax conclusions" in normalized_methodology
+    assert "not tax advice, after-tax optimization, tax-loss harvesting" in normalized_methodology
+    assert "| `reporting_currency_total_tax_amount` | 35.80 |" in methodology
+
+
 def test_methodology_index_links_source_data_product_methodologies() -> None:
     index = _read("docs/methodologies/README.md")
 
@@ -385,6 +425,7 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "source-data-products/portfolio-cashflow-projection.md" in index
     assert "source-data-products/portfolio-liquidity-ladder.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
+    assert "source-data-products/portfolio-realized-tax-summary.md" in index
     assert "source-data-products/transaction-cost-curve.md" in index
     assert "Effective-dated open and closed tax-lot state" in index
     assert "current-epoch snapshot reconciliation" in index
@@ -392,4 +433,5 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "Fail-closed DPM source-family readiness" in index
     assert "Governed booked transaction-row windowing" in index
     assert "Source-owned cash-availability buckets" in index
+    assert "Portfolio-level aggregation of explicit booked withholding-tax" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index

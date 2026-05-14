@@ -73,6 +73,10 @@ Boundary rules that matter:
    `PlannedWithdrawalSchedule:v1` so downstream DPM workflows can carry bounded income, reserve,
    and withdrawal evidence without claiming financial-planning advice, suitability approval,
    funding recommendations, cashflow forecasting, treasury instructions, or OMS acknowledgement.
+   `PortfolioRealizedTaxSummary:v1` adds source-owned portfolio realized-tax totals from explicit
+   booked withholding-tax and other-interest-deduction ledger evidence without claiming tax advice,
+   after-tax optimization, tax-loss harvesting, client-tax approval, tax-reporting certification,
+   execution quality, or OMS acknowledgement.
 7. `TransactionLedgerWindow:v1` preserves explicit row-level realized FX P&L evidence and can
    restate book-currency and trade/local-currency fields into a requested reporting currency with
    field-aware source-currency selection, without promoting portfolio-level FX attribution.

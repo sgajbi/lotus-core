@@ -8,7 +8,7 @@ from portfolio_common.source_data_products import source_data_product_openapi_ex
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dependencies import pagination_params, sorting_params
-from ..dtos.transaction_dto import PaginatedTransactionResponse
+from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
 from ..services.transaction_service import TransactionService
 
 router = APIRouter(prefix="/portfolios", tags=["Transactions"])
@@ -167,6 +167,82 @@ async def get_transactions(
             reporting_currency=reporting_currency,
             **pagination,
             **sorting,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get(
+    "/{portfolio_id}/realized-tax-summary",
+    response_model=PortfolioRealizedTaxSummaryResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Invalid realized-tax summary query.",
+            "content": {
+                "application/json": {"example": INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE}
+            },
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
+    },
+    summary="Get Portfolio Realized Tax Summary",
+    description=(
+        "What: Return a portfolio-level summary of explicit source-recorded realized tax evidence "
+        "from booked transaction ledger rows.\n"
+        "How: Aggregates withholding tax and other recorded tax or interest deduction amounts by "
+        "source currency, optionally restating totals into a requested reporting currency using "
+        "Core FX evidence.\n"
+        "When: Use this route when downstream consumers need auditable portfolio-level tax "
+        "evidence without reconstructing tax totals from ledger rows. The response is source "
+        "evidence only and must not be used as tax advice, after-tax optimization, tax-loss "
+        "harvesting suitability, jurisdiction-specific recommendation, client-tax approval, "
+        "tax-reporting certification, or OMS acknowledgement."
+    ),
+    openapi_extra=source_data_product_openapi_extra("PortfolioRealizedTaxSummary"),
+)
+async def get_realized_tax_summary(
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier.",
+        examples=["PORT-TXN-001"],
+    ),
+    start_date: Optional[date] = Query(
+        None,
+        description="The start date for the transaction-date window filter (inclusive).",
+        examples=["2026-01-01"],
+    ),
+    end_date: Optional[date] = Query(
+        None,
+        description="The end date for the transaction-date window filter (inclusive).",
+        examples=["2026-03-31"],
+    ),
+    as_of_date: Optional[date] = Query(
+        None,
+        description=(
+            "Optional as-of date for booked transaction state. If omitted, latest business_date "
+            "is used."
+        ),
+        examples=["2026-03-31"],
+    ),
+    reporting_currency: Optional[str] = Query(
+        None,
+        description=("Optional reporting currency for restating aggregated explicit tax totals."),
+        examples=["SGD"],
+    ),
+    db: AsyncSession = Depends(get_async_db_session),
+):
+    service = TransactionService(db)
+    try:
+        return await service.get_realized_tax_summary(
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=as_of_date,
+            reporting_currency=reporting_currency,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

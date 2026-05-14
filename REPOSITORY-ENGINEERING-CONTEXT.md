@@ -75,7 +75,12 @@ Current repository posture:
     `LiquidityReserveRequirement:v1`, and `PlannedWithdrawalSchedule:v1` as lineage-backed
     query-control-plane products for bounded DPM income, reserve, and withdrawal evidence without
     financial-planning-advice, suitability-approval, cashflow-forecasting, funding-recommendation,
-    treasury-instruction, or OMS-acknowledgement claims.
+    treasury-instruction, or OMS-acknowledgement claims. `PortfolioRealizedTaxSummary:v1` adds
+    operational read-plane aggregation of explicit booked withholding-tax and
+    other-interest-deduction evidence by ledger currency, with optional reporting-currency
+    restatement and explicit boundaries from tax advice, after-tax optimization,
+    tax-loss-harvesting, client-tax approval, tax-reporting certification, execution quality, and
+    OMS acknowledgement.
 20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared
@@ -297,6 +302,14 @@ Most relevant current governance:
     states, lineage, source-record identity, and explicit boundaries from tax advice, after-tax
     optimization, tax-loss harvesting suitability, client-tax approval, jurisdiction-specific
     recommendations, tax-reporting certification, best execution, and OMS acknowledgement.
+35. RFC42-WTBD-006 source-owner methodology depth now includes the implementation-backed
+    `PortfolioRealizedTaxSummary:v1` product and methodology under
+    `docs/methodologies/source-data-products/portfolio-realized-tax-summary.md`; it pins
+    portfolio/date/as-of transaction filtering, explicit withholding-tax and
+    other-interest-deduction inclusion, currency-grouped totals, optional reporting-currency
+    restatement from latest available FX rates, evidence-row and source-window counts, and the
+    explicit boundary from tax advice, after-tax optimization, tax-loss harvesting, client-tax
+    approval, tax-reporting certification, execution quality, and OMS acknowledgement.
 
 ## Context Maintenance Rule
 
