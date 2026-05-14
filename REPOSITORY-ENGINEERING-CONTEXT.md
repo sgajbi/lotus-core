@@ -67,7 +67,11 @@ Current repository posture:
     without moving rebalance decisioning into core. RFC40-WTBD-008 source-owner coverage adds
     `ClientRestrictionProfile:v1` and `SustainabilityPreferenceProfile:v1` as effective-dated,
     lineage-backed query-control-plane products and canonical front-office seed inputs; downstream
-    `lotus-manage` consumption remains a separate slice.
+    `lotus-manage` consumption remains a separate slice. RFC42-WTBD-006 source-owner coverage adds
+    `ClientTaxProfile:v1` and `ClientTaxRuleSet:v1` as effective-dated, lineage-backed
+    query-control-plane products for bounded tax-reference evidence without tax-advice,
+    after-tax-optimization, tax-loss-harvesting, client-tax-approval, or jurisdiction-specific
+    recommendation claims.
 20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared
@@ -281,6 +285,14 @@ Most relevant current governance:
     cost bps; min/max cost bps; deterministic paging; and the explicit boundary from
     market-impact, venue-routing, best-execution, OMS acknowledgement, and minimum-cost execution
     methodology.
+34. RFC42-WTBD-006 source-owner methodology depth now includes implementation-backed
+    `ClientTaxProfile:v1` and `ClientTaxRuleSet:v1` methodologies under
+    `docs/methodologies/source-data-products/client-tax-profile.md` and
+    `docs/methodologies/source-data-products/client-tax-rule-set.md`; they pin effective-dated
+    discretionary mandate resolution, profile/rule selection and deduplication, supportability
+    states, lineage, source-record identity, and explicit boundaries from tax advice, after-tax
+    optimization, tax-loss harvesting suitability, client-tax approval, jurisdiction-specific
+    recommendations, tax-reporting certification, best execution, and OMS acknowledgement.
 
 ## Context Maintenance Rule
 

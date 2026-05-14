@@ -21,7 +21,7 @@ generation. In business terms, `lotus-core` supplies the governed facts that a p
 needs before `lotus-manage` can calculate a rebalance: the approved model, the mandate authority,
 the investable/restricted universe, tax lots, observed transaction-cost evidence, market prices,
 FX coverage, client restriction profiles, sustainability preferences, an operator-grade
-source-family readiness decision, first-wave PM-book membership from portfolio master data, and
+client tax-reference profile and rule-set evidence, an operator-grade source-family readiness decision, first-wave PM-book membership from portfolio master data, and
 CIO model-change affected-mandate discovery from approved model and mandate-binding data.
 `lotus-manage` remains the execution and decisioning application; `lotus-core` remains the
 source-data authority.
@@ -39,6 +39,8 @@ source-data authority.
 | `CioModelChangeAffectedCohort:v1` | `/integration/model-portfolios/{model_portfolio_id}/affected-mandates` | Source-owned CIO model-change affected-mandate cohort resolved from the approved model definition and effective active discretionary mandate bindings, with deterministic event identity, snapshot identity, supportability, and lineage. | Implemented and locally proven for RFC41-WTBD-002 source ownership. It deliberately does not claim tactical house-view, risk-event, campaign, or OMS execution authority. |
 | `ClientRestrictionProfile:v1` | `/integration/portfolios/{portfolio_id}/client-restriction-profile` | Effective-dated client and mandate restriction profile for DPM buy/sell controls, including scoped instrument, asset-class, issuer, and country restrictions with lineage and supportability. | Implemented and locally proven for RFC40-WTBD-008 source ownership. Canonical seed coverage includes private-credit and sanctioned-market buy restrictions. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed restriction enforcement. |
 | `SustainabilityPreferenceProfile:v1` | `/integration/portfolios/{portfolio_id}/sustainability-preference-profile` | Effective-dated sustainability preference profile for mandate-aware portfolio construction, including allocation bounds, exclusions, positive tilts, framework, source, and lineage. | Implemented and locally proven for RFC40-WTBD-008 source ownership. Canonical seed coverage includes a minimum sustainable allocation, thermal-coal exclusion, and low-carbon-transition positive tilt. Downstream `lotus-manage` consumption remains the next WTBD slice before client-facing proof packs may advertise source-backed sustainability preference enforcement. |
+| `ClientTaxProfile:v1` | `/integration/portfolios/{portfolio_id}/client-tax-profile` | Effective-dated client tax-reference profile facts, including tax residency, booking tax jurisdiction, bounded tax status, source-supplied withholding rate, tax-applicability flags, treaty codes, eligible account types, lineage, and supportability. | Implemented locally for RFC42-WTBD-006 source ownership. It is reference evidence only and does not claim tax advice, after-tax optimization, tax-loss harvesting suitability, client-tax approval, jurisdiction-specific recommendations, tax-reporting certification, or OMS acknowledgement. |
+| `ClientTaxRuleSet:v1` | `/integration/portfolios/{portfolio_id}/client-tax-rule-set` | Effective-dated client tax-rule references, including tax year, jurisdiction, rule code/category/status/source, applicability, source-supplied rate and threshold fields, lineage, and supportability. | Implemented locally for RFC42-WTBD-006 source ownership. It is reference evidence only and does not claim tax advice, tax-loss harvesting suitability, after-tax optimization, client-tax approval, jurisdiction-specific recommendations, tax-reporting certification, best execution, or OMS acknowledgement. |
 | `PortfolioCashflowProjection:v1` | `/portfolios/{portfolio_id}/cashflow-projection` | Core-derived daily cashflow projection for operational cash-movement evidence. It exposes daily booked cashflow, projected settlement cashflow, net cashflow, cumulative cashflow, booked/projected/net totals, source-data product identity, portfolio base currency, runtime metadata, data-quality posture, latest evidence timestamp, and deterministic projection fingerprint for downstream outcome and liquidity consumers. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening; live front-office proof remains part of the consuming manage slice. |
 | `PortfolioLiquidityLadder:v1` | `/portfolios/{portfolio_id}/liquidity-ladder` | Source-owned cash-availability ladder evidence. It exposes opening source cash, deterministic T0/T+1/T+2-to-T+7/T+8-to-T+30/T+31-to-horizon cash buckets, booked and projected settlement cashflow contributions, cumulative cash availability, maximum cash shortfall, non-cash exposure by instrument liquidity tier, runtime metadata, data-quality posture, evidence timestamp, and deterministic source fingerprint. | Implemented and locally proven in RFC-0042 WTBD-006 source-owner hardening. It is evidence for monitoring, reporting, DPM supportability, and client explanation; it is not an advice recommendation, income plan, funding recommendation, OMS execution forecast, tax methodology, best-execution assessment, or market-impact model. |
 
@@ -46,14 +48,14 @@ source-data authority.
 
 Outcome review, proof-pack, and wave surfaces are bank-buyable only when they preserve the
 difference between source-owned evidence and downstream interpretation. `lotus-core` currently owns
-recorded portfolio, transaction, tax-lot, observed-fee, and operational cashflow facts. It does not
+recorded portfolio, transaction, tax-lot, client tax-reference, observed-fee, and operational cashflow facts. It does not
 own risk methodology, performance returns, client tax advice, liquidity planning, execution routing,
 or OMS acknowledgement methodology.
 
 | Audience | What this means |
 | --- | --- |
 | Business users | Core supplies recorded facts such as holdings, cash totals, transaction fees, withholding tax, realized FX P&L, linked cashflow rows, tax lots, observed fee evidence, and operational cashflow projections. Decisioning products can explain those facts but must not silently invent a broader methodology. |
-| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`, `PortfolioCashflowProjection:v1`, and `PortfolioLiquidityLadder:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
+| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioTaxLotWindow:v1`, `ClientTaxProfile:v1`, `ClientTaxRuleSet:v1`, `TransactionCostCurve:v1`, `PortfolioCashflowProjection:v1`, and `PortfolioLiquidityLadder:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
 | Operations | Investigate stale, partial, or missing evidence at the owning source product before treating a manage/risk/performance surface as wrong. If a source product is unavailable or outside scope, downstream products should degrade rather than recalculate locally. |
 | Sales and client demos | Position the platform as source-governed: recorded ledger and portfolio facts are traceable to core, analytics are owned by their specialist services, and unsupported execution/tax/liquidity claims remain visibly outside the supported boundary. |
 
@@ -131,6 +133,13 @@ local currency when source transaction currency is available, source transaction
 policy id/version, and supportability. It is not jurisdiction-specific tax advice, realized-tax
 optimization, wash-sale treatment, client-tax approval, or tax-reporting certification.
 
+`ClientTaxProfile:v1` and `ClientTaxRuleSet:v1` are governed sources for bounded client
+tax-reference evidence from bank tax, client master, mandate, or rules source systems. They expose
+effective-dated profile and rule rows with lineage, supportability, latest evidence timestamps, and
+source record identity. They are not tax advice, after-tax optimization, tax-loss harvesting
+suitability, client-tax approval, jurisdiction-specific recommendations, tax-reporting
+certification, best execution, or OMS acknowledgement.
+
 `TransactionCostCurve:v1` is the governed source for observed booked transaction-fee evidence
 grouped by security, transaction type, and fee currency. Its implementation-backed methodology uses
 explicit `transaction_costs` rows when present, falls back to `trade_fee` only when explicit cost
@@ -146,6 +155,7 @@ flowchart LR
     CoreCash[core PortfolioCashflowProjection:v1<br/>daily and total operational cashflow evidence]
     CoreLiquidity[core PortfolioLiquidityLadder:v1<br/>cash availability buckets and liquidity-tier exposure]
     CoreLots[core PortfolioTaxLotWindow:v1<br/>lot and cost-basis state]
+    CoreTax[core ClientTaxProfile/RuleSet:v1<br/>tax-reference evidence]
     CoreFees[core TransactionCostCurve:v1<br/>observed booked fee evidence]
     Manage[lotus-manage outcome/proof/wave consumers<br/>preserve source refs and supportability]
     Perf[lotus-performance<br/>performance methodology]
@@ -157,6 +167,7 @@ flowchart LR
     CoreCash --> Manage
     CoreLiquidity --> Manage
     CoreLots --> Manage
+    CoreTax --> Manage
     CoreFees --> Manage
     Perf --> Manage
     Risk --> Manage
@@ -223,7 +234,7 @@ proof path.
 
 | Proof area | Current state |
 | --- | --- |
-| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, observed transaction-cost curves, market-data/FX coverage, client restriction profiles, sustainability preferences, DPM source-family readiness, first-wave PM-book membership, and first-wave CIO model-change affected-cohort discovery. |
+| Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, observed transaction-cost curves, market-data/FX coverage, client restriction profiles, sustainability preferences, client tax-reference profile and rule-set evidence, DPM source-family readiness, first-wave PM-book membership, and first-wave CIO model-change affected-cohort discovery. |
 | Local validation | Source-data product guard, domain-product validation, focused validator tests, OpenAPI contract tests, and product-specific service/router tests exist. |
 | Reusable live validation | `make live-dpm-source-validate` runs `scripts/validate_live_dpm_source_products.py` against `core-control.dev.lotus`. |
 | Latest live attempt | Passed: `make live-dpm-source-validate` returned 7/7 probes with READY source-family evidence on 2026-05-02. |
@@ -231,7 +242,7 @@ proof path.
 
 ```mermaid
 flowchart TD
-    Seed[Canonical front-office seed PB_SG_GLOBAL_BAL_001] --> CoreProducts[Seven DPM source products]
+    Seed[Canonical front-office seed PB_SG_GLOBAL_BAL_001] --> CoreProducts[DPM source products]
     CoreProducts --> LiveValidator[make live-dpm-source-validate]
     LiveValidator --> Evidence{Live evidence accepted?}
     Evidence -->|No, runtime unavailable or data incomplete| Blocked[Keep stateful capability hidden]

@@ -6,6 +6,10 @@ from pydantic import ValidationError
 from src.services.ingestion_service.app.DTOs.reference_data_dto import (
     ClientRestrictionProfileIngestionRequest,
     ClientRestrictionProfileRecord,
+    ClientTaxProfileIngestionRequest,
+    ClientTaxProfileRecord,
+    ClientTaxRuleSetIngestionRequest,
+    ClientTaxRuleSetRecord,
     DiscretionaryMandateBindingIngestionRequest,
     DiscretionaryMandateBindingRecord,
     InstrumentEligibilityProfileIngestionRequest,
@@ -114,6 +118,47 @@ def _sustainability_profile(**overrides: object) -> dict[str, object]:
         "preference_source": "client_mandate",
         "minimum_allocation": "0.2000000000",
         "exclusion_codes": ["THERMAL_COAL"],
+        "effective_from": "2026-04-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _tax_profile(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "client_id": "CIF_SG_000184",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "tax_profile_id": "TAX_PROFILE_SG_001",
+        "tax_residency_country": "SG",
+        "booking_tax_jurisdiction": "SG",
+        "tax_status": "TAXABLE",
+        "profile_status": "active",
+        "withholding_tax_rate": "0.1500000000",
+        "capital_gains_tax_applicable": False,
+        "income_tax_applicable": True,
+        "treaty_codes": ["US_SG_TREATY"],
+        "eligible_account_types": ["DPM"],
+        "effective_from": "2026-04-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _tax_rule_set(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "client_id": "CIF_SG_000184",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "rule_set_id": "TAX_RULES_SG_2026",
+        "tax_year": 2026,
+        "jurisdiction_code": "SG",
+        "rule_code": "US_DIVIDEND_WITHHOLDING",
+        "rule_category": "WITHHOLDING",
+        "rule_status": "active",
+        "rule_source": "bank_tax_reference",
+        "applies_to_income_types": ["DIVIDEND"],
+        "rate": "0.1500000000",
         "effective_from": "2026-04-01",
     }
     record.update(overrides)
@@ -256,4 +301,50 @@ def test_sustainability_preference_ingestion_rejects_duplicate_effective_profile
     with pytest.raises(ValidationError, match="duplicate effective records"):
         SustainabilityPreferenceProfileIngestionRequest.model_validate(
             {"sustainability_preferences": [duplicate, dict(duplicate)]}
+        )
+
+
+def test_client_tax_profile_validates_unknown_status_has_no_tax_detail() -> None:
+    with pytest.raises(ValidationError, match="UNKNOWN tax_status"):
+        ClientTaxProfileRecord.model_validate(
+            _tax_profile(
+                tax_status="UNKNOWN",
+                withholding_tax_rate="0.1500000000",
+                income_tax_applicable=True,
+            )
+        )
+
+
+def test_client_tax_profile_ingestion_rejects_duplicate_effective_profiles() -> None:
+    duplicate = _tax_profile()
+
+    with pytest.raises(ValidationError, match="duplicate effective records"):
+        ClientTaxProfileIngestionRequest.model_validate(
+            {"tax_profiles": [duplicate, dict(duplicate)]}
+        )
+
+
+def test_client_tax_rule_set_validates_threshold_pair_and_substance() -> None:
+    with pytest.raises(ValidationError, match="threshold_currency is required"):
+        ClientTaxRuleSetRecord.model_validate(_tax_rule_set(threshold_amount="250000.0000"))
+
+    with pytest.raises(ValidationError, match="bounded rule evidence"):
+        ClientTaxRuleSetRecord.model_validate(
+            _tax_rule_set(
+                applies_to_asset_classes=[],
+                applies_to_security_ids=[],
+                applies_to_income_types=[],
+                rate=None,
+                threshold_amount=None,
+                threshold_currency=None,
+            )
+        )
+
+
+def test_client_tax_rule_set_ingestion_rejects_duplicate_effective_rules() -> None:
+    duplicate = _tax_rule_set()
+
+    with pytest.raises(ValidationError, match="duplicate effective records"):
+        ClientTaxRuleSetIngestionRequest.model_validate(
+            {"tax_rule_sets": [duplicate, dict(duplicate)]}
         )
