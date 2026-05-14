@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     BenchmarkReturnSeries,
     CashAccountMaster,
     ClassificationTaxonomy,
+    ClientIncomeNeedsSchedule,
     ClientRestrictionProfile,
     ClientTaxProfile,
     ClientTaxRuleSet,
@@ -18,8 +19,10 @@ from portfolio_common.database_models import (
     IndexReturnSeries,
     InstrumentEligibilityProfile,
     InstrumentLookthroughComponent,
+    LiquidityReserveRequirement,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
+    PlannedWithdrawalSchedule,
     PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
     RiskFreeSeries,
@@ -296,6 +299,81 @@ class ReferenceDataIngestionService:
                 "threshold_amount",
                 "threshold_currency",
                 "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_client_income_needs_schedules(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=ClientIncomeNeedsSchedule,
+            records=records,
+            conflict_columns=["client_id", "portfolio_id", "schedule_id", "start_date"],
+            update_columns=[
+                "mandate_id",
+                "need_type",
+                "need_status",
+                "amount",
+                "currency",
+                "frequency",
+                "end_date",
+                "priority",
+                "funding_policy",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_liquidity_reserve_requirements(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=LiquidityReserveRequirement,
+            records=records,
+            conflict_columns=[
+                "client_id",
+                "portfolio_id",
+                "reserve_requirement_id",
+                "effective_from",
+                "requirement_version",
+            ],
+            update_columns=[
+                "mandate_id",
+                "reserve_type",
+                "reserve_status",
+                "required_amount",
+                "currency",
+                "horizon_days",
+                "priority",
+                "policy_source",
+                "effective_to",
+                "source_system",
+                "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_planned_withdrawal_schedules(self, records: list[dict[str, Any]]) -> None:
+        await self._upsert_many(
+            model=PlannedWithdrawalSchedule,
+            records=records,
+            conflict_columns=[
+                "client_id",
+                "portfolio_id",
+                "withdrawal_schedule_id",
+                "scheduled_date",
+            ],
+            update_columns=[
+                "mandate_id",
+                "withdrawal_type",
+                "withdrawal_status",
+                "amount",
+                "currency",
+                "recurrence_frequency",
+                "purpose_code",
                 "source_system",
                 "source_record_id",
                 "observed_at",

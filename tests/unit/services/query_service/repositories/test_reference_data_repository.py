@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -401,6 +401,121 @@ async def test_reference_data_repository_lists_latest_client_tax_rule_sets() -> 
 
     assert [row.rule_code for row in rows] == ["SG_REPORTING", "US_DIVIDEND_WITHHOLDING"]
     assert rows[1].rule_version == 2
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_income_needs_schedules() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                schedule_id="INCOME_NEED_MONTHLY_001",
+                updated_at=datetime(2026, 5, 3, 9),
+            ),
+            SimpleNamespace(
+                schedule_id="INCOME_NEED_MONTHLY_001",
+                updated_at=datetime(2026, 5, 1, 9),
+            ),
+            SimpleNamespace(
+                schedule_id="INCOME_NEED_ANNUAL_001",
+                updated_at=datetime(2026, 5, 2, 9),
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_client_income_needs_schedules(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 5, 3),
+    )
+
+    assert [row.schedule_id for row in rows] == [
+        "INCOME_NEED_ANNUAL_001",
+        "INCOME_NEED_MONTHLY_001",
+    ]
+    assert rows[1].updated_at == datetime(2026, 5, 3, 9)
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_liquidity_reserve_requirements() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                reserve_requirement_id="RESERVE_MIN_CASH_001",
+                effective_from=date(2026, 4, 1),
+                requirement_version=1,
+            ),
+            SimpleNamespace(
+                reserve_requirement_id="RESERVE_MIN_CASH_001",
+                effective_from=date(2026, 5, 1),
+                requirement_version=2,
+            ),
+            SimpleNamespace(
+                reserve_requirement_id="RESERVE_SPENDING_001",
+                effective_from=date(2026, 4, 1),
+                requirement_version=1,
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_liquidity_reserve_requirements(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 5, 3),
+    )
+
+    assert [row.reserve_requirement_id for row in rows] == [
+        "RESERVE_MIN_CASH_001",
+        "RESERVE_SPENDING_001",
+    ]
+    assert rows[0].requirement_version == 2
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_planned_withdrawals() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                withdrawal_schedule_id="WITHDRAWAL_Q3_001",
+                scheduled_date=date(2026, 7, 15),
+                updated_at=datetime(2026, 5, 3, 9),
+            ),
+            SimpleNamespace(
+                withdrawal_schedule_id="WITHDRAWAL_Q3_001",
+                scheduled_date=date(2026, 7, 15),
+                updated_at=datetime(2026, 5, 1, 9),
+            ),
+            SimpleNamespace(
+                withdrawal_schedule_id="WITHDRAWAL_Q4_001",
+                scheduled_date=date(2026, 10, 15),
+                updated_at=datetime(2026, 5, 2, 9),
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_planned_withdrawal_schedules(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 5, 3),
+        horizon_days=365,
+    )
+
+    assert [row.withdrawal_schedule_id for row in rows] == [
+        "WITHDRAWAL_Q3_001",
+        "WITHDRAWAL_Q4_001",
+    ]
+    assert rows[0].updated_at == datetime(2026, 5, 3, 9)
     db.execute.assert_awaited_once()
 
 

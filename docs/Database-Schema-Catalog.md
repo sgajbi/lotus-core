@@ -488,6 +488,112 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `client_income_needs_schedules`
+
+- **Purpose**: Effective-dated client and mandate income-needs source records for DPM evidence.
+- **Description**: Stores the source records behind `ClientIncomeNeedsSchedule:v1`, including
+  bounded need type/status, amount, currency, cadence, priority, funding-policy reference,
+  lineage, and quality status. The table is source-reference evidence only and does not provide
+  financial-planning advice, suitability approval, cashflow forecasting, funding recommendations,
+  or OMS acknowledgement.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
+  as-of date; active schedules are returned by default and deterministic latest selection is
+  applied by schedule id.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Optional discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the schedule.
+  - `schedule_id` (String): Source-owned income-needs schedule identifier.
+  - `need_type` (String): Bounded income-needs type.
+  - `need_status` (String): Income-needs lifecycle status.
+  - `amount` (Numeric): Source-supplied income-needs amount.
+  - `currency` (String): Currency for `amount`.
+  - `frequency` (String): Source-supplied income-needs cadence.
+  - `start_date` (Date): Schedule effective start date.
+  - `end_date` (Date): Optional schedule effective end date.
+  - `priority` (Integer): Source priority for reserve and withdrawal planning context.
+  - `funding_policy` (String): Optional upstream funding policy reference.
+  - `source_system` (String): Upstream income-needs source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the record.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `liquidity_reserve_requirements`
+
+- **Purpose**: Effective-dated client and mandate liquidity reserve source records for DPM
+  evidence.
+- **Description**: Stores the source records behind `LiquidityReserveRequirement:v1`, including
+  reserve type/status, required amount, currency, horizon, priority, policy source, version,
+  lineage, and quality status. The table is source-reference evidence only and does not approve
+  cash reserve recommendations, financial-planning advice, suitability, treasury instructions, or
+  OMS acknowledgement.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
+  as-of date; active requirements are returned by default and deterministic latest-version
+  selection is applied by reserve requirement id.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Optional discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the requirement.
+  - `reserve_requirement_id` (String): Source-owned reserve requirement identifier.
+  - `reserve_type` (String): Bounded reserve requirement type.
+  - `reserve_status` (String): Reserve lifecycle status.
+  - `required_amount` (Numeric): Source-supplied reserve amount.
+  - `currency` (String): Currency for `required_amount`.
+  - `horizon_days` (Integer): Reserve horizon in calendar days.
+  - `priority` (Integer): Source priority for reserve planning context.
+  - `policy_source` (String): Upstream policy or bank authority reference.
+  - `effective_from` (Date): Requirement effective start date.
+  - `effective_to` (Date): Optional requirement effective end date.
+  - `requirement_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream reserve source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the record.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `planned_withdrawal_schedules`
+
+- **Purpose**: Horizon-bounded client and mandate planned withdrawal source records for DPM
+  evidence.
+- **Description**: Stores the source records behind `PlannedWithdrawalSchedule:v1`, including
+  withdrawal type/status, amount, currency, scheduled date, optional recurrence, purpose code,
+  lineage, and quality status. The table is source-reference evidence only and does not provide a
+  cashflow forecast, financial-planning advice, suitability approval, funding recommendation,
+  treasury instruction, or OMS acknowledgement.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Forward-window lookup by portfolio id, client id, mandate id,
+  `as_of_date`, and `horizon_days`; active withdrawals are returned by default and deterministic
+  latest selection is applied by withdrawal schedule id and scheduled date.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Optional discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the withdrawal schedule.
+  - `withdrawal_schedule_id` (String): Source-owned withdrawal schedule identifier.
+  - `withdrawal_type` (String): Bounded withdrawal type.
+  - `withdrawal_status` (String): Withdrawal lifecycle status.
+  - `amount` (Numeric): Source-supplied withdrawal amount.
+  - `currency` (String): Currency for `amount`.
+  - `scheduled_date` (Date): Planned withdrawal date.
+  - `recurrence_frequency` (String): Optional recurrence cadence.
+  - `purpose_code` (String): Optional source purpose code.
+  - `source_system` (String): Upstream planned withdrawal source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the record.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `model_portfolio_targets`
 
 - **Purpose**: Effective-dated target weights and policy bands for discretionary model portfolios.

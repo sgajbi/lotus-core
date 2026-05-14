@@ -521,6 +521,137 @@ class ClientTaxRuleSet(Base):
     )
 
 
+class ClientIncomeNeedsSchedule(Base):
+    __tablename__ = "client_income_needs_schedules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=True, index=True)
+    schedule_id = Column(String, nullable=False, index=True)
+    need_type = Column(String, nullable=False, index=True)
+    need_status = Column(String, nullable=False, server_default="active", index=True)
+    amount = Column(Numeric(18, 4), nullable=False)
+    currency = Column(String(3), nullable=False, index=True)
+    frequency = Column(String, nullable=False, index=True)
+    start_date = Column(Date, nullable=False, index=True)
+    end_date = Column(Date, nullable=True, index=True)
+    priority = Column(Integer, nullable=False, server_default="1")
+    funding_policy = Column(String, nullable=True)
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "portfolio_id",
+            "schedule_id",
+            "start_date",
+            name="_client_income_needs_schedule_effective_uc",
+        ),
+        Index(
+            "ix_client_income_needs_schedule_effective_window",
+            "portfolio_id",
+            "client_id",
+            "start_date",
+            "end_date",
+        ),
+    )
+
+
+class LiquidityReserveRequirement(Base):
+    __tablename__ = "liquidity_reserve_requirements"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=True, index=True)
+    reserve_requirement_id = Column(String, nullable=False, index=True)
+    reserve_type = Column(String, nullable=False, index=True)
+    reserve_status = Column(String, nullable=False, server_default="active", index=True)
+    required_amount = Column(Numeric(18, 4), nullable=False)
+    currency = Column(String(3), nullable=False, index=True)
+    horizon_days = Column(Integer, nullable=False)
+    priority = Column(Integer, nullable=False, server_default="1")
+    policy_source = Column(String, nullable=False)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    requirement_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "portfolio_id",
+            "reserve_requirement_id",
+            "effective_from",
+            "requirement_version",
+            name="_liquidity_reserve_requirement_effective_uc",
+        ),
+        Index(
+            "ix_liquidity_reserve_requirement_effective_window",
+            "portfolio_id",
+            "client_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class PlannedWithdrawalSchedule(Base):
+    __tablename__ = "planned_withdrawal_schedules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=True, index=True)
+    withdrawal_schedule_id = Column(String, nullable=False, index=True)
+    withdrawal_type = Column(String, nullable=False, index=True)
+    withdrawal_status = Column(String, nullable=False, server_default="active", index=True)
+    amount = Column(Numeric(18, 4), nullable=False)
+    currency = Column(String(3), nullable=False, index=True)
+    scheduled_date = Column(Date, nullable=False, index=True)
+    recurrence_frequency = Column(String, nullable=True, index=True)
+    purpose_code = Column(String, nullable=True, index=True)
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "portfolio_id",
+            "withdrawal_schedule_id",
+            "scheduled_date",
+            name="_planned_withdrawal_schedule_effective_uc",
+        ),
+        Index(
+            "ix_planned_withdrawal_schedule_window",
+            "portfolio_id",
+            "client_id",
+            "scheduled_date",
+        ),
+    )
+
+
 class InstrumentEligibilityProfile(Base):
     __tablename__ = "instrument_eligibility_profiles"
 

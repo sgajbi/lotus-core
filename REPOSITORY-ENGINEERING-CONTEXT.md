@@ -71,7 +71,11 @@ Current repository posture:
     `ClientTaxProfile:v1` and `ClientTaxRuleSet:v1` as effective-dated, lineage-backed
     query-control-plane products for bounded tax-reference evidence without tax-advice,
     after-tax-optimization, tax-loss-harvesting, client-tax-approval, or jurisdiction-specific
-    recommendation claims.
+    recommendation claims. It also adds `ClientIncomeNeedsSchedule:v1`,
+    `LiquidityReserveRequirement:v1`, and `PlannedWithdrawalSchedule:v1` as lineage-backed
+    query-control-plane products for bounded DPM income, reserve, and withdrawal evidence without
+    financial-planning-advice, suitability-approval, cashflow-forecasting, funding-recommendation,
+    treasury-instruction, or OMS-acknowledgement claims.
 20. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared

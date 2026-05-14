@@ -11,6 +11,7 @@ from ..DTOs.reference_data_dto import (
     BenchmarkReturnSeriesIngestionRequest,
     CashAccountMasterIngestionRequest,
     ClassificationTaxonomyIngestionRequest,
+    ClientIncomeNeedsScheduleIngestionRequest,
     ClientRestrictionProfileIngestionRequest,
     ClientTaxProfileIngestionRequest,
     ClientTaxRuleSetIngestionRequest,
@@ -20,8 +21,10 @@ from ..DTOs.reference_data_dto import (
     IndexReturnSeriesIngestionRequest,
     InstrumentEligibilityProfileIngestionRequest,
     InstrumentLookthroughComponentIngestionRequest,
+    LiquidityReserveRequirementIngestionRequest,
     ModelPortfolioDefinitionIngestionRequest,
     ModelPortfolioTargetIngestionRequest,
+    PlannedWithdrawalScheduleIngestionRequest,
     PortfolioBenchmarkAssignmentIngestionRequest,
     RiskFreeSeriesIngestionRequest,
     SustainabilityPreferenceProfileIngestionRequest,
@@ -492,6 +495,117 @@ async def ingest_client_tax_rule_sets(
         request_payload=request.model_dump(mode="json"),
         persist_fn=lambda: reference_data_service.upsert_client_tax_rule_sets(
             [item.model_dump() for item in request.tax_rule_sets]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/client-income-needs-schedules",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest client income-needs schedules",
+    description=(
+        "What: Accept source-owned client income-needs schedule records for DPM evidence.\n"
+        "How: Validate bounded need type, active window, amount, currency, cadence, source "
+        "lineage, and quality fields, then upsert durable income-needs schedule records.\n"
+        "When: Use when bank planning or reference systems publish client income-needs facts. "
+        "This endpoint stores planning evidence only and does not provide financial-planning "
+        "advice, funding recommendations, suitability approval, or OMS instructions."
+    ),
+)
+async def ingest_client_income_needs_schedules(
+    request: ClientIncomeNeedsScheduleIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/client-income-needs-schedules",
+        entity_type="client_income_needs_schedule",
+        accepted_count=len(request.income_needs_schedules),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_client_income_needs_schedules(
+            [item.model_dump() for item in request.income_needs_schedules]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/liquidity-reserve-requirements",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest liquidity reserve requirements",
+    description=(
+        "What: Accept source-owned liquidity reserve requirement records for DPM evidence.\n"
+        "How: Validate bounded reserve type, required amount, horizon, policy source, effective "
+        "dates, source lineage, and quality fields, then upsert durable reserve requirements.\n"
+        "When: Use when bank policy, planning, or reference systems publish reserve facts. This "
+        "endpoint stores evidence only and does not provide funding advice, liquidity advice, "
+        "client suitability approval, or OMS acknowledgement."
+    ),
+)
+async def ingest_liquidity_reserve_requirements(
+    request: LiquidityReserveRequirementIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/liquidity-reserve-requirements",
+        entity_type="liquidity_reserve_requirement",
+        accepted_count=len(request.liquidity_reserve_requirements),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_liquidity_reserve_requirements(
+            [item.model_dump() for item in request.liquidity_reserve_requirements]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/planned-withdrawal-schedules",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest planned withdrawal schedules",
+    description=(
+        "What: Accept source-owned planned withdrawal schedule records for DPM evidence.\n"
+        "How: Validate bounded withdrawal type, scheduled date, amount, currency, source "
+        "lineage, and quality fields, then upsert durable withdrawal schedule records.\n"
+        "When: Use when bank planning or reference systems publish planned withdrawal facts. "
+        "This endpoint stores evidence only and does not forecast cashflows, recommend funding, "
+        "approve client advice, or acknowledge OMS execution."
+    ),
+)
+async def ingest_planned_withdrawal_schedules(
+    request: PlannedWithdrawalScheduleIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/planned-withdrawal-schedules",
+        entity_type="planned_withdrawal_schedule",
+        accepted_count=len(request.planned_withdrawal_schedules),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_planned_withdrawal_schedules(
+            [item.model_dump() for item in request.planned_withdrawal_schedules]
         ),
         ingestion_job_service=ingestion_job_service,
     )

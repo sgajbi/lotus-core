@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     BenchmarkDefinition,
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
+    ClientIncomeNeedsSchedule,
     ClientRestrictionProfile,
     ClientTaxProfile,
     ClientTaxRuleSet,
@@ -17,10 +18,12 @@ from portfolio_common.database_models import (
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
-    MarketPrice,
     InstrumentEligibilityProfile,
+    LiquidityReserveRequirement,
+    MarketPrice,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
+    PlannedWithdrawalSchedule,
     PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
     RiskFreeSeries,
@@ -406,6 +409,130 @@ class ReferenceDataRepository:
             "rule_set_id",
             "jurisdiction_code",
             "rule_code",
+        )
+
+    async def list_client_income_needs_schedules(
+        self,
+        *,
+        portfolio_id: str,
+        client_id: str,
+        as_of_date: date,
+        mandate_id: str | None = None,
+        include_inactive_schedules: bool = False,
+    ) -> list[ClientIncomeNeedsSchedule]:
+        stmt = (
+            select(ClientIncomeNeedsSchedule)
+            .where(
+                ClientIncomeNeedsSchedule.portfolio_id == portfolio_id,
+                ClientIncomeNeedsSchedule.client_id == client_id,
+                _effective_filter(
+                    ClientIncomeNeedsSchedule.start_date,
+                    ClientIncomeNeedsSchedule.end_date,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ClientIncomeNeedsSchedule.schedule_id.asc(),
+                ClientIncomeNeedsSchedule.start_date.desc(),
+                ClientIncomeNeedsSchedule.observed_at.desc().nulls_last(),
+                ClientIncomeNeedsSchedule.updated_at.desc(),
+            )
+        )
+        if mandate_id:
+            stmt = stmt.where(
+                or_(
+                    ClientIncomeNeedsSchedule.mandate_id.is_(None),
+                    ClientIncomeNeedsSchedule.mandate_id == mandate_id,
+                )
+            )
+        if not include_inactive_schedules:
+            stmt = stmt.where(ClientIncomeNeedsSchedule.need_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(list(result.scalars().all()), "schedule_id")
+
+    async def list_liquidity_reserve_requirements(
+        self,
+        *,
+        portfolio_id: str,
+        client_id: str,
+        as_of_date: date,
+        mandate_id: str | None = None,
+        include_inactive_requirements: bool = False,
+    ) -> list[LiquidityReserveRequirement]:
+        stmt = (
+            select(LiquidityReserveRequirement)
+            .where(
+                LiquidityReserveRequirement.portfolio_id == portfolio_id,
+                LiquidityReserveRequirement.client_id == client_id,
+                _effective_filter(
+                    LiquidityReserveRequirement.effective_from,
+                    LiquidityReserveRequirement.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                LiquidityReserveRequirement.reserve_requirement_id.asc(),
+                LiquidityReserveRequirement.effective_from.desc(),
+                LiquidityReserveRequirement.observed_at.desc().nulls_last(),
+                LiquidityReserveRequirement.requirement_version.desc(),
+                LiquidityReserveRequirement.updated_at.desc(),
+            )
+        )
+        if mandate_id:
+            stmt = stmt.where(
+                or_(
+                    LiquidityReserveRequirement.mandate_id.is_(None),
+                    LiquidityReserveRequirement.mandate_id == mandate_id,
+                )
+            )
+        if not include_inactive_requirements:
+            stmt = stmt.where(LiquidityReserveRequirement.reserve_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(
+            list(result.scalars().all()),
+            "reserve_requirement_id",
+        )
+
+    async def list_planned_withdrawal_schedules(
+        self,
+        *,
+        portfolio_id: str,
+        client_id: str,
+        as_of_date: date,
+        horizon_days: int,
+        mandate_id: str | None = None,
+        include_inactive_withdrawals: bool = False,
+    ) -> list[PlannedWithdrawalSchedule]:
+        window_end = as_of_date + timedelta(days=horizon_days)
+        stmt = (
+            select(PlannedWithdrawalSchedule)
+            .where(
+                PlannedWithdrawalSchedule.portfolio_id == portfolio_id,
+                PlannedWithdrawalSchedule.client_id == client_id,
+                PlannedWithdrawalSchedule.scheduled_date >= as_of_date,
+                PlannedWithdrawalSchedule.scheduled_date <= window_end,
+            )
+            .order_by(
+                PlannedWithdrawalSchedule.scheduled_date.asc(),
+                PlannedWithdrawalSchedule.withdrawal_schedule_id.asc(),
+                PlannedWithdrawalSchedule.observed_at.desc().nulls_last(),
+                PlannedWithdrawalSchedule.updated_at.desc(),
+            )
+        )
+        if mandate_id:
+            stmt = stmt.where(
+                or_(
+                    PlannedWithdrawalSchedule.mandate_id.is_(None),
+                    PlannedWithdrawalSchedule.mandate_id == mandate_id,
+                )
+            )
+        if not include_inactive_withdrawals:
+            stmt = stmt.where(PlannedWithdrawalSchedule.withdrawal_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(
+            list(result.scalars().all()),
+            "withdrawal_schedule_id",
+            "scheduled_date",
         )
 
     async def list_instrument_eligibility_profiles(
