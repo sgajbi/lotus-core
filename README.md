@@ -65,6 +65,10 @@ Boundary rules that matter:
    RFC40-WTBD-008 extends that source-owner boundary with `ClientRestrictionProfile:v1` and
    `SustainabilityPreferenceProfile:v1` so downstream stateful construction can consume governed
    mandate restrictions and sustainability preferences instead of local fallback truth.
+   RFC42-WTBD-006 extends the tax-reference boundary with `ClientTaxProfile:v1` and
+   `ClientTaxRuleSet:v1` so downstream consumers can carry source-owned tax evidence without
+   claiming tax advice, after-tax optimization, tax-loss harvesting, client-tax approval, or
+   jurisdiction-specific recommendations.
 7. `TransactionLedgerWindow:v1` preserves explicit row-level realized FX P&L evidence and can
    restate book-currency and trade/local-currency fields into a requested reporting currency with
    field-aware source-currency selection, without promoting portfolio-level FX attribution.

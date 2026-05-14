@@ -393,6 +393,38 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="ClientTaxProfile",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/client-tax-profile",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for bounded client tax-reference profile facts. It publishes "
+            "source-owned evidence only and does not provide tax advice or after-tax "
+            "optimization."
+        ),
+    ),
+    SourceDataProductDefinition(
+        product_name="ClientTaxRuleSet",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/client-tax-rule-set",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for bounded client tax-rule references. It does not approve "
+            "client tax outcomes, tax-loss harvesting, or jurisdiction-specific "
+            "recommendations."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,

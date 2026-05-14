@@ -38,6 +38,14 @@ from ..dtos.reference_integration_dto import (
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
     ClientRestrictionProfileSupportability,
+    ClientTaxProfileEntry,
+    ClientTaxProfileRequest,
+    ClientTaxProfileResponse,
+    ClientTaxProfileSupportability,
+    ClientTaxRuleSetEntry,
+    ClientTaxRuleSetRequest,
+    ClientTaxRuleSetResponse,
+    ClientTaxRuleSetSupportability,
     ComponentSeriesResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -982,6 +990,201 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "sustainability_preference_profile:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                        }
+                    )
+                ),
+            ),
+        )
+
+    async def get_client_tax_profile(
+        self,
+        portfolio_id: str,
+        request: ClientTaxProfileRequest,
+    ) -> ClientTaxProfileResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        rows = await self._reference_repository.list_client_tax_profiles(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            as_of_date=request.as_of_date,
+            mandate_id=binding.mandate_id,
+            include_inactive_profiles=request.include_inactive_profiles,
+        )
+        entries = [
+            ClientTaxProfileEntry(
+                tax_profile_id=row.tax_profile_id,
+                tax_residency_country=row.tax_residency_country,
+                booking_tax_jurisdiction=row.booking_tax_jurisdiction,
+                tax_status=row.tax_status,
+                profile_status=row.profile_status,
+                withholding_tax_rate=(
+                    self._as_decimal(row.withholding_tax_rate)
+                    if row.withholding_tax_rate is not None
+                    else None
+                ),
+                capital_gains_tax_applicable=bool(row.capital_gains_tax_applicable),
+                income_tax_applicable=bool(row.income_tax_applicable),
+                treaty_codes=self._string_list(row.treaty_codes),
+                eligible_account_types=self._string_list(row.eligible_account_types),
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
+                profile_version=int(row.profile_version),
+                source_record_id=row.source_record_id,
+            )
+            for row in rows
+        ]
+        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "CLIENT_TAX_PROFILE_READY"
+        missing_data_families: list[str] = []
+        if not rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "CLIENT_TAX_PROFILE_EMPTY"
+            missing_data_families.append("client_tax_profile")
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        return ClientTaxProfileResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            profiles=entries,
+            supportability=ClientTaxProfileSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                profile_count=len(entries),
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": "lotus-core-query-service",
+                "source_table": "client_tax_profiles,portfolio_mandate_bindings",
+                "contract_version": "rfc_042_client_tax_profile_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=("ACCEPTED" if rows else "MISSING"),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "ClientTaxProfile",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "row_count": len(rows),
+                    }
+                ),
+                snapshot_id=(
+                    "client_tax_profile:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                        }
+                    )
+                ),
+            ),
+        )
+
+    async def get_client_tax_rule_set(
+        self,
+        portfolio_id: str,
+        request: ClientTaxRuleSetRequest,
+    ) -> ClientTaxRuleSetResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        rows = await self._reference_repository.list_client_tax_rule_sets(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            as_of_date=request.as_of_date,
+            mandate_id=binding.mandate_id,
+            include_inactive_rules=request.include_inactive_rules,
+        )
+        entries = [
+            ClientTaxRuleSetEntry(
+                rule_set_id=row.rule_set_id,
+                tax_year=int(row.tax_year),
+                jurisdiction_code=row.jurisdiction_code,
+                rule_code=row.rule_code,
+                rule_category=row.rule_category,
+                rule_status=row.rule_status,
+                rule_source=row.rule_source,
+                applies_to_asset_classes=self._string_list(row.applies_to_asset_classes),
+                applies_to_security_ids=self._string_list(row.applies_to_security_ids),
+                applies_to_income_types=self._string_list(row.applies_to_income_types),
+                rate=self._as_decimal(row.rate) if row.rate is not None else None,
+                threshold_amount=(
+                    self._as_decimal(row.threshold_amount)
+                    if row.threshold_amount is not None
+                    else None
+                ),
+                threshold_currency=row.threshold_currency,
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
+                rule_version=int(row.rule_version),
+                source_record_id=row.source_record_id,
+            )
+            for row in rows
+        ]
+        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "CLIENT_TAX_RULE_SET_READY"
+        missing_data_families: list[str] = []
+        if not rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "CLIENT_TAX_RULE_SET_EMPTY"
+            missing_data_families.append("client_tax_rule_set")
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        return ClientTaxRuleSetResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            rules=entries,
+            supportability=ClientTaxRuleSetSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                rule_count=len(entries),
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": "lotus-core-query-service",
+                "source_table": "client_tax_rule_sets,portfolio_mandate_bindings",
+                "contract_version": "rfc_042_client_tax_rule_set_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=("ACCEPTED" if rows else "MISSING"),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "ClientTaxRuleSet",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "row_count": len(rows),
+                    }
+                ),
+                snapshot_id=(
+                    "client_tax_rule_set:"
                     + self._request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,

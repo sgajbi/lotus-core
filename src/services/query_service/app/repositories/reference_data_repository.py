@@ -11,6 +11,8 @@ from portfolio_common.database_models import (
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
     ClientRestrictionProfile,
+    ClientTaxProfile,
+    ClientTaxRuleSet,
     FxRate,
     IndexDefinition,
     IndexPriceSeries,
@@ -318,6 +320,92 @@ class ReferenceDataRepository:
             list(result.scalars().all()),
             "preference_framework",
             "preference_code",
+        )
+
+    async def list_client_tax_profiles(
+        self,
+        *,
+        portfolio_id: str,
+        client_id: str,
+        as_of_date: date,
+        mandate_id: str | None = None,
+        include_inactive_profiles: bool = False,
+    ) -> list[ClientTaxProfile]:
+        stmt = (
+            select(ClientTaxProfile)
+            .where(
+                ClientTaxProfile.portfolio_id == portfolio_id,
+                ClientTaxProfile.client_id == client_id,
+                _effective_filter(
+                    ClientTaxProfile.effective_from,
+                    ClientTaxProfile.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ClientTaxProfile.tax_profile_id.asc(),
+                ClientTaxProfile.effective_from.desc(),
+                ClientTaxProfile.observed_at.desc().nulls_last(),
+                ClientTaxProfile.profile_version.desc(),
+                ClientTaxProfile.updated_at.desc(),
+            )
+        )
+        if mandate_id:
+            stmt = stmt.where(
+                or_(
+                    ClientTaxProfile.mandate_id.is_(None), ClientTaxProfile.mandate_id == mandate_id
+                )
+            )
+        if not include_inactive_profiles:
+            stmt = stmt.where(ClientTaxProfile.profile_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(list(result.scalars().all()), "tax_profile_id")
+
+    async def list_client_tax_rule_sets(
+        self,
+        *,
+        portfolio_id: str,
+        client_id: str,
+        as_of_date: date,
+        mandate_id: str | None = None,
+        include_inactive_rules: bool = False,
+    ) -> list[ClientTaxRuleSet]:
+        stmt = (
+            select(ClientTaxRuleSet)
+            .where(
+                ClientTaxRuleSet.portfolio_id == portfolio_id,
+                ClientTaxRuleSet.client_id == client_id,
+                _effective_filter(
+                    ClientTaxRuleSet.effective_from,
+                    ClientTaxRuleSet.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                ClientTaxRuleSet.rule_set_id.asc(),
+                ClientTaxRuleSet.jurisdiction_code.asc(),
+                ClientTaxRuleSet.rule_code.asc(),
+                ClientTaxRuleSet.effective_from.desc(),
+                ClientTaxRuleSet.observed_at.desc().nulls_last(),
+                ClientTaxRuleSet.rule_version.desc(),
+                ClientTaxRuleSet.updated_at.desc(),
+            )
+        )
+        if mandate_id:
+            stmt = stmt.where(
+                or_(
+                    ClientTaxRuleSet.mandate_id.is_(None),
+                    ClientTaxRuleSet.mandate_id == mandate_id,
+                )
+            )
+        if not include_inactive_rules:
+            stmt = stmt.where(ClientTaxRuleSet.rule_status == "active")
+        result = await self._db.execute(stmt)
+        return _latest_effective_rows(
+            list(result.scalars().all()),
+            "rule_set_id",
+            "jurisdiction_code",
+            "rule_code",
         )
 
     async def list_instrument_eligibility_profiles(

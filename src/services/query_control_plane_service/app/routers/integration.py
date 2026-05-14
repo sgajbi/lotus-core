@@ -34,6 +34,10 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
+    ClientTaxProfileRequest,
+    ClientTaxProfileResponse,
+    ClientTaxRuleSetRequest,
+    ClientTaxRuleSetResponse,
     CoverageRequest,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -105,6 +109,12 @@ CLIENT_RESTRICTION_PROFILE_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 SUSTAINABILITY_PREFERENCE_PROFILE_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+CLIENT_TAX_PROFILE_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+CLIENT_TAX_RULE_SET_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = {
@@ -843,6 +853,101 @@ async def get_sustainability_preference_profile(
     response = cast(
         SustainabilityPreferenceProfileResponse | None,
         await integration_service.get_sustainability_preference_profile(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/client-tax-profile",
+    response_model=ClientTaxProfileResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            CLIENT_TAX_PROFILE_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective client tax profile",
+    description=(
+        "What: Return effective source-owned client tax profile records for a portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding first, then selects active "
+        "client tax profile records by portfolio, client, mandate, and as-of date with "
+        "deterministic version ordering.\n"
+        "When: Use this endpoint when lotus-manage needs bounded tax-reference evidence for "
+        "DPM governance. The response publishes source-owned reference fields only; it does "
+        "not provide tax advice, after-tax optimization, tax-loss harvesting suitability, or "
+        "jurisdiction-specific recommendations."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ClientTaxProfile"),
+)
+async def get_client_tax_profile(
+    request: ClientTaxProfileRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose client tax profile is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ClientTaxProfileResponse:
+    response = cast(
+        ClientTaxProfileResponse | None,
+        await integration_service.get_client_tax_profile(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/client-tax-rule-set",
+    response_model=ClientTaxRuleSetResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            CLIENT_TAX_RULE_SET_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective client tax rule set",
+    description=(
+        "What: Return effective source-owned client tax rule references for a portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding first, then selects active "
+        "client tax rule-set records by portfolio, client, mandate, jurisdiction, rule code, "
+        "and as-of date with deterministic version ordering.\n"
+        "When: Use this endpoint when lotus-manage needs bounded tax-rule reference evidence "
+        "for DPM governance. The response does not approve client tax outcomes, recommend "
+        "tax-loss harvesting, or replace bank-owned tax systems."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ClientTaxRuleSet"),
+)
+async def get_client_tax_rule_set(
+    request: ClientTaxRuleSetRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose client tax rule set is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ClientTaxRuleSetResponse:
+    response = cast(
+        ClientTaxRuleSetResponse | None,
+        await integration_service.get_client_tax_rule_set(
             portfolio_id=portfolio_id,
             request=request,
         ),

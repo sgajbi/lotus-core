@@ -18,6 +18,8 @@ from src.services.query_control_plane_service.app.routers.integration import (
     fetch_risk_free_series,
     get_benchmark_coverage,
     get_client_restriction_profile,
+    get_client_tax_profile,
+    get_client_tax_rule_set,
     get_core_snapshot_service,
     get_dpm_source_readiness,
     get_effective_integration_policy,
@@ -55,6 +57,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortRequest,
     ClassificationTaxonomyRequest,
     ClientRestrictionProfileRequest,
+    ClientTaxProfileRequest,
+    ClientTaxRuleSetRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
@@ -1289,6 +1293,78 @@ async def test_get_sustainability_preference_profile_router_function() -> None:
 
     assert response["product_name"] == "SustainabilityPreferenceProfile"
     mock_service.get_sustainability_preference_profile.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_client_tax_profile_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_client_tax_profile = AsyncMock(
+        return_value={
+            "product_name": "ClientTaxProfile",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "profiles": [],
+            "supportability": {
+                "state": "INCOMPLETE",
+                "reason": "CLIENT_TAX_PROFILE_EMPTY",
+                "profile_count": 0,
+                "missing_data_families": ["client_tax_profile"],
+            },
+            "lineage": {"contract_version": "rfc_042_client_tax_profile_v1"},
+        }
+    )
+    request = ClientTaxProfileRequest(as_of_date="2026-05-03", tenant_id="default")
+
+    response = await get_client_tax_profile(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "ClientTaxProfile"
+    mock_service.get_client_tax_profile.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_client_tax_rule_set_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_client_tax_rule_set = AsyncMock(
+        return_value={
+            "product_name": "ClientTaxRuleSet",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "rules": [],
+            "supportability": {
+                "state": "INCOMPLETE",
+                "reason": "CLIENT_TAX_RULE_SET_EMPTY",
+                "rule_count": 0,
+                "missing_data_families": ["client_tax_rule_set"],
+            },
+            "lineage": {"contract_version": "rfc_042_client_tax_rule_set_v1"},
+        }
+    )
+    request = ClientTaxRuleSetRequest(as_of_date="2026-05-03", tenant_id="default")
+
+    response = await get_client_tax_rule_set(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "ClientTaxRuleSet"
+    mock_service.get_client_tax_rule_set.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
     )

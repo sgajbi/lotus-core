@@ -405,6 +405,89 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `client_tax_profiles`
+
+- **Purpose**: Effective-dated client and mandate tax-reference profile source records for DPM
+  evidence.
+- **Description**: Stores the source records behind `ClientTaxProfile:v1`, including tax
+  residency, booking tax jurisdiction, bounded tax status, source-supplied withholding rate,
+  lifecycle status, tax-applicability flags, treaty codes, eligible account types, version, lineage, and quality
+  status. The table is source-reference evidence only and does not provide tax advice,
+  after-tax optimization, tax-loss harvesting suitability, client-tax approval, or
+  jurisdiction-specific recommendations.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
+  as-of date; active profiles are returned by default and deterministic latest-version
+  selection is applied by tax profile id.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Optional discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the tax profile.
+  - `tax_profile_id` (String): Source-owned tax profile identifier.
+  - `tax_residency_country` (String): Client tax-residency country.
+  - `booking_tax_jurisdiction` (String): Booking-center tax jurisdiction.
+  - `tax_status` (String): Bounded tax status from the source system.
+  - `profile_status` (String): Tax profile lifecycle status.
+  - `withholding_tax_rate` (Numeric): Source-supplied withholding rate ratio, when applicable.
+  - `capital_gains_tax_applicable` (Boolean): Source flag for capital-gains tax applicability.
+  - `income_tax_applicable` (Boolean): Source flag for income-tax applicability.
+  - `treaty_codes` (JSON): Treaty codes supplied by the source system.
+  - `eligible_account_types` (JSON): Eligible account type codes supplied by the source system.
+  - `effective_from` (Date): Tax profile effective start date.
+  - `effective_to` (Date): Optional tax profile effective end date.
+  - `profile_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream tax-reference source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the record.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `client_tax_rule_sets`
+
+- **Purpose**: Effective-dated client and mandate tax-rule reference source records for DPM
+  evidence.
+- **Description**: Stores the source records behind `ClientTaxRuleSet:v1`, including tax year,
+  jurisdiction, rule code/category/status/source, applicability lists, source-supplied rates and
+  thresholds, version, lineage, and quality status. The table is source-reference evidence only and
+  does not provide tax advice, tax-loss harvesting suitability, after-tax optimization,
+  client-tax approval, jurisdiction-specific recommendations, tax-reporting certification, best
+  execution, or OMS acknowledgement.
+- **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
+  as-of date; active rules are returned by default and deterministic latest-version selection is
+  applied by rule set id, jurisdiction, and rule code.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key for internal row identity.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `mandate_id` (String): Optional discretionary mandate identifier.
+  - `client_id` (String): Canonical client identifier bound to the tax rule set.
+  - `rule_set_id` (String): Source-owned tax rule-set identifier.
+  - `tax_year` (Integer): Tax year for the source rule.
+  - `jurisdiction_code` (String): Tax jurisdiction code.
+  - `rule_code` (String): Machine-readable tax rule code.
+  - `rule_category` (String): Bounded tax rule category.
+  - `rule_status` (String): Rule lifecycle status.
+  - `rule_source` (String): Upstream source channel or authority.
+  - `applies_to_asset_classes` (JSON): Asset classes in rule scope.
+  - `applies_to_security_ids` (JSON): Security identifiers in rule scope.
+  - `applies_to_income_types` (JSON): Income types in rule scope.
+  - `rate` (Numeric): Source-supplied rate ratio, when applicable.
+  - `threshold_amount` (Numeric): Source-supplied threshold amount, when applicable.
+  - `threshold_currency` (String): Currency for `threshold_amount`, when applicable.
+  - `effective_from` (Date): Rule effective start date.
+  - `effective_to` (Date): Optional rule effective end date.
+  - `rule_version` (Integer): Version used for deterministic tie-breaks.
+  - `source_system` (String): Upstream tax-rule source system.
+  - `source_record_id` (String): Source record identifier.
+  - `observed_at` (DateTime): Timestamp when the upstream source observed or published the record.
+  - `quality_status` (String): Data quality status.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `model_portfolio_targets`
 
 - **Purpose**: Effective-dated target weights and policy bands for discretionary model portfolios.

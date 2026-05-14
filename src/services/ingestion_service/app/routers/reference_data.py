@@ -12,6 +12,8 @@ from ..DTOs.reference_data_dto import (
     CashAccountMasterIngestionRequest,
     ClassificationTaxonomyIngestionRequest,
     ClientRestrictionProfileIngestionRequest,
+    ClientTaxProfileIngestionRequest,
+    ClientTaxRuleSetIngestionRequest,
     DiscretionaryMandateBindingIngestionRequest,
     IndexDefinitionIngestionRequest,
     IndexPriceSeriesIngestionRequest,
@@ -415,6 +417,81 @@ async def ingest_sustainability_preference_profiles(
         request_payload=request.model_dump(mode="json"),
         persist_fn=lambda: reference_data_service.upsert_sustainability_preference_profiles(
             [item.model_dump() for item in request.sustainability_preferences]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/client-tax-profiles",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest client tax profiles",
+    description=(
+        "What: Accept effective-dated source-owned client tax profile records for DPM evidence.\n"
+        "How: Validate bounded tax-status, jurisdiction, rate, treaty, source lineage, "
+        "effective dates, and quality fields, then upsert durable tax profile records.\n"
+        "When: Use when bank tax, client master, or mandate systems publish tax-reference "
+        "facts needed by lotus-manage. This endpoint stores reference evidence only and does "
+        "not publish tax advice or after-tax optimization decisions."
+    ),
+)
+async def ingest_client_tax_profiles(
+    request: ClientTaxProfileIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/client-tax-profiles",
+        entity_type="client_tax_profile",
+        accepted_count=len(request.tax_profiles),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_client_tax_profiles(
+            [item.model_dump() for item in request.tax_profiles]
+        ),
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+@router.post(
+    "/ingest/client-tax-rule-sets",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest client tax rule sets",
+    description=(
+        "What: Accept effective-dated source-owned client tax rule references for DPM evidence.\n"
+        "How: Validate bounded rule category, jurisdiction, applicability, thresholds, rates, "
+        "source lineage, effective dates, and quality fields, then upsert durable rule-set "
+        "records.\n"
+        "When: Use when bank tax or rules systems publish governed tax-reference facts needed "
+        "by lotus-manage. This endpoint stores reference evidence only and does not approve "
+        "client tax outcomes, tax-loss harvesting, or jurisdiction-specific recommendations."
+    ),
+)
+async def ingest_client_tax_rule_sets(
+    request: ClientTaxRuleSetIngestionRequest,
+    http_request: Request,
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        endpoint="/ingest/client-tax-rule-sets",
+        entity_type="client_tax_rule_set",
+        accepted_count=len(request.tax_rule_sets),
+        request_payload=request.model_dump(mode="json"),
+        persist_fn=lambda: reference_data_service.upsert_client_tax_rule_sets(
+            [item.model_dump() for item in request.tax_rule_sets]
         ),
         ingestion_job_service=ingestion_job_service,
     )

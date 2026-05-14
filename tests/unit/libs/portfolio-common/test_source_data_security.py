@@ -66,6 +66,12 @@ def test_client_source_products_classify_sensitive_identifiers() -> None:
     sustainability_profile = get_source_data_security_profile("SustainabilityPreferenceProfile")
     assert sustainability_profile.sensitivity_classification == CLIENT_SENSITIVE
     assert {"portfolio_id", "mandate_id", "client_id"} <= set(sustainability_profile.pii_fields)
+    tax_profile = get_source_data_security_profile("ClientTaxProfile")
+    assert tax_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert {"portfolio_id", "mandate_id", "client_id"} <= set(tax_profile.pii_fields)
+    tax_rule_profile = get_source_data_security_profile("ClientTaxRuleSet")
+    assert tax_rule_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert {"portfolio_id", "mandate_id", "client_id"} <= set(tax_rule_profile.pii_fields)
 
 
 def test_operator_evidence_products_require_operator_access_and_operational_retention() -> None:
@@ -102,6 +108,8 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "CioModelChangeAffectedCohort",
         "ClientRestrictionProfile",
         "SustainabilityPreferenceProfile",
+        "ClientTaxProfile",
+        "ClientTaxRuleSet",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):

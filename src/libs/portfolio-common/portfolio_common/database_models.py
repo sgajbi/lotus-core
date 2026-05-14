@@ -420,6 +420,107 @@ class SustainabilityPreferenceProfile(Base):
     )
 
 
+class ClientTaxProfile(Base):
+    __tablename__ = "client_tax_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=True, index=True)
+    tax_profile_id = Column(String, nullable=False, index=True)
+    tax_residency_country = Column(String, nullable=False, index=True)
+    booking_tax_jurisdiction = Column(String, nullable=False, index=True)
+    tax_status = Column(String, nullable=False, index=True)
+    profile_status = Column(String, nullable=False, server_default="active", index=True)
+    withholding_tax_rate = Column(Numeric(18, 10), nullable=True)
+    capital_gains_tax_applicable = Column(Boolean, nullable=False, server_default="false")
+    income_tax_applicable = Column(Boolean, nullable=False, server_default="false")
+    treaty_codes = Column(JSON, nullable=False, server_default="[]")
+    eligible_account_types = Column(JSON, nullable=False, server_default="[]")
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    profile_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "portfolio_id",
+            "tax_profile_id",
+            "effective_from",
+            "profile_version",
+            name="_client_tax_profile_effective_uc",
+        ),
+        Index(
+            "ix_client_tax_profile_effective_window",
+            "portfolio_id",
+            "client_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class ClientTaxRuleSet(Base):
+    __tablename__ = "client_tax_rule_sets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, nullable=False, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False, index=True)
+    mandate_id = Column(String, nullable=True, index=True)
+    rule_set_id = Column(String, nullable=False, index=True)
+    tax_year = Column(Integer, nullable=False, index=True)
+    jurisdiction_code = Column(String, nullable=False, index=True)
+    rule_code = Column(String, nullable=False, index=True)
+    rule_category = Column(String, nullable=False, index=True)
+    rule_status = Column(String, nullable=False, index=True)
+    rule_source = Column(String, nullable=False)
+    applies_to_asset_classes = Column(JSON, nullable=False, server_default="[]")
+    applies_to_security_ids = Column(JSON, nullable=False, server_default="[]")
+    applies_to_income_types = Column(JSON, nullable=False, server_default="[]")
+    rate = Column(Numeric(18, 10), nullable=True)
+    threshold_amount = Column(Numeric(18, 4), nullable=True)
+    threshold_currency = Column(String, nullable=True)
+    effective_from = Column(Date, nullable=False, index=True)
+    effective_to = Column(Date, nullable=True, index=True)
+    rule_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=True)
+    source_record_id = Column(String, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=True)
+    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "portfolio_id",
+            "rule_set_id",
+            "jurisdiction_code",
+            "rule_code",
+            "effective_from",
+            "rule_version",
+            name="_client_tax_rule_set_effective_uc",
+        ),
+        Index(
+            "ix_client_tax_rule_set_effective_window",
+            "portfolio_id",
+            "client_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class InstrumentEligibilityProfile(Base):
     __tablename__ = "instrument_eligibility_profiles"
 
