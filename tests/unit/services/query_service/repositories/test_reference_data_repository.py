@@ -339,6 +339,72 @@ async def test_reference_data_repository_lists_latest_sustainability_preferences
 
 
 @pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_client_tax_profiles() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(tax_profile_id="TAX_PROFILE_SG_001", profile_version=2),
+            SimpleNamespace(tax_profile_id="TAX_PROFILE_SG_001", profile_version=1),
+            SimpleNamespace(tax_profile_id="TAX_PROFILE_US_001", profile_version=1),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_client_tax_profiles(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 5, 3),
+    )
+
+    assert [row.tax_profile_id for row in rows] == [
+        "TAX_PROFILE_SG_001",
+        "TAX_PROFILE_US_001",
+    ]
+    assert rows[0].profile_version == 2
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_lists_latest_client_tax_rule_sets() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                rule_set_id="TAX_RULES_SG_2026",
+                jurisdiction_code="SG",
+                rule_code="US_DIVIDEND_WITHHOLDING",
+                rule_version=2,
+            ),
+            SimpleNamespace(
+                rule_set_id="TAX_RULES_SG_2026",
+                jurisdiction_code="SG",
+                rule_code="US_DIVIDEND_WITHHOLDING",
+                rule_version=1,
+            ),
+            SimpleNamespace(
+                rule_set_id="TAX_RULES_SG_2026",
+                jurisdiction_code="SG",
+                rule_code="SG_REPORTING",
+                rule_version=1,
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_client_tax_rule_sets(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        client_id="CIF_SG_000184",
+        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+        as_of_date=date(2026, 5, 3),
+    )
+
+    assert [row.rule_code for row in rows] == ["SG_REPORTING", "US_DIVIDEND_WITHHOLDING"]
+    assert rows[1].rule_version == 2
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_list_instrument_eligibility_profiles_returns_latest_effective_rows() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
