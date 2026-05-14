@@ -425,6 +425,53 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="ClientIncomeNeedsSchedule",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/client-income-needs-schedule",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for bounded income-needs schedule evidence. It does not "
+            "provide financial-planning advice, suitability approval, or funding "
+            "recommendations."
+        ),
+    ),
+    SourceDataProductDefinition(
+        product_name="LiquidityReserveRequirement",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/liquidity-reserve-requirement",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for bounded liquidity-reserve requirement evidence. It "
+            "does not approve reserve recommendations or replace treasury policy systems."
+        ),
+    ),
+    SourceDataProductDefinition(
+        product_name="PlannedWithdrawalSchedule",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/planned-withdrawal-schedule",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for bounded planned-withdrawal evidence. It is not a "
+            "cashflow forecast, funding recommendation, suitability approval, or OMS "
+            "acknowledgement."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,

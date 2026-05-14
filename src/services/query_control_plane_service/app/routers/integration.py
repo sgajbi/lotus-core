@@ -32,6 +32,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortResponse,
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
+    ClientIncomeNeedsScheduleRequest,
+    ClientIncomeNeedsScheduleResponse,
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
     ClientTaxProfileRequest,
@@ -51,10 +53,14 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
+    LiquidityReserveRequirementRequest,
+    LiquidityReserveRequirementResponse,
     MarketDataCoverageRequest,
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
+    PlannedWithdrawalScheduleRequest,
+    PlannedWithdrawalScheduleResponse,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
     PortfolioTaxLotWindowRequest,
@@ -115,6 +121,15 @@ CLIENT_TAX_PROFILE_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 CLIENT_TAX_RULE_SET_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+CLIENT_INCOME_NEEDS_SCHEDULE_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+LIQUIDITY_RESERVE_REQUIREMENT_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+PLANNED_WITHDRAWAL_SCHEDULE_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = {
@@ -948,6 +963,152 @@ async def get_client_tax_rule_set(
     response = cast(
         ClientTaxRuleSetResponse | None,
         await integration_service.get_client_tax_rule_set(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/client-income-needs-schedule",
+    response_model=ClientIncomeNeedsScheduleResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            CLIENT_INCOME_NEEDS_SCHEDULE_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective client income-needs schedule",
+    description=(
+        "What: Return effective source-owned client income-needs schedule records for a "
+        "portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding first, then selects active "
+        "income-needs records by portfolio, client, mandate, and as-of date with deterministic "
+        "version ordering.\n"
+        "When: Use this endpoint when lotus-manage needs bounded cashflow-needs evidence for "
+        "DPM construction and monitoring. The response publishes source-owned reference fields "
+        "only; it does not provide financial-planning advice, client liability planning, "
+        "suitability approval, or funding recommendations."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ClientIncomeNeedsSchedule"),
+)
+async def get_client_income_needs_schedule(
+    request: ClientIncomeNeedsScheduleRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose client income-needs schedule is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ClientIncomeNeedsScheduleResponse:
+    response = cast(
+        ClientIncomeNeedsScheduleResponse | None,
+        await integration_service.get_client_income_needs_schedule(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/liquidity-reserve-requirement",
+    response_model=LiquidityReserveRequirementResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            LIQUIDITY_RESERVE_REQUIREMENT_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve effective liquidity reserve requirements",
+    description=(
+        "What: Return effective source-owned liquidity reserve requirement records for a "
+        "portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding first, then selects active "
+        "reserve requirements by portfolio, client, mandate, and as-of date with deterministic "
+        "version ordering.\n"
+        "When: Use this endpoint when lotus-manage needs bounded liquidity-reserve evidence "
+        "for DPM construction and supportability checks. The response does not approve a cash "
+        "reserve recommendation, provide financial-planning advice, approve suitability, or "
+        "replace bank-owned treasury and liquidity policy systems."
+    ),
+    openapi_extra=source_data_product_openapi_extra("LiquidityReserveRequirement"),
+)
+async def get_liquidity_reserve_requirement(
+    request: LiquidityReserveRequirementRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose liquidity reserve requirement is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> LiquidityReserveRequirementResponse:
+    response = cast(
+        LiquidityReserveRequirementResponse | None,
+        await integration_service.get_liquidity_reserve_requirement(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/planned-withdrawal-schedule",
+    response_model=PlannedWithdrawalScheduleResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            PLANNED_WITHDRAWAL_SCHEDULE_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve planned withdrawal schedules",
+    description=(
+        "What: Return source-owned planned withdrawal records for a portfolio over a requested "
+        "forward horizon.\n"
+        "How: Resolves the effective discretionary mandate binding first, then selects active "
+        "withdrawal records by portfolio, client, mandate, and scheduled date with "
+        "deterministic ordering.\n"
+        "When: Use this endpoint when lotus-manage needs bounded planned-withdrawal evidence "
+        "for DPM liquidity checks. The response is not a cashflow forecast, financial-planning "
+        "advice, suitability approval, funding recommendation, or OMS acknowledgement."
+    ),
+    openapi_extra=source_data_product_openapi_extra("PlannedWithdrawalSchedule"),
+)
+async def get_planned_withdrawal_schedule(
+    request: PlannedWithdrawalScheduleRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose planned withdrawal schedule is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> PlannedWithdrawalScheduleResponse:
+    response = cast(
+        PlannedWithdrawalScheduleResponse | None,
+        await integration_service.get_planned_withdrawal_schedule(
             portfolio_id=portfolio_id,
             request=request,
         ),

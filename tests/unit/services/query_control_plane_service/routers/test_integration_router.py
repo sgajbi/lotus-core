@@ -17,6 +17,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     fetch_index_return_series,
     fetch_risk_free_series,
     get_benchmark_coverage,
+    get_client_income_needs_schedule,
     get_client_restriction_profile,
     get_client_tax_profile,
     get_client_tax_rule_set,
@@ -25,7 +26,9 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_effective_integration_policy,
     get_instrument_enrichment_bulk,
     get_integration_service,
+    get_liquidity_reserve_requirement,
     get_market_data_coverage,
+    get_planned_withdrawal_schedule,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
     get_sustainability_preference_profile,
@@ -56,6 +59,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     CioModelChangeAffectedCohortRequest,
     ClassificationTaxonomyRequest,
+    ClientIncomeNeedsScheduleRequest,
     ClientRestrictionProfileRequest,
     ClientTaxProfileRequest,
     ClientTaxRuleSetRequest,
@@ -66,8 +70,10 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     IntegrationWindow,
+    LiquidityReserveRequirementRequest,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
+    PlannedWithdrawalScheduleRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
@@ -1368,6 +1374,163 @@ async def test_get_client_tax_rule_set_router_function() -> None:
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
     )
+
+
+@pytest.mark.asyncio
+async def test_get_client_income_needs_schedule_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_client_income_needs_schedule = AsyncMock(
+        return_value={
+            "product_name": "ClientIncomeNeedsSchedule",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "schedules": [],
+            "supportability": {
+                "state": "INCOMPLETE",
+                "reason": "CLIENT_INCOME_NEEDS_SCHEDULE_EMPTY",
+                "schedule_count": 0,
+                "missing_data_families": ["client_income_needs_schedule"],
+            },
+            "lineage": {"contract_version": "rfc_042_client_income_needs_schedule_v1"},
+        }
+    )
+    request = ClientIncomeNeedsScheduleRequest(as_of_date="2026-05-03", tenant_id="default")
+
+    response = await get_client_income_needs_schedule(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "ClientIncomeNeedsSchedule"
+    mock_service.get_client_income_needs_schedule.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_liquidity_reserve_requirement_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_liquidity_reserve_requirement = AsyncMock(
+        return_value={
+            "product_name": "LiquidityReserveRequirement",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "requirements": [],
+            "supportability": {
+                "state": "INCOMPLETE",
+                "reason": "LIQUIDITY_RESERVE_REQUIREMENT_EMPTY",
+                "requirement_count": 0,
+                "missing_data_families": ["liquidity_reserve_requirement"],
+            },
+            "lineage": {"contract_version": "rfc_042_liquidity_reserve_requirement_v1"},
+        }
+    )
+    request = LiquidityReserveRequirementRequest(as_of_date="2026-05-03", tenant_id="default")
+
+    response = await get_liquidity_reserve_requirement(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "LiquidityReserveRequirement"
+    mock_service.get_liquidity_reserve_requirement.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_planned_withdrawal_schedule_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_planned_withdrawal_schedule = AsyncMock(
+        return_value={
+            "product_name": "PlannedWithdrawalSchedule",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "horizon_days": 365,
+            "withdrawals": [],
+            "supportability": {
+                "state": "INCOMPLETE",
+                "reason": "PLANNED_WITHDRAWAL_SCHEDULE_EMPTY",
+                "withdrawal_count": 0,
+                "missing_data_families": ["planned_withdrawal_schedule"],
+            },
+            "lineage": {"contract_version": "rfc_042_planned_withdrawal_schedule_v1"},
+        }
+    )
+    request = PlannedWithdrawalScheduleRequest(as_of_date="2026-05-03", tenant_id="default")
+
+    response = await get_planned_withdrawal_schedule(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "PlannedWithdrawalSchedule"
+    mock_service.get_planned_withdrawal_schedule.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_client_income_needs_schedule_router_raises_404_without_binding() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_client_income_needs_schedule = AsyncMock(return_value=None)
+    request = ClientIncomeNeedsScheduleRequest(as_of_date="2026-05-03")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_client_income_needs_schedule(
+            portfolio_id="PB_MISSING",
+            request=request,
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_liquidity_reserve_requirement_router_raises_404_without_binding() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_liquidity_reserve_requirement = AsyncMock(return_value=None)
+    request = LiquidityReserveRequirementRequest(as_of_date="2026-05-03")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_liquidity_reserve_requirement(
+            portfolio_id="PB_MISSING",
+            request=request,
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_planned_withdrawal_schedule_router_raises_404_without_binding() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_planned_withdrawal_schedule = AsyncMock(return_value=None)
+    request = PlannedWithdrawalScheduleRequest(as_of_date="2026-05-03")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_planned_withdrawal_schedule(
+            portfolio_id="PB_MISSING",
+            request=request,
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio

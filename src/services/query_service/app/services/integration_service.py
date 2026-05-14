@@ -34,6 +34,10 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
     ClassificationTaxonomyResponse,
+    ClientIncomeNeedsScheduleEntry,
+    ClientIncomeNeedsScheduleRequest,
+    ClientIncomeNeedsScheduleResponse,
+    ClientIncomeNeedsScheduleSupportability,
     ClientRestrictionProfileEntry,
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
@@ -68,6 +72,10 @@ from ..dtos.reference_integration_dto import (
     InstrumentEligibilityRecord,
     InstrumentEligibilitySupportability,
     IntegrationWindow,
+    LiquidityReserveRequirementEntry,
+    LiquidityReserveRequirementRequest,
+    LiquidityReserveRequirementResponse,
+    LiquidityReserveRequirementSupportability,
     MarketDataCoverageRequest,
     MarketDataCoverageSupportability,
     MarketDataCoverageWindowResponse,
@@ -77,6 +85,10 @@ from ..dtos.reference_integration_dto import (
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
     ModelPortfolioTargetRow,
+    PlannedWithdrawalScheduleEntry,
+    PlannedWithdrawalScheduleRequest,
+    PlannedWithdrawalScheduleResponse,
+    PlannedWithdrawalScheduleSupportability,
     PortfolioManagerBookMember,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
@@ -1190,6 +1202,276 @@ class IntegrationService:
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
                             "as_of_date": request.as_of_date.isoformat(),
+                        }
+                    )
+                ),
+            ),
+        )
+
+    async def get_client_income_needs_schedule(
+        self,
+        portfolio_id: str,
+        request: ClientIncomeNeedsScheduleRequest,
+    ) -> ClientIncomeNeedsScheduleResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        rows = await self._reference_repository.list_client_income_needs_schedules(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            as_of_date=request.as_of_date,
+            mandate_id=binding.mandate_id,
+            include_inactive_schedules=request.include_inactive_schedules,
+        )
+        entries = [
+            ClientIncomeNeedsScheduleEntry(
+                schedule_id=row.schedule_id,
+                need_type=row.need_type,
+                need_status=row.need_status,
+                amount=self._as_decimal(row.amount),
+                currency=row.currency,
+                frequency=row.frequency,
+                start_date=row.start_date,
+                end_date=row.end_date,
+                priority=int(row.priority),
+                funding_policy=row.funding_policy,
+                source_record_id=row.source_record_id,
+            )
+            for row in rows
+        ]
+        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "CLIENT_INCOME_NEEDS_SCHEDULE_READY"
+        missing_data_families: list[str] = []
+        if not rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "CLIENT_INCOME_NEEDS_SCHEDULE_EMPTY"
+            missing_data_families.append("client_income_needs_schedule")
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        return ClientIncomeNeedsScheduleResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            schedules=entries,
+            supportability=ClientIncomeNeedsScheduleSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                schedule_count=len(entries),
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": "lotus-core-query-service",
+                "source_table": "client_income_needs_schedules,portfolio_mandate_bindings",
+                "contract_version": "rfc_042_client_income_needs_schedule_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=("ACCEPTED" if rows else "MISSING"),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "ClientIncomeNeedsSchedule",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "row_count": len(rows),
+                    }
+                ),
+                snapshot_id=(
+                    "client_income_needs_schedule:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                        }
+                    )
+                ),
+            ),
+        )
+
+    async def get_liquidity_reserve_requirement(
+        self,
+        portfolio_id: str,
+        request: LiquidityReserveRequirementRequest,
+    ) -> LiquidityReserveRequirementResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        rows = await self._reference_repository.list_liquidity_reserve_requirements(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            as_of_date=request.as_of_date,
+            mandate_id=binding.mandate_id,
+            include_inactive_requirements=request.include_inactive_requirements,
+        )
+        entries = [
+            LiquidityReserveRequirementEntry(
+                reserve_requirement_id=row.reserve_requirement_id,
+                reserve_type=row.reserve_type,
+                reserve_status=row.reserve_status,
+                required_amount=self._as_decimal(row.required_amount),
+                currency=row.currency,
+                horizon_days=int(row.horizon_days),
+                priority=int(row.priority),
+                policy_source=row.policy_source,
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
+                requirement_version=int(row.requirement_version),
+                source_record_id=row.source_record_id,
+            )
+            for row in rows
+        ]
+        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "LIQUIDITY_RESERVE_REQUIREMENT_READY"
+        missing_data_families: list[str] = []
+        if not rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "LIQUIDITY_RESERVE_REQUIREMENT_EMPTY"
+            missing_data_families.append("liquidity_reserve_requirement")
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        return LiquidityReserveRequirementResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            requirements=entries,
+            supportability=LiquidityReserveRequirementSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                requirement_count=len(entries),
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": "lotus-core-query-service",
+                "source_table": "liquidity_reserve_requirements,portfolio_mandate_bindings",
+                "contract_version": "rfc_042_liquidity_reserve_requirement_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=("ACCEPTED" if rows else "MISSING"),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "LiquidityReserveRequirement",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "row_count": len(rows),
+                    }
+                ),
+                snapshot_id=(
+                    "liquidity_reserve_requirement:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                        }
+                    )
+                ),
+            ),
+        )
+
+    async def get_planned_withdrawal_schedule(
+        self,
+        portfolio_id: str,
+        request: PlannedWithdrawalScheduleRequest,
+    ) -> PlannedWithdrawalScheduleResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        rows = await self._reference_repository.list_planned_withdrawal_schedules(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            as_of_date=request.as_of_date,
+            horizon_days=request.horizon_days,
+            mandate_id=binding.mandate_id,
+            include_inactive_withdrawals=request.include_inactive_withdrawals,
+        )
+        entries = [
+            PlannedWithdrawalScheduleEntry(
+                withdrawal_schedule_id=row.withdrawal_schedule_id,
+                withdrawal_type=row.withdrawal_type,
+                withdrawal_status=row.withdrawal_status,
+                amount=self._as_decimal(row.amount),
+                currency=row.currency,
+                scheduled_date=row.scheduled_date,
+                recurrence_frequency=row.recurrence_frequency,
+                purpose_code=row.purpose_code,
+                source_record_id=row.source_record_id,
+            )
+            for row in rows
+        ]
+        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
+        supportability_reason = "PLANNED_WITHDRAWAL_SCHEDULE_READY"
+        missing_data_families: list[str] = []
+        if not rows:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "PLANNED_WITHDRAWAL_SCHEDULE_EMPTY"
+            missing_data_families.append("planned_withdrawal_schedule")
+
+        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        return PlannedWithdrawalScheduleResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            horizon_days=request.horizon_days,
+            withdrawals=entries,
+            supportability=PlannedWithdrawalScheduleSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                withdrawal_count=len(entries),
+                missing_data_families=missing_data_families,
+            ),
+            lineage={
+                "source_system": "lotus-core-query-service",
+                "source_table": "planned_withdrawal_schedules,portfolio_mandate_bindings",
+                "contract_version": "rfc_042_planned_withdrawal_schedule_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=("ACCEPTED" if rows else "MISSING"),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "PlannedWithdrawalSchedule",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "horizon_days": request.horizon_days,
+                        "row_count": len(rows),
+                    }
+                ),
+                snapshot_id=(
+                    "planned_withdrawal_schedule:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                            "horizon_days": request.horizon_days,
                         }
                     )
                 ),

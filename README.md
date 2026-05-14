@@ -68,7 +68,11 @@ Boundary rules that matter:
    RFC42-WTBD-006 extends the tax-reference boundary with `ClientTaxProfile:v1` and
    `ClientTaxRuleSet:v1` so downstream consumers can carry source-owned tax evidence without
    claiming tax advice, after-tax optimization, tax-loss harvesting, client-tax approval, or
-   jurisdiction-specific recommendations.
+   jurisdiction-specific recommendations. The same source-owner slice now adds
+   `ClientIncomeNeedsSchedule:v1`, `LiquidityReserveRequirement:v1`, and
+   `PlannedWithdrawalSchedule:v1` so downstream DPM workflows can carry bounded income, reserve,
+   and withdrawal evidence without claiming financial-planning advice, suitability approval,
+   funding recommendations, cashflow forecasting, treasury instructions, or OMS acknowledgement.
 7. `TransactionLedgerWindow:v1` preserves explicit row-level realized FX P&L evidence and can
    restate book-currency and trade/local-currency fields into a requested reporting currency with
    field-aware source-currency selection, without promoting portfolio-level FX attribution.

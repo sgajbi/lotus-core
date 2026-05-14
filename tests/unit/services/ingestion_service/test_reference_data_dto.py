@@ -4,6 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from src.services.ingestion_service.app.DTOs.reference_data_dto import (
+    ClientIncomeNeedsScheduleIngestionRequest,
+    ClientIncomeNeedsScheduleRecord,
     ClientRestrictionProfileIngestionRequest,
     ClientRestrictionProfileRecord,
     ClientTaxProfileIngestionRequest,
@@ -14,8 +16,12 @@ from src.services.ingestion_service.app.DTOs.reference_data_dto import (
     DiscretionaryMandateBindingRecord,
     InstrumentEligibilityProfileIngestionRequest,
     InstrumentEligibilityProfileRecord,
+    LiquidityReserveRequirementIngestionRequest,
+    LiquidityReserveRequirementRecord,
     ModelPortfolioTargetIngestionRequest,
     ModelPortfolioTargetRecord,
+    PlannedWithdrawalScheduleIngestionRequest,
+    PlannedWithdrawalScheduleRecord,
     SustainabilityPreferenceProfileIngestionRequest,
     SustainabilityPreferenceProfileRecord,
 )
@@ -160,6 +166,62 @@ def _tax_rule_set(**overrides: object) -> dict[str, object]:
         "applies_to_income_types": ["DIVIDEND"],
         "rate": "0.1500000000",
         "effective_from": "2026-04-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _income_needs_schedule(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "client_id": "CIF_SG_000184",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "schedule_id": "INCOME_NEED_MONTHLY_001",
+        "need_type": "LIVING_EXPENSE",
+        "need_status": "active",
+        "amount": "25000.0000",
+        "currency": "SGD",
+        "frequency": "MONTHLY",
+        "start_date": "2026-04-01",
+        "priority": 1,
+        "funding_policy": "POLICY_DPM_SG_BALANCED_V1",
+    }
+    record.update(overrides)
+    return record
+
+
+def _liquidity_reserve_requirement(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "client_id": "CIF_SG_000184",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "reserve_requirement_id": "RESERVE_MIN_CASH_001",
+        "reserve_type": "MIN_CASH_BUFFER",
+        "reserve_status": "active",
+        "required_amount": "150000.0000",
+        "currency": "SGD",
+        "horizon_days": 90,
+        "priority": 1,
+        "policy_source": "POLICY_DPM_SG_BALANCED_V1",
+        "effective_from": "2026-04-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _planned_withdrawal_schedule(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "client_id": "CIF_SG_000184",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "withdrawal_schedule_id": "WITHDRAWAL_Q3_001",
+        "withdrawal_type": "PLANNED_WITHDRAWAL",
+        "withdrawal_status": "active",
+        "amount": "50000.0000",
+        "currency": "SGD",
+        "scheduled_date": "2026-07-15",
+        "recurrence_frequency": "QUARTERLY",
+        "purpose_code": "CLIENT_SPENDING",
     }
     record.update(overrides)
     return record
@@ -348,3 +410,53 @@ def test_client_tax_rule_set_ingestion_rejects_duplicate_effective_rules() -> No
         ClientTaxRuleSetIngestionRequest.model_validate(
             {"tax_rule_sets": [duplicate, dict(duplicate)]}
         )
+
+
+def test_client_income_needs_schedule_validates_effective_window() -> None:
+    with pytest.raises(ValidationError, match="end_date must be on or after"):
+        ClientIncomeNeedsScheduleRecord.model_validate(
+            _income_needs_schedule(start_date="2026-04-10", end_date="2026-04-01")
+        )
+
+
+def test_client_income_needs_schedule_ingestion_rejects_duplicate_rows() -> None:
+    duplicate = _income_needs_schedule()
+
+    with pytest.raises(ValidationError, match="duplicate effective records"):
+        ClientIncomeNeedsScheduleIngestionRequest.model_validate(
+            {"income_needs_schedules": [duplicate, dict(duplicate)]}
+        )
+
+
+def test_liquidity_reserve_requirement_validates_effective_window() -> None:
+    with pytest.raises(ValidationError, match="effective_to must be on or after"):
+        LiquidityReserveRequirementRecord.model_validate(
+            _liquidity_reserve_requirement(
+                effective_from="2026-04-10",
+                effective_to="2026-04-01",
+            )
+        )
+
+
+def test_liquidity_reserve_requirement_ingestion_rejects_duplicate_rows() -> None:
+    duplicate = _liquidity_reserve_requirement()
+
+    with pytest.raises(ValidationError, match="duplicate effective records"):
+        LiquidityReserveRequirementIngestionRequest.model_validate(
+            {"liquidity_reserve_requirements": [duplicate, dict(duplicate)]}
+        )
+
+
+def test_planned_withdrawal_schedule_ingestion_rejects_duplicate_rows() -> None:
+    duplicate = _planned_withdrawal_schedule()
+
+    with pytest.raises(ValidationError, match="duplicate effective records"):
+        PlannedWithdrawalScheduleIngestionRequest.model_validate(
+            {"planned_withdrawal_schedules": [duplicate, dict(duplicate)]}
+        )
+
+
+def test_planned_withdrawal_schedule_record_accepts_bounded_record() -> None:
+    record = PlannedWithdrawalScheduleRecord.model_validate(_planned_withdrawal_schedule())
+
+    assert record.withdrawal_schedule_id == "WITHDRAWAL_Q3_001"

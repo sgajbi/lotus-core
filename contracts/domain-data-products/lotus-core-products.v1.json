@@ -1936,6 +1936,195 @@
         "tenant_id"
       ],
       "temporal_semantics_ref": "as_of_date"
+    },
+    {
+      "product_name": "ClientIncomeNeedsSchedule",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_management",
+      "lifecycle_status": "active",
+      "request_scope": {
+        "scope_level": "portfolio",
+        "supports_bulk": false
+      },
+      "temporal_scope": {
+        "primary_time_field": "as_of_date",
+        "freshness_basis": "as_of_date",
+        "supports_restatement": true
+      },
+      "required_trust_metadata": [
+        "product_name",
+        "product_version",
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "policy_version",
+        "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": [
+        "/integration/portfolios/{portfolio_id}/client-income-needs-schedule"
+      ],
+      "freshness_policy": {
+        "freshness_class": "intraday",
+        "max_allowed_age_description": "Client income-needs schedules are effective-dated source records resolved by portfolio, client, mandate, and as-of date as bounded DPM liquidity evidence only."
+      },
+      "completeness_policy": {
+        "default_status": "partial",
+        "partial_allowed": true
+      },
+      "lineage_policy": {
+        "lineage_required": true,
+        "evidence_bundle_required": true,
+        "evidence_access_class_ref": "customer_consumable",
+        "lineage_bundle_class_ref": "customer_lineage_summary"
+      },
+      "security_profile_ref": "system_access:client_sensitive:retain_for_client_record:audit_system_access",
+      "approved_consumers": [
+        "lotus-manage"
+      ],
+      "deprecation_policy": {
+        "state": "not_deprecated",
+        "successor_product": null
+      },
+      "identifier_refs": [
+        "portfolio_id",
+        "tenant_id"
+      ],
+      "temporal_semantics_ref": "as_of_date"
+    },
+    {
+      "product_name": "LiquidityReserveRequirement",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_management",
+      "lifecycle_status": "active",
+      "request_scope": {
+        "scope_level": "portfolio",
+        "supports_bulk": false
+      },
+      "temporal_scope": {
+        "primary_time_field": "as_of_date",
+        "freshness_basis": "as_of_date",
+        "supports_restatement": true
+      },
+      "required_trust_metadata": [
+        "product_name",
+        "product_version",
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "policy_version",
+        "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": [
+        "/integration/portfolios/{portfolio_id}/liquidity-reserve-requirement"
+      ],
+      "freshness_policy": {
+        "freshness_class": "intraday",
+        "max_allowed_age_description": "Liquidity reserve requirements are effective-dated source records resolved by portfolio, client, mandate, and as-of date as bounded reserve evidence only."
+      },
+      "completeness_policy": {
+        "default_status": "partial",
+        "partial_allowed": true
+      },
+      "lineage_policy": {
+        "lineage_required": true,
+        "evidence_bundle_required": true,
+        "evidence_access_class_ref": "customer_consumable",
+        "lineage_bundle_class_ref": "customer_lineage_summary"
+      },
+      "security_profile_ref": "system_access:client_sensitive:retain_for_client_record:audit_system_access",
+      "approved_consumers": [
+        "lotus-manage"
+      ],
+      "deprecation_policy": {
+        "state": "not_deprecated",
+        "successor_product": null
+      },
+      "identifier_refs": [
+        "portfolio_id",
+        "tenant_id"
+      ],
+      "temporal_semantics_ref": "as_of_date"
+    },
+    {
+      "product_name": "PlannedWithdrawalSchedule",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_management",
+      "lifecycle_status": "active",
+      "request_scope": {
+        "scope_level": "portfolio",
+        "supports_bulk": false
+      },
+      "temporal_scope": {
+        "primary_time_field": "as_of_date",
+        "freshness_basis": "as_of_date",
+        "supports_restatement": true
+      },
+      "required_trust_metadata": [
+        "product_name",
+        "product_version",
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "policy_version",
+        "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": [
+        "/integration/portfolios/{portfolio_id}/planned-withdrawal-schedule"
+      ],
+      "freshness_policy": {
+        "freshness_class": "intraday",
+        "max_allowed_age_description": "Planned withdrawal schedules are source records resolved by portfolio, client, mandate, as-of date, and forward horizon as bounded withdrawal evidence only."
+      },
+      "completeness_policy": {
+        "default_status": "partial",
+        "partial_allowed": true
+      },
+      "lineage_policy": {
+        "lineage_required": true,
+        "evidence_bundle_required": true,
+        "evidence_access_class_ref": "customer_consumable",
+        "lineage_bundle_class_ref": "customer_lineage_summary"
+      },
+      "security_profile_ref": "system_access:client_sensitive:retain_for_client_record:audit_system_access",
+      "approved_consumers": [
+        "lotus-manage"
+      ],
+      "deprecation_policy": {
+        "state": "not_deprecated",
+        "successor_product": null
+      },
+      "identifier_refs": [
+        "portfolio_id",
+        "tenant_id"
+      ],
+      "temporal_semantics_ref": "as_of_date"
     }
   ]
 }
