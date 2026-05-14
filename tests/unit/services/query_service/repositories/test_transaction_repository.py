@@ -1,5 +1,6 @@
 # tests/unit/services/query_service/repositories/test_transaction_repository.py
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -257,6 +258,23 @@ async def test_portfolio_exists_false(
     assert exists is False
 
 
+async def test_get_portfolio_base_currency(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+):
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = "USD"
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    base_currency = await repository.get_portfolio_base_currency("P1")
+
+    assert base_currency == "USD"
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.base_currency" in compiled_query
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
+
+
 async def test_get_transactions_count_with_date_filters(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
@@ -324,6 +342,34 @@ async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loa
     assert "ORDER BY transactions.security_id ASC" in compiled_query
 
 
+async def test_list_realized_tax_evidence_transactions_filters_explicit_tax_evidence(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_rows = MagicMock()
+    mock_rows.scalars.return_value.all.return_value = [Transaction()]
+    mock_db_session.execute = AsyncMock(return_value=mock_rows)
+
+    rows = await repository.list_realized_tax_evidence_transactions(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+    )
+
+    assert len(rows) == 1
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.portfolio_id = 'P1'" in compiled_query
+    assert "transactions.withholding_tax_amount IS NOT NULL" in compiled_query
+    assert "transactions.other_interest_deductions_amount IS NOT NULL" in compiled_query
+    assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
+    assert "ORDER BY transactions.currency ASC" in compiled_query
+    assert "transactions.transaction_date ASC" in compiled_query
+    assert "transactions.transaction_id ASC" in compiled_query
+
+
 async def test_get_transactions_count_applies_instrument_filter(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
@@ -356,6 +402,43 @@ async def test_get_latest_business_date(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "business_dates.calendar_code = 'GLOBAL'" in compiled_query
+
+
+async def test_get_latest_fx_rate_returns_identity_for_same_currency(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+):
+    rate = await repository.get_latest_fx_rate(
+        from_currency="USD",
+        to_currency="USD",
+        as_of_date=date(2026, 4, 30),
+    )
+
+    assert rate == Decimal("1")
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_get_latest_fx_rate_queries_latest_available_rate(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+):
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = Decimal("1.36")
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    rate = await repository.get_latest_fx_rate(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2026, 4, 30),
+    )
+
+    assert rate == Decimal("1.36")
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "fx_rates.from_currency = 'USD'" in compiled_query
+    assert "fx_rates.to_currency = 'SGD'" in compiled_query
+    assert "fx_rates.rate_date <= '2026-04-30'" in compiled_query
+    assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
 
 
 async def test_get_transactions_count_with_component_and_fx_filters(

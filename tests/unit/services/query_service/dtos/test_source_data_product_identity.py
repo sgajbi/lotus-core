@@ -24,7 +24,10 @@ from src.services.query_service.app.dtos.reporting_dto import (
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
 )
-from src.services.query_service.app.dtos.transaction_dto import PaginatedTransactionResponse
+from src.services.query_service.app.dtos.transaction_dto import (
+    PaginatedTransactionResponse,
+    PortfolioRealizedTaxSummaryResponse,
+)
 
 
 @pytest.mark.parametrize(
@@ -41,6 +44,7 @@ from src.services.query_service.app.dtos.transaction_dto import PaginatedTransac
         (PortfolioPositionsResponse, "HoldingsAsOf"),
         (CashBalancesResponse, "HoldingsAsOf"),
         (PaginatedTransactionResponse, "TransactionLedgerWindow"),
+        (PortfolioRealizedTaxSummaryResponse, "PortfolioRealizedTaxSummary"),
     ],
 )
 def test_query_service_product_responses_declare_product_identity_defaults(
