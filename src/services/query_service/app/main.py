@@ -13,6 +13,7 @@ from .enterprise_readiness import (
 )
 from .routers import (
     buy_state,
+    cash_movements,
     cash_balances,
     cash_accounts,
     cashflow_projection,
@@ -72,6 +73,7 @@ include_routers(
     cash_balances.router,
     cash_accounts.router,
     liquidity_ladder.router,
+    cash_movements.router,
     buy_state.router,
     sell_state.router,
     transactions.router,

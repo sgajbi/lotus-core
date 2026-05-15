@@ -184,6 +184,29 @@ async def test_latest_cashflow_evidence_timestamp_returns_none_when_no_evidence(
     assert latest is None
 
 
+async def test_cashflow_repository_cash_movement_summary_groups_latest_cashflow_rows(
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock(all=lambda: [])
+    repository = CashflowRepository(mock_db_session)
+
+    await repository.get_portfolio_cash_movement_summary(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 18),
+        end_date=date(2026, 4, 28),
+    )
+
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER (PARTITION BY cashflows.transaction_id" in compiled_query
+    assert "ORDER BY cashflows.epoch DESC, cashflows.id DESC" in compiled_query
+    assert "anon_1.portfolio_id = 'P1'" in compiled_query
+    assert "anon_1.cashflow_date BETWEEN '2026-04-18' AND '2026-04-28'" in compiled_query
+    assert "GROUP BY anon_1.classification, anon_1.timing, anon_1.currency" in compiled_query
+    assert "anon_1.is_position_flow" in compiled_query
+    assert "anon_1.is_portfolio_flow" in compiled_query
+
+
 async def test_cashflow_repository_external_flows_limits_to_investor_movements(
     mock_db_session: AsyncMock,
 ) -> None:

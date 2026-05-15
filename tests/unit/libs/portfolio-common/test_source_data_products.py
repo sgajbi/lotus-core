@@ -32,6 +32,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "TransactionLedgerWindow",
         "PortfolioRealizedTaxSummary",
         "PortfolioCashflowProjection",
+        "PortfolioCashMovementSummary",
         "PortfolioLiquidityLadder",
         "PositionTimeseriesInput",
         "PortfolioTimeseriesInput",
