@@ -46,6 +46,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingResponse,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
+    ExternalCurrencyExposureRequest,
+    ExternalCurrencyExposureResponse,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgeExecutionReadinessResponse,
     IndexCatalogRequest,
@@ -1163,6 +1165,56 @@ async def get_external_hedge_execution_readiness(
     response = cast(
         ExternalHedgeExecutionReadinessResponse | None,
         await integration_service.get_external_hedge_execution_readiness(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/external-currency-exposure",
+    response_model=ExternalCurrencyExposureResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve external treasury currency exposure posture",
+    description=(
+        "What: Return the source-owner posture for external treasury currency exposure "
+        "evidence for a DPM portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding for portfolio identity, "
+        "then returns a fail-closed unavailable posture until bank-owned external treasury "
+        "exposure feeds are ingested and certified.\n"
+        "When: Use this endpoint when lotus-manage or gateway needs a bounded RFC39-WTBD-008 "
+        "source signal for currency-overlay supportability. The response does not calculate "
+        "FX attribution, provide hedge advice, issue treasury instructions, declare execution "
+        "readiness, acknowledge OMS execution, or claim fills, settlement, or autonomous "
+        "treasury action."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ExternalCurrencyExposure"),
+)
+async def get_external_currency_exposure(
+    request: ExternalCurrencyExposureRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose external currency exposure is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ExternalCurrencyExposureResponse:
+    response = cast(
+        ExternalCurrencyExposureResponse | None,
+        await integration_service.get_external_currency_exposure(
             portfolio_id=portfolio_id,
             request=request,
         ),

@@ -15,6 +15,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClientTaxRuleSetRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
+    ExternalCurrencyExposureRequest,
     ExternalHedgeExecutionReadinessRequest,
     InstrumentEligibilityBulkRequest,
     LiquidityReserveRequirementRequest,
@@ -905,6 +906,72 @@ async def test_external_hedge_execution_readiness_returns_none_without_binding()
     response = await service.get_external_hedge_execution_readiness(
         "PB_MISSING",
         ExternalHedgeExecutionReadinessRequest(as_of_date=date(2026, 5, 3)),
+    )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_external_currency_exposure_fails_closed_until_treasury_ingested():
+    service = make_service()
+    as_of_date = date(2026, 5, 3)
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        profile_binding_row(as_of_date)
+    )
+
+    response = await service.get_external_currency_exposure(
+        "PB_SG_GLOBAL_BAL_001",
+        ExternalCurrencyExposureRequest(
+            as_of_date=as_of_date,
+            tenant_id="default",
+            reporting_currency="USD",
+            exposure_currencies=["EUR", "JPY"],
+        ),
+    )
+
+    assert response is not None
+    assert response.product_name == "ExternalCurrencyExposure"
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED"
+    assert response.supportability.exposure_count == 0
+    assert response.supportability.missing_data_families == [
+        "external_currency_exposure",
+        "external_hedge_policy",
+        "external_fx_forward_curve",
+        "external_eligible_hedge_instrument",
+    ]
+    assert "fx_attribution" in response.supportability.blocked_capabilities
+    assert "oms_acknowledgement" in response.supportability.blocked_capabilities
+    assert response.exposures == []
+    assert response.data_quality_status == "MISSING"
+    assert response.lineage == {
+        "source_system": "external-bank-treasury",
+        "source_table": "not_ingested",
+        "contract_version": "rfc_039_external_currency_exposure_v1",
+        "integration_status": "not_ingested",
+        "runtime_posture": "fail_closed",
+        "non_claims": (
+            "fx_attribution,hedge_advice,treasury_instruction,execution_readiness,"
+            "oms_acknowledgement,fills,settlement,autonomous_treasury_action"
+        ),
+    }
+    service._reference_repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=as_of_date,
+        mandate_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_external_currency_exposure_returns_none_without_binding():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.get_external_currency_exposure(
+        "PB_MISSING",
+        ExternalCurrencyExposureRequest(as_of_date=date(2026, 5, 3)),
     )
 
     assert response is None

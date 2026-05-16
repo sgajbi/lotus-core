@@ -60,6 +60,9 @@ from ..dtos.reference_integration_dto import (
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
     DpmSourceReadinessSupportability,
+    ExternalCurrencyExposureRequest,
+    ExternalCurrencyExposureResponse,
+    ExternalCurrencyExposureSupportability,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgeExecutionReadinessResponse,
     ExternalHedgeExecutionReadinessSupportability,
@@ -1550,6 +1553,87 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_hedge_execution_readiness:"
+                    + self._request_fingerprint(
+                        {
+                            "portfolio_id": portfolio_id,
+                            "client_id": binding.client_id,
+                            "as_of_date": request.as_of_date.isoformat(),
+                            "integration_status": "not_ingested",
+                        }
+                    )
+                ),
+            ),
+        )
+
+    async def get_external_currency_exposure(
+        self,
+        portfolio_id: str,
+        request: ExternalCurrencyExposureRequest,
+    ) -> ExternalCurrencyExposureResponse | None:
+        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            mandate_id=request.mandate_id,
+        )
+        if binding is None:
+            return None
+
+        missing_data_families = [
+            "external_currency_exposure",
+            "external_hedge_policy",
+            "external_fx_forward_curve",
+            "external_eligible_hedge_instrument",
+        ]
+        blocked_capabilities = [
+            "fx_attribution",
+            "hedge_advice",
+            "treasury_instruction",
+            "execution_readiness",
+            "oms_acknowledgement",
+            "fills",
+            "settlement",
+            "autonomous_treasury_action",
+        ]
+
+        return ExternalCurrencyExposureResponse(
+            portfolio_id=portfolio_id,
+            client_id=binding.client_id,
+            mandate_id=binding.mandate_id,
+            reporting_currency=request.reporting_currency,
+            exposure_currencies=request.exposure_currencies,
+            exposures=[],
+            supportability=ExternalCurrencyExposureSupportability(
+                exposure_count=0,
+                missing_data_families=missing_data_families,
+                blocked_capabilities=blocked_capabilities,
+            ),
+            lineage={
+                "source_system": "external-bank-treasury",
+                "source_table": "not_ingested",
+                "contract_version": "rfc_039_external_currency_exposure_v1",
+                "integration_status": "not_ingested",
+                "runtime_posture": "fail_closed",
+                "non_claims": ",".join(blocked_capabilities),
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status="MISSING",
+                latest_evidence_timestamp=None,
+                source_batch_fingerprint=self._request_fingerprint(
+                    {
+                        "product": "ExternalCurrencyExposure",
+                        "portfolio_id": portfolio_id,
+                        "client_id": binding.client_id,
+                        "mandate_id": binding.mandate_id,
+                        "as_of_date": request.as_of_date.isoformat(),
+                        "reporting_currency": request.reporting_currency,
+                        "exposure_currencies": sorted(request.exposure_currencies),
+                        "integration_status": "not_ingested",
+                    }
+                ),
+                snapshot_id=(
+                    "external_currency_exposure:"
                     + self._request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
