@@ -2260,7 +2260,7 @@
       "owner_repository": "lotus-core",
       "product_family": "dpm_source_data",
       "authoritative_domain": "portfolio_state",
-      "lifecycle_status": "proposed",
+      "lifecycle_status": "active",
       "request_scope": {
         "scope_level": "portfolio",
         "supports_bulk": false

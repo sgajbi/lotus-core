@@ -24,6 +24,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_core_snapshot_service,
     get_dpm_source_readiness,
     get_effective_integration_policy,
+    get_external_currency_exposure,
     get_external_hedge_execution_readiness,
     get_instrument_enrichment_bulk,
     get_integration_service,
@@ -67,6 +68,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
+    ExternalCurrencyExposureRequest,
     ExternalHedgeExecutionReadinessRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
@@ -1588,6 +1590,66 @@ async def test_get_external_hedge_execution_readiness_router_raises_404_without_
 
     with pytest.raises(HTTPException) as exc_info:
         await get_external_hedge_execution_readiness(
+            portfolio_id="PB_MISSING",
+            request=request,
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_external_currency_exposure_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_external_currency_exposure = AsyncMock(
+        return_value={
+            "product_name": "ExternalCurrencyExposure",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "reporting_currency": "USD",
+            "exposure_currencies": ["EUR", "JPY"],
+            "exposures": [],
+            "supportability": {
+                "state": "UNAVAILABLE",
+                "reason": "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED",
+                "exposure_count": 0,
+                "missing_data_families": ["external_currency_exposure"],
+                "blocked_capabilities": ["oms_acknowledgement"],
+            },
+            "lineage": {"contract_version": "rfc_039_external_currency_exposure_v1"},
+        }
+    )
+    request = ExternalCurrencyExposureRequest(
+        as_of_date="2026-05-03",
+        tenant_id="default",
+        reporting_currency="USD",
+        exposure_currencies=["EUR", "JPY"],
+    )
+
+    response = await get_external_currency_exposure(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "ExternalCurrencyExposure"
+    mock_service.get_external_currency_exposure.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_external_currency_exposure_router_raises_404_without_binding() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_external_currency_exposure = AsyncMock(return_value=None)
+    request = ExternalCurrencyExposureRequest(as_of_date="2026-05-03")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_external_currency_exposure(
             portfolio_id="PB_MISSING",
             request=request,
             integration_service=mock_service,

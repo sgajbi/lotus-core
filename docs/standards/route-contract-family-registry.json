@@ -108,6 +108,7 @@
         "POST /integration/portfolios/{portfolio_id}/client-restriction-profile",
         "POST /integration/portfolios/{portfolio_id}/client-tax-profile",
         "POST /integration/portfolios/{portfolio_id}/client-tax-rule-set",
+        "POST /integration/portfolios/{portfolio_id}/external-currency-exposure",
         "POST /integration/portfolios/{portfolio_id}/external-hedge-execution-readiness",
         "POST /integration/portfolios/{portfolio_id}/liquidity-reserve-requirement",
         "POST /integration/portfolios/{portfolio_id}/mandate-binding",
