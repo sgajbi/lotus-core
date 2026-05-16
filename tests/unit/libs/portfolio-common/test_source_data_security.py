@@ -63,6 +63,9 @@ def test_client_source_products_classify_sensitive_identifiers() -> None:
     realized_tax_profile = get_source_data_security_profile("PortfolioRealizedTaxSummary")
     assert realized_tax_profile.sensitivity_classification == CLIENT_SENSITIVE
     assert {"portfolio_id", "client_id"} <= set(realized_tax_profile.pii_fields)
+    cash_movement_profile = get_source_data_security_profile("PortfolioCashMovementSummary")
+    assert cash_movement_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert {"portfolio_id", "client_id"} <= set(cash_movement_profile.pii_fields)
     restriction_profile = get_source_data_security_profile("ClientRestrictionProfile")
     assert restriction_profile.sensitivity_classification == CLIENT_SENSITIVE
     assert {"portfolio_id", "mandate_id", "client_id"} <= set(restriction_profile.pii_fields)

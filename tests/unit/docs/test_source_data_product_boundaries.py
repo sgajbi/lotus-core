@@ -45,6 +45,10 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "Daily booked cashflow, projected settlement cashflow, net cashflow points" in catalog
     assert "booked/projected/net totals" in catalog
     assert "must not treat the projection as a liquidity ladder" in catalog
+    assert "| `PortfolioCashMovementSummary:v1` |" in catalog
+    assert "portfolio-cash-movement-summary.md" in catalog
+    assert "latest cashflow rows by classification, timing, currency, and flow scope" in catalog
+    assert "must not treat the summary as a forecast" in catalog
     assert "| `PortfolioLiquidityLadder:v1` |" in catalog
     assert "cash-availability buckets" in catalog
     assert "asset exposure by source-owned instrument liquidity tier" in catalog
@@ -74,6 +78,7 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "`MarketDataCoverageWindow:v1`" in wiki
     assert "`DpmSourceReadiness:v1`" in wiki
     assert "`PortfolioCashflowProjection:v1`" in wiki
+    assert "`PortfolioCashMovementSummary:v1`" in wiki
     assert "`PortfolioLiquidityLadder:v1`" in wiki
     assert "`PortfolioTaxLotWindow:v1`" in wiki
     assert "snapshot-backed positions to latest current-epoch history quantity" in (normalized_wiki)
@@ -90,6 +95,8 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "classifies empty, complete, and paged windows" in normalized_wiki
     assert "settlement-dated future external `DEPOSIT` and `WITHDRAWAL` movements" in wiki
     assert "Same-day booked and projected movements are additive" in wiki
+    assert "bucket totals by classification, timing, currency, and flow scope" in wiki
+    assert "funding recommendations, treasury instructions" in normalized_wiki
     assert "deterministic T0/T+1/T+2-to-T+7" in wiki
     assert "non-cash exposure by instrument liquidity tier" in wiki
     assert "advice recommendation, client income plan" in wiki
@@ -244,6 +251,43 @@ def test_portfolio_cashflow_projection_methodology_is_implementation_backed() ->
     assert "`points[].booked_net_cashflow`" in methodology
     assert "`projected_settlement_total_cashflow`" in methodology
     assert "| `points[2026-03-04].net_cashflow` | -18000 |" in methodology
+
+
+def test_portfolio_cash_movement_summary_methodology_is_implementation_backed() -> None:
+    methodology = _read(
+        "docs/methodologies/source-data-products/portfolio-cash-movement-summary.md"
+    )
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`PortfolioCashMovementSummary:v1`" in methodology
+    assert "`GET /portfolios/{portfolio_id}/cash-movement-summary`" in methodology
+    assert "R = row_number(partition by transaction_id order by epoch desc, id desc) = 1" in (
+        methodology
+    )
+    assert "A_g = sum(r.amount for r in W where key(r) = g)" in methodology
+    assert "movement_direction_g = INFLOW if A_g > 0" in methodology
+    assert "`data_quality_status` | `COMPLETE` when rows exist; otherwise `MISSING`" in (
+        methodology
+    )
+    assert "Mixed currencies are never converted or netted together" in methodology
+    assert "not a cashflow forecast, income plan, funding recommendation" in normalized_methodology
 
 
 def test_portfolio_liquidity_ladder_methodology_is_implementation_backed() -> None:

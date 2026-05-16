@@ -711,6 +711,42 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     )
 
 
+async def test_openapi_describes_cash_movement_summary_contract_examples(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    summary = schema["paths"]["/portfolios/{portfolio_id}/cash-movement-summary"]["get"]
+    assert "source-owned portfolio cash movement totals" in summary["description"]
+    assert "Do not use it as a cashflow forecast" in summary["description"]
+
+    start_date = next(
+        parameter for parameter in summary["parameters"] if parameter["name"] == "start_date"
+    )
+    assert start_date["description"] == "Inclusive cashflow-date window start."
+    end_date = next(
+        parameter for parameter in summary["parameters"] if parameter["name"] == "end_date"
+    )
+    assert end_date["description"] == "Inclusive cashflow-date window end."
+
+    invalid_window = summary["responses"]["400"]["content"]["application/json"]["example"]
+    assert invalid_window["detail"] == "start_date must be on or before end_date"
+    not_found = summary["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"] == "Portfolio with id PORT-CASH-001 not found"
+
+    summary_response = schema["components"]["schemas"]["PortfolioCashMovementSummaryResponse"]
+    assert summary_response["properties"]["product_name"]["default"] == (
+        "PortfolioCashMovementSummary"
+    )
+    assert (
+        "cashflow-date window start" in summary_response["properties"]["start_date"]["description"]
+    )
+    bucket_schema = schema["components"]["schemas"]["CashMovementBucket"]
+    assert bucket_schema["properties"]["movement_direction"]["description"] == (
+        "Direction derived from the sign of total_amount only."
+    )
+
+
 async def test_openapi_describes_portfolio_discovery_contract_examples(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200

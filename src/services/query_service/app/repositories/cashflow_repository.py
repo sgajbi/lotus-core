@@ -158,6 +158,44 @@ class CashflowRepository:
             return None
         return max(timestamps)
 
+    @async_timed(repository="CashflowRepository", method="get_portfolio_cash_movement_summary")
+    async def get_portfolio_cash_movement_summary(
+        self, portfolio_id: str, start_date: date, end_date: date
+    ) -> list[tuple[str, str, str, bool, bool, int, Decimal, datetime | None]]:
+        """Aggregate latest cashflow rows by source-owned cash movement classification."""
+        latest_cashflows = self._latest_cashflows_subquery()
+        stmt = (
+            select(
+                latest_cashflows.c.classification,
+                latest_cashflows.c.timing,
+                latest_cashflows.c.currency,
+                latest_cashflows.c.is_position_flow,
+                latest_cashflows.c.is_portfolio_flow,
+                func.count().label("cashflow_count"),
+                func.sum(latest_cashflows.c.amount).label("total_amount"),
+                func.max(latest_cashflows.c.updated_at).label("latest_evidence_timestamp"),
+            )
+            .where(
+                latest_cashflows.c.portfolio_id == portfolio_id,
+                latest_cashflows.c.cashflow_date.between(start_date, end_date),
+            )
+            .group_by(
+                latest_cashflows.c.classification,
+                latest_cashflows.c.timing,
+                latest_cashflows.c.currency,
+                latest_cashflows.c.is_position_flow,
+                latest_cashflows.c.is_portfolio_flow,
+            )
+            .order_by(
+                latest_cashflows.c.classification.asc(),
+                latest_cashflows.c.timing.asc(),
+                latest_cashflows.c.currency.asc(),
+                latest_cashflows.c.is_portfolio_flow.desc(),
+                latest_cashflows.c.is_position_flow.desc(),
+            )
+        )
+        return (await self.db.execute(stmt)).all()
+
     @async_timed(repository="CashflowRepository", method="get_external_flows")
     async def get_external_flows(
         self, portfolio_id: str, start_date: date, end_date: date

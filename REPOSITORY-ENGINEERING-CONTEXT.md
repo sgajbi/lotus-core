@@ -310,6 +310,14 @@ Most relevant current governance:
     restatement from latest available FX rates, evidence-row and source-window counts, and the
     explicit boundary from tax advice, after-tax optimization, tax-loss harvesting, client-tax
     approval, tax-reporting certification, execution quality, and OMS acknowledgement.
+36. RFC42-WTBD-006 source-owner methodology depth now includes the implementation-backed
+    `PortfolioCashMovementSummary:v1` product and methodology under
+    `docs/methodologies/source-data-products/portfolio-cash-movement-summary.md`; it pins latest
+    cashflow row selection by transaction epoch/id, bounded cashflow-date windows, grouping by
+    classification, timing, currency, and flow scope, signed bucket totals, source row counts,
+    movement direction, empty-window posture, and the explicit boundary from cashflow forecasting,
+    funding recommendations, treasury instructions, liquidity advice, tax methodology, execution
+    quality, and OMS acknowledgement.
 
 ## Context Maintenance Rule
 

@@ -117,6 +117,22 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Core-derived daily net cashflow projection for operational liquidity planning.",
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioCashMovementSummary",
+        product_version="v1",
+        route_family=OPERATIONAL_READ,
+        serving_plane=QUERY_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-gateway", "lotus-report", "lotus-manage"),
+        current_routes=("/portfolios/{portfolio_id}/cash-movement-summary",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Core-owned cash movement summary over latest cashflow rows by classification, "
+            "timing, currency, and flow scope. It is not a forecast, funding recommendation, "
+            "treasury instruction, or OMS acknowledgement."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="PortfolioLiquidityLadder",
         product_version="v1",
         route_family=OPERATIONAL_READ,

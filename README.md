@@ -84,6 +84,10 @@ Boundary rules that matter:
    component-total cashflow evidence in portfolio base currency so downstream outcome consumers can
    preserve operational cash-movement components without deriving liquidity ladders, income-needs
    advice, or OMS execution forecasts.
+9. `PortfolioCashMovementSummary:v1` emits source-owned cash movement totals over latest cashflow
+   rows by classification, timing, currency, and flow scope without claiming cashflow forecasting,
+   funding recommendations, treasury instructions, liquidity advice, execution quality, tax
+   methodology, or OMS acknowledgement.
 
 ## Architecture At A Glance
 
