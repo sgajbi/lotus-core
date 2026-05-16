@@ -89,16 +89,17 @@ Boundary rules that matter:
    funding recommendations, treasury instructions, liquidity advice, execution quality, tax
    methodology, or OMS acknowledgement.
 10. RFC39-WTBD-008 external treasury source products now include active fail-closed
-    `ExternalCurrencyExposure:v1`, `ExternalHedgePolicy:v1`, and
+    `ExternalCurrencyExposure:v1`, `ExternalHedgePolicy:v1`, `ExternalFXForwardCurve:v1`, and
     `ExternalHedgeExecutionReadiness:v1` routes at
     `/integration/portfolios/{portfolio_id}/external-currency-exposure` and
-    `/integration/portfolios/{portfolio_id}/external-hedge-policy`, and
+    `/integration/portfolios/{portfolio_id}/external-hedge-policy`,
+    `/integration/market-data/external-fx-forward-curve`, and
     `/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness`. They return
-    `UNAVAILABLE` until bank-owned treasury ingestion is certified. `ExternalFXForwardCurve:v1`
-    and `ExternalEligibleHedgeInstrument:v1` remain planned contracts. None of these contracts
+    `UNAVAILABLE` until bank-owned treasury ingestion is certified.
+    `ExternalEligibleHedgeInstrument:v1` remains a planned contract. None of these contracts
     create FX attribution, hedge advice, hedge-policy approval, forward pricing, treasury
-    instructions, counterparty selection, order generation, best execution, OMS acknowledgement,
-    fills, or settlement claims.
+    instructions, counterparty selection, order generation, venue-routing, best execution, OMS
+    acknowledgement, fills, or settlement claims.
 
 ## Architecture At A Glance
 

@@ -48,6 +48,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DpmSourceReadinessResponse,
     ExternalCurrencyExposureRequest,
     ExternalCurrencyExposureResponse,
+    ExternalFXForwardCurveRequest,
+    ExternalFXForwardCurveResponse,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgeExecutionReadinessResponse,
     ExternalHedgePolicyRequest,
@@ -1279,6 +1281,31 @@ async def get_external_currency_exposure(
             ),
         )
     return response
+
+
+@router.post(
+    "/market-data/external-fx-forward-curve",
+    response_model=ExternalFXForwardCurveResponse,
+    summary="Resolve external treasury FX forward curve posture",
+    description=(
+        "What: Return the source-owner posture for external treasury FX forward curve "
+        "evidence needed by DPM currency-overlay workflows.\n"
+        "How: Echoes the requested as-of date, reporting currency, currency pairs, and tenors, "
+        "then returns a fail-closed unavailable posture until bank-owned external treasury "
+        "curve feeds are ingested and certified.\n"
+        "When: Use this endpoint when lotus-manage or gateway needs bounded "
+        "RFC39-WTBD-008 forward-curve supportability. The response does not price forwards, "
+        "perform FX valuation methodology, provide hedge advice, issue treasury instructions, "
+        "select counterparties, generate orders, declare best execution, route venues, "
+        "acknowledge OMS execution, or claim fills, settlement, or autonomous treasury action."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ExternalFXForwardCurve"),
+)
+async def get_external_fx_forward_curve(
+    request: ExternalFXForwardCurveRequest,
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ExternalFXForwardCurveResponse:
+    return await integration_service.get_external_fx_forward_curve(request=request)
 
 
 @router.post(
