@@ -2323,7 +2323,7 @@
       "owner_repository": "lotus-core",
       "product_family": "dpm_source_data",
       "authoritative_domain": "portfolio_management",
-      "lifecycle_status": "proposed",
+      "lifecycle_status": "active",
       "request_scope": {
         "scope_level": "portfolio",
         "supports_bulk": false
@@ -2354,7 +2354,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "intraday",
-        "max_allowed_age_description": "Planned external treasury hedge policy evidence supplied by bank-owned systems."
+        "max_allowed_age_description": "Fail-closed external treasury hedge policy posture until bank-owned ingestion is certified."
       },
       "completeness_policy": {
         "default_status": "partial",

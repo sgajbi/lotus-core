@@ -17,6 +17,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DpmSourceReadinessRequest,
     ExternalCurrencyExposureRequest,
     ExternalHedgeExecutionReadinessRequest,
+    ExternalHedgePolicyRequest,
     InstrumentEligibilityBulkRequest,
     LiquidityReserveRequirementRequest,
     MarketDataCoverageRequest,
@@ -972,6 +973,69 @@ async def test_external_currency_exposure_returns_none_without_binding():
     response = await service.get_external_currency_exposure(
         "PB_MISSING",
         ExternalCurrencyExposureRequest(as_of_date=date(2026, 5, 3)),
+    )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_external_hedge_policy_fails_closed_until_treasury_ingested():
+    service = make_service()
+    as_of_date = date(2026, 5, 3)
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        profile_binding_row(as_of_date)
+    )
+
+    response = await service.get_external_hedge_policy(
+        "PB_SG_GLOBAL_BAL_001",
+        ExternalHedgePolicyRequest(
+            as_of_date=as_of_date,
+            tenant_id="default",
+            reporting_currency="USD",
+            exposure_currencies=["EUR", "JPY"],
+        ),
+    )
+
+    assert response is not None
+    assert response.product_name == "ExternalHedgePolicy"
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED"
+    assert response.supportability.policy_rule_count == 0
+    assert response.supportability.missing_data_families == ["external_hedge_policy"]
+    assert "hedge_policy_approval" in response.supportability.blocked_capabilities
+    assert "treasury_instruction" in response.supportability.blocked_capabilities
+    assert "oms_acknowledgement" in response.supportability.blocked_capabilities
+    assert response.policy_rules == []
+    assert response.data_quality_status == "MISSING"
+    assert response.lineage == {
+        "source_system": "external-bank-treasury",
+        "source_table": "not_ingested",
+        "contract_version": "rfc_039_external_hedge_policy_v1",
+        "integration_status": "not_ingested",
+        "runtime_posture": "fail_closed",
+        "non_claims": (
+            "hedge_policy_approval,hedge_advice,treasury_instruction,"
+            "counterparty_selection,order_generation,best_execution,oms_acknowledgement,"
+            "fills,settlement,autonomous_treasury_action"
+        ),
+    }
+    service._reference_repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=as_of_date,
+        mandate_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_external_hedge_policy_returns_none_without_binding():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.get_external_hedge_policy(
+        "PB_MISSING",
+        ExternalHedgePolicyRequest(as_of_date=date(2026, 5, 3)),
     )
 
     assert response is None

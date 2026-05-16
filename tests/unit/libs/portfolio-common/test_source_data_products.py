@@ -59,6 +59,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "PlannedWithdrawalSchedule",
         "ExternalHedgeExecutionReadiness",
         "ExternalCurrencyExposure",
+        "ExternalHedgePolicy",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
         "ReconciliationEvidenceBundle",
@@ -74,7 +75,6 @@ def test_dpm_planned_source_products_are_governed_but_not_active_routes() -> Non
     }
 
     assert planned_products.keys() == {
-        "ExternalHedgePolicy",
         "ExternalFXForwardCurve",
         "ExternalEligibleHedgeInstrument",
     }
@@ -102,7 +102,6 @@ def test_dpm_planned_source_products_are_reserved_for_lotus_manage() -> None:
     }
 
     assert product_names == {
-        "ExternalHedgePolicy",
         "ExternalFXForwardCurve",
         "ExternalEligibleHedgeInstrument",
     }

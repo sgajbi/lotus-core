@@ -539,6 +539,23 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="ExternalHedgePolicy",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/external-hedge-policy",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for fail-closed external treasury hedge-policy posture. "
+            "It returns unavailable policy evidence until bank-owned treasury ingestion is "
+            "certified and does not approve hedge policy, choose counterparties, issue "
+            "treasury instructions, generate orders, or acknowledge OMS execution."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
@@ -584,21 +601,6 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
 )
 
 DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
-    SourceDataProductDefinition(
-        product_name="ExternalHedgePolicy",
-        product_version="v1",
-        route_family=ANALYTICS_INPUT,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
-        owner="lotus-core",
-        consumers=("lotus-manage",),
-        current_routes=("/integration/portfolios/{portfolio_id}/external-hedge-policy",),
-        paging_mode=INLINE_PAGED,
-        export_mode=NOT_APPLICABLE,
-        notes=(
-            "Planned external treasury source product for bank-supplied hedge policy evidence. "
-            "It will not approve hedge policy, choose counterparties, or issue trade orders."
-        ),
-    ),
     SourceDataProductDefinition(
         product_name="ExternalFXForwardCurve",
         product_version="v1",

@@ -431,9 +431,6 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         audit_requirement=AUDIT_SYSTEM_ACCESS,
         pii_fields=("portfolio_id", "mandate_id", "client_id"),
     ),
-)
-
-DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
     SourceDataSecurityProfile(
         product_name="ExternalHedgePolicy",
         tenant_required=True,
@@ -444,6 +441,9 @@ DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...]
         audit_requirement=AUDIT_SYSTEM_ACCESS,
         pii_fields=("portfolio_id", "mandate_id", "client_id"),
     ),
+)
+
+DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
     SourceDataSecurityProfile(
         product_name="ExternalFXForwardCurve",
         tenant_required=True,
