@@ -318,17 +318,18 @@ Most relevant current governance:
     movement direction, empty-window posture, and the explicit boundary from cashflow forecasting,
     funding recommendations, treasury instructions, liquidity advice, tax methodology, execution
     quality, and OMS acknowledgement.
-37. RFC39-WTBD-008 now has active fail-closed
-    `ExternalCurrencyExposure:v1` and `ExternalHedgeExecutionReadiness:v1` source-product routes at
-    `/integration/portfolios/{portfolio_id}/external-currency-exposure` and
-    `/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness`. It resolves
-    portfolio mandate identity, returns `UNAVAILABLE` until bank-owned external treasury ingestion
-    is certified, and publishes required missing treasury data families plus blocked capabilities
-    for downstream supportability gates. `ExternalHedgePolicy:v1`,
-    `ExternalFXForwardCurve:v1`, and `ExternalEligibleHedgeInstrument:v1` remain planned
-    contracts. This boundary does not claim FX attribution, hedge advice, forward pricing,
-    treasury instructions, counterparty choice, best execution, OMS acknowledgement, fills,
-    settlement, or autonomous treasury action.
+37. RFC39-WTBD-008 now has active fail-closed `ExternalCurrencyExposure:v1`,
+    `ExternalHedgePolicy:v1`, and `ExternalHedgeExecutionReadiness:v1` source-product routes at
+    `/integration/portfolios/{portfolio_id}/external-currency-exposure`,
+    `/integration/portfolios/{portfolio_id}/external-hedge-policy`, and
+    `/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness`. They resolve
+    portfolio mandate identity, return `UNAVAILABLE` until bank-owned external treasury ingestion
+    is certified, and publish required missing treasury data families plus blocked capabilities
+    for downstream supportability gates. `ExternalFXForwardCurve:v1` and
+    `ExternalEligibleHedgeInstrument:v1` remain planned contracts. This boundary does not claim FX
+    attribution, hedge advice, hedge-policy approval, forward pricing, treasury instructions,
+    counterparty choice, order generation, best execution, OMS acknowledgement, fills, settlement,
+    or autonomous treasury action.
 
 ## Context Maintenance Rule
 

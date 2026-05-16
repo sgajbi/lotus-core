@@ -30,7 +30,6 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     expected_profiles = {
-        "ExternalHedgePolicy",
         "ExternalFXForwardCurve",
         "ExternalEligibleHedgeInstrument",
     }
@@ -44,7 +43,9 @@ def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
         assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
         assert profile.operator_only is False
 
-    assert profiles["ExternalHedgePolicy"].sensitivity_classification == CLIENT_SENSITIVE
+    hedge_policy_profile = get_source_data_security_profile("ExternalHedgePolicy")
+    assert hedge_policy_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert hedge_policy_profile.audit_requirement == AUDIT_SYSTEM_ACCESS
     exposure_profile = get_source_data_security_profile("ExternalCurrencyExposure")
     assert exposure_profile.sensitivity_classification == CLIENT_SENSITIVE
     assert exposure_profile.audit_requirement == AUDIT_SYSTEM_ACCESS
