@@ -556,6 +556,26 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="ExternalEligibleHedgeInstrument",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=(
+            "/integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments",
+        ),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for fail-closed external treasury eligible hedge instrument "
+            "posture. It returns unavailable instrument evidence until bank-owned treasury "
+            "ingestion is certified and does not perform suitability approval, recommend "
+            "products, select counterparties, issue treasury instructions, or acknowledge "
+            "OMS execution."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ExternalFXForwardCurve",
         product_version="v1",
         route_family=ANALYTICS_INPUT,
@@ -617,23 +637,7 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
     ),
 )
 
-DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
-    SourceDataProductDefinition(
-        product_name="ExternalEligibleHedgeInstrument",
-        product_version="v1",
-        route_family=ANALYTICS_INPUT,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
-        owner="lotus-core",
-        consumers=("lotus-manage",),
-        current_routes=("/integration/instruments/external-eligible-hedge-instruments",),
-        paging_mode=INLINE_PAGED,
-        export_mode=NOT_APPLICABLE,
-        notes=(
-            "Planned external treasury source product for bank-supplied eligible hedge "
-            "instrument evidence. It will not perform suitability approval or venue routing."
-        ),
-    ),
-)
+DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = ()
 
 
 def get_source_data_product(product_name: str) -> SourceDataProductDefinition:
