@@ -556,6 +556,23 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="ExternalFXForwardCurve",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/market-data/external-fx-forward-curve",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for fail-closed external treasury FX forward curve posture. "
+            "It returns unavailable curve evidence until bank-owned treasury ingestion is "
+            "certified and does not price forwards, perform FX valuation methodology, route "
+            "venues, or acknowledge OMS execution."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
@@ -601,22 +618,6 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
 )
 
 DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
-    SourceDataProductDefinition(
-        product_name="ExternalFXForwardCurve",
-        product_version="v1",
-        route_family=ANALYTICS_INPUT,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
-        owner="lotus-core",
-        consumers=("lotus-manage",),
-        current_routes=("/integration/market-data/external-fx-forward-curve",),
-        paging_mode=INLINE_PAGED,
-        export_mode=NOT_APPLICABLE,
-        notes=(
-            "Planned external treasury source product for bank-supplied FX forward curve "
-            "evidence. It will preserve source quotes and supportability without pricing "
-            "forwards locally."
-        ),
-    ),
     SourceDataProductDefinition(
         product_name="ExternalEligibleHedgeInstrument",
         product_version="v1",

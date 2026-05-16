@@ -25,6 +25,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_dpm_source_readiness,
     get_effective_integration_policy,
     get_external_currency_exposure,
+    get_external_fx_forward_curve,
     get_external_hedge_execution_readiness,
     get_external_hedge_policy,
     get_instrument_enrichment_bulk,
@@ -70,6 +71,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
     ExternalCurrencyExposureRequest,
+    ExternalFXForwardCurveRequest,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgePolicyRequest,
     IndexCatalogRequest,
@@ -1511,9 +1513,7 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
                 "missing_data_families": ["external_hedge_execution_readiness"],
                 "blocked_capabilities": ["oms_acknowledgement"],
             },
-            "lineage": {
-                "contract_version": "rfc_039_external_hedge_execution_readiness_v1"
-            },
+            "lineage": {"contract_version": "rfc_039_external_hedge_execution_readiness_v1"},
         }
     )
     request = ExternalHedgeExecutionReadinessRequest(
@@ -1718,6 +1718,45 @@ async def test_get_external_currency_exposure_router_raises_404_without_binding(
         )
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_external_fx_forward_curve_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_external_fx_forward_curve = AsyncMock(
+        return_value={
+            "product_name": "ExternalFXForwardCurve",
+            "product_version": "v1",
+            "as_of_date": "2026-05-03",
+            "reporting_currency": "USD",
+            "currency_pairs": ["EUR/USD", "USD/JPY"],
+            "tenors": ["1M", "3M"],
+            "curve_points": [],
+            "supportability": {
+                "state": "UNAVAILABLE",
+                "reason": "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED",
+                "curve_point_count": 0,
+                "missing_data_families": ["external_fx_forward_curve"],
+                "blocked_capabilities": ["forward_pricing", "oms_acknowledgement"],
+            },
+            "lineage": {"contract_version": "rfc_039_external_fx_forward_curve_v1"},
+        }
+    )
+    request = ExternalFXForwardCurveRequest(
+        as_of_date="2026-05-03",
+        tenant_id="default",
+        reporting_currency="USD",
+        currency_pairs=["EUR/USD", "USD/JPY"],
+        tenors=["1M", "3M"],
+    )
+
+    response = await get_external_fx_forward_curve(
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "ExternalFXForwardCurve"
+    mock_service.get_external_fx_forward_curve.assert_awaited_once_with(request=request)
 
 
 @pytest.mark.asyncio

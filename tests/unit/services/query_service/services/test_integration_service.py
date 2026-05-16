@@ -16,6 +16,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     DpmSourceReadinessRequest,
     ExternalCurrencyExposureRequest,
+    ExternalFXForwardCurveRequest,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgePolicyRequest,
     InstrumentEligibilityBulkRequest,
@@ -1039,6 +1040,47 @@ async def test_external_hedge_policy_returns_none_without_binding():
     )
 
     assert response is None
+
+
+@pytest.mark.asyncio
+async def test_external_fx_forward_curve_fails_closed_until_treasury_ingested():
+    service = make_service()
+    as_of_date = date(2026, 5, 3)
+
+    response = await service.get_external_fx_forward_curve(
+        ExternalFXForwardCurveRequest(
+            as_of_date=as_of_date,
+            tenant_id="default",
+            reporting_currency="USD",
+            currency_pairs=["EUR/USD", "USD/JPY"],
+            tenors=["1M", "3M"],
+        ),
+    )
+
+    assert response.product_name == "ExternalFXForwardCurve"
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED"
+    assert response.supportability.curve_point_count == 0
+    assert response.supportability.missing_data_families == ["external_fx_forward_curve"]
+    assert "forward_pricing" in response.supportability.blocked_capabilities
+    assert "best_execution" in response.supportability.blocked_capabilities
+    assert "venue_routing" in response.supportability.blocked_capabilities
+    assert "oms_acknowledgement" in response.supportability.blocked_capabilities
+    assert response.curve_points == []
+    assert response.data_quality_status == "MISSING"
+    assert response.lineage == {
+        "source_system": "external-bank-treasury",
+        "source_table": "not_ingested",
+        "contract_version": "rfc_039_external_fx_forward_curve_v1",
+        "integration_status": "not_ingested",
+        "runtime_posture": "fail_closed",
+        "non_claims": (
+            "forward_pricing,fx_valuation_methodology,hedge_advice,"
+            "treasury_instruction,counterparty_selection,order_generation,best_execution,"
+            "venue_routing,oms_acknowledgement,fills,settlement,"
+            "autonomous_treasury_action"
+        ),
+    }
 
 
 @pytest.mark.parametrize(

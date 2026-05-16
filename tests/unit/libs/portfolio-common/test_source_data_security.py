@@ -30,7 +30,6 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     expected_profiles = {
-        "ExternalFXForwardCurve",
         "ExternalEligibleHedgeInstrument",
     }
     profiles = {
@@ -52,6 +51,9 @@ def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
     readiness_profile = get_source_data_security_profile("ExternalHedgeExecutionReadiness")
     assert readiness_profile.sensitivity_classification == CLIENT_SENSITIVE
     assert readiness_profile.audit_requirement == AUDIT_SYSTEM_ACCESS
+    forward_curve_profile = get_source_data_security_profile("ExternalFXForwardCurve")
+    assert forward_curve_profile.sensitivity_classification == "reference_internal"
+    assert forward_curve_profile.audit_requirement == AUDIT_SYSTEM_ACCESS
 
 
 def test_every_source_data_product_has_tenant_and_entitlement_profile() -> None:
@@ -141,6 +143,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "ClientIncomeNeedsSchedule",
         "LiquidityReserveRequirement",
         "PlannedWithdrawalSchedule",
+        "ExternalFXForwardCurve",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
     ):

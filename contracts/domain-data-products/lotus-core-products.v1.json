@@ -2386,7 +2386,7 @@
       "owner_repository": "lotus-core",
       "product_family": "dpm_source_data",
       "authoritative_domain": "market_reference_data",
-      "lifecycle_status": "proposed",
+      "lifecycle_status": "active",
       "request_scope": {
         "scope_level": "instrument",
         "supports_bulk": true
@@ -2417,7 +2417,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "intraday",
-        "max_allowed_age_description": "Planned external treasury FX forward curve evidence supplied by bank-owned systems."
+        "max_allowed_age_description": "Fail-closed external treasury FX forward curve posture; curve evidence remains unavailable until bank-owned treasury ingestion is certified."
       },
       "completeness_policy": {
         "default_status": "partial",
