@@ -277,7 +277,13 @@ decisioning, suitability adjudication, or execution pricing into core. New propo
 should be added only through a follow-up RFC or explicit RFC extension with implementation
 evidence.
 
-There are currently no remaining planned DPM source products in the in-code planned catalog.
+RFC39-WTBD-008 now adds planned, not active, external treasury source-product contracts for
+`ExternalCurrencyExposure:v1`, `ExternalHedgePolicy:v1`, `ExternalFXForwardCurve:v1`,
+`ExternalEligibleHedgeInstrument:v1`, and `ExternalHedgeExecutionReadiness:v1`. They are proposed
+domain products only: no runtime route is active, no ingestion table is certified, and no downstream
+consumer may claim treasury policy approval, forward pricing, hedge advice, counterparty selection,
+best execution, OMS acknowledgement, fills, settlement, or autonomous treasury action from these
+planned contracts.
 
 ## Platform relationship
 

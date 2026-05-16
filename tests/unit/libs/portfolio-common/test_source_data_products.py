@@ -71,7 +71,13 @@ def test_dpm_planned_source_products_are_governed_but_not_active_routes() -> Non
         product.product_name: product for product in DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG
     }
 
-    assert planned_products.keys() == set()
+    assert planned_products.keys() == {
+        "ExternalCurrencyExposure",
+        "ExternalHedgePolicy",
+        "ExternalFXForwardCurve",
+        "ExternalEligibleHedgeInstrument",
+        "ExternalHedgeExecutionReadiness",
+    }
     assert not set(planned_products) & active_product_names
     assert all(product.owner == "lotus-core" for product in planned_products.values())
     assert all(product.consumers == ("lotus-manage",) for product in planned_products.values())
@@ -95,7 +101,13 @@ def test_dpm_planned_source_products_are_reserved_for_lotus_manage() -> None:
         product.product_name for product in planned_products_for_consumer("lotus-manage")
     }
 
-    assert product_names == set()
+    assert product_names == {
+        "ExternalCurrencyExposure",
+        "ExternalHedgePolicy",
+        "ExternalFXForwardCurve",
+        "ExternalEligibleHedgeInstrument",
+        "ExternalHedgeExecutionReadiness",
+    }
     assert planned_products_for_consumer("lotus-performance") == ()
 
 

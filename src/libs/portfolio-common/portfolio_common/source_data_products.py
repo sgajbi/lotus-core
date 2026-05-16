@@ -548,7 +548,88 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
     ),
 )
 
-DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = ()
+DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
+    SourceDataProductDefinition(
+        product_name="ExternalCurrencyExposure",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/external-currency-exposure",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Planned external treasury source product for bank-supplied currency exposure "
+            "evidence. It will not calculate FX attribution, hedge advice, or execution "
+            "readiness locally."
+        ),
+    ),
+    SourceDataProductDefinition(
+        product_name="ExternalHedgePolicy",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolios/{portfolio_id}/external-hedge-policy",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Planned external treasury source product for bank-supplied hedge policy evidence. "
+            "It will not approve hedge policy, choose counterparties, or issue trade orders."
+        ),
+    ),
+    SourceDataProductDefinition(
+        product_name="ExternalFXForwardCurve",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/market-data/external-fx-forward-curve",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Planned external treasury source product for bank-supplied FX forward curve "
+            "evidence. It will preserve source quotes and supportability without pricing "
+            "forwards locally."
+        ),
+    ),
+    SourceDataProductDefinition(
+        product_name="ExternalEligibleHedgeInstrument",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/instruments/external-eligible-hedge-instruments",),
+        paging_mode=INLINE_PAGED,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Planned external treasury source product for bank-supplied eligible hedge "
+            "instrument evidence. It will not perform suitability approval or venue routing."
+        ),
+    ),
+    SourceDataProductDefinition(
+        product_name="ExternalHedgeExecutionReadiness",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=(
+            "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness",
+        ),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Planned external treasury source product for bank-supplied hedge execution "
+            "readiness evidence. It will not acknowledge OMS execution, fills, settlement, "
+            "or best execution."
+        ),
+    ),
+)
 
 
 def get_source_data_product(product_name: str) -> SourceDataProductDefinition:
