@@ -66,20 +66,21 @@ evidence reference rather than omitting the concept.
 | `DataQualityCoverageReport` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/integration/benchmarks/{benchmark_id}/coverage`, `/integration/reference/risk-free-series/coverage` |
 | `IngestionEvidenceBundle` | Control-plane and policy | `query_control_plane_service` | gateway, manage, report | `/lineage/portfolios/{portfolio_id}/keys`, `/support/portfolios/{portfolio_id}/reprocessing-keys`, `/support/portfolios/{portfolio_id}/reprocessing-jobs` |
 
-## Planned External Treasury Source Products
+## External Treasury Source Products
 
-RFC39-WTBD-008 now has a governed planned source-product boundary for bank-owned treasury data,
-without activating runtime routes or support claims. These products remain `proposed` in the
-repo-native domain-product declaration until ingestion, persistence, APIs, supportability tests,
-and live evidence are implemented:
+RFC39-WTBD-008 now has a governed source-product boundary for bank-owned treasury data.
+`ExternalHedgeExecutionReadiness:v1` has an active fail-closed runtime route that returns
+`UNAVAILABLE` until external treasury ingestion is certified. The remaining products stay
+`proposed` in the repo-native domain-product declaration until ingestion, persistence, APIs,
+supportability tests, and live evidence are implemented:
 
-| Planned product | Intended source evidence | Explicit non-claim |
-| --- | --- | --- |
-| `ExternalCurrencyExposure:v1` | Bank-supplied currency exposure evidence by portfolio, mandate, currency, and as-of date. | No local FX attribution, hedge advice, treasury instruction, or execution claim. |
-| `ExternalHedgePolicy:v1` | Bank-supplied hedge policy constraints, allowed hedge posture, and policy lineage. | No hedge-policy approval, counterparty choice, client suitability approval, or order generation. |
-| `ExternalFXForwardCurve:v1` | Bank-supplied FX forward curve observations with source refs and freshness posture. | No local forward pricing, valuation methodology, best execution, or venue-routing claim. |
-| `ExternalEligibleHedgeInstrument:v1` | Bank-supplied eligible hedge instrument reference evidence. | No suitability approval, product recommendation, counterparty selection, or execution readiness. |
-| `ExternalHedgeExecutionReadiness:v1` | Bank-supplied hedge execution-readiness posture for a portfolio and as-of date. | No OMS acknowledgement, fills, settlement, best execution, or autonomous treasury action. |
+| Product | Current posture | Intended source evidence | Explicit non-claim |
+| --- | --- | --- | --- |
+| `ExternalCurrencyExposure:v1` | Planned only. | Bank-supplied currency exposure evidence by portfolio, mandate, currency, and as-of date. | No local FX attribution, hedge advice, treasury instruction, or execution claim. |
+| `ExternalHedgePolicy:v1` | Planned only. | Bank-supplied hedge policy constraints, allowed hedge posture, and policy lineage. | No hedge-policy approval, counterparty choice, client suitability approval, or order generation. |
+| `ExternalFXForwardCurve:v1` | Planned only. | Bank-supplied FX forward curve observations with source refs and freshness posture. | No local forward pricing, valuation methodology, best execution, or venue-routing claim. |
+| `ExternalEligibleHedgeInstrument:v1` | Planned only. | Bank-supplied eligible hedge instrument reference evidence. | No suitability approval, product recommendation, counterparty selection, or execution readiness. |
+| `ExternalHedgeExecutionReadiness:v1` | Active fail-closed route: `/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness`. | Bank-supplied hedge execution-readiness posture for a portfolio and as-of date. | No OMS acknowledgement, fills, settlement, best execution, or autonomous treasury action. |
 
 ## Paging And Export Rules
 
@@ -154,6 +155,7 @@ source truth.
 | `ClientIncomeNeedsSchedule:v1` | Effective-dated client income-needs schedule facts including bounded need type/status, amount, currency, cadence, priority, funding-policy reference, supportability metadata, lineage, and source record identity. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/client-income-needs-schedule.md`. | Consumers may use returned schedule rows as source-owned DPM liquidity and cash-needs evidence with supportability and lineage attached. | Consumers must not claim financial-planning advice, client liability planning, suitability approval, cashflow forecasting, funding recommendations, or OMS acknowledgement from schedule facts. |
 | `LiquidityReserveRequirement:v1` | Effective-dated liquidity reserve requirement facts including reserve type/status, required amount, currency, horizon, priority, policy source, supportability metadata, lineage, and source record identity. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/liquidity-reserve-requirement.md`. | Consumers may use returned requirement rows as source-owned DPM reserve evidence with supportability and lineage attached. | Consumers must not claim cash-reserve recommendations, financial-planning advice, suitability approval, treasury instructions, or OMS acknowledgement from reserve facts. |
 | `PlannedWithdrawalSchedule:v1` | Horizon-bounded planned withdrawal facts including withdrawal type/status, amount, currency, scheduled date, recurrence, purpose code, supportability metadata, lineage, and source record identity. The implementation-backed methodology is documented in `docs/methodologies/source-data-products/planned-withdrawal-schedule.md`. | Consumers may use returned withdrawal rows as source-owned DPM withdrawal evidence with supportability and lineage attached. | Consumers must not claim cashflow forecasting, financial-planning advice, suitability approval, funding recommendations, treasury instructions, or OMS acknowledgement from withdrawal facts. |
+| `ExternalHedgeExecutionReadiness:v1` | Fail-closed external treasury readiness posture for currency-overlay workflows. It resolves portfolio mandate identity and returns `UNAVAILABLE` with required external treasury data families, blocked capabilities, lineage, runtime metadata, and deterministic fingerprints until bank-owned treasury ingestion is certified. | Consumers may use the unavailable posture to block currency-overlay realization and route operators to treasury-source integration work. | Consumers must not claim hedge advice, forward pricing, counterparty selection, best execution, OMS acknowledgement, fills, settlement, or autonomous treasury action from this posture. |
 | `TransactionCostCurve:v1` | Observed booked fee evidence grouped by security, transaction type, and currency. | Consumers may distinguish source-backed observed cost context from local estimated construction cost. | Consumers must not claim predictive market-impact, venue-routing, fill-quality, best-execution, or minimum-cost execution methodology from observed fee evidence. |
 
 These boundaries are intentionally conservative. `lotus-core` is the source authority for recorded

@@ -88,10 +88,12 @@ Boundary rules that matter:
    rows by classification, timing, currency, and flow scope without claiming cashflow forecasting,
    funding recommendations, treasury instructions, liquidity advice, execution quality, tax
    methodology, or OMS acknowledgement.
-10. RFC39-WTBD-008 external treasury source products are now governed as planned contracts for
-    future bank-owned ingestion: `ExternalCurrencyExposure:v1`, `ExternalHedgePolicy:v1`,
-    `ExternalFXForwardCurve:v1`, `ExternalEligibleHedgeInstrument:v1`, and
-    `ExternalHedgeExecutionReadiness:v1`. They are not active runtime APIs and do not create
+10. RFC39-WTBD-008 external treasury source products now include an active fail-closed
+    `ExternalHedgeExecutionReadiness:v1` route at
+    `/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness`. It returns
+    `UNAVAILABLE` until bank-owned treasury ingestion is certified. `ExternalCurrencyExposure:v1`,
+    `ExternalHedgePolicy:v1`, `ExternalFXForwardCurve:v1`, and
+    `ExternalEligibleHedgeInstrument:v1` remain planned contracts. None of these contracts create
     hedge advice, forward pricing, treasury instructions, counterparty selection, best execution,
     OMS acknowledgement, fills, or settlement claims.
 

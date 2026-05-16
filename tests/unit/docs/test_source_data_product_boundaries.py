@@ -115,7 +115,7 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "flowchart LR" in wiki
 
 
-def test_external_treasury_source_products_are_planned_not_active_claims() -> None:
+def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> None:
     catalog = _read("docs/architecture/RFC-0083-source-data-product-catalog.md")
     wiki = _read("wiki/Mesh-Data-Products.md")
     normalized_wiki = _single_line(wiki)
@@ -130,8 +130,9 @@ def test_external_treasury_source_products_are_planned_not_active_claims() -> No
         assert f"`{product_name}`" in catalog
         assert f"`{product_name}`" in wiki
 
-    assert "Planned External Treasury Source Products" in catalog
-    assert "no runtime route is active" in normalized_wiki
+    assert "External Treasury Source Products" in catalog
+    assert "fail-closed unavailable runtime posture" in normalized_wiki
+    assert "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness" in wiki
     assert "treasury policy approval, forward pricing, hedge advice" in normalized_wiki
     assert "OMS acknowledgement, fills, settlement" in normalized_wiki
 
