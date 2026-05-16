@@ -318,6 +318,13 @@ Most relevant current governance:
     movement direction, empty-window posture, and the explicit boundary from cashflow forecasting,
     funding recommendations, treasury instructions, liquidity advice, tax methodology, execution
     quality, and OMS acknowledgement.
+37. RFC39-WTBD-008 now has planned, not active, external treasury source-product contracts in the
+    in-code planned catalog and repo-native domain-product declaration:
+    `ExternalCurrencyExposure:v1`, `ExternalHedgePolicy:v1`, `ExternalFXForwardCurve:v1`,
+    `ExternalEligibleHedgeInstrument:v1`, and `ExternalHedgeExecutionReadiness:v1`. They define
+    the future Lotus-side ingestion and source boundary for bank-owned treasury evidence without
+    activating runtime routes or claiming hedge advice, forward pricing, treasury instructions,
+    counterparty choice, best execution, OMS acknowledgement, fills, or settlement.
 
 ## Context Maintenance Rule
 

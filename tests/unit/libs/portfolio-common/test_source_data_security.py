@@ -29,7 +29,13 @@ def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> No
 
 
 def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
-    expected_profiles = set()
+    expected_profiles = {
+        "ExternalCurrencyExposure",
+        "ExternalHedgePolicy",
+        "ExternalFXForwardCurve",
+        "ExternalEligibleHedgeInstrument",
+        "ExternalHedgeExecutionReadiness",
+    }
     profiles = {
         profile.product_name: profile for profile in DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES
     }
@@ -39,6 +45,12 @@ def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
         assert profile.access_classification == SYSTEM_ACCESS
         assert profile.audit_requirement == AUDIT_SYSTEM_ACCESS
         assert profile.operator_only is False
+
+    assert profiles["ExternalCurrencyExposure"].sensitivity_classification == CLIENT_SENSITIVE
+    assert profiles["ExternalHedgePolicy"].sensitivity_classification == CLIENT_SENSITIVE
+    assert (
+        profiles["ExternalHedgeExecutionReadiness"].sensitivity_classification == CLIENT_SENSITIVE
+    )
 
 
 def test_every_source_data_product_has_tenant_and_entitlement_profile() -> None:

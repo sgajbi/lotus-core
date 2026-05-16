@@ -115,6 +115,27 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "flowchart LR" in wiki
 
 
+def test_external_treasury_source_products_are_planned_not_active_claims() -> None:
+    catalog = _read("docs/architecture/RFC-0083-source-data-product-catalog.md")
+    wiki = _read("wiki/Mesh-Data-Products.md")
+    normalized_wiki = _single_line(wiki)
+
+    for product_name in (
+        "ExternalCurrencyExposure:v1",
+        "ExternalHedgePolicy:v1",
+        "ExternalFXForwardCurve:v1",
+        "ExternalEligibleHedgeInstrument:v1",
+        "ExternalHedgeExecutionReadiness:v1",
+    ):
+        assert f"`{product_name}`" in catalog
+        assert f"`{product_name}`" in wiki
+
+    assert "Planned External Treasury Source Products" in catalog
+    assert "no runtime route is active" in normalized_wiki
+    assert "treasury policy approval, forward pricing, hedge advice" in normalized_wiki
+    assert "OMS acknowledgement, fills, settlement" in normalized_wiki
+
+
 def test_holdings_as_of_methodology_is_implementation_backed() -> None:
     methodology = _read("docs/methodologies/source-data-products/holdings-as-of.md")
     normalized_methodology = _single_line(methodology)

@@ -66,6 +66,21 @@ evidence reference rather than omitting the concept.
 | `DataQualityCoverageReport` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/integration/benchmarks/{benchmark_id}/coverage`, `/integration/reference/risk-free-series/coverage` |
 | `IngestionEvidenceBundle` | Control-plane and policy | `query_control_plane_service` | gateway, manage, report | `/lineage/portfolios/{portfolio_id}/keys`, `/support/portfolios/{portfolio_id}/reprocessing-keys`, `/support/portfolios/{portfolio_id}/reprocessing-jobs` |
 
+## Planned External Treasury Source Products
+
+RFC39-WTBD-008 now has a governed planned source-product boundary for bank-owned treasury data,
+without activating runtime routes or support claims. These products remain `proposed` in the
+repo-native domain-product declaration until ingestion, persistence, APIs, supportability tests,
+and live evidence are implemented:
+
+| Planned product | Intended source evidence | Explicit non-claim |
+| --- | --- | --- |
+| `ExternalCurrencyExposure:v1` | Bank-supplied currency exposure evidence by portfolio, mandate, currency, and as-of date. | No local FX attribution, hedge advice, treasury instruction, or execution claim. |
+| `ExternalHedgePolicy:v1` | Bank-supplied hedge policy constraints, allowed hedge posture, and policy lineage. | No hedge-policy approval, counterparty choice, client suitability approval, or order generation. |
+| `ExternalFXForwardCurve:v1` | Bank-supplied FX forward curve observations with source refs and freshness posture. | No local forward pricing, valuation methodology, best execution, or venue-routing claim. |
+| `ExternalEligibleHedgeInstrument:v1` | Bank-supplied eligible hedge instrument reference evidence. | No suitability approval, product recommendation, counterparty selection, or execution readiness. |
+| `ExternalHedgeExecutionReadiness:v1` | Bank-supplied hedge execution-readiness posture for a portfolio and as-of date. | No OMS acknowledgement, fills, settlement, best execution, or autonomous treasury action. |
+
 ## Paging And Export Rules
 
 1. Small bounded products may remain inline responses.
