@@ -411,6 +411,16 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         pii_fields=("portfolio_id", "source_record_id", "source_batch_id"),
         operator_only=True,
     ),
+    SourceDataSecurityProfile(
+        product_name="ExternalHedgeExecutionReadiness",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id", "mandate_id", "client_id"),
+    ),
 )
 
 DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
@@ -451,16 +461,6 @@ DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...]
         sensitivity_classification=REFERENCE_INTERNAL,
         retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
         audit_requirement=AUDIT_SYSTEM_ACCESS,
-    ),
-    SourceDataSecurityProfile(
-        product_name="ExternalHedgeExecutionReadiness",
-        tenant_required=True,
-        entitlement_required=True,
-        access_classification=SYSTEM_ACCESS,
-        sensitivity_classification=CLIENT_SENSITIVE,
-        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
-        audit_requirement=AUDIT_SYSTEM_ACCESS,
-        pii_fields=("portfolio_id", "mandate_id", "client_id"),
     ),
 )
 

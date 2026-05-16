@@ -932,6 +932,99 @@ class PlannedWithdrawalScheduleResponse(SourceDataProductRuntimeMetadata):
     model_config = ConfigDict()
 
 
+class ExternalHedgeExecutionReadinessRequest(BaseModel):
+    as_of_date: date = Field(
+        ...,
+        description=(
+            "Business date used to evaluate external treasury source availability for hedge "
+            "execution readiness."
+        ),
+        examples=["2026-05-03"],
+    )
+    tenant_id: str | None = Field(None, description="Optional tenant identifier.")
+    mandate_id: str | None = Field(None, description="Optional mandate disambiguator.")
+    reporting_currency: str | None = Field(
+        None,
+        description="Optional reporting currency supplied by the downstream DPM workflow.",
+        examples=["USD"],
+    )
+    exposure_currencies: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional exposure currencies the downstream workflow wants treasury readiness "
+            "checked for. The current source-owner posture remains unavailable until external "
+            "treasury ingestion is certified."
+        ),
+        examples=[["EUR", "JPY"]],
+    )
+
+    model_config = ConfigDict()
+
+
+class ExternalHedgeExecutionReadinessSupportability(BaseModel):
+    state: Literal["UNAVAILABLE"] = Field(
+        "UNAVAILABLE",
+        description=(
+            "Supportability state for external treasury hedge execution readiness. The current "
+            "Lotus Core runtime exposes only fail-closed unavailable posture."
+        ),
+        examples=["UNAVAILABLE"],
+    )
+    reason: Literal["EXTERNAL_TREASURY_SOURCE_NOT_INGESTED"] = Field(
+        "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED",
+        description="Machine-readable fail-closed reason.",
+        examples=["EXTERNAL_TREASURY_SOURCE_NOT_INGESTED"],
+    )
+    missing_data_families: list[str] = Field(
+        default_factory=list,
+        description="External treasury source-data families required before readiness can be used.",
+    )
+    blocked_capabilities: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Capabilities explicitly blocked by the unavailable posture. These are non-claims, "
+            "not pending recommendations."
+        ),
+    )
+
+    model_config = ConfigDict()
+
+
+class ExternalHedgeExecutionReadinessResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["ExternalHedgeExecutionReadiness"] = product_name_field(
+        "ExternalHedgeExecutionReadiness"
+    )
+    product_version: Literal["v1"] = product_version_field()
+    portfolio_id: str = Field(..., description="Portfolio identifier for the readiness posture.")
+    client_id: str = Field(..., description="Client identifier bound to the portfolio mandate.")
+    mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
+    reporting_currency: str | None = Field(
+        None,
+        description="Requested reporting currency echoed for downstream audit.",
+        examples=["USD"],
+    )
+    exposure_currencies: list[str] = Field(
+        default_factory=list,
+        description="Requested exposure currencies echoed for downstream audit.",
+    )
+    readiness_checks: list[dict[str, str]] = Field(
+        default_factory=list,
+        description=(
+            "External treasury readiness checks. Empty while external treasury ingestion is not "
+            "certified."
+        ),
+    )
+    supportability: ExternalHedgeExecutionReadinessSupportability = Field(
+        ..., description="Fail-closed supportability posture for external treasury readiness."
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Source lineage and non-claim posture for external treasury readiness.",
+    )
+
+    model_config = ConfigDict()
+
+
 class BenchmarkAssignmentRequest(BaseModel):
     as_of_date: date = Field(
         ...,

@@ -504,6 +504,24 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="ExternalHedgeExecutionReadiness",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=(
+            "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness",
+        ),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for fail-closed external treasury hedge execution readiness. "
+            "It returns unavailable until bank-owned treasury ingestion is certified and does "
+            "not acknowledge OMS execution, fills, settlement, or best execution."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ReconciliationEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
@@ -609,24 +627,6 @@ DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...]
         notes=(
             "Planned external treasury source product for bank-supplied eligible hedge "
             "instrument evidence. It will not perform suitability approval or venue routing."
-        ),
-    ),
-    SourceDataProductDefinition(
-        product_name="ExternalHedgeExecutionReadiness",
-        product_version="v1",
-        route_family=ANALYTICS_INPUT,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
-        owner="lotus-core",
-        consumers=("lotus-manage",),
-        current_routes=(
-            "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness",
-        ),
-        paging_mode=NOT_APPLICABLE,
-        export_mode=NOT_APPLICABLE,
-        notes=(
-            "Planned external treasury source product for bank-supplied hedge execution "
-            "readiness evidence. It will not acknowledge OMS execution, fills, settlement, "
-            "or best execution."
         ),
     ),
 )
