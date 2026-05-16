@@ -57,6 +57,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "ClientIncomeNeedsSchedule",
         "LiquidityReserveRequirement",
         "PlannedWithdrawalSchedule",
+        "ExternalHedgeExecutionReadiness",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
         "ReconciliationEvidenceBundle",
@@ -76,7 +77,6 @@ def test_dpm_planned_source_products_are_governed_but_not_active_routes() -> Non
         "ExternalHedgePolicy",
         "ExternalFXForwardCurve",
         "ExternalEligibleHedgeInstrument",
-        "ExternalHedgeExecutionReadiness",
     }
     assert not set(planned_products) & active_product_names
     assert all(product.owner == "lotus-core" for product in planned_products.values())
@@ -106,7 +106,6 @@ def test_dpm_planned_source_products_are_reserved_for_lotus_manage() -> None:
         "ExternalHedgePolicy",
         "ExternalFXForwardCurve",
         "ExternalEligibleHedgeInstrument",
-        "ExternalHedgeExecutionReadiness",
     }
     assert planned_products_for_consumer("lotus-performance") == ()
 

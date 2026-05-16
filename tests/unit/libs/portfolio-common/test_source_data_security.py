@@ -34,7 +34,6 @@ def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
         "ExternalHedgePolicy",
         "ExternalFXForwardCurve",
         "ExternalEligibleHedgeInstrument",
-        "ExternalHedgeExecutionReadiness",
     }
     profiles = {
         profile.product_name: profile for profile in DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES
@@ -48,9 +47,9 @@ def test_dpm_planned_source_data_security_profiles_are_system_scoped() -> None:
 
     assert profiles["ExternalCurrencyExposure"].sensitivity_classification == CLIENT_SENSITIVE
     assert profiles["ExternalHedgePolicy"].sensitivity_classification == CLIENT_SENSITIVE
-    assert (
-        profiles["ExternalHedgeExecutionReadiness"].sensitivity_classification == CLIENT_SENSITIVE
-    )
+    readiness_profile = get_source_data_security_profile("ExternalHedgeExecutionReadiness")
+    assert readiness_profile.sensitivity_classification == CLIENT_SENSITIVE
+    assert readiness_profile.audit_requirement == AUDIT_SYSTEM_ACCESS
 
 
 def test_every_source_data_product_has_tenant_and_entitlement_profile() -> None:

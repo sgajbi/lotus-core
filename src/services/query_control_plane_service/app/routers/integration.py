@@ -46,6 +46,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingResponse,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
+    ExternalHedgeExecutionReadinessRequest,
+    ExternalHedgeExecutionReadinessResponse,
     IndexCatalogRequest,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
@@ -130,6 +132,9 @@ LIQUIDITY_RESERVE_REQUIREMENT_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 PLANNED_WITHDRAWAL_SCHEDULE_NOT_FOUND_EXAMPLE = {
+    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
+}
+EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
 PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = {
@@ -1109,6 +1114,55 @@ async def get_planned_withdrawal_schedule(
     response = cast(
         PlannedWithdrawalScheduleResponse | None,
         await integration_service.get_planned_withdrawal_schedule(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/external-hedge-execution-readiness",
+    response_model=ExternalHedgeExecutionReadinessResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve external treasury hedge execution readiness posture",
+    description=(
+        "What: Return the source-owner posture for external treasury hedge execution "
+        "readiness for a DPM portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding for portfolio identity, "
+        "then returns a fail-closed unavailable posture until bank-owned external treasury "
+        "source products are ingested and certified.\n"
+        "When: Use this endpoint when lotus-manage or gateway needs a bounded RFC39-WTBD-008 "
+        "source signal for currency-overlay supportability. The response does not provide "
+        "hedge advice, forward pricing, counterparty selection, best execution, OMS "
+        "acknowledgement, fills, settlement, or autonomous treasury action."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ExternalHedgeExecutionReadiness"),
+)
+async def get_external_hedge_execution_readiness(
+    request: ExternalHedgeExecutionReadinessRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose external treasury readiness is requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ExternalHedgeExecutionReadinessResponse:
+    response = cast(
+        ExternalHedgeExecutionReadinessResponse | None,
+        await integration_service.get_external_hedge_execution_readiness(
             portfolio_id=portfolio_id,
             request=request,
         ),
