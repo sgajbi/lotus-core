@@ -103,9 +103,11 @@ Boundary rules that matter:
     generation, venue-routing, best execution, OMS acknowledgement, fills, or settlement claims.
 11. RFC42-WTBD execution boundary coverage adds `ExternalOrderExecutionAcknowledgement:v1` at
     `/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement`. It returns
-    `UNAVAILABLE` until bank-owned OMS acknowledgement ingestion is certified and does not create
-    orders, route venues, declare best execution, acknowledge OMS execution, certify fills, confirm
-    settlement, or perform autonomous execution action.
+    `UNAVAILABLE` until bank-owned OMS acknowledgement ingestion is certified. Its
+    implementation-backed methodology is documented in
+    `docs/methodologies/source-data-products/external-order-execution-acknowledgement.md`; it does
+    not create orders, route venues, declare best execution, acknowledge OMS execution, certify
+    fills, confirm settlement, or perform autonomous execution action.
 
 ## Architecture At A Glance
 
