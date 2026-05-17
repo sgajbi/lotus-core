@@ -333,10 +333,11 @@ Most relevant current governance:
     attribution, hedge advice, hedge-policy approval, eligible-instrument selection, product
     recommendation, forward pricing, FX valuation methodology, treasury instructions, counterparty
     choice, order generation, venue routing, best execution, OMS acknowledgement, fills,
-    settlement, or autonomous treasury action. `ExternalFXForwardCurve:v1` is pinned by
+    settlement, or autonomous treasury action. `ExternalEligibleHedgeInstrument:v1`,
+    `ExternalFXForwardCurve:v1`, and `ExternalHedgeExecutionReadiness:v1` are pinned by
     implementation-backed methodology truth at
+    `docs/methodologies/source-data-products/external-eligible-hedge-instrument.md`,
     `docs/methodologies/source-data-products/external-fx-forward-curve.md`, and
-    `ExternalHedgeExecutionReadiness:v1` is pinned by
     `docs/methodologies/source-data-products/external-hedge-execution-readiness.md`.
 38. RFC42-WTBD execution-boundary coverage now has active fail-closed
     `ExternalOrderExecutionAcknowledgement:v1` at
