@@ -11,7 +11,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.events import PortfolioAggregationRequiredEvent
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_aggregation_service.app.consumers import (
     portfolio_timeseries_consumer as portfolio_timeseries_consumer_module,
@@ -62,39 +62,26 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
         dlq_topic="test.dlq",
     )
     consumer._send_to_dlq_async = AsyncMock()
-    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
 
     async def override_session():
         yield async_db_session
 
-    original_update_job_status = (
-        portfolio_timeseries_consumer_module.PortfolioTimeseriesConsumer._update_job_status
-    )
-
-    async def update_job_status_with_ownership_loss(
+    async def complete_or_requeue_with_ownership_loss(
         self,
         portfolio_id,
         a_date,
-        status,
         db_session=None,
     ):
-        async with session_factory() as session:
-            await session.execute(
-                update(PortfolioAggregationJob)
-                .where(
-                    PortfolioAggregationJob.portfolio_id == portfolio_id,
-                    PortfolioAggregationJob.aggregation_date == a_date,
-                )
-                .values(status="COMPLETE")
+        assert db_session is not None
+        await db_session.execute(
+            update(PortfolioAggregationJob)
+            .where(
+                PortfolioAggregationJob.portfolio_id == portfolio_id,
+                PortfolioAggregationJob.aggregation_date == a_date,
             )
-            await session.commit()
-        return await original_update_job_status(
-            self,
-            portfolio_id,
-            a_date,
-            status,
-            db_session=db_session,
+            .values(status="COMPLETE")
         )
+        return "LOST_OWNERSHIP"
 
     deterministic_record = PortfolioTimeseries(
         portfolio_id="PORT-AGG-INT-01",
@@ -114,8 +101,8 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
         ),
         patch.object(
             portfolio_timeseries_consumer_module.PortfolioTimeseriesConsumer,
-            "_update_job_status",
-            new=update_job_status_with_ownership_loss,
+            "_complete_or_requeue_job",
+            new=complete_or_requeue_with_ownership_loss,
         ),
         patch(
             "src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer.PortfolioTimeseriesLogic.calculate_daily_record",
