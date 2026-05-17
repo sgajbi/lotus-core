@@ -132,6 +132,10 @@ def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> 
         assert f"`{product_name}`" in wiki
 
     assert "External Treasury Source Products" in catalog
+    assert "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md" in (
+        catalog
+    )
+    assert "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md" in wiki
     assert "docs/methodologies/source-data-products/external-fx-forward-curve.md" in catalog
     assert "docs/methodologies/source-data-products/external-fx-forward-curve.md" in wiki
     assert (
@@ -510,6 +514,7 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "source-data-products/portfolio-liquidity-ladder.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
     assert "source-data-products/portfolio-realized-tax-summary.md" in index
+    assert "source-data-products/external-eligible-hedge-instrument.md" in index
     assert "source-data-products/external-fx-forward-curve.md" in index
     assert "source-data-products/external-hedge-execution-readiness.md" in index
     assert "source-data-products/external-order-execution-acknowledgement.md" in index
@@ -521,10 +526,60 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "Governed booked transaction-row windowing" in index
     assert "Source-owned cash-availability buckets" in index
     assert "Portfolio-level aggregation of explicit booked withholding-tax" in index
+    assert "Fail-closed external treasury eligible hedge instrument posture" in index
     assert "Fail-closed external treasury FX forward curve posture" in index
     assert "Fail-closed external treasury hedge execution readiness posture" in index
     assert "Fail-closed external OMS acknowledgement posture" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index
+
+
+def test_external_eligible_hedge_instrument_methodology_is_implementation_backed() -> None:
+    methodology = _read(
+        "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md"
+    )
+    catalog = _read("docs/architecture/RFC-0083-source-data-product-catalog.md")
+    wiki = _read("wiki/Mesh-Data-Products.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+        "## Downstream Consumption Rules",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`ExternalEligibleHedgeInstrument:v1`" in methodology
+    assert (
+        "`POST /integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments`"
+        in methodology
+    )
+    assert "`DiscretionaryMandateBinding:v1`" in methodology
+    assert "INSTR = []" in methodology
+    assert "n_INSTR = len(INSTR) = 0" in methodology
+    assert "external_eligible_hedge_instrument" in methodology
+    assert "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED" in methodology
+    assert 'data_quality_status = "MISSING"' in methodology
+    assert "source system `external-bank-treasury`" in methodology
+    assert "external_eligible_hedge_instrument:" in methodology
+    assert "does not select eligible hedge instruments" in normalized_methodology
+    assert "hedge_instrument_suitability" in methodology
+    assert "autonomous treasury action" in normalized_methodology
+    assert (
+        "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md"
+        in catalog
+    )
+    assert "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md" in wiki
 
 
 def test_external_hedge_execution_readiness_methodology_is_implementation_backed() -> None:
