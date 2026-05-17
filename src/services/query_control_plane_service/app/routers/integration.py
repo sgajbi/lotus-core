@@ -48,6 +48,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DpmSourceReadinessResponse,
     ExternalCurrencyExposureRequest,
     ExternalCurrencyExposureResponse,
+    ExternalEligibleHedgeInstrumentRequest,
+    ExternalEligibleHedgeInstrumentResponse,
     ExternalFXForwardCurveRequest,
     ExternalFXForwardCurveResponse,
     ExternalHedgeExecutionReadinessRequest,
@@ -1269,6 +1271,58 @@ async def get_external_currency_exposure(
     response = cast(
         ExternalCurrencyExposureResponse | None,
         await integration_service.get_external_currency_exposure(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/external-eligible-hedge-instruments",
+    response_model=ExternalEligibleHedgeInstrumentResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve external treasury eligible hedge instrument posture",
+    description=(
+        "What: Return the source-owner posture for external treasury eligible hedge "
+        "instrument evidence for a DPM portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding for portfolio identity, "
+        "then returns a fail-closed unavailable posture until bank-owned external treasury "
+        "instrument eligibility feeds are ingested and certified.\n"
+        "When: Use this endpoint when lotus-manage or gateway needs bounded RFC39-WTBD-008 "
+        "eligible hedge instrument supportability. The response does not perform suitability "
+        "approval, recommend hedge products, choose counterparties, issue treasury "
+        "instructions, generate orders, declare best execution, acknowledge OMS execution, "
+        "or claim fills, settlement, or autonomous treasury action."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ExternalEligibleHedgeInstrument"),
+)
+async def get_external_eligible_hedge_instruments(
+    request: ExternalEligibleHedgeInstrumentRequest,
+    portfolio_id: str = Path(
+        ...,
+        description=(
+            "Portfolio identifier whose external eligible hedge instruments are requested."
+        ),
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ExternalEligibleHedgeInstrumentResponse:
+    response = cast(
+        ExternalEligibleHedgeInstrumentResponse | None,
+        await integration_service.get_external_eligible_hedge_instruments(
             portfolio_id=portfolio_id,
             request=request,
         ),

@@ -60,6 +60,7 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "ExternalHedgeExecutionReadiness",
         "ExternalCurrencyExposure",
         "ExternalHedgePolicy",
+        "ExternalEligibleHedgeInstrument",
         "ExternalFXForwardCurve",
         "IndexSeriesWindow",
         "RiskFreeSeriesWindow",
@@ -75,24 +76,8 @@ def test_dpm_planned_source_products_are_governed_but_not_active_routes() -> Non
         product.product_name: product for product in DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG
     }
 
-    assert planned_products.keys() == {
-        "ExternalEligibleHedgeInstrument",
-    }
+    assert planned_products.keys() == set()
     assert not set(planned_products) & active_product_names
-    assert all(product.owner == "lotus-core" for product in planned_products.values())
-    assert all(product.consumers == ("lotus-manage",) for product in planned_products.values())
-    assert all(
-        product.serving_plane == QUERY_CONTROL_PLANE_SERVICE
-        for product in planned_products.values()
-    )
-    assert all(product.route_family == ANALYTICS_INPUT for product in planned_products.values())
-    assert all(
-        route.startswith("/integration/")
-        and "execution-context" not in route
-        and "dpm-execution-context" not in route
-        for product in planned_products.values()
-        for route in product.current_routes
-    )
     validate_source_data_product_catalog(DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG)
 
 
@@ -101,9 +86,7 @@ def test_dpm_planned_source_products_are_reserved_for_lotus_manage() -> None:
         product.product_name for product in planned_products_for_consumer("lotus-manage")
     }
 
-    assert product_names == {
-        "ExternalEligibleHedgeInstrument",
-    }
+    assert product_names == set()
     assert planned_products_for_consumer("lotus-performance") == ()
 
 

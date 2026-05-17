@@ -94,6 +94,7 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
                 "ExternalHedgeExecutionReadiness",
                 "ExternalCurrencyExposure",
                 "ExternalHedgePolicy",
+                "ExternalEligibleHedgeInstrument",
                 "ExternalFXForwardCurve",
             }
             else family_map[source_product.route_family]

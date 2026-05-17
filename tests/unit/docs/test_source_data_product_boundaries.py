@@ -134,6 +134,7 @@ def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> 
     assert "fail-closed unavailable runtime posture" in normalized_wiki
     assert "/integration/portfolios/{portfolio_id}/external-currency-exposure" in wiki
     assert "/integration/portfolios/{portfolio_id}/external-hedge-policy" in wiki
+    assert "/integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments" in wiki
     assert "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness" in wiki
     assert (
         "FX attribution, treasury policy approval, forward pricing, hedge advice"

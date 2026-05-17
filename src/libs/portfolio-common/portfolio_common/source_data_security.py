@@ -442,6 +442,16 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         pii_fields=("portfolio_id", "mandate_id", "client_id"),
     ),
     SourceDataSecurityProfile(
+        product_name="ExternalEligibleHedgeInstrument",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id", "mandate_id", "client_id"),
+    ),
+    SourceDataSecurityProfile(
         product_name="ExternalFXForwardCurve",
         tenant_required=True,
         entitlement_required=True,
@@ -452,17 +462,7 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
     ),
 )
 
-DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
-    SourceDataSecurityProfile(
-        product_name="ExternalEligibleHedgeInstrument",
-        tenant_required=True,
-        entitlement_required=True,
-        access_classification=SYSTEM_ACCESS,
-        sensitivity_classification=REFERENCE_INTERNAL,
-        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
-        audit_requirement=AUDIT_SYSTEM_ACCESS,
-    ),
-)
+DPM_PLANNED_SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = ()
 
 
 def get_source_data_security_profile(product_name: str) -> SourceDataSecurityProfile:
