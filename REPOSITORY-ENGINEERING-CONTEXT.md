@@ -335,7 +335,9 @@ Most relevant current governance:
     choice, order generation, venue routing, best execution, OMS acknowledgement, fills,
     settlement, or autonomous treasury action. `ExternalFXForwardCurve:v1` is pinned by
     implementation-backed methodology truth at
-    `docs/methodologies/source-data-products/external-fx-forward-curve.md`.
+    `docs/methodologies/source-data-products/external-fx-forward-curve.md`, and
+    `ExternalHedgeExecutionReadiness:v1` is pinned by
+    `docs/methodologies/source-data-products/external-hedge-execution-readiness.md`.
 38. RFC42-WTBD execution-boundary coverage now has active fail-closed
     `ExternalOrderExecutionAcknowledgement:v1` at
     `/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement`. It resolves
