@@ -132,6 +132,8 @@ def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> 
         assert f"`{product_name}`" in wiki
 
     assert "External Treasury Source Products" in catalog
+    assert "docs/methodologies/source-data-products/external-fx-forward-curve.md" in catalog
+    assert "docs/methodologies/source-data-products/external-fx-forward-curve.md" in wiki
     assert "fail-closed unavailable runtime posture" in normalized_wiki
     assert "/integration/portfolios/{portfolio_id}/external-currency-exposure" in wiki
     assert "/integration/portfolios/{portfolio_id}/external-hedge-policy" in wiki
@@ -504,6 +506,7 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "source-data-products/portfolio-liquidity-ladder.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
     assert "source-data-products/portfolio-realized-tax-summary.md" in index
+    assert "source-data-products/external-fx-forward-curve.md" in index
     assert "source-data-products/external-order-execution-acknowledgement.md" in index
     assert "source-data-products/transaction-cost-curve.md" in index
     assert "Effective-dated open and closed tax-lot state" in index
@@ -513,8 +516,49 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "Governed booked transaction-row windowing" in index
     assert "Source-owned cash-availability buckets" in index
     assert "Portfolio-level aggregation of explicit booked withholding-tax" in index
+    assert "Fail-closed external treasury FX forward curve posture" in index
     assert "Fail-closed external OMS acknowledgement posture" in index
     assert "Observed booked-fee aggregation by security, transaction type, and currency" in index
+
+
+def test_external_fx_forward_curve_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/external-fx-forward-curve.md")
+    catalog = _read("docs/architecture/RFC-0083-source-data-product-catalog.md")
+    wiki = _read("wiki/Mesh-Data-Products.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Endpoint and Mode Coverage",
+        "## Inputs",
+        "## Upstream Data Sources",
+        "## Unit Conventions",
+        "## Variable Dictionary",
+        "## Methodology and Formulas",
+        "## Step-by-Step Computation",
+        "## Validation and Failure Behavior",
+        "## Configuration Options",
+        "## Outputs",
+        "## Worked Example",
+        "## Downstream Consumption Rules",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`ExternalFXForwardCurve:v1`" in methodology
+    assert "`POST /integration/market-data/external-fx-forward-curve`" in methodology
+    assert "CURVE = []" in methodology
+    assert "n_CURVE = len(CURVE) = 0" in methodology
+    assert "external_fx_forward_curve" in methodology
+    assert "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED" in methodology
+    assert 'data_quality_status = "MISSING"' in methodology
+    assert "source system `external-bank-treasury`" in methodology
+    assert "external_fx_forward_curve:" in methodology
+    assert "does not price forwards, perform FX valuation" in normalized_methodology
+    assert "counterparty selection, order generation, best execution" in normalized_methodology
+    assert "autonomous treasury action" in normalized_methodology
+    assert "docs/methodologies/source-data-products/external-fx-forward-curve.md" in catalog
+    assert "docs/methodologies/source-data-products/external-fx-forward-curve.md" in wiki
 
 
 def test_external_order_execution_acknowledgement_methodology_is_implementation_backed() -> None:

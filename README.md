@@ -97,7 +97,9 @@ Boundary rules that matter:
     `/integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments`,
     `/integration/market-data/external-fx-forward-curve`, and
     `/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness`. They return
-    `UNAVAILABLE` until bank-owned treasury ingestion is certified. None of these contracts create
+    `UNAVAILABLE` until bank-owned treasury ingestion is certified. `ExternalFXForwardCurve:v1`
+    now has implementation-backed methodology truth at
+    `docs/methodologies/source-data-products/external-fx-forward-curve.md`. None of these contracts create
     FX attribution, hedge advice, hedge-policy approval, eligible-instrument selection, product
     recommendations, forward pricing, treasury instructions, counterparty selection, order
     generation, venue-routing, best execution, OMS acknowledgement, fills, or settlement claims.
