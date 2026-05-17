@@ -29,6 +29,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_external_fx_forward_curve,
     get_external_hedge_execution_readiness,
     get_external_hedge_policy,
+    get_external_order_execution_acknowledgement,
     get_instrument_enrichment_bulk,
     get_integration_service,
     get_liquidity_reserve_requirement,
@@ -76,6 +77,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ExternalFXForwardCurveRequest,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgePolicyRequest,
+    ExternalOrderExecutionAcknowledgementRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
@@ -1594,6 +1596,68 @@ async def test_get_external_hedge_execution_readiness_router_raises_404_without_
 
     with pytest.raises(HTTPException) as exc_info:
         await get_external_hedge_execution_readiness(
+            portfolio_id="PB_MISSING",
+            request=request,
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_external_order_execution_acknowledgement_router_function() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_external_order_execution_acknowledgement = AsyncMock(
+        return_value={
+            "product_name": "ExternalOrderExecutionAcknowledgement",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "client_id": "CIF_SG_000184",
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-03",
+            "execution_intent_id": "rebalance-run-2026-05-03-001",
+            "order_reference_ids": ["OMS-ORDER-001"],
+            "acknowledgements": [],
+            "supportability": {
+                "state": "UNAVAILABLE",
+                "reason": "EXTERNAL_OMS_SOURCE_NOT_INGESTED",
+                "acknowledgement_count": 0,
+                "missing_data_families": ["external_oms_order_execution_acknowledgement"],
+                "blocked_capabilities": ["oms_acknowledgement", "fills", "settlement"],
+            },
+            "lineage": {
+                "contract_version": "rfc_042_external_order_execution_acknowledgement_v1"
+            },
+        }
+    )
+    request = ExternalOrderExecutionAcknowledgementRequest(
+        as_of_date="2026-05-03",
+        tenant_id="default",
+        execution_intent_id="rebalance-run-2026-05-03-001",
+        order_reference_ids=["OMS-ORDER-001"],
+    )
+
+    response = await get_external_order_execution_acknowledgement(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "ExternalOrderExecutionAcknowledgement"
+    mock_service.get_external_order_execution_acknowledgement.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_external_order_execution_acknowledgement_router_raises_404_without_binding() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_external_order_execution_acknowledgement = AsyncMock(return_value=None)
+    request = ExternalOrderExecutionAcknowledgementRequest(as_of_date="2026-05-03")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_external_order_execution_acknowledgement(
             portfolio_id="PB_MISSING",
             request=request,
             integration_service=mock_service,
