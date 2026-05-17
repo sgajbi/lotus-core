@@ -113,6 +113,7 @@
         "POST /integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments",
         "POST /integration/portfolios/{portfolio_id}/external-hedge-execution-readiness",
         "POST /integration/portfolios/{portfolio_id}/external-hedge-policy",
+        "POST /integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement",
         "POST /integration/portfolios/{portfolio_id}/liquidity-reserve-requirement",
         "POST /integration/portfolios/{portfolio_id}/mandate-binding",
         "POST /integration/portfolios/{portfolio_id}/planned-withdrawal-schedule",

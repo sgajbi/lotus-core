@@ -126,6 +126,7 @@ def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> 
         "ExternalFXForwardCurve:v1",
         "ExternalEligibleHedgeInstrument:v1",
         "ExternalHedgeExecutionReadiness:v1",
+        "ExternalOrderExecutionAcknowledgement:v1",
     ):
         assert f"`{product_name}`" in catalog
         assert f"`{product_name}`" in wiki
@@ -137,10 +138,15 @@ def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> 
     assert "/integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments" in wiki
     assert "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness" in wiki
     assert (
+        "/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement" in wiki
+    )
+    assert (
         "FX attribution, treasury policy approval, forward pricing, hedge advice"
         in normalized_wiki
     )
     assert "OMS acknowledgement, fills, settlement" in normalized_wiki
+    assert "external OMS acknowledgement" in wiki
+    assert "execution-status certification" in normalized_wiki
 
 
 def test_holdings_as_of_methodology_is_implementation_backed() -> None:

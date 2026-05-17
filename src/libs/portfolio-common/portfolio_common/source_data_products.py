@@ -522,6 +522,25 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="ExternalOrderExecutionAcknowledgement",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=(
+            "/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement",
+        ),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "DPM source product for fail-closed external OMS order-execution "
+            "acknowledgement posture. It returns unavailable acknowledgement evidence until "
+            "bank-owned OMS ingestion is certified and does not create orders, route venues, "
+            "declare best execution, certify fills, or confirm settlement."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ExternalCurrencyExposure",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

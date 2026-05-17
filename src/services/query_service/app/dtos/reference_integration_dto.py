@@ -2338,6 +2338,111 @@ class MarketDataCoverageRequest(BaseModel):
     model_config = ConfigDict()
 
 
+class ExternalOrderExecutionAcknowledgementRequest(BaseModel):
+    as_of_date: date = Field(
+        ...,
+        description=(
+            "Business date used to evaluate external OMS acknowledgement availability for "
+            "portfolio execution evidence."
+        ),
+        examples=["2026-05-03"],
+    )
+    tenant_id: str | None = Field(None, description="Optional tenant identifier.")
+    mandate_id: str | None = Field(None, description="Optional mandate disambiguator.")
+    execution_intent_id: str | None = Field(
+        None,
+        description=(
+            "Optional downstream execution-intent identifier echoed for audit. Core does not "
+            "create, route, or amend orders from this value."
+        ),
+        examples=["rebalance-run-2026-05-03-001"],
+    )
+    order_reference_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional external order references requested for acknowledgement lookup. The "
+            "current source-owner posture remains unavailable until bank-owned OMS "
+            "acknowledgement ingestion is certified."
+        ),
+        examples=[["OMS-ORDER-001", "OMS-ORDER-002"]],
+    )
+
+    model_config = ConfigDict()
+
+
+class ExternalOrderExecutionAcknowledgementSupportability(BaseModel):
+    state: Literal["UNAVAILABLE"] = Field(
+        "UNAVAILABLE",
+        description=(
+            "Supportability state for external OMS order-execution acknowledgement. The "
+            "current Lotus Core runtime exposes only fail-closed unavailable posture."
+        ),
+        examples=["UNAVAILABLE"],
+    )
+    reason: Literal["EXTERNAL_OMS_SOURCE_NOT_INGESTED"] = Field(
+        "EXTERNAL_OMS_SOURCE_NOT_INGESTED",
+        description="Machine-readable fail-closed reason.",
+        examples=["EXTERNAL_OMS_SOURCE_NOT_INGESTED"],
+    )
+    acknowledgement_count: int = Field(
+        0,
+        ge=0,
+        description="Number of external OMS acknowledgement rows returned.",
+    )
+    missing_data_families: list[str] = Field(
+        default_factory=list,
+        description=(
+            "External OMS source-data families required before acknowledgement evidence can "
+            "be used."
+        ),
+    )
+    blocked_capabilities: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Capabilities explicitly blocked by unavailable OMS acknowledgement posture."
+        ),
+    )
+
+    model_config = ConfigDict()
+
+
+class ExternalOrderExecutionAcknowledgementResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["ExternalOrderExecutionAcknowledgement"] = product_name_field(
+        "ExternalOrderExecutionAcknowledgement"
+    )
+    product_version: Literal["v1"] = product_version_field()
+    portfolio_id: str = Field(
+        ..., description="Portfolio identifier for the OMS acknowledgement posture."
+    )
+    client_id: str = Field(..., description="Client identifier bound to the portfolio mandate.")
+    mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
+    execution_intent_id: str | None = Field(
+        None,
+        description="Requested execution-intent identifier echoed for downstream audit.",
+    )
+    order_reference_ids: list[str] = Field(
+        default_factory=list,
+        description="Requested external order references echoed for downstream audit.",
+    )
+    acknowledgements: list[dict[str, str]] = Field(
+        default_factory=list,
+        description=(
+            "External OMS acknowledgement rows. Empty while external OMS acknowledgement "
+            "ingestion is not certified."
+        ),
+    )
+    supportability: ExternalOrderExecutionAcknowledgementSupportability = Field(
+        ...,
+        description="Fail-closed supportability posture for external OMS acknowledgement.",
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Source lineage and non-claim posture for external OMS acknowledgement.",
+    )
+
+    model_config = ConfigDict()
+
+
 class MarketDataPriceCoverageRecord(BaseModel):
     instrument_id: str = Field(
         ..., description="Requested instrument identifier.", examples=["EQ_US_AAPL"]

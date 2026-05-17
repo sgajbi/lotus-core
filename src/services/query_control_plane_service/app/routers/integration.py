@@ -56,6 +56,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ExternalHedgeExecutionReadinessResponse,
     ExternalHedgePolicyRequest,
     ExternalHedgePolicyResponse,
+    ExternalOrderExecutionAcknowledgementRequest,
+    ExternalOrderExecutionAcknowledgementResponse,
     IndexCatalogRequest,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
@@ -1221,6 +1223,57 @@ async def get_external_hedge_execution_readiness(
     response = cast(
         ExternalHedgeExecutionReadinessResponse | None,
         await integration_service.get_external_hedge_execution_readiness(
+            portfolio_id=portfolio_id,
+            request=request,
+        ),
+    )
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No effective discretionary mandate binding found for portfolio and as_of_date."
+            ),
+        )
+    return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/external-order-execution-acknowledgement",
+    response_model=ExternalOrderExecutionAcknowledgementResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "No effective discretionary mandate binding found.",
+            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    summary="Resolve external OMS order execution acknowledgement posture",
+    description=(
+        "What: Return the source-owner posture for external OMS order-execution "
+        "acknowledgement evidence for a DPM portfolio.\n"
+        "How: Resolves the effective discretionary mandate binding for portfolio identity, "
+        "then returns a fail-closed unavailable posture until bank-owned external OMS "
+        "acknowledgement feeds are ingested and certified.\n"
+        "When: Use this endpoint when lotus-manage or gateway needs bounded RFC42-WTBD "
+        "execution acknowledgement supportability. The response does not create orders, "
+        "route venues, declare best execution, acknowledge OMS execution, certify fills, "
+        "confirm settlement, or perform autonomous execution action."
+    ),
+    openapi_extra=source_data_product_openapi_extra("ExternalOrderExecutionAcknowledgement"),
+)
+async def get_external_order_execution_acknowledgement(
+    request: ExternalOrderExecutionAcknowledgementRequest,
+    portfolio_id: str = Path(
+        ...,
+        description=(
+            "Portfolio identifier whose external OMS acknowledgement posture is requested."
+        ),
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> ExternalOrderExecutionAcknowledgementResponse:
+    response = cast(
+        ExternalOrderExecutionAcknowledgementResponse | None,
+        await integration_service.get_external_order_execution_acknowledgement(
             portfolio_id=portfolio_id,
             request=request,
         ),

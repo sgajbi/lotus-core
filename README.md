@@ -101,6 +101,11 @@ Boundary rules that matter:
     FX attribution, hedge advice, hedge-policy approval, eligible-instrument selection, product
     recommendations, forward pricing, treasury instructions, counterparty selection, order
     generation, venue-routing, best execution, OMS acknowledgement, fills, or settlement claims.
+11. RFC42-WTBD execution boundary coverage adds `ExternalOrderExecutionAcknowledgement:v1` at
+    `/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement`. It returns
+    `UNAVAILABLE` until bank-owned OMS acknowledgement ingestion is certified and does not create
+    orders, route venues, declare best execution, acknowledge OMS execution, certify fills, confirm
+    settlement, or perform autonomous execution action.
 
 ## Architecture At A Glance
 

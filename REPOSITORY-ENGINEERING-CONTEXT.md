@@ -334,6 +334,14 @@ Most relevant current governance:
     recommendation, forward pricing, FX valuation methodology, treasury instructions, counterparty
     choice, order generation, venue routing, best execution, OMS acknowledgement, fills,
     settlement, or autonomous treasury action.
+38. RFC42-WTBD execution-boundary coverage now has active fail-closed
+    `ExternalOrderExecutionAcknowledgement:v1` at
+    `/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement`. It resolves
+    portfolio mandate identity, returns `UNAVAILABLE` until bank-owned OMS acknowledgement ingestion
+    is certified, and publishes missing OMS data family plus blocked capabilities for downstream
+    supportability gates without claiming order generation, venue routing, best execution, OMS
+    acknowledgement, fills, settlement, execution-status certification, or autonomous execution
+    action.
 
 ## Context Maintenance Rule
 

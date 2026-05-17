@@ -92,6 +92,7 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
                 "LiquidityReserveRequirement",
                 "PlannedWithdrawalSchedule",
                 "ExternalHedgeExecutionReadiness",
+                "ExternalOrderExecutionAcknowledgement",
                 "ExternalCurrencyExposure",
                 "ExternalHedgePolicy",
                 "ExternalEligibleHedgeInstrument",

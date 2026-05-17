@@ -20,6 +20,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ExternalFXForwardCurveRequest,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgePolicyRequest,
+    ExternalOrderExecutionAcknowledgementRequest,
     InstrumentEligibilityBulkRequest,
     LiquidityReserveRequirementRequest,
     MarketDataCoverageRequest,
@@ -909,6 +910,70 @@ async def test_external_hedge_execution_readiness_returns_none_without_binding()
     response = await service.get_external_hedge_execution_readiness(
         "PB_MISSING",
         ExternalHedgeExecutionReadinessRequest(as_of_date=date(2026, 5, 3)),
+    )
+
+    assert response is None
+
+
+@pytest.mark.asyncio
+async def test_external_order_execution_acknowledgement_fails_closed_until_oms_ingested():
+    service = make_service()
+    as_of_date = date(2026, 5, 3)
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        profile_binding_row(as_of_date)
+    )
+
+    response = await service.get_external_order_execution_acknowledgement(
+        "PB_SG_GLOBAL_BAL_001",
+        ExternalOrderExecutionAcknowledgementRequest(
+            as_of_date=as_of_date,
+            tenant_id="default",
+            execution_intent_id="rebalance-run-2026-05-03-001",
+            order_reference_ids=["OMS-ORDER-002", "OMS-ORDER-001"],
+        ),
+    )
+
+    assert response is not None
+    assert response.product_name == "ExternalOrderExecutionAcknowledgement"
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "EXTERNAL_OMS_SOURCE_NOT_INGESTED"
+    assert response.supportability.acknowledgement_count == 0
+    assert response.supportability.missing_data_families == [
+        "external_oms_order_execution_acknowledgement"
+    ]
+    assert "oms_acknowledgement" in response.supportability.blocked_capabilities
+    assert "fills" in response.supportability.blocked_capabilities
+    assert "settlement" in response.supportability.blocked_capabilities
+    assert response.acknowledgements == []
+    assert response.data_quality_status == "MISSING"
+    assert response.lineage == {
+        "source_system": "external-bank-oms",
+        "source_table": "not_ingested",
+        "contract_version": "rfc_042_external_order_execution_acknowledgement_v1",
+        "integration_status": "not_ingested",
+        "runtime_posture": "fail_closed",
+        "non_claims": (
+            "order_generation,venue_routing,best_execution,oms_acknowledgement,fills,"
+            "settlement,execution_status_certification,autonomous_execution_action"
+        ),
+    }
+    service._reference_repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=as_of_date,
+        mandate_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_external_order_execution_acknowledgement_returns_none_without_binding():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.get_external_order_execution_acknowledgement(
+        "PB_MISSING",
+        ExternalOrderExecutionAcknowledgementRequest(as_of_date=date(2026, 5, 3)),
     )
 
     assert response is None
