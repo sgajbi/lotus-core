@@ -837,7 +837,8 @@
       "approved_consumers": [
         "lotus-performance",
         "lotus-risk",
-        "lotus-report"
+        "lotus-report",
+        "lotus-manage"
       ],
       "deprecation_policy": {
         "state": "not_deprecated",

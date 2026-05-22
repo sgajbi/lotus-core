@@ -214,7 +214,7 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         route_family=ANALYTICS_INPUT,
         serving_plane=QUERY_CONTROL_PLANE_SERVICE,
         owner="lotus-core",
-        consumers=("lotus-performance", "lotus-risk", "lotus-report"),
+        consumers=("lotus-performance", "lotus-risk", "lotus-report", "lotus-manage"),
         current_routes=("/integration/portfolios/{portfolio_id}/benchmark-assignment",),
         notes="Effective benchmark assignment for a portfolio and as-of date.",
     ),

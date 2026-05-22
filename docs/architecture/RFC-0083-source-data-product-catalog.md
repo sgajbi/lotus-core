@@ -56,7 +56,7 @@ evidence reference rather than omitting the concept.
 | `PortfolioAnalyticsReference` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/reference` |
 | `MarketDataWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/market-series` |
 | `InstrumentReferenceBundle` | Analytics input | `query_control_plane_service` | performance, risk, gateway, advise | `/integration/instruments/enrichment-bulk`, `/integration/reference/classification-taxonomy` |
-| `BenchmarkAssignment` | Analytics input | `query_control_plane_service` | performance, risk, report | `/integration/portfolios/{portfolio_id}/benchmark-assignment` |
+| `BenchmarkAssignment` | Analytics input | `query_control_plane_service` | performance, risk, report, manage | `/integration/portfolios/{portfolio_id}/benchmark-assignment` |
 | `BenchmarkConstituentWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/composition-window` |
 | `IndexSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/indices/{index_id}/price-series`, `/integration/indices/{index_id}/return-series` |
 | `RiskFreeSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/reference/risk-free-series` |
