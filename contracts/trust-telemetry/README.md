@@ -7,6 +7,8 @@ The current first-wave snapshot is:
 
 1. `portfolio-state-snapshot.telemetry.v1.json`
    Runtime trust proof for `lotus-core:PortfolioStateSnapshot:v1`.
+2. `dpm-source-readiness.telemetry.v1.json`
+   Runtime trust proof for `lotus-core:DpmSourceReadiness:v1`.
 
 Validate locally with:
 
