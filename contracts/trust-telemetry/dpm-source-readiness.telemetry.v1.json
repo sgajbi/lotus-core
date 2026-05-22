@@ -1,0 +1,60 @@
+{
+  "contract_id": "lotus-domain-product-trust-telemetry-snapshot",
+  "contract_version": "1.0.0",
+  "governed_by_rfcs": [
+    "RFC-0087"
+  ],
+  "emitted_at_utc": "2026-05-22T00:00:00Z",
+  "product_id": "lotus-core:DpmSourceReadiness:v1",
+  "producer_repository": "lotus-core",
+  "product_name": "DpmSourceReadiness",
+  "product_version": "v1",
+  "source_repository": "lotus-core",
+  "freshness": {
+    "freshness_class": "intraday",
+    "freshness_state": "current",
+    "evaluated_at_utc": "2026-05-22T00:00:00Z",
+    "observed_at_utc": "2026-05-22T00:00:00Z",
+    "age_seconds": 0,
+    "max_allowed_age_seconds": 3600
+  },
+  "completeness_status": "complete",
+  "reconciliation_status": "reconciled",
+  "data_quality_status": "quality_passed",
+  "lineage": {
+    "lineage_materialized": true,
+    "lineage_bundle_id": "lineage:lotus-core:dpm-source-readiness:PB_SG_GLOBAL_BAL_001:2026-05-22",
+    "evidence_access_class": "operator_only",
+    "evidence_uris": [
+      "lotus-core://evidence/dpm-source-readiness/PB_SG_GLOBAL_BAL_001/2026-05-22"
+    ]
+  },
+  "blocking": {
+    "blocked": false
+  },
+  "observed_trust_metadata": {
+    "product_name": "DpmSourceReadiness",
+    "product_version": "v1",
+    "tenant_id": "TENANT_PRIVATE_BANKING_DEMO",
+    "generated_at": "2026-05-22T00:00:00Z",
+    "as_of_date": "2026-05-22",
+    "restatement_version": "restatement:2026-05-22:0",
+    "reconciliation_status": "reconciled",
+    "data_quality_status": "quality_passed",
+    "latest_evidence_timestamp": "2026-05-22T00:00:00Z",
+    "source_batch_fingerprint": "sha256:dpm-source-readiness-demo-batch",
+    "snapshot_id": "PB_SG_GLOBAL_BAL_001:2026-05-22:dpm-source-readiness",
+    "policy_version": "dpm-source-readiness-policy.v1",
+    "correlation_id": "rfc-0087-lotus-core-dpm-source-readiness"
+  },
+  "evidence": {
+    "correlation_id": "rfc-0087-lotus-core-dpm-source-readiness",
+    "validation_lanes": [
+      "feature",
+      "pr-merge",
+      "main-releasability"
+    ],
+    "source_event_id": "source-event:lotus-core:dpm-source-readiness:PB_SG_GLOBAL_BAL_001:2026-05-22",
+    "source_artifact_uri": "lotus-core://contracts/trust-telemetry/dpm-source-readiness.telemetry.v1.json"
+  }
+}

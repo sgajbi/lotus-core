@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_ROOT = REPO_ROOT.parent / "lotus-platform"
 TELEMETRY_DIR = REPO_ROOT / "contracts" / "trust-telemetry"
 SNAPSHOT_PATH = TELEMETRY_DIR / "portfolio-state-snapshot.telemetry.v1.json"
+DPM_SOURCE_READINESS_PATH = TELEMETRY_DIR / "dpm-source-readiness.telemetry.v1.json"
 DECLARATION_PATH = REPO_ROOT / "contracts" / "domain-data-products" / "lotus-core-products.v1.json"
 
 
@@ -40,29 +41,34 @@ def test_portfolio_state_snapshot_trust_telemetry_validates_with_platform_contra
     assert issues == []
 
 
-def test_portfolio_state_snapshot_trust_telemetry_is_tied_to_repo_declaration() -> None:
-    snapshot = _load_json(SNAPSHOT_PATH)
-    declaration = _load_json(DECLARATION_PATH)
-    declared_product = next(
-        product
-        for product in declaration["products"]
-        if product["product_name"] == "PortfolioStateSnapshot"
-    )
+def test_required_trust_telemetry_files_exist() -> None:
+    assert SNAPSHOT_PATH.exists()
+    assert DPM_SOURCE_READINESS_PATH.exists()
 
-    assert snapshot["product_id"] == "lotus-core:PortfolioStateSnapshot:v1"
-    assert snapshot["producer_repository"] == declaration["producer_repository"]
-    assert snapshot["product_name"] == declared_product["product_name"]
-    assert snapshot["product_version"] == declared_product["product_version"]
-    assert (
-        snapshot["freshness"]["freshness_class"]
-        == (declared_product["freshness_policy"]["freshness_class"])
-    )
-    assert set(snapshot["observed_trust_metadata"]) == set(
-        declared_product["required_trust_metadata"]
-    )
-    assert snapshot["lineage"]["lineage_materialized"] is True
-    assert (
-        snapshot["lineage"]["evidence_access_class"]
-        == (declared_product["lineage_policy"]["evidence_access_class_ref"])
-    )
-    assert snapshot["blocking"]["blocked"] is False
+
+def test_trust_telemetry_is_tied_to_repo_declaration() -> None:
+    declaration = _load_json(DECLARATION_PATH)
+    declared_products = {product["product_name"]: product for product in declaration["products"]}
+
+    for telemetry_path in (SNAPSHOT_PATH, DPM_SOURCE_READINESS_PATH):
+        snapshot = _load_json(telemetry_path)
+        declared_product = declared_products[snapshot["product_name"]]
+
+        assert snapshot["product_id"] == (
+            f"lotus-core:{declared_product['product_name']}:{declared_product['product_version']}"
+        )
+        assert snapshot["producer_repository"] == declaration["producer_repository"]
+        assert snapshot["product_version"] == declared_product["product_version"]
+        assert (
+            snapshot["freshness"]["freshness_class"]
+            == (declared_product["freshness_policy"]["freshness_class"])
+        )
+        assert set(snapshot["observed_trust_metadata"]) == set(
+            declared_product["required_trust_metadata"]
+        )
+        assert snapshot["lineage"]["lineage_materialized"] is True
+        assert (
+            snapshot["lineage"]["evidence_access_class"]
+            == (declared_product["lineage_policy"]["evidence_access_class_ref"])
+        )
+        assert snapshot["blocking"]["blocked"] is False
