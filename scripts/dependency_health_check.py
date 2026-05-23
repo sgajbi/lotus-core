@@ -51,11 +51,7 @@ def constrained_install_command(python_bin: Path, *install_args: str) -> list[st
 
 
 def pip_audit_command(python_bin: Path, site_packages_dir: Path) -> list[str]:
-    ignored_vulnerabilities = [
-        option
-        for vulnerability_id in PIP_AUDIT_IGNORED_VULNERABILITIES
-        for option in ("--ignore-vuln", vulnerability_id)
-    ]
+    ignored_vulnerabilities = pip_audit_ignore_options()
     return [
         str(python_bin),
         "-m",
@@ -64,6 +60,15 @@ def pip_audit_command(python_bin: Path, site_packages_dir: Path) -> list[str]:
         str(site_packages_dir),
         *ignored_vulnerabilities,
     ]
+
+
+def pip_audit_ignore_options() -> list[str]:
+    ignored_vulnerabilities = [
+        option
+        for vulnerability_id in PIP_AUDIT_IGNORED_VULNERABILITIES
+        for option in ("--ignore-vuln", vulnerability_id)
+    ]
+    return ignored_vulnerabilities
 
 
 def _run(command: list[str], *, cwd: Path) -> None:
