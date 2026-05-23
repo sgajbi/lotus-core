@@ -15,6 +15,10 @@ TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
 PIP_AUDIT_IGNORED_VULNERABILITIES = (
     # The audit venv's pip bootstrap is tooling-only and is not shipped with any Lotus service.
     "CVE-2026-3219",
+    # Temporary ecosystem exception: FastAPI still constrains Starlette below the fixed 1.0.1
+    # release line, so Lotus services cannot consume the PYSEC-2026-161 fix without breaking
+    # resolver compatibility. Remove when FastAPI publishes a compatible Starlette range.
+    "PYSEC-2026-161",
 )
 
 
