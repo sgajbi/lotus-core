@@ -40,7 +40,9 @@ Current router groups inside `query_control_plane_service` are:
   requests
 - `analytics_inputs`
   portfolio and position analytics timeseries, analytics reference metadata, and durable export-job
-  lifecycle
+  lifecycle. The analytics reference `performance_end_date` is the latest complete performance
+  horizon across required portfolio and position analytics source families, bounded by the requested
+  as-of date.
 - `capabilities`
   tenant- and consumer-aware capability discovery, including the
   `core.observability.portfolio_supportability` feature flag for Gateway, Workbench, and downstream

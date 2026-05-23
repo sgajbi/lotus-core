@@ -51,4 +51,6 @@ def test_pip_audit_command_scopes_to_site_packages_path() -> None:
         str(site_packages),
         "--ignore-vuln",
         "CVE-2026-3219",
+        "--ignore-vuln",
+        "PYSEC-2026-161",
     ]

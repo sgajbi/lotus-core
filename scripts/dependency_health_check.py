@@ -15,6 +15,10 @@ TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
 PIP_AUDIT_IGNORED_VULNERABILITIES = (
     # The audit venv's pip bootstrap is tooling-only and is not shipped with any Lotus service.
     "CVE-2026-3219",
+    # Temporary ecosystem exception: FastAPI still constrains Starlette below the fixed 1.0.1
+    # release line, so Lotus services cannot consume the PYSEC-2026-161 fix without breaking
+    # resolver compatibility. Remove when FastAPI publishes a compatible Starlette range.
+    "PYSEC-2026-161",
 )
 
 
@@ -47,11 +51,7 @@ def constrained_install_command(python_bin: Path, *install_args: str) -> list[st
 
 
 def pip_audit_command(python_bin: Path, site_packages_dir: Path) -> list[str]:
-    ignored_vulnerabilities = [
-        option
-        for vulnerability_id in PIP_AUDIT_IGNORED_VULNERABILITIES
-        for option in ("--ignore-vuln", vulnerability_id)
-    ]
+    ignored_vulnerabilities = pip_audit_ignore_options()
     return [
         str(python_bin),
         "-m",
@@ -60,6 +60,15 @@ def pip_audit_command(python_bin: Path, site_packages_dir: Path) -> list[str]:
         str(site_packages_dir),
         *ignored_vulnerabilities,
     ]
+
+
+def pip_audit_ignore_options() -> list[str]:
+    ignored_vulnerabilities = [
+        option
+        for vulnerability_id in PIP_AUDIT_IGNORED_VULNERABILITIES
+        for option in ("--ignore-vuln", vulnerability_id)
+    ]
+    return ignored_vulnerabilities
 
 
 def _run(command: list[str], *, cwd: Path) -> None:

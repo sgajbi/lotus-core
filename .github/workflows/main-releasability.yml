@@ -147,8 +147,7 @@ jobs:
         run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --services query_service
       - name: Generate runtime SBOM
         run: |
-          mkdir -p output/build-evidence
-          python -m pip_audit -r requirements/shared-runtime.lock.txt --format cyclonedx-json -o output/build-evidence/shared-runtime-sbom.cdx.json
+          python scripts/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json
       - name: Write build provenance manifest
         run: |
           python scripts/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json

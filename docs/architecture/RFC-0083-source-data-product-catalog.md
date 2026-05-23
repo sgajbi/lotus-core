@@ -454,8 +454,9 @@ flows.
 `lotus-performance` and `lotus-risk`. It is catalog-backed on the query control plane and publishes
 the same product identity and runtime metadata envelope as the analytics-input timeseries products.
 It reuses the existing lineage timestamp for top-level `generated_at`, marks the reference
-`COMPLETE` when the portfolio can be bounded by a portfolio performance horizon, marks it `PARTIAL`
-when the portfolio exists but no performance horizon is available, and derives
+`COMPLETE` when the portfolio can be bounded by a complete performance horizon across required
+portfolio and position analytics source families, marks it `PARTIAL` when the portfolio exists but
+no calculable performance horizon is available, and derives
 `latest_evidence_timestamp` from durable portfolio source/update/create timestamps when those fields
 are available.
 

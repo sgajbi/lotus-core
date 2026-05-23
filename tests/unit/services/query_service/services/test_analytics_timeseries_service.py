@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
     AnalyticsWindow,
@@ -360,9 +360,7 @@ async def test_get_portfolio_timeseries_uses_position_horizon_when_portfolio_row
 
 
 @pytest.mark.asyncio
-async def test_portfolio_observation_rows_aggregates_position_rows_with_fx_and_next_page_token() -> (
-    None
-):
+async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=4),
@@ -1197,9 +1195,7 @@ async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date
 
 
 @pytest.mark.asyncio
-async def test_get_portfolio_reference_uses_position_timeseries_horizon_when_portfolio_rows_lag() -> (
-    None
-):
+async def test_portfolio_reference_uses_latest_complete_performance_horizon() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -1221,7 +1217,36 @@ async def test_get_portfolio_reference_uses_position_timeseries_horizon_when_por
         portfolio_id="P1",
         request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-03-20"),
     )
-    assert response.performance_end_date == date(2025, 3, 20)
+    assert response.performance_end_date == date(2025, 3, 16)
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_reference_does_not_overstate_position_only_horizon() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="EUR",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+                client_id="CIF_1",
+                booking_center_code="SGPB",
+                portfolio_type="advisory",
+                objective="Growth",
+            )
+        ),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 4, 10)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 5, 22)),
+    )
+
+    response = await service.get_portfolio_reference(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsReferenceRequest(as_of_date="2026-05-23"),
+    )
+
+    assert response.resolved_as_of_date == date(2026, 5, 23)
+    assert response.performance_end_date == date(2026, 4, 10)
 
 
 @pytest.mark.asyncio
@@ -1392,9 +1417,7 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_distinguishes_internal_trade_flows_from_external_funding() -> (
-    None
-):
+async def test_position_timeseries_distinguishes_internal_trade_from_external_funding() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -1969,9 +1992,7 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_converts_position_values_to_portfolio_and_reporting_currency() -> (
-    None
-):
+async def test_position_timeseries_converts_values_to_portfolio_and_reporting_currency() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(

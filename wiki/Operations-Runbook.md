@@ -88,6 +88,14 @@ and the current Workbench forward-liquidity horizon. After reseeding, `Portfolio
 should show at least one non-zero point for the canonical window and one non-zero current-horizon
 planned settlement point.
 
+Projected settlements in the canonical seed must land on business days and must be covered by the
+required FX pairs through the latest projected settlement date. Benchmark and FX reference coverage
+extends through at least 45 calendar days after the canonical as-of date, and through any later
+projected settlement date, so current-date Gateway and Workbench probes do not degrade on missing
+reference series. The current raw `market_prices` and `fx_rates` contracts are point-in-time
+series; when those contracts move to effective-date ranges, open-ended terminal price/rate validity
+should use `3999-12-31` explicitly.
+
 ## Startup checks
 
 When app-local runtime is unhealthy, check this order:

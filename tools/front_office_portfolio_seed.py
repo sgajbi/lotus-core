@@ -258,6 +258,12 @@ def _calendar_dates(start: date, end: date) -> list[str]:
     return dates
 
 
+def _next_business_date(current: date) -> date:
+    while current.weekday() >= 5:
+        current += timedelta(days=1)
+    return current
+
+
 def _iso_utc_timestamp(day: date, hour: int = 21) -> str:
     return (
         datetime(day.year, day.month, day.day, hour=hour, tzinfo=UTC)
@@ -488,12 +494,18 @@ def build_front_office_portfolio_bundle(
     effective_benchmark_start = benchmark_start_date or start_date
     business_dates = _business_dates(start_date, end_date)
     calendar_dates = _calendar_dates(start_date, end_date)
-    fx_calendar_dates = _calendar_dates(start_date, end_date + timedelta(days=30))
     as_of_date = end_date.isoformat()
     forward_withdrawal_date = end_date + timedelta(days=7)
-    forward_withdrawal_settlement_date = end_date + timedelta(days=10)
+    forward_withdrawal_settlement_date = _next_business_date(end_date + timedelta(days=10))
     current_horizon_planned_withdrawal_date = end_date + timedelta(days=20)
-    current_horizon_planned_withdrawal_settlement_date = end_date + timedelta(days=36)
+    current_horizon_planned_withdrawal_settlement_date = _next_business_date(
+        end_date + timedelta(days=36)
+    )
+    forward_market_support_date = max(
+        end_date + timedelta(days=45),
+        current_horizon_planned_withdrawal_settlement_date,
+    )
+    fx_calendar_dates = _calendar_dates(start_date, forward_market_support_date)
 
     def tx_dt(day_offset: int, hour: int = 10) -> datetime:
         current = start_date + timedelta(days=day_offset)
@@ -1925,6 +1937,17 @@ def _reprocess_front_office_transactions(ingestion_base_url: str, bundle: dict[s
     )
 
 
+def _should_reprocess_after_ingest(
+    *,
+    should_ingest: bool,
+    reprocess_after_ingest: bool,
+    skip_reprocess: bool,
+) -> bool:
+    if skip_reprocess:
+        return False
+    return should_ingest and reprocess_after_ingest
+
+
 def _date_at_or_after(actual: str | None, expected: str) -> bool:
     if not actual:
         return False
@@ -1943,6 +1966,65 @@ def _front_office_analytics_are_fresh(
         and _date_at_or_after(performance_summary.get("report_end_date"), expected_end_date)
         and _date_at_or_after(return_path.get("latest_available_date"), expected_end_date)
     )
+
+
+def _front_office_readiness_blockers(
+    observation: dict[str, Any],
+    *,
+    expected_end_date: str,
+) -> list[str]:
+    blockers: list[str] = []
+    if observation.get("positions_data_quality_status") != "COMPLETE":
+        blockers.append("positions_data_quality_not_complete")
+    if observation.get("cash_data_quality_status") != "COMPLETE":
+        blockers.append("cash_data_quality_not_complete")
+
+    for field_name in (
+        "pending_valuation_jobs",
+        "processing_valuation_jobs",
+        "stale_processing_aggregation_jobs",
+        "failed_aggregation_jobs",
+    ):
+        job_count = int(observation.get(field_name) or 0)
+        if job_count:
+            blockers.append(f"{field_name}={job_count}")
+
+    if not observation.get("benchmark_code"):
+        blockers.append("gateway_performance_benchmark_missing")
+    if not _date_at_or_after(
+        observation.get("analytics_performance_end_date"), expected_end_date
+    ):
+        blockers.append(
+            "core_analytics_reference_stale="
+            f"{observation.get('analytics_performance_end_date') or 'missing'}"
+        )
+    if not _date_at_or_after(
+        observation.get("performance_report_end_date"), expected_end_date
+    ):
+        blockers.append(
+            "gateway_performance_report_stale="
+            f"{observation.get('performance_report_end_date') or 'missing'}"
+        )
+    if not _date_at_or_after(
+        observation.get("return_path_latest_available_date"), expected_end_date
+    ):
+        blockers.append(
+            "gateway_return_path_stale="
+            f"{observation.get('return_path_latest_available_date') or 'missing'}"
+        )
+    return blockers
+
+
+def _front_office_background_work(observation: dict[str, Any]) -> list[str]:
+    background: list[str] = []
+    for field_name in (
+        "pending_aggregation_jobs",
+        "processing_aggregation_jobs",
+    ):
+        job_count = int(observation.get(field_name) or 0)
+        if job_count:
+            background.append(f"{field_name}={job_count}")
+    return background
 
 
 def _extract_readiness_summary(readiness_payload: dict[str, Any]) -> dict[str, Any]:
@@ -2050,26 +2132,39 @@ def _cleanup_existing_front_office_seed(
     postgres_container: str,
     portfolio_id: str,
     benchmark_id: str,
+    max_attempts: int = 3,
 ) -> None:
     sql = build_front_office_seed_cleanup_sql(
         portfolio_id=portfolio_id,
         benchmark_id=benchmark_id,
     )
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            postgres_container,
-            "psql",
-            "-U",
-            "user",
-            "-d",
-            "portfolio_db",
-            "-c",
-            sql,
-        ],
-        check=True,
-    )
+    command = [
+        "docker",
+        "exec",
+        postgres_container,
+        "psql",
+        "-U",
+        "user",
+        "-d",
+        "portfolio_db",
+        "-c",
+        sql,
+    ]
+    for attempt in range(1, max_attempts + 1):
+        try:
+            subprocess.run(command, check=True)
+            return
+        except subprocess.CalledProcessError:
+            if attempt >= max_attempts:
+                raise
+            LOGGER.warning(
+                "Front-office seed cleanup hit a transient database conflict for %s; "
+                "retrying attempt %s of %s.",
+                portfolio_id,
+                attempt + 1,
+                max_attempts,
+            )
+            time.sleep(attempt * 2)
 
 
 def _verify_front_office_portfolio(
@@ -2085,6 +2180,8 @@ def _verify_front_office_portfolio(
 ) -> dict[str, Any]:
     deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
     last_observation: dict[str, Any] | None = None
+    last_logged_blockers: tuple[str, ...] | None = None
+    last_logged_at: datetime | None = None
     while datetime.now(tz=UTC) < deadline:
         try:
             _, positions_payload = _request_json(
@@ -2135,7 +2232,7 @@ def _verify_front_office_portfolio(
                 "GET",
                 f"{gateway_base_url}/api/v1/workbench/{expected.portfolio_id}/performance/summary"
                 f"?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class"
-                f"&attribution_dimension=asset_class&detail_basis=NET",
+                f"&attribution_dimension=asset_class&detail_basis=NET&report_end_date={end_date}",
                 headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
             )
         except RuntimeError as exc:
@@ -2180,6 +2277,10 @@ def _verify_front_office_portfolio(
             "processing_valuation_jobs": support_overview.get("processing_valuation_jobs"),
             "pending_aggregation_jobs": support_overview.get("pending_aggregation_jobs"),
             "processing_aggregation_jobs": support_overview.get("processing_aggregation_jobs"),
+            "stale_processing_aggregation_jobs": support_overview.get(
+                "stale_processing_aggregation_jobs"
+            ),
+            "failed_aggregation_jobs": support_overview.get("failed_aggregation_jobs"),
             "benchmark_code": performance_summary.get("benchmark_code"),
             "analytics_performance_end_date": analytics_reference.get("performance_end_date"),
             "performance_report_end_date": performance_summary.get("report_end_date"),
@@ -2204,8 +2305,8 @@ def _verify_front_office_portfolio(
             and cash_payload.get("data_quality_status") == "COMPLETE"
             and int(support_overview.get("pending_valuation_jobs") or 0) == 0
             and int(support_overview.get("processing_valuation_jobs") or 0) == 0
-            and int(support_overview.get("pending_aggregation_jobs") or 0) == 0
-            and int(support_overview.get("processing_aggregation_jobs") or 0) == 0
+            and int(support_overview.get("stale_processing_aggregation_jobs") or 0) == 0
+            and int(support_overview.get("failed_aggregation_jobs") or 0) == 0
             and benchmark_assignment.get("benchmark_id")
             and performance_summary.get("benchmark_code")
             and _front_office_analytics_are_fresh(
@@ -2228,6 +2329,10 @@ def _verify_front_office_portfolio(
                 "processing_valuation_jobs": support_overview.get("processing_valuation_jobs"),
                 "pending_aggregation_jobs": support_overview.get("pending_aggregation_jobs"),
                 "processing_aggregation_jobs": support_overview.get("processing_aggregation_jobs"),
+                "stale_processing_aggregation_jobs": support_overview.get(
+                    "stale_processing_aggregation_jobs"
+                ),
+                "failed_aggregation_jobs": support_overview.get("failed_aggregation_jobs"),
                 "positions_data_quality_status": positions_payload.get("data_quality_status"),
                 "cash_data_quality_status": cash_payload.get("data_quality_status"),
                 "benchmark_code": performance_summary.get("benchmark_code"),
@@ -2240,11 +2345,33 @@ def _verify_front_office_portfolio(
                 ),
             }
 
-        LOGGER.info(
-            "Front-office verification waiting on readiness for %s: %s",
-            expected.portfolio_id,
+        blockers = _front_office_readiness_blockers(
             last_observation,
+            expected_end_date=end_date,
         )
+        background_work = _front_office_background_work(last_observation)
+        blocker_categories = tuple(blocker.split("=", maxsplit=1)[0] for blocker in blockers)
+        logged_blocker_categories = (
+            tuple(blocker.split("=", maxsplit=1)[0] for blocker in last_logged_blockers)
+            if last_logged_blockers is not None
+            else None
+        )
+        now = datetime.now(tz=UTC)
+        if (
+            blocker_categories != logged_blocker_categories
+            or last_logged_at is None
+            or (now - last_logged_at) >= timedelta(seconds=30)
+        ):
+            LOGGER.info(
+                "Front-office verification waiting on readiness for %s: blockers=%s "
+                "background_work=%s observation=%s",
+                expected.portfolio_id,
+                blockers,
+                background_work,
+                last_observation,
+            )
+            last_logged_blockers = tuple(blockers)
+            last_logged_at = now
 
     readiness_diagnostics = _collect_front_office_readiness_diagnostics(
         query_control_plane_base_url=query_control_plane_base_url,
@@ -2285,7 +2412,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-reprocess",
         action="store_true",
-        help="Do not queue transaction reprocessing after bundle ingest.",
+        help=(
+            "Deprecated compatibility flag. Transaction reprocessing is no longer queued after "
+            "canonical clean ingest unless --reprocess-after-ingest is supplied."
+        ),
+    )
+    parser.add_argument(
+        "--reprocess-after-ingest",
+        action="store_true",
+        help=(
+            "Queue transaction reprocessing after ingest for deliberate recovery proof. "
+            "Do not use for normal clean canonical bootstrap because it replays late data."
+        ),
     )
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
@@ -2341,7 +2479,11 @@ def main() -> int:
                 poll_interval_seconds=args.poll_interval_seconds,
             )
         _ingest_reference_data(ingestion_base_url, bundle)
-        if should_ingest and not args.skip_reprocess:
+        if _should_reprocess_after_ingest(
+            should_ingest=should_ingest,
+            reprocess_after_ingest=args.reprocess_after_ingest,
+            skip_reprocess=args.skip_reprocess,
+        ):
             _reprocess_front_office_transactions(ingestion_base_url, bundle)
 
     if not args.ingest_only:
