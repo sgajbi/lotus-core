@@ -42,12 +42,19 @@ not part of canonical Workbench runtime bring-up.
   client-restriction, and sustainability-preference source records for DPM assembly proof
 - income, fee, tax, sell, and withdrawal activity
 - two future/planned withdrawals covering both the canonical and current forward cashflow horizons
+- planned settlement dates are rolled to business days and backed by FX coverage
+  through the latest projected settlement date
 - canonical paired product-and-cash transactions aligned with the core demo ingest pattern
 - normalized cash-book transaction rows with `price = 1` and
   `quantity = gross_transaction_amount`
 - full valuation coverage through the report end date so performance analytics remain valid
 - FX and benchmark component coverage through the forward validation window so
-  next-day analytics requests remain valid
+  next-day and current-date analytics requests remain valid. The seed extends these reference
+  series through at least 45 calendar days after the canonical as-of date, and through any later
+  projected settlement date.
+- the current raw `market_prices` and `fx_rates` contracts are point-in-time
+  series; a future effective-range schema should represent open-ended terminal
+  price/rate validity with `3999-12-31`, not with ambiguous missing end dates
 - client restriction records for:
   - private-credit buys blocked by `NO_PRIVATE_CREDIT_BUY`
   - sanctioned-market buys blocked by `NO_SANCTIONED_MARKET_BUY`
@@ -87,7 +94,9 @@ verifies:
 - DPM client restriction and sustainability preference source records resolve through
   query-control-plane integration routes
 - gateway performance summary resolves with benchmark-linked content
-- core analytics reference `performance_end_date` is at or after the seed end date
+- core analytics reference `performance_end_date` is at or after the seed end date and represents
+  a complete calculable performance horizon across portfolio and position analytics source
+  families
 - gateway performance `report_end_date` and return-path latest available date are
   at or after the seed end date
 
@@ -106,11 +115,13 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
     `2026-04-17` for `-18000` and `2026-04-30` for `-12000`
   - allocation views: `asset_class`, `sector`, `region`, `currency`
   - market price coverage through `2026-04-10`
-  - EUR/USD FX, benchmark return, and USD risk-free coverage through `2026-05-10`
+  - EUR/USD FX and benchmark return coverage through `2026-05-25`
+  - USD risk-free coverage through `2026-05-10`
   - no `PORT_SMOKE_%` portfolio rows remained after the clean seed
 - `lotus-core query_control_plane`
   - benchmark assignment resolves to `BMK_PB_GLOBAL_BALANCED_60_40`
-  - analytics reference `performance_end_date` resolves to `2026-04-10`
+  - analytics reference `performance_end_date` resolves to `2026-04-10`, the latest complete
+    performance horizon usable by downstream TWR
   - DPM source products resolve client restriction and sustainability preference records for
     `PB_SG_GLOBAL_BAL_001` when the RFC40-WTBD-008 source-owner slice is applied
 - `lotus-core portfolio_aggregation_service`

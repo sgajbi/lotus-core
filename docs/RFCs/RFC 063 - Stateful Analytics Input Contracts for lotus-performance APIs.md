@@ -129,7 +129,8 @@ reference contract rather than a vague metadata helper.
 
 ### Response contract
 1. `resolved_as_of_date` is echoed explicitly.
-2. `performance_end_date` is bounded by `resolved_as_of_date`.
+2. `performance_end_date` is the latest complete performance horizon where required portfolio and
+   position analytics source families are both available, bounded by `resolved_as_of_date`.
 3. `reference_state_policy` explicitly states that portfolio reference fields come from the
    current canonical portfolio record.
 4. `supported_grouping_dimensions` declares the canonical analytics grouping dimensions without
@@ -139,7 +140,8 @@ reference contract rather than a vague metadata helper.
 This endpoint no longer implies historical effective-dated portfolio metadata it cannot actually
 provide. The contract is now explicit about two separate truths:
 1. portfolio reference fields are current canonical portfolio state
-2. performance horizon metadata is bounded by the requested as-of date
+2. performance horizon metadata is bounded by the requested as-of date and does not overstate
+   readiness from a single source family when downstream TWR cannot calculate that date
 
 ## Analytics-Export Job Contract Baseline
 The analytics export lifecycle endpoints are also now explicit about what kind of "job" they are.

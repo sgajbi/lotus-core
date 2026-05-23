@@ -24,8 +24,8 @@ from portfolio_common.monitoring import (
 )
 from portfolio_common.reconciliation_quality import (
     COMPLETE,
-    DataQualityCoverageSignal,
     PARTIAL,
+    DataQualityCoverageSignal,
     classify_data_quality_coverage,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1056,14 +1056,17 @@ class AnalyticsTimeseriesService:
                 else max(latest_position_date, observed_latest)
             )
 
-        candidates = [
-            candidate
-            for candidate in (latest_portfolio_date, latest_position_date)
-            if candidate is not None
+        portfolio_dates = [
+            candidate for candidate in (latest_portfolio_date, *(observed_dates or [])) if candidate
         ]
-        if not candidates:
+        portfolio_candidate = max(portfolio_dates) if portfolio_dates else None
+        if portfolio_candidate is None and latest_position_date is None:
             return None
-        return min(max(candidates), as_of_date)
+        if portfolio_candidate is None:
+            return min(latest_position_date, as_of_date) if latest_position_date else None
+        if latest_position_date is None:
+            return min(portfolio_candidate, as_of_date)
+        return min(portfolio_candidate, latest_position_date, as_of_date)
 
     @staticmethod
     def _export_result_endpoint(job_id: str) -> str:

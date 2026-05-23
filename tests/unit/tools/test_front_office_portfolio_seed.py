@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from datetime import date
 from decimal import Decimal
@@ -12,14 +13,18 @@ from tools.front_office_portfolio_seed import (
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
     FRONT_OFFICE_SEED_CONTRACT,
+    _cleanup_existing_front_office_seed,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
     _extract_support_overview_summary,
     _front_office_analytics_are_fresh,
+    _front_office_background_work,
+    _front_office_readiness_blockers,
     _ingest_front_office_core_data,
     _ingest_reference_data,
     _reprocess_front_office_transactions,
     _required_cross_currency_fx_windows,
+    _should_reprocess_after_ingest,
     _validate_front_office_cash_transactions,
     _validate_front_office_internal_transaction_pairs,
     _verify_front_office_portfolio,
@@ -104,7 +109,7 @@ def test_front_office_bundle_includes_income_and_paired_cash_transactions():
     current_horizon_withdrawal = by_txn["TXN-WITHDRAWAL-CURRENT-HORIZON-001"]
     assert current_horizon_withdrawal["transaction_type"] == "WITHDRAWAL"
     assert current_horizon_withdrawal["transaction_date"].startswith("2026-04-30")
-    assert current_horizon_withdrawal["settlement_date"].startswith("2026-05-16")
+    assert current_horizon_withdrawal["settlement_date"].startswith("2026-05-18")
 
     assert by_txn["TXN-CASH-BUY-AAPL-001"]["transaction_type"] == "SELL"
     assert by_txn["TXN-CASH-SELL-AAPL-001"]["transaction_type"] == "BUY"
@@ -148,7 +153,7 @@ def test_front_office_bundle_honors_explicit_end_date_for_market_prices():
     assert future_withdrawal["transaction_date"].startswith("2026-04-24")
     assert future_withdrawal["settlement_date"].startswith("2026-04-27")
     assert current_horizon_withdrawal["transaction_date"].startswith("2026-05-07")
-    assert current_horizon_withdrawal["settlement_date"].startswith("2026-05-23")
+    assert current_horizon_withdrawal["settlement_date"].startswith("2026-05-25")
 
 
 def test_front_office_bundle_pairs_internal_transactions_under_shared_event_linkage():
@@ -295,7 +300,21 @@ def test_front_office_bundle_includes_forward_cashflow_event_inside_projection_w
     ].startswith("2026-04-30")
     assert future_by_id["TXN-WITHDRAWAL-CURRENT-HORIZON-001"][
         "settlement_date"
-    ].startswith("2026-05-16")
+    ].startswith("2026-05-18")
+
+
+def test_front_office_bundle_projected_settlements_do_not_require_weekend_fx():
+    bundle = _build_bundle()
+    future_txns = [
+        transaction
+        for transaction in bundle["transactions"]
+        if transaction["transaction_date"][:10] > bundle["as_of_date"]
+    ]
+
+    assert future_txns
+    for transaction in future_txns:
+        settlement_date = date.fromisoformat(transaction["settlement_date"][:10])
+        assert settlement_date.weekday() < 5
 
 
 def test_front_office_bundle_carries_full_price_coverage_through_as_of_date():
@@ -549,7 +568,24 @@ def test_front_office_bundle_extends_fx_coverage_through_forward_projection_wind
         if row["from_currency"] == "EUR" and row["to_currency"] == "USD"
     ]
     assert eur_usd_rates
-    assert eur_usd_rates[-1]["rate_date"] == "2026-05-10"
+    assert eur_usd_rates[-1]["rate_date"] == "2026-05-25"
+
+
+def test_front_office_bundle_fx_covers_projected_settlement_dates():
+    bundle = _build_bundle()
+    required_settlement_dates = {
+        transaction["settlement_date"][:10]
+        for transaction in bundle["transactions"]
+        if transaction["transaction_date"][:10] > bundle["as_of_date"]
+    }
+    eur_usd_dates = {
+        row["rate_date"]
+        for row in bundle["fx_rates"]
+        if row["from_currency"] == "EUR" and row["to_currency"] == "USD"
+    }
+
+    assert required_settlement_dates
+    assert required_settlement_dates <= eur_usd_dates
 
 
 def test_front_office_bundle_extends_usd_risk_free_coverage_through_forward_window():
@@ -590,7 +626,7 @@ def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_
     assert bundle["benchmark_return_series"][0]["source_record_id"].startswith(
         DEFAULT_BENCHMARK_ID.lower()
     )
-    assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-05-10"
+    assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-05-25"
     sector_by_index = {
         index["index_id"]: index["classification_labels"].get("sector")
         for index in bundle["indices"]
@@ -621,6 +657,28 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "PB_SG_GLOBAL_BAL_001" in sql
     assert DEFAULT_BENCHMARK_ID in sql
     assert DEFAULT_DPM_MODEL_PORTFOLIO_ID in sql
+
+
+def test_front_office_cleanup_retries_transient_database_conflicts(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command, *, check):
+        calls.append(command)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(returncode=1, cmd=command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed.subprocess.run", fake_run)
+    monkeypatch.setattr("tools.front_office_portfolio_seed.time.sleep", lambda _: None)
+
+    _cleanup_existing_front_office_seed(
+        postgres_container="postgres",
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        benchmark_id=DEFAULT_BENCHMARK_ID,
+    )
+
+    assert len(calls) == 2
+    assert calls[0] == calls[1]
 
 
 def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed():
@@ -859,6 +917,7 @@ def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeyp
 
     assert args.gateway_base_url == "http://gateway.dev.lotus"
     assert args.end_date == "2026-04-10"
+    assert not args.reprocess_after_ingest
 
 
 def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
@@ -934,6 +993,31 @@ def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
             },
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("should_ingest", "reprocess_after_ingest", "skip_reprocess", "expected"),
+    [
+        (True, False, False, False),
+        (True, True, False, True),
+        (False, True, False, False),
+        (True, True, True, False),
+    ],
+)
+def test_front_office_seed_reprocess_after_ingest_is_explicit_recovery_mode(
+    should_ingest: bool,
+    reprocess_after_ingest: bool,
+    skip_reprocess: bool,
+    expected: bool,
+) -> None:
+    assert (
+        _should_reprocess_after_ingest(
+            should_ingest=should_ingest,
+            reprocess_after_ingest=reprocess_after_ingest,
+            skip_reprocess=skip_reprocess,
+        )
+        is expected
+    )
 
 
 def test_front_office_seed_waits_for_portfolio_persistence_before_reference_ingest(monkeypatch):
@@ -1183,8 +1267,10 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
             {
                 "pending_valuation_jobs": 0,
                 "processing_valuation_jobs": 0,
-                "pending_aggregation_jobs": 0,
-                "processing_aggregation_jobs": 0,
+                "pending_aggregation_jobs": 14,
+                "processing_aggregation_jobs": 2,
+                "stale_processing_aggregation_jobs": 0,
+                "failed_aggregation_jobs": 0,
             },
         ),
         (
@@ -1197,7 +1283,7 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         (
             "http://gateway.dev/api/v1/workbench/P1/performance/summary"
             "?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class"
-            "&attribution_dimension=asset_class&detail_basis=NET"
+            "&attribution_dimension=asset_class&detail_basis=NET&report_end_date=2026-04-10"
         ): (
             200,
             {
@@ -1241,8 +1327,56 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert verification["income_types"] == 2
     assert verification["activity_buckets"] == 3
     assert verification["positions_data_quality_status"] == "COMPLETE"
-    assert verification["pending_aggregation_jobs"] == 0
+    assert verification["pending_aggregation_jobs"] == 14
+    assert verification["processing_aggregation_jobs"] == 2
+    assert verification["failed_aggregation_jobs"] == 0
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
     assert all("activity-summary/query" not in url for url in requested_urls)
+    assert any("report_end_date=2026-04-10" in url for url in requested_urls)
     assert gateway_header_calls == [FRONT_OFFICE_GATEWAY_CALLER_HEADERS]
+
+
+def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
+    blockers = _front_office_readiness_blockers(
+        {
+            "positions_data_quality_status": "COMPLETE",
+            "cash_data_quality_status": "STALE",
+            "pending_valuation_jobs": 3,
+            "processing_valuation_jobs": 0,
+            "pending_aggregation_jobs": 2,
+            "processing_aggregation_jobs": 1,
+            "stale_processing_aggregation_jobs": 1,
+            "failed_aggregation_jobs": 4,
+            "benchmark_code": None,
+            "analytics_performance_end_date": "2026-04-09",
+            "performance_report_end_date": "2026-04-10",
+            "return_path_latest_available_date": None,
+        },
+        expected_end_date="2026-04-10",
+    )
+
+    assert blockers == [
+        "cash_data_quality_not_complete",
+        "pending_valuation_jobs=3",
+        "stale_processing_aggregation_jobs=1",
+        "failed_aggregation_jobs=4",
+        "gateway_performance_benchmark_missing",
+        "core_analytics_reference_stale=2026-04-09",
+        "gateway_return_path_stale=missing",
+    ]
+
+
+def test_front_office_background_work_reports_non_blocking_aggregation_drain() -> None:
+    background = _front_office_background_work(
+        {
+            "pending_aggregation_jobs": 12,
+            "processing_aggregation_jobs": 3,
+            "failed_aggregation_jobs": 0,
+        }
+    )
+
+    assert background == [
+        "pending_aggregation_jobs=12",
+        "processing_aggregation_jobs=3",
+    ]

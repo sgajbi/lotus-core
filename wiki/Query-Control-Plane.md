@@ -144,6 +144,11 @@ Use this grouping when deciding where a new consumer should bind:
 - analytics inputs and export jobs
   portfolio timeseries, position timeseries, analytics reference, and
   `/integration/exports/analytics-timeseries/jobs...`
+
+`PortfolioAnalyticsReference.performance_end_date` is the latest complete performance horizon
+where required portfolio and position analytics source families overlap. It is bounded by the
+requested `as_of_date` and must not advertise a newer isolated source date that downstream
+performance analytics cannot calculate.
 - support and lineage
   `/support/...` and `/lineage/...`
 - simulation lifecycle

@@ -165,8 +165,9 @@ async def get_position_analytics_timeseries(
     description=(
         "What: Return portfolio-level reference metadata for analytics joins and "
         "lifecycle context.\n"
-        "How: Resolve current canonical portfolio reference fields, bound "
-        "performance_end_date by the requested as_of_date, and include lineage metadata.\n"
+        "How: Resolve current canonical portfolio reference fields, publish the latest complete "
+        "performance_end_date where required portfolio and position analytics source families "
+        "overlap, bound that date by the requested as_of_date, and include lineage metadata.\n"
         "When: Used by lotus-performance analytics pipelines and lotus-gateway workspace source "
         "context flows alongside analytics timeseries endpoints to avoid repetitive metadata "
         "payload duplication.\n"

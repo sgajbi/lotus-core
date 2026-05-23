@@ -637,7 +637,10 @@ class PortfolioAnalyticsReferenceResponse(SourceDataProductRuntimeMetadata):
     )
     performance_end_date: date | None = Field(
         None,
-        description=("Latest available portfolio valuation date, bounded by resolved_as_of_date."),
+        description=(
+            "Latest complete performance horizon where required portfolio and position "
+            "analytics source families are both available, bounded by resolved_as_of_date."
+        ),
         examples=["2025-12-31"],
     )
     client_id: str = Field(

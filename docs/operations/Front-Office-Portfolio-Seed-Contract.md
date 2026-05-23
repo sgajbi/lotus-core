@@ -122,8 +122,11 @@ The seed must make the following product surfaces materially usable.
 - projected cash movements over both the canonical contract window and the current Workbench
   forward-liquidity horizon
 - future-dated settlement activity or projected cash events
-- benchmark and FX coverage through the forward validation horizon so next-day
+- benchmark and FX coverage through the forward validation horizon so next-day and current-date
   analytics requests do not fail on missing reference data
+- projected settlement dates must land on business days and must be covered by
+  required FX pairs; the canonical seed must not require weekend FX to value or
+  settle planned activity
 - enough data to show:
   - current available cash
   - cash by currency
@@ -136,6 +139,10 @@ The seed must make the following product surfaces materially usable.
   analysis window starts
 - daily price history for all relevant securities
 - daily FX for all required currency pairs
+- raw `market_prices` and `fx_rates` are currently point-in-time series keyed by
+  `price_date` / `rate_date`; when those source contracts grow effective-date
+  ranges, open-ended terminal validity should use `3999-12-31` as the explicit
+  far-future end date instead of relying on implicit latest-row behavior
 - portfolio timeseries coverage across:
   - 7D
   - 30D
@@ -165,8 +172,10 @@ The seed must make the following product surfaces materially usable.
 This canonical portfolio seed must remain analytically usable end to end.
 
 Do not introduce stale-price or missing-price conditions into the primary
-portfolio seed if they would cap `performance_end_date` or distort benchmark,
-contribution, or attribution outputs.
+portfolio seed if they would cap the complete calculable `performance_end_date`
+or distort benchmark, contribution, or attribution outputs. The analytics
+reference date must remain a date where required portfolio and position
+analytics source families overlap for downstream performance calculation.
 
 If readiness/error flows need explicit coverage, seed them in a separate
 operator scenario rather than degrading the primary front-office reference
@@ -257,8 +266,9 @@ Target minimum history depth:
 - prices and FX: 12 months
 - benchmark series: 12 months
 - transactions: at least 3-6 months of realistic activity
-- FX and benchmark component/reference coverage should extend through the active
-  forward cashflow validation horizon, not stop exactly at the report end date
+- FX and benchmark component/reference coverage should extend through at least 45 calendar days
+  after the canonical as-of date and any later projected settlement date, not stop exactly at the
+  report end date
 
 That does not require 12 months of dense transaction flow. It does require
 enough historical market series to make the performance periods meaningful.
