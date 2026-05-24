@@ -208,18 +208,64 @@ def _probe_dpm_portfolio_universe_candidate_paging(
     candidate_rows = [row for row in candidates if isinstance(row, dict)]
     page = _dict_body(body_dict.get("page"))
     next_page_token = page.get("next_page_token")
+    second_response: httpx.Response | None = None
+    second_body_dict: dict[str, Any] = {}
+    second_candidate_rows: list[dict[str, Any]] = []
+    second_page_token: Any = None
+    if isinstance(next_page_token, str) and next_page_token:
+        second_response = client.post(
+            "/integration/dpm/portfolio-universe/candidates",
+            json={
+                "as_of_date": as_of_date,
+                "tenant_id": tenant_id,
+                "booking_center_code": "Singapore",
+                "model_portfolio_ids": [model_portfolio_id],
+                "include_inactive_mandates": False,
+                "page": {"page_size": 1, "page_token": next_page_token},
+            },
+        )
+        second_body = _json_body(second_response)
+        second_body_dict = _dict_body(second_body)
+        second_candidates = second_body_dict.get("candidates", [])
+        second_candidate_rows = [row for row in second_candidates if isinstance(row, dict)]
+        second_page_token = _dict_body(second_body_dict.get("page")).get("next_page_token")
+
+    first_page_ids = {
+        str(row.get("portfolio_id")) for row in candidate_rows if row.get("portfolio_id")
+    }
+    second_page_ids = {
+        str(row.get("portfolio_id")) for row in second_candidate_rows if row.get("portfolio_id")
+    }
+    expected_second_page_ids = second_page_ids & set(EXPECTED_DPM_UNIVERSE_PORTFOLIO_IDS)
+    duplicate_page_ids = sorted(first_page_ids & second_page_ids)
     return _result(
         "dpm_portfolio_universe_candidate_paging",
         response.status_code == 200
         and body_dict.get("product_name") == "DpmPortfolioUniverseCandidate"
         and len(candidate_rows) == 1
         and isinstance(next_page_token, str)
-        and bool(next_page_token),
+        and bool(next_page_token)
+        and second_response is not None
+        and second_response.status_code == 200
+        and second_body_dict.get("product_name") == "DpmPortfolioUniverseCandidate"
+        and len(second_candidate_rows) == 1
+        and bool(expected_second_page_ids)
+        and not duplicate_page_ids,
         {
             "status_code": response.status_code,
             "product_name": body_dict.get("product_name"),
             "candidate_count": len(candidate_rows),
+            "first_page_portfolio_ids": sorted(first_page_ids),
             "next_page_token_present": bool(next_page_token),
+            "second_status_code": second_response.status_code
+            if second_response is not None
+            else None,
+            "second_product_name": second_body_dict.get("product_name"),
+            "second_candidate_count": len(second_candidate_rows),
+            "second_page_portfolio_ids": sorted(second_page_ids),
+            "second_page_expected_portfolio_ids": sorted(expected_second_page_ids),
+            "second_next_page_token_present": bool(second_page_token),
+            "duplicate_page_portfolio_ids": duplicate_page_ids,
         },
     )
 
