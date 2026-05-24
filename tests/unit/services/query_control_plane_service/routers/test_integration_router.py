@@ -41,6 +41,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_transaction_cost_curve,
     resolve_cio_model_change_affected_cohort,
     resolve_discretionary_mandate_binding,
+    resolve_dpm_portfolio_universe_candidates,
     resolve_instrument_eligibility_bulk,
     resolve_model_portfolio_targets,
     resolve_portfolio_benchmark_assignment,
@@ -71,6 +72,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClientTaxRuleSetRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
+    DpmPortfolioUniverseCandidateRequest,
     DpmSourceReadinessRequest,
     ExternalCurrencyExposureRequest,
     ExternalEligibleHedgeInstrumentRequest,
@@ -768,6 +770,80 @@ async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404
         await resolve_cio_model_change_affected_cohort(
             model_portfolio_id="MODEL_EMPTY",
             request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+        return_value={
+            "product_name": "DpmPortfolioUniverseCandidate",
+            "product_version": "v1",
+            "as_of_date": "2026-05-03",
+            "candidates": [
+                {
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                    "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+                    "client_id": "CIF_SG_000184",
+                    "booking_center_code": "Singapore",
+                    "jurisdiction_code": "SG",
+                    "discretionary_authority_status": "active",
+                    "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+                    "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+                    "mandate_objective": "global_balanced",
+                    "risk_profile": "balanced",
+                    "investment_horizon": "medium_term",
+                    "effective_from": "2026-05-01",
+                    "effective_to": None,
+                    "binding_version": 3,
+                    "source_record_id": "mandate-binding-001",
+                }
+            ],
+            "page": {
+                "page_size": 250,
+                "sort_key": "portfolio_id:asc,mandate_id:asc",
+                "returned_component_count": 1,
+                "request_scope_fingerprint": "scope-1",
+                "next_page_token": None,
+            },
+            "supportability": {
+                "state": "READY",
+                "reason": "DPM_PORTFOLIO_UNIVERSE_READY",
+                "returned_candidate_count": 1,
+                "filters_applied": ["as_of_date", "active_discretionary_authority"],
+                "page_truncated": False,
+            },
+            "lineage": {"source_table": "portfolio_mandate_bindings"},
+        }
+    )
+    request = DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03")
+
+    response = await resolve_dpm_portfolio_universe_candidates(
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "DpmPortfolioUniverseCandidate"
+    assert response["candidates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
+    mock_service.resolve_dpm_portfolio_universe_candidates.assert_awaited_once_with(
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_maps_empty_universe_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+        return_value=MagicMock(candidates=[])
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await resolve_dpm_portfolio_universe_candidates(
+            request=DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03"),
             integration_service=mock_service,
         )
 

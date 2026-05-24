@@ -55,8 +55,8 @@ Current repository posture:
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
     `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`,
     `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`,
-    `PortfolioManagerBookMembership:v1`, and `CioModelChangeAffectedCohort:v1`. They are declared
-    in the active source-data catalog,
+    `PortfolioManagerBookMembership:v1`, `CioModelChangeAffectedCohort:v1`, and
+    `DpmPortfolioUniverseCandidate:v1`. They are declared in the active source-data catalog,
     route-family registry, source-security profiles, and domain-product declaration, backed by
     canonical front-office seed payloads where applicable, and live-proven for the RFC-0087 source
     family through `make live-dpm-source-validate`. `PortfolioManagerBookMembership:v1` is the
@@ -64,7 +64,10 @@ Current repository posture:
     `advisor_id` without claiming a broader relationship-householding hierarchy.
     `CioModelChangeAffectedCohort:v1` is the RFC41-WTBD-002 source-owner foundation and resolves
     affected discretionary mandates from approved model definitions and effective mandate bindings
-    without moving rebalance decisioning into core. RFC40-WTBD-008 source-owner coverage adds
+    without moving rebalance decisioning into core. `DpmPortfolioUniverseCandidate:v1` advances
+    RFC37-WTBD-004 source-owner depth by exposing paged Core-owned DPM universe candidates from
+    effective discretionary mandate bindings without claiming relationship-householding, client
+    suitability, PM ranking, execution, or external workflow ownership. RFC40-WTBD-008 source-owner coverage adds
     `ClientRestrictionProfile:v1` and `SustainabilityPreferenceProfile:v1` as effective-dated,
     lineage-backed query-control-plane products and canonical front-office seed inputs; downstream
     `lotus-manage` consumption remains a separate slice. RFC42-WTBD-006 source-owner coverage adds
@@ -264,7 +267,8 @@ Most relevant current governance:
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`,
     `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`,
     `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`, and
-    `PortfolioManagerBookMembership:v1`, with product-specific APIs, ingestion/persistence support
+    `PortfolioManagerBookMembership:v1`, `CioModelChangeAffectedCohort:v1`, and
+    `DpmPortfolioUniverseCandidate:v1`, with product-specific APIs, ingestion/persistence support
     where core owns source state, route-family metadata, source-data security, domain-product
     declarations, OpenAPI proof, live validator coverage where applicable, and canonical
     front-office seed support for `PB_SG_GLOBAL_BAL_001`.

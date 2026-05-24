@@ -44,6 +44,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
+    DpmPortfolioUniverseCandidateRequest,
+    DpmPortfolioUniverseCandidateResponse,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
     ExternalCurrencyExposureRequest,
@@ -119,6 +121,9 @@ MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = {
 }
 PORTFOLIO_MANAGER_BOOK_EMPTY_EXAMPLE = {
     "detail": "No portfolio memberships found for portfolio_manager_id and request filters."
+}
+DPM_PORTFOLIO_UNIVERSE_EMPTY_EXAMPLE = {
+    "detail": "No DPM portfolio-universe candidates found for request filters."
 }
 MANDATE_BINDING_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
@@ -614,6 +619,53 @@ async def resolve_cio_model_change_affected_cohort(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No affected mandates found for model_portfolio_id and request filters.",
+        )
+    return response
+
+
+@router.post(
+    "/dpm/portfolio-universe/candidates",
+    response_model=DpmPortfolioUniverseCandidateResponse,
+    summary="Resolve DPM portfolio-universe candidates",
+    description=(
+        "What: Return source-owned DPM portfolio-universe candidates from effective "
+        "discretionary mandate bindings.\n"
+        "How: Applies as-of, booking-center, model-portfolio, active-authority, and deterministic "
+        "paging controls against Core-owned mandate binding records, then returns candidate rows "
+        "with supportability, continuation metadata, and lineage.\n"
+        "When: Use this endpoint when lotus-manage needs source-owned DPM universe discovery "
+        "before campaign or wave composition. Do not use it as a client householding, suitability, "
+        "portfolio-manager ranking, execution, or external workflow API."
+    ),
+    responses={
+        404: problem_response(
+            "No DPM portfolio-universe candidates found.",
+            DPM_PORTFOLIO_UNIVERSE_EMPTY_EXAMPLE,
+        ),
+        422: problem_response(
+            "Invalid DPM portfolio-universe request",
+            {"detail": "DPM portfolio-universe page token does not match request scope."},
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("DpmPortfolioUniverseCandidate"),
+)
+async def resolve_dpm_portfolio_universe_candidates(
+    request: DpmPortfolioUniverseCandidateRequest,
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> DpmPortfolioUniverseCandidateResponse:
+    try:
+        response = await integration_service.resolve_dpm_portfolio_universe_candidates(
+            request=request,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    candidates = getattr(response, "candidates", None)
+    if candidates is None and isinstance(response, dict):
+        candidates = response.get("candidates", [])
+    if not candidates:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No DPM portfolio-universe candidates found for request filters.",
         )
     return response
 

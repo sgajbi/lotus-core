@@ -69,6 +69,15 @@ DPM_SOURCE_READINESS_SCHEMA_ROOTS = {
     "MarketDataCurrencyPair",
 }
 
+DPM_PORTFOLIO_UNIVERSE_CANDIDATE_SCHEMA_ROOTS = {
+    "DpmPortfolioUniverseCandidateRequest",
+    "DpmPortfolioUniverseCandidate",
+    "DpmPortfolioUniverseCandidateSupportability",
+    "DpmPortfolioUniverseCandidateResponse",
+    "ReferencePageRequest",
+    "ReferencePageMetadata",
+}
+
 BENCHMARK_SOURCE_SCHEMA_ROOTS = {
     "BenchmarkCompositionWindowRequest",
     "BenchmarkCompositionWindowResponse",

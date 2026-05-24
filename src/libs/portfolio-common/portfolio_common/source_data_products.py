@@ -393,6 +393,21 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="DpmPortfolioUniverseCandidate",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/dpm/portfolio-universe/candidates",),
+        paging_mode=INLINE_PAGED,
+        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
+        notes=(
+            "DPM source product for source-owned portfolio-universe candidate discovery, "
+            "backed by effective discretionary mandate bindings."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="ClientRestrictionProfile",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

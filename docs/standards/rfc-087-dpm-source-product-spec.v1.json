@@ -168,6 +168,29 @@
         "operator lineage"
       ],
       "implementation_slice": "Slice 9"
+    },
+    {
+      "product_name": "DpmPortfolioUniverseCandidate",
+      "product_version": "v1",
+      "product_family": "dpm_source_data",
+      "authoritative_domain": "portfolio_management",
+      "proposed_route": {
+        "method": "POST",
+        "path": "/integration/dpm/portfolio-universe/candidates"
+      },
+      "required_ingestion": [
+        "uses effective discretionary mandate bindings from portfolio_mandate_bindings"
+      ],
+      "minimum_response_families": [
+        "source-data product envelope",
+        "paged candidate rows",
+        "portfolio, mandate, client, model, and policy identity",
+        "active discretionary authority filter",
+        "deterministic continuation token metadata",
+        "supportability",
+        "source lineage"
+      ],
+      "implementation_slice": "RFC37-WTBD-004 source-owner extension"
     }
   ]
 }

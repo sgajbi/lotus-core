@@ -25,6 +25,7 @@ from tests.integration.services.query_control_plane_service.openapi_schema_contr
     DPM_MANDATE_BINDING_SCHEMA_ROOTS,
     DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS,
     DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS,
+    DPM_PORTFOLIO_UNIVERSE_CANDIDATE_SCHEMA_ROOTS,
     DPM_PORTFOLIO_TAX_LOT_SCHEMA_ROOTS,
     DPM_SOURCE_READINESS_SCHEMA_ROOTS,
     DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS,
@@ -2120,6 +2121,19 @@ async def test_openapi_fully_documents_dpm_source_readiness_schema_family(async_
     assert_schema_properties_are_documented_and_exampled(
         schema,
         DPM_SOURCE_READINESS_SCHEMA_ROOTS,
+    )
+
+
+async def test_openapi_fully_documents_dpm_portfolio_universe_candidate_schema_family(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(
+        schema,
+        DPM_PORTFOLIO_UNIVERSE_CANDIDATE_SCHEMA_ROOTS,
     )
 
 

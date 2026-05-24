@@ -46,6 +46,21 @@ def _mandate_binding() -> dict:
     }
 
 
+def _dpm_portfolio_universe_candidates() -> dict:
+    return {
+        "product_name": "DpmPortfolioUniverseCandidate",
+        "supportability": {"state": "READY", "returned_candidate_count": 1},
+        "candidates": [
+            {
+                "portfolio_id": validator.DEFAULT_PORTFOLIO_ID,
+                "mandate_id": validator.DEFAULT_MANDATE_ID,
+                "model_portfolio_id": validator.DEFAULT_MODEL_PORTFOLIO_ID,
+            }
+        ],
+        "page": {"next_page_token": None},
+    }
+
+
 def _eligibility() -> dict:
     return {
         "product_name": "InstrumentEligibilityProfile",
@@ -153,6 +168,10 @@ def _handler(overrides: dict[str, tuple[int, dict | str]] | None = None) -> Call
             "POST",
             f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/mandate-binding",
         ): (200, _mandate_binding()),
+        (
+            "POST",
+            "/integration/dpm/portfolio-universe/candidates",
+        ): (200, _dpm_portfolio_universe_candidates()),
         ("POST", "/integration/instruments/eligibility-bulk"): (200, _eligibility()),
         (
             "POST",
@@ -199,6 +218,7 @@ def test_live_dpm_source_validator_accepts_ready_canonical_products() -> None:
         "openapi_dpm_source_routes",
         "dpm_model_targets_ready",
         "dpm_mandate_binding_ready",
+        "dpm_portfolio_universe_candidates_ready",
         "dpm_instrument_eligibility_ready",
         "dpm_client_restrictions_ready",
         "dpm_sustainability_preferences_ready",

@@ -84,6 +84,7 @@ def test_core_domain_product_declaration_aligns_to_live_source_data_catalog() ->
                 "DpmSourceReadiness",
                 "PortfolioManagerBookMembership",
                 "CioModelChangeAffectedCohort",
+                "DpmPortfolioUniverseCandidate",
                 "ClientRestrictionProfile",
                 "SustainabilityPreferenceProfile",
                 "ClientTaxProfile",

@@ -19,6 +19,7 @@ EXPECTED_PRODUCTS = {
     "PortfolioTaxLotWindow": "Slice 7",
     "MarketDataCoverageWindow": "Slice 8",
     "DpmSourceReadiness": "Slice 9",
+    "DpmPortfolioUniverseCandidate": "RFC37-WTBD-004 source-owner extension",
 }
 
 

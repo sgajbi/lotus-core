@@ -779,6 +779,46 @@ async def test_list_model_portfolio_affected_mandates_can_include_inactive_autho
 
 
 @pytest.mark.asyncio
+async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cursor() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            SimpleNamespace(
+                portfolio_id="PB_SG_GLOBAL_BAL_001",
+                mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+                effective_from=date(2026, 5, 1),
+                updated_at=None,
+                created_at=None,
+            ),
+            SimpleNamespace(
+                portfolio_id="PB_SG_INCOME_002",
+                mandate_id="MANDATE_PB_SG_INCOME_002",
+                effective_from=date(2026, 5, 1),
+                updated_at=None,
+                created_at=None,
+            ),
+        ]
+    )
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_dpm_portfolio_universe_candidates(
+        as_of_date=date(2026, 5, 3),
+        booking_center_code="Singapore",
+        model_portfolio_ids=["MODEL_PB_SG_GLOBAL_BAL_DPM"],
+        after_sort_key=("PB_SG_GLOBAL_BAL_001", "MANDATE_PB_SG_GLOBAL_BAL_001"),
+        limit=1,
+    )
+
+    assert [row.portfolio_id for row in rows] == ["PB_SG_INCOME_002"]
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
+    assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
+    assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
+    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
+    assert "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')" in compiled
+
+
+@pytest.mark.asyncio
 async def test_resolve_discretionary_mandate_binding_uses_effective_filters() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
