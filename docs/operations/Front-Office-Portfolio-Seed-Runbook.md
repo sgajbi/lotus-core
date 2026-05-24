@@ -1,7 +1,8 @@
 # Front-Office Portfolio Seed Runbook
 
 This runbook seeds one realistic discretionary portfolio scenario for local
-gateway and UI development.
+gateway and UI development, plus two source-only DPM universe candidate rows
+used to prove bounded Core candidate discovery.
 
 Use this when you need one portfolio that exercises:
 
@@ -18,9 +19,13 @@ Use this when you need one portfolio that exercises:
 
 This runbook is local-only and does not depend on `lotus-manage`.
 
-Routine front-office seeding is intentionally limited to `PB_SG_GLOBAL_BAL_001`. The governed
-RFC-086 bank-day load scenario with `1000` portfolios is separate load/performance tooling and is
-not part of canonical Workbench runtime bring-up.
+Routine front-office analytics seeding is intentionally limited to `PB_SG_GLOBAL_BAL_001`. The
+seed also publishes source-only candidate portfolio master and mandate-binding rows for
+`PB_SG_GLOBAL_INC_002` and `PB_SG_GLOBAL_GROWTH_003` so `DpmPortfolioUniverseCandidate:v1` can prove
+multi-candidate discovery and paging without pretending those portfolios are full holdings,
+performance, risk, or Workbench demo portfolios. The governed RFC-086 bank-day load scenario with
+`1000` portfolios is separate load/performance tooling and is not part of canonical Workbench
+runtime bring-up.
 
 ## Seeded Portfolio
 
@@ -62,6 +67,9 @@ not part of canonical Workbench runtime bring-up.
   - minimum sustainable allocation `0.2000000000`
   - thermal-coal exclusion `THERMAL_COAL`
   - low-carbon-transition positive tilt `LOW_CARBON_TRANSITION`
+- DPM portfolio-universe source-only candidate rows for:
+  - `PB_SG_GLOBAL_INC_002` / `MANDATE_PB_SG_GLOBAL_INC_002`
+  - `PB_SG_GLOBAL_GROWTH_003` / `MANDATE_PB_SG_GLOBAL_GROWTH_003`
 
 ## Operator Command
 
@@ -93,6 +101,8 @@ verifies:
 - benchmark assignment resolves
 - DPM client restriction and sustainability preference source records resolve through
   query-control-plane integration routes
+- DPM portfolio-universe candidates return the governed three-candidate source scenario and prove
+  continuation-token paging
 - gateway performance summary resolves with benchmark-linked content
 - core analytics reference `performance_end_date` is at or after the seed end date and represents
   a complete calculable performance horizon across portfolio and position analytics source
@@ -124,6 +134,10 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
     performance horizon usable by downstream TWR
   - DPM source products resolve client restriction and sustainability preference records for
     `PB_SG_GLOBAL_BAL_001` when the RFC40-WTBD-008 source-owner slice is applied
+  - DPM portfolio-universe candidate discovery returns `PB_SG_GLOBAL_BAL_001`,
+    `PB_SG_GLOBAL_INC_002`, and `PB_SG_GLOBAL_GROWTH_003` as Core-owned candidate rows; this proves
+    source-owned candidate discovery only, not relationship householding, suitability, PM ranking,
+    execution readiness, client workflow, or full analytics support for the source-only rows
 - `lotus-core portfolio_aggregation_service`
   - portfolio aggregation backlog for `PB_SG_GLOBAL_BAL_001`: `0` pending,
     `0` processing, `382` complete

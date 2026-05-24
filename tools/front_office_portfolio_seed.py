@@ -38,6 +38,34 @@ DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
 )
 DEFAULT_DPM_MODEL_PORTFOLIO_ID = "MODEL_PB_SG_GLOBAL_BAL_DPM"
 DEFAULT_DPM_MODEL_PORTFOLIO_VERSION = "2026.04"
+DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
+    {
+        "portfolio_id": "PB_SG_GLOBAL_INC_002",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_INC_002",
+        "client_id": "CIF_SG_000219",
+        "advisor_id": "RM_SG_001",
+        "risk_profile": "income",
+        "objective": "Income-oriented discretionary mandate with controlled drawdown.",
+        "policy_pack_id": "POLICY_DPM_SG_INCOME_V1",
+        "mandate_objective": (
+            "Generate resilient income while preserving capital within agreed volatility limits."
+        ),
+        "source_record_id": "pb_sg_global_inc_002_mandate_binding_v1",
+    },
+    {
+        "portfolio_id": "PB_SG_GLOBAL_GROWTH_003",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_GROWTH_003",
+        "client_id": "CIF_SG_000227",
+        "advisor_id": "RM_SG_001",
+        "risk_profile": "growth",
+        "objective": "Growth-oriented discretionary mandate for long-term capital appreciation.",
+        "policy_pack_id": "POLICY_DPM_SG_GROWTH_V1",
+        "mandate_objective": (
+            "Compound long-term capital with diversified global growth exposure and liquidity guardrails."
+        ),
+        "source_record_id": "pb_sg_global_growth_003_mandate_binding_v1",
+    },
+)
 FRONT_OFFICE_GATEWAY_CALLER_HEADERS = {
     "X-Actor-Id": "workbench-system",
     "X-Tenant-Id": "tenant-sg",
@@ -216,9 +244,14 @@ def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str)
     benchmark_index_id_list = ", ".join(
         f"'{index_id}'" for index_id in DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS
     )
+    source_only_candidate_cleanup = [
+        build_portfolio_seed_cleanup_sql(portfolio_id=row["portfolio_id"])
+        for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS
+    ]
     return "\n".join(
         [
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
+            *source_only_candidate_cleanup,
             (
                 "delete from model_portfolio_targets "
                 f"where model_portfolio_id = '{DEFAULT_DPM_MODEL_PORTFOLIO_ID}' "
@@ -590,6 +623,24 @@ def build_front_office_portfolio_bundle(
             "is_leverage_allowed": False,
         }
     ]
+    portfolios.extend(
+        {
+            "portfolio_id": row["portfolio_id"],
+            "base_currency": "USD",
+            "open_date": "2025-01-06",
+            "risk_exposure": row["risk_profile"],
+            "investment_time_horizon": "long_term",
+            "portfolio_type": "discretionary",
+            "objective": row["objective"],
+            "booking_center_code": "Singapore",
+            "client_id": row["client_id"],
+            "advisor_id": row["advisor_id"],
+            "status": "active",
+            "cost_basis_method": "FIFO",
+            "is_leverage_allowed": False,
+        }
+        for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS
+    )
 
     instruments = [
         {
@@ -1464,6 +1515,40 @@ def build_front_office_portfolio_bundle(
             "quality_status": "accepted",
         }
     ]
+    mandate_bindings.extend(
+        {
+            "portfolio_id": row["portfolio_id"],
+            "mandate_id": row["mandate_id"],
+            "client_id": row["client_id"],
+            "mandate_type": "discretionary",
+            "discretionary_authority_status": "active",
+            "booking_center_code": "Singapore",
+            "jurisdiction_code": "SG",
+            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+            "policy_pack_id": row["policy_pack_id"],
+            "mandate_objective": row["mandate_objective"],
+            "risk_profile": row["risk_profile"],
+            "investment_horizon": "long_term",
+            "review_cadence": "quarterly",
+            "last_review_date": "2026-03-31",
+            "next_review_due_date": "2026-06-30",
+            "leverage_allowed": False,
+            "tax_awareness_allowed": True,
+            "settlement_awareness_required": True,
+            "rebalance_frequency": "monthly",
+            "rebalance_bands": {
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": "0.0200000000",
+            },
+            "effective_from": "2026-04-01",
+            "binding_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": row["source_record_id"],
+            "observed_at": _iso_utc_timestamp(end_date, hour=9),
+            "quality_status": "accepted",
+        }
+        for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS
+    )
     restricted_instrument_reason_codes = {
         "FO_PRIV_PRIVATE_CREDIT_A": ["PRIVATE_ASSET_REVIEW", "ILLIQUID_ALTERNATIVE"],
     }
@@ -1991,16 +2076,12 @@ def _front_office_readiness_blockers(
 
     if not observation.get("benchmark_code"):
         blockers.append("gateway_performance_benchmark_missing")
-    if not _date_at_or_after(
-        observation.get("analytics_performance_end_date"), expected_end_date
-    ):
+    if not _date_at_or_after(observation.get("analytics_performance_end_date"), expected_end_date):
         blockers.append(
             "core_analytics_reference_stale="
             f"{observation.get('analytics_performance_end_date') or 'missing'}"
         )
-    if not _date_at_or_after(
-        observation.get("performance_report_end_date"), expected_end_date
-    ):
+    if not _date_at_or_after(observation.get("performance_report_end_date"), expected_end_date):
         blockers.append(
             "gateway_performance_report_stale="
             f"{observation.get('performance_report_end_date') or 'missing'}"

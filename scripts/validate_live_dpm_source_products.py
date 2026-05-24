@@ -10,6 +10,11 @@ from typing import Any
 import httpx
 
 DEFAULT_PORTFOLIO_ID = "PB_SG_GLOBAL_BAL_001"
+EXPECTED_DPM_UNIVERSE_PORTFOLIO_IDS = (
+    "PB_SG_GLOBAL_BAL_001",
+    "PB_SG_GLOBAL_INC_002",
+    "PB_SG_GLOBAL_GROWTH_003",
+)
 DEFAULT_MODEL_PORTFOLIO_ID = "MODEL_PB_SG_GLOBAL_BAL_DPM"
 DEFAULT_MANDATE_ID = "MANDATE_PB_SG_GLOBAL_BAL_001"
 DEFAULT_AS_OF_DATE = "2026-04-10"
@@ -155,18 +160,66 @@ def _probe_dpm_portfolio_universe_candidates(
         and row.get("model_portfolio_id") == model_portfolio_id
         for row in candidate_rows
     )
+    returned_portfolio_ids = {
+        str(row.get("portfolio_id")) for row in candidate_rows if row.get("portfolio_id")
+    }
+    missing_expected_portfolio_ids = sorted(
+        set(EXPECTED_DPM_UNIVERSE_PORTFOLIO_IDS) - returned_portfolio_ids
+    )
     return _result(
         "dpm_portfolio_universe_candidates_ready",
         response.status_code == 200
         and supportability.get("state") in {"READY", "DEGRADED"}
-        and contains_portfolio,
+        and contains_portfolio
+        and not missing_expected_portfolio_ids,
         {
             "status_code": response.status_code,
             "product_name": body_dict.get("product_name"),
             "supportability_state": supportability.get("state"),
             "candidate_count": len(candidate_rows),
             "contains_portfolio": contains_portfolio,
+            "missing_expected_portfolio_ids": missing_expected_portfolio_ids,
             "next_page_token": _dict_body(body_dict.get("page")).get("next_page_token"),
+        },
+    )
+
+
+def _probe_dpm_portfolio_universe_candidate_paging(
+    client: httpx.Client,
+    *,
+    model_portfolio_id: str,
+    as_of_date: str,
+    tenant_id: str,
+) -> ProbeResult:
+    response = client.post(
+        "/integration/dpm/portfolio-universe/candidates",
+        json={
+            "as_of_date": as_of_date,
+            "tenant_id": tenant_id,
+            "booking_center_code": "Singapore",
+            "model_portfolio_ids": [model_portfolio_id],
+            "include_inactive_mandates": False,
+            "page": {"page_size": 1},
+        },
+    )
+    body = _json_body(response)
+    body_dict = _dict_body(body)
+    candidates = body_dict.get("candidates", [])
+    candidate_rows = [row for row in candidates if isinstance(row, dict)]
+    page = _dict_body(body_dict.get("page"))
+    next_page_token = page.get("next_page_token")
+    return _result(
+        "dpm_portfolio_universe_candidate_paging",
+        response.status_code == 200
+        and body_dict.get("product_name") == "DpmPortfolioUniverseCandidate"
+        and len(candidate_rows) == 1
+        and isinstance(next_page_token, str)
+        and bool(next_page_token),
+        {
+            "status_code": response.status_code,
+            "product_name": body_dict.get("product_name"),
+            "candidate_count": len(candidate_rows),
+            "next_page_token_present": bool(next_page_token),
         },
     )
 
@@ -547,6 +600,15 @@ def run_validation(
                 lambda: _probe_dpm_portfolio_universe_candidates(
                     client,
                     portfolio_id=portfolio_id,
+                    model_portfolio_id=model_portfolio_id,
+                    as_of_date=as_of_date,
+                    tenant_id=tenant_id,
+                ),
+            ),
+            (
+                "dpm_portfolio_universe_candidate_paging",
+                lambda: _probe_dpm_portfolio_universe_candidate_paging(
+                    client,
                     model_portfolio_id=model_portfolio_id,
                     as_of_date=as_of_date,
                     tenant_id=tenant_id,
