@@ -9,6 +9,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
+    DpmPortfolioUniverseCandidateResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IntegrationWindow,
@@ -124,6 +125,7 @@ def test_transaction_cost_curve_request_normalizes_filters() -> None:
         (ClassificationTaxonomyResponse, "InstrumentReferenceBundle"),
         (InstrumentEnrichmentBulkResponse, "InstrumentReferenceBundle"),
         (TransactionCostCurveResponse, "TransactionCostCurve"),
+        (DpmPortfolioUniverseCandidateResponse, "DpmPortfolioUniverseCandidate"),
     ],
 )
 def test_source_data_product_responses_declare_product_identity_defaults(

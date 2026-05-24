@@ -201,6 +201,58 @@ class ReferenceDataRepository:
             "mandate_id",
         )
 
+    async def list_dpm_portfolio_universe_candidates(
+        self,
+        *,
+        as_of_date: date,
+        booking_center_code: str | None = None,
+        model_portfolio_ids: list[str] | None = None,
+        include_inactive_mandates: bool = False,
+        after_sort_key: tuple[str, str] | None = None,
+        limit: int | None = None,
+    ) -> list[PortfolioMandateBinding]:
+        stmt = (
+            select(PortfolioMandateBinding)
+            .where(
+                PortfolioMandateBinding.mandate_type == "discretionary",
+                _effective_filter(
+                    PortfolioMandateBinding.effective_from,
+                    PortfolioMandateBinding.effective_to,
+                    as_of_date,
+                ),
+            )
+            .order_by(
+                PortfolioMandateBinding.portfolio_id.asc(),
+                PortfolioMandateBinding.mandate_id.asc(),
+                PortfolioMandateBinding.effective_from.desc(),
+                PortfolioMandateBinding.observed_at.desc().nulls_last(),
+                PortfolioMandateBinding.binding_version.desc(),
+                PortfolioMandateBinding.updated_at.desc(),
+            )
+        )
+        if booking_center_code:
+            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        if model_portfolio_ids:
+            stmt = stmt.where(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
+        if not include_inactive_mandates:
+            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
+
+        result = await self._db.execute(stmt)
+        rows = _latest_effective_rows(
+            list(result.scalars().all()),
+            "portfolio_id",
+            "mandate_id",
+        )
+        if after_sort_key is not None:
+            rows = [
+                row
+                for row in rows
+                if (str(row.portfolio_id), str(row.mandate_id)) > after_sort_key
+            ]
+        if limit is not None:
+            rows = rows[:limit]
+        return rows
+
     async def resolve_discretionary_mandate_binding(
         self,
         portfolio_id: str,

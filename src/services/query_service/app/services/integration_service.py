@@ -55,6 +55,10 @@ from ..dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
     DiscretionaryMandateBindingSupportability,
+    DpmPortfolioUniverseCandidate,
+    DpmPortfolioUniverseCandidateRequest,
+    DpmPortfolioUniverseCandidateResponse,
+    DpmPortfolioUniverseCandidateSupportability,
     DpmSourceFamilyReadiness,
     DpmSourceFamilyState,
     DpmSourceReadinessRequest,
@@ -744,6 +748,130 @@ class IntegrationService:
                 latest_evidence_timestamp=latest_evidence_timestamp,
                 source_batch_fingerprint=snapshot_fingerprint,
                 snapshot_id=f"cio_model_change_cohort:{snapshot_fingerprint}",
+            ),
+        )
+
+    async def resolve_dpm_portfolio_universe_candidates(
+        self,
+        request: DpmPortfolioUniverseCandidateRequest,
+    ) -> DpmPortfolioUniverseCandidateResponse:
+        model_portfolio_ids = sorted(
+            {
+                model_portfolio_id.strip()
+                for model_portfolio_id in request.model_portfolio_ids
+                if model_portfolio_id.strip()
+            }
+        )
+        request_scope_fingerprint = self._request_fingerprint(
+            {
+                "product_name": "DpmPortfolioUniverseCandidate",
+                "as_of_date": request.as_of_date.isoformat(),
+                "booking_center_code": request.booking_center_code,
+                "model_portfolio_ids": model_portfolio_ids,
+                "include_inactive_mandates": request.include_inactive_mandates,
+                "tenant_id": request.tenant_id,
+            }
+        )
+        cursor = self._decode_page_token(request.page.page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope and token_scope != request_scope_fingerprint:
+            raise ValueError("DPM portfolio-universe page token does not match request scope.")
+
+        after_sort_key: tuple[str, str] | None = None
+        if cursor.get("last_portfolio_id") and cursor.get("last_mandate_id"):
+            after_sort_key = (str(cursor["last_portfolio_id"]), str(cursor["last_mandate_id"]))
+
+        rows = await self._reference_repository.list_dpm_portfolio_universe_candidates(
+            as_of_date=request.as_of_date,
+            booking_center_code=request.booking_center_code,
+            model_portfolio_ids=model_portfolio_ids,
+            include_inactive_mandates=request.include_inactive_mandates,
+            after_sort_key=after_sort_key,
+            limit=request.page.page_size + 1,
+        )
+        has_more = len(rows) > request.page.page_size
+        page_rows = rows[: request.page.page_size]
+        candidates = [
+            DpmPortfolioUniverseCandidate(
+                portfolio_id=row.portfolio_id,
+                mandate_id=row.mandate_id,
+                client_id=row.client_id,
+                booking_center_code=row.booking_center_code,
+                jurisdiction_code=row.jurisdiction_code,
+                discretionary_authority_status=row.discretionary_authority_status,
+                model_portfolio_id=row.model_portfolio_id,
+                policy_pack_id=row.policy_pack_id,
+                mandate_objective=row.mandate_objective,
+                risk_profile=row.risk_profile,
+                investment_horizon=row.investment_horizon,
+                effective_from=row.effective_from,
+                effective_to=row.effective_to,
+                binding_version=int(row.binding_version),
+                source_record_id=row.source_record_id,
+            )
+            for row in page_rows
+        ]
+
+        next_page_token: str | None = None
+        if has_more and candidates:
+            last_candidate = candidates[-1]
+            next_page_token = self._encode_page_token(
+                {
+                    "scope_fingerprint": request_scope_fingerprint,
+                    "last_portfolio_id": last_candidate.portfolio_id,
+                    "last_mandate_id": last_candidate.mandate_id,
+                }
+            )
+
+        filters_applied = ["as_of_date"]
+        if request.booking_center_code:
+            filters_applied.append("booking_center_code")
+        if model_portfolio_ids:
+            filters_applied.append("model_portfolio_ids")
+        if not request.include_inactive_mandates:
+            filters_applied.append("active_discretionary_authority")
+
+        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE"] = "READY"
+        supportability_reason = "DPM_PORTFOLIO_UNIVERSE_READY"
+        data_quality_status = "ACCEPTED"
+        if not candidates:
+            supportability_state = "INCOMPLETE"
+            supportability_reason = "DPM_PORTFOLIO_UNIVERSE_EMPTY"
+            data_quality_status = "MISSING"
+        elif has_more:
+            supportability_state = "DEGRADED"
+            supportability_reason = "DPM_PORTFOLIO_UNIVERSE_PAGE_PARTIAL"
+            data_quality_status = "PARTIAL"
+
+        return DpmPortfolioUniverseCandidateResponse(
+            candidates=candidates,
+            page=ReferencePageMetadata(
+                page_size=request.page.page_size,
+                sort_key="portfolio_id:asc,mandate_id:asc",
+                returned_component_count=len(candidates),
+                request_scope_fingerprint=request_scope_fingerprint,
+                next_page_token=next_page_token,
+            ),
+            supportability=DpmPortfolioUniverseCandidateSupportability(
+                state=supportability_state,
+                reason=supportability_reason,
+                returned_candidate_count=len(candidates),
+                filters_applied=filters_applied,
+                page_truncated=has_more,
+            ),
+            lineage={
+                "source_system": "lotus-core",
+                "source_table": "portfolio_mandate_bindings",
+                "source_filter": "mandate_type=discretionary",
+                "contract_version": "rfc_037_dpm_portfolio_universe_candidate_v1",
+            },
+            **source_data_product_runtime_metadata(
+                as_of_date=request.as_of_date,
+                tenant_id=request.tenant_id,
+                data_quality_status=data_quality_status,
+                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(page_rows),
+                source_batch_fingerprint=request_scope_fingerprint,
+                snapshot_id=f"dpm_portfolio_universe:{request_scope_fingerprint}",
             ),
         )
 

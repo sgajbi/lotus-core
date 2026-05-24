@@ -18,6 +18,7 @@ DEFAULT_ELIGIBILITY_IDS = ("FO_EQ_AAPL_US", "FO_PRIV_PRIVATE_CREDIT_A")
 DEFAULT_MARKET_IDS = ("FO_EQ_AAPL_US", "FO_BOND_UST_2030", "FO_EQ_SAP_DE")
 DEFAULT_FX_PAIRS = (("EUR", "USD"),)
 EXPECTED_OPENAPI_PATHS = {
+    "/integration/dpm/portfolio-universe/candidates",
     "/integration/model-portfolios/{model_portfolio_id}/targets",
     "/integration/portfolios/{portfolio_id}/mandate-binding",
     "/integration/portfolios/{portfolio_id}/client-restriction-profile",
@@ -121,6 +122,51 @@ def _probe_model_targets(
             "supportability_state": _supportability_state(body_dict),
             "target_count": target_count,
             "total_target_weight": str(total_weight) if total_weight is not None else None,
+        },
+    )
+
+
+def _probe_dpm_portfolio_universe_candidates(
+    client: httpx.Client,
+    *,
+    portfolio_id: str,
+    model_portfolio_id: str,
+    as_of_date: str,
+    tenant_id: str,
+) -> ProbeResult:
+    response = client.post(
+        "/integration/dpm/portfolio-universe/candidates",
+        json={
+            "as_of_date": as_of_date,
+            "tenant_id": tenant_id,
+            "booking_center_code": "Singapore",
+            "model_portfolio_ids": [model_portfolio_id],
+            "include_inactive_mandates": False,
+            "page": {"page_size": 50},
+        },
+    )
+    body = _json_body(response)
+    body_dict = _dict_body(body)
+    supportability = _dict_body(body_dict.get("supportability"))
+    candidates = body_dict.get("candidates", [])
+    candidate_rows = [row for row in candidates if isinstance(row, dict)]
+    contains_portfolio = any(
+        row.get("portfolio_id") == portfolio_id
+        and row.get("model_portfolio_id") == model_portfolio_id
+        for row in candidate_rows
+    )
+    return _result(
+        "dpm_portfolio_universe_candidates_ready",
+        response.status_code == 200
+        and supportability.get("state") in {"READY", "DEGRADED"}
+        and contains_portfolio,
+        {
+            "status_code": response.status_code,
+            "product_name": body_dict.get("product_name"),
+            "supportability_state": supportability.get("state"),
+            "candidate_count": len(candidate_rows),
+            "contains_portfolio": contains_portfolio,
+            "next_page_token": _dict_body(body_dict.get("page")).get("next_page_token"),
         },
     )
 
@@ -491,6 +537,16 @@ def run_validation(
                     client,
                     portfolio_id=portfolio_id,
                     mandate_id=mandate_id,
+                    model_portfolio_id=model_portfolio_id,
+                    as_of_date=as_of_date,
+                    tenant_id=tenant_id,
+                ),
+            ),
+            (
+                "dpm_portfolio_universe_candidates_ready",
+                lambda: _probe_dpm_portfolio_universe_candidates(
+                    client,
+                    portfolio_id=portfolio_id,
                     model_portfolio_id=model_portfolio_id,
                     as_of_date=as_of_date,
                     tenant_id=tenant_id,

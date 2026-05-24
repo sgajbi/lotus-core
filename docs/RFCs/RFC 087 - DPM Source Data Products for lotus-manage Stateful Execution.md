@@ -1199,6 +1199,9 @@ gateway/workbench integration work.
    `DpmModelPortfolioTarget:v1`, `DiscretionaryMandateBinding:v1`,
    `InstrumentEligibilityProfile:v1`, `PortfolioTaxLotWindow:v1`,
    `MarketDataCoverageWindow:v1`, and `DpmSourceReadiness:v1`.
+   A post-closure RFC37-WTBD-004 source-owner extension adds
+   `DpmPortfolioUniverseCandidate:v1` for paged Core-owned DPM portfolio-universe candidate
+   discovery from effective discretionary mandate bindings.
 2. Each product is wired through route metadata, source-data product catalog metadata,
    source-security profiles, domain-product declarations, OpenAPI contract shape, tests, and
    canonical seed data where applicable.
@@ -1207,6 +1210,10 @@ gateway/workbench integration work.
    configuration.
 4. A reusable live validator now probes OpenAPI publication and all six source-product routes
    against canonical managed mandate identifiers.
+5. The portfolio-universe extension is producer-scoped: it supplies source-owned candidate
+   membership, continuation metadata, supportability, and lineage, but does not claim downstream
+   campaign composition, relationship-householding, suitability approval, PM ranking, execution,
+   client communication workflow, or external workflow ownership.
 
 ### Quality Improvements Made
 
@@ -1238,6 +1245,9 @@ Local validation evidence captured in this audit:
 3. `python -m ruff format --check scripts/validate_live_dpm_source_products.py tests/unit/scripts/test_validate_live_dpm_source_products.py` passed.
 4. `make source-data-product-contract-guard` passed.
 5. `make domain-product-validate` passed.
+6. The RFC37-WTBD-004 portfolio-universe extension added focused service, router, source-product
+   catalog/security, OpenAPI schema-family, and domain-product contract tests for
+   `DpmPortfolioUniverseCandidate:v1`.
 
 Remote evidence available for this audit:
 
@@ -1262,6 +1272,12 @@ managed mandate data, source-family readiness/supportability is exposed, `lotus-
 source assembly is proven end to end, and deployed Swagger/live responses are covered by executable
 validators. Operational closure is also complete: merge hygiene passed and GitHub wiki publication
 from repo-local wiki source is complete.
+
+The later `DpmPortfolioUniverseCandidate:v1` extension reaches producer-side gold-standard posture
+once local and CI gates pass, because the contract is cataloged, security-profiled, documented,
+OpenAPI-bound, domain-product declared, paged, source-lineage preserving, and explicitly bounded by
+non-claims. It does not by itself close RFC37-WTBD-004 end to end; downstream `lotus-manage`
+consumption and live canonical wave proof remain separate closure evidence.
 
 ### Documentation And Skill Review
 

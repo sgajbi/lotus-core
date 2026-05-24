@@ -14,6 +14,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClientTaxProfileRequest,
     ClientTaxRuleSetRequest,
     DiscretionaryMandateBindingRequest,
+    DpmPortfolioUniverseCandidateRequest,
     DpmSourceReadinessRequest,
     ExternalCurrencyExposureRequest,
     ExternalEligibleHedgeInstrumentRequest,
@@ -80,6 +81,14 @@ def portfolio_manager_book_request(as_of_date: date) -> PortfolioManagerBookMemb
 
 def cio_model_change_request(as_of_date: date) -> CioModelChangeAffectedCohortRequest:
     return CioModelChangeAffectedCohortRequest(
+        as_of_date=as_of_date,
+        tenant_id="default",
+        booking_center_code="Singapore",
+    )
+
+
+def dpm_portfolio_universe_request(as_of_date: date) -> DpmPortfolioUniverseCandidateRequest:
+    return DpmPortfolioUniverseCandidateRequest(
         as_of_date=as_of_date,
         tenant_id="default",
         booking_center_code="Singapore",
@@ -291,6 +300,71 @@ async def test_resolve_cio_model_change_affected_cohort_returns_none_without_app
 
     assert response is None
     service._reference_repository.list_model_portfolio_affected_mandates.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_returns_source_owned_page():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.list_dpm_portfolio_universe_candidates.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            discretionary_authority_status="active",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective="global_balanced",
+            risk_profile="balanced",
+            investment_horizon="medium_term",
+            effective_from=date(2026, 5, 1),
+            effective_to=None,
+            binding_version=3,
+            source_record_id="mandate-binding-001",
+            observed_at=datetime(2026, 5, 1, 8, 3, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 1, 8, 4, tzinfo=UTC),
+        )
+    ]
+
+    response = await service.resolve_dpm_portfolio_universe_candidates(
+        dpm_portfolio_universe_request(date(2026, 5, 3))
+    )
+
+    service._reference_repository.list_dpm_portfolio_universe_candidates.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        as_of_date=date(2026, 5, 3),
+        booking_center_code="Singapore",
+        model_portfolio_ids=[],
+        include_inactive_mandates=False,
+        after_sort_key=None,
+        limit=251,
+    )
+    assert response.product_name == "DpmPortfolioUniverseCandidate"
+    assert response.supportability.state == "READY"
+    assert response.supportability.returned_candidate_count == 1
+    assert response.candidates[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.candidates[0].mandate_id == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert response.page.next_page_token is None
+    assert response.lineage["source_table"] == "portfolio_mandate_bindings"
+    assert response.snapshot_id is not None
+    assert response.snapshot_id.startswith("dpm_portfolio_universe:")
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_marks_empty_universe_incomplete():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.list_dpm_portfolio_universe_candidates.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+    response = await service.resolve_dpm_portfolio_universe_candidates(
+        dpm_portfolio_universe_request(date(2026, 5, 3))
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_EMPTY"
+    assert response.candidates == []
+    assert response.data_quality_status == "MISSING"
 
 
 @pytest.mark.asyncio

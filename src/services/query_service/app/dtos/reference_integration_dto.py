@@ -3304,6 +3304,142 @@ class ReferencePageMetadata(BaseModel):
     model_config = ConfigDict()
 
 
+class DpmPortfolioUniverseCandidateRequest(BaseModel):
+    as_of_date: date = Field(
+        ...,
+        description="Business date used to resolve effective DPM portfolio-universe candidates.",
+        examples=["2026-05-03"],
+    )
+    tenant_id: str | None = Field(
+        None,
+        description="Optional tenant identifier carried for lineage and policy-scoped consumers.",
+        examples=["default"],
+    )
+    booking_center_code: str | None = Field(
+        None,
+        description="Optional booking-center filter for regional DPM universe discovery.",
+        examples=["Singapore"],
+    )
+    model_portfolio_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional approved model portfolio identifiers used to narrow the DPM candidate "
+            "universe. Empty means all effective discretionary mandate bindings in scope."
+        ),
+        examples=[["MODEL_PB_SG_GLOBAL_BAL_DPM", "MODEL_PB_SG_INCOME_DPM"]],
+    )
+    include_inactive_mandates: bool = Field(
+        False,
+        description=(
+            "When false, only active discretionary authority bindings are returned. Inactive "
+            "bindings remain source-visible for exception dashboards only when explicitly requested."
+        ),
+    )
+    page: ReferencePageRequest = Field(
+        default_factory=ReferencePageRequest,
+        description="Deterministic paging controls for large DPM portfolio-universe cohorts.",
+    )
+
+    model_config = ConfigDict()
+
+
+class DpmPortfolioUniverseCandidate(BaseModel):
+    portfolio_id: str = Field(..., description="Candidate portfolio identifier.")
+    mandate_id: str = Field(..., description="Source-owned discretionary mandate identifier.")
+    client_id: str = Field(..., description="Client identifier bound to the mandate.")
+    booking_center_code: str = Field(..., description="Booking center governing the mandate.")
+    jurisdiction_code: str = Field(..., description="Jurisdiction governing the mandate.")
+    discretionary_authority_status: str = Field(
+        ..., description="Discretionary authority status selected by the source product."
+    )
+    model_portfolio_id: str = Field(..., description="Approved model portfolio identifier.")
+    policy_pack_id: str | None = Field(
+        None,
+        description="Policy pack associated with the mandate binding, when available.",
+    )
+    mandate_objective: str | None = Field(
+        None,
+        description="Mandate objective carried by the source-owned binding.",
+    )
+    risk_profile: str = Field(..., description="Mandate risk profile.")
+    investment_horizon: str = Field(..., description="Mandate investment horizon.")
+    effective_from: date = Field(..., description="Binding effective start date.")
+    effective_to: date | None = Field(
+        None,
+        description="Binding effective end date, null when open-ended.",
+    )
+    binding_version: int = Field(..., description="Selected binding version.")
+    source_record_id: str | None = Field(
+        None,
+        description="Source record id for universe-candidate audit and replay.",
+    )
+
+    model_config = ConfigDict()
+
+
+class DpmPortfolioUniverseCandidateSupportability(BaseModel):
+    state: Literal["READY", "DEGRADED", "INCOMPLETE"] = Field(
+        ...,
+        description="Supportability state for DPM portfolio-universe candidate discovery.",
+        examples=["READY"],
+    )
+    reason: str = Field(
+        ...,
+        description="Machine-readable supportability reason.",
+        examples=["DPM_PORTFOLIO_UNIVERSE_READY"],
+    )
+    returned_candidate_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of candidate mandate bindings returned in the current page.",
+        examples=[250],
+    )
+    filters_applied: list[str] = Field(
+        default_factory=list,
+        description="Filters applied by the source product.",
+        examples=[["as_of_date", "active_discretionary_authority", "booking_center_code"]],
+    )
+    page_truncated: bool = Field(
+        ...,
+        description="True when additional candidates remain behind the continuation token.",
+    )
+
+    model_config = ConfigDict()
+
+
+class DpmPortfolioUniverseCandidateResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["DpmPortfolioUniverseCandidate"] = product_name_field(
+        "DpmPortfolioUniverseCandidate"
+    )
+    product_version: Literal["v1"] = product_version_field()
+    as_of_date: date = Field(
+        ...,
+        description="Business date used to resolve candidate membership.",
+        examples=["2026-05-03"],
+    )
+    candidates: list[DpmPortfolioUniverseCandidate] = Field(
+        default_factory=list,
+        description=(
+            "Deterministically ordered Core-owned DPM portfolio-universe candidates selected "
+            "from effective discretionary mandate bindings."
+        ),
+    )
+    page: ReferencePageMetadata = Field(
+        ...,
+        description="Paging metadata for the returned candidate page.",
+    )
+    supportability: DpmPortfolioUniverseCandidateSupportability = Field(
+        ...,
+        description="Readiness posture for automatic DPM portfolio-universe discovery.",
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Source lineage for DPM portfolio-universe candidate discovery.",
+    )
+
+    model_config = ConfigDict()
+
+
 class BenchmarkMarketSeriesRequest(SeriesRequest):
     target_currency: str | None = Field(
         None,
