@@ -49,13 +49,23 @@ def _mandate_binding() -> dict:
 def _dpm_portfolio_universe_candidates() -> dict:
     return {
         "product_name": "DpmPortfolioUniverseCandidate",
-        "supportability": {"state": "READY", "returned_candidate_count": 1},
+        "supportability": {"state": "READY", "returned_candidate_count": 3},
         "candidates": [
             {
                 "portfolio_id": validator.DEFAULT_PORTFOLIO_ID,
                 "mandate_id": validator.DEFAULT_MANDATE_ID,
                 "model_portfolio_id": validator.DEFAULT_MODEL_PORTFOLIO_ID,
-            }
+            },
+            {
+                "portfolio_id": "PB_SG_GLOBAL_INC_002",
+                "mandate_id": "MANDATE_PB_SG_GLOBAL_INC_002",
+                "model_portfolio_id": validator.DEFAULT_MODEL_PORTFOLIO_ID,
+            },
+            {
+                "portfolio_id": "PB_SG_GLOBAL_GROWTH_003",
+                "mandate_id": "MANDATE_PB_SG_GLOBAL_GROWTH_003",
+                "model_portfolio_id": validator.DEFAULT_MODEL_PORTFOLIO_ID,
+            },
         ],
         "page": {"next_page_token": None},
     }
@@ -197,6 +207,15 @@ def _handler(overrides: dict[str, tuple[int, dict | str]] | None = None) -> Call
     def handle(request: httpx.Request) -> httpx.Response:
         key = (request.method, request.url.path)
         status_code, body = responses[key]
+        if key == ("POST", "/integration/dpm/portfolio-universe/candidates"):
+            request_body = json.loads(request.content.decode("utf-8")) if request.content else {}
+            page = request_body.get("page") if isinstance(request_body, dict) else {}
+            if isinstance(page, dict) and page.get("page_size") == 1 and status_code == 200:
+                full_body = dict(body) if isinstance(body, dict) else {}
+                candidates = full_body.get("candidates", [])
+                full_body["candidates"] = candidates[:1] if isinstance(candidates, list) else []
+                full_body["page"] = {"next_page_token": "candidate-page-2"}
+                return _response(status_code, full_body)
         return _response(status_code, body)
 
     return handle
@@ -219,6 +238,7 @@ def test_live_dpm_source_validator_accepts_ready_canonical_products() -> None:
         "dpm_model_targets_ready",
         "dpm_mandate_binding_ready",
         "dpm_portfolio_universe_candidates_ready",
+        "dpm_portfolio_universe_candidate_paging",
         "dpm_instrument_eligibility_ready",
         "dpm_client_restrictions_ready",
         "dpm_sustainability_preferences_ready",
@@ -255,6 +275,23 @@ def test_live_dpm_source_validator_reports_stale_market_data_coverage() -> None:
     assert failure["name"] == "dpm_market_data_coverage_ready"
     assert failure["details"]["supportability_state"] == "STALE"
     assert failure["details"]["stale_instrument_ids"] == ["FO_EQ_SAP_DE"]
+
+
+def test_live_dpm_source_validator_requires_full_candidate_source_scenario() -> None:
+    candidates = _dpm_portfolio_universe_candidates()
+    candidates["supportability"] = {"state": "READY", "returned_candidate_count": 1}
+    candidates["candidates"] = candidates["candidates"][:1]
+
+    summary = _run({"/integration/dpm/portfolio-universe/candidates": (200, candidates)})
+
+    assert summary["failed"] == 1
+    failure = summary["failures"][0]
+    assert failure["name"] == "dpm_portfolio_universe_candidates_ready"
+    assert failure["details"]["candidate_count"] == 1
+    assert failure["details"]["missing_expected_portfolio_ids"] == [
+        "PB_SG_GLOBAL_GROWTH_003",
+        "PB_SG_GLOBAL_INC_002",
+    ]
 
 
 def test_live_dpm_source_validator_requires_mandate_review_cycle_truth() -> None:

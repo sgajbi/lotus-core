@@ -10,6 +10,7 @@ from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
     DEFAULT_DPM_MODEL_PORTFOLIO_ID,
     DEFAULT_DPM_MODEL_PORTFOLIO_VERSION,
+    DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS,
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
     FRONT_OFFICE_SEED_CONTRACT,
@@ -64,6 +65,21 @@ def test_front_office_bundle_uses_real_business_names_and_context():
     assert "Siemens Financieringsmaatschappij NV 2.500% 2031" in instrument_names
     assert "Private Credit Opportunities Fund A" in instrument_names
     assert all("MANUAL_" not in instrument["name"] for instrument in bundle["instruments"])
+
+
+def test_front_office_bundle_includes_source_only_dpm_candidate_portfolios():
+    bundle = _build_bundle()
+    portfolios = {row["portfolio_id"]: row for row in bundle["portfolios"]}
+
+    assert {"PB_SG_GLOBAL_BAL_001", "PB_SG_GLOBAL_INC_002", "PB_SG_GLOBAL_GROWTH_003"} <= set(
+        portfolios
+    )
+    for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS:
+        portfolio = portfolios[row["portfolio_id"]]
+        assert portfolio["portfolio_type"] == "discretionary"
+        assert portfolio["booking_center_code"] == "Singapore"
+        assert portfolio["advisor_id"] == "RM_SG_001"
+        assert portfolio["status"] == "active"
 
 
 def test_front_office_bundle_carries_meaningful_classification_metadata():
@@ -295,12 +311,12 @@ def test_front_office_bundle_includes_forward_cashflow_event_inside_projection_w
     future_by_id = {transaction["transaction_id"]: transaction for transaction in future_txns}
     assert future_by_id["TXN-WITHDRAWAL-FUTURE-001"]["transaction_date"].startswith("2026-04-17")
     assert future_by_id["TXN-WITHDRAWAL-FUTURE-001"]["settlement_date"].startswith("2026-04-20")
-    assert future_by_id["TXN-WITHDRAWAL-CURRENT-HORIZON-001"][
-        "transaction_date"
-    ].startswith("2026-04-30")
-    assert future_by_id["TXN-WITHDRAWAL-CURRENT-HORIZON-001"][
-        "settlement_date"
-    ].startswith("2026-05-18")
+    assert future_by_id["TXN-WITHDRAWAL-CURRENT-HORIZON-001"]["transaction_date"].startswith(
+        "2026-04-30"
+    )
+    assert future_by_id["TXN-WITHDRAWAL-CURRENT-HORIZON-001"]["settlement_date"].startswith(
+        "2026-05-18"
+    )
 
 
 def test_front_office_bundle_projected_settlements_do_not_require_weekend_fx():
@@ -390,41 +406,54 @@ def test_front_office_bundle_includes_dpm_model_portfolio_targets():
 def test_front_office_bundle_includes_dpm_mandate_binding():
     bundle = _build_bundle()
 
-    assert bundle["mandate_bindings"] == [
-        {
-            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
-            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
-            "client_id": "CIF_SG_000184",
-            "mandate_type": "discretionary",
-            "discretionary_authority_status": "active",
-            "booking_center_code": "Singapore",
-            "jurisdiction_code": "SG",
-            "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
-            "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
-            "mandate_objective": (
-                "Preserve and grow global balanced wealth within controlled drawdown limits."
-            ),
-            "risk_profile": "balanced",
-            "investment_horizon": "long_term",
-            "review_cadence": "quarterly",
-            "last_review_date": "2026-03-31",
-            "next_review_due_date": "2026-06-30",
-            "leverage_allowed": False,
-            "tax_awareness_allowed": True,
-            "settlement_awareness_required": True,
-            "rebalance_frequency": "monthly",
-            "rebalance_bands": {
-                "default_band": "0.0250000000",
-                "cash_reserve_weight": "0.0200000000",
-            },
-            "effective_from": "2026-04-01",
-            "binding_version": 1,
-            "source_system": "LOTUS_FRONT_OFFICE_SEED",
-            "source_record_id": "pb_sg_global_bal_001_mandate_binding_v1",
-            "observed_at": "2026-04-10T09:00:00Z",
-            "quality_status": "accepted",
-        }
-    ]
+    bindings = {row["portfolio_id"]: row for row in bundle["mandate_bindings"]}
+
+    assert set(bindings) == {
+        "PB_SG_GLOBAL_BAL_001",
+        "PB_SG_GLOBAL_INC_002",
+        "PB_SG_GLOBAL_GROWTH_003",
+    }
+    primary = bindings["PB_SG_GLOBAL_BAL_001"]
+    assert primary == {
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        "client_id": "CIF_SG_000184",
+        "mandate_type": "discretionary",
+        "discretionary_authority_status": "active",
+        "booking_center_code": "Singapore",
+        "jurisdiction_code": "SG",
+        "model_portfolio_id": DEFAULT_DPM_MODEL_PORTFOLIO_ID,
+        "policy_pack_id": "POLICY_DPM_SG_BALANCED_V1",
+        "mandate_objective": (
+            "Preserve and grow global balanced wealth within controlled drawdown limits."
+        ),
+        "risk_profile": "balanced",
+        "investment_horizon": "long_term",
+        "review_cadence": "quarterly",
+        "last_review_date": "2026-03-31",
+        "next_review_due_date": "2026-06-30",
+        "leverage_allowed": False,
+        "tax_awareness_allowed": True,
+        "settlement_awareness_required": True,
+        "rebalance_frequency": "monthly",
+        "rebalance_bands": {
+            "default_band": "0.0250000000",
+            "cash_reserve_weight": "0.0200000000",
+        },
+        "effective_from": "2026-04-01",
+        "binding_version": 1,
+        "source_system": "LOTUS_FRONT_OFFICE_SEED",
+        "source_record_id": "pb_sg_global_bal_001_mandate_binding_v1",
+        "observed_at": "2026-04-10T09:00:00Z",
+        "quality_status": "accepted",
+    }
+    for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS:
+        binding = bindings[row["portfolio_id"]]
+        assert binding["mandate_id"] == row["mandate_id"]
+        assert binding["model_portfolio_id"] == DEFAULT_DPM_MODEL_PORTFOLIO_ID
+        assert binding["discretionary_authority_status"] == "active"
+        assert binding["mandate_objective"] == row["mandate_objective"]
+        assert binding["source_record_id"] == row["source_record_id"]
 
 
 def test_front_office_bundle_includes_dpm_instrument_eligibility_profiles():
@@ -655,6 +684,8 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "IDX_GLOBAL_EQUITY_TR" in sql
     assert "IDX_GLOBAL_BOND_TR" in sql
     assert "PB_SG_GLOBAL_BAL_001" in sql
+    assert "PB_SG_GLOBAL_INC_002" in sql
+    assert "PB_SG_GLOBAL_GROWTH_003" in sql
     assert DEFAULT_BENCHMARK_ID in sql
     assert DEFAULT_DPM_MODEL_PORTFOLIO_ID in sql
 
@@ -831,6 +862,11 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
     )
     assert calls[9][2]["model_portfolio_targets"]
     assert calls[10][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert {row["portfolio_id"] for row in calls[10][2]["mandate_bindings"]} == {
+        "PB_SG_GLOBAL_BAL_001",
+        "PB_SG_GLOBAL_INC_002",
+        "PB_SG_GLOBAL_GROWTH_003",
+    }
     assert calls[11][2]["restriction_profiles"]
     assert calls[12][2]["sustainability_preferences"]
     assert calls[13][2]["eligibility_profiles"]

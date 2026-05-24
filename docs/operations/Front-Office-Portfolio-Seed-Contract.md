@@ -11,7 +11,9 @@ contract for a single high-value front-office workstation example.
 
 Create one realistic discretionary private-banking portfolio seed that can
 surface the majority of current `lotus-core`, `lotus-performance`, gateway, and
-UI features without depending on fake placeholder states.
+UI features without depending on fake placeholder states. The seed may also
+carry narrow source-only rows when a source product needs multi-row proof, but
+those rows must not be presented as full demo analytics portfolios.
 
 The seed must support:
 
@@ -24,6 +26,7 @@ The seed must support:
 - benchmark-linked performance analysis
 - performance evidence expansion later
 - DPM source-owner proof for mandate restrictions and sustainability preferences
+- DPM source-owner proof for bounded portfolio-universe candidate discovery and paging
 
 ## Seed Design Principles
 
@@ -58,6 +61,15 @@ Recommended example:
 - booking centre: `Singapore`
 - strategy: global balanced discretionary mandate
 - portfolio type: `Discretionary`
+
+Source-only DPM candidate rows:
+
+- `PB_SG_GLOBAL_INC_002` / `MANDATE_PB_SG_GLOBAL_INC_002`
+- `PB_SG_GLOBAL_GROWTH_003` / `MANDATE_PB_SG_GLOBAL_GROWTH_003`
+
+These rows exist to prove `DpmPortfolioUniverseCandidate:v1` completeness and continuation-token
+paging. They must not be used as holdings, performance, risk, proposal, or Workbench demo
+portfolios until full source-owner data exists.
 
 ## Minimum Product Surface Coverage
 
