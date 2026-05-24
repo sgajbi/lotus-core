@@ -352,6 +352,133 @@ async def test_resolve_dpm_portfolio_universe_candidates_returns_source_owned_pa
 
 
 @pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_returns_paged_degraded_state():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.list_dpm_portfolio_universe_candidates.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            discretionary_authority_status="active",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective="global_balanced",
+            risk_profile="balanced",
+            investment_horizon="medium_term",
+            effective_from=date(2026, 5, 1),
+            effective_to=None,
+            binding_version=3,
+            source_record_id="mandate-binding-001",
+            observed_at=datetime(2026, 5, 1, 8, 3, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 1, 8, 4, tzinfo=UTC),
+        ),
+        SimpleNamespace(
+            portfolio_id="PB_SG_INCOME_002",
+            mandate_id="MANDATE_PB_SG_INCOME_002",
+            client_id="CIF_SG_000222",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            discretionary_authority_status="active",
+            model_portfolio_id="MODEL_PB_SG_INCOME_DPM",
+            policy_pack_id="POLICY_DPM_SG_INCOME_V1",
+            mandate_objective="income",
+            risk_profile="income",
+            investment_horizon="medium_term",
+            effective_from=date(2026, 5, 1),
+            effective_to=None,
+            binding_version=1,
+            source_record_id="mandate-binding-002",
+            observed_at=datetime(2026, 5, 1, 8, 5, tzinfo=UTC),
+            updated_at=datetime(2026, 5, 1, 8, 6, tzinfo=UTC),
+        ),
+    ]
+    request = DpmPortfolioUniverseCandidateRequest(
+        as_of_date=date(2026, 5, 3),
+        tenant_id="default",
+        model_portfolio_ids=[" MODEL_PB_SG_INCOME_DPM ", "MODEL_PB_SG_GLOBAL_BAL_DPM"],
+        page={"page_size": 1},
+    )
+
+    response = await service.resolve_dpm_portfolio_universe_candidates(request)
+
+    service._reference_repository.list_dpm_portfolio_universe_candidates.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        as_of_date=date(2026, 5, 3),
+        booking_center_code=None,
+        model_portfolio_ids=["MODEL_PB_SG_GLOBAL_BAL_DPM", "MODEL_PB_SG_INCOME_DPM"],
+        include_inactive_mandates=False,
+        after_sort_key=None,
+        limit=2,
+    )
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_PAGE_PARTIAL"
+    assert response.supportability.page_truncated is True
+    assert response.supportability.filters_applied == [
+        "as_of_date",
+        "model_portfolio_ids",
+        "active_discretionary_authority",
+    ]
+    assert response.data_quality_status == "PARTIAL"
+    assert response.page.next_page_token is not None
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_accepts_scoped_page_token():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.list_dpm_portfolio_universe_candidates.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
+    request = DpmPortfolioUniverseCandidateRequest(
+        as_of_date=date(2026, 5, 3),
+        tenant_id="default",
+    )
+    scope = service._request_fingerprint(  # pylint: disable=protected-access
+        {
+            "product_name": "DpmPortfolioUniverseCandidate",
+            "as_of_date": "2026-05-03",
+            "booking_center_code": None,
+            "model_portfolio_ids": [],
+            "include_inactive_mandates": False,
+            "tenant_id": "default",
+        }
+    )
+    request.page.page_token = service._encode_page_token(  # pylint: disable=protected-access
+        {
+            "scope_fingerprint": scope,
+            "last_portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "last_mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        }
+    )
+
+    await service.resolve_dpm_portfolio_universe_candidates(request)
+
+    service._reference_repository.list_dpm_portfolio_universe_candidates.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        as_of_date=date(2026, 5, 3),
+        booking_center_code=None,
+        model_portfolio_ids=[],
+        include_inactive_mandates=False,
+        after_sort_key=("PB_SG_GLOBAL_BAL_001", "MANDATE_PB_SG_GLOBAL_BAL_001"),
+        limit=251,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_rejects_wrong_scope_token():
+    service = make_service()
+    request = DpmPortfolioUniverseCandidateRequest(
+        as_of_date=date(2026, 5, 3),
+        tenant_id="default",
+    )
+    request.page.page_token = service._encode_page_token(  # pylint: disable=protected-access
+        {"scope_fingerprint": "wrong-scope"}
+    )
+
+    with pytest.raises(ValueError, match="does not match request scope"):
+        await service.resolve_dpm_portfolio_universe_candidates(request)
+
+
+@pytest.mark.asyncio
 async def test_resolve_dpm_portfolio_universe_candidates_marks_empty_universe_incomplete():
     service = make_service()
     service._reference_repository = AsyncMock()  # pylint: disable=protected-access
