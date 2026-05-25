@@ -1,3 +1,7 @@
+import http.client
+
+import pytest
+
 from tools import demo_data_pack
 
 
@@ -85,3 +89,13 @@ def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
 
     assert demo_data_pack._all_demo_portfolios_exist("http://query") is True
     assert set(seen) == {item.portfolio_id for item in demo_data_pack.DEMO_EXPECTATIONS}
+
+
+def test_request_json_treats_remote_disconnect_as_retryable_connection_error(monkeypatch):
+    def disconnecting_urlopen(*_args, **_kwargs):
+        raise http.client.RemoteDisconnected("closed without response")
+
+    monkeypatch.setattr(demo_data_pack.request, "urlopen", disconnecting_urlopen)
+
+    with pytest.raises(RuntimeError, match="GET http://query.dev/health connection error"):
+        demo_data_pack._request_json("GET", "http://query.dev/health")

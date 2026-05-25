@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import logging
 import math
@@ -1159,7 +1160,7 @@ def _request_json(
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"{method} {url} failed ({exc.code}): {detail}") from exc
-    except error.URLError as exc:
+    except (error.URLError, http.client.RemoteDisconnected, TimeoutError, ConnectionError) as exc:
         raise RuntimeError(f"{method} {url} connection error: {exc}") from exc
 
 
