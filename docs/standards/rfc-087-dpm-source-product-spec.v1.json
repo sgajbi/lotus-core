@@ -185,6 +185,7 @@
         "source-data product envelope",
         "paged candidate rows",
         "portfolio, mandate, client, model, and policy identity",
+        "explicit effective-discretionary-mandate selection basis",
         "active discretionary authority filter",
         "deterministic continuation token metadata",
         "supportability",

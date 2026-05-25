@@ -58,6 +58,7 @@ from ..dtos.reference_integration_dto import (
     DpmPortfolioUniverseCandidate,
     DpmPortfolioUniverseCandidateRequest,
     DpmPortfolioUniverseCandidateResponse,
+    DpmPortfolioUniverseCandidateSelectionBasis,
     DpmPortfolioUniverseCandidateSupportability,
     DpmSourceFamilyReadiness,
     DpmSourceFamilyState,
@@ -858,6 +859,21 @@ class IntegrationService:
                 returned_candidate_count=len(candidates),
                 filters_applied=filters_applied,
                 page_truncated=has_more,
+            ),
+            selection_basis=DpmPortfolioUniverseCandidateSelectionBasis(
+                basis_type="EFFECTIVE_DISCRETIONARY_MANDATE_BINDING",
+                source_table="portfolio_mandate_bindings",
+                included_when=[
+                    "mandate_type=discretionary",
+                    "effective_from<=as_of_date",
+                    "effective_to is null or effective_to>=as_of_date",
+                    "active authority unless include_inactive_mandates=true",
+                ],
+                downstream_boundary=(
+                    "Candidate membership is not relationship householding, suitability approval, "
+                    "portfolio-manager ranking, execution readiness, client communication "
+                    "workflow, or external workflow ownership."
+                ),
             ),
             lineage={
                 "source_system": "lotus-core",

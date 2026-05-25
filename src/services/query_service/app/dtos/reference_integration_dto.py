@@ -3407,6 +3407,54 @@ class DpmPortfolioUniverseCandidateSupportability(BaseModel):
     model_config = ConfigDict()
 
 
+class DpmPortfolioUniverseCandidateSelectionBasis(BaseModel):
+    basis_type: Literal["EFFECTIVE_DISCRETIONARY_MANDATE_BINDING"] = Field(
+        ...,
+        description=(
+            "Source-owned selection-basis code declaring that candidate membership is resolved "
+            "from effective discretionary mandate bindings, not inferred by a downstream campaign."
+        ),
+        examples=["EFFECTIVE_DISCRETIONARY_MANDATE_BINDING"],
+    )
+    source_table: Literal["portfolio_mandate_bindings"] = Field(
+        ...,
+        description="Core source table family used to resolve DPM portfolio-universe candidates.",
+        examples=["portfolio_mandate_bindings"],
+    )
+    included_when: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Deterministic source predicates that must hold before a mandate binding can appear "
+            "as a DPM portfolio-universe candidate."
+        ),
+        examples=[
+            [
+                "mandate_type=discretionary",
+                "effective_from<=as_of_date",
+                "effective_to is null or effective_to>=as_of_date",
+                "active authority unless include_inactive_mandates=true",
+            ]
+        ],
+    )
+    downstream_boundary: str = Field(
+        ...,
+        description=(
+            "Consumer boundary for the candidate-selection basis. This prevents candidate "
+            "membership from being promoted into unsupported relationship, suitability, PM "
+            "ranking, execution, client-communication, or external workflow authority."
+        ),
+        examples=[
+            (
+                "Candidate membership is not relationship householding, suitability approval, "
+                "portfolio-manager ranking, execution readiness, client communication workflow, "
+                "or external workflow ownership."
+            )
+        ],
+    )
+
+    model_config = ConfigDict()
+
+
 class DpmPortfolioUniverseCandidateResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["DpmPortfolioUniverseCandidate"] = product_name_field(
         "DpmPortfolioUniverseCandidate"
@@ -3431,6 +3479,13 @@ class DpmPortfolioUniverseCandidateResponse(SourceDataProductRuntimeMetadata):
     supportability: DpmPortfolioUniverseCandidateSupportability = Field(
         ...,
         description="Readiness posture for automatic DPM portfolio-universe discovery.",
+    )
+    selection_basis: DpmPortfolioUniverseCandidateSelectionBasis = Field(
+        ...,
+        description=(
+            "Source-owned rule basis explaining why returned mandate bindings qualify as DPM "
+            "portfolio-universe candidates."
+        ),
     )
     lineage: dict[str, str] = Field(
         default_factory=dict,

@@ -817,6 +817,21 @@ async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
                 "filters_applied": ["as_of_date", "active_discretionary_authority"],
                 "page_truncated": False,
             },
+            "selection_basis": {
+                "basis_type": "EFFECTIVE_DISCRETIONARY_MANDATE_BINDING",
+                "source_table": "portfolio_mandate_bindings",
+                "included_when": [
+                    "mandate_type=discretionary",
+                    "effective_from<=as_of_date",
+                    "effective_to is null or effective_to>=as_of_date",
+                    "active authority unless include_inactive_mandates=true",
+                ],
+                "downstream_boundary": (
+                    "Candidate membership is not relationship householding, suitability "
+                    "approval, portfolio-manager ranking, execution readiness, client "
+                    "communication workflow, or external workflow ownership."
+                ),
+            },
             "lineage": {"source_table": "portfolio_mandate_bindings"},
         }
     )
@@ -829,6 +844,9 @@ async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
 
     assert response["product_name"] == "DpmPortfolioUniverseCandidate"
     assert response["candidates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
+    assert response["selection_basis"]["basis_type"] == (
+        "EFFECTIVE_DISCRETIONARY_MANDATE_BINDING"
+    )
     mock_service.resolve_dpm_portfolio_universe_candidates.assert_awaited_once_with(
         request=request,
     )
