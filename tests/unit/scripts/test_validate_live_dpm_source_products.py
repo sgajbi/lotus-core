@@ -213,14 +213,39 @@ def _handler(overrides: dict[str, tuple[int, dict | str]] | None = None) -> Call
             if isinstance(page, dict) and page.get("page_size") == 1 and status_code == 200:
                 full_body = dict(body) if isinstance(body, dict) else {}
                 candidates = full_body.get("candidates", [])
-                if page.get("page_token"):
+                if full_body.get("_test_never_end"):
+                    full_body["candidates"] = candidates[:1] if isinstance(candidates, list) else []
+                    full_body["page"] = {"next_page_token": "candidate-loop"}
+                    return _response(status_code, full_body)
+                page_token = page.get("page_token")
+                if page_token == "candidate-page-2":
                     full_body["candidates"] = (
                         candidates[1:2] if isinstance(candidates, list) else []
                     )
-                    full_body["page"] = {"next_page_token": "candidate-page-3"}
+                    full_body["page"] = {
+                        "next_page_token": (
+                            "candidate-page-3"
+                            if isinstance(candidates, list) and len(candidates) > 2
+                            else None
+                        )
+                    }
+                elif page_token == "candidate-page-3":
+                    full_body["candidates"] = (
+                        candidates[2:3] if isinstance(candidates, list) else []
+                    )
+                    full_body["page"] = {"next_page_token": None}
+                elif page_token:
+                    full_body["candidates"] = []
+                    full_body["page"] = {"next_page_token": None}
                 else:
                     full_body["candidates"] = candidates[:1] if isinstance(candidates, list) else []
-                    full_body["page"] = {"next_page_token": "candidate-page-2"}
+                    full_body["page"] = {
+                        "next_page_token": (
+                            "candidate-page-2"
+                            if isinstance(candidates, list) and len(candidates) > 1
+                            else None
+                        )
+                    }
                 return _response(status_code, full_body)
         return _response(status_code, body)
 
@@ -304,7 +329,26 @@ def test_live_dpm_source_validator_requires_full_candidate_source_scenario() -> 
     ]
 
 
-def test_live_dpm_source_validator_follows_candidate_page_token() -> None:
+def test_live_dpm_source_validator_walks_all_candidate_page_tokens() -> None:
+    summary = _run()
+
+    paging = next(
+        result
+        for result in summary["results"]
+        if result["name"] == "dpm_portfolio_universe_candidate_paging"
+    )
+    assert paging["ok"] is True
+    assert paging["details"]["page_count"] == 3
+    assert paging["details"]["returned_expected_portfolio_ids"] == [
+        "PB_SG_GLOBAL_BAL_001",
+        "PB_SG_GLOBAL_GROWTH_003",
+        "PB_SG_GLOBAL_INC_002",
+    ]
+    assert paging["details"]["pagination_terminated"] is True
+    assert paging["details"]["terminal_page_has_no_token"] is True
+
+
+def test_live_dpm_source_validator_rejects_duplicate_candidate_pages() -> None:
     candidates = _dpm_portfolio_universe_candidates()
     repeated_candidate = candidates["candidates"][0]
     candidates["candidates"] = [repeated_candidate, repeated_candidate]
@@ -317,8 +361,36 @@ def test_live_dpm_source_validator_follows_candidate_page_token() -> None:
         if result["name"] == "dpm_portfolio_universe_candidate_paging"
     )
     assert failure["name"] == "dpm_portfolio_universe_candidate_paging"
-    assert failure["details"]["first_page_portfolio_ids"] == [validator.DEFAULT_PORTFOLIO_ID]
-    assert failure["details"]["second_page_portfolio_ids"] == [validator.DEFAULT_PORTFOLIO_ID]
+    assert failure["details"]["page_summaries"][0]["portfolio_ids"] == [
+        validator.DEFAULT_PORTFOLIO_ID
+    ]
+    assert failure["details"]["page_summaries"][1]["portfolio_ids"] == [
+        validator.DEFAULT_PORTFOLIO_ID
+    ]
+    assert failure["details"]["duplicate_page_portfolio_ids"] == [validator.DEFAULT_PORTFOLIO_ID]
+
+
+def test_live_dpm_source_validator_rejects_non_terminating_candidate_pages() -> None:
+    candidates = _dpm_portfolio_universe_candidates()
+    summary = _run(
+        {
+            "/integration/dpm/portfolio-universe/candidates": (
+                200,
+                {
+                    **candidates,
+                    "_test_never_end": True,
+                },
+            )
+        }
+    )
+
+    failure = next(
+        result
+        for result in summary["failures"]
+        if result["name"] == "dpm_portfolio_universe_candidate_paging"
+    )
+    assert failure["details"]["pagination_terminated"] is False
+    assert failure["details"]["page_count"] == failure["details"]["max_pages"]
     assert failure["details"]["duplicate_page_portfolio_ids"] == [validator.DEFAULT_PORTFOLIO_ID]
 
 

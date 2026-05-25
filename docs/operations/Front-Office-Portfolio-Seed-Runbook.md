@@ -102,7 +102,7 @@ verifies:
 - DPM client restriction and sustainability preference source records resolve through
   query-control-plane integration routes
 - DPM portfolio-universe candidates return the governed three-candidate source scenario and prove
-  continuation-token paging
+  full continuation-token paging through terminal page exhaustion
 - gateway performance summary resolves with benchmark-linked content
 - core analytics reference `performance_end_date` is at or after the seed end date and represents
   a complete calculable performance horizon across portfolio and position analytics source
@@ -136,10 +136,11 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
     `PB_SG_GLOBAL_BAL_001` when the RFC40-WTBD-008 source-owner slice is applied
   - DPM portfolio-universe candidate discovery returns `PB_SG_GLOBAL_BAL_001`,
     `PB_SG_GLOBAL_INC_002`, and `PB_SG_GLOBAL_GROWTH_003` as Core-owned candidate rows; this proves
-    source-owned candidate discovery only. The live DPM source validator also follows the
-    continuation token from a one-row candidate page and rejects duplicate or empty continuation
-    pages. This does not prove relationship householding, suitability, PM ranking, execution
-    readiness, client workflow, or full analytics support for the source-only rows.
+    source-owned candidate discovery only. The live DPM source validator also walks one-row
+    candidate pages until the terminal page, requires every governed candidate to appear exactly
+    once, and rejects duplicate, empty, or non-terminating continuation pages. This does not prove
+    relationship householding, suitability, PM ranking, execution readiness, client workflow, or
+    full analytics support for the source-only rows.
 - `lotus-core portfolio_aggregation_service`
   - portfolio aggregation backlog for `PB_SG_GLOBAL_BAL_001`: `0` pending,
     `0` processing, `382` complete
