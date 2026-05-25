@@ -191,29 +191,23 @@ def _probe_dpm_portfolio_universe_candidate_paging(
     as_of_date: str,
     tenant_id: str,
 ) -> ProbeResult:
-    response = client.post(
-        "/integration/dpm/portfolio-universe/candidates",
-        json={
-            "as_of_date": as_of_date,
-            "tenant_id": tenant_id,
-            "booking_center_code": "Singapore",
-            "model_portfolio_ids": [model_portfolio_id],
-            "include_inactive_mandates": False,
-            "page": {"page_size": 1},
-        },
-    )
-    body = _json_body(response)
-    body_dict = _dict_body(body)
-    candidates = body_dict.get("candidates", [])
-    candidate_rows = [row for row in candidates if isinstance(row, dict)]
-    page = _dict_body(body_dict.get("page"))
-    next_page_token = page.get("next_page_token")
-    second_response: httpx.Response | None = None
-    second_body_dict: dict[str, Any] = {}
-    second_candidate_rows: list[dict[str, Any]] = []
-    second_page_token: Any = None
-    if isinstance(next_page_token, str) and next_page_token:
-        second_response = client.post(
+    expected_portfolio_ids = set(EXPECTED_DPM_UNIVERSE_PORTFOLIO_IDS)
+    page_token: str | None = None
+    page_summaries: list[dict[str, Any]] = []
+    page_portfolio_ids: list[str] = []
+    product_names: list[Any] = []
+    status_codes: list[int] = []
+    duplicate_page_portfolio_ids: set[str] = set()
+    seen_portfolio_ids: set[str] = set()
+    pagination_terminated = False
+    max_pages = len(EXPECTED_DPM_UNIVERSE_PORTFOLIO_IDS) + 5
+
+    for page_index in range(max_pages):
+        page_request: dict[str, Any] = {"page_size": 1}
+        if page_token:
+            page_request["page_token"] = page_token
+
+        response = client.post(
             "/integration/dpm/portfolio-universe/candidates",
             json={
                 "as_of_date": as_of_date,
@@ -221,51 +215,72 @@ def _probe_dpm_portfolio_universe_candidate_paging(
                 "booking_center_code": "Singapore",
                 "model_portfolio_ids": [model_portfolio_id],
                 "include_inactive_mandates": False,
-                "page": {"page_size": 1, "page_token": next_page_token},
+                "page": page_request,
             },
         )
-        second_body = _json_body(second_response)
-        second_body_dict = _dict_body(second_body)
-        second_candidates = second_body_dict.get("candidates", [])
-        second_candidate_rows = [row for row in second_candidates if isinstance(row, dict)]
-        second_page_token = _dict_body(second_body_dict.get("page")).get("next_page_token")
+        body_dict = _dict_body(_json_body(response))
+        product_names.append(body_dict.get("product_name"))
+        status_codes.append(response.status_code)
 
-    first_page_ids = {
-        str(row.get("portfolio_id")) for row in candidate_rows if row.get("portfolio_id")
-    }
-    second_page_ids = {
-        str(row.get("portfolio_id")) for row in second_candidate_rows if row.get("portfolio_id")
-    }
-    expected_second_page_ids = second_page_ids & set(EXPECTED_DPM_UNIVERSE_PORTFOLIO_IDS)
-    duplicate_page_ids = sorted(first_page_ids & second_page_ids)
+        candidates = body_dict.get("candidates", [])
+        candidate_rows = [row for row in candidates if isinstance(row, dict)]
+        current_page_ids = [
+            str(row.get("portfolio_id")) for row in candidate_rows if row.get("portfolio_id")
+        ]
+        for portfolio_id in current_page_ids:
+            if portfolio_id in seen_portfolio_ids:
+                duplicate_page_portfolio_ids.add(portfolio_id)
+            seen_portfolio_ids.add(portfolio_id)
+        page_portfolio_ids.extend(current_page_ids)
+
+        next_page_token = _dict_body(body_dict.get("page")).get("next_page_token")
+        page_summaries.append(
+            {
+                "page_index": page_index,
+                "status_code": response.status_code,
+                "product_name": body_dict.get("product_name"),
+                "candidate_count": len(candidate_rows),
+                "portfolio_ids": current_page_ids,
+                "next_page_token_present": bool(next_page_token),
+            }
+        )
+
+        if not isinstance(next_page_token, str) or not next_page_token:
+            pagination_terminated = True
+            break
+        page_token = next_page_token
+
+    returned_expected_ids = sorted(set(page_portfolio_ids) & expected_portfolio_ids)
+    missing_expected_ids = sorted(expected_portfolio_ids - set(page_portfolio_ids))
+    duplicate_page_ids = sorted(duplicate_page_portfolio_ids)
+    page_candidate_counts = [page["candidate_count"] for page in page_summaries]
+    terminal_page_has_no_token = (
+        bool(page_summaries) and not page_summaries[-1]["next_page_token_present"]
+    )
+    first_page_had_token = bool(page_summaries) and page_summaries[0]["next_page_token_present"]
     return _result(
         "dpm_portfolio_universe_candidate_paging",
-        response.status_code == 200
-        and body_dict.get("product_name") == "DpmPortfolioUniverseCandidate"
-        and len(candidate_rows) == 1
-        and isinstance(next_page_token, str)
-        and bool(next_page_token)
-        and second_response is not None
-        and second_response.status_code == 200
-        and second_body_dict.get("product_name") == "DpmPortfolioUniverseCandidate"
-        and len(second_candidate_rows) == 1
-        and bool(expected_second_page_ids)
+        bool(page_summaries)
+        and all(status_code == 200 for status_code in status_codes)
+        and all(product_name == "DpmPortfolioUniverseCandidate" for product_name in product_names)
+        and all(count == 1 for count in page_candidate_counts)
+        and first_page_had_token
+        and pagination_terminated
+        and terminal_page_has_no_token
+        and not missing_expected_ids
         and not duplicate_page_ids,
         {
-            "status_code": response.status_code,
-            "product_name": body_dict.get("product_name"),
-            "candidate_count": len(candidate_rows),
-            "first_page_portfolio_ids": sorted(first_page_ids),
-            "next_page_token_present": bool(next_page_token),
-            "second_status_code": second_response.status_code
-            if second_response is not None
-            else None,
-            "second_product_name": second_body_dict.get("product_name"),
-            "second_candidate_count": len(second_candidate_rows),
-            "second_page_portfolio_ids": sorted(second_page_ids),
-            "second_page_expected_portfolio_ids": sorted(expected_second_page_ids),
-            "second_next_page_token_present": bool(second_page_token),
+            "page_count": len(page_summaries),
+            "status_codes": status_codes,
+            "product_names": product_names,
+            "page_candidate_counts": page_candidate_counts,
+            "page_summaries": page_summaries,
+            "returned_expected_portfolio_ids": returned_expected_ids,
+            "missing_expected_portfolio_ids": missing_expected_ids,
             "duplicate_page_portfolio_ids": duplicate_page_ids,
+            "pagination_terminated": pagination_terminated,
+            "terminal_page_has_no_token": terminal_page_has_no_token,
+            "max_pages": max_pages,
         },
     )
 
