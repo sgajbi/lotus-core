@@ -76,6 +76,7 @@ services:
     command: ["python", "-m", "tools.kafka_setup"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS: ${KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS:-4}
     networks:
       - app_network
 
@@ -537,6 +538,9 @@ services:
       <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+      PORTFOLIO_AGGREGATION_CONSUMER_COUNT: ${PORTFOLIO_AGGREGATION_CONSUMER_COUNT:-4}
+      AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS: ${AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS:-2}
+      AGGREGATION_SCHEDULER_BATCH_SIZE: ${AGGREGATION_SCHEDULER_BATCH_SIZE:-500}
     depends_on:
       kafka-topic-creator:
         condition: service_completed_successfully

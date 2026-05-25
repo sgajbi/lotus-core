@@ -50,7 +50,7 @@ async def test_scheduler_dispatches_claimed_jobs_with_correlation_header(
 
     mock_kafka_producer.publish_message.assert_called_once_with(
         topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
-        key="P1",
+        key="P1|2025-08-11",
         value={
             "portfolio_id": "P1",
             "aggregation_date": "2025-08-11",
@@ -77,7 +77,7 @@ async def test_scheduler_omits_empty_correlation_header(
 
     mock_kafka_producer.publish_message.assert_called_once_with(
         topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
-        key="P2",
+        key="P2|2025-08-12",
         value={
             "portfolio_id": "P2",
             "aggregation_date": "2025-08-12",

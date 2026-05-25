@@ -156,6 +156,15 @@ available, check `portfolio_aggregation_jobs` for a pending backlog and
 requires portfolio aggregation to catch up before workbench validation or demo
 screenshots are accepted.
 
+The app-local Core stack now creates only the portfolio aggregation job topic
+with four local partitions by default and runs four portfolio aggregation
+consumers by default. Aggregation messages are keyed by `portfolio_id` plus
+`aggregation_date`, so the canonical one-portfolio, many-business-day seed can
+drain portfolio-day jobs in parallel without changing transaction, valuation,
+or persistence topic partitioning. Operators can override this for constrained
+machines with `KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS` and
+`PORTFOLIO_AGGREGATION_CONSUMER_COUNT`.
+
 The seed cleanup remains bounded to `PB_SG_GLOBAL_BAL_001` data plus known volatile replay fences
 for canonical seed topics. It clears stale local `processed_events` fences that can survive when
 Kafka offsets are reset or reused, but it must not delete unrelated processed-event history or broad

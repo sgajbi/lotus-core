@@ -6,7 +6,11 @@ import time
 
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient, NewTopic
-from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_RUNTIME_NAMES
+from portfolio_common.config import (
+    KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
+    KAFKA_TOPIC_RUNTIME_NAMES,
+)
 from portfolio_common.logging_utils import setup_logging
 
 # Setup basic logging for the tool
@@ -18,6 +22,9 @@ logger = logging.getLogger(__name__)
 # For production, replication_factor should be >= 3. For local dev, 1 is sufficient.
 REPLICATION_FACTOR = int(os.getenv("KAFKA_REPLICATION_FACTOR", 1))
 NUM_PARTITIONS = int(os.getenv("KAFKA_NUM_PARTITIONS", 1))
+PORTFOLIO_AGGREGATION_JOB_PARTITIONS = int(
+    os.getenv("KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS", NUM_PARTITIONS)
+)
 # For production, min.insync.replicas should be 2 when replication factor is 3.
 MIN_INSYNC_REPLICAS = int(os.getenv("KAFKA_MIN_INSYNC_REPLICAS", 1))
 
@@ -32,6 +39,13 @@ TOPIC_CONFIG = {
 
 TOPICS_TO_CREATE = list(KAFKA_TOPIC_RUNTIME_NAMES)
 
+
+def _partition_count_for_topic(topic: str) -> int:
+    if topic == KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC:
+        return max(1, PORTFOLIO_AGGREGATION_JOB_PARTITIONS)
+    return max(1, NUM_PARTITIONS)
+
+
 def create_topics(admin_client: AdminClient):
     """Creates topics in Kafka."""
 
@@ -40,7 +54,7 @@ def create_topics(admin_client: AdminClient):
     new_topic_list = [
         NewTopic(
             topic,
-            num_partitions=NUM_PARTITIONS,
+            num_partitions=_partition_count_for_topic(topic),
             replication_factor=REPLICATION_FACTOR,
             config=TOPIC_CONFIG
         )

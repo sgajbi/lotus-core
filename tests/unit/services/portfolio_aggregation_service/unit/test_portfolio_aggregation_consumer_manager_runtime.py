@@ -46,6 +46,7 @@ class _FakeServer:
 class _FakeSuccessConsumer:
     def __init__(self, **kwargs):
         self.topic = kwargs["topic"]
+        self.service_prefix = kwargs["service_prefix"]
         self.shutdown_called = False
         self._stop_event = asyncio.Event()
 
@@ -85,6 +86,20 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
     assert all(c.shutdown_called for c in manager.consumers)
     assert manager.scheduler.stop_called is True
     assert manager.dispatcher.stop_called is True
+
+
+async def test_consumer_manager_honors_configured_consumer_pool(_patch_runtime, monkeypatch):
+    monkeypatch.setenv("PORTFOLIO_AGGREGATION_CONSUMER_COUNT", "3")
+    monkeypatch.setattr(consumer_manager, "PortfolioTimeseriesConsumer", _FakeSuccessConsumer)
+
+    manager = consumer_manager.ConsumerManager()
+
+    assert len(manager.consumers) == 3
+    assert [consumer.service_prefix for consumer in manager.consumers] == [
+        "PTA1",
+        "PTA2",
+        "PTA3",
+    ]
 
 
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):
