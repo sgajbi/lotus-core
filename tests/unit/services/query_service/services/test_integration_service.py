@@ -345,6 +345,16 @@ async def test_resolve_dpm_portfolio_universe_candidates_returns_source_owned_pa
     assert response.supportability.returned_candidate_count == 1
     assert response.candidates[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert response.candidates[0].mandate_id == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert response.selection_basis.basis_type == "EFFECTIVE_DISCRETIONARY_MANDATE_BINDING"
+    assert response.selection_basis.source_table == "portfolio_mandate_bindings"
+    assert response.selection_basis.included_when == [
+        "mandate_type=discretionary",
+        "effective_from<=as_of_date",
+        "effective_to is null or effective_to>=as_of_date",
+        "active authority unless include_inactive_mandates=true",
+    ]
+    assert "suitability approval" in response.selection_basis.downstream_boundary
+    assert "execution readiness" in response.selection_basis.downstream_boundary
     assert response.page.next_page_token is None
     assert response.lineage["source_table"] == "portfolio_mandate_bindings"
     assert response.snapshot_id is not None

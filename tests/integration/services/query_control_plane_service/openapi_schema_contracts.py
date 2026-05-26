@@ -72,6 +72,7 @@ DPM_SOURCE_READINESS_SCHEMA_ROOTS = {
 DPM_PORTFOLIO_UNIVERSE_CANDIDATE_SCHEMA_ROOTS = {
     "DpmPortfolioUniverseCandidateRequest",
     "DpmPortfolioUniverseCandidate",
+    "DpmPortfolioUniverseCandidateSelectionBasis",
     "DpmPortfolioUniverseCandidateSupportability",
     "DpmPortfolioUniverseCandidateResponse",
     "ReferencePageRequest",
