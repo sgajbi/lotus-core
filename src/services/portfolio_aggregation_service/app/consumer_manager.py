@@ -19,6 +19,7 @@ from portfolio_common.runtime_supervision import (
 
 from .consumers.portfolio_timeseries_consumer import PortfolioTimeseriesConsumer
 from .core.aggregation_scheduler import AggregationScheduler
+from .settings import get_aggregation_runtime_settings
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
@@ -36,16 +37,18 @@ class ConsumerManager:
         self.consumers = []
         self.tasks = []
         self._shutdown_event = asyncio.Event()
+        runtime_settings = get_aggregation_runtime_settings()
 
-        self.consumers.append(
-            PortfolioTimeseriesConsumer(
-                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
-                group_id="portfolio_aggregation_group",
-                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-                service_prefix="PTA",
+        for index in range(runtime_settings.portfolio_aggregation_consumer_count):
+            self.consumers.append(
+                PortfolioTimeseriesConsumer(
+                    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                    topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
+                    group_id="portfolio_aggregation_group",
+                    dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+                    service_prefix=f"PTA{index + 1}",
+                )
             )
-        )
 
         self.scheduler = AggregationScheduler()
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())

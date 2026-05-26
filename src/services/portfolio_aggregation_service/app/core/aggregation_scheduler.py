@@ -62,6 +62,7 @@ class AggregationScheduler:
         logger.info(f"Dispatching {len(jobs)} claimed aggregation jobs to Kafka.")
         record_keys = [f"{job.portfolio_id}|{job.aggregation_date.isoformat()}" for job in jobs]
         for idx, job in enumerate(jobs):
+            record_key = record_keys[idx]
             event = PortfolioAggregationRequiredEvent(
                 portfolio_id=job.portfolio_id,
                 aggregation_date=job.aggregation_date,
@@ -73,7 +74,7 @@ class AggregationScheduler:
             try:
                 self._producer.publish_message(
                     topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
-                    key=job.portfolio_id,
+                    key=record_key,
                     value=event.model_dump(mode="json"),
                     headers=headers,
                 )

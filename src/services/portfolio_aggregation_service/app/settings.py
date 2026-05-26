@@ -16,6 +16,7 @@ def _env_positive_int(name: str, default: int) -> int:
 
 @dataclass(frozen=True, slots=True)
 class AggregationRuntimeSettings:
+    portfolio_aggregation_consumer_count: int
     aggregation_scheduler_poll_interval_seconds: int
     aggregation_scheduler_batch_size: int
     aggregation_scheduler_stale_timeout_minutes: int
@@ -28,6 +29,10 @@ def get_aggregation_runtime_settings(
     scheduler_batch_size_default: int = 100,
 ) -> AggregationRuntimeSettings:
     return AggregationRuntimeSettings(
+        portfolio_aggregation_consumer_count=_env_positive_int(
+            "PORTFOLIO_AGGREGATION_CONSUMER_COUNT",
+            1,
+        ),
         aggregation_scheduler_poll_interval_seconds=_env_positive_int(
             "AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS",
             scheduler_poll_interval_default,

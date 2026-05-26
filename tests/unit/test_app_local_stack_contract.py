@@ -72,3 +72,27 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
         "timeseries_generator_service",
         "valuation_orchestrator_service",
     ]
+
+
+def test_app_local_stack_parallelizes_portfolio_aggregation_drain() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    services = compose["services"]
+
+    topic_creator_env = services["kafka-topic-creator"]["environment"]
+    aggregation_env = services["portfolio_aggregation_service"]["environment"]
+
+    assert (
+        topic_creator_env["KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS"]
+        == "${KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS:-4}"
+    )
+    assert (
+        aggregation_env["PORTFOLIO_AGGREGATION_CONSUMER_COUNT"]
+        == "${PORTFOLIO_AGGREGATION_CONSUMER_COUNT:-4}"
+    )
+    assert (
+        aggregation_env["AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS"]
+        == "${AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS:-2}"
+    )
+    assert aggregation_env["AGGREGATION_SCHEDULER_BATCH_SIZE"] == (
+        "${AGGREGATION_SCHEDULER_BATCH_SIZE:-500}"
+    )
