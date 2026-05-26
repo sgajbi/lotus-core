@@ -435,6 +435,56 @@ async def test_resolve_dpm_portfolio_universe_candidates_returns_paged_degraded_
 
 
 @pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_normalizes_booking_center_scope():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.list_dpm_portfolio_universe_candidates.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
+    request = DpmPortfolioUniverseCandidateRequest(
+        as_of_date=date(2026, 5, 3),
+        tenant_id="default",
+        booking_center_code="  Singapore  ",
+    )
+
+    await service.resolve_dpm_portfolio_universe_candidates(request)
+
+    service._reference_repository.list_dpm_portfolio_universe_candidates.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        as_of_date=date(2026, 5, 3),
+        booking_center_code="Singapore",
+        model_portfolio_ids=[],
+        include_inactive_mandates=False,
+        after_sort_key=None,
+        limit=251,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_ignores_blank_booking_center_scope():
+    service = make_service()
+    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
+    service._reference_repository.list_dpm_portfolio_universe_candidates.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
+    request = DpmPortfolioUniverseCandidateRequest(
+        as_of_date=date(2026, 5, 3),
+        tenant_id="default",
+        booking_center_code="   ",
+    )
+
+    response = await service.resolve_dpm_portfolio_universe_candidates(request)
+
+    service._reference_repository.list_dpm_portfolio_universe_candidates.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        as_of_date=date(2026, 5, 3),
+        booking_center_code=None,
+        model_portfolio_ids=[],
+        include_inactive_mandates=False,
+        after_sort_key=None,
+        limit=251,
+    )
+    assert response.supportability.filters_applied == [
+        "as_of_date",
+        "active_discretionary_authority",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_resolve_dpm_portfolio_universe_candidates_accepts_scoped_page_token():
     service = make_service()
     service._reference_repository = AsyncMock()  # pylint: disable=protected-access
