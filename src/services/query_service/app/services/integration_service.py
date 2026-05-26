@@ -756,6 +756,11 @@ class IntegrationService:
         self,
         request: DpmPortfolioUniverseCandidateRequest,
     ) -> DpmPortfolioUniverseCandidateResponse:
+        booking_center_code = (
+            request.booking_center_code.strip() if request.booking_center_code else None
+        )
+        if booking_center_code == "":
+            booking_center_code = None
         model_portfolio_ids = sorted(
             {
                 model_portfolio_id.strip()
@@ -767,7 +772,7 @@ class IntegrationService:
             {
                 "product_name": "DpmPortfolioUniverseCandidate",
                 "as_of_date": request.as_of_date.isoformat(),
-                "booking_center_code": request.booking_center_code,
+                "booking_center_code": booking_center_code,
                 "model_portfolio_ids": model_portfolio_ids,
                 "include_inactive_mandates": request.include_inactive_mandates,
                 "tenant_id": request.tenant_id,
@@ -784,7 +789,7 @@ class IntegrationService:
 
         rows = await self._reference_repository.list_dpm_portfolio_universe_candidates(
             as_of_date=request.as_of_date,
-            booking_center_code=request.booking_center_code,
+            booking_center_code=booking_center_code,
             model_portfolio_ids=model_portfolio_ids,
             include_inactive_mandates=request.include_inactive_mandates,
             after_sort_key=after_sort_key,
@@ -825,7 +830,7 @@ class IntegrationService:
             )
 
         filters_applied = ["as_of_date"]
-        if request.booking_center_code:
+        if booking_center_code:
             filters_applied.append("booking_center_code")
         if model_portfolio_ids:
             filters_applied.append("model_portfolio_ids")
