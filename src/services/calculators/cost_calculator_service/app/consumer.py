@@ -402,7 +402,7 @@ class CostCalculatorConsumer(BaseConsumer):
                             if (
                                 processed_event.cash_entry_mode is not None
                                 and mode == UPSTREAM_PROVIDED_CASH_ENTRY_MODE
-                                and processed_event.transaction_type.upper()
+                                and _normalize_event_code(processed_event.transaction_type)
                                 != ADJUSTMENT_TRANSACTION_TYPE
                             ):
                                 external_cash_id = (

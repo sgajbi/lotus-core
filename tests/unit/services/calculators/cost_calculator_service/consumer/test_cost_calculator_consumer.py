@@ -924,6 +924,43 @@ async def test_consumer_defers_upstream_mode_until_cash_leg_is_available(
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 
 
+async def test_consumer_normalizes_upstream_adjustment_cash_leg_type(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    incoming = json.loads(mock_buy_kafka_message.value().decode("utf-8"))
+    incoming["transaction_id"] = "ADJ-UP-01"
+    incoming["transaction_type"] = " adjustment "
+    incoming["quantity"] = "0"
+    incoming["price"] = "0"
+    incoming["gross_transaction_amount"] = "25"
+    incoming["trade_fee"] = "0"
+    incoming["cash_entry_mode"] = " upstream_provided "
+    incoming["external_cash_transaction_id"] = None
+    mock_buy_kafka_message.value.return_value = json.dumps(incoming).encode("utf-8")
+
+    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_instrument.return_value = None
+
+    await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    mock_repo.get_transaction_history.assert_not_called()
+    mock_repo.update_transaction_costs.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_called_once()
+    payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
+    assert payload["transaction_type"] == " adjustment "
+    assert payload["external_cash_transaction_id"] is None
+    cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
+
+
 async def test_consumer_fee_auto_generate_mode_sends_to_dlq(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_buy_kafka_message: MagicMock,
