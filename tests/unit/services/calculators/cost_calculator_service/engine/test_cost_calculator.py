@@ -192,6 +192,33 @@ def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
     mock_disposition_engine.add_buy_lot.assert_called_once_with(bond_buy)
 
 
+def test_buy_strategy_normalizes_policy_hook_for_accrued_interest_exclusion(
+    cost_calculator, mock_disposition_engine
+):
+    bond_buy = Transaction(
+        transaction_id="BOND_BUY_PADDED_POLICY_01",
+        portfolio_id="P_USD",
+        instrument_id="UST5Y",
+        security_id="S_UST5Y",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("98000"),
+        trade_currency="USD",
+        fees=Fees(brokerage=Decimal("40")),
+        accrued_interest=Decimal("1250"),
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        calculation_policy_id=" buy_exclude_accrued_interest_from_book_cost ",
+    )
+
+    cost_calculator.calculate_transaction_costs(bond_buy)
+
+    assert bond_buy.net_cost_local == Decimal("98040")
+    assert bond_buy.net_cost == Decimal("98040")
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(bond_buy)
+
+
 def test_buy_strategy_rejects_zero_quantity_with_invariant_error(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
@@ -314,6 +341,20 @@ def test_sell_strategy_reports_unsupported_oversold_policy(
     cost_calculator.calculate_transaction_costs(sell_transaction)
 
     assert error_reporter.has_errors_for("SELL001")
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_sell_strategy_normalizes_oversold_policy(
+    cost_calculator, mock_disposition_engine, error_reporter, sell_transaction
+):
+    sell_transaction.calculation_policy_id = " sell_allow_oversold_policy "
+    mock_disposition_engine.get_available_quantity.return_value = Decimal("3")
+
+    cost_calculator.calculate_transaction_costs(sell_transaction)
+
+    errors = error_reporter.get_errors()
+    assert error_reporter.has_errors_for("SELL001")
+    assert "oversold policy is configured but not supported" in errors[0].error_reason
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
@@ -655,6 +696,29 @@ def test_interest_strategy_allows_expense_direction_baseline(
     assert not error_reporter.has_errors_for("INT_EXPENSE_OK")
     assert expense_interest.realized_gain_loss == Decimal("0")
     mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_interest_strategy_normalizes_direction(cost_calculator, error_reporter):
+    expense_interest = Transaction(
+        transaction_id="INT_EXPENSE_PADDED_OK",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("25.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        interest_direction=" expense ",
+    )
+
+    cost_calculator.calculate_transaction_costs(expense_interest)
+
+    assert not error_reporter.has_errors_for("INT_EXPENSE_PADDED_OK")
+    assert expense_interest.realized_gain_loss == Decimal("0")
 
 
 def test_interest_strategy_rejects_unknown_direction(cost_calculator, error_reporter):

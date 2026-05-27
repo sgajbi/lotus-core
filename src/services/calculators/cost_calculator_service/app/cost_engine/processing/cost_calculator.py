@@ -25,11 +25,8 @@ SELL_ALLOW_OVERSOLD_POLICIES = {
 
 
 def _is_accrued_interest_excluded_from_book_cost(transaction: Transaction) -> bool:
-    policy_id = getattr(transaction, "calculation_policy_id", None)
-    return (
-        isinstance(policy_id, str)
-        and policy_id in ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES
-    )
+    policy_id = _normalize_code(getattr(transaction, "calculation_policy_id", None))
+    return policy_id in ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES
 
 
 def _add_buy_invariant_error(
@@ -178,8 +175,8 @@ class SellStrategy:
         available_quantity = disposition_engine.get_available_quantity(
             transaction.portfolio_id, transaction.instrument_id
         )
-        policy_id = getattr(transaction, "calculation_policy_id", None)
-        allows_oversold = isinstance(policy_id, str) and policy_id in SELL_ALLOW_OVERSOLD_POLICIES
+        policy_id = _normalize_code(getattr(transaction, "calculation_policy_id", None))
+        allows_oversold = policy_id in SELL_ALLOW_OVERSOLD_POLICIES
         if transaction.quantity > available_quantity:
             if allows_oversold:
                 _add_sell_invariant_error(
@@ -442,7 +439,7 @@ class InterestStrategy:
         if raw_direction in (None, ""):
             direction = "INCOME"
         else:
-            direction = str(raw_direction).upper()
+            direction = _normalize_code(raw_direction)
         if direction not in {"INCOME", "EXPENSE"}:
             _add_interest_invariant_error(
                 error_reporter,
