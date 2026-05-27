@@ -43,6 +43,10 @@ service-level composition boundary.
    responsible for orchestration and repository calls.
 6. Added direct builder tests for backlog-age derivation and controls/reconciliation
    projection, plus model metadata tests for the new indexes.
+7. Tightened the latency gate probe for `portfolio_positions` to use the
+   already-resolved portfolio `as_of_date`, avoiding repeated latest-business-date
+   discovery inside the measured holdings read and making the latency profile more
+   deterministic.
 
 ## Validation
 
@@ -55,7 +59,9 @@ service-level composition boundary.
 - `make migration-smoke`
   - passed; Alembic head is `7f8a9b0c1d2e`
 - `make test-latency-gate`
-  - passed; `support_overview` p95 `74.62ms` against `240ms` budget
+  - passed after deterministic `as_of_date` probe update; `support_overview` p95
+    `51.46ms` against `240ms` budget and `portfolio_positions` p95 `47.9ms`
+    against `280ms` budget
 - `make ci-local`
   - passed; `2112` unit tests passed, query-service integration-lite `118` tests passed,
     combined query-service coverage `99%`

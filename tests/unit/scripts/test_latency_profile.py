@@ -245,9 +245,11 @@ def test_cases_use_runtime_context_dates_and_identifiers() -> None:
     analytics_position = next(
         case for case in cases if case.name == "analytics_position_timeseries"
     )
+    portfolio_positions = next(case for case in cases if case.name == "portfolio_positions")
     benchmark_series = next(case for case in cases if case.name == "benchmark_market_series")
 
     assert "/portfolios/PORT_123/" in analytics_portfolio.url
+    assert portfolio_positions.url.endswith("/portfolios/PORT_123/positions?as_of_date=2026-03-05")
     assert analytics_portfolio.payload["as_of_date"] == "2026-03-05"
     assert analytics_position.payload["as_of_date"] == "2026-03-05"
     assert "/benchmarks/BMK_ABC/market-series" in benchmark_series.url

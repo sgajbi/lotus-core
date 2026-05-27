@@ -329,7 +329,10 @@ def _cases(
         EndpointCase(
             "portfolio_positions",
             "GET",
-            f"{query_base_url}/portfolios/{runtime_context.portfolio_id}/positions",
+            (
+                f"{query_base_url}/portfolios/{runtime_context.portfolio_id}/positions"
+                f"?as_of_date={as_of_date}"
+            ),
             None,
             280,
         ),
