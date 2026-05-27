@@ -449,9 +449,11 @@ async def test_change_quantity_effect_rules(txn_type, quantity, amount, expected
 
 
 async def test_get_fx_rate_or_raise_identity_currency(mock_dependencies):
+    (_, _, _, _, fx_repo, _) = mock_dependencies
     service = CoreSnapshotService(AsyncMock())
-    rate = await service._get_fx_rate_or_raise("USD", "USD", date(2026, 2, 27))
+    rate = await service._get_fx_rate_or_raise(" usd ", "USD", date(2026, 2, 27))
     assert rate == Decimal("1")
+    fx_repo.get_fx_rates.assert_not_awaited()
 
 
 async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencies):

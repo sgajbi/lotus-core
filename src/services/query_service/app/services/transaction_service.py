@@ -15,6 +15,7 @@ from ..dtos.transaction_dto import (
     RealizedTaxCurrencyTotal,
     TransactionRecord,
 )
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 
 logger = logging.getLogger(__name__)
@@ -305,9 +306,13 @@ class TransactionService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return amount
-        rate = await self._get_fx_rate(from_currency, to_currency, as_of_date)
+        rate = await self._get_fx_rate(
+            normalized_from_currency, normalized_to_currency, as_of_date
+        )
         return amount * rate
 
     async def _get_fx_rate(
@@ -316,17 +321,20 @@ class TransactionService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        cache_key = (from_currency, to_currency, as_of_date)
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
         if cache_key in self._fx_cache:
             return self._fx_cache[cache_key]
         rate = await self.repo.get_latest_fx_rate(
-            from_currency=from_currency,
-            to_currency=to_currency,
+            from_currency=normalized_from_currency,
+            to_currency=normalized_to_currency,
             as_of_date=as_of_date,
         )
         if rate is None:
             raise ValueError(
-                f"FX rate not found for {from_currency}/{to_currency} as of {as_of_date}."
+                "FX rate not found for "
+                f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
             )
         resolved_rate = Decimal(str(rate))
         self._fx_cache[cache_key] = resolved_rate

@@ -30,6 +30,7 @@ from ..dtos.core_snapshot_dto import (
 )
 from ..dtos.integration_dto import InstrumentEnrichmentRecord
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.fx_rate_repository import FxRateRepository
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.portfolio_repository import PortfolioRepository
@@ -579,15 +580,17 @@ class CoreSnapshotService:
     async def _get_fx_rate_or_raise(
         self, from_currency: str, to_currency: str, as_of_date
     ) -> Decimal:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return Decimal(1)
         rates = await self.fx_repo.get_fx_rates(
-            from_currency=from_currency,
-            to_currency=to_currency,
+            from_currency=normalized_from_currency,
+            to_currency=normalized_to_currency,
             end_date=as_of_date,
         )
         if not rates:
-            pair = f"{from_currency}/{to_currency}"
+            pair = f"{normalized_from_currency}/{normalized_to_currency}"
             raise CoreSnapshotUnavailableSectionError(
                 f"missing FX rate {pair} on or before {as_of_date.isoformat()}"
             )

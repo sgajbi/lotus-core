@@ -159,3 +159,32 @@ async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_cash_balances(portfolio_id="P404")
+
+
+async def test_cash_balance_service_normalizes_fx_cache_and_identity_checks() -> None:
+    repo = AsyncMock()
+    repo.get_latest_fx_rate.return_value = Decimal("1.35")
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+
+        same_currency = await service._convert_amount(
+            amount=Decimal("10"),
+            from_currency=" sgd ",
+            to_currency="SGD",
+            as_of_date=date(2026, 3, 27),
+        )
+        first_rate = await service._get_fx_rate(" usd ", " sgd ", date(2026, 3, 27))
+        second_rate = await service._get_fx_rate("USD", "SGD", date(2026, 3, 27))
+
+    assert same_currency == Decimal("10")
+    assert first_rate == Decimal("1.35")
+    assert second_rate == Decimal("1.35")
+    repo.get_latest_fx_rate.assert_awaited_once_with(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2026, 3, 27),
+    )

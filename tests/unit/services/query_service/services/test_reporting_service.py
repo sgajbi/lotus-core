@@ -475,13 +475,25 @@ async def test_reporting_service_get_fx_rate_uses_cache_and_raises_for_missing_r
         return_value=repo,
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
-        first = await service._get_fx_rate("EUR", "USD", date(2026, 3, 27))
+        same_currency = await service._convert_amount(
+            amount=Decimal("10"),
+            from_currency=" usd ",
+            to_currency="USD",
+            as_of_date=date(2026, 3, 27),
+        )
+        first = await service._get_fx_rate(" eur ", " usd ", date(2026, 3, 27))
         second = await service._get_fx_rate("EUR", "USD", date(2026, 3, 27))
+        assert same_currency == Decimal("10")
         assert first == Decimal("1.25")
         assert second == Decimal("1.25")
         assert repo.get_latest_fx_rate.await_count == 1
+        repo.get_latest_fx_rate.assert_awaited_once_with(
+            from_currency="EUR",
+            to_currency="USD",
+            as_of_date=date(2026, 3, 27),
+        )
         with pytest.raises(ValueError, match="FX rate not found"):
-            await service._get_fx_rate("CHF", "USD", date(2026, 3, 27))
+            await service._get_fx_rate(" chf ", " usd ", date(2026, 3, 27))
 
 
 @pytest.mark.asyncio
