@@ -1729,7 +1729,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
             mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
             client_id="CIF_SG_000184",
             mandate_type="discretionary",
-            discretionary_authority_status="active",
+            discretionary_authority_status=" active ",
             booking_center_code="Singapore",
             jurisdiction_code="SG",
             model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
@@ -1756,7 +1756,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
             source_system="mandate_admin",
             source_record_id="mandate_001_v1",
             observed_at=observed_at,
-            quality_status="accepted",
+            quality_status=" accepted ",
         )
     )
 
@@ -1769,6 +1769,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
     assert response.product_name == "DiscretionaryMandateBinding"
     assert response.model_portfolio_id == "MODEL_PB_SG_GLOBAL_BAL_DPM"
     assert response.policy_pack_id == "POLICY_DPM_SG_BALANCED_V1"
+    assert response.discretionary_authority_status == "ACTIVE"
     assert response.mandate_objective == (
         "Preserve and grow global balanced wealth within controlled drawdown limits."
     )
@@ -1779,6 +1780,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
     assert response.rebalance_bands.cash_reserve_weight == Decimal("0.0200000000")
     assert response.supportability.state == "READY"
     assert response.supportability.missing_data_families == []
+    assert response.data_quality_status == "ACCEPTED"
     assert response.latest_evidence_timestamp == observed_at
     service._reference_repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",

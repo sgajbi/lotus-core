@@ -172,6 +172,13 @@ class IntegrationService:
         return [str(item) for item in value if str(item).strip()]
 
     @staticmethod
+    def _control_code(value: Any, *, default: str = "") -> str:
+        if value is None:
+            return default
+        normalized = str(value).strip().upper()
+        return normalized or default
+
+    @staticmethod
     def _runtime_metadata(
         as_of_date: date,
         *,
@@ -727,7 +734,8 @@ class IntegrationService:
         missing_data_families: list[str] = []
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "MANDATE_BINDING_READY"
-        if str(row.discretionary_authority_status).lower() != "active":
+        discretionary_authority_status = self._control_code(row.discretionary_authority_status)
+        if discretionary_authority_status != "ACTIVE":
             supportability_state = "INCOMPLETE"
             supportability_reason = "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
             missing_data_families.append("active_discretionary_authority")
@@ -762,7 +770,7 @@ class IntegrationService:
             mandate_id=row.mandate_id,
             client_id=row.client_id,
             mandate_type=row.mandate_type,
-            discretionary_authority_status=row.discretionary_authority_status,
+            discretionary_authority_status=discretionary_authority_status,
             booking_center_code=row.booking_center_code,
             jurisdiction_code=row.jurisdiction_code,
             model_portfolio_id=row.model_portfolio_id,
@@ -798,7 +806,7 @@ class IntegrationService:
             },
             **self._runtime_metadata(
                 request.as_of_date,
-                data_quality_status=str(row.quality_status).upper(),
+                data_quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
             ),
         )
