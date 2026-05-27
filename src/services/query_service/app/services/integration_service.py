@@ -1,6 +1,4 @@
-import base64
 import hashlib
-import hmac
 import json
 import logging
 from datetime import UTC, date, datetime, timedelta
@@ -142,6 +140,7 @@ from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .integration_policy import build_effective_policy_response
+from .page_token_codec import PageTokenCodec
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +152,7 @@ class IntegrationService:
         self._buy_state_repository = BuyStateRepository(db)
         self._portfolio_repository = PortfolioRepository(db)
         self._transaction_repository = TransactionRepository(db)
-        self._page_token_secret = load_query_service_settings().page_token_secret
+        self._page_token_codec = PageTokenCodec(load_query_service_settings().page_token_secret)
 
     @staticmethod
     def _as_decimal(value: Any) -> Decimal:
@@ -342,38 +341,10 @@ class IntegrationService:
         return IntegrationService._request_fingerprint(payload)
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        signature = hmac.new(
-            self._page_token_secret.encode("utf-8"),
-            serialized.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        envelope = {"p": payload, "s": signature}
-        return base64.urlsafe_b64encode(json.dumps(envelope).encode("utf-8")).decode("utf-8")
+        return self._page_token_codec.encode(payload)
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
-        if not token:
-            return {}
-        try:
-            decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
-            envelope = json.loads(decoded)
-            payload = envelope["p"]
-            signature = envelope["s"]
-            serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-            expected = hmac.new(
-                self._page_token_secret.encode("utf-8"),
-                serialized.encode("utf-8"),
-                hashlib.sha256,
-            ).hexdigest()
-            if not hmac.compare_digest(signature, expected):
-                raise ValueError("Invalid page token signature.")
-            if not isinstance(payload, dict):
-                raise ValueError("Malformed page token payload.")
-            return payload
-        except ValueError:
-            raise
-        except Exception as exc:
-            raise ValueError("Malformed page token.") from exc
+        return self._page_token_codec.decode(token)
 
     def get_effective_policy(
         self,
