@@ -11,6 +11,7 @@ from src.services.query_service.app.services.position_flow_effects import (
     ("transaction_type", "quantity", "amount", "expected"),
     [
         ("BUY", "10", None, Decimal("10")),
+        (" buy ", "10", None, Decimal("10")),
         ("TRANSFER_IN", "3.5", None, Decimal("3.5")),
         ("MERGER_IN", "4", None, Decimal("4")),
         ("EXCHANGE_IN", "5", None, Decimal("5")),
@@ -23,6 +24,7 @@ from src.services.query_service.app.services.position_flow_effects import (
         ("RIGHTS_ALLOCATE", "3", None, Decimal("3")),
         ("RIGHTS_SHARE_DELIVERY", "4", None, Decimal("4")),
         ("SELL", "7", None, Decimal("-7")),
+        (" sell ", "7", None, Decimal("-7")),
         ("CASH_IN_LIEU", "0.5", None, Decimal("-0.5")),
         ("TRANSFER_OUT", "2", None, Decimal("-2")),
         ("MERGER_OUT", "1", None, Decimal("-1")),
@@ -37,6 +39,7 @@ from src.services.query_service.app.services.position_flow_effects import (
         ("RIGHTS_SELL", "2", None, Decimal("-2")),
         ("RIGHTS_EXPIRE", "1", None, Decimal("-1")),
         ("DEPOSIT", "5", "7", Decimal("7")),
+        (" deposit ", "5", "7", Decimal("7")),
         ("WITHDRAWAL", "5", "7", Decimal("-7")),
         ("FEE", "1", "7", Decimal("-7")),
         ("TAX", "1", "7", Decimal("-7")),
