@@ -76,6 +76,12 @@ def _is_cash_instrument(transaction: Transaction) -> bool:
     )
 
 
+def _cash_movement_amount(transaction: Transaction) -> Decimal:
+    gross_amount = Decimal(str(transaction.gross_transaction_amount or 0))
+    quantity_amount = Decimal(str(transaction.quantity or 0))
+    return gross_amount if not gross_amount.is_zero() else quantity_amount
+
+
 class BuyStrategy:
     def calculate_costs(
         self,
@@ -217,12 +223,13 @@ class CashInflowStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        transaction.gross_cost = transaction.gross_transaction_amount
-        transaction.net_cost_local = transaction.gross_transaction_amount
+        cash_amount_local = _cash_movement_amount(transaction)
+        transaction.gross_cost = cash_amount_local
+        transaction.net_cost_local = cash_amount_local
         fx_rate = transaction.transaction_fx_rate or Decimal(1)
         transaction.net_cost = transaction.net_cost_local * fx_rate
         cash_buy_equivalent = transaction.model_copy()
-        cash_buy_equivalent.quantity = transaction.gross_transaction_amount
+        cash_buy_equivalent.quantity = cash_amount_local
 
         disposition_engine.add_buy_lot(cash_buy_equivalent)
 
@@ -234,8 +241,9 @@ class CashOutflowStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
+        cash_amount_local = _cash_movement_amount(transaction)
         fx_rate = transaction.transaction_fx_rate or Decimal(1)
-        transaction.net_cost_local = -transaction.gross_transaction_amount
+        transaction.net_cost_local = -cash_amount_local
         transaction.net_cost = transaction.net_cost_local * fx_rate
         transaction.gross_cost = transaction.net_cost
         transaction.realized_gain_loss = None

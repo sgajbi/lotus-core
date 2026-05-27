@@ -347,6 +347,34 @@ def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_eng
     assert call_args.quantity == Decimal("10000")
 
 
+def test_deposit_strategy_uses_quantity_when_gross_amount_is_zero(
+    cost_calculator, mock_disposition_engine
+):
+    deposit_transaction = Transaction(
+        transaction_id="DEPOSIT_QTY_AMOUNT_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.DEPOSIT,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("10000"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(deposit_transaction)
+
+    assert deposit_transaction.gross_cost == Decimal("10000")
+    assert deposit_transaction.net_cost_local == Decimal("10000")
+    assert deposit_transaction.net_cost == Decimal("10000.0")
+    mock_disposition_engine.add_buy_lot.assert_called_once()
+    cash_lot = mock_disposition_engine.add_buy_lot.call_args[0][0]
+    assert cash_lot.quantity == Decimal("10000")
+
+
 def test_dividend_transaction_has_zero_cost(cost_calculator, mock_disposition_engine):
     dividend_transaction = Transaction(
         transaction_id="DIV001",
@@ -700,6 +728,34 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
     assert withdrawal_transaction.realized_gain_loss is None
     assert withdrawal_transaction.net_cost == Decimal("-500")
+    assert withdrawal_transaction.net_cost_local == Decimal("-500")
+
+
+def test_withdrawal_strategy_uses_quantity_when_gross_amount_is_zero(
+    cost_calculator, mock_disposition_engine
+):
+    withdrawal_transaction = Transaction(
+        transaction_id="WITHDRAWAL_QTY_AMOUNT_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="WITHDRAWAL",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("500"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
+    )
+
+    cost_calculator.calculate_transaction_costs(withdrawal_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert withdrawal_transaction.realized_gain_loss is None
+    assert withdrawal_transaction.net_cost == Decimal("-500.0")
     assert withdrawal_transaction.net_cost_local == Decimal("-500")
 
 
