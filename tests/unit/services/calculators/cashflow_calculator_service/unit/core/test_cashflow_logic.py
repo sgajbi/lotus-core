@@ -65,6 +65,27 @@ def test_calculate_buy_transaction(mock_metric, base_transaction_event: Transact
 @patch(
     "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
 )
+def test_calculate_buy_transaction_normalizes_transaction_type(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event.model_copy(update={"transaction_type": " buy "})
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_OUTFLOW,
+        timing=CashflowTiming.BOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == Decimal("-1005.50")
+    mock_metric.labels.assert_called_once_with(classification="INVESTMENT_OUTFLOW", timing="BOD")
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
 def test_calculate_sell_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A SELL is a positive cashflow (inflow)."""
     # ARRANGE
@@ -211,6 +232,34 @@ def test_calculate_interest_expense_transaction(
 @patch(
     "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
 )
+def test_calculate_interest_expense_normalizes_direction(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": " interest ",
+            "gross_transaction_amount": Decimal("120"),
+            "trade_fee": Decimal("5"),
+            "interest_direction": " expense ",
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INCOME,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == Decimal("-115")
+    mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
 def test_calculate_deposit_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A DEPOSIT is a positive cashflow (inflow)."""
     # ARRANGE
@@ -339,6 +388,28 @@ def test_calculate_transfer_out_transaction(mock_metric, base_transaction_event:
     assert cashflow.classification == "TRANSFER"
     assert cashflow.is_portfolio_flow is True
     assert cashflow.amount < 0
+    mock_metric.labels.assert_called_once_with(classification="TRANSFER", timing="EOD")
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_transfer_out_normalizes_transaction_type(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event.model_copy(update={"transaction_type": " transfer_out "})
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=True,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == Decimal("-994.50")
+    assert cashflow.classification == "TRANSFER"
     mock_metric.labels.assert_called_once_with(classification="TRANSFER", timing="EOD")
     mock_metric.labels.return_value.inc.assert_called_once()
 

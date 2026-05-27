@@ -40,6 +40,10 @@ TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
 }
 
 
+def _normalize_code(value: object, default: str = "") -> str:
+    return str(value or default).strip().upper()
+
+
 class CashflowLogic:
     """
     A stateless calculator that generates a Cashflow object from a transaction
@@ -54,11 +58,15 @@ class CashflowLogic:
         Applies the calculation rule to a transaction to generate a cashflow.
         """
         amount = Decimal(0)
-        interest_direction = str(getattr(transaction, "interest_direction", "INCOME")).upper()
+        transaction_type = _normalize_code(transaction.transaction_type)
+        interest_direction = _normalize_code(
+            getattr(transaction, "interest_direction", None),
+            default="INCOME",
+        )
 
         # For NET, we adjust the gross amount by the fee and honor net-settled
         # interest when withholding/deductions are provided.
-        if transaction.transaction_type == "INTEREST":
+        if transaction_type == "INTEREST":
             deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
                 transaction.other_interest_deductions_amount or Decimal(0)
             )
@@ -67,7 +75,7 @@ class CashflowLogic:
                 amount = transaction.gross_transaction_amount - deductions - (
                     transaction.trade_fee or 0
                 )
-        elif transaction.transaction_type in ["BUY", "FEE"]:
+        elif transaction_type in {"BUY", "FEE"}:
             amount = transaction.gross_transaction_amount + (transaction.trade_fee or 0)
         else:  # SELL, DIVIDEND, INTEREST, etc.
             amount = transaction.gross_transaction_amount - (transaction.trade_fee or 0)
@@ -81,7 +89,7 @@ class CashflowLogic:
         ]
 
         # INTEREST direction baseline: default INCOME (inflow), EXPENSE (outflow).
-        if transaction.transaction_type == "INTEREST":
+        if transaction_type == "INTEREST":
             if interest_direction == "EXPENSE":
                 amount = -abs(amount)
             else:
@@ -90,16 +98,18 @@ class CashflowLogic:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.FX_SELL:
             amount = -abs(amount)
-        elif transaction.transaction_type == "ADJUSTMENT":
-            movement_direction = str(getattr(transaction, "movement_direction", "INFLOW")).upper()
+        elif transaction_type == "ADJUSTMENT":
+            movement_direction = _normalize_code(
+                getattr(transaction, "movement_direction", None),
+                default="INFLOW",
+            )
             amount = abs(amount) if movement_direction == "INFLOW" else -abs(amount)
         elif rule.classification in positive_classifications:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.TRANSFER:
-            tx_type = transaction.transaction_type.upper()
-            if tx_type in TRANSFER_INFLOW_TRANSACTION_TYPES:
+            if transaction_type in TRANSFER_INFLOW_TRANSACTION_TYPES:
                 amount = abs(amount)
-            elif tx_type in TRANSFER_OUTFLOW_TRANSACTION_TYPES:
+            elif transaction_type in TRANSFER_OUTFLOW_TRANSACTION_TYPES:
                 amount = -abs(amount)
             else:
                 amount = abs(amount) if transaction.quantity > 0 else -abs(amount)
