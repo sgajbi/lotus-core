@@ -715,6 +715,30 @@ async def test_consumer_defer_when_fx_rate_missing(
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 
 
+async def test_fx_enrichment_normalizes_same_currency_without_lookup(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    transactions = [
+        {
+            "transaction_id": "BUY_PADDED_CCY_01",
+            "transaction_date": "2025-12-05T10:00:00Z",
+            "trade_currency": " usd ",
+        }
+    ]
+
+    enriched = await cost_calculator_consumer._enrich_transactions_with_fx(
+        transactions=transactions,
+        portfolio_base_currency=" USD ",
+        repo=repo,
+    )
+
+    repo.get_fx_rate.assert_not_awaited()
+    assert enriched[0]["trade_currency"] == "USD"
+    assert enriched[0]["portfolio_base_currency"] == "USD"
+    assert "transaction_fx_rate" not in enriched[0]
+
+
 async def test_consumer_emits_sell_lifecycle_metrics(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_sell_kafka_message: MagicMock,

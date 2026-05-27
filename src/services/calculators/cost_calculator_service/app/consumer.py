@@ -27,8 +27,8 @@ from portfolio_common.transaction_domain import (
     assert_upstream_cash_leg_pairing,
     build_auto_generated_adjustment_cash_leg,
     build_fx_contract_instrument_event,
-    enrich_buy_transaction_metadata,
     build_fx_processed_event,
+    enrich_buy_transaction_metadata,
     enrich_dividend_transaction_metadata,
     enrich_fx_transaction_metadata,
     enrich_interest_transaction_metadata,
@@ -58,6 +58,10 @@ from .transaction_processor import TransactionProcessor
 logger = logging.getLogger(__name__)
 SERVICE_NAME = "cost-calculator"
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
+
+
+def _normalize_event_code(value: object) -> str:
+    return str(value or "").strip().upper()
 
 
 class FxRateNotFoundError(Exception):
@@ -117,7 +121,7 @@ class CostCalculatorConsumer(BaseConsumer):
 
     @staticmethod
     def _record_lifecycle_stage(transaction_type: str, stage: str, status: str) -> None:
-        normalized_type = (transaction_type or "").upper()
+        normalized_type = _normalize_event_code(transaction_type)
         if normalized_type == "BUY":
             BUY_LIFECYCLE_STAGE_TOTAL.labels(stage, status).inc()
         if normalized_type == "SELL":
@@ -164,14 +168,17 @@ class CostCalculatorConsumer(BaseConsumer):
         """
         Iterates through transactions, fetching and attaching FX rates for cross-currency trades.
         """
+        portfolio_base_currency = _normalize_event_code(portfolio_base_currency)
         for txn_raw in transactions:
+            trade_currency = _normalize_event_code(txn_raw.get("trade_currency"))
+            txn_raw["trade_currency"] = trade_currency
             txn_raw["portfolio_base_currency"] = portfolio_base_currency
 
-            if txn_raw.get("trade_currency") == portfolio_base_currency:
+            if trade_currency == portfolio_base_currency:
                 continue
 
             fx_rate = await repo.get_fx_rate(
-                from_currency=txn_raw["trade_currency"],
+                from_currency=trade_currency,
                 to_currency=portfolio_base_currency,
                 a_date=datetime.fromisoformat(
                     txn_raw["transaction_date"].replace("Z", "+00:00")
@@ -241,7 +248,7 @@ class CostCalculatorConsumer(BaseConsumer):
                         if is_ca_bundle_a_transaction_type(event.transaction_type):
                             assert_ca_bundle_a_transaction_valid(event)
 
-                        event_transaction_type = event.transaction_type.upper()
+                        event_transaction_type = _normalize_event_code(event.transaction_type)
                         events_to_publish: list[TransactionEvent] = []
                         instrument_events_to_publish: list[InstrumentEvent] = []
 
@@ -283,9 +290,11 @@ class CostCalculatorConsumer(BaseConsumer):
                             new_transaction_ids = {event.transaction_id}
 
                             processor = self._get_transaction_processor(cost_basis_method)
-                            processed, errored, open_lot_quantities = processor.process_transactions(
-                                existing_transactions_raw=[],
-                                new_transactions_raw=all_transactions_raw,
+                            processed, errored, open_lot_quantities = (
+                                processor.process_transactions(
+                                    existing_transactions_raw=[],
+                                    new_transactions_raw=all_transactions_raw,
+                                )
                             )
 
                             if errored:
@@ -542,7 +551,7 @@ class CostCalculatorConsumer(BaseConsumer):
             # Missing FX is a temporal dependency issue. Defer the message so Kafka can redeliver
             # after additional FX events are persisted instead of DLQing the transaction.
             BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
-            if getattr(event, "transaction_type", "").upper() == "SELL":
+            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
                 SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
             logger.warning(
                 "FX dependency not available yet; deferring message without DLQ.", exc_info=True
@@ -550,13 +559,13 @@ class CostCalculatorConsumer(BaseConsumer):
             raise RetryableConsumerError(str(e))
         except (DBAPIError, IntegrityError, PortfolioNotFoundError):
             BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
-            if getattr(event, "transaction_type", "").upper() == "SELL":
+            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
                 SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
             logger.warning("DB or data availability error; will retry...", exc_info=True)
             raise
         except Exception as e:
             BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "failed").inc()
-            if getattr(event, "transaction_type", "").upper() == "SELL":
+            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
                 SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "failed").inc()
             transaction_id = getattr(event, "transaction_id", "UNKNOWN")
             logger.error(
