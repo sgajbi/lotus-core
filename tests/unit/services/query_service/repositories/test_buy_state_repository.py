@@ -71,3 +71,24 @@ async def test_list_portfolio_tax_lots_returns_rows_with_currency():
     )
 
     assert rows == [(SimpleNamespace(lot_id="LOT-1"), "USD")]
+
+
+async def test_list_portfolio_tax_lots_normalizes_closed_status_filter():
+    db = AsyncMock()
+    db.execute.return_value = _mock_result(all_rows=[])
+    repo = BuyStateRepository(db)
+
+    await repo.list_portfolio_tax_lots(
+        portfolio_id="PORT-1",
+        as_of_date=date(2026, 4, 10),
+        security_ids=None,
+        include_closed_lots=False,
+        lot_status_filter=" closed ",
+        after_sort_key=None,
+        limit=251,
+    )
+
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_lot_state.open_quantity <= 0" in compiled_query
+    assert "position_lot_state.open_quantity > 0" not in compiled_query

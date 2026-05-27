@@ -50,7 +50,7 @@ class BuyStateRepository:
         ]
         if security_ids:
             filters.append(PositionLotState.security_id.in_(security_ids))
-        status_filter = (lot_status_filter or "").upper()
+        status_filter = (lot_status_filter or "").strip().upper()
         if status_filter == "OPEN" or (not include_closed_lots and status_filter != "CLOSED"):
             filters.append(PositionLotState.open_quantity > 0)
         elif status_filter == "CLOSED":
