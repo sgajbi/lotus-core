@@ -206,7 +206,7 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
                 "SEC1",
                 market_value="800",
                 quantity="10",
-                valuation_status="UNVALUED",
+                valuation_status=" unvalued ",
                 snapshot_date=date(2026, 3, 27),
             ),
             instrument=_instrument("SEC1", asset_class="EQUITY"),

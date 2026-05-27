@@ -33,6 +33,12 @@ from .allocation_calculator import AllocationInputRow, calculate_allocation_view
 from .cash_balance_service import CashBalanceResolver
 
 ZERO = Decimal("0")
+UNVALUED_STATUS = "UNVALUED"
+
+
+def _normalize_control_code(value: Any, *, default: str = "") -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized or default
 
 
 class ReportingService:
@@ -228,7 +234,7 @@ class ReportingService:
             )
             total_portfolio += portfolio_value
             total_reporting += reporting_value
-            if str(row.snapshot.valuation_status or "").upper() == "UNVALUED":
+            if _normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
                 unvalued_position_count += 1
             else:
                 valued_position_count += 1
