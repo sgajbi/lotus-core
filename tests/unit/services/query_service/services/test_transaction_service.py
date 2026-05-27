@@ -487,6 +487,64 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
     assert summary.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
 
 
+async def test_get_realized_tax_summary_normalizes_currency_buckets(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_portfolio_base_currency.return_value = " usd "
+    mock_transaction_repo.list_realized_tax_evidence_transactions.return_value = [
+        Transaction(
+            transaction_id="TAX1",
+            transaction_date=datetime(2025, 1, 11),
+            transaction_type="INTEREST",
+            instrument_id="I1",
+            security_id="S1",
+            quantity=Decimal(0),
+            price=Decimal(0),
+            currency="USD",
+            withholding_tax_amount=Decimal("10"),
+            other_interest_deductions_amount=Decimal("5"),
+        ),
+        Transaction(
+            transaction_id="TAX2",
+            transaction_date=datetime(2025, 1, 12),
+            transaction_type="DIVIDEND",
+            instrument_id="I2",
+            security_id="S2",
+            quantity=Decimal(0),
+            price=Decimal(0),
+            currency=" usd ",
+            withholding_tax_amount=Decimal("2"),
+            other_interest_deductions_amount=Decimal("3"),
+        ),
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        summary = await service.get_realized_tax_summary(
+            portfolio_id="P1",
+            reporting_currency=" sgd ",
+        )
+
+    assert summary.base_currency == "USD"
+    assert summary.reporting_currency == "SGD"
+    assert len(summary.currency_totals) == 1
+    assert summary.currency_totals[0].currency == "USD"
+    assert summary.currency_totals[0].transaction_count == 2
+    assert summary.currency_totals[0].withholding_tax_amount == Decimal("12")
+    assert summary.currency_totals[0].other_tax_deductions_amount == Decimal("8")
+    assert summary.currency_totals[0].total_tax_amount == Decimal("20")
+    assert summary.reporting_currency_total_tax_amount == Decimal("27.20")
+    mock_transaction_repo.get_latest_fx_rate.assert_awaited_once_with(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2025, 1, 15),
+    )
+
+
 async def test_get_realized_tax_summary_reports_empty_evidence_without_fabrication(
     mock_transaction_repo: AsyncMock,
 ) -> None:
