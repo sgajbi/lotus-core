@@ -760,6 +760,30 @@ async def test_build_lineage_key_record_valuation_blocked_state(service: Operati
     assert record.operational_state == "VALUATION_BLOCKED"
 
 
+async def test_build_support_job_record_normalizes_terminal_failure_status(
+    service: OperationsService,
+):
+    created_at = datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc)
+    record = service._build_support_job_record(
+        job_id=601,
+        job_type="VALUATION",
+        business_date=date(2026, 3, 13),
+        status=" failed ",
+        security_id="S1",
+        epoch=4,
+        attempt_count=1,
+        correlation_id="corr-val-601",
+        created_at=created_at,
+        updated_at=created_at,
+        failure_reason="Source price missing.",
+        reference_now=created_at,
+    )
+
+    assert record.status == " failed "
+    assert record.is_terminal_failure is True
+    assert record.operational_state == "FAILED"
+
+
 async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
     created_at = datetime(2025, 8, 31, 10, 0, tzinfo=timezone.utc)
     updated_at = datetime(2025, 8, 31, 10, 15, tzinfo=timezone.utc)
@@ -1449,7 +1473,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
             {
                 "run_id": "recon_1234567890abcdef",
                 "reconciliation_type": "transaction_cashflow",
-                "status": "FAILED",
+                "status": " failed ",
                 "business_date": date(2026, 3, 13),
                 "epoch": 3,
                 "started_at": started_at,
@@ -1481,7 +1505,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.reconciliation_status == BLOCKED
     assert response.items[0].run_id == "recon_1234567890abcdef"
     assert response.items[0].reconciliation_type == "transaction_cashflow"
-    assert response.items[0].status == "FAILED"
+    assert response.items[0].status == " failed "
     assert response.items[0].requested_by == "pipeline_orchestrator_service"
     assert response.items[0].dedupe_key == "recon:transaction_cashflow:P1:2026-03-13:3"
     assert response.items[0].correlation_id == "corr-recon-20260313-001"

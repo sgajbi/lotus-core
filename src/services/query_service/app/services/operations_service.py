@@ -149,6 +149,10 @@ class OperationsService:
         return "COMPLETED"
 
     @classmethod
+    def _is_terminal_failure_status(cls, status: str | None) -> bool:
+        return cls._normalize_support_job_status(status) == "FAILED"
+
+    @classmethod
     def _is_support_job_retrying(cls, status: str, attempt_count: int | None) -> bool:
         normalized_status = cls._normalize_support_job_status(status)
         return (attempt_count or 0) > 0 and normalized_status in {"PENDING", "PROCESSING"}
@@ -322,7 +326,7 @@ class OperationsService:
                 stale_threshold_minutes,
             ),
             failure_reason=failure_reason,
-            is_terminal_failure=status == "FAILED",
+            is_terminal_failure=self._is_terminal_failure_status(status),
             operational_state=self._get_support_job_operational_state(
                 status,
                 updated_at,
@@ -1012,7 +1016,7 @@ class OperationsService:
                     dedupe_key=run.dedupe_key,
                     correlation_id=run.correlation_id,
                     failure_reason=run.failure_reason,
-                    is_terminal_failure=run.status == "FAILED",
+                    is_terminal_failure=self._is_terminal_failure_status(run.status),
                     is_blocking=self._is_controls_blocking(run.status),
                     operational_state=self._get_reconciliation_operational_state(run.status),
                 )
