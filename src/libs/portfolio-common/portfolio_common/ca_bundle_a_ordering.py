@@ -4,6 +4,7 @@ from .ca_bundle_a_constants import (
     CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
     CA_BUNDLE_A_SOURCE_OUT_TYPES,
     CA_BUNDLE_A_TARGET_IN_TYPES,
+    normalize_ca_bundle_a_transaction_type,
 )
 
 
@@ -18,7 +19,9 @@ def ca_bundle_a_dependency_rank(event: Any) -> int:
     3: rights refund stage
     4: non-Bundle-A / unknown
     """
-    transaction_type = str(getattr(event, "transaction_type", "") or "").upper()
+    transaction_type = normalize_ca_bundle_a_transaction_type(
+        getattr(event, "transaction_type", "")
+    )
     if transaction_type in CA_BUNDLE_A_SOURCE_OUT_TYPES:
         return 0
     if transaction_type in {"RIGHTS_ANNOUNCE", "RIGHTS_ALLOCATE"}:

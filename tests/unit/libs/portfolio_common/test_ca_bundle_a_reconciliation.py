@@ -39,13 +39,13 @@ def test_bundle_a_reconciliation_balanced_when_target_in_equals_source_out() -> 
     events = [
         _event(
             transaction_id="SRC_01",
-            transaction_type="SPIN_OFF",
+            transaction_type=" spin_off ",
             gross_transaction_amount="100",
             net_cost_local="-100",
         ),
         _event(
             transaction_id="TGT_01",
-            transaction_type="SPIN_IN",
+            transaction_type=" spin_in ",
             gross_transaction_amount="100",
             net_cost_local="100",
         ),
@@ -92,7 +92,7 @@ def test_bundle_a_reconciliation_reports_insufficient_legs() -> None:
 def test_bundle_a_reconciliation_dependency_gap_detection() -> None:
     event = _event(
         transaction_id="TGT_01",
-        transaction_type="DEMERGER_IN",
+        transaction_type=" demerger_in ",
         gross_transaction_amount="100",
         dependency_reference_ids=["SRC_01", "TGT_00"],
     )
