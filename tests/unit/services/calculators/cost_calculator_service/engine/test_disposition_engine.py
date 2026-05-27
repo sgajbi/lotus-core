@@ -121,3 +121,14 @@ def test_set_initial_lots_delegates_to_strategy(
     # Assert
     # It should have been called only with the list containing the buy transaction
     mock_strategy.set_initial_lots.assert_called_once_with([sample_transaction])
+
+
+def test_set_initial_lots_normalizes_buy_transaction_type(
+    disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction
+):
+    padded_buy = sample_transaction.model_copy(update={"transaction_type": " buy "})
+    sell_transaction = sample_transaction.model_copy(update={"transaction_type": " sell "})
+
+    disposition_engine.set_initial_lots([sell_transaction, padded_buy])
+
+    mock_strategy.set_initial_lots.assert_called_once_with([padded_buy])
