@@ -98,6 +98,13 @@ class CoreSnapshotService:
         ).hexdigest()
 
     @staticmethod
+    def _normalize_freshness_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        normalized_status = status.strip().upper()
+        return normalized_status or None
+
+    @staticmethod
     def _snapshot_data_quality_status(
         *,
         freshness: CoreSnapshotFreshnessMetadata,
@@ -105,10 +112,13 @@ class CoreSnapshotService:
     ) -> str:
         if baseline_count <= 0:
             return UNKNOWN
-        if freshness.freshness_status == "HISTORICAL_FALLBACK":
+        freshness_status = CoreSnapshotService._normalize_freshness_status(
+            freshness.freshness_status
+        )
+        if freshness_status == "HISTORICAL_FALLBACK":
             return PARTIAL
         if (
-            freshness.freshness_status == "CURRENT_SNAPSHOT"
+            freshness_status == "CURRENT_SNAPSHOT"
             and freshness.snapshot_timestamp is not None
             and freshness.snapshot_epoch is not None
         ):

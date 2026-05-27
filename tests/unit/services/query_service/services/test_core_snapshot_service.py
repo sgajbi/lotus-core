@@ -188,7 +188,7 @@ async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> No
     assert (
         CoreSnapshotService._snapshot_data_quality_status(
             freshness=CoreSnapshotFreshnessMetadata(
-                freshness_status="CURRENT_SNAPSHOT",
+                freshness_status=" current_snapshot ",
                 baseline_source="position_state",
                 snapshot_timestamp=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
                 snapshot_epoch=7,
@@ -212,7 +212,7 @@ async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> No
     assert (
         CoreSnapshotService._snapshot_data_quality_status(
             freshness=CoreSnapshotFreshnessMetadata(
-                freshness_status="HISTORICAL_FALLBACK",
+                freshness_status=" historical_fallback ",
                 baseline_source="position_history",
                 fallback_reason="NO_CURRENT_POSITION_STATE_ROWS",
             ),
