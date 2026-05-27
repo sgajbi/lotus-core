@@ -4,19 +4,21 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PLATFORM_REPO = REPO_ROOT.parent / "lotus-platform"
 CONTRACT_RELATIVE_PATH = Path("context/contracts/canonical-front-office-demo-data-contract.json")
-INVARIANTS_RELATIVE_PATH = Path("context/contracts/canonical-front-office-demo-data-invariants.json")
+INVARIANTS_RELATIVE_PATH = Path(
+    "context/contracts/canonical-front-office-demo-data-invariants.json"
+)
 
 
 @dataclass(frozen=True)
 class FrontOfficeSeedContract:
     portfolio_id: str
     benchmark_id: str
+    advisor_id: str
     canonical_as_of_date: str
     benchmark_start_date: str
     seed_start_date: str
@@ -34,7 +36,7 @@ class FrontOfficeSeedContract:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
 def _resolve_platform_repo_root() -> Path | None:
@@ -66,6 +68,7 @@ def _build_fallback_contract() -> FrontOfficeSeedContract:
     return FrontOfficeSeedContract(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         benchmark_id="BMK_PB_GLOBAL_BALANCED_60_40",
+        advisor_id="advisor_sg_001",
         canonical_as_of_date="2026-04-10",
         benchmark_start_date="2025-01-06",
         seed_start_date="2025-03-31",
@@ -91,10 +94,12 @@ def _to_seed_contract(
     benchmark = contract_payload["benchmark"]
     date_policy = contract_payload["date_policy"]
     thresholds = invariant_payload["minimum_thresholds"]
+    advisor_cockpit = contract_payload.get("advisor_cockpit", {})
 
     return FrontOfficeSeedContract(
         portfolio_id=portfolio["portfolio_id"],
         benchmark_id=benchmark["benchmark_code"],
+        advisor_id=advisor_cockpit.get("advisor_id", "advisor_sg_001"),
         canonical_as_of_date=date_policy["canonical_as_of_date"],
         benchmark_start_date=date_policy["warmup_start_date"],
         seed_start_date=date_policy["seed_start_date"],

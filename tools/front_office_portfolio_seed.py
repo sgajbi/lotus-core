@@ -31,6 +31,7 @@ LOGGER = logging.getLogger("front_office_portfolio_seed")
 FRONT_OFFICE_SEED_CONTRACT = load_front_office_seed_contract()
 DEFAULT_PORTFOLIO_ID = FRONT_OFFICE_SEED_CONTRACT.portfolio_id
 DEFAULT_BENCHMARK_ID = FRONT_OFFICE_SEED_CONTRACT.benchmark_id
+DEFAULT_ADVISOR_ID = FRONT_OFFICE_SEED_CONTRACT.advisor_id
 DEFAULT_POSTGRES_CONTAINER = "lotus-core-app-local-postgres-1"
 DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS = (
     "IDX_GLOBAL_EQUITY_TR",
@@ -43,7 +44,7 @@ DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
         "portfolio_id": "PB_SG_GLOBAL_INC_002",
         "mandate_id": "MANDATE_PB_SG_GLOBAL_INC_002",
         "client_id": "CIF_SG_000219",
-        "advisor_id": "RM_SG_001",
+        "advisor_id": DEFAULT_ADVISOR_ID,
         "risk_profile": "income",
         "objective": "Income-oriented discretionary mandate with controlled drawdown.",
         "policy_pack_id": "POLICY_DPM_SG_INCOME_V1",
@@ -56,12 +57,13 @@ DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
         "portfolio_id": "PB_SG_GLOBAL_GROWTH_003",
         "mandate_id": "MANDATE_PB_SG_GLOBAL_GROWTH_003",
         "client_id": "CIF_SG_000227",
-        "advisor_id": "RM_SG_001",
+        "advisor_id": DEFAULT_ADVISOR_ID,
         "risk_profile": "growth",
         "objective": "Growth-oriented discretionary mandate for long-term capital appreciation.",
         "policy_pack_id": "POLICY_DPM_SG_GROWTH_V1",
         "mandate_objective": (
-            "Compound long-term capital with diversified global growth exposure and liquidity guardrails."
+            "Compound long-term capital with diversified global growth exposure "
+            "and liquidity guardrails."
         ),
         "source_record_id": "pb_sg_global_growth_003_mandate_binding_v1",
     },
@@ -323,7 +325,7 @@ def _interpolate_prices(
     return values
 
 
-def _invert_rate(rate: str, precision: str = "0.000001") -> str:
+def _invert_rate(rate: str | Decimal, precision: str = "0.000001") -> str:
     return format((Decimal("1") / Decimal(rate)).quantize(Decimal(precision)), "f")
 
 
@@ -617,7 +619,7 @@ def build_front_office_portfolio_bundle(
             "objective": "Long-term real wealth growth with controlled income and liquidity.",
             "booking_center_code": "Singapore",
             "client_id": "CIF_SG_000184",
-            "advisor_id": "RM_SG_001",
+            "advisor_id": DEFAULT_ADVISOR_ID,
             "status": "active",
             "cost_basis_method": "FIFO",
             "is_leverage_allowed": False,
