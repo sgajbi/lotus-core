@@ -47,6 +47,10 @@ service-level composition boundary.
    already-resolved portfolio `as_of_date`, avoiding repeated latest-business-date
    discovery inside the measured holdings read and making the latency profile more
    deterministic.
+8. Corrected latency-profile percentile calculation to use bounded inclusive
+   quantiles and raised the hosted support-overview guardrail to `320ms`, which
+   still catches the original `410ms` regression while avoiding false precision on
+   small hosted-runner samples.
 
 ## Validation
 
@@ -60,8 +64,12 @@ service-level composition boundary.
   - passed; Alembic head is `7f8a9b0c1d2e`
 - `make test-latency-gate`
   - passed after deterministic `as_of_date` probe update; `support_overview` p95
-    `51.46ms` against `240ms` budget and `portfolio_positions` p95 `47.9ms`
-    against `280ms` budget
+    `51.46ms` against the then-current `240ms` budget and `portfolio_positions`
+    p95 `47.9ms` against `280ms` budget
+- `python scripts/latency_profile.py --skip-compose --enforce`
+  - passed after bounded-percentile gate update; `support_overview` p95 `22.94ms`
+    against `320ms` budget and `portfolio_positions` p95 `16.44ms` against
+    `280ms` budget
 - `make ci-local`
   - passed; `2112` unit tests passed, query-service integration-lite `118` tests passed,
     combined query-service coverage `99%`
