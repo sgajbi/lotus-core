@@ -64,7 +64,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
                 "CASH_USD",
                 name="USD Cash Account",
                 currency=" usd ",
-                asset_class="CASH",
+                asset_class=" cash ",
             ),
         ),
         ReportingSnapshotRow(

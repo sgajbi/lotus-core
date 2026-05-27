@@ -16,6 +16,11 @@ ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
 
 
+def _normalize_control_code(value: Any, *, default: str = "") -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized or default
+
+
 class CashBalanceResolver:
     def __init__(
         self,
@@ -192,7 +197,7 @@ class CashBalanceResolver:
     def is_cash_row(row: Any) -> bool:
         return (
             row.instrument is not None
-            and str(row.instrument.asset_class or "").upper() == CASH_ASSET_CLASS
+            and _normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
         )
 
     @staticmethod
