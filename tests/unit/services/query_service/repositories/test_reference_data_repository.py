@@ -72,6 +72,45 @@ async def test_reference_data_repository_lists_latest_market_data_windows() -> N
 
 
 @pytest.mark.asyncio
+async def test_reference_data_repository_normalizes_market_reference_currency_filters() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [
+        _FakeExecuteResult([]),
+        _FakeExecuteResult([]),
+        _FakeExecuteResult([]),
+    ]
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_benchmark_definitions(
+        as_of_date=date(2026, 1, 31),
+        benchmark_currency=" usd ",
+    )
+    await repo.list_index_definitions(
+        as_of_date=date(2026, 1, 31),
+        index_currency=" sgd ",
+    )
+    await repo.list_risk_free_series(
+        currency=" eur ",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
+
+    benchmark_sql = str(
+        db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    index_sql = str(
+        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    risk_free_sql = str(
+        db.execute.await_args_list[2].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+
+    assert "benchmark_definitions.benchmark_currency = 'USD'" in benchmark_sql
+    assert "index_definitions.index_currency = 'SGD'" in index_sql
+    assert "risk_free_series.series_currency = 'EUR'" in risk_free_sql
+
+
+@pytest.mark.asyncio
 async def test_reference_data_repository_methods_cover_query_contracts() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [

@@ -672,7 +672,10 @@ class ReferenceDataRepository:
         if benchmark_type:
             stmt = stmt.where(BenchmarkDefinition.benchmark_type == benchmark_type)
         if benchmark_currency:
-            stmt = stmt.where(BenchmarkDefinition.benchmark_currency == benchmark_currency.upper())
+            stmt = stmt.where(
+                BenchmarkDefinition.benchmark_currency
+                == normalize_currency_code(benchmark_currency)
+            )
         if benchmark_status:
             stmt = stmt.where(BenchmarkDefinition.benchmark_status == benchmark_status)
         result = await self._db.execute(
@@ -701,7 +704,9 @@ class ReferenceDataRepository:
         if index_ids:
             stmt = stmt.where(IndexDefinition.index_id.in_(index_ids))
         if index_currency:
-            stmt = stmt.where(IndexDefinition.index_currency == index_currency.upper())
+            stmt = stmt.where(
+                IndexDefinition.index_currency == normalize_currency_code(index_currency)
+            )
         if index_type:
             stmt = stmt.where(IndexDefinition.index_type == index_type)
         if index_status:
@@ -886,7 +891,7 @@ class ReferenceDataRepository:
         stmt = (
             select(RiskFreeSeries)
             .where(
-                RiskFreeSeries.series_currency == currency.upper(),
+                RiskFreeSeries.series_currency == normalize_currency_code(currency),
                 RiskFreeSeries.series_date >= start_date,
                 RiskFreeSeries.series_date <= end_date,
             )
