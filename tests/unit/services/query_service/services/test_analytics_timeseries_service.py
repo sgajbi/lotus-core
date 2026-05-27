@@ -39,6 +39,58 @@ def _sum_external_flows(cash_flows) -> Decimal:
 
 
 @pytest.mark.asyncio
+async def test_analytics_service_normalizes_portfolio_to_reporting_fx_request() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(get_fx_rates_map=AsyncMock(return_value={}))
+
+    same_currency_rates = await service._get_conversion_rates(  # pylint: disable=protected-access
+        portfolio_currency=" usd ",
+        reporting_currency="USD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+    cross_currency_rates = await service._get_conversion_rates(  # pylint: disable=protected-access
+        portfolio_currency=" eur ",
+        reporting_currency=" usd ",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+
+    assert same_currency_rates == {}
+    assert cross_currency_rates == {}
+    service.repo.get_fx_rates_map.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="USD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+
+
+@pytest.mark.asyncio
+async def test_analytics_service_deduplicates_position_currency_fx_maps() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("1.1")})
+    )
+
+    rates = await service._get_position_to_portfolio_rate_maps(  # pylint: disable=protected-access
+        position_currencies={" eur ", "EUR", " usd ", ""},
+        portfolio_currency=" usd ",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+
+    assert rates["USD"] == {}
+    assert rates["EUR"] == {date(2025, 1, 1): Decimal("1.1")}
+    service.repo.get_fx_rates_map.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="USD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_portfolio_timeseries_happy_path() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
@@ -2020,7 +2072,7 @@ async def test_position_timeseries_converts_values_to_portfolio_and_reporting_cu
                     asset_class="Equity",
                     sector="Technology",
                     country="DE",
-                    position_currency="EUR",
+                    position_currency=" eur ",
                 )
             ]
         ),
@@ -2038,12 +2090,16 @@ async def test_position_timeseries_converts_values_to_portfolio_and_reporting_cu
         request=PositionAnalyticsTimeseriesRequest(
             as_of_date="2025-12-31",
             window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
-            reporting_currency="SGD",
+            reporting_currency=" sgd ",
             include_cash_flows=True,
         ),
     )
 
     row = response.rows[0]
+    assert response.portfolio_currency == "USD"
+    assert response.reporting_currency == "SGD"
+    assert row.position_currency == "EUR"
+    assert row.cash_flow_currency == "EUR"
     assert row.beginning_market_value_position_currency == Decimal("10")
     assert row.beginning_market_value_portfolio_currency == Decimal("11.00")
     assert row.ending_market_value_portfolio_currency == Decimal("12.10")
@@ -2051,6 +2107,18 @@ async def test_position_timeseries_converts_values_to_portfolio_and_reporting_cu
     assert row.ending_market_value_reporting_currency == Decimal("15.7300")
     assert row.position_to_portfolio_fx_rate == Decimal("1.10")
     assert row.portfolio_to_reporting_fx_rate == Decimal("1.30")
+    service.repo.get_fx_rates_map.assert_any_await(
+        from_currency="USD",
+        to_currency="SGD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+    service.repo.get_fx_rates_map.assert_any_await(
+        from_currency="EUR",
+        to_currency="USD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
 
 
 @pytest.mark.asyncio
