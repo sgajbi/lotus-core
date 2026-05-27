@@ -1,10 +1,11 @@
 # services/query-service/app/services/instrument_service.py
 import logging
-from typing import Optional, List
+from typing import List, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..repositories.instrument_repository import InstrumentRepository
 from ..dtos.instrument_dto import InstrumentRecord, PaginatedInstrumentResponse
+from ..repositories.instrument_repository import InstrumentRepository
 
 logger = logging.getLogger(__name__)
 

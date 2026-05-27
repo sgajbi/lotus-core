@@ -2,10 +2,11 @@
 import logging
 from datetime import date
 from typing import Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..repositories.fx_rate_repository import FxRateRepository
 from ..dtos.fx_rate_dto import FxRateRecord, FxRateResponse
+from ..repositories.fx_rate_repository import FxRateRepository
 
 logger = logging.getLogger(__name__)
 

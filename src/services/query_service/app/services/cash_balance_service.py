@@ -4,12 +4,12 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
 
+from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.reporting_repository import ReportingRepository
-from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"

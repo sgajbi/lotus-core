@@ -2,10 +2,11 @@
 import logging
 from datetime import date
 from typing import Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..repositories.price_repository import MarketPriceRepository
 from ..dtos.price_dto import MarketPriceRecord, MarketPriceResponse
+from ..repositories.price_repository import MarketPriceRepository
 
 logger = logging.getLogger(__name__)
 

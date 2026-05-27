@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 COUNTRY_TO_REGION = {
     "US": "North America",
     "CA": "North America",
