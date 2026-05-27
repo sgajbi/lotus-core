@@ -32,7 +32,14 @@ def _fx_contract_event() -> TransactionEvent:
 
 
 def test_build_fx_contract_instrument_event_from_contract_component() -> None:
-    instrument = build_fx_contract_instrument_event(_fx_contract_event())
+    event = _fx_contract_event().model_copy(
+        update={
+            "component_type": " fx_contract_open ",
+            "buy_currency": " usd ",
+            "sell_currency": " eur ",
+        }
+    )
+    instrument = build_fx_contract_instrument_event(event)
 
     assert instrument is not None
     assert instrument.security_id == "FXC-2026-0001"
@@ -43,10 +50,13 @@ def test_build_fx_contract_instrument_event_from_contract_component() -> None:
     assert instrument.maturity_date.isoformat() == "2026-07-01"
     assert instrument.pair_base_currency == "EUR"
     assert instrument.pair_quote_currency == "USD"
+    assert instrument.currency == "USD"
+    assert instrument.buy_currency == "USD"
+    assert instrument.sell_currency == "EUR"
     assert instrument.buy_amount == Decimal("1095000")
     assert instrument.contract_rate == Decimal("1.095")
 
 
 def test_build_fx_contract_instrument_event_returns_none_for_cash_component() -> None:
-    event = _fx_contract_event().model_copy(update={"component_type": "FX_CASH_SETTLEMENT_BUY"})
+    event = _fx_contract_event().model_copy(update={"component_type": " fx_cash_settlement_buy "})
     assert build_fx_contract_instrument_event(event) is None
