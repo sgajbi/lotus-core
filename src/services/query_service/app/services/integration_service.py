@@ -1,5 +1,3 @@
-import hashlib
-import json
 import logging
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -141,6 +139,7 @@ from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .integration_policy import build_effective_policy_response
 from .page_token_codec import PageTokenCodec
+from .request_fingerprint import request_fingerprint, series_request_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -240,8 +239,7 @@ class IntegrationService:
 
     @staticmethod
     def _request_fingerprint(payload: dict[str, Any]) -> str:
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
+        return request_fingerprint(payload)
 
     @staticmethod
     def _latest_effective_records(
@@ -326,19 +324,13 @@ class IntegrationService:
         request: Any,
         extras: dict[str, Any] | None = None,
     ) -> str:
-        payload: dict[str, Any] = {
-            "series_key": series_key,
-            identifier_key: identifier_value,
-            "as_of_date": request.as_of_date.isoformat(),
-            "window": {
-                "start_date": request.window.start_date.isoformat(),
-                "end_date": request.window.end_date.isoformat(),
-            },
-            "frequency": request.frequency,
-        }
-        if extras:
-            payload.update(extras)
-        return IntegrationService._request_fingerprint(payload)
+        return series_request_fingerprint(
+            series_key=series_key,
+            identifier_key=identifier_key,
+            identifier_value=identifier_value,
+            request=request,
+            extras=extras,
+        )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return self._page_token_codec.encode(payload)
