@@ -1978,8 +1978,12 @@ class IntegrationService:
                 InstrumentEligibilityRecord(
                     security_id=row.security_id,
                     found=True,
-                    eligibility_status=str(row.eligibility_status).upper(),
-                    product_shelf_status=str(row.product_shelf_status).upper(),
+                    eligibility_status=self._control_code(
+                        row.eligibility_status, default="UNKNOWN"
+                    ),
+                    product_shelf_status=self._control_code(
+                        row.product_shelf_status, default="UNKNOWN"
+                    ),
                     buy_allowed=bool(row.buy_allowed),
                     sell_allowed=bool(row.sell_allowed),
                     restriction_reason_codes=list(row.restriction_reason_codes or []),
@@ -1994,7 +1998,7 @@ class IntegrationService:
                     country_of_risk=row.country_of_risk,
                     effective_from=row.effective_from,
                     effective_to=row.effective_to,
-                    quality_status=str(row.quality_status).upper(),
+                    quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
                     source_record_id=row.source_record_id,
                 )
             )

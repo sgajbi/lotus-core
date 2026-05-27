@@ -1957,8 +1957,8 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
     service._reference_repository.list_instrument_eligibility_profiles.return_value = [
         SimpleNamespace(
             security_id="MSFT",
-            eligibility_status="RESTRICTED",
-            product_shelf_status="RESTRICTED",
+            eligibility_status=" restricted ",
+            product_shelf_status=" restricted ",
             buy_allowed=False,
             sell_allowed=True,
             restriction_reason_codes=["CONCENTRATION_REVIEW"],
@@ -1975,7 +1975,7 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
             effective_to=None,
             source_record_id="MSFT-elig",
             observed_at=observed_at,
-            quality_status="accepted",
+            quality_status=" accepted ",
         ),
         SimpleNamespace(
             security_id="AAPL",
@@ -2017,7 +2017,10 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
     assert response.records[0].buy_allowed is True
     assert response.records[1].found is False
     assert response.records[1].restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
+    assert response.records[2].eligibility_status == "RESTRICTED"
+    assert response.records[2].product_shelf_status == "RESTRICTED"
     assert response.records[2].restriction_reason_codes == ["CONCENTRATION_REVIEW"]
+    assert response.records[2].quality_status == "ACCEPTED"
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.reason == "INSTRUMENT_ELIGIBILITY_MISSING"
     assert response.supportability.requested_count == 3
