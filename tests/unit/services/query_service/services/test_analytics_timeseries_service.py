@@ -714,6 +714,24 @@ def test_effective_beginning_market_value_keeps_cash_book_fee_drag_explicit() ->
     assert result == Decimal("100")
 
 
+def test_cash_flow_observation_normalizes_timing_control_code() -> None:
+    row = SimpleNamespace(
+        classification=" expense ",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        timing=" EOD ",
+    )
+
+    observation = AnalyticsTimeseriesService._build_cash_flow_observation(  # pylint: disable=protected-access
+        row,
+        amount=Decimal("-10"),
+    )
+
+    assert observation.timing == "eod"
+    assert observation.cash_flow_type == "fee"
+    assert observation.flow_scope == "operational"
+
+
 def test_effective_beginning_market_value_normalizes_cash_book_asset_class() -> None:
     service = make_service()
     row = SimpleNamespace(

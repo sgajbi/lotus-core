@@ -216,7 +216,7 @@ class AnalyticsTimeseriesService:
         )
         return CashFlowObservation(
             amount=amount,
-            timing=str(row.timing).lower(),
+            timing=str(row.timing).strip().lower(),
             cash_flow_type=cash_flow_type,
             flow_scope=flow_scope,
             source_classification=str(row.classification),
