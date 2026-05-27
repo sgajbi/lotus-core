@@ -49,7 +49,7 @@ def _snapshot(
 async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() -> None:
     reporting_repo = AsyncMock()
     cashflow_repo = AsyncMock()
-    portfolio = _portfolio("P1")
+    portfolio = _portfolio("P1", base_currency=" usd ")
     reporting_repo.get_portfolio_by_id.return_value = portfolio
     reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
     reporting_repo.list_latest_snapshot_rows.return_value = [
@@ -60,17 +60,17 @@ async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() ->
                 market_value="100000",
                 updated_at=datetime(2026, 3, 27, 9, 30, tzinfo=UTC),
             ),
-            instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
+            instrument=_instrument("CASH_USD", asset_class=" cash ", liquidity_tier=None),
         ),
         ReportingSnapshotRow(
             portfolio=portfolio,
             snapshot=_snapshot("EQ1", market_value="400000"),
-            instrument=_instrument("EQ1", liquidity_tier="T1"),
+            instrument=_instrument("EQ1", liquidity_tier=" t1 "),
         ),
         ReportingSnapshotRow(
             portfolio=portfolio,
             snapshot=_snapshot("BOND1", market_value="250000"),
-            instrument=_instrument("BOND1", liquidity_tier="T2"),
+            instrument=_instrument("BOND1", liquidity_tier=" t2 "),
         ),
     ]
     cashflow_repo.get_portfolio_cashflow_series.return_value = [
