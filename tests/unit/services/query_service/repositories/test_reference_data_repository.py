@@ -59,13 +59,16 @@ async def test_reference_data_repository_lists_latest_market_data_windows() -> N
         as_of_date=date(2026, 4, 10),
     )
     fx_rows = await repo.list_latest_fx_rates(
-        currency_pairs=[("USD", "SGD")],
+        currency_pairs=[(" usd ", " sgd ")],
         as_of_date=date(2026, 4, 10),
     )
 
     assert price_rows[0].security_id == "EQ_US_AAPL"
     assert fx_rows[0].from_currency == "USD"
     assert db.execute.await_count == 2
+    fx_stmt = db.execute.await_args_list[1].args[0]
+    fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "('USD', 'SGD')" in fx_sql
 
 
 @pytest.mark.asyncio
@@ -207,12 +210,16 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert risk_free_coverage["total_points"] >= 0
 
     fx_rates = await repo.get_fx_rates(
-        from_currency="EUR",
-        to_currency="USD",
+        from_currency=" eur ",
+        to_currency=" usd ",
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 2),
     )
     assert fx_rates[date(2026, 1, 1)] == Decimal("1.1")
+    fx_stmt = db.execute.await_args_list[19].args[0]
+    fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "fx_rates.from_currency = 'EUR'" in fx_sql
+    assert "fx_rates.to_currency = 'USD'" in fx_sql
 
 
 @pytest.mark.asyncio
@@ -815,7 +822,10 @@ async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cu
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
     assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
-    assert "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')" in compiled
+    assert (
+        "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')"
+        in compiled
+    )
 
 
 @pytest.mark.asyncio

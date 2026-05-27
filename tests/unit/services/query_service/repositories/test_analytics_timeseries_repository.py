@@ -89,12 +89,16 @@ async def test_analytics_timeseries_repository_methods() -> None:
     assert len(position_rows) == 1
 
     fx_map = await repo.get_fx_rates_map(
-        from_currency="EUR",
-        to_currency="USD",
+        from_currency=" eur ",
+        to_currency=" usd ",
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
     )
     assert fx_map[date(2025, 1, 1)] == Decimal("1.1200000000")
+    fx_stmt = db.execute.await_args_list[5].args[0]
+    fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "fx_rates.from_currency = 'EUR'" in fx_sql
+    assert "fx_rates.to_currency = 'USD'" in fx_sql
 
     portfolio_snapshot_epoch = await repo.get_portfolio_snapshot_epoch(
         portfolio_id="P1",

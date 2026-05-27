@@ -34,8 +34,8 @@ async def test_get_fx_rates_with_filters(repository: FxRateRepository, mock_db_s
     """
     # ACT
     await repository.get_fx_rates(
-        from_currency="USD",
-        to_currency="EUR",
+        from_currency=" usd ",
+        to_currency=" eur ",
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
     )
