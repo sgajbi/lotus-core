@@ -235,6 +235,12 @@ def test_source_data_security_openapi_extra_exposes_governed_profile() -> None:
     assert extension["operator_only"] is False
 
 
+def test_required_source_data_capability_uses_governed_product_identity() -> None:
+    capability = required_source_data_capability(" portfolioAnalyticsReference ")
+
+    assert capability == "source_data.portfolio_analytics_reference.read"
+
+
 def test_source_data_products_have_default_read_capability_rules() -> None:
     rules = source_data_capability_rules()
 

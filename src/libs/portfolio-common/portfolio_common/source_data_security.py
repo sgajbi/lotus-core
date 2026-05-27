@@ -512,8 +512,8 @@ def source_data_security_openapi_extra(product_name: str) -> dict[str, dict[str,
 
 
 def required_source_data_capability(product_name: str) -> str:
-    get_source_data_security_profile(product_name)
-    normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", product_name).lower()
+    profile = get_source_data_security_profile(product_name)
+    normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", profile.product_name).lower()
     return f"source_data.{normalized}.read"
 
 
