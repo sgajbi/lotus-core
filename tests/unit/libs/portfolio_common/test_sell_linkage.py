@@ -28,7 +28,8 @@ def _sell_event() -> TransactionEvent:
 
 
 def test_enrich_sell_metadata_populates_defaults() -> None:
-    enriched = enrich_sell_transaction_metadata(_sell_event())
+    event = _sell_event().model_copy(update={"transaction_type": " sell "})
+    enriched = enrich_sell_transaction_metadata(event)
     assert enriched.economic_event_id == "EVT-SELL-PORT-LINK-001-SELL-LINK-001"
     assert enriched.linked_transaction_group_id == "LTG-SELL-PORT-LINK-001-SELL-LINK-001"
     assert enriched.calculation_policy_id == SELL_FIFO_POLICY_ID

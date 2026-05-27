@@ -1,6 +1,7 @@
 from portfolio_common.events import TransactionEvent
 
 from .cash_entry_mode import normalize_cash_entry_mode
+from .control_code_normalization import normalize_transaction_control_code
 
 INTEREST_DEFAULT_POLICY_ID = "INTEREST_DEFAULT_POLICY"
 INTEREST_DEFAULT_POLICY_VERSION = "1.0.0"
@@ -11,7 +12,7 @@ def enrich_interest_transaction_metadata(event: TransactionEvent) -> Transaction
     Ensures INTEREST events carry deterministic linkage and policy metadata.
     Existing upstream-provided values are preserved.
     """
-    if event.transaction_type.upper() != "INTEREST":
+    if normalize_transaction_control_code(event.transaction_type) != "INTEREST":
         return event
 
     economic_event_id = (

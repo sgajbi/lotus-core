@@ -1,5 +1,7 @@
 from portfolio_common.events import TransactionEvent
 
+from .control_code_normalization import normalize_transaction_control_code
+
 BUY_DEFAULT_POLICY_ID = "BUY_DEFAULT_POLICY"
 BUY_DEFAULT_POLICY_VERSION = "1.0.0"
 
@@ -9,10 +11,12 @@ def enrich_buy_transaction_metadata(event: TransactionEvent) -> TransactionEvent
     Ensures BUY events carry deterministic linkage and policy metadata.
     Existing upstream-provided values are preserved.
     """
-    if event.transaction_type.upper() != "BUY":
+    if normalize_transaction_control_code(event.transaction_type) != "BUY":
         return event
 
-    economic_event_id = event.economic_event_id or f"EVT-BUY-{event.portfolio_id}-{event.transaction_id}"
+    economic_event_id = (
+        event.economic_event_id or f"EVT-BUY-{event.portfolio_id}-{event.transaction_id}"
+    )
     linked_transaction_group_id = (
         event.linked_transaction_group_id or f"LTG-BUY-{event.portfolio_id}-{event.transaction_id}"
     )
