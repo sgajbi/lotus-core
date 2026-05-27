@@ -33,6 +33,10 @@ VALUATION_VALUED_CURRENT = "VALUED_CURRENT"
 VALUATION_VALUED_STALE = "VALUED_STALE"
 
 
+def _normalize_currency_code(value: object) -> str:
+    return str(value or "").strip().upper()
+
+
 class DataNotFoundError(Exception):
     """Custom exception for retryable data fetching errors."""
 
@@ -163,16 +167,25 @@ class ValuationConsumer(BaseConsumer):
                             # 4. Perform valuation if price is available
                             job_failure_reason = None
                             if price:
-                                fx_rate = await repo.get_fx_rate(
-                                    instrument.currency,
-                                    portfolio.base_currency,
-                                    event.valuation_date,
+                                instrument_currency = _normalize_currency_code(
+                                    instrument.currency
                                 )
-                                if instrument.currency != portfolio.base_currency and not fx_rate:
+                                portfolio_currency = _normalize_currency_code(
+                                    portfolio.base_currency
+                                )
+                                price_currency = _normalize_currency_code(price.currency)
+                                fx_rate = None
+                                if instrument_currency != portfolio_currency:
+                                    fx_rate = await repo.get_fx_rate(
+                                        instrument_currency,
+                                        portfolio_currency,
+                                        event.valuation_date,
+                                    )
+                                if instrument_currency != portfolio_currency and not fx_rate:
                                     snapshot.valuation_status = VALUATION_FAILED
                                     job_failure_reason = (
                                         "Missing FX rate for "
-                                        f"{instrument.currency}->{portfolio.base_currency} "
+                                        f"{instrument_currency}->{portfolio_currency} "
                                         f"on or before {event.valuation_date}"
                                     )
                                     VALUATION_JOBS_FAILED_TOTAL.labels(
@@ -195,9 +208,9 @@ class ValuationConsumer(BaseConsumer):
                                         market_price=price.price,
                                         cost_basis_base=snapshot.cost_basis,
                                         cost_basis_local=snapshot.cost_basis_local,
-                                        price_currency=price.currency,
-                                        instrument_currency=instrument.currency,
-                                        portfolio_currency=portfolio.base_currency,
+                                        price_currency=price_currency,
+                                        instrument_currency=instrument_currency,
+                                        portfolio_currency=portfolio_currency,
                                         product_type=instrument.product_type,
                                         price_to_instrument_fx_rate=None,
                                         instrument_to_portfolio_fx_rate=fx_rate.rate
