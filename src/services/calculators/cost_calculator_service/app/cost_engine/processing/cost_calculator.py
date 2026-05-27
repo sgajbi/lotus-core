@@ -64,10 +64,10 @@ def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
 
 
 def _is_cash_instrument(transaction: Transaction) -> bool:
-    product_type = str(getattr(transaction, "product_type", "") or "").upper()
-    asset_class = str(getattr(transaction, "asset_class", "") or "").upper()
-    instrument_id = str(getattr(transaction, "instrument_id", "") or "").upper()
-    security_id = str(getattr(transaction, "security_id", "") or "").upper()
+    product_type = _normalize_code(getattr(transaction, "product_type", ""))
+    asset_class = _normalize_code(getattr(transaction, "asset_class", ""))
+    instrument_id = _normalize_code(getattr(transaction, "instrument_id", ""))
+    security_id = _normalize_code(getattr(transaction, "security_id", ""))
     return (
         product_type == "CASH"
         or asset_class == "CASH"
@@ -82,8 +82,12 @@ def _cash_movement_amount(transaction: Transaction) -> Decimal:
     return gross_amount if not gross_amount.is_zero() else quantity_amount
 
 
+def _normalize_code(value: object) -> str:
+    return str(value or "").strip().upper()
+
+
 def _normalize_currency_code(currency_code: str) -> str:
-    return currency_code.strip().upper()
+    return _normalize_code(currency_code)
 
 
 def _normalize_transaction_type(transaction_type: str | TransactionType) -> str:

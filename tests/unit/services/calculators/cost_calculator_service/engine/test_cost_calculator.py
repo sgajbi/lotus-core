@@ -809,6 +809,38 @@ def test_withdrawal_strategy_uses_quantity_when_gross_amount_is_zero(
     assert withdrawal_transaction.net_cost_local == Decimal("-500")
 
 
+def test_cash_withdrawal_detection_normalizes_source_vocabulary(
+    cost_calculator, mock_disposition_engine
+):
+    withdrawal_transaction = Transaction(
+        transaction_id="WITHDRAWAL_PADDED_CASH_01",
+        portfolio_id="P1",
+        instrument_id=" cash_usd ",
+        security_id=" cash_usd ",
+        transaction_type=" withdrawal ",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("500"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency=" usd ",
+        portfolio_base_currency=" USD ",
+        transaction_fx_rate=None,
+        product_type=" cash ",
+        asset_class=" cash ",
+    )
+
+    cost_calculator.calculate_transaction_costs(withdrawal_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert withdrawal_transaction.transaction_type == "WITHDRAWAL"
+    assert withdrawal_transaction.trade_currency == "USD"
+    assert withdrawal_transaction.portfolio_base_currency == "USD"
+    assert withdrawal_transaction.transaction_fx_rate == Decimal("1")
+    assert withdrawal_transaction.realized_gain_loss is None
+    assert withdrawal_transaction.net_cost == Decimal("-500")
+    assert withdrawal_transaction.net_cost_local == Decimal("-500")
+
+
 def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
