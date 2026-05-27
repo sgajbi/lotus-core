@@ -7,6 +7,7 @@ from .cash_entry_mode import (
     is_upstream_provided_cash_entry_mode,
     normalize_cash_entry_mode,
 )
+from .control_code_normalization import normalize_transaction_control_code
 from .interest_models import InterestCanonicalTransaction
 from .interest_reason_codes import InterestValidationReasonCode
 
@@ -30,7 +31,7 @@ def validate_interest_transaction(
 ) -> list[InterestValidationIssue]:
     issues: list[InterestValidationIssue] = []
 
-    if txn.transaction_type.upper() != "INTEREST":
+    if normalize_transaction_control_code(txn.transaction_type) != "INTEREST":
         issues.append(
             InterestValidationIssue(
                 code=InterestValidationReasonCode.INVALID_TRANSACTION_TYPE,
@@ -76,7 +77,7 @@ def validate_interest_transaction(
         )
 
     if txn.interest_direction is not None:
-        direction = txn.interest_direction.upper()
+        direction = normalize_transaction_control_code(txn.interest_direction)
         if direction not in {"INCOME", "EXPENSE"}:
             issues.append(
                 InterestValidationIssue(

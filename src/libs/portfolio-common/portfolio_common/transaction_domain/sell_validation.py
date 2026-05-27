@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Iterable
 
+from .control_code_normalization import normalize_transaction_control_code
 from .sell_models import SellCanonicalTransaction
 from .sell_reason_codes import SellValidationReasonCode
 
@@ -24,7 +25,7 @@ def validate_sell_transaction(
 ) -> list[SellValidationIssue]:
     issues: list[SellValidationIssue] = []
 
-    if txn.transaction_type.upper() != "SELL":
+    if normalize_transaction_control_code(txn.transaction_type) != "SELL":
         issues.append(
             SellValidationIssue(
                 code=SellValidationReasonCode.INVALID_TRANSACTION_TYPE,
