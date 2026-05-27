@@ -409,7 +409,7 @@ async def test_get_latest_fx_rate_returns_identity_for_same_currency(
     mock_db_session: AsyncMock,
 ):
     rate = await repository.get_latest_fx_rate(
-        from_currency="USD",
+        from_currency=" usd ",
         to_currency="USD",
         as_of_date=date(2026, 4, 30),
     )
@@ -427,8 +427,8 @@ async def test_get_latest_fx_rate_queries_latest_available_rate(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     rate = await repository.get_latest_fx_rate(
-        from_currency="USD",
-        to_currency="SGD",
+        from_currency=" usd ",
+        to_currency=" sgd ",
         as_of_date=date(2026, 4, 30),
     )
 

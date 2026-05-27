@@ -112,8 +112,8 @@ async def test_reporting_repository_get_latest_fx_rate_uses_desc_limit_one() -> 
     repo = ReportingRepository(db)
 
     rate = await repo.get_latest_fx_rate(
-        from_currency="EUR",
-        to_currency="USD",
+        from_currency=" eur ",
+        to_currency=" usd ",
         as_of_date=date(2026, 3, 27),
     )
 
@@ -133,7 +133,7 @@ async def test_reporting_repository_get_latest_fx_rate_short_circuits_same_curre
     repo = ReportingRepository(db)
 
     rate = await repo.get_latest_fx_rate(
-        from_currency="USD",
+        from_currency=" usd ",
         to_currency="USD",
         as_of_date=date(2026, 3, 27),
     )
