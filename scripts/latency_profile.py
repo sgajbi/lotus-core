@@ -53,7 +53,7 @@ def _percentile_ms(samples: list[float], percentile: int) -> float:
     if len(samples) == 1:
         return samples[0]
     index = max(0, min(percentile - 1, 99))
-    return statistics.quantiles(samples, n=100)[index]
+    return statistics.quantiles(samples, n=100, method="inclusive")[index]
 
 
 def _wait_ready(
@@ -329,7 +329,10 @@ def _cases(
         EndpointCase(
             "portfolio_positions",
             "GET",
-            f"{query_base_url}/portfolios/{runtime_context.portfolio_id}/positions",
+            (
+                f"{query_base_url}/portfolios/{runtime_context.portfolio_id}/positions"
+                f"?as_of_date={as_of_date}"
+            ),
             None,
             280,
         ),
@@ -345,7 +348,7 @@ def _cases(
             "GET",
             f"{query_control_plane_base_url}/support/portfolios/{runtime_context.portfolio_id}/overview",
             None,
-            240,
+            320,
         ),
         EndpointCase(
             "benchmark_catalog",

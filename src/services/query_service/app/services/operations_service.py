@@ -1,6 +1,7 @@
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 
+from portfolio_common.monitoring import observe_portfolio_supportability
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     BREAK_OPEN,
@@ -11,7 +12,6 @@ from portfolio_common.reconciliation_quality import (
     classify_finding_status,
     classify_reconciliation_status,
 )
-from portfolio_common.monitoring import observe_portfolio_supportability
 from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
@@ -50,12 +50,15 @@ from ..repositories.operations_repository import (
     LoadRunProgressSummary,
     MissingHistoricalFxDependencySummary,
     OperationsRepository,
-    ReconciliationFindingSummary,
     SnapshotValuationCoverageSummary,
 )
 from ..support_policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+)
+from .support_overview_builder import (
+    SupportOverviewSnapshot,
+    build_support_overview_response,
 )
 
 _VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
@@ -789,7 +792,7 @@ class OperationsService:
             ),
         )
         latest_reconciliation_run = None
-        latest_reconciliation_finding_summary: ReconciliationFindingSummary | None = None
+        latest_reconciliation_finding_summary = None
         if latest_control_stage is not None:
             latest_reconciliation_run = (
                 await self.repo.get_latest_reconciliation_run_for_portfolio_day(
@@ -826,166 +829,31 @@ class OperationsService:
                 ),
             )
 
-        valuation_backlog_age_days = None
-        if valuation_job_health.oldest_open_job_date:
-            reference_date = latest_business_date or generated_at_utc.date()
-            valuation_backlog_age_days = max(
-                0, (reference_date - valuation_job_health.oldest_open_job_date).days
-            )
-        aggregation_backlog_age_days = None
-        if aggregation_job_health.oldest_open_job_date:
-            reference_date = latest_business_date or generated_at_utc.date()
-            aggregation_backlog_age_days = max(
-                0, (reference_date - aggregation_job_health.oldest_open_job_date).days
-            )
-        analytics_export_backlog_age_minutes = None
-        if analytics_export_job_health.oldest_open_job_created_at:
-            delta = generated_at_utc - analytics_export_job_health.oldest_open_job_created_at
-            analytics_export_backlog_age_minutes = max(0, int(delta.total_seconds() // 60))
-        reprocessing_backlog_age_days = None
-        if reprocessing_health.oldest_reprocessing_watermark_date:
-            reference_date = latest_business_date or generated_at_utc.date()
-            reprocessing_backlog_age_days = max(
-                0,
-                (reference_date - reprocessing_health.oldest_reprocessing_watermark_date).days,
-            )
-
         controls_status = latest_control_stage.status if latest_control_stage else None
         controls_blocking = self._is_controls_blocking(controls_status)
 
-        return SupportOverviewResponse(
-            portfolio_id=portfolio_id,
-            business_date=latest_business_date,
-            current_epoch=current_epoch,
-            stale_threshold_minutes=stale_threshold_minutes,
-            failed_window_hours=failed_window_hours,
-            generated_at_utc=generated_at_utc,
-            active_reprocessing_keys=reprocessing_health.active_keys,
-            stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
-            oldest_reprocessing_watermark_date=(
-                reprocessing_health.oldest_reprocessing_watermark_date
-            ),
-            oldest_reprocessing_security_id=reprocessing_health.oldest_reprocessing_security_id,
-            oldest_reprocessing_epoch=reprocessing_health.oldest_reprocessing_epoch,
-            oldest_reprocessing_updated_at=reprocessing_health.oldest_reprocessing_updated_at,
-            reprocessing_backlog_age_days=reprocessing_backlog_age_days,
-            pending_valuation_jobs=valuation_job_health.pending_jobs,
-            processing_valuation_jobs=valuation_job_health.processing_jobs,
-            stale_processing_valuation_jobs=valuation_job_health.stale_processing_jobs,
-            failed_valuation_jobs=valuation_job_health.failed_jobs,
-            failed_valuation_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
-            oldest_pending_valuation_date=valuation_job_health.oldest_open_job_date,
-            oldest_pending_valuation_job_id=valuation_job_health.oldest_open_job_id,
-            oldest_pending_valuation_security_id=valuation_job_health.oldest_open_security_id,
-            oldest_pending_valuation_correlation_id=(
-                valuation_job_health.oldest_open_job_correlation_id
-            ),
-            valuation_backlog_age_days=valuation_backlog_age_days,
-            pending_aggregation_jobs=aggregation_job_health.pending_jobs,
-            processing_aggregation_jobs=aggregation_job_health.processing_jobs,
-            stale_processing_aggregation_jobs=aggregation_job_health.stale_processing_jobs,
-            failed_aggregation_jobs=aggregation_job_health.failed_jobs,
-            failed_aggregation_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
-            oldest_pending_aggregation_date=aggregation_job_health.oldest_open_job_date,
-            oldest_pending_aggregation_job_id=aggregation_job_health.oldest_open_job_id,
-            oldest_pending_aggregation_correlation_id=(
-                aggregation_job_health.oldest_open_job_correlation_id
-            ),
-            aggregation_backlog_age_days=aggregation_backlog_age_days,
-            pending_analytics_export_jobs=analytics_export_job_health.accepted_jobs,
-            processing_analytics_export_jobs=analytics_export_job_health.running_jobs,
-            stale_processing_analytics_export_jobs=analytics_export_job_health.stale_running_jobs,
-            failed_analytics_export_jobs=analytics_export_job_health.failed_jobs,
-            failed_analytics_export_jobs_within_window=(
-                analytics_export_job_health.failed_jobs_last_hours
-            ),
-            oldest_pending_analytics_export_created_at=(
-                analytics_export_job_health.oldest_open_job_created_at
-            ),
-            oldest_pending_analytics_export_job_id=(analytics_export_job_health.oldest_open_job_id),
-            oldest_pending_analytics_export_request_fingerprint=(
-                analytics_export_job_health.oldest_open_request_fingerprint
-            ),
-            analytics_export_backlog_age_minutes=analytics_export_backlog_age_minutes,
-            latest_transaction_date=latest_transaction_date,
-            latest_booked_transaction_date=latest_booked_transaction_date,
-            latest_position_snapshot_date=latest_position_snapshot_date_unbounded,
-            latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
-            position_snapshot_history_mismatch_count=position_snapshot_history_mismatch_count,
-            controls_business_date=(
-                latest_control_stage.business_date if latest_control_stage else None
-            ),
-            controls_stage_id=(latest_control_stage.id if latest_control_stage else None),
-            controls_last_source_event_type=(
-                latest_control_stage.last_source_event_type if latest_control_stage else None
-            ),
-            controls_created_at=(latest_control_stage.created_at if latest_control_stage else None),
-            controls_ready_emitted_at=(
-                latest_control_stage.ready_emitted_at if latest_control_stage else None
-            ),
-            controls_epoch=latest_control_stage.epoch if latest_control_stage else None,
-            controls_status=controls_status,
-            controls_failure_reason=(
-                getattr(latest_control_stage, "failure_reason", None)
-                if latest_control_stage
-                else None
-            ),
-            controls_latest_reconciliation_run_id=(
-                latest_reconciliation_run.run_id if latest_reconciliation_run else None
-            ),
-            controls_latest_reconciliation_type=(
-                latest_reconciliation_run.reconciliation_type if latest_reconciliation_run else None
-            ),
-            controls_latest_reconciliation_status=(
-                latest_reconciliation_run.status if latest_reconciliation_run else None
-            ),
-            controls_latest_reconciliation_correlation_id=(
-                latest_reconciliation_run.correlation_id if latest_reconciliation_run else None
-            ),
-            controls_latest_reconciliation_requested_by=(
-                latest_reconciliation_run.requested_by if latest_reconciliation_run else None
-            ),
-            controls_latest_reconciliation_dedupe_key=(
-                latest_reconciliation_run.dedupe_key if latest_reconciliation_run else None
-            ),
-            controls_latest_reconciliation_failure_reason=(
-                latest_reconciliation_run.failure_reason if latest_reconciliation_run else None
-            ),
-            controls_latest_reconciliation_total_findings=(
-                latest_reconciliation_finding_summary.total_findings
-                if latest_reconciliation_finding_summary
-                else None
-            ),
-            controls_latest_reconciliation_blocking_findings=(
-                latest_reconciliation_finding_summary.blocking_findings
-                if latest_reconciliation_finding_summary
-                else None
-            ),
-            controls_latest_blocking_finding_id=(
-                latest_reconciliation_finding_summary.top_blocking_finding_id
-                if latest_reconciliation_finding_summary
-                else None
-            ),
-            controls_latest_blocking_finding_type=(
-                latest_reconciliation_finding_summary.top_blocking_finding_type
-                if latest_reconciliation_finding_summary
-                else None
-            ),
-            controls_latest_blocking_finding_security_id=(
-                latest_reconciliation_finding_summary.top_blocking_finding_security_id
-                if latest_reconciliation_finding_summary
-                else None
-            ),
-            controls_latest_blocking_finding_transaction_id=(
-                latest_reconciliation_finding_summary.top_blocking_finding_transaction_id
-                if latest_reconciliation_finding_summary
-                else None
-            ),
-            controls_last_updated_at=(
-                latest_control_stage.updated_at if latest_control_stage else None
-            ),
-            controls_blocking=controls_blocking,
-            publish_allowed=not controls_blocking,
+        return build_support_overview_response(
+            SupportOverviewSnapshot(
+                portfolio_id=portfolio_id,
+                latest_business_date=latest_business_date,
+                current_epoch=current_epoch,
+                stale_threshold_minutes=stale_threshold_minutes,
+                failed_window_hours=failed_window_hours,
+                generated_at_utc=generated_at_utc,
+                reprocessing_health=reprocessing_health,
+                valuation_job_health=valuation_job_health,
+                aggregation_job_health=aggregation_job_health,
+                analytics_export_job_health=analytics_export_job_health,
+                latest_transaction_date=latest_transaction_date,
+                latest_booked_transaction_date=latest_booked_transaction_date,
+                latest_position_snapshot_date=latest_position_snapshot_date_unbounded,
+                latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
+                position_snapshot_history_mismatch_count=position_snapshot_history_mismatch_count,
+                latest_control_stage=latest_control_stage,
+                latest_reconciliation_run=latest_reconciliation_run,
+                latest_reconciliation_finding_summary=latest_reconciliation_finding_summary,
+                controls_blocking=controls_blocking,
+            )
         )
 
     async def get_portfolio_readiness(

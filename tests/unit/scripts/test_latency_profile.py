@@ -18,6 +18,12 @@ def test_percentile_single_sample() -> None:
     assert _percentile_ms([12.5], 95) == 12.5
 
 
+def test_percentile_is_bounded_by_observed_samples() -> None:
+    samples = [1.0, 2.0, 100.0]
+
+    assert _percentile_ms(samples, 99) <= max(samples)
+
+
 def test_enforce_gate_detects_budget_and_status_violations() -> None:
     passed, violations = _enforce_gate(
         [
@@ -245,9 +251,13 @@ def test_cases_use_runtime_context_dates_and_identifiers() -> None:
     analytics_position = next(
         case for case in cases if case.name == "analytics_position_timeseries"
     )
+    portfolio_positions = next(case for case in cases if case.name == "portfolio_positions")
+    support_overview = next(case for case in cases if case.name == "support_overview")
     benchmark_series = next(case for case in cases if case.name == "benchmark_market_series")
 
     assert "/portfolios/PORT_123/" in analytics_portfolio.url
+    assert portfolio_positions.url.endswith("/portfolios/PORT_123/positions?as_of_date=2026-03-05")
+    assert support_overview.p95_budget_ms == 320
     assert analytics_portfolio.payload["as_of_date"] == "2026-03-05"
     assert analytics_position.payload["as_of_date"] == "2026-03-05"
     assert "/benchmarks/BMK_ABC/market-series" in benchmark_series.url

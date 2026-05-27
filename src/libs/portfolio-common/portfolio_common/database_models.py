@@ -1461,6 +1461,20 @@ class PortfolioAggregationJob(Base):
             "status",
             "updated_at",
         ),
+        Index(
+            "ix_portfolio_aggregation_jobs_portfolio_status_updated",
+            "portfolio_id",
+            "status",
+            "updated_at",
+        ),
+        Index(
+            "ix_portfolio_aggregation_jobs_portfolio_status_date_updated_id",
+            "portfolio_id",
+            "status",
+            "aggregation_date",
+            "updated_at",
+            "id",
+        ),
     )
 
 
@@ -1504,6 +1518,20 @@ class PortfolioValuationJob(Base):
             "ix_portfolio_valuation_jobs_status_updated_at",
             "status",
             "updated_at",
+        ),
+        Index(
+            "ix_portfolio_valuation_jobs_portfolio_status_updated",
+            "portfolio_id",
+            "status",
+            "updated_at",
+        ),
+        Index(
+            "ix_portfolio_valuation_jobs_portfolio_status_date_updated_id",
+            "portfolio_id",
+            "status",
+            "valuation_date",
+            "updated_at",
+            "id",
         ),
     )
 
