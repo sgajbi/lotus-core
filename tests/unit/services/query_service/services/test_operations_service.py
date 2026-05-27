@@ -15,6 +15,14 @@ from src.services.query_service.app.repositories.operations_repository import (
     ReprocessingHealthSummary,
 )
 from src.services.query_service.app.services import operations_service as operations_service_module
+from src.services.query_service.app.services.load_run_progress_builder import (
+    _ceiling_division,
+    _elapsed_seconds_between,
+    _get_valuation_to_timeseries_handoff_pressure_hint,
+    _safe_ratio,
+    get_load_run_operator_progress_state,
+    get_load_run_state,
+)
 from src.services.query_service.app.services.operations_service import OperationsService
 
 pytestmark = pytest.mark.asyncio
@@ -333,14 +341,14 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert control_call.kwargs["as_of"] == response.generated_at_utc
 
 
-async def test_operations_service_helper_branches_cover_ratio_division_and_elapsed_time() -> None:
-    assert OperationsService._safe_ratio(3, 0) == 0.0
-    assert OperationsService._safe_ratio(1, 3) == pytest.approx(0.333333)
-    assert OperationsService._ceiling_division(0, 10) == 0
-    assert OperationsService._ceiling_division(7, 3) == 3
-    assert OperationsService._elapsed_seconds_between(None, FIXED_GENERATED_AT) is None
+async def test_load_run_builder_helper_branches_cover_ratio_division_and_elapsed_time() -> None:
+    assert _safe_ratio(3, 0) == 0.0
+    assert _safe_ratio(1, 3) == pytest.approx(0.333333)
+    assert _ceiling_division(0, 10) == 0
+    assert _ceiling_division(7, 3) == 3
+    assert _elapsed_seconds_between(None, FIXED_GENERATED_AT) is None
     assert (
-        OperationsService._elapsed_seconds_between(
+        _elapsed_seconds_between(
             FIXED_GENERATED_AT,
             FIXED_GENERATED_AT - timedelta(minutes=1),
         )
@@ -348,13 +356,10 @@ async def test_operations_service_helper_branches_cover_ratio_division_and_elaps
     )
 
 
-async def test_operations_service_load_run_state_and_handoff_pressure_cover_major_paths() -> None:
+async def test_load_run_builder_state_and_handoff_pressure_cover_major_paths() -> None:
+    assert get_load_run_state(_load_run_summary(failed_valuation_jobs=1)) == "FAILED"
     assert (
-        OperationsService._get_load_run_state(_load_run_summary(failed_valuation_jobs=1))
-        == "FAILED"
-    )
-    assert (
-        OperationsService._get_load_run_state(
+        get_load_run_state(
             _load_run_summary(
                 portfolios_with_timeseries=1000,
                 open_valuation_jobs=0,
@@ -363,13 +368,10 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         )
         == "COMPLETE"
     )
+    assert get_load_run_state(_load_run_summary(transactions_ingested=0)) == "SEEDING"
+    assert get_load_run_state(_load_run_summary()) == "MATERIALIZING"
     assert (
-        OperationsService._get_load_run_state(_load_run_summary(transactions_ingested=0))
-        == "SEEDING"
-    )
-    assert OperationsService._get_load_run_state(_load_run_summary()) == "MATERIALIZING"
-    assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+        _get_valuation_to_timeseries_handoff_pressure_hint(
             _load_run_summary(
                 pending_valuation_jobs=0,
                 completed_valuation_jobs_without_position_timeseries=0,
@@ -378,7 +380,7 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "NO_HANDOFF_PRESSURE"
     )
     assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+        _get_valuation_to_timeseries_handoff_pressure_hint(
             _load_run_summary(
                 pending_valuation_jobs=10,
                 completed_valuation_jobs_without_position_timeseries=0,
@@ -387,7 +389,7 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "SCHEDULER_DISPATCH_BOUND"
     )
     assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+        _get_valuation_to_timeseries_handoff_pressure_hint(
             _load_run_summary(
                 pending_valuation_jobs=0,
                 completed_valuation_jobs_without_position_timeseries=3,
@@ -396,7 +398,7 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "DOWNSTREAM_OF_VALUATION"
     )
     assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(_load_run_summary())
+        _get_valuation_to_timeseries_handoff_pressure_hint(_load_run_summary())
         == "MIXED_HANDOFF_PRESSURE"
     )
 
@@ -2852,35 +2854,35 @@ async def test_get_load_run_operator_progress_state_covers_running_slow_stuck_an
     )
 
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             running_summary,
             reference_now=reference_now,
         )
         == "RUNNING"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             slow_summary,
             reference_now=reference_now,
         )
         == "SLOW"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             stuck_summary,
             reference_now=reference_now,
         )
         == "STUCK"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             complete_summary,
             reference_now=reference_now,
         )
         == "COMPLETE"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             failed_summary,
             reference_now=reference_now,
         )
