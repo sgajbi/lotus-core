@@ -39,6 +39,8 @@ from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
 from .position_flow_effects import transaction_quantity_effect_decimal
 
+CASH_ASSET_CLASS = "CASH"
+
 
 class CoreSnapshotBadRequestError(ValueError):
     pass
@@ -54,6 +56,15 @@ class CoreSnapshotConflictError(ValueError):
 
 class CoreSnapshotUnavailableSectionError(ValueError):
     pass
+
+
+def _normalize_control_code(value: Any, *, default: str = "") -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized or default
+
+
+def _is_cash_asset_class(value: Any) -> bool:
+    return _normalize_control_code(value) == CASH_ASSET_CLASS
 
 
 @dataclass
@@ -114,9 +125,12 @@ class CoreSnapshotService:
         if portfolio is None:
             raise CoreSnapshotNotFoundError(f"Portfolio {portfolio_id} not found")
 
-        reporting_currency = request.reporting_currency or portfolio.base_currency
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+        reporting_currency = normalize_currency_code(
+            str(request.reporting_currency or portfolio.base_currency)
+        )
         reporting_fx = await self._get_fx_rate_or_raise(
-            from_currency=portfolio.base_currency,
+            from_currency=portfolio_currency,
             to_currency=reporting_currency,
             as_of_date=request.as_of_date,
         )
@@ -167,7 +181,7 @@ class CoreSnapshotService:
             projected_positions = await self._resolve_projected_positions(
                 session_id=session.session_id,
                 as_of_date=request.as_of_date,
-                portfolio_base_currency=portfolio.base_currency,
+                portfolio_base_currency=portfolio_currency,
                 reporting_currency=reporting_currency,
                 baseline_positions=baseline_positions,
                 include_zero=request.options.include_zero_quantity_positions,
@@ -300,7 +314,7 @@ class CoreSnapshotService:
                 warnings=warnings,
             ),
             valuation_context=CoreSnapshotValuationContext(
-                portfolio_currency=portfolio.base_currency,
+                portfolio_currency=portfolio_currency,
                 reporting_currency=reporting_currency,
                 position_basis=request.options.position_basis,
                 weight_basis=request.options.weight_basis,
@@ -348,7 +362,7 @@ class CoreSnapshotService:
             if (
                 not include_cash
                 and instrument
-                and str(instrument.asset_class or "").upper() == "CASH"
+                and _is_cash_asset_class(instrument.asset_class)
             ):
                 continue
 
@@ -485,7 +499,7 @@ class CoreSnapshotService:
             entry["quantity"] = entry["quantity"] + delta
 
         for security_id, entry in projected.items():
-            if not include_cash and str(entry.get("asset_class") or "").upper() == "CASH":
+            if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
                 continue
             if not include_zero and entry["quantity"] == Decimal(0):
                 continue
@@ -531,7 +545,7 @@ class CoreSnapshotService:
 
         filtered: dict[str, dict[str, Any]] = {}
         for key, value in projected.items():
-            if not include_cash and str(value.get("asset_class") or "").upper() == "CASH":
+            if not include_cash and _is_cash_asset_class(value.get("asset_class")):
                 continue
             if not include_zero and value["quantity"] == Decimal(0):
                 continue

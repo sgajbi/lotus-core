@@ -233,6 +233,31 @@ async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> No
     )
 
 
+async def test_core_snapshot_canonicalizes_valuation_context_currencies(mock_dependencies):
+    (_, portfolio_repo, _, _, fx_repo, _) = mock_dependencies
+    portfolio_repo.get_by_id.return_value = SimpleNamespace(
+        portfolio_id="PORT_001",
+        base_currency=" usd ",
+    )
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        reporting_currency=" sgd ",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.PORTFOLIO_TOTALS],
+    )
+
+    response = await service.get_core_snapshot("PORT_001", request)
+
+    assert response.valuation_context.portfolio_currency == "USD"
+    assert response.valuation_context.reporting_currency == "SGD"
+    fx_repo.get_fx_rates.assert_awaited_once_with(
+        from_currency="USD",
+        to_currency="SGD",
+        end_date=date(2026, 2, 27),
+    )
+
+
 async def test_get_instrument_enrichment_bulk_preserves_order_and_unknowns(mock_dependencies):
     (_, _, _, _, _, instrument_repo) = mock_dependencies
     instrument_repo.get_by_security_ids.return_value = [
@@ -572,7 +597,7 @@ async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dep
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
         (
             _snapshot_row("SEC_CASH", Decimal("1"), Decimal("1"), Decimal("1")),
-            _instrument("SEC_CASH", "USD", "CASH"),
+            _instrument("SEC_CASH", "USD", " cash "),
             SimpleNamespace(status="CURRENT"),
         ),
         (
@@ -667,7 +692,7 @@ async def test_resolve_projected_positions_filters_cash_and_zero_quantity(mock_d
                 "market_value_local": Decimal("1"),
                 "currency": "USD",
                 "instrument_name": "Cash",
-                "asset_class": "CASH",
+                "asset_class": " cash ",
                 "sector": None,
                 "country_of_risk": None,
                 "isin": None,
