@@ -375,7 +375,9 @@ class PositionCalculator:
 
     @staticmethod
     def _cash_position_amount_delta(transaction: TransactionEvent, txn_type: str) -> Decimal:
-        magnitude = abs(Decimal(str(transaction.gross_transaction_amount or 0)))
+        gross_amount = Decimal(str(transaction.gross_transaction_amount or 0))
+        quantity_amount = Decimal(str(transaction.quantity or 0))
+        magnitude = abs(gross_amount if not gross_amount.is_zero() else quantity_amount)
         if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {
             "ADJUSTMENT",
             "FX_CASH_SETTLEMENT_BUY",

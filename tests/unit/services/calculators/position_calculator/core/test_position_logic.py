@@ -708,6 +708,47 @@ def test_cash_portfolio_flows_treat_zero_booked_cost_as_amount_fallback(
     assert next_state.cost_basis_local == expected_cost
 
 
+@pytest.mark.parametrize(
+    ("transaction_type", "quantity", "expected_quantity", "expected_cost"),
+    [
+        ("DEPOSIT", Decimal("25"), Decimal("125"), Decimal("125")),
+        ("WITHDRAWAL", Decimal("30"), Decimal("70"), Decimal("70")),
+        ("FEE", Decimal("5"), Decimal("95"), Decimal("95")),
+        ("TAX", Decimal("7"), Decimal("93"), Decimal("93")),
+    ],
+)
+def test_cash_portfolio_flows_fall_back_to_quantity_when_gross_amount_is_zero(
+    transaction_type: str,
+    quantity: Decimal,
+    expected_quantity: Decimal,
+    expected_cost: Decimal,
+) -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+    event = TransactionEvent(
+        transaction_id=f"{transaction_type}_QUANTITY_AMOUNT_01",
+        transaction_type=transaction_type,
+        quantity=quantity,
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+
+    assert next_state.quantity == expected_quantity
+    assert next_state.cost_basis == expected_cost
+    assert next_state.cost_basis_local == expected_cost
+
+
 def test_calculate_next_position_for_foreign_currency_cash_flow_uses_booked_base_and_local_costs(
 ) -> None:
     initial_state = PositionStateDTO(
