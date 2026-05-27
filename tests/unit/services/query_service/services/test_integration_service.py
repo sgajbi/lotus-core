@@ -2552,6 +2552,59 @@ async def test_reference_contract_methods() -> None:
 
 
 @pytest.mark.asyncio
+async def test_risk_free_products_normalize_currency_before_repository_lookup() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment] # pylint: disable=protected-access
+        list_risk_free_series=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    series_date=date(2026, 1, 1),
+                    value=Decimal("0.03"),
+                    value_convention="annualized_rate",
+                    day_count_convention="act_360",
+                    compounding_convention="simple",
+                    series_currency="USD",
+                    quality_status="accepted",
+                )
+            ]
+        ),
+        get_risk_free_coverage=AsyncMock(
+            return_value={
+                "total_points": 1,
+                "observed_start_date": date(2026, 1, 1),
+                "observed_end_date": date(2026, 1, 1),
+                "quality_status_counts": {"accepted": 1},
+            }
+        ),
+    )
+
+    risk_free = await service.get_risk_free_series(
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            currency=" usd ",
+            series_mode="annualized_rate_series",
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)),
+            frequency="daily",
+        ),
+    )
+    coverage = await service.get_risk_free_coverage(" usd ", date(2026, 1, 1), date(2026, 1, 1))
+
+    service._reference_repository.list_risk_free_series.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        currency="USD",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 1),
+    )
+    service._reference_repository.get_risk_free_coverage.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        currency="USD",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 1),
+    )
+    assert risk_free.currency == "USD"
+    assert risk_free.request_fingerprint
+    assert coverage.request_fingerprint
+
+
+@pytest.mark.asyncio
 async def test_market_reference_products_expose_row_backed_quality_and_evidence_timestamp() -> None:
     service = make_service()
     older_source_timestamp = datetime(2026, 1, 2, 9, 0, tzinfo=UTC)

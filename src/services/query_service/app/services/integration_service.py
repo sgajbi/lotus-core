@@ -132,6 +132,7 @@ from ..dtos.reference_integration_dto import (
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.buy_state_repository import BuyStateRepository
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
@@ -3327,20 +3328,21 @@ class IntegrationService:
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
+        normalized_currency = normalize_currency_code(request.currency)
         request_fingerprint = self._series_request_fingerprint(
             series_key="risk_free_series",
             identifier_key="currency",
-            identifier_value=request.currency.upper(),
+            identifier_value=normalized_currency,
             request=request,
             extras={"series_mode": request.series_mode},
         )
         rows = await self._reference_repository.list_risk_free_series(
-            currency=request.currency,
+            currency=normalized_currency,
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
         return RiskFreeSeriesResponse(
-            currency=request.currency.upper(),
+            currency=normalized_currency,
             as_of_date=request.as_of_date,
             series_mode=request.series_mode,
             resolved_window=IntegrationWindow(
@@ -3410,10 +3412,11 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
+        normalized_currency = normalize_currency_code(currency)
         request_fingerprint = self._request_fingerprint(
             {
                 "coverage_key": "risk_free_coverage",
-                "currency": currency.upper(),
+                "currency": normalized_currency,
                 "window": {
                     "start_date": start_date.isoformat(),
                     "end_date": end_date.isoformat(),
@@ -3421,7 +3424,7 @@ class IntegrationService:
             }
         )
         coverage = await self._reference_repository.get_risk_free_coverage(
-            currency=currency,
+            currency=normalized_currency,
             start_date=start_date,
             end_date=end_date,
         )
