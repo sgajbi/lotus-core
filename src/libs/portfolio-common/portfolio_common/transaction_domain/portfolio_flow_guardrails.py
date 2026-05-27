@@ -1,6 +1,7 @@
 from portfolio_common.events import TransactionEvent
 
 from .cash_entry_mode import AUTO_GENERATE_CASH_ENTRY_MODE, normalize_cash_entry_mode
+from .control_code_normalization import normalize_transaction_control_code
 
 PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES = {
     "FEE",
@@ -13,7 +14,7 @@ PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES = {
 
 
 def is_portfolio_flow_no_auto_generate_transaction_type(transaction_type: str | None) -> bool:
-    normalized_type = (transaction_type or "").strip().upper()
+    normalized_type = normalize_transaction_control_code(transaction_type)
     return normalized_type in PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES
 
 

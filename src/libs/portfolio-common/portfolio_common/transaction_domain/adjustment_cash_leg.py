@@ -4,6 +4,7 @@ from decimal import Decimal
 from portfolio_common.events import TransactionEvent
 
 from .cash_entry_mode import AUTO_GENERATE_CASH_ENTRY_MODE, normalize_cash_entry_mode
+from .control_code_normalization import normalize_transaction_control_code
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
@@ -13,11 +14,6 @@ AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES = {
     "DIVIDEND",
     "INTEREST",
 }
-
-
-def _normalize_control_code(value: str | None) -> str:
-    return str(value or "").strip().upper()
-
 
 @dataclass(frozen=True)
 class AdjustmentCashLegError(ValueError):
@@ -32,7 +28,7 @@ def should_auto_generate_cash_leg(event: TransactionEvent) -> bool:
     if event.cash_entry_mode is None:
         return False
     mode = normalize_cash_entry_mode(event.cash_entry_mode)
-    transaction_type = _normalize_control_code(event.transaction_type)
+    transaction_type = normalize_transaction_control_code(event.transaction_type)
     return (
         mode == AUTO_GENERATE_CASH_ENTRY_MODE
         and transaction_type in AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES
@@ -43,7 +39,7 @@ def should_auto_generate_cash_leg(event: TransactionEvent) -> bool:
 def _resolve_adjustment_amount_and_direction(
     event: TransactionEvent,
 ) -> tuple[Decimal, str, str]:
-    tx_type = _normalize_control_code(event.transaction_type)
+    tx_type = normalize_transaction_control_code(event.transaction_type)
     fee = event.trade_fee or Decimal(0)
 
     if tx_type == "BUY":
@@ -59,11 +55,10 @@ def _resolve_adjustment_amount_and_direction(
         net_interest = event.net_interest_amount
         if net_interest is None:
             net_interest = event.gross_transaction_amount - deductions - fee
-        direction = (
-            "OUTFLOW"
-            if _normalize_control_code(getattr(event, "interest_direction", "INCOME")) == "EXPENSE"
-            else "INFLOW"
+        interest_direction = normalize_transaction_control_code(
+            getattr(event, "interest_direction", "INCOME")
         )
+        direction = "OUTFLOW" if interest_direction == "EXPENSE" else "INFLOW"
         reason = "INTEREST_CHARGE_SETTLEMENT" if direction == "OUTFLOW" else "INTEREST_SETTLEMENT"
         return net_interest, direction, reason
     raise AdjustmentCashLegError(
@@ -96,7 +91,7 @@ def build_auto_generated_adjustment_cash_leg(event: TransactionEvent) -> Transac
     amount, movement_direction, adjustment_reason = _resolve_adjustment_amount_and_direction(event)
     amount = abs(amount)
 
-    tx_type = _normalize_control_code(event.transaction_type)
+    tx_type = normalize_transaction_control_code(event.transaction_type)
     economic_event_id = (
         event.economic_event_id or f"EVT-{tx_type}-{event.portfolio_id}-{event.transaction_id}"
     )

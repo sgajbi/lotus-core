@@ -1,5 +1,7 @@
 from portfolio_common.events import TransactionEvent
 
+from .control_code_normalization import normalize_transaction_control_code
+
 FX_COMPONENT_PROCESSING_TYPES = {
     "FX_CONTRACT_OPEN",
     "FX_CONTRACT_CLOSE",
@@ -9,7 +11,7 @@ FX_COMPONENT_PROCESSING_TYPES = {
 
 
 def normalize_processing_type(value: str | None) -> str:
-    return str(value or "").strip().upper()
+    return normalize_transaction_control_code(value)
 
 
 def resolve_effective_processing_transaction_type(event: TransactionEvent) -> str:
