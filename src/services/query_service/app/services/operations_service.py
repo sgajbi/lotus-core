@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.operations_dto import (
     AnalyticsExportJobListResponse,
     AnalyticsExportJobRecord,
-    CalculatorSloBucket,
     CalculatorSloResponse,
     LineageKeyListResponse,
     LineageKeyRecord,
@@ -32,7 +31,6 @@ from ..dtos.operations_dto import (
     ReprocessingJobListResponse,
     ReprocessingKeyListResponse,
     ReprocessingKeyRecord,
-    ReprocessingSloBucket,
     SupportJobListResponse,
     SupportJobRecord,
     SupportOverviewResponse,
@@ -47,6 +45,7 @@ from ..support_policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
 )
+from .calculator_slo_builder import build_calculator_slo_response
 from .load_run_progress_builder import build_load_run_progress_response
 from .portfolio_readiness_builder import (
     PortfolioReadinessSnapshot,
@@ -592,68 +591,15 @@ class OperationsService:
             ),
         )
 
-        reference_date = latest_business_date or generated_at_utc.date()
-        valuation_backlog_age_days = (
-            max(0, (reference_date - valuation_job_health.oldest_open_job_date).days)
-            if valuation_job_health.oldest_open_job_date is not None
-            else None
-        )
-        aggregation_backlog_age_days = (
-            max(0, (reference_date - aggregation_job_health.oldest_open_job_date).days)
-            if aggregation_job_health.oldest_open_job_date is not None
-            else None
-        )
-        reprocessing_backlog_age_days = (
-            max(0, (reference_date - reprocessing_health.oldest_reprocessing_watermark_date).days)
-            if reprocessing_health.oldest_reprocessing_watermark_date is not None
-            else None
-        )
-
-        return CalculatorSloResponse(
+        return build_calculator_slo_response(
             portfolio_id=portfolio_id,
-            business_date=latest_business_date,
+            latest_business_date=latest_business_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
             generated_at_utc=generated_at_utc,
-            valuation=CalculatorSloBucket(
-                pending_jobs=valuation_job_health.pending_jobs,
-                processing_jobs=valuation_job_health.processing_jobs,
-                stale_processing_jobs=valuation_job_health.stale_processing_jobs,
-                failed_jobs=valuation_job_health.failed_jobs,
-                failed_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
-                oldest_open_job_date=valuation_job_health.oldest_open_job_date,
-                oldest_open_job_id=valuation_job_health.oldest_open_job_id,
-                oldest_open_job_correlation_id=(
-                    valuation_job_health.oldest_open_job_correlation_id
-                ),
-                backlog_age_days=valuation_backlog_age_days,
-            ),
-            aggregation=CalculatorSloBucket(
-                pending_jobs=aggregation_job_health.pending_jobs,
-                processing_jobs=aggregation_job_health.processing_jobs,
-                stale_processing_jobs=aggregation_job_health.stale_processing_jobs,
-                failed_jobs=aggregation_job_health.failed_jobs,
-                failed_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
-                oldest_open_job_date=aggregation_job_health.oldest_open_job_date,
-                oldest_open_job_id=aggregation_job_health.oldest_open_job_id,
-                oldest_open_job_correlation_id=(
-                    aggregation_job_health.oldest_open_job_correlation_id
-                ),
-                backlog_age_days=aggregation_backlog_age_days,
-            ),
-            reprocessing=ReprocessingSloBucket(
-                active_reprocessing_keys=reprocessing_health.active_keys,
-                stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
-                oldest_reprocessing_watermark_date=(
-                    reprocessing_health.oldest_reprocessing_watermark_date
-                ),
-                oldest_reprocessing_security_id=(
-                    reprocessing_health.oldest_reprocessing_security_id
-                ),
-                oldest_reprocessing_epoch=reprocessing_health.oldest_reprocessing_epoch,
-                oldest_reprocessing_updated_at=(reprocessing_health.oldest_reprocessing_updated_at),
-                backlog_age_days=reprocessing_backlog_age_days,
-            ),
+            reprocessing_health=reprocessing_health,
+            valuation_job_health=valuation_job_health,
+            aggregation_job_health=aggregation_job_health,
         )
 
     async def get_lineage(self, portfolio_id: str, security_id: str) -> LineageResponse:
