@@ -88,7 +88,7 @@ class ReportingService:
                     portfolio_id=portfolio.portfolio_id,
                     booking_center_code=portfolio.booking_center_code,
                     client_id=portfolio.client_id,
-                    portfolio_currency=portfolio.base_currency,
+                    portfolio_currency=normalize_currency_code(str(portfolio.base_currency)),
                     aum_portfolio_currency=(
                         per_portfolio_native[portfolio.portfolio_id]
                         if request.scope.scope_type == "portfolio"
@@ -186,7 +186,10 @@ class ReportingService:
         resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for portfolio summary queries.")
-        reporting_currency = request.reporting_currency or portfolio.base_currency
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+        reporting_currency = normalize_currency_code(
+            str(request.reporting_currency or portfolio_currency)
+        )
 
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
@@ -219,7 +222,7 @@ class ReportingService:
             portfolio_value = Decimal(str(row.snapshot.market_value or ZERO))
             reporting_value = await self._convert_amount(
                 amount=portfolio_value,
-                from_currency=portfolio.base_currency,
+                from_currency=portfolio_currency,
                 to_currency=reporting_currency,
                 as_of_date=resolved_as_of_date,
             )
@@ -234,7 +237,7 @@ class ReportingService:
             portfolio_id=portfolio.portfolio_id,
             booking_center_code=portfolio.booking_center_code,
             client_id=portfolio.client_id,
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             resolved_as_of_date=resolved_as_of_date,
             portfolio_type=portfolio.portfolio_type,
@@ -393,9 +396,9 @@ class ReportingService:
         requested_reporting_currency: str | None,
     ) -> str:
         if requested_reporting_currency:
-            return requested_reporting_currency
+            return normalize_currency_code(requested_reporting_currency)
         if scope.scope_type == "portfolio":
-            return str(portfolios[0].base_currency)
+            return normalize_currency_code(str(portfolios[0].base_currency))
         raise ValueError(
             "reporting_currency is required for portfolio-list and business-unit reporting queries."
         )

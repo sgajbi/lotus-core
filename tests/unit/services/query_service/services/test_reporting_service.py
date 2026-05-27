@@ -94,7 +94,7 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     None
 ):
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("P1", base_currency=" usd ")
     repo.get_latest_business_date.return_value = date(2026, 3, 27)
     repo.list_portfolios.return_value = [portfolio]
     repo.list_latest_snapshot_rows.return_value = [
@@ -124,6 +124,7 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     assert response.reporting_currency == "USD"
     assert response.totals.aum_reporting_currency == Decimal("150")
     assert response.totals.position_count == 2
+    assert response.portfolios[0].portfolio_currency == "USD"
     assert response.portfolios[0].aum_portfolio_currency == Decimal("150")
 
 
@@ -174,7 +175,7 @@ async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversi
 
 async def test_get_portfolio_summary_returns_historical_restated_totals() -> None:
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("P1", base_currency=" usd ")
     portfolio.portfolio_type = "DISCRETIONARY"
     portfolio.objective = "Growth"
     portfolio.risk_exposure = "BALANCED"
@@ -193,7 +194,7 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
             instrument=_instrument(
                 "CASH_USD",
                 name="USD Cash",
-                currency="USD",
+                currency=" usd ",
                 asset_class="CASH",
                 sector="CASH",
                 product_type="CASH",
@@ -216,7 +217,7 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
             cash_account_id="CASH-ACC-USD-001",
             security_id="CASH_USD",
             display_name="USD Operating Cash",
-            account_currency="USD",
+            account_currency=" usd ",
         )
     ]
     repo.get_latest_cash_account_ids.return_value = {}
@@ -228,9 +229,11 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_portfolio_summary(
-            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency=" sgd ")
         )
 
+    assert response.portfolio_currency == "USD"
+    assert response.reporting_currency == "SGD"
     assert response.totals.total_market_value_portfolio_currency == Decimal("1000")
     assert response.totals.cash_balance_portfolio_currency == Decimal("200")
     assert response.totals.invested_market_value_reporting_currency == Decimal("1200.0")
@@ -434,7 +437,7 @@ async def test_reporting_service_resolve_scope_requires_matching_portfolios() ->
 @pytest.mark.asyncio
 async def test_reporting_service_resolve_reporting_currency_covers_scope_rules() -> None:
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("P1", base_currency=" usd ")
 
     with patch(
         "src.services.query_service.app.services.reporting_service.ReportingRepository",
@@ -445,7 +448,7 @@ async def test_reporting_service_resolve_reporting_currency_covers_scope_rules()
             await service._resolve_reporting_currency(
                 scope=ReportingScope(portfolio_id="P1"),
                 portfolios=[portfolio],
-                requested_reporting_currency="SGD",
+                requested_reporting_currency=" sgd ",
             )
             == "SGD"
         )

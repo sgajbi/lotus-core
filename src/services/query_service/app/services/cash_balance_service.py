@@ -34,6 +34,8 @@ class CashBalanceResolver:
         reporting_currency: str,
         rows: list[Any],
     ) -> CashBalancesResponse:
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+        reporting_currency = normalize_currency_code(reporting_currency)
         cash_rows = [row for row in rows if self.is_cash_row(row)]
         account_records = await self.build_cash_account_balance_records(
             portfolio=portfolio,
@@ -43,7 +45,7 @@ class CashBalanceResolver:
         )
         return CashBalancesResponse(
             portfolio_id=portfolio.portfolio_id,
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             resolved_as_of_date=resolved_as_of_date,
             totals=CashBalancesTotals(
@@ -157,6 +159,7 @@ class CashBalanceResolver:
         instrument_name: str,
         account_currency: str,
     ) -> CashAccountBalanceRecord:
+        account_currency = normalize_currency_code(str(account_currency))
         if snapshot_row is None:
             native_balance = ZERO
             portfolio_balance = ZERO
@@ -237,6 +240,7 @@ class CashBalanceService:
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for cash balance queries.")
         effective_reporting_currency = reporting_currency or portfolio.base_currency
+        effective_reporting_currency = normalize_currency_code(str(effective_reporting_currency))
 
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
