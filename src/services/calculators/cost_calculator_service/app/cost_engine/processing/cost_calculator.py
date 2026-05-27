@@ -82,6 +82,16 @@ def _cash_movement_amount(transaction: Transaction) -> Decimal:
     return gross_amount if not gross_amount.is_zero() else quantity_amount
 
 
+def _normalize_currency_code(currency_code: str) -> str:
+    return currency_code.strip().upper()
+
+
+def _normalize_transaction_type(transaction_type: str | TransactionType) -> str:
+    if isinstance(transaction_type, TransactionType):
+        return transaction_type.value
+    return str(transaction_type).strip().upper()
+
+
 class BuyStrategy:
     def calculate_costs(
         self,
@@ -558,6 +568,8 @@ class CostCalculator:
         self._default_strategy = DefaultStrategy()
 
     def _validate_fx(self, t: Transaction) -> bool:
+        t.trade_currency = _normalize_currency_code(t.trade_currency)
+        t.portfolio_base_currency = _normalize_currency_code(t.portfolio_base_currency)
         if t.trade_currency == t.portfolio_base_currency:
             if not t.transaction_fx_rate:
                 t.transaction_fx_rate = Decimal(1)
@@ -575,6 +587,7 @@ class CostCalculator:
         if not self._validate_fx(transaction):
             return
         try:
+            transaction.transaction_type = _normalize_transaction_type(transaction.transaction_type)
             if transaction.transaction_type not in TransactionType.list():
                 self._error_reporter.add_error(
                     transaction.transaction_id,

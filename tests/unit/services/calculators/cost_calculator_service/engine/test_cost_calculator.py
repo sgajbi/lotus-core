@@ -114,6 +114,56 @@ def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
     mock_disposition_engine.add_buy_lot.assert_called_once_with(dual_currency_buy)
 
 
+def test_cost_calculator_normalizes_same_currency_codes_before_fx_requirement(
+    cost_calculator, mock_disposition_engine
+):
+    same_currency_buy = Transaction(
+        transaction_id="BUY_SAME_CCY_NORMALIZE_01",
+        portfolio_id="P_USD",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency=" usd ",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=None,
+    )
+
+    cost_calculator.calculate_transaction_costs(same_currency_buy)
+
+    assert same_currency_buy.trade_currency == "USD"
+    assert same_currency_buy.portfolio_base_currency == "USD"
+    assert same_currency_buy.transaction_fx_rate == Decimal("1")
+    assert same_currency_buy.net_cost == Decimal("1000")
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(same_currency_buy)
+
+
+def test_cost_calculator_normalizes_transaction_type_before_strategy_resolution(
+    cost_calculator, mock_disposition_engine
+):
+    lowercase_buy = Transaction(
+        transaction_id="BUY_LOWERCASE_TYPE_01",
+        portfolio_id="P_USD",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=" buy ",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(lowercase_buy)
+
+    assert lowercase_buy.transaction_type == "BUY"
+    assert lowercase_buy.net_cost == Decimal("1000.0")
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(lowercase_buy)
+
+
 def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
     cost_calculator, mock_disposition_engine
 ):
