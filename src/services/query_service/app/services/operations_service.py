@@ -180,9 +180,10 @@ class OperationsService:
 
     @classmethod
     def _get_reconciliation_operational_state(cls, status: str | None) -> str:
+        normalized_status = cls._normalize_support_job_status(status)
         if cls._is_controls_blocking(status):
             return "BLOCKING"
-        if status == "RUNNING":
+        if normalized_status == "RUNNING":
             return "RUNNING"
         return "COMPLETED"
 
@@ -190,9 +191,9 @@ class OperationsService:
     def _get_portfolio_control_stage_operational_state(cls, status: str | None) -> str:
         return "BLOCKING" if cls._is_controls_blocking(status) else "COMPLETED"
 
-    @staticmethod
-    def _is_reconciliation_finding_blocking(severity: str | None) -> bool:
-        return severity == "ERROR"
+    @classmethod
+    def _is_reconciliation_finding_blocking(cls, severity: str | None) -> bool:
+        return cls._normalize_support_job_status(severity) == "ERROR"
 
     @classmethod
     def _get_reconciliation_finding_operational_state(cls, severity: str | None) -> str:
@@ -566,9 +567,10 @@ class OperationsService:
             )
         )
 
-    @staticmethod
-    def _is_controls_blocking(status: str | None) -> bool:
-        return status in {"FAILED", "REQUIRES_REPLAY"}
+    @classmethod
+    def _is_controls_blocking(cls, status: str | None) -> bool:
+        normalized_status = cls._normalize_support_job_status(status)
+        return normalized_status in {"FAILED", "REQUIRES_REPLAY"}
 
     async def get_calculator_slos(
         self,

@@ -453,14 +453,16 @@ async def test_operations_service_operational_state_helpers_cover_terminal_and_s
 async def test_operations_service_reconciliation_and_lineage_helpers_cover_blocking_logic() -> None:
     now = FIXED_GENERATED_AT
     stale_at = now - timedelta(minutes=30)
-    assert OperationsService._get_reconciliation_operational_state("FAILED") == "BLOCKING"
-    assert OperationsService._get_reconciliation_operational_state("RUNNING") == "RUNNING"
+    assert OperationsService._get_reconciliation_operational_state(" failed ") == "BLOCKING"
+    assert OperationsService._get_reconciliation_operational_state(" running ") == "RUNNING"
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
-    assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
+    assert (
+        OperationsService._get_portfolio_control_stage_operational_state(" failed ") == "BLOCKING"
+    )
     assert (
         OperationsService._get_portfolio_control_stage_operational_state("COMPLETED") == "COMPLETED"
     )
-    assert OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
+    assert OperationsService._get_reconciliation_finding_operational_state(" error ") == "BLOCKING"
     assert OperationsService._get_reconciliation_finding_operational_state("WARN") == "NON_BLOCKING"
     assert (
         OperationsService._get_reprocessing_key_operational_state(" reprocessing ", stale_at, now)
@@ -1636,10 +1638,15 @@ async def test_analytics_export_operational_state_branches():
 async def test_reconciliation_and_reprocessing_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
 
-    assert OperationsService._get_reconciliation_operational_state("REQUIRES_REPLAY") == "BLOCKING"
-    assert OperationsService._get_reconciliation_operational_state("RUNNING") == "RUNNING"
+    assert (
+        OperationsService._get_reconciliation_operational_state(" requires_replay ")
+        == "BLOCKING"
+    )
+    assert OperationsService._get_reconciliation_operational_state(" running ") == "RUNNING"
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
-    assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
+    assert (
+        OperationsService._get_portfolio_control_stage_operational_state(" failed ") == "BLOCKING"
+    )
     assert (
         OperationsService._get_portfolio_control_stage_operational_state("COMPLETED") == "COMPLETED"
     )
@@ -1647,7 +1654,7 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
         OperationsService._get_reprocessing_key_operational_state("CURRENT", updated_at)
         == "CURRENT"
     )
-    assert OperationsService._is_reconciliation_finding_blocking("ERROR") is True
+    assert OperationsService._is_reconciliation_finding_blocking(" error ") is True
     assert OperationsService._is_reconciliation_finding_blocking("WARNING") is False
     assert OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
     assert OperationsService._get_reconciliation_finding_operational_state("INFO") == "NON_BLOCKING"
