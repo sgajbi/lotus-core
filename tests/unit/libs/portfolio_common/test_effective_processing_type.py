@@ -25,6 +25,16 @@ def test_effective_processing_type_defaults_to_transaction_type() -> None:
     assert resolve_effective_processing_transaction_type(_base_event()) == "FX_FORWARD"
 
 
+def test_effective_processing_type_normalizes_transaction_type() -> None:
+    event = _base_event().model_copy(update={"transaction_type": " buy "})
+    assert resolve_effective_processing_transaction_type(event) == "BUY"
+
+
 def test_effective_processing_type_prefers_fx_component_type() -> None:
     event = _base_event().model_copy(update={"component_type": "FX_CASH_SETTLEMENT_BUY"})
+    assert resolve_effective_processing_transaction_type(event) == "FX_CASH_SETTLEMENT_BUY"
+
+
+def test_effective_processing_type_normalizes_fx_component_type() -> None:
+    event = _base_event().model_copy(update={"component_type": " fx_cash_settlement_buy "})
     assert resolve_effective_processing_transaction_type(event) == "FX_CASH_SETTLEMENT_BUY"

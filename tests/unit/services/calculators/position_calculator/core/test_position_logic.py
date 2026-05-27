@@ -521,6 +521,35 @@ def test_calculate_next_position_for_sell_uses_net_cost():
     assert new_state.cost_basis_local == Decimal("500")
 
 
+def test_calculate_next_position_normalizes_transaction_type_before_calculation() -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("10"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+    buy_event = TransactionEvent(
+        transaction_id="BUY_LOWERCASE_TYPE_01",
+        transaction_type=" buy ",
+        quantity=Decimal("5"),
+        net_cost=Decimal("55"),
+        net_cost_local=Decimal("55"),
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime.now(),
+        price=Decimal("11"),
+        gross_transaction_amount=Decimal("55"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    new_state = PositionCalculator.calculate_next_position(initial_state, buy_event)
+
+    assert new_state.quantity == Decimal("15")
+    assert new_state.cost_basis == Decimal("155")
+    assert new_state.cost_basis_local == Decimal("155")
+
+
 def test_calculate_next_position_for_adjustment_uses_movement_direction():
     initial_state = PositionStateDTO(
         quantity=Decimal("1000"),

@@ -8,6 +8,10 @@ FX_COMPONENT_PROCESSING_TYPES = {
 }
 
 
+def normalize_processing_type(value: str | None) -> str:
+    return str(value or "").strip().upper()
+
+
 def resolve_effective_processing_transaction_type(event: TransactionEvent) -> str:
     """
     Returns the concrete processing type for a persisted transaction row.
@@ -16,7 +20,7 @@ def resolve_effective_processing_transaction_type(event: TransactionEvent) -> st
     For FX, transaction_type remains the business deal type while component_type
     identifies the concrete row behavior required by downstream processors.
     """
-    component_type = (event.component_type or "").upper()
+    component_type = normalize_processing_type(event.component_type)
     if component_type in FX_COMPONENT_PROCESSING_TYPES:
         return component_type
-    return event.transaction_type.upper()
+    return normalize_processing_type(event.transaction_type)
