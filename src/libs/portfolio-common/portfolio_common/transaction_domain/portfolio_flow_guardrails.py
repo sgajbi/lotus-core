@@ -13,7 +13,8 @@ PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES = {
 
 
 def is_portfolio_flow_no_auto_generate_transaction_type(transaction_type: str | None) -> bool:
-    return (transaction_type or "").upper() in PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES
+    normalized_type = (transaction_type or "").strip().upper()
+    return normalized_type in PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES
 
 
 def assert_portfolio_flow_cash_entry_mode_allowed(event: TransactionEvent) -> None:
