@@ -463,11 +463,11 @@ async def test_operations_service_reconciliation_and_lineage_helpers_cover_block
     assert OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
     assert OperationsService._get_reconciliation_finding_operational_state("WARN") == "NON_BLOCKING"
     assert (
-        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", stale_at, now)
+        OperationsService._get_reprocessing_key_operational_state(" reprocessing ", stale_at, now)
         == "STALE_REPROCESSING"
     )
     assert (
-        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", now, now)
+        OperationsService._get_reprocessing_key_operational_state(" reprocessing ", now, now)
         == "REPROCESSING"
     )
     assert (
@@ -488,7 +488,7 @@ async def test_operations_service_reconciliation_and_lineage_helpers_cover_block
             latest_position_history_date=date(2026, 4, 17),
             latest_daily_snapshot_date=date(2026, 4, 17),
             latest_valuation_job_date=date(2026, 4, 17),
-            latest_valuation_job_status="FAILED",
+            latest_valuation_job_status=" failed ",
         )
         is True
     )
@@ -724,7 +724,7 @@ async def test_build_lineage_key_record_replaying_state(service: OperationsServi
             "security_id": "S1",
             "epoch": 2,
             "watermark_date": date(2025, 8, 1),
-            "reprocessing_status": "REPROCESSING",
+            "reprocessing_status": " reprocessing ",
             "latest_position_history_date": date(2025, 8, 31),
             "latest_daily_snapshot_date": date(2025, 8, 30),
             "latest_valuation_job_date": date(2025, 8, 31),
@@ -749,7 +749,7 @@ async def test_build_lineage_key_record_valuation_blocked_state(service: Operati
             "latest_daily_snapshot_date": date(2025, 8, 31),
             "latest_valuation_job_date": date(2025, 8, 31),
             "latest_valuation_job_id": 102,
-            "latest_valuation_job_status": "FAILED",
+            "latest_valuation_job_status": " failed ",
             "latest_valuation_job_correlation_id": "corr-val-102",
         }
     )
@@ -1692,7 +1692,7 @@ async def test_stale_detection_helpers_cover_remaining_branches():
     assert OperationsService._is_support_job_stale("FAILED", stale, now=now) is False
     assert OperationsService._is_analytics_export_job_stale("running", stale, now=now) is True
     assert OperationsService._is_analytics_export_job_stale("running", fresh, now=now) is False
-    assert OperationsService._is_reprocessing_key_stale("REPROCESSING", stale, now=now) is True
+    assert OperationsService._is_reprocessing_key_stale(" reprocessing ", stale, now=now) is True
     assert (
         OperationsService._get_support_job_operational_state("PROCESSING", current_fresh)
         == "PROCESSING"
@@ -1702,7 +1702,7 @@ async def test_stale_detection_helpers_cover_remaining_branches():
         == "RUNNING"
     )
     assert (
-        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", current_fresh)
+        OperationsService._get_reprocessing_key_operational_state(" reprocessing ", current_fresh)
         == "REPROCESSING"
     )
 

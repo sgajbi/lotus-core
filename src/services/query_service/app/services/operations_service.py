@@ -206,14 +206,16 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
+        normalized_status = cls._normalize_support_job_status(status)
         if cls._is_reprocessing_key_stale(status, updated_at, now, stale_threshold_minutes):
             return "STALE_REPROCESSING"
-        if status == "REPROCESSING":
+        if normalized_status == "REPROCESSING":
             return "REPROCESSING"
         return "CURRENT"
 
-    @staticmethod
+    @classmethod
     def _has_lineage_artifact_gap(
+        cls,
         latest_position_history_date: date | None,
         latest_daily_snapshot_date: date | None,
         latest_valuation_job_date: date | None,
@@ -231,18 +233,24 @@ class OperationsService:
             or latest_valuation_job_date < latest_position_history_date
         ):
             return True
-        return latest_valuation_job_status in {"FAILED", "PENDING", "PROCESSING"}
+        normalized_status = cls._normalize_support_job_status(latest_valuation_job_status)
+        return normalized_status in {"FAILED", "PENDING", "PROCESSING"}
 
-    @staticmethod
+    @classmethod
     def _get_lineage_key_operational_state(
+        cls,
         reprocessing_status: str | None,
         has_artifact_gap: bool,
         latest_valuation_job_status: str | None,
     ) -> str:
-        if reprocessing_status == "REPROCESSING":
+        normalized_reprocessing_status = cls._normalize_support_job_status(reprocessing_status)
+        normalized_valuation_status = cls._normalize_support_job_status(
+            latest_valuation_job_status
+        )
+        if normalized_reprocessing_status == "REPROCESSING":
             return "REPLAYING"
         if has_artifact_gap:
-            if latest_valuation_job_status == "FAILED":
+            if normalized_valuation_status == "FAILED":
                 return "VALUATION_BLOCKED"
             return "ARTIFACT_GAP"
         return "HEALTHY"
@@ -1316,7 +1324,10 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
-        normalized_status = "PROCESSING" if status == "REPROCESSING" else status
+        normalized_status = cls._normalize_support_job_status(status)
+        normalized_status = (
+            "PROCESSING" if normalized_status == "REPROCESSING" else normalized_status
+        )
         return cls._is_support_job_stale(
             normalized_status,
             updated_at,
