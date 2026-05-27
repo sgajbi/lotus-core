@@ -164,3 +164,27 @@ async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
+
+
+async def test_get_fx_rate_normalizes_currency_codes_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    fx_rate = await repo.get_fx_rate(
+        from_currency=" eur ",
+        to_currency=" usd ",
+        a_date=date(2026, 3, 27),
+    )
+
+    assert fx_rate is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "fx_rates.from_currency = 'EUR'" in compiled_query
+    assert "fx_rates.to_currency = 'USD'" in compiled_query
+    assert "fx_rates.rate_date <= '2026-03-27'" in compiled_query
+    assert "ORDER BY fx_rates.rate_date DESC" in compiled_query

@@ -42,6 +42,10 @@ class ValuationRepositoryBase:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _normalize_currency_code(currency_code: str) -> str:
+        return currency_code.strip().upper()
+
     def _observe_jobs_claimed(self, claimed_count: int) -> None:
         """Hook for service-local metrics."""
 
@@ -530,11 +534,13 @@ class ValuationRepositoryBase:
     async def get_fx_rate(
         self, from_currency: str, to_currency: str, a_date: date
     ) -> Optional[FxRate]:
+        normalized_from_currency = self._normalize_currency_code(from_currency)
+        normalized_to_currency = self._normalize_currency_code(to_currency)
         stmt = (
             select(FxRate)
             .filter(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                FxRate.from_currency == normalized_from_currency,
+                FxRate.to_currency == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
             .order_by(FxRate.rate_date.desc())
