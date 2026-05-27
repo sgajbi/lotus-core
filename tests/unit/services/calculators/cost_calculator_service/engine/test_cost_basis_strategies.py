@@ -144,6 +144,29 @@ def test_average_cost_dual_currency(avco_strategy: AverageCostBasisStrategy):
     assert final_qty == Decimal("150")
 
 
+def test_average_cost_initial_lots_normalize_buy_transaction_type(
+    avco_strategy: AverageCostBasisStrategy,
+):
+    buy_txn = Transaction(
+        transaction_id="AVCO_PADDED_BUY_1",
+        portfolio_id="P1",
+        instrument_id="AVCO_STOCK",
+        security_id="S1",
+        transaction_type=" buy ",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        net_cost_local=Decimal("1000"),
+    )
+
+    avco_strategy.set_initial_lots([buy_txn])
+
+    assert avco_strategy.get_available_quantity("P1", "AVCO_STOCK") == Decimal("100")
+
+
 # --- Tests for FIFOBasisStrategy ---
 
 
@@ -182,6 +205,18 @@ def test_fifo_add_buy_lot(fifo_strategy: FIFOBasisStrategy, sample_buy_transacti
     assert len(fifo_strategy._open_lots[lot_key]) == 1
     lot = fifo_strategy._open_lots[lot_key][0]
     assert lot.cost_per_share_base == Decimal("10.10")  # 1010 / 100
+
+
+def test_fifo_initial_lots_normalize_buy_transaction_type(
+    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: Transaction
+):
+    padded_buy = sample_buy_transaction.model_copy(update={"transaction_type": " buy "})
+
+    fifo_strategy.set_initial_lots([padded_buy])
+
+    assert fifo_strategy.get_available_quantity("P1", "FIFO_STOCK") == Decimal("100")
+    lot = fifo_strategy._open_lots[("P1", "FIFO_STOCK")][0]
+    assert lot.transaction_id == "FIFO_BUY_01"
 
 
 def test_fifo_consume_sell_fully(

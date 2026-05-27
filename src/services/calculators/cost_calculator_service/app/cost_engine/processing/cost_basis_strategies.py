@@ -9,6 +9,10 @@ from .cost_objects import CostLot
 logger = logging.getLogger(__name__)
 
 
+def _is_buy_transaction(transaction: Transaction) -> bool:
+    return str(transaction.transaction_type or "").strip().upper() == "BUY"
+
+
 class CostBasisStrategy(Protocol):
     def add_buy_lot(self, transaction: Transaction): ...
     def consume_sell_quantity(
@@ -108,7 +112,7 @@ class FIFOBasisStrategy:
 
     def set_initial_lots(self, transactions: list[Transaction]):
         for txn in transactions:
-            if txn.transaction_type == "BUY":
+            if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
 
     def get_open_lot_quantities(self) -> dict[str, Decimal]:
@@ -187,7 +191,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
 
     def set_initial_lots(self, transactions: list[Transaction]):
         for txn in transactions:
-            if txn.transaction_type == "BUY":
+            if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
 
     def get_open_lot_quantities(self) -> dict[str, Decimal]:
