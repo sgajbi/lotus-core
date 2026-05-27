@@ -17,6 +17,7 @@ from urllib import error, parse, request
 LOGGER = logging.getLogger("demo_data_pack")
 
 DEFAULT_DEMO_BENCHMARK_ID = "BMK_GLOBAL_BALANCED_60_40"
+SECONDARY_DEMO_BENCHMARK_ID = "BMK_GLOBAL_GROWTH_80_20"
 DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
 
 
@@ -34,8 +35,13 @@ DEMO_EXPECTATIONS: tuple[PortfolioExpectation, ...] = (
         "DEMO_ADV_USD_001",
         1,
         1,
-        8,
-        (("CASH_USD", 235350.0), ("SEC_AAPL_US", 800.0), ("SEC_UST_5Y", 120.0)),
+        15,
+        (
+            ("CASH_USD", 398905.0),
+            ("SEC_AAPL_US", 1420.0),
+            ("SEC_UST_5Y", 150.0),
+            ("SEC_ETF_WORLD_USD", 530.0),
+        ),
     ),
     PortfolioExpectation(
         "DEMO_DPM_EUR_001",
@@ -220,22 +226,37 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
     for current_date, equity_return, bond_return in zip(
         series_dates, equity_daily_returns, bond_daily_returns, strict=True
     ):
-        benchmark_return = (equity_return * Decimal("0.6")) + (bond_return * Decimal("0.4"))
-        benchmark_return_series.append(
-            {
-                "series_id": "bmk_global_balanced_60_40_return",
-                "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
-                "series_date": current_date,
-                "benchmark_return": f"{benchmark_return:.10f}",
-                "return_period": "1d",
-                "return_convention": "total_return_index",
-                "series_currency": "USD",
-                "source_timestamp": _iso_utc_timestamp(date.fromisoformat(current_date)),
-                "source_vendor": "LOTUS_DEMO",
-                "source_record_id": f"bmk_global_balanced_60_40_return_{current_date}",
-                "quality_status": "accepted",
-            }
+        benchmark_series_specs = (
+            (
+                DEFAULT_DEMO_BENCHMARK_ID,
+                "bmk_global_balanced_60_40_return",
+                Decimal("0.6"),
+                Decimal("0.4"),
+            ),
+            (
+                SECONDARY_DEMO_BENCHMARK_ID,
+                "bmk_global_growth_80_20_return",
+                Decimal("0.8"),
+                Decimal("0.2"),
+            ),
         )
+        for benchmark_id, series_id, equity_weight, bond_weight in benchmark_series_specs:
+            benchmark_return = (equity_return * equity_weight) + (bond_return * bond_weight)
+            benchmark_return_series.append(
+                {
+                    "series_id": series_id,
+                    "benchmark_id": benchmark_id,
+                    "series_date": current_date,
+                    "benchmark_return": f"{benchmark_return:.10f}",
+                    "return_period": "1d",
+                    "return_convention": "total_return_index",
+                    "series_currency": "USD",
+                    "source_timestamp": _iso_utc_timestamp(date.fromisoformat(current_date)),
+                    "source_vendor": "LOTUS_DEMO",
+                    "source_record_id": f"{series_id}_{current_date}",
+                    "quality_status": "accepted",
+                }
+            )
 
     return {
         "benchmark_assignments": [
@@ -272,7 +293,28 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "source_timestamp": _iso_utc_timestamp(start_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_balanced_60_40_definition",
-            }
+            },
+            {
+                "benchmark_id": SECONDARY_DEMO_BENCHMARK_ID,
+                "benchmark_name": "Global Growth 80/20",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "benchmark_status": "active",
+                "benchmark_family": "multi_asset_growth",
+                "benchmark_provider": "LOTUS_DEMO",
+                "rebalance_frequency": "monthly",
+                "classification_set_id": "wm_global_taxonomy_v1",
+                "classification_labels": {
+                    "asset_class": "multi_asset",
+                    "strategy": "growth",
+                    "region": "global",
+                },
+                "effective_from": effective_from,
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "bmk_global_growth_80_20_definition",
+            },
         ],
         "benchmark_compositions": [
             {
@@ -295,6 +337,28 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "source_timestamp": _iso_utc_timestamp(start_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_balanced_60_40_bond",
+                "quality_status": "accepted",
+            },
+            {
+                "benchmark_id": SECONDARY_DEMO_BENCHMARK_ID,
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "composition_effective_from": effective_from,
+                "composition_weight": "0.8000000000",
+                "rebalance_event_id": "bmk_global_growth_80_20_initial",
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "bmk_global_growth_80_20_equity",
+                "quality_status": "accepted",
+            },
+            {
+                "benchmark_id": SECONDARY_DEMO_BENCHMARK_ID,
+                "index_id": "IDX_GLOBAL_BOND_TR",
+                "composition_effective_from": effective_from,
+                "composition_weight": "0.2000000000",
+                "rebalance_event_id": "bmk_global_growth_80_20_initial",
+                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_vendor": "LOTUS_DEMO",
+                "source_record_id": "bmk_global_growth_80_20_bond",
                 "quality_status": "accepted",
             },
         ],
@@ -344,6 +408,10 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
         "benchmark_verification": {
             "portfolio_id": DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID,
             "benchmark_id": DEFAULT_DEMO_BENCHMARK_ID,
+            "catalog_benchmark_ids": [
+                DEFAULT_DEMO_BENCHMARK_ID,
+                SECONDARY_DEMO_BENCHMARK_ID,
+            ],
             "start_date": effective_from,
             "end_date": latest_date,
         },
@@ -384,7 +452,7 @@ def build_risk_free_reference_data(
 
 
 def build_demo_bundle() -> dict[str, Any]:
-    start_date = date.today() - timedelta(days=365)
+    start_date = date.today() - timedelta(days=365 * 3)
     end_date = date.today()
     dates = _business_dates(start_date, end_date)
     as_of = end_date.isoformat()
@@ -406,7 +474,7 @@ def build_demo_bundle() -> dict[str, Any]:
         {
             "portfolio_id": "DEMO_ADV_USD_001",
             "base_currency": "USD",
-            "open_date": "2024-01-02",
+            "open_date": "2023-01-03",
             "risk_exposure": "Moderate",
             "investment_time_horizon": "Long",
             "portfolio_type": "Advisory",
@@ -590,9 +658,9 @@ def build_demo_bundle() -> dict[str, Any]:
             "CASH_USD",
             tx_ts(1, 9),
             "DEPOSIT",
-            500000,
+            750000,
             1,
-            500000,
+            750000,
             "USD",
         ),
         _tx(
@@ -602,9 +670,9 @@ def build_demo_bundle() -> dict[str, Any]:
             "SEC_AAPL_US",
             tx_ts(2),
             "BUY",
-            800,
-            185,
-            148000,
+            1200,
+            182,
+            218400,
             "USD",
         ),
         _tx(
@@ -614,9 +682,9 @@ def build_demo_bundle() -> dict[str, Any]:
             "CASH_USD",
             tx_ts(2),
             "SELL",
-            148000,
+            218400,
             1,
-            148000,
+            218400,
             "USD",
         ),
         _tx(
@@ -626,9 +694,9 @@ def build_demo_bundle() -> dict[str, Any]:
             "SEC_UST_5Y",
             tx_ts(5),
             "BUY",
-            120,
-            980,
-            117600,
+            180,
+            975,
+            175500,
             "USD",
         ),
         _tx(
@@ -638,9 +706,33 @@ def build_demo_bundle() -> dict[str, Any]:
             "CASH_USD",
             tx_ts(5),
             "SELL",
-            117600,
+            175500,
             1,
-            117600,
+            175500,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_BUY_ETF_01",
+            "DEMO_ADV_USD_001",
+            "WORLD_ETF",
+            "SEC_ETF_WORLD_USD",
+            tx_ts(35),
+            "BUY",
+            650,
+            128,
+            83200,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_OUT_03",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(35),
+            "SELL",
+            83200,
+            1,
+            83200,
             "USD",
         ),
         _tx(
@@ -652,7 +744,7 @@ def build_demo_bundle() -> dict[str, Any]:
             "DIVIDEND",
             0,
             0,
-            1200,
+            1800,
             "USD",
         ),
         _tx(
@@ -662,9 +754,117 @@ def build_demo_bundle() -> dict[str, Any]:
             "CASH_USD",
             tx_ts(160),
             "BUY",
-            1200,
+            1800,
             1,
-            1200,
+            1800,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_COUPON_01",
+            "DEMO_ADV_USD_001",
+            "UST5Y",
+            "SEC_UST_5Y",
+            tx_ts(340),
+            "DIVIDEND",
+            0,
+            0,
+            950,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_IN_02",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(340),
+            "BUY",
+            950,
+            1,
+            950,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_DEP_02",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(420, 9),
+            "DEPOSIT",
+            120000,
+            1,
+            120000,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_BUY_AAPL_02",
+            "DEMO_ADV_USD_001",
+            "AAPL",
+            "SEC_AAPL_US",
+            tx_ts(510),
+            "BUY",
+            220,
+            196,
+            43120,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_OUT_04",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(510),
+            "SELL",
+            43120,
+            1,
+            43120,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_SELL_UST_01",
+            "DEMO_ADV_USD_001",
+            "UST5Y",
+            "SEC_UST_5Y",
+            tx_ts(675),
+            "SELL",
+            30,
+            992,
+            29760,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_IN_03",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(675),
+            "BUY",
+            29760,
+            1,
+            29760,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_SELL_ETF_01",
+            "DEMO_ADV_USD_001",
+            "WORLD_ETF",
+            "SEC_ETF_WORLD_USD",
+            tx_ts(780),
+            "SELL",
+            120,
+            142,
+            17040,
+            "USD",
+        ),
+        _tx(
+            "DEMO_ADV_CASH_IN_04",
+            "DEMO_ADV_USD_001",
+            "CASH",
+            "CASH_USD",
+            tx_ts(780),
+            "BUY",
+            17040,
+            1,
+            17040,
             "USD",
         ),
         _tx(
@@ -672,11 +872,11 @@ def build_demo_bundle() -> dict[str, Any]:
             "DEMO_ADV_USD_001",
             "CASH",
             "CASH_USD",
-            tx_ts(330),
+            tx_ts(900),
             "FEE",
             1,
-            250,
-            250,
+            425,
+            425,
             "USD",
         ),
         _tx(
@@ -1250,6 +1450,7 @@ def _verify_benchmark_reference(
     *,
     portfolio_id: str,
     benchmark_id: str,
+    catalog_benchmark_ids: list[str],
     start_date: str,
     end_date: str,
     wait_seconds: int,
@@ -1283,7 +1484,10 @@ def _verify_benchmark_reference(
         )
         if (
             isinstance(records, list)
-            and any(record.get("benchmark_id") == benchmark_id for record in records)
+            and all(
+                any(record.get("benchmark_id") == expected_id for record in records)
+                for expected_id in catalog_benchmark_ids
+            )
             and isinstance(assignment_payload, dict)
             and assignment_payload.get("benchmark_id") == benchmark_id
             and isinstance(segments, list)
@@ -1292,6 +1496,7 @@ def _verify_benchmark_reference(
             return {
                 "portfolio_id": portfolio_id,
                 "benchmark_id": benchmark_id,
+                "catalog_benchmark_ids": catalog_benchmark_ids,
                 "catalog_records": len(records),
                 "composition_segments": len(segments),
             }
@@ -1379,6 +1584,7 @@ def main() -> int:
             query_control_plane_base_url,
             portfolio_id=demo_bundle["benchmark_verification"]["portfolio_id"],
             benchmark_id=demo_bundle["benchmark_verification"]["benchmark_id"],
+            catalog_benchmark_ids=demo_bundle["benchmark_verification"]["catalog_benchmark_ids"],
             start_date=demo_bundle["benchmark_verification"]["start_date"],
             end_date=demo_bundle["benchmark_verification"]["end_date"],
             wait_seconds=args.wait_seconds,
