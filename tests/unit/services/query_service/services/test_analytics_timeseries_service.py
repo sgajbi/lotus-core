@@ -714,6 +714,33 @@ def test_effective_beginning_market_value_keeps_cash_book_fee_drag_explicit() ->
     assert result == Decimal("100")
 
 
+def test_effective_beginning_market_value_normalizes_cash_book_asset_class() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        security_id="OPERATING_ACCOUNT_USD",
+        asset_class=" cash ",
+        bod_market_value=Decimal("0"),
+        eod_market_value=Decimal("250"),
+        bod_cashflow_position=Decimal("200"),
+    )
+    internal_flow = CashFlowObservation(
+        amount=Decimal("-200"),
+        timing="bod",
+        cash_flow_type="internal_trade_flow",
+        flow_scope="internal",
+        source_classification="INVESTMENT_OUTFLOW",
+    )
+
+    result = service._effective_beginning_market_value(  # pylint: disable=protected-access
+        row,
+        previous_eod_market_value=Decimal("100"),
+        cash_flows=[internal_flow],
+        has_portfolio_external_flow=False,
+    )
+
+    assert result == Decimal("250")
+
+
 @pytest.mark.asyncio
 async def test_portfolio_observation_rows_raises_when_position_fx_missing() -> None:
     service = make_service()

@@ -280,8 +280,8 @@ class AnalyticsTimeseriesService:
 
     @staticmethod
     def _is_cash_book_position(row: object) -> bool:
-        asset_class = str(getattr(row, "asset_class", "") or "").casefold()
-        security_id = str(getattr(row, "security_id", "") or "").upper()
+        asset_class = str(getattr(row, "asset_class", "") or "").strip().casefold()
+        security_id = str(getattr(row, "security_id", "") or "").strip().upper()
         return asset_class == "cash" or security_id.startswith("CASH_")
 
     @staticmethod
