@@ -2163,7 +2163,7 @@ def test_get_effective_policy_filters_requested_sections(monkeypatch: pytest.Mon
     response = service.get_effective_policy(
         consumer_system="lotus-manage",
         tenant_id="default",
-        include_sections=["overview", "allocation", "holdings"],
+        include_sections=[" overview ", "allocation", " holdings "],
     )
     assert response.consumer_system == "lotus-manage"
     assert response.allowed_sections == ["OVERVIEW", "HOLDINGS"]

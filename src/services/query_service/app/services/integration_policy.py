@@ -144,7 +144,7 @@ def build_effective_policy_response(
     )
 
     if include_sections:
-        requested = [section.upper() for section in include_sections]
+        requested = normalize_sections(include_sections) or []
         if policy_context.allowed_sections is None:
             allowed_sections = requested
         else:
