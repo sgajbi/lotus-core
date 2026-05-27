@@ -124,6 +124,62 @@ def test_calculate_allocation_views_groups_weights_and_position_counts() -> None
     assert buckets["BOND"].position_count == 1
 
 
+def test_calculate_allocation_views_canonicalizes_bucket_keys_by_dimension() -> None:
+    result = calculate_allocation_views(
+        rows=[
+            AllocationInputRow(
+                instrument=_instrument(
+                    "SEC1",
+                    asset_class=" equity ",
+                    currency=" usd ",
+                    sector=" tech ",
+                    country_of_risk=" us ",
+                    product_type="Equity",
+                    rating=" a ",
+                    issuer_id=" issuer_a ",
+                    issuer_name=" Issuer A ",
+                ),
+                snapshot=_snapshot("SEC1"),
+                market_value_reporting_currency=Decimal("100"),
+            ),
+            AllocationInputRow(
+                instrument=_instrument(
+                    "SEC2",
+                    asset_class="EQUITY",
+                    currency="USD",
+                    sector="TECH",
+                    country_of_risk="US",
+                    product_type="Equity",
+                    rating="A",
+                    issuer_id="ISSUER_A",
+                    issuer_name="Issuer A",
+                ),
+                snapshot=_snapshot("SEC2"),
+                market_value_reporting_currency=Decimal("50"),
+            ),
+        ],
+        dimensions=[
+            "asset_class",
+            "currency",
+            "sector",
+            "country",
+            "region",
+            "rating",
+            "issuer_id",
+            "issuer_name",
+        ],
+    )
+
+    assert _bucket_values(result, "asset_class") == {"EQUITY": Decimal("150")}
+    assert _bucket_values(result, "currency") == {"USD": Decimal("150")}
+    assert _bucket_values(result, "sector") == {"TECH": Decimal("150")}
+    assert _bucket_values(result, "country") == {"US": Decimal("150")}
+    assert _bucket_values(result, "region") == {"North America": Decimal("150")}
+    assert _bucket_values(result, "rating") == {"A": Decimal("150")}
+    assert _bucket_values(result, "issuer_id") == {"ISSUER_A": Decimal("150")}
+    assert _bucket_values(result, "issuer_name") == {"Issuer A": Decimal("150")}
+
+
 def test_calculate_allocation_views_uses_unclassified_for_missing_dimension_values() -> None:
     result = calculate_allocation_views(
         rows=[

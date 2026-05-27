@@ -46,4 +46,4 @@ COUNTRY_TO_REGION = {
 def resolve_region(country_code: str | None) -> str | None:
     if not country_code:
         return None
-    return COUNTRY_TO_REGION.get(country_code.upper(), "Other")
+    return COUNTRY_TO_REGION.get(country_code.strip().upper(), "Other")
