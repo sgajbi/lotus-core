@@ -631,6 +631,8 @@ def test_front_office_bundle_extends_usd_risk_free_coverage_through_forward_wind
 def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_identity():
     bundle = _build_bundle()
 
+    assert len(bundle["benchmark_definitions"]) == 1
+    assert len(bundle["benchmark_compositions"]) == 2
     assert {row["benchmark_id"] for row in bundle["benchmark_definitions"]} == {
         DEFAULT_BENCHMARK_ID
     }
@@ -656,6 +658,28 @@ def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_
         DEFAULT_BENCHMARK_ID.lower()
     )
     assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-05-25"
+    assert len(
+        {
+            (row["benchmark_id"], row["effective_from"])
+            for row in bundle["benchmark_definitions"]
+        }
+    ) == len(bundle["benchmark_definitions"])
+    assert len(
+        {
+            (
+                row["benchmark_id"],
+                row["index_id"],
+                row["composition_effective_from"],
+            )
+            for row in bundle["benchmark_compositions"]
+        }
+    ) == len(bundle["benchmark_compositions"])
+    assert len(
+        {
+            (row["benchmark_id"], row["series_date"], row["return_period"])
+            for row in bundle["benchmark_return_series"]
+        }
+    ) == len(bundle["benchmark_return_series"])
     sector_by_index = {
         index["index_id"]: index["classification_labels"].get("sector")
         for index in bundle["indices"]
