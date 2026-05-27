@@ -3291,8 +3291,8 @@ async def test_transaction_cost_curve_groups_by_security_type_and_currency() -> 
                 transaction_cost_row(
                     transaction_id="TXN-AAPL-BUY-USD-002",
                     security_id="EQ_US_AAPL",
-                    transaction_type="BUY",
-                    currency="USD",
+                    transaction_type=" buy ",
+                    currency=" usd ",
                     gross_transaction_amount=Decimal("20000.00"),
                     trade_fee=Decimal("30.00"),
                 ),

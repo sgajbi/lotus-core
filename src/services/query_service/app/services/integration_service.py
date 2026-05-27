@@ -2171,9 +2171,9 @@ class IntegrationService:
     @staticmethod
     def _transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
         return (
-            str(transaction.security_id),
-            str(transaction.transaction_type).upper(),
-            str(transaction.currency).upper(),
+            str(transaction.security_id).strip(),
+            str(transaction.transaction_type).strip().upper(),
+            str(transaction.currency).strip().upper(),
         )
 
     @classmethod
