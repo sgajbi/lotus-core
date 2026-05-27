@@ -2381,7 +2381,7 @@ async def test_get_export_result_ndjson_gzip() -> None:
     row = SimpleNamespace(
         job_id="aexp_1",
         dataset_type="portfolio_timeseries",
-        status="completed",
+        status=" Completed ",
         result_payload={
             "job_id": "aexp_1",
             "dataset_type": "portfolio_timeseries",
@@ -2418,7 +2418,7 @@ async def test_create_export_job_reuses_existing() -> None:
         job_id="aexp_existing",
         dataset_type="portfolio_timeseries",
         portfolio_id="P1",
-        status="completed",
+        status=" Completed ",
         request_fingerprint="fp",
         result_format="json",
         compression="none",
@@ -2443,6 +2443,7 @@ async def test_create_export_job_reuses_existing() -> None:
         )
     )
     assert response.job_id == "aexp_existing"
+    assert response.status == "completed"
     assert response.disposition == "reused_completed"
     assert response.result_available is True
 
@@ -2454,7 +2455,7 @@ async def test_create_export_job_reuses_fresh_running_job() -> None:
         job_id="aexp_running",
         dataset_type="portfolio_timeseries",
         portfolio_id="P1",
-        status="running",
+        status=" RUNNING ",
         request_fingerprint="fp",
         result_format="json",
         compression="none",
@@ -2481,6 +2482,7 @@ async def test_create_export_job_reuses_fresh_running_job() -> None:
     )
 
     assert response.job_id == "aexp_running"
+    assert response.status == "running"
     assert response.disposition == "reused_inflight"
     assert response.result_available is False
 
@@ -2681,7 +2683,7 @@ async def test_get_export_result_json_success_and_export_job_state_helpers() -> 
     service = make_service()
     completed_row = SimpleNamespace(
         job_id="aexp_ok",
-        status="completed",
+        status=" Completed ",
         result_payload={
             "job_id": "aexp_ok",
             "dataset_type": "portfolio_timeseries",

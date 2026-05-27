@@ -1100,19 +1100,27 @@ class AnalyticsTimeseriesService:
     def _export_result_endpoint(job_id: str) -> str:
         return f"/integration/exports/analytics-timeseries/jobs/{job_id}/result"
 
+    @staticmethod
+    def _normalize_export_job_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        normalized_status = status.strip().lower()
+        return normalized_status or None
+
     @classmethod
     def _to_export_response(
         cls, row: object, *, disposition: str = "status_lookup"
     ) -> AnalyticsExportJobResponse:
+        normalized_status = cls._normalize_export_job_status(row.status)
         return AnalyticsExportJobResponse(
             job_id=row.job_id,
             dataset_type=row.dataset_type,
             portfolio_id=row.portfolio_id,
-            status=row.status,
+            status=normalized_status or row.status,
             disposition=disposition,
             lifecycle_mode=cls._EXPORT_LIFECYCLE_MODE,
             request_fingerprint=row.request_fingerprint,
-            result_available=row.status == "completed",
+            result_available=normalized_status == "completed",
             result_endpoint=cls._export_result_endpoint(row.job_id),
             result_format=row.result_format,
             compression=row.compression,
@@ -1150,9 +1158,10 @@ class AnalyticsTimeseriesService:
                 dataset_type=request.dataset_type,
             )
             if existing is not None:
-                if existing.status == "completed":
+                existing_status = self._normalize_export_job_status(existing.status)
+                if existing_status == "completed":
                     return existing, True
-                if existing.status in {"accepted", "running"}:
+                if existing_status in {"accepted", "running"}:
                     stale_threshold = datetime.now(UTC) - timedelta(
                         minutes=self._analytics_export_stale_timeout_minutes
                     )
@@ -1219,7 +1228,11 @@ class AnalyticsTimeseriesService:
             request_fingerprint=request_fingerprint,
         )
         if reused:
-            disposition = "reused_completed" if row.status == "completed" else "reused_inflight"
+            disposition = (
+                "reused_completed"
+                if self._normalize_export_job_status(row.status) == "completed"
+                else "reused_inflight"
+            )
             return self._to_export_response(row, disposition=disposition)
 
         job_id = row.job_id
@@ -1292,7 +1305,7 @@ class AnalyticsTimeseriesService:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if row.status != "completed":
+        if self._normalize_export_job_status(row.status) != "completed":
             raise AnalyticsInputError(
                 "UNSUPPORTED_CONFIGURATION",
                 "Export job is not completed yet; result unavailable.",
@@ -1307,7 +1320,7 @@ class AnalyticsTimeseriesService:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if row.status != "completed":
+        if self._normalize_export_job_status(row.status) != "completed":
             raise AnalyticsInputError(
                 "UNSUPPORTED_CONFIGURATION",
                 "Export job is not completed yet; result unavailable.",
