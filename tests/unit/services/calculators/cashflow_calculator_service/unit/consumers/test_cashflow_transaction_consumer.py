@@ -469,6 +469,43 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
         assert rules_repo.get_all_rules.await_count == 2
 
 
+async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    from src.services.calculators.cashflow_calculator_service.app.consumers import (
+        transaction_consumer,
+    )
+
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.return_value = [
+        CashflowRule(
+            transaction_type=" buy ",
+            classification="INVESTMENT_OUTFLOW",
+            timing="BOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    ]
+
+    with (
+        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            return_value=rules_repo,
+        ),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            return_value=100.0,
+        ),
+    ):
+        rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, " buy ")
+
+        assert rule is not None
+        assert rule.classification == "INVESTMENT_OUTFLOW"
+        assert rules_repo.get_all_rules.await_count == 1
+
+
 async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
     cashflow_consumer: CashflowCalculatorConsumer,
 ):
