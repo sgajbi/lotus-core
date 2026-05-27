@@ -128,6 +128,11 @@ class OperationsService:
         return status.strip().upper()
 
     @classmethod
+    def _normalize_support_status_filter(cls, status: str | None) -> str | None:
+        normalized_status = cls._normalize_support_job_status(status)
+        return normalized_status or None
+
+    @classmethod
     def _get_support_job_operational_state(
         cls,
         status: str,
@@ -162,6 +167,11 @@ class OperationsService:
         if status is None:
             return None
         return status.strip().lower()
+
+    @classmethod
+    def _normalize_analytics_export_status_filter(cls, status: str | None) -> str | None:
+        normalized_status = cls._normalize_analytics_export_status(status)
+        return normalized_status or None
 
     @classmethod
     def _get_analytics_export_operational_state(
@@ -705,10 +715,13 @@ class OperationsService:
     ) -> LineageKeyListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        normalized_reprocessing_status = self._normalize_support_status_filter(
+            reprocessing_status
+        )
         total, keys = await asyncio.gather(
             self.repo.get_lineage_keys_count(
                 portfolio_id=portfolio_id,
-                reprocessing_status=reprocessing_status,
+                reprocessing_status=normalized_reprocessing_status,
                 security_id=security_id,
                 as_of=generated_at_utc,
             ),
@@ -716,7 +729,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                reprocessing_status=reprocessing_status,
+                reprocessing_status=normalized_reprocessing_status,
                 security_id=security_id,
                 as_of=generated_at_utc,
             ),
@@ -759,10 +772,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_valuation_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 security_id=security_id,
                 job_id=job_id,
@@ -773,7 +787,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 security_id=security_id,
                 job_id=job_id,
@@ -824,10 +838,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_aggregation_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 job_id=job_id,
                 correlation_id=correlation_id,
@@ -837,7 +852,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 job_id=job_id,
                 correlation_id=correlation_id,
@@ -886,10 +901,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_analytics_export_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_analytics_export_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 job_id=job_id,
                 request_fingerprint=request_fingerprint,
                 as_of=generated_at_utc,
@@ -898,7 +914,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 job_id=job_id,
                 request_fingerprint=request_fingerprint,
                 stale_minutes=stale_minutes,
@@ -962,6 +978,7 @@ class OperationsService:
     ) -> ReconciliationRunListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        normalized_status = self._normalize_support_status_filter(status)
         total, runs = await asyncio.gather(
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
@@ -970,7 +987,7 @@ class OperationsService:
                 requested_by=requested_by,
                 dedupe_key=dedupe_key,
                 reconciliation_type=reconciliation_type,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
             self.repo.get_reconciliation_runs(
@@ -982,7 +999,7 @@ class OperationsService:
                 requested_by=requested_by,
                 dedupe_key=dedupe_key,
                 reconciliation_type=reconciliation_type,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
         )
@@ -1108,13 +1125,14 @@ class OperationsService:
     ) -> PortfolioControlStageListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        normalized_status = self._normalize_support_status_filter(status)
         total, stages = await asyncio.gather(
             self.repo.get_portfolio_control_stages_count(
                 portfolio_id=portfolio_id,
                 stage_id=stage_id,
                 stage_name=stage_name,
                 business_date=business_date,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
             self.repo.get_portfolio_control_stages(
@@ -1124,7 +1142,7 @@ class OperationsService:
                 stage_id=stage_id,
                 stage_name=stage_name,
                 business_date=business_date,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
         )
@@ -1167,10 +1185,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, keys = await asyncio.gather(
             self.repo.get_reprocessing_keys_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 watermark_date=watermark_date,
                 as_of=generated_at_utc,
@@ -1179,7 +1198,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 watermark_date=watermark_date,
                 stale_minutes=stale_minutes,
@@ -1238,10 +1257,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_reprocessing_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,
@@ -1251,7 +1271,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,

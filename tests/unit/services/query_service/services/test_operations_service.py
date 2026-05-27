@@ -666,7 +666,7 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     ]
 
     response = await service.get_lineage_keys(
-        "P1", skip=0, limit=10, reprocessing_status="CURRENT", security_id=None
+        "P1", skip=0, limit=10, reprocessing_status=" current ", security_id=None
     )
 
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -807,7 +807,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
         )()
     ]
 
-    response = await service.get_valuation_jobs("P1", skip=0, limit=20, status="PENDING")
+    response = await service.get_valuation_jobs("P1", skip=0, limit=20, status=" pending ")
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -868,7 +868,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
         )()
     ]
 
-    response = await service.get_aggregation_jobs("P1", skip=0, limit=20, status="PROCESSING")
+    response = await service.get_aggregation_jobs("P1", skip=0, limit=20, status=" processing ")
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -979,7 +979,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     ]
 
     response = await service.get_reprocessing_jobs(
-        "P1", skip=0, limit=20, status="PROCESSING", security_id="S1"
+        "P1", skip=0, limit=20, status=" processing ", security_id="S1"
     )
 
     assert response.stale_threshold_minutes == 15
@@ -1086,7 +1086,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         )()
     ]
 
-    response = await service.get_analytics_export_jobs("P1", skip=0, limit=20, status="FAILED")
+    response = await service.get_analytics_export_jobs("P1", skip=0, limit=20, status=" FAILED ")
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -1108,7 +1108,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         portfolio_id="P1",
         skip=0,
         limit=20,
-        status="FAILED",
+        status="failed",
         job_id=None,
         request_fingerprint=None,
         stale_minutes=15,
@@ -1117,7 +1117,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     )
     mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
-        status="FAILED",
+        status="failed",
         job_id=None,
         request_fingerprint=None,
         as_of=response.generated_at_utc,
@@ -1327,14 +1327,14 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         "P1",
         skip=0,
         limit=20,
-        status="FAILED",
+        status=" failed ",
         job_id="aexp_1234567890abcdef",
     )
 
     assert response.total == 0
     mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
-        status="FAILED",
+        status="failed",
         job_id="aexp_1234567890abcdef",
         request_fingerprint=None,
         as_of=response.generated_at_utc,
@@ -1343,7 +1343,7 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         portfolio_id="P1",
         skip=0,
         limit=20,
-        status="FAILED",
+        status="failed",
         job_id="aexp_1234567890abcdef",
         request_fingerprint=None,
         stale_minutes=15,
@@ -1494,7 +1494,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         requested_by="pipeline_orchestrator_service",
         dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type="transaction_cashflow",
-        status="FAILED",
+        status="failed",
     )
 
     assert response.total == 1
@@ -1853,7 +1853,7 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
         stage_id=701,
         stage_name="FINANCIAL_RECONCILIATION",
         business_date=date(2026, 3, 13),
-        status="REQUIRES_REPLAY",
+        status=" requires_replay ",
     )
 
     assert response.portfolio_id == "P1"
@@ -1913,7 +1913,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
         portfolio_id="P1",
         skip=0,
         limit=50,
-        status="REPROCESSING",
+        status=" reprocessing ",
         security_id="SEC-US-IBM",
     )
 
