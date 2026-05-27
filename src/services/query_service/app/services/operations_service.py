@@ -149,7 +149,7 @@ class OperationsService:
     def _normalize_analytics_export_status(status: str | None) -> str | None:
         if status is None:
             return None
-        return status.lower()
+        return status.strip().lower()
 
     @classmethod
     def _get_analytics_export_operational_state(

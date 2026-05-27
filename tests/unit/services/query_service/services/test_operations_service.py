@@ -1614,10 +1614,11 @@ async def test_analytics_export_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
     assert OperationsService._normalize_analytics_export_status(None) is None
     assert (
-        OperationsService._get_analytics_export_operational_state("FAILED", updated_at) == "FAILED"
+        OperationsService._get_analytics_export_operational_state(" FAILED ", updated_at)
+        == "FAILED"
     )
     assert (
-        OperationsService._get_analytics_export_operational_state("accepted", updated_at)
+        OperationsService._get_analytics_export_operational_state(" accepted ", updated_at)
         == "ACCEPTED"
     )
     assert (
