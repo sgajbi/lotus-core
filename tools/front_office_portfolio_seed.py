@@ -1376,6 +1376,7 @@ def build_front_office_portfolio_bundle(
             "source_record_id": f"{benchmark_id.lower()}_definition",
         }
         for definition in benchmark_reference["benchmark_definitions"]
+        if definition["benchmark_id"] == DEFAULT_DEMO_BENCHMARK_ID
     ]
     benchmark_reference["benchmark_compositions"] = [
         {
@@ -1392,6 +1393,7 @@ def build_front_office_portfolio_bundle(
             ),
         }
         for composition in benchmark_reference["benchmark_compositions"]
+        if composition["benchmark_id"] == DEFAULT_DEMO_BENCHMARK_ID
     ]
     benchmark_reference["benchmark_return_series"] = [
         {
@@ -1408,6 +1410,7 @@ def build_front_office_portfolio_bundle(
             ),
         }
         for series_row in benchmark_reference["benchmark_return_series"]
+        if series_row["benchmark_id"] == DEFAULT_DEMO_BENCHMARK_ID
     ]
     benchmark_reference["benchmark_assignments"] = [
         {

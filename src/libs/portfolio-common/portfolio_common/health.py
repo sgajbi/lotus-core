@@ -1,6 +1,7 @@
 # src/libs/portfolio-common/portfolio_common/health.py
 import asyncio
 import logging
+import time
 from typing import Awaitable, Callable
 
 from confluent_kafka.admin import AdminClient
@@ -65,13 +66,19 @@ async def check_kafka_health() -> bool:
         return False
 
 
-def create_health_router(*dependencies: str) -> APIRouter:
+def create_health_router(
+    *dependencies: str,
+    readiness_cache_ttl_seconds: float = 5.0,
+) -> APIRouter:
     """
     Creates a standardized health check router.
 
     Args:
         *dependencies: A list of strings ('db', 'kafka') specifying which
                        dependencies to check for the readiness probe.
+        readiness_cache_ttl_seconds: Per-process cache duration for dependency
+                       readiness results. Keeps probe storms from repeatedly
+                       forcing expensive dependency metadata checks.
 
     Returns:
         A FastAPI APIRouter with /live and /ready endpoints.
@@ -79,6 +86,10 @@ def create_health_router(*dependencies: str) -> APIRouter:
     router = APIRouter(tags=["Health"])
 
     dep_map = {"db": ("database", check_db_health), "kafka": ("kafka", check_kafka_health)}
+    readiness_cache_ttl_seconds = max(0.0, readiness_cache_ttl_seconds)
+    cached_until = 0.0
+    cached_all_ok = False
+    cached_dep_status: dict[str, str] | None = None
 
     @router.get(
         "/health/live",
@@ -127,17 +138,32 @@ def create_health_router(*dependencies: str) -> APIRouter:
         },
     )
     async def readiness_probe():
+        nonlocal cached_all_ok, cached_dep_status, cached_until
+
         resolved_dependencies = [
             (dep_map[dep][0], dep_map[dep][1]) for dep in dependencies if dep in dep_map
         ]
-        results = await asyncio.gather(*[check() for _, check in resolved_dependencies])
+        now = time.monotonic()
+        if (
+            readiness_cache_ttl_seconds > 0
+            and cached_dep_status is not None
+            and now < cached_until
+        ):
+            all_ok = cached_all_ok
+            dep_status = dict(cached_dep_status)
+        else:
+            results = await asyncio.gather(*[check() for _, check in resolved_dependencies])
 
-        all_ok = all(results)
+            all_ok = all(results)
 
-        dep_status = {
-            dependency_name: "ok" if results[i] else "unavailable"
-            for i, (dependency_name, _) in enumerate(resolved_dependencies)
-        }
+            dep_status = {
+                dependency_name: "ok" if results[i] else "unavailable"
+                for i, (dependency_name, _) in enumerate(resolved_dependencies)
+            }
+            if readiness_cache_ttl_seconds > 0:
+                cached_all_ok = all_ok
+                cached_dep_status = dict(dep_status)
+                cached_until = time.monotonic() + readiness_cache_ttl_seconds
 
         if all_ok:
             return {"status": "ready", "dependencies": dep_status}
