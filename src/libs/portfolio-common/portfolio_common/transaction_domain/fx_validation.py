@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
+from .control_code_normalization import normalize_transaction_control_code
 from .fx_models import (
     FX_BUSINESS_TRANSACTION_TYPES,
     FX_CASH_LEG_ROLES,
@@ -65,8 +66,14 @@ def validate_fx_transaction(
     txn: FxCanonicalTransaction, *, strict_metadata: bool = False
 ) -> list[FxValidationIssue]:
     issues: list[FxValidationIssue] = []
+    transaction_type = normalize_transaction_control_code(txn.transaction_type)
+    component_type = normalize_transaction_control_code(txn.component_type)
+    quote_convention = normalize_transaction_control_code(txn.fx_rate_quote_convention)
+    cash_leg_role = normalize_transaction_control_code(txn.fx_cash_leg_role)
+    spot_exposure_model = normalize_transaction_control_code(txn.spot_exposure_model)
+    realized_pnl_mode = normalize_transaction_control_code(txn.fx_realized_pnl_mode)
 
-    if txn.transaction_type.upper() not in FX_BUSINESS_TRANSACTION_TYPES:
+    if transaction_type not in FX_BUSINESS_TRANSACTION_TYPES:
         issues.append(
             FxValidationIssue(
                 code=FxValidationReasonCode.INVALID_TRANSACTION_TYPE,
@@ -75,7 +82,7 @@ def validate_fx_transaction(
             )
         )
 
-    if txn.component_type.upper() not in FX_COMPONENT_TYPES:
+    if component_type not in FX_COMPONENT_TYPES:
         issues.append(
             FxValidationIssue(
                 code=FxValidationReasonCode.INVALID_COMPONENT_TYPE,
@@ -146,7 +153,7 @@ def validate_fx_transaction(
             )
         )
 
-    if txn.fx_rate_quote_convention not in FX_RATE_QUOTE_CONVENTIONS:
+    if quote_convention not in FX_RATE_QUOTE_CONVENTIONS:
         issues.append(
             FxValidationIssue(
                 code=FxValidationReasonCode.INVALID_QUOTE_CONVENTION,
@@ -207,9 +214,8 @@ def validate_fx_transaction(
                 )
             )
 
-    component_type = txn.component_type.upper()
     if component_type.startswith("FX_CASH_SETTLEMENT"):
-        if txn.fx_cash_leg_role not in FX_CASH_LEG_ROLES:
+        if cash_leg_role not in FX_CASH_LEG_ROLES:
             issues.append(
                 FxValidationIssue(
                     code=FxValidationReasonCode.INVALID_FX_CASH_ROLE,
@@ -226,7 +232,7 @@ def validate_fx_transaction(
                 )
             )
 
-    if txn.transaction_type.upper() in {"FX_FORWARD", "FX_SWAP"} or component_type.startswith(
+    if transaction_type in {"FX_FORWARD", "FX_SWAP"} or component_type.startswith(
         "FX_CONTRACT"
     ):
         if not txn.fx_contract_id:
@@ -241,7 +247,7 @@ def validate_fx_transaction(
                 )
             )
 
-    if txn.transaction_type.upper() == "FX_SWAP":
+    if transaction_type == "FX_SWAP":
         if not txn.swap_event_id or not txn.near_leg_group_id or not txn.far_leg_group_id:
             issues.append(
                 FxValidationIssue(
@@ -264,7 +270,7 @@ def validate_fx_transaction(
 
     if (
         txn.spot_exposure_model is not None
-        and txn.spot_exposure_model not in FX_SPOT_EXPOSURE_MODELS
+        and spot_exposure_model not in FX_SPOT_EXPOSURE_MODELS
     ):
         issues.append(
             FxValidationIssue(
@@ -276,7 +282,7 @@ def validate_fx_transaction(
 
     if (
         txn.fx_realized_pnl_mode is not None
-        and txn.fx_realized_pnl_mode not in FX_REALIZED_PNL_MODES
+        and realized_pnl_mode not in FX_REALIZED_PNL_MODES
     ):
         issues.append(
             FxValidationIssue(

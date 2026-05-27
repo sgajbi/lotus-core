@@ -54,6 +54,36 @@ def test_validate_fx_transaction_happy_path() -> None:
     assert issues == []
 
 
+def test_validate_fx_transaction_normalizes_control_codes() -> None:
+    txn = _base_txn().model_copy(
+        update={
+            "transaction_type": " fx_forward ",
+            "component_type": " fx_contract_open ",
+            "fx_rate_quote_convention": " quote_per_base ",
+            "spot_exposure_model": " none ",
+            "fx_realized_pnl_mode": " upstream_provided ",
+        }
+    )
+
+    issues = validate_fx_transaction(txn, strict_metadata=True)
+
+    assert issues == []
+
+
+def test_validate_fx_transaction_normalizes_cash_leg_role() -> None:
+    txn = _base_txn().model_copy(
+        update={
+            "component_type": " fx_cash_settlement_buy ",
+            "fx_cash_leg_role": " buy ",
+            "linked_fx_cash_leg_id": "FX-CASH-SELL-001",
+        }
+    )
+
+    issues = validate_fx_transaction(txn)
+
+    assert issues == []
+
+
 def test_validate_fx_transaction_rejects_unknown_business_type() -> None:
     txn = _base_txn().model_copy(update={"transaction_type": "BUY"})
     issues = validate_fx_transaction(txn)
@@ -130,7 +160,7 @@ def test_validate_fx_transaction_requires_swap_group_identifiers() -> None:
 def test_validate_fx_transaction_rejects_non_distinct_swap_groups() -> None:
     txn = _base_txn().model_copy(
         update={
-            "transaction_type": "FX_SWAP",
+            "transaction_type": " fx_swap ",
             "swap_event_id": "FXSWAP-001",
             "near_leg_group_id": "FXSWAP-001-LEG",
             "far_leg_group_id": "FXSWAP-001-LEG",
