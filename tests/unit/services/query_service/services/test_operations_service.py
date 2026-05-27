@@ -1591,20 +1591,26 @@ async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
 
 
 async def test_support_job_retrying_only_for_active_retry_states():
-    assert OperationsService._is_support_job_retrying("PENDING", 1) is True
-    assert OperationsService._is_support_job_retrying("PROCESSING", 2) is True
+    assert OperationsService._is_support_job_retrying(" pending ", 1) is True
+    assert OperationsService._is_support_job_retrying(" processing ", 2) is True
     assert OperationsService._is_support_job_retrying("FAILED", 3) is False
     assert OperationsService._is_support_job_retrying("PENDING", 0) is False
 
 
 async def test_support_job_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
-    assert OperationsService._get_support_job_operational_state("FAILED", updated_at) == "FAILED"
     assert (
-        OperationsService._get_support_job_operational_state("SKIPPED_NO_POSITION", updated_at)
+        OperationsService._get_support_job_operational_state(" failed ", updated_at) == "FAILED"
+    )
+    assert (
+        OperationsService._get_support_job_operational_state(
+            " skipped_no_position ", updated_at
+        )
         == "SKIPPED"
     )
-    assert OperationsService._get_support_job_operational_state("PENDING", updated_at) == "PENDING"
+    assert (
+        OperationsService._get_support_job_operational_state(" pending ", updated_at) == "PENDING"
+    )
     assert (
         OperationsService._get_support_job_operational_state("COMPLETE", updated_at) == "COMPLETED"
     )
@@ -1681,7 +1687,7 @@ async def test_stale_detection_helpers_cover_remaining_branches():
     fresh = datetime(2026, 3, 13, 10, 20, tzinfo=timezone.utc)
     current_fresh = datetime.now(timezone.utc)
 
-    assert OperationsService._is_support_job_stale("PROCESSING", stale, now=now) is True
+    assert OperationsService._is_support_job_stale(" processing ", stale, now=now) is True
     assert OperationsService._is_support_job_stale("PROCESSING", fresh, now=now) is False
     assert OperationsService._is_support_job_stale("FAILED", stale, now=now) is False
     assert OperationsService._is_analytics_export_job_stale("running", stale, now=now) is True

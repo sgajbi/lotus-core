@@ -121,6 +121,12 @@ class OperationsService:
             return COMPLETE
         return UNKNOWN
 
+    @staticmethod
+    def _normalize_support_job_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        return status.strip().upper()
+
     @classmethod
     def _get_support_job_operational_state(
         cls,
@@ -129,21 +135,23 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
-        if status == "FAILED":
+        normalized_status = cls._normalize_support_job_status(status) or ""
+        if normalized_status == "FAILED":
             return "FAILED"
-        if status.startswith("SKIPPED"):
+        if normalized_status.startswith("SKIPPED"):
             return "SKIPPED"
-        if cls._is_support_job_stale(status, updated_at, now, stale_threshold_minutes):
+        if cls._is_support_job_stale(normalized_status, updated_at, now, stale_threshold_minutes):
             return "STALE_PROCESSING"
-        if status == "PROCESSING":
+        if normalized_status == "PROCESSING":
             return "PROCESSING"
-        if status == "PENDING":
+        if normalized_status == "PENDING":
             return "PENDING"
         return "COMPLETED"
 
-    @staticmethod
-    def _is_support_job_retrying(status: str, attempt_count: int | None) -> bool:
-        return (attempt_count or 0) > 0 and status in {"PENDING", "PROCESSING"}
+    @classmethod
+    def _is_support_job_retrying(cls, status: str, attempt_count: int | None) -> bool:
+        normalized_status = cls._normalize_support_job_status(status)
+        return (attempt_count or 0) > 0 and normalized_status in {"PENDING", "PROCESSING"}
 
     @staticmethod
     def _normalize_analytics_export_status(status: str | None) -> str | None:
@@ -1278,7 +1286,7 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
-        if status != "PROCESSING" or updated_at is None:
+        if cls._normalize_support_job_status(status) != "PROCESSING" or updated_at is None:
             return False
         reference_now = now or datetime.now(timezone.utc)
         return updated_at < reference_now - timedelta(minutes=stale_threshold_minutes)
