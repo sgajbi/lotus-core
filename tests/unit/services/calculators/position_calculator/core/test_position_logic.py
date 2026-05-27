@@ -589,6 +589,36 @@ def test_calculate_next_position_for_adjustment_uses_movement_direction():
     assert final_state.cost_basis == Decimal("1030")
 
 
+def test_calculate_next_position_for_adjustment_normalizes_movement_direction():
+    initial_state = PositionStateDTO(
+        quantity=Decimal("1000"),
+        cost_basis=Decimal("1000"),
+        cost_basis_local=Decimal("1000"),
+    )
+    outflow_event = TransactionEvent(
+        transaction_id="ADJ_PADDED_OUT_01",
+        transaction_type="ADJUSTMENT",
+        movement_direction=" outflow ",
+        quantity=Decimal("0"),
+        net_cost=Decimal("0"),
+        net_cost_local=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("20"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, outflow_event)
+
+    assert next_state.quantity == Decimal("980")
+    assert next_state.cost_basis == Decimal("980")
+    assert next_state.cost_basis_local == Decimal("980")
+
+
 def test_calculate_next_position_for_fx_cash_settlement_buy_updates_cash_position() -> None:
     initial_state = PositionStateDTO(
         quantity=Decimal("1000"),
