@@ -1,7 +1,9 @@
 from portfolio_common.database_models import (
     AnalyticsExportJob,
+    CashAccountMaster,
     Cashflow,
     DailyPositionSnapshot,
+    InstrumentLookthroughComponent,
     MarketPrice,
     Portfolio,
     PortfolioAggregationJob,
@@ -9,6 +11,7 @@ from portfolio_common.database_models import (
     PortfolioValuationJob,
     PositionHistory,
     PositionLotState,
+    PositionState,
     PositionTimeseries,
     ReprocessingJob,
     Transaction,
@@ -170,3 +173,82 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
         "updated_at",
         "id",
     ]
+
+
+def test_api_query_hot_path_indexes_are_declared():
+    index_specs = {
+        PositionHistory: {
+            "ix_pos_hist_port_norm_sec_date_id": [
+                "position_history.portfolio_id",
+                "trim(position_history.security_id)",
+                "position_history.position_date DESC",
+                "position_history.id DESC",
+                "position_history.epoch",
+            ],
+        },
+        DailyPositionSnapshot: {
+            "ix_daily_snap_port_norm_sec_date_id": [
+                "daily_position_snapshots.portfolio_id",
+                "trim(daily_position_snapshots.security_id)",
+                "daily_position_snapshots.date DESC",
+                "daily_position_snapshots.id DESC",
+                "daily_position_snapshots.epoch",
+            ],
+        },
+        Transaction: {
+            "ix_txn_port_date_id": [
+                "transactions.portfolio_id",
+                "transactions.transaction_date DESC",
+                "transactions.id DESC",
+            ],
+            "ix_txn_port_norm_sec_date_id": [
+                "transactions.portfolio_id",
+                "trim(transactions.security_id)",
+                "transactions.transaction_date DESC",
+                "transactions.id DESC",
+            ],
+            "ix_txn_port_norm_cash_instr_date_id": [
+                "transactions.portfolio_id",
+                "trim(transactions.settlement_cash_instrument_id)",
+                "transactions.transaction_date DESC",
+                "transactions.id DESC",
+            ],
+            "ix_txn_port_linked_group_date_id": [
+                "transactions.portfolio_id",
+                "transactions.linked_transaction_group_id",
+                "transactions.transaction_date DESC",
+                "transactions.id DESC",
+            ],
+        },
+        CashAccountMaster: {
+            "ix_cash_account_port_currency_id": [
+                "cash_account_masters.portfolio_id",
+                "cash_account_masters.account_currency",
+                "cash_account_masters.cash_account_id",
+            ],
+        },
+        InstrumentLookthroughComponent: {
+            "ix_lookthrough_norm_parent_eff_comp": [
+                "trim(instrument_lookthrough_components.parent_security_id)",
+                "instrument_lookthrough_components.effective_from DESC",
+                "instrument_lookthrough_components.effective_to",
+                "trim(instrument_lookthrough_components.component_security_id)",
+            ],
+        },
+        PositionState: {
+            "ix_position_state_port_norm_sec_epoch": [
+                "position_state.portfolio_id",
+                "trim(position_state.security_id)",
+                "position_state.epoch",
+            ],
+        },
+    }
+
+    for model, indexes in index_specs.items():
+        declared_indexes = {index.name: index for index in model.__table__.indexes}
+        for index_name, expected_expressions in indexes.items():
+            assert index_name in declared_indexes
+            actual_expressions = [
+                str(expression) for expression in declared_indexes[index_name].expressions
+            ]
+            assert actual_expressions == expected_expressions

@@ -80,6 +80,32 @@ make ci-local
 - the stack expects migrations to reach `head` before dependent services fully operate
 - migration drift in `lotus-core` can surface as query-service, control-plane, or worker failures
 
+## Index And Partition Operations
+
+High-volume Core fact tables must be optimized from observed query shapes first. Add model-declared
+and migrated indexes when API or calculator reads use stable predicates such as portfolio/date,
+portfolio/security/date, or normalized identifier lookups.
+
+Partitioning is a physical storage migration, not a routine runtime optimization. Existing
+authoritative tables should not be silently converted to partitioned parents by maintenance scripts.
+Use `scripts/db_partition_advisor.py` to review current candidates and generate future monthly
+partition DDL:
+
+```bash
+python scripts/db_partition_advisor.py --as-of 2026-05-28 --horizon-months 3
+```
+
+With a PostgreSQL connection, inspect current partition posture:
+
+```bash
+python scripts/db_partition_advisor.py --inspect --database-url "$DATABASE_URL"
+```
+
+`--execute` creates future monthly partitions only for tables that are already PostgreSQL
+partitioned parents. Converting `transactions`, `position_history`, `daily_position_snapshots`,
+`cashflows`, `position_timeseries`, `portfolio_timeseries`, or `market_prices` into partitioned
+parents requires a separate governed Alembic migration and production rollout plan.
+
 ## Production posture
 
 1. prefer forward-only fixes over relying on downgrade in production

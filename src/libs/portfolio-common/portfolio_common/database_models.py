@@ -139,6 +139,14 @@ class PositionHistory(Base):
             position_date.desc(),
             id.desc(),
         ),
+        Index(
+            "ix_pos_hist_port_norm_sec_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            position_date.desc(),
+            id.desc(),
+            "epoch",
+        ),
     )
 
 
@@ -181,6 +189,14 @@ class DailyPositionSnapshot(Base):
             func.trim(security_id),
             date.desc(),
             epoch.desc(),
+        ),
+        Index(
+            "ix_daily_snap_port_norm_sec_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            date.desc(),
+            id.desc(),
+            "epoch",
         ),
     )
 
@@ -1098,6 +1114,12 @@ class CashAccountMaster(Base):
             "opened_on",
             "closed_on",
         ),
+        Index(
+            "ix_cash_account_port_currency_id",
+            "portfolio_id",
+            "account_currency",
+            "cash_account_id",
+        ),
     )
 
 
@@ -1129,6 +1151,13 @@ class InstrumentLookthroughComponent(Base):
             "parent_security_id",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_lookthrough_norm_parent_eff_comp",
+            func.trim(parent_security_id),
+            effective_from.desc(),
+            "effective_to",
+            func.trim(component_security_id),
         ),
     )
 
@@ -1266,6 +1295,33 @@ class Transaction(Base):
             func.trim(security_id),
             transaction_date,
             transaction_id,
+        ),
+        Index(
+            "ix_txn_port_date_id",
+            "portfolio_id",
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_norm_sec_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_norm_cash_instr_date_id",
+            "portfolio_id",
+            func.trim(settlement_cash_instrument_id),
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_linked_group_date_id",
+            "portfolio_id",
+            "linked_transaction_group_id",
+            transaction_date.desc(),
+            id.desc(),
         ),
     )
 
@@ -1765,6 +1821,12 @@ class PositionState(Base):
             "ix_position_state_watermark_updated",
             "watermark_date",
             "updated_at",
+        ),
+        Index(
+            "ix_position_state_port_norm_sec_epoch",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
         ),
     )
 
