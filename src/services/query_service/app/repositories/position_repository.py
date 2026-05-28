@@ -16,6 +16,8 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .identifier_normalization import normalize_security_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,11 +49,16 @@ class PositionRepository:
         This is the start of the current continuous holding period.
         """
 
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return None
+
+        history_security_id = func.trim(PositionHistory.security_id)
         last_zero_date_cte = (
             select(func.max(PositionHistory.position_date).label("last_zero_date"))
             .where(
                 PositionHistory.portfolio_id == portfolio_id,
-                PositionHistory.security_id == security_id,
+                history_security_id == security_id,
                 PositionHistory.epoch == epoch,
                 PositionHistory.quantity == 0,
             )
@@ -64,7 +71,7 @@ class PositionRepository:
             .join(last_zero_date_cte, text("1=1"), isouter=True)
             .where(
                 PositionHistory.portfolio_id == portfolio_id,
-                PositionHistory.security_id == security_id,
+                history_security_id == security_id,
                 PositionHistory.epoch == epoch,
                 PositionHistory.position_date
                 > func.coalesce(last_zero_date_cte.c.last_zero_date, date.min),
@@ -89,14 +96,17 @@ class PositionRepository:
 
         by_epoch: dict[int, list[str]] = {}
         for security_id, epoch in security_epoch_pairs:
-            by_epoch.setdefault(epoch, []).append(security_id)
+            normalized_security_id = normalize_security_id(security_id)
+            if normalized_security_id:
+                by_epoch.setdefault(epoch, []).append(normalized_security_id)
 
         key_filters = []
+        history_security_id = func.trim(PositionHistory.security_id)
         for epoch, security_ids in by_epoch.items():
             key_filters.append(
                 and_(
                     PositionHistory.epoch == epoch,
-                    PositionHistory.security_id.in_(security_ids),
+                    history_security_id.in_(security_ids),
                 )
             )
 
@@ -105,7 +115,7 @@ class PositionRepository:
 
         last_zero_subq = (
             select(
-                PositionHistory.security_id.label("security_id"),
+                history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 func.max(PositionHistory.position_date).label("last_zero_date"),
             )
@@ -114,13 +124,13 @@ class PositionRepository:
                 or_(*key_filters),
                 PositionHistory.quantity == 0,
             )
-            .group_by(PositionHistory.security_id, PositionHistory.epoch)
+            .group_by(history_security_id, PositionHistory.epoch)
             .subquery()
         )
 
         held_since_stmt = (
             select(
-                PositionHistory.security_id.label("security_id"),
+                history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 func.min(PositionHistory.position_date).label("held_since_date"),
             )
@@ -128,7 +138,7 @@ class PositionRepository:
             .outerjoin(
                 last_zero_subq,
                 and_(
-                    PositionHistory.security_id == last_zero_subq.c.security_id,
+                    history_security_id == last_zero_subq.c.security_id,
                     PositionHistory.epoch == last_zero_subq.c.epoch,
                 ),
             )
@@ -138,14 +148,14 @@ class PositionRepository:
                 PositionHistory.position_date
                 > func.coalesce(last_zero_subq.c.last_zero_date, date.min),
             )
-            .group_by(PositionHistory.security_id, PositionHistory.epoch)
+            .group_by(history_security_id, PositionHistory.epoch)
         )
 
         rows = (await self.db.execute(held_since_stmt)).all()
         return {
-            (str(row.security_id), int(row.epoch)): row.held_since_date
+            (normalize_security_id(row.security_id), int(row.epoch)): row.held_since_date
             for row in rows
-            if row.held_since_date is not None
+            if row.held_since_date is not None and normalize_security_id(row.security_id)
         }
 
     async def get_position_history_by_security(
@@ -502,9 +512,10 @@ class PositionRepository:
         Returns latest available valuation fields by security from daily snapshots,
         regardless of epoch. Used to enrich fallback position-history rows.
         """
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         ranked_snapshot_subq = (
             select(
-                DailyPositionSnapshot.security_id.label("security_id"),
+                snapshot_security_id.label("security_id"),
                 DailyPositionSnapshot.market_price.label("market_price"),
                 DailyPositionSnapshot.market_value.label("market_value"),
                 DailyPositionSnapshot.unrealized_gain_loss.label("unrealized_gain_loss"),
@@ -514,7 +525,7 @@ class PositionRepository:
                 ),
                 func.row_number()
                 .over(
-                    partition_by=DailyPositionSnapshot.security_id,
+                    partition_by=snapshot_security_id,
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
                 .label("rn"),
@@ -528,10 +539,10 @@ class PositionRepository:
         rows = results.mappings().all()
         valuation_map: dict[str, dict[str, float | None]] = {}
         for row in rows:
-            security_id = row.get("security_id")
+            security_id = normalize_security_id(row.get("security_id"))
             if not security_id:
                 continue
-            valuation_map[str(security_id)] = {
+            valuation_map[security_id] = {
                 "market_price": row.get("market_price"),
                 "market_value": row.get("market_value"),
                 "unrealized_gain_loss": row.get("unrealized_gain_loss"),
@@ -548,9 +559,10 @@ class PositionRepository:
         on or before the requested date, regardless of epoch. Used to enrich
         history-backed rows when snapshot materialization lags reprocessing.
         """
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         ranked_snapshot_subq = (
             select(
-                DailyPositionSnapshot.security_id.label("security_id"),
+                snapshot_security_id.label("security_id"),
                 DailyPositionSnapshot.market_price.label("market_price"),
                 DailyPositionSnapshot.market_value.label("market_value"),
                 DailyPositionSnapshot.unrealized_gain_loss.label("unrealized_gain_loss"),
@@ -560,7 +572,7 @@ class PositionRepository:
                 ),
                 func.row_number()
                 .over(
-                    partition_by=DailyPositionSnapshot.security_id,
+                    partition_by=snapshot_security_id,
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
                 .label("rn"),
@@ -577,10 +589,10 @@ class PositionRepository:
         rows = results.mappings().all()
         valuation_map: dict[str, dict[str, float | None]] = {}
         for row in rows:
-            security_id = row.get("security_id")
+            security_id = normalize_security_id(row.get("security_id"))
             if not security_id:
                 continue
-            valuation_map[str(security_id)] = {
+            valuation_map[security_id] = {
                 "market_price": row.get("market_price"),
                 "market_value": row.get("market_value"),
                 "unrealized_gain_loss": row.get("unrealized_gain_loss"),
@@ -597,20 +609,31 @@ class PositionRepository:
         if not security_ids:
             return {}
 
+        normalized_security_ids = sorted(
+            {
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            }
+        )
+        if not normalized_security_ids:
+            return {}
+
+        market_price_security_id = func.trim(MarketPrice.security_id)
         stmt = (
             select(
-                MarketPrice.security_id,
+                market_price_security_id.label("security_id"),
                 func.max(MarketPrice.price_date).label("latest_price_date"),
             )
             .where(
-                MarketPrice.security_id.in_(security_ids),
+                market_price_security_id.in_(normalized_security_ids),
                 MarketPrice.price_date <= as_of_date,
             )
-            .group_by(MarketPrice.security_id)
+            .group_by(market_price_security_id)
         )
         rows = (await self.db.execute(stmt)).all()
         return {
-            str(row.security_id): row.latest_price_date
+            normalize_security_id(row.security_id): row.latest_price_date
             for row in rows
-            if row.latest_price_date is not None
+            if row.latest_price_date is not None and normalize_security_id(row.security_id)
         }

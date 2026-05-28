@@ -1,5 +1,6 @@
 # tests/unit/services/query_service/repositories/test_unit_query_position_repo.py
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -91,13 +92,14 @@ async def test_get_held_since_date_uses_last_zero_cte(
     mock_result.scalar_one_or_none.return_value = date(2025, 1, 10)
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    held_since = await repository.get_held_since_date("P1", "S1", 3)
+    held_since = await repository.get_held_since_date("P1", " S1 ", 3)
 
     assert held_since == date(2025, 1, 10)
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "WITH last_zero_date AS" in compiled_query
     assert "coalesce(last_zero_date.last_zero_date" in compiled_query.lower()
+    assert "trim(position_history.security_id) = 'S1'" in compiled_query
     assert "position_history.epoch = 3" in compiled_query
 
 
@@ -135,7 +137,7 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
     mock_result = MagicMock()
     mock_result.mappings.return_value.all.return_value = [
         {
-            "security_id": "SEC_A",
+            "security_id": " SEC_A ",
             "market_price": 101.0,
             "market_value": 1212.0,
             "unrealized_gain_loss": 112.0,
@@ -167,7 +169,8 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "FROM (" in compiled_query
-    assert "daily_position_snapshots.security_id AS security_id" in compiled_query
+    assert "trim(daily_position_snapshots.security_id) AS security_id" in compiled_query
+    assert "PARTITION BY trim(daily_position_snapshots.security_id)" in compiled_query
 
 
 async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_latest_rows(
@@ -176,7 +179,7 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
     mock_result = MagicMock()
     mock_result.mappings.return_value.all.return_value = [
         {
-            "security_id": "SEC_A",
+            "security_id": " SEC_A ",
             "market_price": 101.0,
             "market_value": 1212.0,
             "unrealized_gain_loss": 112.0,
@@ -210,7 +213,10 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.date <= '2025-01-31'" in compiled_query
-    assert "row_number() OVER (PARTITION BY daily_position_snapshots.security_id" in compiled_query
+    assert (
+        "row_number() OVER (PARTITION BY trim(daily_position_snapshots.security_id)"
+        in compiled_query
+    )
     assert (
         "ORDER BY daily_position_snapshots.date DESC, daily_position_snapshots.id DESC"
         in compiled_query
@@ -260,19 +266,44 @@ async def test_get_held_since_dates_non_empty_input_returns_keyed_map(
 ):
     mock_result = MagicMock()
     row = MagicMock()
-    row.security_id = "S1"
+    row.security_id = " S1 "
     row.epoch = 3
     row.held_since_date = date(2025, 1, 10)
     mock_result.all.return_value = [row]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    held_since_map = await repository.get_held_since_dates("P1", [("S1", 3)])
+    held_since_map = await repository.get_held_since_dates("P1", [(" S1 ", 3)])
 
     assert held_since_map == {("S1", 3): date(2025, 1, 10)}
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "FROM position_history" in compiled_query
-    assert "GROUP BY position_history.security_id, position_history.epoch" in compiled_query
+    assert "trim(position_history.security_id) IN ('S1')" in compiled_query
+    assert "GROUP BY trim(position_history.security_id), position_history.epoch" in compiled_query
+
+
+async def test_get_latest_market_price_dates_normalizes_security_filters(
+    repository: PositionRepository, mock_db_session: AsyncMock
+):
+    mock_result = MagicMock()
+    mock_result.all.return_value = [
+        SimpleNamespace(security_id=" SEC_A ", latest_price_date=date(2025, 1, 30)),
+        SimpleNamespace(security_id="", latest_price_date=date(2025, 1, 29)),
+        SimpleNamespace(security_id="SEC_B", latest_price_date=None),
+    ]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    latest_dates = await repository.get_latest_market_price_dates(
+        [" SEC_A ", "", "SEC_A"], date(2025, 1, 31)
+    )
+
+    assert latest_dates == {"SEC_A": date(2025, 1, 30)}
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(market_prices.security_id) AS security_id" in compiled_query
+    assert "trim(market_prices.security_id) IN ('SEC_A')" in compiled_query
+    assert "market_prices.price_date <= '2025-01-31'" in compiled_query
+    assert "GROUP BY trim(market_prices.security_id)" in compiled_query
 
 
 async def test_get_latest_positions_by_portfolio_as_of_date_builds_expected_query(

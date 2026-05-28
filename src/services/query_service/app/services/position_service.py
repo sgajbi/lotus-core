@@ -15,6 +15,7 @@ from ..dtos.position_dto import (
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.valuation_dto import ValuationData
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ class PositionService:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
+        security_id = normalize_security_id(security_id)
         db_results = await self.repo.get_position_history_by_security(
             portfolio_id=portfolio_id,
             security_id=security_id,
@@ -100,14 +102,14 @@ class PositionService:
             history_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
 
         snapshot_results_by_security = {
-            str(position_row.security_id): (position_row, instrument, pos_state)
+            normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)
             for position_row, instrument, pos_state in snapshot_results
         }
         db_results = list(snapshot_results_by_security.values())
         history_supplements = [
             (position_row, instrument, pos_state)
             for position_row, instrument, pos_state in history_results
-            if str(position_row.security_id) not in snapshot_results_by_security
+            if normalize_security_id(position_row.security_id) not in snapshot_results_by_security
         ]
         db_results.extend(history_supplements)
 
@@ -124,7 +126,8 @@ class PositionService:
 
         positions = []
         for position_row, instrument, pos_state in db_results:
-            is_snapshot_row = str(position_row.security_id) in snapshot_security_ids
+            security_id = normalize_security_id(position_row.security_id)
+            is_snapshot_row = security_id in snapshot_security_ids
             valuation_dto = None
             if is_snapshot_row:
                 valuation_dto = ValuationData(
@@ -135,7 +138,7 @@ class PositionService:
                     unrealized_gain_loss_local=position_row.unrealized_gain_loss_local,
                 )
             else:
-                fallback_valuation = fallback_valuation_map.get(position_row.security_id)
+                fallback_valuation = fallback_valuation_map.get(security_id)
                 if fallback_valuation is not None:
                     valuation_dto = ValuationData(
                         market_price=fallback_valuation.get("market_price"),
@@ -156,7 +159,7 @@ class PositionService:
                         unrealized_gain_loss_local=0,
                     )
             position_dto = Position(
-                security_id=position_row.security_id,
+                security_id=security_id,
                 quantity=position_row.quantity,
                 cost_basis=position_row.cost_basis,
                 cost_basis_local=position_row.cost_basis_local,
@@ -204,7 +207,12 @@ class PositionService:
                 position.held_since_date = position.position_date
                 continue
             held_since_requests.append(
-                (idx, str(position_row.security_id), int(epoch), position.position_date)
+                (
+                    idx,
+                    normalize_security_id(position_row.security_id),
+                    int(epoch),
+                    position.position_date,
+                )
             )
 
         if held_since_requests:
@@ -223,11 +231,14 @@ class PositionService:
             (position.position_date for position in positions), default=date.today()
         )
         latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-            security_ids=[
-                position.security_id
-                for position in positions
-                if self._requires_market_price_freshness(position)
-            ],
+            security_ids=sorted(
+                {
+                    normalize_security_id(position.security_id)
+                    for position in positions
+                    if self._requires_market_price_freshness(position)
+                    and normalize_security_id(position.security_id)
+                }
+            ),
             as_of_date=response_as_of_date,
         )
         return PortfolioPositionsResponse(
@@ -264,7 +275,8 @@ class PositionService:
             return STALE
         if any(
             (
-                latest_market_price_dates.get(position.security_id) != response_as_of_date
+                latest_market_price_dates.get(normalize_security_id(position.security_id))
+                != response_as_of_date
                 if PositionService._requires_market_price_freshness(position)
                 else False
             )

@@ -90,7 +90,7 @@ async def test_get_position_history(mock_position_repo: AsyncMock):
         service = PositionService(AsyncMock())
         params = {
             "portfolio_id": "P1",
-            "security_id": "S1",
+            "security_id": " S1 ",
             "start_date": date(2025, 1, 1),
             "end_date": date(2025, 1, 31),
         }
@@ -99,7 +99,13 @@ async def test_get_position_history(mock_position_repo: AsyncMock):
         response = await service.get_position_history(**params)
 
         # ASSERT
-        mock_position_repo.get_position_history_by_security.assert_awaited_once_with(**params)
+        mock_position_repo.get_position_history_by_security.assert_awaited_once_with(
+            portfolio_id="P1",
+            security_id="S1",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+        )
+        assert response.security_id == "S1"
         assert len(response.positions) == 1
         assert response.positions[0].transaction_id == "T1"
         assert response.positions[0].valuation is None
@@ -401,6 +407,99 @@ async def test_get_latest_positions_supplements_missing_snapshot_rows_from_histo
         mock_position_repo.get_latest_snapshot_valuation_map_as_of_date.assert_awaited_once_with(
             "P1", date(2025, 1, 1)
         )
+
+
+async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembly(
+    mock_position_repo: AsyncMock,
+):
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        snapshot_row = DailyPositionSnapshot(
+            security_id=" SNAP_ONLY ",
+            quantity=Decimal("100"),
+            cost_basis=Decimal("1000"),
+            cost_basis_local=Decimal("1000"),
+            market_price=Decimal("10"),
+            market_value=Decimal("1000"),
+            market_value_local=Decimal("1000"),
+            unrealized_gain_loss=Decimal("0"),
+            unrealized_gain_loss_local=Decimal("0"),
+            date=date(2025, 1, 1),
+        )
+        matching_history_row = PositionHistory(
+            security_id="SNAP_ONLY",
+            quantity=Decimal("100"),
+            cost_basis=Decimal("1000"),
+            cost_basis_local=Decimal("1000"),
+            position_date=date(2025, 1, 1),
+            transaction_id="T-SNAP",
+        )
+        history_row = PositionHistory(
+            security_id=" HIST_ONLY ",
+            quantity=Decimal("310"),
+            cost_basis=Decimal("57195"),
+            cost_basis_local=Decimal("57195"),
+            position_date=date(2025, 1, 1),
+            transaction_id="T-HIST",
+        )
+        instrument = Instrument(
+            name="Apple Inc.",
+            isin="US0378331005",
+            currency="USD",
+            asset_class="Equity",
+            product_type="Equity",
+            sector="Technology",
+            country_of_risk="US",
+        )
+        state = PositionState(status="CURRENT", epoch=2)
+
+        mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+            (snapshot_row, instrument, state)
+        ]
+        mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = [
+            (matching_history_row, instrument, state),
+            (history_row, instrument, state),
+        ]
+        mock_position_repo.get_latest_snapshot_valuation_map_as_of_date.return_value = {
+            "HIST_ONLY": {
+                "market_price": Decimal("209.1627"),
+                "market_value": Decimal("64840.437"),
+                "unrealized_gain_loss": Decimal("7645.437"),
+                "market_value_local": Decimal("64840.437"),
+                "unrealized_gain_loss_local": Decimal("7645.437"),
+            }
+        }
+        mock_position_repo.get_held_since_dates.return_value = {
+            ("SNAP_ONLY", 2): date(2024, 12, 31),
+            ("HIST_ONLY", 2): date(2024, 4, 3),
+        }
+        mock_position_repo.get_latest_market_price_dates.return_value = {
+            "SNAP_ONLY": date(2025, 1, 1),
+            "HIST_ONLY": date(2025, 1, 1),
+        }
+
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions("P1", as_of_date=date(2025, 1, 1))
+
+        assert [position.security_id for position in response.positions] == [
+            "SNAP_ONLY",
+            "HIST_ONLY",
+        ]
+        assert response.positions[0].held_since_date == date(2024, 12, 31)
+        assert response.positions[1].held_since_date == date(2024, 4, 3)
+        assert response.positions[1].valuation is not None
+        assert response.positions[1].valuation.market_value == Decimal("64840.437")
+        mock_position_repo.get_held_since_dates.assert_awaited_once_with(
+            portfolio_id="P1",
+            security_epoch_pairs=[("SNAP_ONLY", 2), ("HIST_ONLY", 2)],
+        )
+        mock_position_repo.get_latest_market_price_dates.assert_awaited_once_with(
+            security_ids=["HIST_ONLY", "SNAP_ONLY"],
+            as_of_date=date(2025, 1, 1),
+        )
+        assert response.data_quality_status == "PARTIAL"
 
 
 async def test_get_latest_positions_include_projected_uses_unbounded_latest(
