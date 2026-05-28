@@ -283,6 +283,20 @@ async def test_get_instrument_enrichment_bulk_preserves_order_and_unknowns(mock_
     assert records[2].liquidity_tier == "L2"
 
 
+async def test_get_instrument_enrichment_bulk_normalizes_returned_security_ids(
+    mock_dependencies,
+):
+    (_, _, _, _, _, instrument_repo) = mock_dependencies
+    instrument_repo.get_by_security_ids.return_value = [_instrument(" SEC_AAPL_US ")]
+
+    service = CoreSnapshotService(AsyncMock())
+    records = await service.get_instrument_enrichment_bulk([" SEC_AAPL_US "])
+
+    assert records[0].security_id == "SEC_AAPL_US"
+    assert records[0].issuer_id == "ISSUER_ SEC_AAPL_US "
+    instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC_AAPL_US"])
+
+
 async def test_core_snapshot_simulation_success(mock_dependencies):
     (_, _, simulation_repo, _, _, _) = mock_dependencies
     simulation_repo.get_changes.return_value = [
@@ -314,6 +328,30 @@ async def test_core_snapshot_simulation_success(mock_dependencies):
     assert response.sections.positions_projected[0].quantity == Decimal("15")
     assert response.tenant_id == "default"
     assert response.policy_version == "snapshot.policy.inline.default"
+
+
+async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_dependencies):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        (
+            _snapshot_row(" SEC_PADDED ", Decimal("3"), Decimal("30"), Decimal("30")),
+            _instrument("SEC_PADDED"),
+            SimpleNamespace(status="CURRENT", epoch=7),
+        )
+    ]
+    service = CoreSnapshotService(AsyncMock())
+
+    rows, _source = await service._resolve_baseline_positions(
+        portfolio_id="PORT_001",
+        as_of_date=date(2026, 2, 27),
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    assert list(rows) == ["SEC_PADDED"]
+    assert rows["SEC_PADDED"]["security_id"] == "SEC_PADDED"
+    assert rows["SEC_PADDED"]["position_record"].security_id == "SEC_PADDED"
 
 
 async def test_core_snapshot_rejects_projected_sections_in_baseline_mode(mock_dependencies):
@@ -639,6 +677,58 @@ async def test_resolve_projected_positions_handles_non_positive_quantity_branch(
         include_cash=True,
     )
     assert projected["SEC_NEG"]["market_value_base"] == Decimal("0")
+
+
+async def test_resolve_projected_positions_normalizes_change_security_ids(mock_dependencies):
+    (_, _, simulation_repo, _, _, instrument_repo) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id=" SEC_EXISTING ",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        ),
+        SimpleNamespace(
+            security_id=" SEC_NEW ",
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            amount=None,
+        ),
+    ]
+    instrument_repo.get_by_security_ids.return_value = [_instrument(" SEC_NEW ")]
+    service = CoreSnapshotService(AsyncMock())
+
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        reporting_currency="USD",
+        baseline_positions={
+            "SEC_EXISTING": {
+                "security_id": "SEC_EXISTING",
+                "quantity": Decimal("3"),
+                "market_value_base": Decimal("30"),
+                "market_value_local": Decimal("30"),
+                "currency": "USD",
+                "instrument_name": "Existing",
+                "asset_class": "EQUITY",
+                "sector": None,
+                "country_of_risk": None,
+                "isin": None,
+                "issuer_id": None,
+                "issuer_name": None,
+                "ultimate_parent_issuer_id": None,
+                "ultimate_parent_issuer_name": None,
+                "liquidity_tier": None,
+            }
+        },
+        include_zero=True,
+        include_cash=True,
+    )
+
+    assert projected["SEC_EXISTING"]["quantity"] == Decimal("5")
+    assert projected["SEC_NEW"]["security_id"] == "SEC_NEW"
+    instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC_NEW"])
 
 
 async def test_resolve_projected_positions_prices_new_security_with_fx(mock_dependencies):
