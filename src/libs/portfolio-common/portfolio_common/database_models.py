@@ -1394,6 +1394,13 @@ class Cashflow(Base):
             cashflow_date,
             epoch.desc(),
         ),
+        Index(
+            "ix_cashflows_port_norm_sec_date_epoch",
+            "portfolio_id",
+            func.trim(security_id),
+            cashflow_date,
+            epoch.desc(),
+        ),
     )
 
 
@@ -1484,6 +1491,13 @@ class PositionTimeseries(Base):
             func.trim(portfolio_id),
             func.trim(security_id),
             date.desc(),
+            epoch.desc(),
+        ),
+        Index(
+            "ix_pos_ts_port_date_norm_sec_epoch",
+            "portfolio_id",
+            date,
+            func.trim(security_id),
             epoch.desc(),
         ),
     )

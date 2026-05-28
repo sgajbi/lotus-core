@@ -110,6 +110,12 @@ def test_normalized_calculation_lookup_indexes_are_declared():
                 "cashflows.cashflow_date",
                 "cashflows.epoch DESC",
             ],
+            "ix_cashflows_port_norm_sec_date_epoch": [
+                "cashflows.portfolio_id",
+                "trim(cashflows.security_id)",
+                "cashflows.cashflow_date",
+                "cashflows.epoch DESC",
+            ],
         },
         PositionLotState: {
             "ix_position_lot_norm_port_sec": [
@@ -122,6 +128,12 @@ def test_normalized_calculation_lookup_indexes_are_declared():
                 "trim(position_timeseries.portfolio_id)",
                 "trim(position_timeseries.security_id)",
                 "position_timeseries.date DESC",
+                "position_timeseries.epoch DESC",
+            ],
+            "ix_pos_ts_port_date_norm_sec_epoch": [
+                "position_timeseries.portfolio_id",
+                "position_timeseries.date",
+                "trim(position_timeseries.security_id)",
                 "position_timeseries.epoch DESC",
             ],
         },
