@@ -70,7 +70,7 @@ async def test_get_reprocessing_health_summary(
         active_keys=3,
         stale_reprocessing_keys=1,
         oldest_reprocessing_watermark_date=date(2025, 8, 20),
-        security_id="SEC-IBM",
+        security_id=" SEC-IBM ",
         epoch=4,
         updated_at=datetime(2025, 8, 20, 9, 0, tzinfo=timezone.utc),
     )
@@ -96,6 +96,7 @@ async def test_get_reprocessing_health_summary(
     assert "status = 'REPROCESSING'" in compiled
     assert "updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "trim(position_state.security_id) AS security_id" in compiled
     assert "order by" in compiled.lower()
     assert "watermark_date asc" in compiled.lower()
     assert "security_id" in compiled.lower()
@@ -114,7 +115,7 @@ async def test_get_valuation_job_health_summary(
         failed_jobs_last_hours=1,
         oldest_open_job_date=date(2025, 8, 1),
         id=8801,
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         correlation_id="corr-val-8801",
     )
     result = MagicMock()
@@ -148,6 +149,7 @@ async def test_get_valuation_job_health_summary(
         in compiled
     )
     assert "status = 'FAILED'" in compiled
+    assert "trim(portfolio_valuation_jobs.security_id) AS security_id" in compiled
     assert "updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert (
         "updated_at >= '2025-08-30 12:00:00+00:00'"
@@ -394,6 +396,14 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     ]
     assert any(
         "position_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
+        "trim(portfolio_valuation_jobs.security_id) AS security_id" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
+        "trim(position_timeseries.security_id) = anon_1.security_id" in compiled
         for compiled in execute_sql
     )
     assert any(

@@ -443,7 +443,7 @@ class OperationsRepository:
         )
         valuation_handoff_base = select(
             PortfolioValuationJob.portfolio_id.label("portfolio_id"),
-            PortfolioValuationJob.security_id.label("security_id"),
+            self._security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.epoch.label("epoch"),
             PortfolioValuationJob.updated_at.label("valuation_completed_at_utc"),
@@ -459,7 +459,8 @@ class OperationsRepository:
         valuation_handoff_subq = valuation_handoff_base.subquery()
         valuation_to_position_join = and_(
             PositionTimeseries.portfolio_id == valuation_handoff_subq.c.portfolio_id,
-            PositionTimeseries.security_id == valuation_handoff_subq.c.security_id,
+            self._security_id_expr(PositionTimeseries.security_id)
+            == valuation_handoff_subq.c.security_id,
             PositionTimeseries.date == valuation_handoff_subq.c.valuation_date,
             PositionTimeseries.epoch == valuation_handoff_subq.c.epoch,
         )
@@ -705,7 +706,7 @@ class OperationsRepository:
             self._reprocessing_status_expr(PositionState.status).label("status"),
             PositionState.updated_at.label("updated_at"),
             PositionState.watermark_date.label("watermark_date"),
-            PositionState.security_id.label("security_id"),
+            self._security_id_expr(PositionState.security_id).label("security_id"),
             PositionState.epoch.label("epoch"),
         ).where(PositionState.portfolio_id == portfolio_id)
         if as_of is not None:
@@ -760,7 +761,7 @@ class OperationsRepository:
             active_keys=int(row.active_keys or 0),
             stale_reprocessing_keys=int(row.stale_reprocessing_keys or 0),
             oldest_reprocessing_watermark_date=row.oldest_reprocessing_watermark_date,
-            oldest_reprocessing_security_id=row.security_id,
+            oldest_reprocessing_security_id=normalize_security_id(row.security_id),
             oldest_reprocessing_epoch=row.epoch,
             oldest_reprocessing_updated_at=row.updated_at,
         )
@@ -781,7 +782,7 @@ class OperationsRepository:
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.id.label("id"),
             PortfolioValuationJob.correlation_id.label("correlation_id"),
-            PortfolioValuationJob.security_id.label("security_id"),
+            self._security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
         ).where(
             PortfolioValuationJob.portfolio_id == portfolio_id,
             self._is_actionable_valuation_job(as_of=as_of),
@@ -856,7 +857,7 @@ class OperationsRepository:
             oldest_open_job_date=row.oldest_open_job_date,
             oldest_open_job_id=row.id,
             oldest_open_job_correlation_id=row.correlation_id,
-            oldest_open_security_id=row.security_id,
+            oldest_open_security_id=normalize_security_id(row.security_id),
         )
 
     async def get_aggregation_job_health_summary(
