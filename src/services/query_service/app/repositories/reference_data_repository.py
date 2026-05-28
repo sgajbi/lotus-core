@@ -78,6 +78,14 @@ def _latest_effective_rows(rows: list[Any], *key_fields: str) -> list[Any]:
     )
 
 
+def _reference_status_expr(status_column: Any):
+    return func.lower(func.trim(status_column))
+
+
+def _normalize_reference_status(status: str) -> str:
+    return status.strip().lower()
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -112,7 +120,7 @@ class ReferenceDataRepository:
             select(ModelPortfolioDefinition)
             .where(
                 ModelPortfolioDefinition.model_portfolio_id == model_portfolio_id,
-                ModelPortfolioDefinition.approval_status == "approved",
+                _reference_status_expr(ModelPortfolioDefinition.approval_status) == "approved",
                 _effective_filter(
                     ModelPortfolioDefinition.effective_from,
                     ModelPortfolioDefinition.effective_to,
@@ -154,7 +162,9 @@ class ReferenceDataRepository:
             )
         )
         if not include_inactive_targets:
-            stmt = stmt.where(ModelPortfolioTarget.target_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(ModelPortfolioTarget.target_status) == "active"
+            )
         result = await self._db.execute(stmt)
         rows = list(result.scalars().all())
         return _latest_effective_rows(
@@ -195,7 +205,10 @@ class ReferenceDataRepository:
         if booking_center_code:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         if not include_inactive_mandates:
-            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
+                == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -237,7 +250,10 @@ class ReferenceDataRepository:
         if model_portfolio_ids:
             stmt = stmt.where(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
         if not include_inactive_mandates:
-            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
+                == "active"
+            )
 
         result = await self._db.execute(stmt)
         rows = _latest_effective_rows(
@@ -326,7 +342,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_restrictions:
-            stmt = stmt.where(ClientRestrictionProfile.restriction_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(ClientRestrictionProfile.restriction_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -371,7 +389,10 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_preferences:
-            stmt = stmt.where(SustainabilityPreferenceProfile.preference_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(SustainabilityPreferenceProfile.preference_status)
+                == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -414,7 +435,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_profiles:
-            stmt = stmt.where(ClientTaxProfile.profile_status == "active")
+            stmt = stmt.where(_reference_status_expr(ClientTaxProfile.profile_status) == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(list(result.scalars().all()), "tax_profile_id")
 
@@ -456,7 +477,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_rules:
-            stmt = stmt.where(ClientTaxRuleSet.rule_status == "active")
+            stmt = stmt.where(_reference_status_expr(ClientTaxRuleSet.rule_status) == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -500,7 +521,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_schedules:
-            stmt = stmt.where(ClientIncomeNeedsSchedule.need_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(ClientIncomeNeedsSchedule.need_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(list(result.scalars().all()), "schedule_id")
 
@@ -540,7 +563,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_requirements:
-            stmt = stmt.where(LiquidityReserveRequirement.reserve_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(LiquidityReserveRequirement.reserve_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -581,7 +606,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_withdrawals:
-            stmt = stmt.where(PlannedWithdrawalSchedule.withdrawal_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(PlannedWithdrawalSchedule.withdrawal_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -677,7 +704,10 @@ class ReferenceDataRepository:
                 == normalize_currency_code(benchmark_currency)
             )
         if benchmark_status:
-            stmt = stmt.where(BenchmarkDefinition.benchmark_status == benchmark_status)
+            stmt = stmt.where(
+                _reference_status_expr(BenchmarkDefinition.benchmark_status)
+                == _normalize_reference_status(benchmark_status)
+            )
         result = await self._db.execute(
             stmt.order_by(
                 BenchmarkDefinition.benchmark_id.asc(),
@@ -710,7 +740,10 @@ class ReferenceDataRepository:
         if index_type:
             stmt = stmt.where(IndexDefinition.index_type == index_type)
         if index_status:
-            stmt = stmt.where(IndexDefinition.index_status == index_status)
+            stmt = stmt.where(
+                _reference_status_expr(IndexDefinition.index_status)
+                == _normalize_reference_status(index_status)
+            )
         result = await self._db.execute(
             stmt.order_by(IndexDefinition.index_id.asc(), IndexDefinition.effective_from.desc())
         )
