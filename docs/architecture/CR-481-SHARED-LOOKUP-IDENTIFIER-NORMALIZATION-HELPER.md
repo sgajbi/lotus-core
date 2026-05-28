@@ -38,7 +38,8 @@ Commands:
 3. `python -m pytest tests/unit/libs/portfolio-common tests/unit/libs/portfolio_common -q`
 4. `python -m ruff check src/libs/portfolio-common/portfolio_common/identifiers.py src/services/calculators/cost_calculator_service/app/repository.py src/services/calculators/position_calculator/app/repositories/position_repository.py src/libs/portfolio-common/portfolio_common/timeseries_repository_base.py src/libs/portfolio-common/portfolio_common/valuation_repository_base.py tests/unit/libs/portfolio-common/test_identifiers.py`
 5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/identifiers.py src/services/calculators/cost_calculator_service/app/repository.py src/services/calculators/position_calculator/app/repositories/position_repository.py src/libs/portfolio-common/portfolio_common/timeseries_repository_base.py src/libs/portfolio-common/portfolio_common/valuation_repository_base.py tests/unit/libs/portfolio-common/test_identifiers.py`
-6. `git diff --check`
+6. `make warning-gate`
+7. `git diff --check`
 
 Results:
 
@@ -47,7 +48,8 @@ Results:
 3. Portfolio-common unit pack: `490 passed`
 4. Touched-surface ruff: passed
 5. Touched-surface format check: passed
-6. Diff hygiene: passed
+6. Warning gate: `2336 passed`, `9 deselected`, zero warnings
+7. Diff hygiene: passed
 
 ## Closure
 
