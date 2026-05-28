@@ -438,6 +438,10 @@ async def test_get_snapshot_valuation_coverage_summary_honors_snapshot_as_of(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled
     assert "daily_position_snapshots.date = '2026-04-17'" in compiled
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "daily_position_snapshots.created_at <= '2026-04-18 07:30:00+00:00'" in compiled
     assert "position_state.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
     assert "upper(trim(daily_position_snapshots.valuation_status)) != 'UNVALUED'" in compiled
@@ -760,6 +764,10 @@ async def test_get_latest_snapshot_date_for_current_epoch(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from daily_position_snapshots" in compiled.lower()
     assert "join position_state on" in compiled.lower()
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "daily_position_snapshots.epoch = position_state.epoch" in compiled
 
 
@@ -794,6 +802,10 @@ async def test_get_latest_snapshot_date_for_current_epoch_as_of(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.date <= '2025-08-20'" in compiled
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "daily_position_snapshots.created_at <= '2025-08-20 10:00:00+00:00'" in compiled
     assert "position_state.updated_at <= '2025-08-20 10:00:00+00:00'" in compiled
 
@@ -809,6 +821,13 @@ async def test_get_position_snapshot_history_mismatch_count(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from (select position_history.portfolio_id" in compiled.lower()
+    assert "trim(position_history.security_id) AS security_id" in compiled
+    assert "trim(daily_position_snapshots.security_id) AS security_id" in compiled
+    assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "left outer join" in compiled.lower()
     assert "daily_position_snapshots" in compiled.lower()
     assert "position_state" in compiled.lower()

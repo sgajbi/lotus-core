@@ -1067,13 +1067,15 @@ class OperationsRepository:
     async def get_latest_snapshot_date_for_current_epoch(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[date]:
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(func.max(DailyPositionSnapshot.date))
             .join(
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
@@ -1092,13 +1094,15 @@ class OperationsRepository:
         as_of_date: date,
         snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(func.max(DailyPositionSnapshot.date))
             .join(
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
@@ -1117,10 +1121,13 @@ class OperationsRepository:
     async def get_position_snapshot_history_mismatch_count(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> int:
+        history_security_id = self._security_id_expr(PositionHistory.security_id)
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         latest_history = (
             select(
                 PositionHistory.portfolio_id,
-                PositionHistory.security_id,
+                history_security_id.label("security_id"),
                 PositionHistory.epoch,
                 func.max(PositionHistory.position_date).label("latest_history_date"),
             )
@@ -1128,7 +1135,7 @@ class OperationsRepository:
                 PositionState,
                 and_(
                     PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    PositionHistory.security_id == PositionState.security_id,
+                    history_security_id == state_security_id,
                     PositionHistory.epoch == PositionState.epoch,
                 ),
             )
@@ -1140,12 +1147,12 @@ class OperationsRepository:
                 PositionState.updated_at <= as_of,
             )
         latest_history = latest_history.group_by(
-            PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
+            PositionHistory.portfolio_id, history_security_id, PositionHistory.epoch
         ).subquery()
         latest_snapshot = (
             select(
                 DailyPositionSnapshot.portfolio_id,
-                DailyPositionSnapshot.security_id,
+                snapshot_security_id.label("security_id"),
                 DailyPositionSnapshot.epoch,
                 func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
             )
@@ -1153,7 +1160,7 @@ class OperationsRepository:
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
@@ -1166,7 +1173,7 @@ class OperationsRepository:
             )
         latest_snapshot = latest_snapshot.group_by(
             DailyPositionSnapshot.portfolio_id,
-            DailyPositionSnapshot.security_id,
+            snapshot_security_id,
             DailyPositionSnapshot.epoch,
         ).subquery()
         joined = latest_history.outerjoin(
@@ -1201,6 +1208,8 @@ class OperationsRepository:
                 unvalued_positions=0,
             )
 
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(
                 func.count().label("total_positions"),
@@ -1219,7 +1228,7 @@ class OperationsRepository:
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
