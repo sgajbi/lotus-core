@@ -5,6 +5,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.instrument_dto import InstrumentRecord, PaginatedInstrumentResponse
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.instrument_repository import InstrumentRepository
 
 logger = logging.getLogger(__name__)
@@ -21,11 +22,18 @@ class InstrumentService:
 
     async def get_instruments_by_ids(self, security_ids: List[str]) -> List[InstrumentRecord]:
         """Retrieves a list of instruments for a given list of security IDs."""
-        if not security_ids:
+        normalized_security_ids = list(
+            dict.fromkeys(
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            )
+        )
+        if not normalized_security_ids:
             return []
-        logger.info(f"Fetching details for {len(security_ids)} instruments.")
-        db_results = await self.repo.get_by_security_ids(security_ids)
-        return [InstrumentRecord.model_validate(row, from_attributes=True) for row in db_results]
+        logger.info(f"Fetching details for {len(normalized_security_ids)} instruments.")
+        db_results = await self.repo.get_by_security_ids(normalized_security_ids)
+        return [self._to_instrument_record(row) for row in db_results]
 
     async def get_instruments(
         self,
@@ -38,6 +46,7 @@ class InstrumentService:
         Retrieves a paginated and filtered list of instruments.
         """
         logger.info("Fetching instruments.")
+        security_id = normalize_security_id(security_id) if security_id else None
 
         total_count = await self.repo.get_instruments_count(
             security_id=security_id, product_type=product_type
@@ -47,10 +56,13 @@ class InstrumentService:
             skip=skip, limit=limit, security_id=security_id, product_type=product_type
         )
 
-        instruments = [
-            InstrumentRecord.model_validate(row, from_attributes=True) for row in db_results
-        ]
+        instruments = [self._to_instrument_record(row) for row in db_results]
 
         return PaginatedInstrumentResponse(
             total=total_count, skip=skip, limit=limit, instruments=instruments
         )
+
+    @staticmethod
+    def _to_instrument_record(row) -> InstrumentRecord:
+        record = InstrumentRecord.model_validate(row, from_attributes=True)
+        return record.model_copy(update={"security_id": normalize_security_id(record.security_id)})

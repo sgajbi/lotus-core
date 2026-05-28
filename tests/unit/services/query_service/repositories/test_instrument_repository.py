@@ -41,7 +41,7 @@ async def test_get_by_security_ids(repository: InstrumentRepository, mock_db_ses
     # ARRANGE
     mock_result = mock_db_session.execute.return_value
     mock_result.scalars.return_value.all.return_value = []
-    security_ids = ["SEC1", "SEC2"]
+    security_ids = [" SEC1 ", "SEC2", "", "SEC1"]
 
     # ACT
     await repository.get_by_security_ids(security_ids)
@@ -50,7 +50,7 @@ async def test_get_by_security_ids(repository: InstrumentRepository, mock_db_ses
     mock_db_session.execute.assert_awaited_once()
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "WHERE instruments.security_id IN ('SEC1', 'SEC2')" in compiled_query
+    assert "WHERE trim(instruments.security_id) IN ('SEC1', 'SEC2')" in compiled_query
 
 
 async def test_get_instruments_no_filters(
@@ -114,13 +114,15 @@ async def test_get_instruments_with_filters(
     mock_result.scalars.return_value.all.return_value = []
 
     # ACT
-    await repository.get_instruments(skip=0, limit=100, security_id="SEC1", product_type="Equity")
+    await repository.get_instruments(
+        skip=0, limit=100, security_id=" SEC1 ", product_type="Equity"
+    )
 
     # ASSERT
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "WHERE instruments.security_id = 'SEC1'" in compiled_query
+    assert "WHERE trim(instruments.security_id) = 'SEC1'" in compiled_query
     assert "AND instruments.product_type = 'Equity'" in compiled_query
 
 
@@ -153,5 +155,14 @@ async def test_get_by_security_ids_returns_empty_for_empty_input(
     mock_db_session: AsyncMock,
 ):
     result = await repository.get_by_security_ids([])
+    assert result == []
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_get_by_security_ids_returns_empty_when_ids_blank(
+    repository: InstrumentRepository,
+    mock_db_session: AsyncMock,
+):
+    result = await repository.get_by_security_ids([" ", ""])
     assert result == []
     mock_db_session.execute.assert_not_awaited()

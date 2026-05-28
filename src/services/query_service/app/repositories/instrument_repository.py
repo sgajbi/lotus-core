@@ -2,10 +2,12 @@
 import logging
 from typing import List, Optional
 
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.database_models import Instrument
 from portfolio_common.utils import async_timed
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,18 @@ class InstrumentRepository:
         """Fetches multiple instruments by a list of their security_id strings."""
         if not security_ids:
             return []
-        stmt = select(Instrument).where(Instrument.security_id.in_(security_ids))
+        normalized_security_ids = list(
+            dict.fromkeys(
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            )
+        )
+        if not normalized_security_ids:
+            return []
+        stmt = select(Instrument).where(
+            func.trim(Instrument.security_id).in_(normalized_security_ids)
+        )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
@@ -35,7 +48,9 @@ class InstrumentRepository:
         """
         stmt = select(Instrument)
         if security_id:
-            stmt = stmt.filter_by(security_id=security_id)
+            normalized_security_id = normalize_security_id(security_id)
+            if normalized_security_id:
+                stmt = stmt.where(func.trim(Instrument.security_id) == normalized_security_id)
         if product_type:
             stmt = stmt.filter_by(product_type=product_type)
         return stmt
