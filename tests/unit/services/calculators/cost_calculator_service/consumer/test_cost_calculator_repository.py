@@ -42,6 +42,23 @@ async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_p
     assert "order by fx_rates.rate_date desc" in compiled_query
 
 
+async def test_get_instrument_trims_security_id_before_query():
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.first.return_value = None
+    db_session.execute.return_value = execute_result
+
+    instrument = await repository.get_instrument(" SEC_A ")
+
+    assert instrument is None
+    compiled_query = str(
+        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(instruments.security_id) = 'SEC_A'" in compiled_query
+
+
 async def test_update_transaction_costs_persists_linkage_metadata() -> None:
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)

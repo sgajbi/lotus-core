@@ -530,7 +530,8 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_instrument")
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        stmt = select(Instrument).filter_by(security_id=security_id)
+        normalized_security_id = self._normalize_security_id(security_id)
+        stmt = select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 

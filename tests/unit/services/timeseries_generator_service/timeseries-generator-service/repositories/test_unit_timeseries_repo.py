@@ -51,11 +51,31 @@ async def test_get_simple_getters(repository: TimeseriesRepository, mock_db_sess
     )
     assert "WHERE portfolios.portfolio_id = 'P1'" in compiled_query
 
-    await repository.get_instrument("S1")
+    await repository.get_instrument(" S1 ")
     compiled_query = str(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
     )
-    assert "WHERE instruments.security_id = 'S1'" in compiled_query
+    assert "WHERE trim(instruments.security_id) = 'S1'" in compiled_query
+
+
+async def test_get_instruments_by_ids_trims_security_ids(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.get_instruments_by_ids([" S1 ", "", " S2 "])
+
+    compiled_query = str(
+        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(instruments.security_id) IN ('S1', 'S2')" in compiled_query
+
+
+async def test_get_instruments_by_ids_skips_empty_security_ids(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    instruments = await repository.get_instruments_by_ids([" ", ""])
+
+    assert instruments == []
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(

@@ -109,7 +109,8 @@ class CostCalculatorRepository:
         return result.scalars().first()
 
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        stmt = select(Instrument).where(Instrument.security_id == security_id)
+        normalized_security_id = str(security_id or "").strip()
+        stmt = select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 

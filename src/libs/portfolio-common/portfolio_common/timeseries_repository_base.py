@@ -224,14 +224,24 @@ class TimeseriesRepositoryBase:
 
     @async_timed(repository="TimeseriesRepository", method="get_instrument")
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        result = await self.db.execute(select(Instrument).filter_by(security_id=security_id))
+        normalized_security_id = str(security_id or "").strip()
+        result = await self.db.execute(
+            select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
+        )
         return result.scalars().first()
 
     @async_timed(repository="TimeseriesRepository", method="get_instruments_by_ids")
     async def get_instruments_by_ids(self, security_ids: List[str]) -> List[Instrument]:
-        if not security_ids:
+        normalized_security_ids = [
+            normalized
+            for security_id in security_ids
+            if (normalized := str(security_id or "").strip())
+        ]
+        if not normalized_security_ids:
             return []
-        stmt = select(Instrument).where(Instrument.security_id.in_(security_ids))
+        stmt = select(Instrument).where(
+            func.trim(Instrument.security_id).in_(normalized_security_ids)
+        )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 

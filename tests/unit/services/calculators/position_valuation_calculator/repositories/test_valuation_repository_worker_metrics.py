@@ -190,6 +190,23 @@ async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_p
     assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
 
 
+async def test_get_instrument_trims_security_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    instrument = await repo.get_instrument(" SEC_A ")
+
+    assert instrument is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(instruments.security_id) = 'SEC_A'" in compiled_query
+
+
 async def test_get_latest_price_for_position_trims_security_id_before_query(
     mock_db_session: AsyncMock,
 ) -> None:
