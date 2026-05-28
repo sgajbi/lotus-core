@@ -169,16 +169,19 @@ class PositionRepository:
         Retrieves the time series of position history for a specific security,
         filtered to include only records from the current epoch for that key.
         """
+        security_id = normalize_security_id(security_id)
+        history_security_id = func.trim(PositionHistory.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         stmt = (
             select(PositionHistory, PositionState.status.label("reprocessing_status"))
             .join(
                 PositionState,
                 (PositionHistory.portfolio_id == PositionState.portfolio_id)
-                & (PositionHistory.security_id == PositionState.security_id),
+                & (history_security_id == state_security_id),
             )
             .where(
                 PositionHistory.portfolio_id == portfolio_id,
-                PositionHistory.security_id == security_id,
+                history_security_id == security_id,
                 PositionHistory.epoch == PositionState.epoch,
             )
         )
@@ -210,6 +213,9 @@ class PositionRepository:
         latest_history_subq = self._latest_current_position_history_subquery(
             portfolio_id=portfolio_id,
         )
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         ranked_snapshot_subq = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
@@ -217,7 +223,7 @@ class PositionRepository:
                 .over(
                     partition_by=(
                         DailyPositionSnapshot.portfolio_id,
-                        DailyPositionSnapshot.security_id,
+                        snapshot_security_id,
                     ),
                     order_by=(
                         DailyPositionSnapshot.date.desc(),
@@ -231,8 +237,7 @@ class PositionRepository:
                 and_(
                     DailyPositionSnapshot.portfolio_id
                     == latest_history_subq.c.portfolio_id,
-                    DailyPositionSnapshot.security_id
-                    == latest_history_subq.c.security_id,
+                    snapshot_security_id == latest_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
                 ),
@@ -253,11 +258,11 @@ class PositionRepository:
                     ranked_snapshot_subq.c.rn == 1,
                 ),
             )
-            .join(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
+            .join(Instrument, instrument_security_id == snapshot_security_id)
             .join(
                 PositionState,
                 (PositionState.portfolio_id == DailyPositionSnapshot.portfolio_id)
-                & (PositionState.security_id == DailyPositionSnapshot.security_id)
+                & (state_security_id == snapshot_security_id)
                 & (PositionState.epoch == DailyPositionSnapshot.epoch),
             )
             .filter(DailyPositionSnapshot.quantity != 0)
@@ -273,12 +278,15 @@ class PositionRepository:
         Fallback query for latest positions per security using position_history
         when daily snapshots are not yet materialized.
         """
+        history_security_id = func.trim(PositionHistory.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         ranked_history_subq = (
             select(
                 PositionHistory.id.label("position_history_id"),
                 func.row_number()
                 .over(
-                    partition_by=PositionHistory.security_id,
+                    partition_by=history_security_id,
                     order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
                 )
                 .label("rn"),
@@ -287,7 +295,7 @@ class PositionRepository:
                 PositionState,
                 and_(
                     PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    PositionHistory.security_id == PositionState.security_id,
+                    history_security_id == state_security_id,
                     PositionHistory.epoch == PositionState.epoch,
                 ),
             )
@@ -304,11 +312,11 @@ class PositionRepository:
                     ranked_history_subq.c.rn == 1,
                 ),
             )
-            .join(Instrument, Instrument.security_id == PositionHistory.security_id)
+            .join(Instrument, instrument_security_id == history_security_id)
             .join(
                 PositionState,
                 (PositionState.portfolio_id == PositionHistory.portfolio_id)
-                & (PositionState.security_id == PositionHistory.security_id)
+                & (state_security_id == history_security_id)
                 & (PositionState.epoch == PositionHistory.epoch),
             )
             .filter(PositionHistory.quantity != 0)
@@ -332,6 +340,9 @@ class PositionRepository:
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
         )
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         ranked_snapshot_subq = (
             select(
                 DailyPositionSnapshot.id.label("snapshot_id"),
@@ -339,7 +350,7 @@ class PositionRepository:
                 .over(
                     partition_by=(
                         DailyPositionSnapshot.portfolio_id,
-                        DailyPositionSnapshot.security_id,
+                        snapshot_security_id,
                     ),
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
@@ -350,8 +361,7 @@ class PositionRepository:
                 and_(
                     DailyPositionSnapshot.portfolio_id
                     == latest_history_subq.c.portfolio_id,
-                    DailyPositionSnapshot.security_id
-                    == latest_history_subq.c.security_id,
+                    snapshot_security_id == latest_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
                 ),
@@ -373,12 +383,12 @@ class PositionRepository:
                     ranked_snapshot_subq.c.rn == 1,
                 ),
             )
-            .join(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
+            .join(Instrument, instrument_security_id == snapshot_security_id)
             .join(
                 PositionState,
                 and_(
                     PositionState.portfolio_id == DailyPositionSnapshot.portfolio_id,
-                    PositionState.security_id == DailyPositionSnapshot.security_id,
+                    state_security_id == snapshot_security_id,
                     PositionState.epoch == DailyPositionSnapshot.epoch,
                 ),
             )
@@ -401,17 +411,19 @@ class PositionRepository:
         portfolio_id: str,
         as_of_date: date | None = None,
     ):
+        history_security_id = func.trim(PositionHistory.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         ranked_history_subq = (
             select(
                 PositionHistory.portfolio_id.label("portfolio_id"),
-                PositionHistory.security_id.label("security_id"),
+                history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
                 func.row_number()
                 .over(
                     partition_by=(
                         PositionHistory.portfolio_id,
-                        PositionHistory.security_id,
+                        history_security_id,
                     ),
                     order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
                 )
@@ -421,7 +433,7 @@ class PositionRepository:
                 PositionState,
                 and_(
                     PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    PositionHistory.security_id == PositionState.security_id,
+                    history_security_id == state_security_id,
                     PositionHistory.epoch == PositionState.epoch,
                 ),
             )
@@ -449,12 +461,15 @@ class PositionRepository:
         Fallback latest per-security position_history rows on or before as_of_date,
         constrained to current epoch via PositionState.
         """
+        history_security_id = func.trim(PositionHistory.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         ranked_history_subq = (
             select(
                 PositionHistory.id.label("position_history_id"),
                 func.row_number()
                 .over(
-                    partition_by=PositionHistory.security_id,
+                    partition_by=history_security_id,
                     order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
                 )
                 .label("rn"),
@@ -463,7 +478,7 @@ class PositionRepository:
                 PositionState,
                 and_(
                     PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    PositionHistory.security_id == PositionState.security_id,
+                    history_security_id == state_security_id,
                     PositionHistory.epoch == PositionState.epoch,
                 ),
             )
@@ -483,12 +498,12 @@ class PositionRepository:
                     ranked_history_subq.c.rn == 1,
                 ),
             )
-            .join(Instrument, Instrument.security_id == PositionHistory.security_id)
+            .join(Instrument, instrument_security_id == history_security_id)
             .join(
                 PositionState,
                 and_(
                     PositionState.portfolio_id == PositionHistory.portfolio_id,
-                    PositionState.security_id == PositionHistory.security_id,
+                    state_security_id == history_security_id,
                     PositionState.epoch == PositionHistory.epoch,
                 ),
             )

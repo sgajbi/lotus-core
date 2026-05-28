@@ -75,7 +75,16 @@ async def test_get_latest_positions_by_portfolio(
     # Assert that it ranks reconciled snapshots by business date and id per security.
     assert (
         "row_number() OVER (PARTITION BY daily_position_snapshots.portfolio_id, "
-        "daily_position_snapshots.security_id" in compiled_query
+        "trim(daily_position_snapshots.security_id)" in compiled_query
+    )
+    assert "trim(daily_position_snapshots.security_id) = anon_2.security_id" in compiled_query
+    assert (
+        "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)"
+        in compiled_query
+    )
+    assert (
+        "trim(position_state.security_id) = trim(daily_position_snapshots.security_id)"
+        in compiled_query
     )
     assert (
         "ORDER BY daily_position_snapshots.date DESC, daily_position_snapshots.id DESC"
@@ -124,7 +133,9 @@ async def test_get_latest_position_history_by_portfolio_builds_ranked_query(
     assert "FROM position_history" in compiled_query
     assert "JOIN position_state ON" in compiled_query
     assert "position_history.epoch = position_state.epoch" in compiled_query
-    assert "row_number() OVER (PARTITION BY position_history.security_id" in compiled_query
+    assert "row_number() OVER (PARTITION BY trim(position_history.security_id)" in compiled_query
+    assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled_query
+    assert "trim(instruments.security_id) = trim(position_history.security_id)" in compiled_query
     assert (
         "ORDER BY position_history.position_date DESC, position_history.id DESC" in compiled_query
     )
@@ -316,7 +327,16 @@ async def test_get_latest_positions_by_portfolio_as_of_date_builds_expected_quer
     assert "daily_position_snapshots.date <= '2025-01-31'" in compiled_query
     assert (
         "row_number() OVER (PARTITION BY daily_position_snapshots.portfolio_id, "
-        "daily_position_snapshots.security_id" in compiled_query
+        "trim(daily_position_snapshots.security_id)" in compiled_query
+    )
+    assert "trim(daily_position_snapshots.security_id) = anon_2.security_id" in compiled_query
+    assert (
+        "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)"
+        in compiled_query
+    )
+    assert (
+        "trim(position_state.security_id) = trim(daily_position_snapshots.security_id)"
+        in compiled_query
     )
     assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled_query
     assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled_query
@@ -331,6 +351,8 @@ async def test_get_latest_position_history_by_portfolio_as_of_date_builds_expect
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_history.position_date <= '2025-01-31'" in compiled_query
-    assert "row_number() OVER (PARTITION BY position_history.security_id" in compiled_query
+    assert "row_number() OVER (PARTITION BY trim(position_history.security_id)" in compiled_query
+    assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled_query
+    assert "trim(instruments.security_id) = trim(position_history.security_id)" in compiled_query
     assert "position_history.epoch = position_state.epoch" in compiled_query
     assert "position_history.quantity != 0" in compiled_query
