@@ -9,6 +9,7 @@ from uuid import uuid4
 from portfolio_common.database_models import FinancialReconciliationFinding
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
+from portfolio_common.valuation_prices import resolve_valuation_unit_price
 
 from ..dtos import ReconciliationRunRequest
 from ..repositories import ReconciliationRepository
@@ -101,21 +102,12 @@ class ReconciliationService:
         cost_basis_local: Decimal,
         product_type: str | None,
     ) -> Decimal:
-        normalized_product_type = (product_type or "").strip().upper()
-        valuation_price_local = market_price
-        if normalized_product_type == "BOND" and not quantity.is_zero():
-            average_cost_local = abs(cost_basis_local / quantity)
-            absolute_price_local = abs(valuation_price_local)
-            if (
-                absolute_price_local > Decimal("0")
-                and absolute_price_local < Decimal("200")
-                and average_cost_local >= Decimal("500")
-            ):
-                price_ratio = average_cost_local / absolute_price_local
-                if price_ratio >= Decimal("50"):
-                    valuation_price_local *= Decimal("100")
-                elif price_ratio >= Decimal("5"):
-                    valuation_price_local *= Decimal("10")
+        valuation_price_local = resolve_valuation_unit_price(
+            market_price=market_price,
+            quantity=quantity,
+            cost_basis_local=cost_basis_local,
+            product_type=product_type,
+        )
         return quantity * valuation_price_local
 
     @staticmethod
