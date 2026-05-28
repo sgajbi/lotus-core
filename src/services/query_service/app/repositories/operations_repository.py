@@ -1263,7 +1263,7 @@ class OperationsRepository:
         base_stmt = (
             select(
                 Transaction.transaction_id.label("transaction_id"),
-                Transaction.security_id.label("security_id"),
+                self._security_id_expr(Transaction.security_id).label("security_id"),
                 cast(func.date(Transaction.transaction_date), Date).label("transaction_date"),
                 Transaction.trade_currency.label("trade_currency"),
                 Portfolio.base_currency.label("portfolio_currency"),
@@ -1308,7 +1308,7 @@ class OperationsRepository:
             sample_records=[
                 MissingHistoricalFxDependencyRecord(
                     transaction_id=row.transaction_id,
-                    security_id=row.security_id,
+                    security_id=normalize_security_id(row.security_id),
                     transaction_date=row.transaction_date,
                     trade_currency=row.trade_currency,
                     portfolio_currency=row.portfolio_currency,
