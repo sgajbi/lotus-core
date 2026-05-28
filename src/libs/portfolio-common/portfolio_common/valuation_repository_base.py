@@ -32,6 +32,7 @@ from .database_models import (
     PositionHistory,
     PositionState,
 )
+from .identifiers import normalize_lookup_identifier
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
@@ -46,14 +47,6 @@ class ValuationRepositoryBase:
     @staticmethod
     def _normalize_currency_code(currency_code: str) -> str:
         return normalize_currency_code(currency_code)
-
-    @staticmethod
-    def _normalize_security_id(security_id: object) -> str:
-        return str(security_id or "").strip()
-
-    @staticmethod
-    def _normalize_identifier(identifier: object) -> str:
-        return str(identifier or "").strip()
 
     def _observe_jobs_claimed(self, claimed_count: int) -> None:
         """Hook for service-local metrics."""
@@ -206,7 +199,7 @@ class ValuationRepositoryBase:
         normalized_portfolio_ids = [
             normalized
             for portfolio_id in portfolio_ids
-            if (normalized := self._normalize_identifier(portfolio_id))
+            if (normalized := normalize_lookup_identifier(portfolio_id))
         ]
         if not normalized_portfolio_ids:
             return []
@@ -410,8 +403,8 @@ class ValuationRepositoryBase:
     async def get_last_position_history_before_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> Optional[PositionHistory]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_security_id(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             select(PositionHistory)
             .filter(
@@ -461,8 +454,8 @@ class ValuationRepositoryBase:
         if failure_reason:
             values_to_update["failure_reason"] = failure_reason
 
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_security_id(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             update(PortfolioValuationJob)
             .where(
@@ -539,14 +532,14 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         stmt = select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
     @async_timed(repository="ValuationRepository", method="get_instrument")
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        normalized_security_id = self._normalize_security_id(security_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
@@ -575,7 +568,7 @@ class ValuationRepositoryBase:
     async def get_latest_price_for_position(
         self, security_id: str, position_date: date
     ) -> Optional[MarketPrice]:
-        normalized_security_id = self._normalize_security_id(security_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         market_price_security_id = func.trim(MarketPrice.security_id)
         stmt = (
             select(MarketPrice)
@@ -764,7 +757,7 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_next_price_date")
     async def get_next_price_date(self, security_id: str, after_date: date) -> Optional[date]:
-        normalized_security_id = self._normalize_security_id(security_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         market_price_security_id = func.trim(MarketPrice.security_id)
         stmt = (
             select(MarketPrice.price_date)

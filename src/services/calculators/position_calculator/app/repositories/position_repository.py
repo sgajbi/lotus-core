@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
     PositionHistory,
     Transaction,
 )
+from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.utils import async_timed
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,10 +26,6 @@ class PositionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    @staticmethod
-    def _normalize_identifier(identifier: object) -> str:
-        return str(identifier or "").strip()
-
     @async_timed(repository="PositionRepository", method="get_latest_completed_snapshot_date")
     async def get_latest_completed_snapshot_date(
         self, portfolio_id: str, security_id: str, epoch: int
@@ -37,8 +34,8 @@ class PositionRepository:
         Finds the latest date for which a daily snapshot has been successfully
         created for a given key in a specific epoch.
         """
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = select(func.max(DailyPositionSnapshot.date)).where(
             func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
             func.trim(DailyPositionSnapshot.security_id) == normalized_security_id,
@@ -57,8 +54,8 @@ class PositionRepository:
         signal that later-dated state already exists, independent of snapshot
         backfill progress.
         """
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = select(func.max(PositionHistory.position_date)).where(
             func.trim(PositionHistory.portfolio_id) == normalized_portfolio_id,
             func.trim(PositionHistory.security_id) == normalized_security_id,
@@ -74,7 +71,7 @@ class PositionRepository:
         Finds all unique security IDs in a portfolio that had a non-zero quantity
         based on the latest available snapshot on or before the specified date.
         """
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         # Subquery to rank snapshots for each security within the portfolio by date.
         latest_snapshot_subquery = (
@@ -120,8 +117,8 @@ class PositionRepository:
         ordered chronologically.
         This is required to replay the entire history accurately.
         """
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             select(Transaction)
             .where(
@@ -149,8 +146,8 @@ class PositionRepository:
     async def get_last_position_before(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> Optional[PositionHistory]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             select(PositionHistory)
             .filter(
@@ -169,8 +166,8 @@ class PositionRepository:
     async def get_transactions_on_or_after(
         self, portfolio_id: str, security_id: str, a_date: date
     ) -> List[Transaction]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             select(Transaction)
             .filter(
@@ -188,12 +185,12 @@ class PositionRepository:
     async def get_transaction_by_id(
         self, transaction_id: str, *, portfolio_id: str | None = None
     ) -> Optional[Transaction]:
-        normalized_transaction_id = self._normalize_identifier(transaction_id)
+        normalized_transaction_id = normalize_lookup_identifier(transaction_id)
         stmt = select(Transaction).where(
             func.trim(Transaction.transaction_id) == normalized_transaction_id
         )
         if portfolio_id:
-            normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+            normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
             stmt = stmt.where(func.trim(Transaction.portfolio_id) == normalized_portfolio_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
@@ -202,8 +199,8 @@ class PositionRepository:
     async def delete_positions_from(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> int:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = delete(PositionHistory).where(
             func.trim(PositionHistory.portfolio_id) == normalized_portfolio_id,
             func.trim(PositionHistory.security_id) == normalized_security_id,

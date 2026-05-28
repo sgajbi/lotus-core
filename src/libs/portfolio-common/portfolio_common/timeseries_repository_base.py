@@ -18,6 +18,7 @@ from .database_models import (
     PositionState,
     PositionTimeseries,
 )
+from .identifiers import normalize_lookup_identifier
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
@@ -29,13 +30,9 @@ class TimeseriesRepositoryBase:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    @staticmethod
-    def _normalize_identifier(identifier: object) -> str:
-        return str(identifier or "").strip()
-
     @async_timed(repository="TimeseriesRepository", method="get_current_epoch_for_portfolio")
     async def get_current_epoch_for_portfolio(self, portfolio_id: str) -> int:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         stmt = select(func.max(PositionState.epoch)).where(
             func.trim(PositionState.portfolio_id) == normalized_portfolio_id
         )
@@ -47,7 +44,7 @@ class TimeseriesRepositoryBase:
     async def get_all_snapshots_for_date(
         self, portfolio_id: str, a_date: date
     ) -> List[DailyPositionSnapshot]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         stmt = select(DailyPositionSnapshot).where(
             func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
             DailyPositionSnapshot.date == a_date,
@@ -228,7 +225,7 @@ class TimeseriesRepositoryBase:
 
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         result = await self.db.execute(
             select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
         )
@@ -236,7 +233,7 @@ class TimeseriesRepositoryBase:
 
     @async_timed(repository="TimeseriesRepository", method="get_instrument")
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         result = await self.db.execute(
             select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         )
@@ -247,7 +244,7 @@ class TimeseriesRepositoryBase:
         normalized_security_ids = [
             normalized
             for security_id in security_ids
-            if (normalized := self._normalize_identifier(security_id))
+            if (normalized := normalize_lookup_identifier(security_id))
         ]
         if not normalized_security_ids:
             return []
@@ -281,7 +278,7 @@ class TimeseriesRepositoryBase:
     async def get_all_position_timeseries_for_date(
         self, portfolio_id: str, a_date: date, epoch: int
     ) -> List[PositionTimeseries]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         position_timeseries_security_id = func.trim(PositionTimeseries.security_id)
         ranked_position_rows = (
             select(
@@ -328,8 +325,8 @@ class TimeseriesRepositoryBase:
     async def get_all_cashflows_for_security_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> List[Cashflow]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         ranked_cashflows = (
             select(
                 Cashflow.id.label("id"),
@@ -361,7 +358,7 @@ class TimeseriesRepositoryBase:
     async def get_last_portfolio_timeseries_before(
         self, portfolio_id: str, a_date: date
     ) -> Optional[PortfolioTimeseries]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         stmt = (
             select(PortfolioTimeseries)
             .filter(
@@ -377,7 +374,7 @@ class TimeseriesRepositoryBase:
     async def get_latest_snapshots_for_date(
         self, portfolio_id: str, a_date: date
     ) -> List[DailyPositionSnapshot]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         latest_snapshot_epochs = (
             select(
@@ -509,8 +506,8 @@ class TimeseriesRepositoryBase:
     async def get_last_snapshot_before(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> Optional[DailyPositionSnapshot]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             select(DailyPositionSnapshot)
             .filter(
@@ -534,8 +531,8 @@ class TimeseriesRepositoryBase:
         epoch: int,
         max_rows: int,
     ) -> List[DailyPositionSnapshot]:
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         ranked_future_snapshots = (
             select(
                 DailyPositionSnapshot.id.label("id"),
@@ -574,8 +571,8 @@ class TimeseriesRepositoryBase:
     ) -> dict[date, List[Cashflow]]:
         if not dates:
             return {}
-        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
-        normalized_security_id = self._normalize_identifier(security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         ranked_cashflows = (
             select(
                 Cashflow.id.label("id"),
