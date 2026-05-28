@@ -33,18 +33,44 @@ async def test_get_position_lots_returns_rows():
     db = AsyncMock()
     db.execute.return_value = _mock_result(scalars_all=[SimpleNamespace(lot_id="LOT-1")])
     repo = BuyStateRepository(db)
-    rows = await repo.get_position_lots("PORT-1", "SEC-1")
+    rows = await repo.get_position_lots("PORT-1", " SEC-1 ")
     assert len(rows) == 1
     assert rows[0].lot_id == "LOT-1"
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(position_lot_state.security_id) = 'SEC-1'" in compiled_query
 
 
 async def test_get_accrued_offsets_returns_rows():
     db = AsyncMock()
     db.execute.return_value = _mock_result(scalars_all=[SimpleNamespace(offset_id="AIO-1")])
     repo = BuyStateRepository(db)
-    rows = await repo.get_accrued_offsets("PORT-1", "SEC-1")
+    rows = await repo.get_accrued_offsets("PORT-1", " SEC-1 ")
     assert len(rows) == 1
     assert rows[0].offset_id == "AIO-1"
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(accrued_income_offset_state.security_id) = 'SEC-1'" in compiled_query
+
+
+async def test_get_position_lots_skips_blank_security_id():
+    db = AsyncMock()
+    repo = BuyStateRepository(db)
+
+    rows = await repo.get_position_lots("PORT-1", " ")
+
+    assert rows == []
+    db.execute.assert_not_awaited()
+
+
+async def test_get_accrued_offsets_skips_blank_security_id():
+    db = AsyncMock()
+    repo = BuyStateRepository(db)
+
+    rows = await repo.get_accrued_offsets("PORT-1", " ")
+
+    assert rows == []
+    db.execute.assert_not_awaited()
 
 
 async def test_get_buy_cash_linkage_returns_tuple():

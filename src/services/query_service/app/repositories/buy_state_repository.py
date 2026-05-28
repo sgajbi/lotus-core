@@ -25,11 +25,15 @@ class BuyStateRepository:
     async def get_position_lots(
         self, portfolio_id: str, security_id: str
     ) -> list[PositionLotState]:
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return []
+
         stmt = (
             select(PositionLotState)
             .where(
                 PositionLotState.portfolio_id == portfolio_id,
-                PositionLotState.security_id == security_id,
+                func.trim(PositionLotState.security_id) == security_id,
             )
             .order_by(PositionLotState.acquisition_date.asc(), PositionLotState.id.asc())
         )
@@ -93,11 +97,15 @@ class BuyStateRepository:
     async def get_accrued_offsets(
         self, portfolio_id: str, security_id: str
     ) -> list[AccruedIncomeOffsetState]:
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return []
+
         stmt = (
             select(AccruedIncomeOffsetState)
             .where(
                 AccruedIncomeOffsetState.portfolio_id == portfolio_id,
-                AccruedIncomeOffsetState.security_id == security_id,
+                func.trim(AccruedIncomeOffsetState.security_id) == security_id,
             )
             .order_by(AccruedIncomeOffsetState.id.asc())
         )

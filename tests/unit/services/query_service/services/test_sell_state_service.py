@@ -21,7 +21,7 @@ def mock_sell_state_repo() -> AsyncMock:
             transaction_id="TXN-SELL-1",
             transaction_date=datetime(2026, 3, 1, 9, 30),
             instrument_id="AAPL",
-            security_id="US0378331005",
+            security_id=" US0378331005 ",
             quantity=Decimal("-25"),
             net_cost=Decimal("-3750"),
             net_cost_local=Decimal("-3750"),
@@ -59,10 +59,16 @@ async def test_get_sell_disposals_maps_deterministic_fields(mock_sell_state_repo
         return_value=mock_sell_state_repo,
     ):
         service = SellStateService(AsyncMock())
-        response = await service.get_sell_disposals("PORT-1", "US0378331005")
+        response = await service.get_sell_disposals("PORT-1", " US0378331005 ")
 
     assert len(response.sell_disposals) == 1
+    assert response.security_id == "US0378331005"
+    mock_sell_state_repo.get_sell_disposals.assert_awaited_once_with(
+        portfolio_id="PORT-1",
+        security_id="US0378331005",
+    )
     record = response.sell_disposals[0]
+    assert record.security_id == "US0378331005"
     assert record.quantity_disposed == Decimal("25")
     assert record.disposal_cost_basis_base == Decimal("3750")
     assert record.net_sell_proceeds_base == Decimal("4250")
