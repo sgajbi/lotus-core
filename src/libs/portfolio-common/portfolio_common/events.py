@@ -101,6 +101,13 @@ class MarketPriceEvent(CoreEventModel):
     price: Decimal
     currency: str
 
+    @field_validator("price")
+    @classmethod
+    def _validate_positive_price(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0:
+            raise ValueError("Market price must be greater than zero.")
+        return value
+
     @field_validator("currency", mode="before")
     @classmethod
     def _normalize_currency_code(cls, value: object) -> str:
@@ -116,6 +123,13 @@ class MarketPricePersistedEvent(CoreEventModel):
     price_date: date
     price: Decimal
     currency: str
+
+    @field_validator("price")
+    @classmethod
+    def _validate_positive_price(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0:
+            raise ValueError("Market price must be greater than zero.")
+        return value
 
     @field_validator("currency", mode="before")
     @classmethod

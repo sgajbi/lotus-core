@@ -52,6 +52,25 @@ def test_market_price_events_normalize_currency_codes() -> None:
     assert persisted_event.currency == "USD"
 
 
+@pytest.mark.parametrize("price", ["0", "-0.01"])
+def test_market_price_events_reject_nonpositive_prices(price: str) -> None:
+    with pytest.raises(ValueError, match="Market price must be greater than zero"):
+        MarketPriceEvent(
+            security_id="SEC_A",
+            price_date="2026-05-28",
+            price=price,
+            currency="USD",
+        )
+
+    with pytest.raises(ValueError, match="Market price must be greater than zero"):
+        MarketPricePersistedEvent(
+            security_id="SEC_A",
+            price_date="2026-05-28",
+            price=price,
+            currency="USD",
+        )
+
+
 def test_transaction_event_normalizes_currency_codes() -> None:
     event = TransactionEvent(
         transaction_id="TX_CANONICAL_CCY_001",
