@@ -234,13 +234,16 @@ async def test_reporting_repository_lookthrough_query_uses_effective_window() ->
     repo = ReportingRepository(db)
 
     await repo.list_instrument_lookthrough_components(
-        parent_security_ids=["FUND1", "FUND2"],
+        parent_security_ids=[" FUND1 ", "FUND2", " "],
         as_of_date=date(2026, 3, 27),
     )
 
     stmt = db.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "instrument_lookthrough_components.parent_security_id IN ('FUND1', 'FUND2')" in compiled
+    assert (
+        "trim(instrument_lookthrough_components.parent_security_id) IN ('FUND1', 'FUND2')"
+        in compiled
+    )
     assert "instrument_lookthrough_components.effective_from <= '2026-03-27'" in compiled
     assert "instrument_lookthrough_components.effective_to >= '2026-03-27'" in compiled
 

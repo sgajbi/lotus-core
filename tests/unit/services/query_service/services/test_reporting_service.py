@@ -356,6 +356,56 @@ async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mod
     assert response.look_through.supported is True
 
 
+async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(" FUND1 ", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        )
+    ]
+    repo.list_instrument_lookthrough_components.return_value = [
+        InstrumentLookthroughComponentRow(
+            parent_security_id=" FUND1 ",
+            component_security_id="ETF1",
+            component_weight=Decimal("1"),
+            component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+        )
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_asset_allocation(
+            AssetAllocationQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                dimensions=["asset_class"],
+                look_through_mode="prefer_look_through",
+            )
+        )
+
+    assert response.look_through.applied_mode == "prefer_look_through"
+    assert response.look_through.decomposed_position_count == 1
+    asset_class_view = next(view for view in response.views if view.dimension == "asset_class")
+    buckets = [
+        (bucket.dimension_value, bucket.market_value_reporting_currency)
+        for bucket in asset_class_view.buckets
+    ]
+    assert buckets == [
+        ("EQUITY", Decimal("100")),
+    ]
+    repo.list_instrument_lookthrough_components.assert_awaited_once_with(
+        parent_security_ids=["FUND1"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+
 @pytest.mark.asyncio
 async def test_reporting_service_can_decompose_position_requires_complete_weights() -> None:
     assert ReportingService._can_decompose_position([]) is False

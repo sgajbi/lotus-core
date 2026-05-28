@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.currency_codes import normalize_currency_code
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
 
 ZERO = Decimal("0")
@@ -19,10 +20,6 @@ CASH_ASSET_CLASS = "CASH"
 def _normalize_control_code(value: Any, *, default: str = "") -> str:
     normalized = str(value or "").strip().upper()
     return normalized or default
-
-
-def _normalize_security_id(value: Any) -> str:
-    return str(value or "").strip()
 
 
 class CashBalanceResolver:
@@ -90,7 +87,7 @@ class CashBalanceResolver:
         cash_security_ids = [
             security_id
             for row in cash_rows
-            if (security_id := _normalize_security_id(row.snapshot.security_id))
+            if (security_id := normalize_security_id(row.snapshot.security_id))
         ]
         master_rows = await self.repo.list_cash_account_masters(
             portfolio_id=portfolio.portfolio_id,
@@ -99,7 +96,7 @@ class CashBalanceResolver:
         master_by_security_id = {
             security_id: row
             for row in master_rows
-            if (security_id := _normalize_security_id(row.security_id))
+            if (security_id := normalize_security_id(row.security_id))
         }
         fallback_cash_account_id_rows = await self.repo.get_latest_cash_account_ids(
             portfolio_id=portfolio.portfolio_id,
@@ -107,20 +104,20 @@ class CashBalanceResolver:
             as_of_date=resolved_as_of_date,
         )
         fallback_cash_account_ids = {
-            _normalize_security_id(security_id): cash_account_id
+            normalize_security_id(security_id): cash_account_id
             for security_id, cash_account_id in fallback_cash_account_id_rows.items()
         }
         snapshot_by_security_id = {
             security_id: row
             for row in cash_rows
-            if (security_id := _normalize_security_id(row.snapshot.security_id))
+            if (security_id := normalize_security_id(row.snapshot.security_id))
         }
 
         account_records: list[CashAccountBalanceRecord] = []
         emitted_cash_account_ids: set[str] = set()
 
         for master_row in master_rows:
-            security_id = _normalize_security_id(master_row.security_id)
+            security_id = normalize_security_id(master_row.security_id)
             snapshot_row = snapshot_by_security_id.get(security_id)
             account_record = await self._build_cash_account_balance_record(
                 portfolio=portfolio,
@@ -140,7 +137,7 @@ class CashBalanceResolver:
             emitted_cash_account_ids.add(master_row.cash_account_id)
 
         for cash_row in cash_rows:
-            security_id = _normalize_security_id(cash_row.snapshot.security_id)
+            security_id = normalize_security_id(cash_row.snapshot.security_id)
             master_row = master_by_security_id.get(security_id)
             fallback_cash_account_id = (
                 master_row.cash_account_id

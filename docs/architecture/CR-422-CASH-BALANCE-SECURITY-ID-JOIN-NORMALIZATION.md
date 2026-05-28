@@ -18,10 +18,9 @@ snapshot data is present.
 
 ## Change
 
-Added a service-local security identifier normalizer for cash-balance assembly. The resolver now
-trims cash snapshot identifiers before fallback lookup, trims master and snapshot join keys, trims
-fallback mapping keys, and emits canonical trimmed cash security identifiers in cash-balance
-records.
+Added security identifier normalization for cash-balance assembly. The resolver now trims cash
+snapshot identifiers before fallback lookup, trims master and snapshot join keys, trims fallback
+mapping keys, and emits canonical trimmed cash security identifiers in cash-balance records.
 
 Currency normalization remains handled by the existing query-service currency-code normalizer.
 

@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .currency_codes import normalize_currency_code
 from .date_filters import start_of_next_day
+from .identifier_normalization import normalize_security_id
 
 
 @dataclass(frozen=True)
@@ -261,12 +262,18 @@ class ReportingRepository:
         parent_security_ids: list[str],
         as_of_date: date,
     ) -> list[InstrumentLookthroughComponentRow]:
-        if not parent_security_ids:
+        normalized_parent_security_ids = [
+            security_id
+            for value in parent_security_ids
+            if (security_id := normalize_security_id(value))
+        ]
+        if not normalized_parent_security_ids:
             return []
 
+        parent_security_id = func.trim(InstrumentLookthroughComponent.parent_security_id)
         stmt = (
             select(
-                InstrumentLookthroughComponent.parent_security_id,
+                parent_security_id.label("parent_security_id"),
                 InstrumentLookthroughComponent.component_security_id,
                 InstrumentLookthroughComponent.component_weight,
                 Instrument,
@@ -276,7 +283,7 @@ class ReportingRepository:
                 Instrument.security_id == InstrumentLookthroughComponent.component_security_id,
             )
             .where(
-                InstrumentLookthroughComponent.parent_security_id.in_(parent_security_ids),
+                parent_security_id.in_(normalized_parent_security_ids),
                 InstrumentLookthroughComponent.effective_from <= as_of_date,
                 or_(
                     InstrumentLookthroughComponent.effective_to.is_(None),
@@ -284,7 +291,7 @@ class ReportingRepository:
                 ),
             )
             .order_by(
-                InstrumentLookthroughComponent.parent_security_id.asc(),
+                parent_security_id.asc(),
                 InstrumentLookthroughComponent.component_security_id.asc(),
             )
         )

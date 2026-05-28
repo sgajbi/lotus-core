@@ -25,6 +25,7 @@ from ..dtos.reporting_dto import (
     ReportingScope,
 )
 from ..repositories.currency_codes import normalize_currency_code
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,
     ReportingRepository,
@@ -287,12 +288,18 @@ class ReportingService:
             direct_rows.append((row.instrument, row.snapshot, reporting_value))
 
         component_rows = await self.repo.list_instrument_lookthrough_components(
-            parent_security_ids=[row.snapshot.security_id for row in rows],
+            parent_security_ids=[
+                security_id
+                for row in rows
+                if (security_id := normalize_security_id(row.snapshot.security_id))
+            ],
             as_of_date=as_of_date,
         )
         components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)
         for component_row in component_rows:
-            components_by_parent[component_row.parent_security_id].append(component_row)
+            components_by_parent[normalize_security_id(component_row.parent_security_id)].append(
+                component_row
+            )
         decomposable_parent_ids = {
             parent_security_id
             for parent_security_id, components in components_by_parent.items()
@@ -313,6 +320,7 @@ class ReportingService:
         undecomposed_requested_count = 0
 
         for row in rows:
+            parent_security_id = normalize_security_id(row.snapshot.security_id)
             native_value = Decimal(str(row.snapshot.market_value or ZERO))
             reporting_value = await self._convert_amount(
                 amount=native_value,
@@ -320,8 +328,8 @@ class ReportingService:
                 to_currency=reporting_currency,
                 as_of_date=as_of_date,
             )
-            components = components_by_parent.get(row.snapshot.security_id, [])
-            if row.snapshot.security_id not in decomposable_parent_ids:
+            components = components_by_parent.get(parent_security_id, [])
+            if parent_security_id not in decomposable_parent_ids:
                 allocation_rows.append((row.instrument, row.snapshot, reporting_value))
                 if not self._cash_balance_resolver.is_cash_row(row):
                     undecomposed_requested_count += 1
