@@ -226,6 +226,7 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
     portfolio_status_date_updated = indexes[
         "ix_portfolio_aggregation_jobs_portfolio_status_date_updated_id"
     ]
+    claim_order = indexes["ix_portfolio_aggregation_jobs_claim_order"]
 
     assert [column.name for column in portfolio_status_updated.columns] == [
         "portfolio_id",
@@ -237,6 +238,12 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
         "status",
         "aggregation_date",
         "updated_at",
+        "id",
+    ]
+    assert [column.name for column in claim_order.columns] == [
+        "status",
+        "portfolio_id",
+        "aggregation_date",
         "id",
     ]
 

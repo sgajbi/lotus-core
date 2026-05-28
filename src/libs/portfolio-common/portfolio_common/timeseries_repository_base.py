@@ -196,7 +196,7 @@ class TimeseriesRepositoryBase:
                 p1.status == "PENDING",
                 completeness_ready_subq,
             )
-            .order_by(p1.portfolio_id, p1.aggregation_date)
+            .order_by(p1.portfolio_id, p1.aggregation_date, p1.id)
             .limit(batch_size)
             .with_for_update(skip_locked=True)
         )
@@ -218,7 +218,10 @@ class TimeseriesRepositoryBase:
         )
 
         result = await self.db.execute(update_query)
-        claimed_jobs = result.scalars().all()
+        claimed_jobs = sorted(
+            result.scalars().all(),
+            key=lambda job: (job.portfolio_id, job.aggregation_date, job.id),
+        )
         if claimed_jobs:
             logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_jobs))
         return claimed_jobs

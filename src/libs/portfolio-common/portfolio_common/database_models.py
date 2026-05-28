@@ -1640,6 +1640,13 @@ class PortfolioAggregationJob(Base):
             "updated_at",
         ),
         Index(
+            "ix_portfolio_aggregation_jobs_claim_order",
+            "status",
+            "portfolio_id",
+            "aggregation_date",
+            "id",
+        ),
+        Index(
             "ix_portfolio_aggregation_jobs_portfolio_status_updated",
             "portfolio_id",
             "status",

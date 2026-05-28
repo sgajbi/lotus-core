@@ -64,6 +64,23 @@ async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
     )
 
 
+async def test_find_and_claim_eligible_jobs_uses_deterministic_claim_order(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.find_and_claim_eligible_jobs(batch_size=5)
+
+    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "portfolio_aggregation_jobs.status = 'PENDING'" in compiled_query
+    assert (
+        "ORDER BY portfolio_aggregation_jobs.portfolio_id, "
+        "portfolio_aggregation_jobs.aggregation_date, portfolio_aggregation_jobs.id"
+    ) in compiled_query
+
+
 async def test_find_and_reset_stale_jobs_refreshes_updated_at(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
@@ -103,6 +120,28 @@ async def test_find_and_claim_eligible_jobs_increments_attempt_count(
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PROCESSING'" in compiled_query
     assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
+
+
+async def test_find_and_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    eligible_result = MagicMock()
+    eligible_result.fetchall.return_value = [(1,), (2,), (3,)]
+    claimed_result = MagicMock()
+    claimed_result.scalars.return_value.all.return_value = [
+        MagicMock(portfolio_id="P2", aggregation_date=date(2025, 1, 1), id=2),
+        MagicMock(portfolio_id="P1", aggregation_date=date(2025, 1, 2), id=3),
+        MagicMock(portfolio_id="P1", aggregation_date=date(2025, 1, 1), id=1),
+    ]
+    mock_db_session.execute.side_effect = [eligible_result, claimed_result]
+
+    claimed_jobs = await repository.find_and_claim_eligible_jobs(batch_size=5)
+
+    assert [(job.portfolio_id, job.aggregation_date, job.id) for job in claimed_jobs] == [
+        ("P1", date(2025, 1, 1), 1),
+        ("P1", date(2025, 1, 2), 3),
+        ("P2", date(2025, 1, 1), 2),
+    ]
 
 
 async def test_find_and_reset_stale_jobs_rechecks_stale_processing_state(
