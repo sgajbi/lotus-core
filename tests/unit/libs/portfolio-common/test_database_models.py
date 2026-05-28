@@ -219,6 +219,11 @@ def test_api_query_hot_path_indexes_are_declared():
                 "transactions.transaction_date DESC",
                 "transactions.id DESC",
             ],
+            "ix_txn_port_settlement_date_id": [
+                "transactions.portfolio_id",
+                "transactions.settlement_date",
+                "transactions.id",
+            ],
         },
         CashAccountMaster: {
             "ix_cash_account_port_currency_id": [

@@ -1323,6 +1323,12 @@ class Transaction(Base):
             transaction_date.desc(),
             id.desc(),
         ),
+        Index(
+            "ix_txn_port_settlement_date_id",
+            "portfolio_id",
+            settlement_date,
+            id,
+        ),
     )
 
 
