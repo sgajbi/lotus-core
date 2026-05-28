@@ -393,8 +393,7 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
         for compiled in execute_sql
     )
     assert any(
-        "upper(trim(portfolio_valuation_jobs.status)) = 'COMPLETE'" in compiled
-        for compiled in execute_sql
+        "portfolio_valuation_jobs.status = 'COMPLETE'" in compiled for compiled in execute_sql
     )
     assert any(
         "count(distinct" in compiled.lower() and "portfolio_id" in compiled.lower()
@@ -1029,7 +1028,7 @@ async def test_get_valuation_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in compiled.lower()
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "upper(trim(portfolio_valuation_jobs.status)) = 'PENDING'" in compiled
+    assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
 
 
@@ -1093,7 +1092,7 @@ async def test_get_aggregation_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_aggregation_jobs" in compiled.lower()
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "upper(trim(portfolio_aggregation_jobs.status)) = 'PROCESSING'" in compiled
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
 
 
 async def test_get_aggregation_jobs_query(
@@ -1283,13 +1282,13 @@ async def test_get_valuation_jobs_query_with_status(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_valuation_jobs(
-        portfolio_id="P1", skip=0, limit=20, status="PENDING"
+        portfolio_id="P1", skip=0, limit=20, status=" pending "
     )
 
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "upper(trim(portfolio_valuation_jobs.status)) = 'PENDING'" in compiled
+    assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
 
 
 async def test_get_aggregation_jobs_query_with_status(
@@ -1300,13 +1299,13 @@ async def test_get_aggregation_jobs_query_with_status(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_aggregation_jobs(
-        portfolio_id="P1", skip=0, limit=20, status="PROCESSING"
+        portfolio_id="P1", skip=0, limit=20, status=" processing "
     )
 
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "upper(trim(portfolio_aggregation_jobs.status)) = 'PROCESSING'" in compiled
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
 
 
 async def test_get_analytics_export_jobs_count_with_status(
@@ -1732,7 +1731,7 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
-    assert "upper(trim(reprocessing_jobs.status)) = 'PROCESSING'" in compiled
+    assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
     assert "from position_history join position_state on" in compiled.lower()
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
@@ -1783,7 +1782,7 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert "anon_1.quantity > 0" in compiled
-    assert "upper(trim(reprocessing_jobs.status)) = 'PROCESSING'" in compiled
+    assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
 
 
 async def test_get_reprocessing_jobs_count_honors_as_of(

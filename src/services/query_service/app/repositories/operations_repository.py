@@ -145,6 +145,10 @@ class OperationsRepository:
         return func.upper(func.trim(status_column))
 
     @staticmethod
+    def _support_job_status_filter(status_column, status: str):
+        return status_column == status.strip().upper()
+
+    @staticmethod
     def _reprocessing_status_expr(status_column):
         return func.upper(func.trim(status_column))
 
@@ -193,8 +197,7 @@ class OperationsRepository:
             )
 
         return or_(
-            OperationsRepository._support_job_status_expr(PortfolioValuationJob.status)
-            != "PENDING",
+            PortfolioValuationJob.status != "PENDING",
             ~superseded_pending_exists.correlate(PortfolioValuationJob).exists(),
         )
 
@@ -455,7 +458,7 @@ class OperationsRepository:
             PortfolioValuationJob.updated_at.label("valuation_completed_at_utc"),
         ).where(
             PortfolioValuationJob.portfolio_id.like(portfolio_pattern),
-            self._support_job_status_expr(PortfolioValuationJob.status) == "COMPLETE",
+            PortfolioValuationJob.status == "COMPLETE",
             ~self._has_superseding_valuation_epoch(as_of=as_of),
         )
         if as_of is not None:
@@ -1677,7 +1680,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(self._support_job_status_expr(PortfolioValuationJob.status) == status)
+            stmt = stmt.where(self._support_job_status_filter(PortfolioValuationJob.status, status))
         if business_date:
             stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
         if normalized_security_id:
@@ -1718,7 +1721,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(self._support_job_status_expr(PortfolioValuationJob.status) == status)
+            stmt = stmt.where(self._support_job_status_filter(PortfolioValuationJob.status, status))
         if business_date:
             stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
         if normalized_security_id:
@@ -1761,7 +1764,7 @@ class OperationsRepository:
             stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(
-                self._support_job_status_expr(PortfolioAggregationJob.status) == status
+                self._support_job_status_filter(PortfolioAggregationJob.status, status)
             )
         if business_date:
             stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
@@ -1793,7 +1796,7 @@ class OperationsRepository:
             stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(
-                self._support_job_status_expr(PortfolioAggregationJob.status) == status
+                self._support_job_status_filter(PortfolioAggregationJob.status, status)
             )
         if business_date:
             stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
@@ -2278,7 +2281,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(self._support_job_status_expr(ReprocessingJob.status) == status)
+            stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
         if normalized_security_id:
             stmt = stmt.where(security_id_expr == normalized_security_id)
         if job_id is not None:
@@ -2333,7 +2336,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(self._support_job_status_expr(ReprocessingJob.status) == status)
+            stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
         if normalized_security_id:
             stmt = stmt.where(security_id_expr == normalized_security_id)
         if job_id is not None:
