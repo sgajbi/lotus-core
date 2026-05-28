@@ -137,6 +137,10 @@ class OperationsRepository:
         self.db = db
 
     @staticmethod
+    def _support_job_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
     def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
         superseding_job = aliased(PortfolioValuationJob)
         superseded_pending_exists = select(superseding_job.id).where(
@@ -151,7 +155,8 @@ class OperationsRepository:
             )
 
         return or_(
-            PortfolioValuationJob.status != "PENDING",
+            OperationsRepository._support_job_status_expr(PortfolioValuationJob.status)
+            != "PENDING",
             ~superseded_pending_exists.correlate(PortfolioValuationJob).exists(),
         )
 
@@ -211,14 +216,15 @@ class OperationsRepository:
 
     @staticmethod
     def _support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
+        normalized_status = OperationsRepository._support_job_status_expr(status_column)
         return case(
-            (status_column == "FAILED", 0),
+            (normalized_status == "FAILED", 0),
             (
-                and_(status_column == "PROCESSING", updated_at_column < stale_threshold),
+                and_(normalized_status == "PROCESSING", updated_at_column < stale_threshold),
                 1,
             ),
-            (status_column == "PROCESSING", 2),
-            (status_column == "PENDING", 3),
+            (normalized_status == "PROCESSING", 2),
+            (normalized_status == "PENDING", 3),
             else_=9,
         )
 
@@ -350,7 +356,7 @@ class OperationsRepository:
             )
 
         valuation_base = select(
-            PortfolioValuationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioValuationJob.status).label("status"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.updated_at.label("updated_at"),
         ).where(
@@ -362,7 +368,7 @@ class OperationsRepository:
         valuation_subq = valuation_base.subquery()
 
         aggregation_base = select(
-            PortfolioAggregationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioAggregationJob.status).label("status"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
         ).where(PortfolioAggregationJob.portfolio_id.like(portfolio_pattern))
@@ -723,7 +729,7 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            PortfolioValuationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioValuationJob.status).label("status"),
             PortfolioValuationJob.updated_at.label("updated_at"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.id.label("id"),
@@ -817,7 +823,7 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            PortfolioAggregationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioAggregationJob.status).label("status"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.id.label("id"),
@@ -1560,7 +1566,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioValuationJob.status == status)
+            stmt = stmt.where(self._support_job_status_expr(PortfolioValuationJob.status) == status)
         if business_date:
             stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
         if security_id:
@@ -1595,7 +1601,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioValuationJob.status == status)
+            stmt = stmt.where(self._support_job_status_expr(PortfolioValuationJob.status) == status)
         if business_date:
             stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
         if security_id:
@@ -1637,7 +1643,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioAggregationJob.status == status)
+            stmt = stmt.where(
+                self._support_job_status_expr(PortfolioAggregationJob.status) == status
+            )
         if business_date:
             stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
         if job_id is not None:
@@ -1667,7 +1675,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioAggregationJob.status == status)
+            stmt = stmt.where(
+                self._support_job_status_expr(PortfolioAggregationJob.status) == status
+            )
         if business_date:
             stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
         if job_id is not None:

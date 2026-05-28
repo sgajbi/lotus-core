@@ -998,7 +998,7 @@ async def test_get_valuation_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in compiled.lower()
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
+    assert "upper(trim(portfolio_valuation_jobs.status)) = 'PENDING'" in compiled
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
 
 
@@ -1023,7 +1023,7 @@ async def test_get_valuation_jobs_query(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "CASE WHEN (upper(trim(portfolio_valuation_jobs.status)) = 'FAILED')" in compiled
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
@@ -1064,7 +1064,7 @@ async def test_get_aggregation_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_aggregation_jobs" in compiled.lower()
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+    assert "upper(trim(portfolio_aggregation_jobs.status)) = 'PROCESSING'" in compiled
 
 
 async def test_get_aggregation_jobs_query(
@@ -1088,7 +1088,7 @@ async def test_get_aggregation_jobs_query(
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "CASE WHEN (upper(trim(portfolio_aggregation_jobs.status)) = 'FAILED')" in compiled
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
@@ -1260,7 +1260,7 @@ async def test_get_valuation_jobs_query_with_status(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
+    assert "upper(trim(portfolio_valuation_jobs.status)) = 'PENDING'" in compiled
 
 
 async def test_get_aggregation_jobs_query_with_status(
@@ -1277,7 +1277,7 @@ async def test_get_aggregation_jobs_query_with_status(
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+    assert "upper(trim(portfolio_aggregation_jobs.status)) = 'PROCESSING'" in compiled
 
 
 async def test_get_analytics_export_jobs_count_with_status(
