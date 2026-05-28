@@ -20,6 +20,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.types import Date
 
 from .config import DEFAULT_BUSINESS_CALENDAR_CODE
+from .currency_codes import normalize_currency_code
 from .database_models import (
     BusinessDate,
     DailyPositionSnapshot,
@@ -44,7 +45,7 @@ class ValuationRepositoryBase:
 
     @staticmethod
     def _normalize_currency_code(currency_code: str) -> str:
-        return currency_code.strip().upper()
+        return normalize_currency_code(currency_code)
 
     def _observe_jobs_claimed(self, claimed_count: int) -> None:
         """Hook for service-local metrics."""
@@ -315,9 +316,8 @@ class ValuationRepositoryBase:
             .correlate(dps)
             .scalar_subquery()
         )
-        snapshot_quantity_matches_history = (
-            latest_history_quantity_for_snapshot.is_(None)
-            | (dps.quantity == latest_history_quantity_for_snapshot)
+        snapshot_quantity_matches_history = latest_history_quantity_for_snapshot.is_(None) | (
+            dps.quantity == latest_history_quantity_for_snapshot
         )
 
         first_gap_subq = (
@@ -536,11 +536,13 @@ class ValuationRepositoryBase:
     ) -> Optional[FxRate]:
         normalized_from_currency = self._normalize_currency_code(from_currency)
         normalized_to_currency = self._normalize_currency_code(to_currency)
+        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
+        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
         stmt = (
             select(FxRate)
             .filter(
-                FxRate.from_currency == normalized_from_currency,
-                FxRate.to_currency == normalized_to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
             .order_by(FxRate.rate_date.desc())
