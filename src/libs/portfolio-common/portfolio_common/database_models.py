@@ -1310,6 +1310,14 @@ class Transaction(Base):
             id.desc(),
         ),
         Index(
+            "ix_txn_port_norm_sec_type_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            "transaction_type",
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
             "ix_txn_port_norm_cash_instr_date_id",
             "portfolio_id",
             func.trim(settlement_cash_instrument_id),

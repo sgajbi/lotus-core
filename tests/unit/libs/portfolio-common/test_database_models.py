@@ -244,6 +244,13 @@ def test_api_query_hot_path_indexes_are_declared():
                 "transactions.transaction_date DESC",
                 "transactions.id DESC",
             ],
+            "ix_txn_port_norm_sec_type_date_id": [
+                "transactions.portfolio_id",
+                "trim(transactions.security_id)",
+                "transactions.transaction_type",
+                "transactions.transaction_date DESC",
+                "transactions.id DESC",
+            ],
             "ix_txn_port_norm_cash_instr_date_id": [
                 "transactions.portfolio_id",
                 "trim(transactions.settlement_cash_instrument_id)",
