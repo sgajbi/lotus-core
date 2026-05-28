@@ -96,7 +96,9 @@ class TransactionRepository:
         if instrument_id:
             stmt = stmt.filter_by(instrument_id=instrument_id)
         if security_id:
-            stmt = stmt.filter_by(security_id=security_id)
+            normalized_security_id = normalize_security_id(security_id)
+            if normalized_security_id:
+                stmt = stmt.where(func.trim(Transaction.security_id) == normalized_security_id)
         if transaction_type:
             stmt = stmt.filter_by(transaction_type=transaction_type)
         if component_type:
