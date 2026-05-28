@@ -2582,6 +2582,7 @@ async def test_ingest_indices_returns_ack_and_persists_full_contract(
     ingestion_test_harness,
 ):
     payload = _index_definition_payload()
+    payload["indices"][0]["index_currency"] = " usd "
     payload["indices"][0].update(
         {
             "index_provider": "MSCI",
@@ -2749,6 +2750,7 @@ async def test_ingest_index_price_series_returns_ack_and_persists_full_contract(
     ingestion_test_harness,
 ):
     payload = _index_price_series_payload()
+    payload["index_price_series"][0]["series_currency"] = " usd "
     payload["index_price_series"][0].update(
         {
             "source_timestamp": "2026-01-02T21:00:00Z",
@@ -2940,6 +2942,7 @@ async def test_ingest_index_return_series_returns_ack_and_persists_full_contract
     ingestion_test_harness,
 ):
     payload = _index_return_series_payload()
+    payload["index_return_series"][0]["series_currency"] = " usd "
     payload["index_return_series"][0].update(
         {
             "source_timestamp": "2026-01-02T21:00:00Z",
@@ -3132,6 +3135,7 @@ async def test_ingest_benchmark_return_series_returns_ack_and_persists_full_cont
     ingestion_test_harness,
 ):
     payload = _benchmark_return_series_payload()
+    payload["benchmark_return_series"][0]["series_currency"] = " usd "
     payload["benchmark_return_series"][0].update(
         {
             "source_timestamp": "2026-01-02T21:00:00Z",
@@ -3326,6 +3330,7 @@ async def test_ingest_risk_free_series_returns_ack_and_persists_full_contract(
     ingestion_test_harness,
 ):
     payload = _risk_free_series_payload()
+    payload["risk_free_series"][0]["series_currency"] = " usd "
     payload["risk_free_series"][0].update(
         {
             "day_count_convention": "act_360",

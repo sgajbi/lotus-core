@@ -871,7 +871,14 @@ class IndexDefinitionRecord(BaseModel):
     index_name: str = Field(
         ..., description="Index display name.", examples=["MSCI World Total Return"]
     )
-    index_currency: str = Field(..., description="Index currency.", examples=["USD"])
+    index_currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter index currency used for benchmark construction, "
+            "performance comparison, and reporting alignment."
+        ),
+        examples=["USD"],
+    )
     index_type: str | None = Field(
         None, description="Index type descriptor.", examples=["equity_index"]
     )
@@ -909,6 +916,11 @@ class IndexDefinitionRecord(BaseModel):
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
 
+    @field_validator("index_currency", mode="before")
+    @classmethod
+    def _normalize_index_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
     model_config = ConfigDict()
 
 
@@ -921,7 +933,11 @@ class IndexPriceSeriesRecord(BaseModel):
     index_price: condecimal(gt=Decimal(0)) = Field(
         ..., description="Index price value.", examples=["4567.1234000000"]
     )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the index price series.",
+        examples=["USD"],
+    )
     value_convention: str = Field(
         ..., description="Value convention label.", examples=["close_price"]
     )
@@ -936,6 +952,11 @@ class IndexPriceSeriesRecord(BaseModel):
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
 
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
     model_config = ConfigDict()
 
 
@@ -948,7 +969,11 @@ class IndexReturnSeriesRecord(BaseModel):
     return_convention: str = Field(
         ..., description="Return convention label.", examples=["total_return_index"]
     )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the index return series.",
+        examples=["USD"],
+    )
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for the index return series record.",
@@ -959,6 +984,11 @@ class IndexReturnSeriesRecord(BaseModel):
         None, description="Source record identifier.", examples=["idxr_20260102"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -976,7 +1006,11 @@ class BenchmarkReturnSeriesRecord(BaseModel):
     return_convention: str = Field(
         ..., description="Return convention label.", examples=["total_return_index"]
     )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the benchmark return series.",
+        examples=["USD"],
+    )
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for the benchmark return series record.",
@@ -987,6 +1021,11 @@ class BenchmarkReturnSeriesRecord(BaseModel):
         None, description="Source record identifier.", examples=["bmkr_20260102"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -1013,7 +1052,11 @@ class RiskFreeSeriesRecord(BaseModel):
         description="Compounding convention.",
         examples=["simple"],
     )
-    series_currency: str = Field(..., description="Series currency.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the risk-free series.",
+        examples=["USD"],
+    )
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for the risk-free curve series record.",
@@ -1024,6 +1067,11 @@ class RiskFreeSeriesRecord(BaseModel):
         None, description="Source record identifier.", examples=["rf_20260102"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 

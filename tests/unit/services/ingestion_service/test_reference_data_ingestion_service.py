@@ -257,7 +257,13 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_indices",
-            [{"index_id": "IDX_001", "effective_from": "2026-01-01"}],
+            [
+                {
+                    "index_id": "IDX_001",
+                    "index_currency": "USD",
+                    "effective_from": "2026-01-01",
+                }
+            ],
             ["index_id", "effective_from"],
             [
                 "index_name",
@@ -277,7 +283,14 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_index_price_series",
-            [{"series_id": "SER_001", "index_id": "IDX_001", "series_date": "2026-01-01"}],
+            [
+                {
+                    "series_id": "SER_001",
+                    "index_id": "IDX_001",
+                    "series_date": "2026-01-01",
+                    "series_currency": "USD",
+                }
+            ],
             ["series_id", "index_id", "series_date"],
             [
                 "index_price",
@@ -291,7 +304,14 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_index_return_series",
-            [{"series_id": "SER_001", "index_id": "IDX_001", "series_date": "2026-01-01"}],
+            [
+                {
+                    "series_id": "SER_001",
+                    "index_id": "IDX_001",
+                    "series_date": "2026-01-01",
+                    "series_currency": "USD",
+                }
+            ],
             ["series_id", "index_id", "series_date"],
             [
                 "index_return",
@@ -306,7 +326,14 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_benchmark_return_series",
-            [{"series_id": "SER_001", "benchmark_id": "BMK_001", "series_date": "2026-01-01"}],
+            [
+                {
+                    "series_id": "SER_001",
+                    "benchmark_id": "BMK_001",
+                    "series_date": "2026-01-01",
+                    "series_currency": "USD",
+                }
+            ],
             ["series_id", "benchmark_id", "series_date"],
             [
                 "benchmark_return",
@@ -326,6 +353,7 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
                     "series_id": "SER_001",
                     "risk_free_curve_id": "RFC_001",
                     "series_date": "2026-01-01",
+                    "series_currency": "USD",
                 }
             ],
             ["series_id", "risk_free_curve_id", "series_date"],
@@ -483,6 +511,85 @@ async def test_upsert_benchmark_definitions_normalizes_benchmark_currency() -> N
 
     compiled_params = db.execute.await_args.args[0].compile().params
     assert compiled_params["benchmark_currency_m0"] == "USD"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "record", "compiled_param"),
+    [
+        (
+            "upsert_indices",
+            {
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "index_name": "Global Equity Total Return",
+                "index_currency": " usd ",
+                "effective_from": "2026-01-01",
+            },
+            "index_currency_m0",
+        ),
+        (
+            "upsert_index_price_series",
+            {
+                "series_id": "series_idx_global_equity_price",
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "series_date": "2026-01-02",
+                "index_price": "4567.1234000000",
+                "series_currency": " usd ",
+                "value_convention": "official_close",
+            },
+            "series_currency_m0",
+        ),
+        (
+            "upsert_index_return_series",
+            {
+                "series_id": "series_idx_global_equity_return",
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "series_date": "2026-01-02",
+                "index_return": "-0.0150000000",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": " usd ",
+            },
+            "series_currency_m0",
+        ),
+        (
+            "upsert_benchmark_return_series",
+            {
+                "series_id": "series_bmk_global_balanced_return",
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "series_date": "2026-01-02",
+                "benchmark_return": "-0.0065000000",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": " usd ",
+            },
+            "series_currency_m0",
+        ),
+        (
+            "upsert_risk_free_series",
+            {
+                "series_id": "rf_usd_sofr_3m",
+                "risk_free_curve_id": "USD_SOFR_3M",
+                "series_date": "2026-01-02",
+                "value": "0.0350000000",
+                "value_convention": "annualized_rate",
+                "series_currency": " usd ",
+            },
+            "series_currency_m0",
+        ),
+    ],
+)
+async def test_reference_market_series_upserts_normalize_currency(
+    method_name: str, record: dict[str, object], compiled_param: str
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await getattr(service, method_name)([record])
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params[compiled_param] == "USD"
     db.commit.assert_awaited_once()
 
 
