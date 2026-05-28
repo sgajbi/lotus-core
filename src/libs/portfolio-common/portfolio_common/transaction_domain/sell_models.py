@@ -5,6 +5,9 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.transaction_domain.control_code_normalization import (
+    normalize_transaction_control_code,
+)
 
 
 class SellCanonicalTransaction(BaseModel):
@@ -17,6 +20,11 @@ class SellCanonicalTransaction(BaseModel):
 
     transaction_id: str = Field(..., description="Unique transaction identifier.")
     transaction_type: str = Field(..., description="Canonical transaction type.")
+
+    @field_validator("transaction_type", mode="before")
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
 
     portfolio_id: str = Field(..., description="Portfolio disposing exposure.")
     instrument_id: str = Field(..., description="Instrument identifier.")

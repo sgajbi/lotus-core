@@ -5,6 +5,10 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.transaction_domain.control_code_normalization import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
 
 
 class DividendCanonicalTransaction(BaseModel):
@@ -17,6 +21,11 @@ class DividendCanonicalTransaction(BaseModel):
 
     transaction_id: str = Field(..., description="Unique transaction identifier.")
     transaction_type: str = Field(..., description="Canonical transaction type.")
+
+    @field_validator("transaction_type", mode="before")
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
 
     portfolio_id: str = Field(..., description="Portfolio receiving distribution.")
     instrument_id: str = Field(..., description="Instrument identifier.")
@@ -69,6 +78,14 @@ class DividendCanonicalTransaction(BaseModel):
             "UPSTREAM_PROVIDED for upstream-provided cash entry."
         ),
     )
+
+    @field_validator("cash_entry_mode", mode="before")
+    @classmethod
+    def _normalize_optional_transaction_control_code(
+        cls, value: str | None
+    ) -> str | None:
+        return normalize_optional_transaction_control_code(value)
+
     external_cash_transaction_id: Optional[str] = Field(
         default=None,
         description=(

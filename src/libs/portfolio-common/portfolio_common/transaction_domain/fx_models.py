@@ -5,6 +5,10 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.transaction_domain.control_code_normalization import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
 
 FX_BUSINESS_TRANSACTION_TYPES = {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}
 FX_COMPONENT_TYPES = {
@@ -86,6 +90,16 @@ class FxCanonicalTransaction(BaseModel):
     def _normalize_currency_code(cls, value: object) -> str:
         return normalize_currency_code(value)
 
+    @field_validator(
+        "transaction_type",
+        "component_type",
+        "fx_rate_quote_convention",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
+
     economic_event_id: Optional[str] = Field(
         default=None, description="Economic event id shared by all FX components."
     )
@@ -108,6 +122,19 @@ class FxCanonicalTransaction(BaseModel):
     settlement_status: Optional[str] = Field(
         default=None, description="Settlement status for FX cash components."
     )
+
+    @field_validator(
+        "fx_cash_leg_role",
+        "settlement_status",
+        "spot_exposure_model",
+        "fx_realized_pnl_mode",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_transaction_control_code(
+        cls, value: str | None
+    ) -> str | None:
+        return normalize_optional_transaction_control_code(value)
 
     fx_contract_id: Optional[str] = Field(
         default=None, description="Stable FX contract identifier."
