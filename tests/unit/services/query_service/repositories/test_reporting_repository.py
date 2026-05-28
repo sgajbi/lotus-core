@@ -270,8 +270,15 @@ async def test_reporting_repository_lookthrough_query_uses_effective_window() ->
         "trim(instrument_lookthrough_components.parent_security_id) IN ('FUND1', 'FUND2')"
         in compiled
     )
+    assert (
+        "trim(instruments.security_id) = "
+        "trim(instrument_lookthrough_components.component_security_id)" in compiled
+    )
+    assert "trim(instrument_lookthrough_components.component_security_id) != ''" in compiled
     assert "instrument_lookthrough_components.effective_from <= '2026-03-27'" in compiled
     assert "instrument_lookthrough_components.effective_to >= '2026-03-27'" in compiled
+    assert "ORDER BY trim(instrument_lookthrough_components.parent_security_id) ASC" in compiled
+    assert "trim(instrument_lookthrough_components.component_security_id) ASC" in compiled
 
 
 @pytest.mark.asyncio
@@ -287,4 +294,26 @@ async def test_reporting_repository_lookthrough_query_skips_database_when_parent
 
     assert rows == []
     db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_lookthrough_components_return_canonical_security_ids(
+) -> None:
+    instrument = SimpleNamespace(security_id=" ETF1 ")
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [(" FUND1 ", " ETF1 ", Decimal("1"), instrument)]
+    )
+    repo = ReportingRepository(db)
+
+    rows = await repo.list_instrument_lookthrough_components(
+        parent_security_ids=[" FUND1 "],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].parent_security_id == "FUND1"
+    assert rows[0].component_security_id == "ETF1"
+    assert rows[0].component_weight == Decimal("1")
+    assert rows[0].component_instrument is instrument
 

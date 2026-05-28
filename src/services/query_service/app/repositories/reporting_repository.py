@@ -287,19 +287,22 @@ class ReportingRepository:
             return []
 
         parent_security_id = func.trim(InstrumentLookthroughComponent.parent_security_id)
+        component_security_id = func.trim(InstrumentLookthroughComponent.component_security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
         stmt = (
             select(
                 parent_security_id.label("parent_security_id"),
-                InstrumentLookthroughComponent.component_security_id,
+                component_security_id.label("component_security_id"),
                 InstrumentLookthroughComponent.component_weight,
                 Instrument,
             )
             .outerjoin(
                 Instrument,
-                Instrument.security_id == InstrumentLookthroughComponent.component_security_id,
+                instrument_security_id == component_security_id,
             )
             .where(
                 parent_security_id.in_(normalized_parent_security_ids),
+                component_security_id != "",
                 InstrumentLookthroughComponent.effective_from <= as_of_date,
                 or_(
                     InstrumentLookthroughComponent.effective_to.is_(None),
@@ -308,14 +311,14 @@ class ReportingRepository:
             )
             .order_by(
                 parent_security_id.asc(),
-                InstrumentLookthroughComponent.component_security_id.asc(),
+                component_security_id.asc(),
             )
         )
         rows = (await self.db.execute(stmt)).all()
         return [
             InstrumentLookthroughComponentRow(
-                parent_security_id=parent_security_id,
-                component_security_id=component_security_id,
+                parent_security_id=normalize_security_id(parent_security_id),
+                component_security_id=normalize_security_id(component_security_id),
                 component_weight=component_weight,
                 component_instrument=component_instrument,
             )
