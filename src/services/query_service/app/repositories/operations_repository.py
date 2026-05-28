@@ -157,6 +157,10 @@ class OperationsRepository:
         return func.upper(func.trim(severity_column))
 
     @staticmethod
+    def _snapshot_valuation_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
     def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
         superseding_job = aliased(PortfolioValuationJob)
         superseded_pending_exists = select(superseding_job.id).where(
@@ -1179,7 +1183,10 @@ class OperationsRepository:
                 func.count()
                 .filter(
                     DailyPositionSnapshot.valuation_status.is_not(None),
-                    DailyPositionSnapshot.valuation_status != "UNVALUED",
+                    self._snapshot_valuation_status_expr(
+                        DailyPositionSnapshot.valuation_status
+                    )
+                    != "UNVALUED",
                 )
                 .label("valued_positions"),
             )

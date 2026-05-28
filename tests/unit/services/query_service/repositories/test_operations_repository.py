@@ -440,7 +440,7 @@ async def test_get_snapshot_valuation_coverage_summary_honors_snapshot_as_of(
     assert "daily_position_snapshots.date = '2026-04-17'" in compiled
     assert "daily_position_snapshots.created_at <= '2026-04-18 07:30:00+00:00'" in compiled
     assert "position_state.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
-    assert "valuation_status != 'UNVALUED'" in compiled
+    assert "upper(trim(daily_position_snapshots.valuation_status)) != 'UNVALUED'" in compiled
 
 
 async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_samples(
