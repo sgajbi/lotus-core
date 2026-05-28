@@ -154,13 +154,13 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
 ):
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
-        [("CASH_USD", "CASH-ACC-USD-001"), ("CASH_SGD", "CASH-ACC-SGD-001")]
+        [(" CASH_USD ", "CASH-ACC-USD-001"), ("CASH_SGD", "CASH-ACC-SGD-001")]
     )
     repo = ReportingRepository(db)
 
     mapping = await repo.get_latest_cash_account_ids(
         portfolio_id="P1",
-        cash_security_ids=["CASH_USD", "CASH_SGD"],
+        cash_security_ids=[" CASH_USD ", "CASH_SGD", ""],
         as_of_date=date(2026, 3, 27),
     )
 
@@ -172,11 +172,15 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     normalized = compiled.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled
-    assert "transactions.settlement_cash_instrument_id IN ('CASH_USD', 'CASH_SGD')" in compiled
+    assert (
+        "trim(transactions.settlement_cash_instrument_id) IN ('CASH_USD', 'CASH_SGD')"
+        in compiled
+    )
     assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
     assert "transactions.settlement_cash_account_id IS NOT NULL" in compiled
     assert (
-        "row_number() over (partition by transactions.settlement_cash_instrument_id" in normalized
+        "row_number() over (partition by trim(transactions.settlement_cash_instrument_id)"
+        in normalized
     )
 
 
@@ -189,6 +193,22 @@ async def test_reporting_repository_cash_account_resolution_skips_query_when_no_
     mapping = await repo.get_latest_cash_account_ids(
         portfolio_id="P1",
         cash_security_ids=[],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert mapping == {}
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_cash_account_resolution_skips_query_when_securities_blank(
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReportingRepository(db)
+
+    mapping = await repo.get_latest_cash_account_ids(
+        portfolio_id="P1",
+        cash_security_ids=[" ", ""],
         as_of_date=date(2026, 3, 27),
     )
 

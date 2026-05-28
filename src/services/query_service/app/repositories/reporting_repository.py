@@ -209,20 +209,29 @@ class ReportingRepository:
         if not cash_security_ids:
             return {}
 
+        normalized_cash_security_ids = [
+            security_id
+            for value in cash_security_ids
+            if (security_id := normalize_security_id(value))
+        ]
+        if not normalized_cash_security_ids:
+            return {}
+
+        cash_security_id = func.trim(Transaction.settlement_cash_instrument_id)
         ranked_txn_subq = (
             select(
-                Transaction.settlement_cash_instrument_id.label("cash_security_id"),
+                cash_security_id.label("cash_security_id"),
                 Transaction.settlement_cash_account_id.label("cash_account_id"),
                 func.row_number()
                 .over(
-                    partition_by=Transaction.settlement_cash_instrument_id,
+                    partition_by=cash_security_id,
                     order_by=(Transaction.transaction_date.desc(), Transaction.id.desc()),
                 )
                 .label("rn"),
             )
             .where(
                 Transaction.portfolio_id == portfolio_id,
-                Transaction.settlement_cash_instrument_id.in_(cash_security_ids),
+                cash_security_id.in_(normalized_cash_security_ids),
                 Transaction.settlement_cash_account_id.is_not(None),
                 Transaction.transaction_date < start_of_next_day(as_of_date),
             )
@@ -233,7 +242,11 @@ class ReportingRepository:
             ranked_txn_subq.c.cash_account_id,
         ).where(ranked_txn_subq.c.rn == 1)
         rows = (await self.db.execute(stmt)).all()
-        return {str(security_id): str(cash_account_id) for security_id, cash_account_id in rows}
+        return {
+            normalize_security_id(security_id): str(cash_account_id)
+            for security_id, cash_account_id in rows
+            if normalize_security_id(security_id)
+        }
 
     async def list_cash_account_masters(
         self,
