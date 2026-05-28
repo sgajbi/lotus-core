@@ -472,8 +472,8 @@ async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_s
             transaction_id="TXN-001",
             security_id=" SEC-IBM ",
             transaction_date=date(2026, 4, 1),
-            trade_currency="EUR",
-            portfolio_currency="USD",
+            trade_currency=" eur ",
+            portfolio_currency=" usd ",
         ),
         MagicMock(
             transaction_id="TXN-002",
@@ -497,13 +497,20 @@ async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_s
     assert summary.latest_transaction_date == date(2026, 4, 4)
     assert [record.transaction_id for record in summary.sample_records] == ["TXN-001", "TXN-002"]
     assert [record.security_id for record in summary.sample_records] == ["SEC-IBM", "SEC-NOVN"]
+    assert [record.trade_currency for record in summary.sample_records] == ["EUR", "CHF"]
+    assert [record.portfolio_currency for record in summary.sample_records] == ["USD", "USD"]
     aggregate_stmt = mock_db_session.execute.await_args_list[0].args[0]
     aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "transactions.portfolio_id = 'P1'" in aggregate_compiled
     assert "trim(transactions.security_id) AS security_id" in aggregate_compiled
+    assert "upper(trim(transactions.trade_currency)) AS trade_currency" in aggregate_compiled
+    assert "upper(trim(portfolios.base_currency)) AS portfolio_currency" in aggregate_compiled
     assert "transaction_date" in aggregate_compiled
     assert "<= '2026-04-17'" in aggregate_compiled
-    assert "transactions.trade_currency != portfolios.base_currency" in aggregate_compiled
+    assert (
+        "upper(trim(transactions.trade_currency)) != upper(trim(portfolios.base_currency))"
+        in aggregate_compiled
+    )
     assert "transactions.transaction_fx_rate IS NULL" in aggregate_compiled
     assert "transactions.created_at <= '2026-04-18 07:30:00+00:00'" in aggregate_compiled
     sample_stmt = mock_db_session.execute.await_args_list[1].args[0]
