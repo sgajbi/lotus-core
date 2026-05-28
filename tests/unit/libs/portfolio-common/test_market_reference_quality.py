@@ -12,6 +12,8 @@ from portfolio_common.market_reference_quality import (
     SourceObservationSignal,
     classify_market_reference_coverage,
     classify_market_reference_point,
+    normalize_quality_status,
+    quality_status_summary_key,
     resolve_observed_at,
     summarize_quality_statuses,
 )
@@ -135,3 +137,10 @@ def test_summarize_quality_statuses_normalizes_and_sorts_counts() -> None:
         "estimated": 1,
         "unknown": 1,
     }
+
+
+def test_quality_status_helpers_expose_canonical_forms() -> None:
+    assert normalize_quality_status(" accepted ") == "ACCEPTED"
+    assert normalize_quality_status(" ") is None
+    assert quality_status_summary_key(" STALE ") == "stale"
+    assert quality_status_summary_key(None) == "unknown"

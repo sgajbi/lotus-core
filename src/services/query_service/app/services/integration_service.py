@@ -9,6 +9,7 @@ from portfolio_common.market_reference_quality import (
     STALE_QUALITY_STATUSES,
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
+    quality_status_summary_key,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -3159,8 +3160,9 @@ class IntegrationService:
         for component in component_series:
             for point in component.points:
                 if point.quality_status:
-                    quality_status_summary[point.quality_status] = (
-                        quality_status_summary.get(point.quality_status, 0) + 1
+                    summary_key = quality_status_summary_key(point.quality_status)
+                    quality_status_summary[summary_key] = (
+                        quality_status_summary.get(summary_key, 0) + 1
                     )
 
         return BenchmarkMarketSeriesResponse(

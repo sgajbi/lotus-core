@@ -4,8 +4,9 @@ Date: 2026-05-28
 
 ## Scope
 
-Query-service reference-data repository benchmark and risk-free coverage quality metadata, plus
-risk-free duplicate-date canonicalization.
+Shared market/reference quality helpers, query-service reference-data repository benchmark and
+risk-free coverage quality metadata, benchmark market-series quality summaries, and risk-free
+duplicate-date canonicalization.
 
 ## Finding
 
@@ -15,17 +16,19 @@ or higher deterministic tie-breaker could therefore replace an accepted observat
 date. That can feed the wrong risk-free point into downstream return, excess-return, and risk
 calculation inputs.
 
-Reference coverage quality counts also used raw persisted quality status values. Case, whitespace,
-or missing quality codes could fragment coverage metadata such as `accepted`, `STALE`, and blank
-values instead of presenting a stable data-product quality signal.
+Reference coverage quality counts and benchmark market-series quality summaries also used raw
+persisted quality status values. Case, whitespace, or missing quality codes could fragment metadata
+such as `accepted`, `STALE`, and blank values instead of presenting a stable data-product quality
+signal.
 
 ## Change
 
-Added a repository-level quality-status normalizer that trims, lower-cases, and maps blank values to
-`unknown`. Reused it for benchmark and risk-free coverage quality-count metadata. Updated risk-free
-duplicate-date canonicalization so accepted observations win even when persisted quality status has
-case or whitespace drift, while preserving deterministic timestamp and source tie-breakers inside
-the selected quality tier.
+Promoted public shared quality-status helpers in `portfolio_common.market_reference_quality`.
+Repository coverage counts and benchmark market-series quality summaries now use the same
+summary-key normalization. Risk-free duplicate-date canonicalization now uses the shared canonical
+quality status so accepted observations win even when persisted quality status has case or
+whitespace drift, while preserving deterministic timestamp and source tie-breakers inside the
+selected quality tier.
 
 ## Evidence
 
@@ -33,12 +36,14 @@ Commands:
 
 1. `python -m pytest tests/unit/services/query_service/repositories/test_reference_data_repository.py -q`
 2. `python -m pytest tests/unit/services/query_service/repositories -q`
-3. `python -m ruff check src/services/query_service/app/repositories/reference_data_repository.py tests/unit/services/query_service/repositories/test_reference_data_repository.py`
+3. `python -m pytest tests/unit/libs/portfolio-common/test_market_reference_quality.py -q`
+4. `python -m pytest tests/unit/services/query_service/services/test_integration_service.py -q`
+5. `python -m ruff check src/libs/portfolio-common/portfolio_common/market_reference_quality.py src/services/query_service/app/repositories/reference_data_repository.py src/services/query_service/app/services/integration_service.py tests/unit/libs/portfolio-common/test_market_reference_quality.py tests/unit/services/query_service/repositories/test_reference_data_repository.py tests/unit/services/query_service/services/test_integration_service.py`
 
 ## Closure
 
 Status: Hardened.
 
 No API route, OpenAPI, wiki source, or platform contract change was required. This is an internal
-reference-data correctness slice that stabilizes risk-free calculation inputs and source-data
-quality metadata without changing the public contract shape.
+market/reference correctness slice that stabilizes risk-free calculation inputs and source-data
+quality metadata keys without changing the public contract shape.

@@ -3066,7 +3066,7 @@ async def test_benchmark_market_series_quality_summary_is_page_scoped() -> None:
                     series_date=date(2026, 1, 1),
                     index_price=Decimal("100"),
                     series_currency="USD",
-                    quality_status="accepted",
+                    quality_status=" Accepted ",
                 ),
                 SimpleNamespace(
                     index_id="IDX2",

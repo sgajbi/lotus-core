@@ -15,7 +15,6 @@ from portfolio_common.reconciliation_quality import (
     classify_data_quality_coverage,
 )
 
-
 ACCEPTED_QUALITY_STATUSES = {"ACCEPTED"}
 PARTIAL_QUALITY_STATUSES = {"ESTIMATED", "PROVISIONAL", "WARNING"}
 STALE_QUALITY_STATUSES = {"STALE"}
@@ -103,10 +102,17 @@ def classify_market_reference_coverage(signal: MarketReferenceCoverageSignal) ->
 def summarize_quality_statuses(statuses: tuple[str | None, ...]) -> dict[str, int]:
     summary: dict[str, int] = {}
     for status in statuses:
-        normalized = _normalize_optional_text(status) or UNKNOWN.lower()
-        key = normalized.lower()
+        key = quality_status_summary_key(status)
         summary[key] = summary.get(key, 0) + 1
     return dict(sorted(summary.items()))
+
+
+def normalize_quality_status(value: str | None) -> str | None:
+    return _normalize_optional_text(value)
+
+
+def quality_status_summary_key(value: str | None) -> str:
+    return (normalize_quality_status(value) or UNKNOWN).lower()
 
 
 def _datetime_or_none(value: datetime | None, field_name: str) -> datetime | None:
