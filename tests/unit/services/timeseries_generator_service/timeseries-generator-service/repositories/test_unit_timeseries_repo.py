@@ -23,7 +23,10 @@ def mock_db_session() -> AsyncMock:
     session = AsyncMock(spec=AsyncSession)
     mock_result = MagicMock()
 
-    mock_result.scalars.return_value.all.return_value = ["item1", "item2"]
+    mock_result.scalars.return_value.all.return_value = [
+        MagicMock(portfolio_id="P1", aggregation_date=date(2025, 1, 1), id=1),
+        MagicMock(portfolio_id="P2", aggregation_date=date(2025, 1, 2), id=2),
+    ]
     mock_result.scalars.return_value.first.return_value = "item1"
     mock_result.mappings.return_value.all.return_value = [
         {"id": 1, "portfolio_id": "P1", "aggregation_date": date(2025, 1, 1)}

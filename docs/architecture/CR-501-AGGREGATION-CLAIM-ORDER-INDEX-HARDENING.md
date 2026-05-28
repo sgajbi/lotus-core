@@ -34,7 +34,7 @@ worker processing order independent of database return ordering.
 
 Commands:
 
-1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/portfolio_aggregation_service/repositories/test_timeseries_repository.py -q`
+1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/portfolio_aggregation_service/repositories/test_timeseries_repository.py tests/unit/services/timeseries_generator_service/timeseries-generator-service/repositories/test_unit_timeseries_repo.py -q`
 2. `python -m alembic heads`
 3. `python scripts/migration_contract_check.py --mode alembic-sql`
 4. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py src/libs/portfolio-common/portfolio_common/timeseries_repository_base.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/portfolio_aggregation_service/repositories/test_timeseries_repository.py alembic/versions/c0d7e8f9a0b1_perf_add_aggregation_claim_order_index.py`
@@ -43,7 +43,7 @@ Commands:
 
 Results:
 
-1. Focused model and aggregation repository proof: `16 passed`
+1. Focused model and aggregation repository proof: `37 passed`
 2. Alembic head proof: `c0d7e8f9a0b1 (head)`
 3. Migration contract smoke: passed
 4. Touched-surface ruff: passed
