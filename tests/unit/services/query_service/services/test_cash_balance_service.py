@@ -156,6 +156,52 @@ async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_
     assert response.data_quality_status == "COMPLETE"
 
 
+async def test_get_cash_balances_normalizes_cash_security_ids_for_master_join() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="250"),
+            instrument=_instrument(
+                "CASH_USD",
+                name="USD Cash Account",
+                currency="USD",
+                asset_class="CASH",
+            ),
+        )
+    ]
+    repo.list_cash_account_masters.return_value = [
+        SimpleNamespace(
+            cash_account_id="CASH-ACC-USD-001",
+            security_id=" CASH_USD ",
+            display_name="USD Operating Cash",
+            account_currency=" usd ",
+        )
+    ]
+    repo.get_latest_cash_account_ids.return_value = {}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(portfolio_id="P1")
+
+    assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.cash_accounts[0].security_id == "CASH_USD"
+    assert response.cash_accounts[0].account_currency == "USD"
+    assert response.cash_accounts[0].balance_portfolio_currency == Decimal("250")
+    assert response.totals.total_balance_portfolio_currency == Decimal("250")
+    repo.get_latest_cash_account_ids.assert_awaited_once_with(
+        portfolio_id="P1",
+        cash_security_ids=["CASH_USD"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
     repo = AsyncMock()
     repo.get_portfolio_by_id.return_value = None

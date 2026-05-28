@@ -21,6 +21,10 @@ def _normalize_control_code(value: Any, *, default: str = "") -> str:
     return normalized or default
 
 
+def _normalize_security_id(value: Any) -> str:
+    return str(value or "").strip()
+
+
 class CashBalanceResolver:
     def __init__(
         self,
@@ -83,31 +87,48 @@ class CashBalanceResolver:
         resolved_as_of_date: date,
         reporting_currency: str,
     ) -> list[CashAccountBalanceRecord]:
-        cash_security_ids = [row.snapshot.security_id for row in cash_rows]
+        cash_security_ids = [
+            security_id
+            for row in cash_rows
+            if (security_id := _normalize_security_id(row.snapshot.security_id))
+        ]
         master_rows = await self.repo.list_cash_account_masters(
             portfolio_id=portfolio.portfolio_id,
             as_of_date=resolved_as_of_date,
         )
-        master_by_security_id = {row.security_id: row for row in master_rows}
-        fallback_cash_account_ids = await self.repo.get_latest_cash_account_ids(
+        master_by_security_id = {
+            security_id: row
+            for row in master_rows
+            if (security_id := _normalize_security_id(row.security_id))
+        }
+        fallback_cash_account_id_rows = await self.repo.get_latest_cash_account_ids(
             portfolio_id=portfolio.portfolio_id,
             cash_security_ids=cash_security_ids,
             as_of_date=resolved_as_of_date,
         )
-        snapshot_by_security_id = {row.snapshot.security_id: row for row in cash_rows}
+        fallback_cash_account_ids = {
+            _normalize_security_id(security_id): cash_account_id
+            for security_id, cash_account_id in fallback_cash_account_id_rows.items()
+        }
+        snapshot_by_security_id = {
+            security_id: row
+            for row in cash_rows
+            if (security_id := _normalize_security_id(row.snapshot.security_id))
+        }
 
         account_records: list[CashAccountBalanceRecord] = []
         emitted_cash_account_ids: set[str] = set()
 
         for master_row in master_rows:
-            snapshot_row = snapshot_by_security_id.get(master_row.security_id)
+            security_id = _normalize_security_id(master_row.security_id)
+            snapshot_row = snapshot_by_security_id.get(security_id)
             account_record = await self._build_cash_account_balance_record(
                 portfolio=portfolio,
                 snapshot_row=snapshot_row,
                 resolved_as_of_date=resolved_as_of_date,
                 reporting_currency=reporting_currency,
                 cash_account_id=master_row.cash_account_id,
-                security_id=master_row.security_id,
+                security_id=security_id,
                 instrument_name=(
                     snapshot_row.instrument.name
                     if snapshot_row and snapshot_row.instrument
@@ -119,12 +140,12 @@ class CashBalanceResolver:
             emitted_cash_account_ids.add(master_row.cash_account_id)
 
         for cash_row in cash_rows:
-            master_row = master_by_security_id.get(cash_row.snapshot.security_id)
+            security_id = _normalize_security_id(cash_row.snapshot.security_id)
+            master_row = master_by_security_id.get(security_id)
             fallback_cash_account_id = (
                 master_row.cash_account_id
                 if master_row is not None
-                else fallback_cash_account_ids.get(cash_row.snapshot.security_id)
-                or cash_row.snapshot.security_id
+                else fallback_cash_account_ids.get(security_id) or security_id
             )
             if fallback_cash_account_id in emitted_cash_account_ids:
                 continue
@@ -135,11 +156,11 @@ class CashBalanceResolver:
                     resolved_as_of_date=resolved_as_of_date,
                     reporting_currency=reporting_currency,
                     cash_account_id=fallback_cash_account_id,
-                    security_id=cash_row.snapshot.security_id,
+                    security_id=security_id,
                     instrument_name=(
                         cash_row.instrument.name
                         if cash_row.instrument is not None
-                        else cash_row.snapshot.security_id
+                        else security_id
                     ),
                     account_currency=(
                         cash_row.instrument.currency
