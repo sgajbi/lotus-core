@@ -70,6 +70,12 @@ def _validate_non_negative_amounts_by_currency(
     return amounts_by_currency
 
 
+def _validate_positive_decimal(value: Decimal, *, field_name: str) -> Decimal:
+    if not value.is_finite() or value <= 0:
+        raise ValueError(f"{field_name} must be greater than zero")
+    return value
+
+
 class Money(BaseModel):
     amount: Decimal = Field(
         description="Monetary amount as decimal string/number.",
@@ -87,6 +93,11 @@ class FxRate(BaseModel):
         examples=["USD/SGD"],
     )
     rate: Decimal = Field(description="FX conversion rate for the pair.", examples=["1.35"])
+
+    @field_validator("rate")
+    @classmethod
+    def validate_positive_rate(cls, value: Decimal) -> Decimal:
+        return _validate_positive_decimal(value, field_name="fx rate")
 
 
 class Position(BaseModel):
@@ -165,6 +176,11 @@ class Price(BaseModel):
         description="Last/mark price used in valuation and sizing.", examples=["180.25"]
     )
     currency: str = Field(description="Currency of the price.", examples=["USD"])
+
+    @field_validator("price")
+    @classmethod
+    def validate_positive_price(cls, value: Decimal) -> Decimal:
+        return _validate_positive_decimal(value, field_name="price")
 
 
 class MarketDataSnapshot(BaseModel):

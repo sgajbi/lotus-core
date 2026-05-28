@@ -14,6 +14,7 @@ from src.services.query_service.app.advisory_simulation.models import (
     Money,
     PortfolioSnapshot,
     Position,
+    Price,
     ProposalResult,
     ProposalSimulateRequest,
     ProposedCashFlow,
@@ -177,6 +178,31 @@ def test_snapshot_models_accept_snapshot_id() -> None:
     assert market.snapshot_id == "md_1"
 
 
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            {"prices": [{"instrument_id": "EQ_1", "price": "0", "currency": "USD"}]},
+            "price must be greater than zero",
+        ),
+        (
+            {"fx_rates": [{"pair": "EUR/USD", "rate": "0"}]},
+            "fx rate must be greater than zero",
+        ),
+    ],
+)
+def test_market_data_snapshot_rejects_nonpositive_calculation_inputs(
+    payload: dict, message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        MarketDataSnapshot.model_validate(payload)
+
+
+def test_price_model_rejects_nonpositive_price() -> None:
+    with pytest.raises(ValidationError, match="price must be greater than zero"):
+        Price(instrument_id="EQ_1", price=Decimal("-1"), currency="USD")
+
+
 def test_suitability_thresholds_validate_liquidity_tier_keys() -> None:
     with pytest.raises(ValidationError):
         EngineOptions(suitability_thresholds={"max_weight_by_liquidity_tier": {"L9": "0.10"}})
@@ -261,4 +287,3 @@ def test_engine_options_reject_invalid_turnover_and_overdraft_values() -> None:
 
     with pytest.raises(ValidationError, match="values must be non-negative"):
         EngineOptions(max_overdraft_by_ccy={"USD": Decimal("-1")})
-
