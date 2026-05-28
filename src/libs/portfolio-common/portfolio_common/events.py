@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .ca_bundle_a_ordering import (
     ca_bundle_a_dependency_rank,
@@ -15,6 +15,10 @@ from .control_code_normalization import (
 )
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
 from .currency_codes import normalize_currency_code, normalize_optional_currency_code
+from .transaction_fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
 
 
 class CoreEventModel(BaseModel):
@@ -282,10 +286,16 @@ class TransactionEvent(CoreEventModel):
         mode="before",
     )
     @classmethod
-    def _normalize_optional_transaction_control_code(
-        cls, value: str | None
-    ) -> str | None:
+    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
         return normalize_optional_transaction_control_code(value)
+
+    @model_validator(mode="after")
+    def _aggregate_fee_components(self) -> "TransactionEvent":
+        self.trade_fee = resolve_transaction_trade_fee(
+            self.trade_fee,
+            {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+        )
+        return self
 
 
 def transaction_event_ordering_key(

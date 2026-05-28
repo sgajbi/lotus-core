@@ -8,7 +8,11 @@ from portfolio_common.control_code_normalization import (
     normalize_transaction_control_code,
 )
 from portfolio_common.currency_codes import normalize_optional_currency_code
-from pydantic import BaseModel, Field, condecimal, field_validator
+from portfolio_common.transaction_fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
+from pydantic import BaseModel, Field, condecimal, field_validator, model_validator
 
 
 class Transaction(BaseModel):
@@ -643,10 +647,16 @@ class Transaction(BaseModel):
         mode="before",
     )
     @classmethod
-    def _normalize_optional_transaction_control_code(
-        cls, value: str | None
-    ) -> str | None:
+    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
         return normalize_optional_transaction_control_code(value)
+
+    @model_validator(mode="after")
+    def _aggregate_fee_components(self) -> "Transaction":
+        self.trade_fee = resolve_transaction_trade_fee(
+            self.trade_fee,
+            {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+        )
+        return self
 
 
 class TransactionIngestionRequest(BaseModel):

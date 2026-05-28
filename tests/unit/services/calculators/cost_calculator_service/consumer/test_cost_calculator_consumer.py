@@ -956,7 +956,8 @@ async def test_consumer_normalizes_upstream_adjustment_cash_leg_type(
     mock_repo.update_transaction_costs.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_called_once()
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
-    assert payload["transaction_type"] == " adjustment "
+    assert payload["transaction_type"] == "ADJUSTMENT"
+    assert payload["cash_entry_mode"] == "UPSTREAM_PROVIDED"
     assert payload["external_cash_transaction_id"] is None
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 

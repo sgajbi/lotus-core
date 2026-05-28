@@ -51,9 +51,7 @@ class InterestCanonicalTransaction(BaseModel):
 
     @field_validator("interest_direction", mode="before")
     @classmethod
-    def _normalize_optional_transaction_control_code(
-        cls, value: str | None
-    ) -> str | None:
+    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
         return normalize_optional_transaction_control_code(value)
 
     trade_fee: Optional[Decimal] = Field(
@@ -113,14 +111,13 @@ class InterestCanonicalTransaction(BaseModel):
     external_cash_transaction_id: Optional[str] = Field(
         default=None,
         description=(
-            "Upstream cash transaction identifier when cash_entry_mode is " "UPSTREAM_PROVIDED."
+            "Upstream cash transaction identifier when cash_entry_mode is UPSTREAM_PROVIDED."
         ),
     )
     settlement_cash_account_id: Optional[str] = Field(
         default=None,
         description=(
-            "Settlement cash account identifier required for AUTO_GENERATE cash-leg "
-            "construction."
+            "Settlement cash account identifier required for AUTO_GENERATE cash-leg construction."
         ),
     )
     settlement_cash_instrument_id: Optional[str] = Field(

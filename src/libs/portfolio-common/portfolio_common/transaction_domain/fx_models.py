@@ -33,9 +33,7 @@ class FxCanonicalTransaction(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     transaction_id: str = Field(..., description="Unique transaction identifier.")
-    transaction_type: str = Field(
-        ..., description="Canonical FX business transaction type."
-    )
+    transaction_type: str = Field(..., description="Canonical FX business transaction type.")
     component_type: str = Field(..., description="Canonical FX component type.")
     component_id: str = Field(..., description="Unique component identifier within the FX group.")
     linked_component_ids: Optional[list[str]] = Field(
@@ -67,9 +65,7 @@ class FxCanonicalTransaction(BaseModel):
     currency: str = Field(..., description="Book currency code.")
     pair_base_currency: str = Field(..., description="Currency pair base currency.")
     pair_quote_currency: str = Field(..., description="Currency pair quote currency.")
-    fx_rate_quote_convention: str = Field(
-        ..., description="Explicit FX rate quote convention."
-    )
+    fx_rate_quote_convention: str = Field(..., description="Explicit FX rate quote convention.")
 
     buy_currency: str = Field(..., description="Currency received at settlement.")
     sell_currency: str = Field(..., description="Currency delivered at settlement.")
@@ -131,9 +127,7 @@ class FxCanonicalTransaction(BaseModel):
         mode="before",
     )
     @classmethod
-    def _normalize_optional_transaction_control_code(
-        cls, value: str | None
-    ) -> str | None:
+    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
         return normalize_optional_transaction_control_code(value)
 
     fx_contract_id: Optional[str] = Field(

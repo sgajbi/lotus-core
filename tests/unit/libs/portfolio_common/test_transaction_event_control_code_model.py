@@ -73,3 +73,27 @@ def test_transaction_event_normalizes_control_codes_without_defaulting() -> None
     assert event.synthetic_flow_source == "UPSTREAM_PROVIDED"
     assert implicit_event.cash_entry_mode is None
     assert implicit_event.fx_realized_pnl_mode is None
+
+
+def test_transaction_event_aggregates_trade_fee_from_components() -> None:
+    event = TransactionEvent(
+        transaction_id="EVENT_FEE_COMPONENTS_001",
+        portfolio_id="PORT_META_001",
+        instrument_id="SEC_EQ_US_001",
+        security_id="SEC_EQ_US_001",
+        transaction_date=datetime(2026, 3, 1, 10, 0),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000.0"),
+        trade_currency="USD",
+        currency="USD",
+        trade_fee=Decimal("0.00"),
+        brokerage=Decimal("2.50"),
+        stamp_duty=Decimal("1.20"),
+        exchange_fee=Decimal("0.70"),
+        gst=Decimal("0.45"),
+        other_fees=Decimal("0.15"),
+    )
+
+    assert event.trade_fee == Decimal("5.00")

@@ -105,6 +105,32 @@ def test_transaction_model_invalid_trade_fee_fails():
     )
 
 
+def test_transaction_model_aggregates_trade_fee_from_components() -> None:
+    payload = {
+        "transaction_id": "txn_fee_components",
+        "portfolio_id": "P1",
+        "instrument_id": "I1",
+        "security_id": "S1",
+        "transaction_date": "2025-01-01T00:00:00",
+        "transaction_type": "BUY",
+        "quantity": "10.0",
+        "price": "100.0",
+        "gross_transaction_amount": "1000.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "trade_fee": "0.00",
+        "brokerage": "2.50",
+        "stamp_duty": "1.20",
+        "exchange_fee": "0.70",
+        "gst": "0.45",
+        "other_fees": "0.15",
+    }
+
+    transaction = Transaction(**payload)
+
+    assert transaction.trade_fee == Decimal("5.00")
+
+
 def test_transaction_model_non_numeric_input_fails():
     """
     Tests that the Transaction model fails validation for non-numeric input for Decimal fields.
