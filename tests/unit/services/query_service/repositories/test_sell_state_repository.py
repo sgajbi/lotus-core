@@ -36,14 +36,23 @@ def repository(mock_db_session: AsyncMock) -> SellStateRepository:
 async def test_get_sell_disposals_filters_portfolio_security_and_sell_type(
     repository: SellStateRepository, mock_db_session: AsyncMock
 ):
-    await repository.get_sell_disposals("PORT-1", "US0378331005")
+    await repository.get_sell_disposals("PORT-1", " US0378331005 ")
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "transactions.portfolio_id = 'PORT-1'" in compiled
-    assert "transactions.security_id = 'US0378331005'" in compiled
+    assert "trim(transactions.security_id) = 'US0378331005'" in compiled
     assert "transactions.transaction_type = 'SELL'" in compiled
+
+
+async def test_get_sell_disposals_skips_blank_security_id(
+    repository: SellStateRepository, mock_db_session: AsyncMock
+):
+    rows = await repository.get_sell_disposals("PORT-1", " ")
+
+    assert rows == []
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_get_sell_cash_linkage_joins_cashflow(

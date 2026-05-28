@@ -1,5 +1,6 @@
 # tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py  # noqa: E501
 import asyncio
+import json
 from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
@@ -211,6 +212,30 @@ async def test_process_message_success(
         )
 
         cashflow_consumer._send_to_dlq_async.assert_not_called()
+
+
+async def test_process_message_sends_negative_interest_deduction_to_dlq(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_cashflow_repo = mock_dependencies["cashflow_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_rules_repo = mock_dependencies["rules_repo"]
+
+    incoming_event_dict = json.loads(mock_kafka_message.value().decode("utf-8"))
+    incoming_event_dict["transaction_type"] = "INTEREST"
+    incoming_event_dict["withholding_tax_amount"] = "-0.01"
+    mock_kafka_message.value.return_value = json.dumps(incoming_event_dict).encode("utf-8")
+
+    await cashflow_consumer.process_message(mock_kafka_message)
+
+    mock_idempotency_repo.claim_event_processing.assert_not_called()
+    mock_rules_repo.get_all_rules.assert_not_awaited()
+    mock_cashflow_repo.create_cashflow.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    cashflow_consumer._send_to_dlq_async.assert_awaited_once()
 
 
 async def test_process_message_sends_to_dlq_if_rule_not_found(
@@ -467,6 +492,43 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
         assert second_rule.timing == "BOD"
         assert third_rule.timing == "EOD"
         assert rules_repo.get_all_rules.await_count == 2
+
+
+async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    from src.services.calculators.cashflow_calculator_service.app.consumers import (
+        transaction_consumer,
+    )
+
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.return_value = [
+        CashflowRule(
+            transaction_type=" buy ",
+            classification="INVESTMENT_OUTFLOW",
+            timing="BOD",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    ]
+
+    with (
+        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            return_value=rules_repo,
+        ),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            return_value=100.0,
+        ),
+    ):
+        rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, " buy ")
+
+        assert rule is not None
+        assert rule.classification == "INVESTMENT_OUTFLOW"
+        assert rules_repo.get_all_rules.await_count == 1
 
 
 async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(

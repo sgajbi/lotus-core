@@ -7,6 +7,7 @@ from ..dtos.sell_state_dto import (
     SellDisposalRecord,
     SellDisposalsResponse,
 )
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.sell_state_repository import SellStateRepository
 
 
@@ -33,6 +34,7 @@ class SellStateService:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
+        security_id = normalize_security_id(security_id)
         rows = await self.repo.get_sell_disposals(
             portfolio_id=portfolio_id, security_id=security_id
         )
@@ -46,7 +48,7 @@ class SellStateService:
                 transaction_id=txn.transaction_id,
                 transaction_date=txn.transaction_date,
                 instrument_id=txn.instrument_id,
-                security_id=txn.security_id,
+                security_id=normalize_security_id(txn.security_id),
                 quantity_disposed=self._absolute_decimal(txn.quantity) or Decimal("0"),
                 disposal_cost_basis_base=self._absolute_decimal(txn.net_cost),
                 disposal_cost_basis_local=self._absolute_decimal(txn.net_cost_local),

@@ -30,13 +30,17 @@ from ..dtos.core_snapshot_dto import (
 )
 from ..dtos.integration_dto import InstrumentEnrichmentRecord
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.fx_rate_repository import FxRateRepository
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
 from .position_flow_effects import transaction_quantity_effect_decimal
+
+CASH_ASSET_CLASS = "CASH"
 
 
 class CoreSnapshotBadRequestError(ValueError):
@@ -53,6 +57,15 @@ class CoreSnapshotConflictError(ValueError):
 
 class CoreSnapshotUnavailableSectionError(ValueError):
     pass
+
+
+def _normalize_control_code(value: Any, *, default: str = "") -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized or default
+
+
+def _is_cash_asset_class(value: Any) -> bool:
+    return _normalize_control_code(value) == CASH_ASSET_CLASS
 
 
 @dataclass
@@ -86,6 +99,13 @@ class CoreSnapshotService:
         ).hexdigest()
 
     @staticmethod
+    def _normalize_freshness_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        normalized_status = status.strip().upper()
+        return normalized_status or None
+
+    @staticmethod
     def _snapshot_data_quality_status(
         *,
         freshness: CoreSnapshotFreshnessMetadata,
@@ -93,10 +113,13 @@ class CoreSnapshotService:
     ) -> str:
         if baseline_count <= 0:
             return UNKNOWN
-        if freshness.freshness_status == "HISTORICAL_FALLBACK":
+        freshness_status = CoreSnapshotService._normalize_freshness_status(
+            freshness.freshness_status
+        )
+        if freshness_status == "HISTORICAL_FALLBACK":
             return PARTIAL
         if (
-            freshness.freshness_status == "CURRENT_SNAPSHOT"
+            freshness_status == "CURRENT_SNAPSHOT"
             and freshness.snapshot_timestamp is not None
             and freshness.snapshot_epoch is not None
         ):
@@ -113,9 +136,12 @@ class CoreSnapshotService:
         if portfolio is None:
             raise CoreSnapshotNotFoundError(f"Portfolio {portfolio_id} not found")
 
-        reporting_currency = request.reporting_currency or portfolio.base_currency
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+        reporting_currency = normalize_currency_code(
+            str(request.reporting_currency or portfolio.base_currency)
+        )
         reporting_fx = await self._get_fx_rate_or_raise(
-            from_currency=portfolio.base_currency,
+            from_currency=portfolio_currency,
             to_currency=reporting_currency,
             as_of_date=request.as_of_date,
         )
@@ -166,7 +192,7 @@ class CoreSnapshotService:
             projected_positions = await self._resolve_projected_positions(
                 session_id=session.session_id,
                 as_of_date=request.as_of_date,
-                portfolio_base_currency=portfolio.base_currency,
+                portfolio_base_currency=portfolio_currency,
                 reporting_currency=reporting_currency,
                 baseline_positions=baseline_positions,
                 include_zero=request.options.include_zero_quantity_positions,
@@ -299,7 +325,7 @@ class CoreSnapshotService:
                 warnings=warnings,
             ),
             valuation_context=CoreSnapshotValuationContext(
-                portfolio_currency=portfolio.base_currency,
+                portfolio_currency=portfolio_currency,
                 reporting_currency=reporting_currency,
                 position_basis=request.options.position_basis,
                 weight_basis=request.options.weight_basis,
@@ -347,7 +373,7 @@ class CoreSnapshotService:
             if (
                 not include_cash
                 and instrument
-                and str(instrument.asset_class or "").upper() == "CASH"
+                and _is_cash_asset_class(instrument.asset_class)
             ):
                 continue
 
@@ -372,13 +398,17 @@ class CoreSnapshotService:
                 market_value_base_raw * reporting_fx if market_value_base_raw is not None else None
             )
 
-            baseline[row.security_id] = {
-                "security_id": row.security_id,
+            security_id = normalize_security_id(row.security_id)
+            if not security_id:
+                continue
+
+            baseline[security_id] = {
+                "security_id": security_id,
                 "quantity": quantity,
                 "market_value_base": market_value_base,
                 "market_value_local": market_value_local,
                 "currency": instrument.currency if instrument else None,
-                "instrument_name": instrument.name if instrument else row.security_id,
+                "instrument_name": instrument.name if instrument else security_id,
                 "asset_class": instrument.asset_class if instrument else None,
                 "sector": instrument.sector if instrument else None,
                 "country_of_risk": instrument.country_of_risk if instrument else None,
@@ -448,11 +478,24 @@ class CoreSnapshotService:
             value["baseline_quantity"] = value["quantity"]
 
         changes = await self.simulation_repo.get_changes(session_id)
-        changed_security_ids = {change.security_id for change in changes}
+        normalized_changes: list[tuple[str, Any]] = []
+        for change in changes:
+            security_id = normalize_security_id(change.security_id)
+            if not security_id:
+                raise CoreSnapshotUnavailableSectionError(
+                    "positions_projected unavailable: simulation change missing security_id"
+                )
+            normalized_changes.append((security_id, change))
+
+        changed_security_ids = {security_id for security_id, _change in normalized_changes}
         missing_security_ids = [sid for sid in changed_security_ids if sid not in projected]
         if missing_security_ids:
             instruments = await self.instrument_repo.get_by_security_ids(missing_security_ids)
-            instrument_map = {item.security_id: item for item in instruments}
+            instrument_map = {
+                security_id: item
+                for item in instruments
+                if (security_id := normalize_security_id(item.security_id))
+            }
             for security_id in missing_security_ids:
                 instrument = instrument_map.get(security_id)
                 if instrument is None:
@@ -478,13 +521,13 @@ class CoreSnapshotService:
                     "liquidity_tier": instrument.liquidity_tier,
                 }
 
-        for change in changes:
-            entry = projected[change.security_id]
+        for security_id, change in normalized_changes:
+            entry = projected[security_id]
             delta = self._change_quantity_effect(change)
             entry["quantity"] = entry["quantity"] + delta
 
         for security_id, entry in projected.items():
-            if not include_cash and str(entry.get("asset_class") or "").upper() == "CASH":
+            if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
                 continue
             if not include_zero and entry["quantity"] == Decimal(0):
                 continue
@@ -530,7 +573,7 @@ class CoreSnapshotService:
 
         filtered: dict[str, dict[str, Any]] = {}
         for key, value in projected.items():
-            if not include_cash and str(value.get("asset_class") or "").upper() == "CASH":
+            if not include_cash and _is_cash_asset_class(value.get("asset_class")):
                 continue
             if not include_zero and value["quantity"] == Decimal(0):
                 continue
@@ -555,7 +598,11 @@ class CoreSnapshotService:
             raise CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
 
         instruments = await self.instrument_repo.get_by_security_ids(requested_ids)
-        by_security_id = {item.security_id: item for item in instruments}
+        by_security_id = {
+            security_id: item
+            for item in instruments
+            if (security_id := normalize_security_id(item.security_id))
+        }
 
         records: list[InstrumentEnrichmentRecord] = []
         for security_id in requested_ids:
@@ -579,15 +626,17 @@ class CoreSnapshotService:
     async def _get_fx_rate_or_raise(
         self, from_currency: str, to_currency: str, as_of_date
     ) -> Decimal:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return Decimal(1)
         rates = await self.fx_repo.get_fx_rates(
-            from_currency=from_currency,
-            to_currency=to_currency,
+            from_currency=normalized_from_currency,
+            to_currency=normalized_to_currency,
             end_date=as_of_date,
         )
         if not rates:
-            pair = f"{from_currency}/{to_currency}"
+            pair = f"{normalized_from_currency}/{normalized_to_currency}"
             raise CoreSnapshotUnavailableSectionError(
                 f"missing FX rate {pair} on or before {as_of_date.isoformat()}"
             )

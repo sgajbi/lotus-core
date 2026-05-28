@@ -91,17 +91,23 @@ async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_
     normalized = compiled.lower()
     assert (
         "row_number() over (partition by daily_position_snapshots.portfolio_id, "
-        "daily_position_snapshots.security_id" in normalized
+        "trim(daily_position_snapshots.security_id)" in normalized
     )
     assert "daily_position_snapshots.date <= '2026-03-27'" in compiled
     assert "daily_position_snapshots.quantity != 0" in compiled
+    assert "trim(position_history.security_id) AS security_id" in compiled
+    assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled
+    assert "trim(daily_position_snapshots.security_id) = anon_2.security_id" in compiled
     assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled
     assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled
     assert "position_history.position_date <= '2026-03-27'" in compiled
     assert "LEFT OUTER JOIN instruments" in compiled
     assert (
+        "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)" in compiled
+    )
+    assert (
         "ORDER BY daily_position_snapshots.portfolio_id ASC, "
-        "daily_position_snapshots.security_id ASC" in compiled
+        "trim(daily_position_snapshots.security_id) ASC" in compiled
     )
 
 
@@ -112,16 +118,16 @@ async def test_reporting_repository_get_latest_fx_rate_uses_desc_limit_one() -> 
     repo = ReportingRepository(db)
 
     rate = await repo.get_latest_fx_rate(
-        from_currency="EUR",
-        to_currency="USD",
+        from_currency=" eur ",
+        to_currency=" usd ",
         as_of_date=date(2026, 3, 27),
     )
 
     assert rate == Decimal("1.2500000000")
     stmt = db.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "fx_rates.from_currency = 'EUR'" in compiled
-    assert "fx_rates.to_currency = 'USD'" in compiled
+    assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in compiled
+    assert "upper(trim(fx_rates.to_currency)) = 'USD'" in compiled
     assert "fx_rates.rate_date <= '2026-03-27'" in compiled
     assert "ORDER BY fx_rates.rate_date DESC" in compiled
     assert "LIMIT 1" in compiled
@@ -133,7 +139,7 @@ async def test_reporting_repository_get_latest_fx_rate_short_circuits_same_curre
     repo = ReportingRepository(db)
 
     rate = await repo.get_latest_fx_rate(
-        from_currency="USD",
+        from_currency=" usd ",
         to_currency="USD",
         as_of_date=date(2026, 3, 27),
     )
@@ -148,13 +154,13 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
 ):
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
-        [("CASH_USD", "CASH-ACC-USD-001"), ("CASH_SGD", "CASH-ACC-SGD-001")]
+        [(" CASH_USD ", "CASH-ACC-USD-001"), ("CASH_SGD", "CASH-ACC-SGD-001")]
     )
     repo = ReportingRepository(db)
 
     mapping = await repo.get_latest_cash_account_ids(
         portfolio_id="P1",
-        cash_security_ids=["CASH_USD", "CASH_SGD"],
+        cash_security_ids=[" CASH_USD ", "CASH_SGD", ""],
         as_of_date=date(2026, 3, 27),
     )
 
@@ -166,11 +172,15 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     normalized = compiled.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled
-    assert "transactions.settlement_cash_instrument_id IN ('CASH_USD', 'CASH_SGD')" in compiled
+    assert (
+        "trim(transactions.settlement_cash_instrument_id) IN ('CASH_USD', 'CASH_SGD')"
+        in compiled
+    )
     assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
     assert "transactions.settlement_cash_account_id IS NOT NULL" in compiled
     assert (
-        "row_number() over (partition by transactions.settlement_cash_instrument_id" in normalized
+        "row_number() over (partition by trim(transactions.settlement_cash_instrument_id)"
+        in normalized
     )
 
 
@@ -183,6 +193,22 @@ async def test_reporting_repository_cash_account_resolution_skips_query_when_no_
     mapping = await repo.get_latest_cash_account_ids(
         portfolio_id="P1",
         cash_security_ids=[],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert mapping == {}
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_cash_account_resolution_skips_query_when_securities_blank(
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReportingRepository(db)
+
+    mapping = await repo.get_latest_cash_account_ids(
+        portfolio_id="P1",
+        cash_security_ids=[" ", ""],
         as_of_date=date(2026, 3, 27),
     )
 
@@ -234,15 +260,25 @@ async def test_reporting_repository_lookthrough_query_uses_effective_window() ->
     repo = ReportingRepository(db)
 
     await repo.list_instrument_lookthrough_components(
-        parent_security_ids=["FUND1", "FUND2"],
+        parent_security_ids=[" FUND1 ", "FUND2", " "],
         as_of_date=date(2026, 3, 27),
     )
 
     stmt = db.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "instrument_lookthrough_components.parent_security_id IN ('FUND1', 'FUND2')" in compiled
+    assert (
+        "trim(instrument_lookthrough_components.parent_security_id) IN ('FUND1', 'FUND2')"
+        in compiled
+    )
+    assert (
+        "trim(instruments.security_id) = "
+        "trim(instrument_lookthrough_components.component_security_id)" in compiled
+    )
+    assert "trim(instrument_lookthrough_components.component_security_id) != ''" in compiled
     assert "instrument_lookthrough_components.effective_from <= '2026-03-27'" in compiled
     assert "instrument_lookthrough_components.effective_to >= '2026-03-27'" in compiled
+    assert "ORDER BY trim(instrument_lookthrough_components.parent_security_id) ASC" in compiled
+    assert "trim(instrument_lookthrough_components.component_security_id) ASC" in compiled
 
 
 @pytest.mark.asyncio
@@ -258,4 +294,26 @@ async def test_reporting_repository_lookthrough_query_skips_database_when_parent
 
     assert rows == []
     db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_lookthrough_components_return_canonical_security_ids(
+) -> None:
+    instrument = SimpleNamespace(security_id=" ETF1 ")
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(
+        [(" FUND1 ", " ETF1 ", Decimal("1"), instrument)]
+    )
+    repo = ReportingRepository(db)
+
+    rows = await repo.list_instrument_lookthrough_components(
+        parent_security_ids=[" FUND1 "],
+        as_of_date=date(2026, 3, 27),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].parent_security_id == "FUND1"
+    assert rows[0].component_security_id == "ETF1"
+    assert rows[0].component_weight == Decimal("1")
+    assert rows[0].component_instrument is instrument
 

@@ -15,6 +15,34 @@ def sorter():
     return TransactionSorter()
 
 
+def _transaction(
+    *,
+    transaction_id: str,
+    transaction_date: datetime,
+    quantity: Decimal = Decimal("1"),
+    instrument_id: str = "A",
+    security_id: str = "S1",
+    transaction_type: str = "BUY",
+    product_type: str | None = None,
+    asset_class: str | None = None,
+) -> Transaction:
+    return Transaction(
+        transaction_id=transaction_id,
+        transaction_date=transaction_date,
+        quantity=quantity,
+        portfolio_id="P1",
+        instrument_id=instrument_id,
+        security_id=security_id,
+        transaction_type=transaction_type,
+        settlement_date=transaction_date,
+        gross_transaction_amount=quantity,
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        product_type=product_type,
+        asset_class=asset_class,
+    )
+
+
 def test_sort_by_date(sorter):
     # Arrange
     t1 = Transaction(
@@ -247,3 +275,49 @@ def test_sort_cash_inflow_before_cash_outflow_on_same_timestamp(sorter):
 
     sorted_list = sorter.sort_transactions([], [settlement_sell, deposit])
     assert [t.transaction_id for t in sorted_list] == ["TS_DEP_01", "TS_CASH_SETTLE_BUY_01"]
+
+
+def test_sort_bundle_dependency_normalizes_transaction_type(sorter):
+    same_day = datetime(2026, 1, 10)
+    target = _transaction(
+        transaction_id="t_target",
+        transaction_date=same_day,
+        quantity=Decimal("10"),
+        transaction_type=" demerger_in ",
+    )
+    source = _transaction(
+        transaction_id="t_source",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        transaction_type=" demerger_out ",
+    )
+
+    sorted_list = sorter.sort_transactions([], [target, source])
+    assert [t.transaction_id for t in sorted_list] == ["t_source", "t_target"]
+
+
+def test_sort_cash_dependencies_normalize_source_vocabulary(sorter):
+    same_day = datetime(2025, 8, 28)
+    fee = _transaction(
+        transaction_id="t_fee",
+        transaction_date=same_day,
+        quantity=Decimal("5000"),
+        instrument_id=" cash_usd ",
+        security_id=" cash_usd ",
+        transaction_type=" fee ",
+        product_type=" cash ",
+        asset_class=" cash ",
+    )
+    deposit = _transaction(
+        transaction_id="t_deposit",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        instrument_id=" cash_usd ",
+        security_id=" cash_usd ",
+        transaction_type=" deposit ",
+        product_type=" cash ",
+        asset_class=" cash ",
+    )
+
+    sorted_list = sorter.sort_transactions([], [fee, deposit])
+    assert [t.transaction_id for t in sorted_list] == ["t_deposit", "t_fee"]

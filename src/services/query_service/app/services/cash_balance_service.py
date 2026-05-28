@@ -4,15 +4,22 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
 
+from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..repositories.currency_codes import normalize_currency_code
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
-from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
+
+
+def _normalize_control_code(value: Any, *, default: str = "") -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized or default
 
 
 class CashBalanceResolver:
@@ -33,6 +40,8 @@ class CashBalanceResolver:
         reporting_currency: str,
         rows: list[Any],
     ) -> CashBalancesResponse:
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+        reporting_currency = normalize_currency_code(reporting_currency)
         cash_rows = [row for row in rows if self.is_cash_row(row)]
         account_records = await self.build_cash_account_balance_records(
             portfolio=portfolio,
@@ -42,7 +51,7 @@ class CashBalanceResolver:
         )
         return CashBalancesResponse(
             portfolio_id=portfolio.portfolio_id,
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             resolved_as_of_date=resolved_as_of_date,
             totals=CashBalancesTotals(
@@ -75,31 +84,48 @@ class CashBalanceResolver:
         resolved_as_of_date: date,
         reporting_currency: str,
     ) -> list[CashAccountBalanceRecord]:
-        cash_security_ids = [row.snapshot.security_id for row in cash_rows]
+        cash_security_ids = [
+            security_id
+            for row in cash_rows
+            if (security_id := normalize_security_id(row.snapshot.security_id))
+        ]
         master_rows = await self.repo.list_cash_account_masters(
             portfolio_id=portfolio.portfolio_id,
             as_of_date=resolved_as_of_date,
         )
-        master_by_security_id = {row.security_id: row for row in master_rows}
-        fallback_cash_account_ids = await self.repo.get_latest_cash_account_ids(
+        master_by_security_id = {
+            security_id: row
+            for row in master_rows
+            if (security_id := normalize_security_id(row.security_id))
+        }
+        fallback_cash_account_id_rows = await self.repo.get_latest_cash_account_ids(
             portfolio_id=portfolio.portfolio_id,
             cash_security_ids=cash_security_ids,
             as_of_date=resolved_as_of_date,
         )
-        snapshot_by_security_id = {row.snapshot.security_id: row for row in cash_rows}
+        fallback_cash_account_ids = {
+            normalize_security_id(security_id): cash_account_id
+            for security_id, cash_account_id in fallback_cash_account_id_rows.items()
+        }
+        snapshot_by_security_id = {
+            security_id: row
+            for row in cash_rows
+            if (security_id := normalize_security_id(row.snapshot.security_id))
+        }
 
         account_records: list[CashAccountBalanceRecord] = []
         emitted_cash_account_ids: set[str] = set()
 
         for master_row in master_rows:
-            snapshot_row = snapshot_by_security_id.get(master_row.security_id)
+            security_id = normalize_security_id(master_row.security_id)
+            snapshot_row = snapshot_by_security_id.get(security_id)
             account_record = await self._build_cash_account_balance_record(
                 portfolio=portfolio,
                 snapshot_row=snapshot_row,
                 resolved_as_of_date=resolved_as_of_date,
                 reporting_currency=reporting_currency,
                 cash_account_id=master_row.cash_account_id,
-                security_id=master_row.security_id,
+                security_id=security_id,
                 instrument_name=(
                     snapshot_row.instrument.name
                     if snapshot_row and snapshot_row.instrument
@@ -111,12 +137,12 @@ class CashBalanceResolver:
             emitted_cash_account_ids.add(master_row.cash_account_id)
 
         for cash_row in cash_rows:
-            master_row = master_by_security_id.get(cash_row.snapshot.security_id)
+            security_id = normalize_security_id(cash_row.snapshot.security_id)
+            master_row = master_by_security_id.get(security_id)
             fallback_cash_account_id = (
                 master_row.cash_account_id
                 if master_row is not None
-                else fallback_cash_account_ids.get(cash_row.snapshot.security_id)
-                or cash_row.snapshot.security_id
+                else fallback_cash_account_ids.get(security_id) or security_id
             )
             if fallback_cash_account_id in emitted_cash_account_ids:
                 continue
@@ -127,11 +153,11 @@ class CashBalanceResolver:
                     resolved_as_of_date=resolved_as_of_date,
                     reporting_currency=reporting_currency,
                     cash_account_id=fallback_cash_account_id,
-                    security_id=cash_row.snapshot.security_id,
+                    security_id=security_id,
                     instrument_name=(
                         cash_row.instrument.name
                         if cash_row.instrument is not None
-                        else cash_row.snapshot.security_id
+                        else security_id
                     ),
                     account_currency=(
                         cash_row.instrument.currency
@@ -156,6 +182,7 @@ class CashBalanceResolver:
         instrument_name: str,
         account_currency: str,
     ) -> CashAccountBalanceRecord:
+        account_currency = normalize_currency_code(str(account_currency))
         if snapshot_row is None:
             native_balance = ZERO
             portfolio_balance = ZERO
@@ -188,7 +215,7 @@ class CashBalanceResolver:
     def is_cash_row(row: Any) -> bool:
         return (
             row.instrument is not None
-            and str(row.instrument.asset_class or "").upper() == CASH_ASSET_CLASS
+            and _normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
         )
 
     @staticmethod
@@ -236,6 +263,7 @@ class CashBalanceService:
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for cash balance queries.")
         effective_reporting_currency = reporting_currency or portfolio.base_currency
+        effective_reporting_currency = normalize_currency_code(str(effective_reporting_currency))
 
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
@@ -256,9 +284,13 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return amount
-        rate = await self._get_fx_rate(from_currency, to_currency, as_of_date)
+        rate = await self._get_fx_rate(
+            normalized_from_currency, normalized_to_currency, as_of_date
+        )
         return amount * rate
 
     async def _get_fx_rate(
@@ -267,17 +299,20 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        cache_key = (from_currency, to_currency, as_of_date)
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
         if cache_key in self._fx_cache:
             return self._fx_cache[cache_key]
         rate = await self.repo.get_latest_fx_rate(
-            from_currency=from_currency,
-            to_currency=to_currency,
+            from_currency=normalized_from_currency,
+            to_currency=normalized_to_currency,
             as_of_date=as_of_date,
         )
         if rate is None:
             raise ValueError(
-                f"FX rate not found for {from_currency}/{to_currency} as of {as_of_date}."
+                "FX rate not found for "
+                f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
             )
         resolved_rate = Decimal(str(rate))
         self._fx_cache[cache_key] = resolved_rate

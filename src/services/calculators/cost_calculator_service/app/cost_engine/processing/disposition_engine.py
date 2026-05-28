@@ -8,6 +8,10 @@ from .cost_basis_strategies import CostBasisStrategy
 logger = logging.getLogger(__name__)
 
 
+def _is_buy_transaction(transaction: Transaction) -> bool:
+    return str(transaction.transaction_type or "").strip().upper() == "BUY"
+
+
 class DispositionEngine:
     """
     Manages 'cost lots', delegating calculation logic to a specific strategy.
@@ -32,12 +36,8 @@ class DispositionEngine:
         )
 
     def set_initial_lots(self, transactions: list[Transaction]):
-        from ..domain.enums.transaction_type import TransactionType
-
         filtered_buys = [
-            txn
-            for txn in transactions
-            if txn.transaction_type == TransactionType.BUY and txn.quantity > Decimal(0)
+            txn for txn in transactions if _is_buy_transaction(txn) and txn.quantity > Decimal(0)
         ]
         self._cost_basis_strategy.set_initial_lots(filtered_buys)
 

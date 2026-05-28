@@ -16,6 +16,7 @@ from ..dtos.simulation_dto import (
     SimulationSessionCreateRequest,
     SimulationSessionResponse,
 )
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.simulation_repository import SimulationRepository
@@ -103,20 +104,30 @@ class SimulationService:
             position_date = row.date if use_snapshot else row.position_date
             if baseline_as_of is None or position_date > baseline_as_of:
                 baseline_as_of = position_date
-            baseline_map[row.security_id] = {
-                "security_id": row.security_id,
+            security_id = normalize_security_id(row.security_id)
+            if not security_id:
+                continue
+            baseline_map[security_id] = {
+                "security_id": security_id,
                 "baseline_quantity": Decimal(str(row.quantity)),
                 "proposed_quantity": Decimal(str(row.quantity)),
                 "cost_basis": Decimal(str(row.cost_basis)) if row.cost_basis is not None else None,
                 "cost_basis_local": Decimal(str(row.cost_basis_local))
                 if row.cost_basis_local is not None
                 else None,
-                "instrument_name": instrument.name if instrument else row.security_id,
+                "instrument_name": instrument.name if instrument else security_id,
                 "asset_class": instrument.asset_class if instrument else None,
             }
 
         changes = await self.repo.get_changes(session_id)
-        security_ids = {item.security_id for item in changes}
+        normalized_changes: list[tuple[str, Any]] = []
+        for change in changes:
+            security_id = normalize_security_id(change.security_id)
+            if not security_id:
+                raise ValueError("Simulation change is missing security_id")
+            normalized_changes.append((security_id, change))
+
+        security_ids = {security_id for security_id, _change in normalized_changes}
         for security_id in security_ids:
             if security_id not in baseline_map:
                 baseline_map[security_id] = {
@@ -130,7 +141,11 @@ class SimulationService:
                 }
 
         instruments = await self.instrument_repo.get_by_security_ids(list(baseline_map.keys()))
-        instrument_map = {item.security_id: item for item in instruments}
+        instrument_map = {
+            security_id: item
+            for item in instruments
+            if (security_id := normalize_security_id(item.security_id))
+        }
 
         for security_id, record in baseline_map.items():
             instrument = instrument_map.get(security_id)
@@ -138,8 +153,8 @@ class SimulationService:
                 record["instrument_name"] = instrument.name
                 record["asset_class"] = instrument.asset_class
 
-        for change in changes:
-            record = baseline_map[change.security_id]
+        for security_id, change in normalized_changes:
+            record = baseline_map[security_id]
             qty = self._change_quantity_effect(change)
             record["proposed_quantity"] += qty
 

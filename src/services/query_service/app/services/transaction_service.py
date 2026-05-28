@@ -15,6 +15,7 @@ from ..dtos.transaction_dto import (
     RealizedTaxCurrencyTotal,
     TransactionRecord,
 )
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 
 logger = logging.getLogger(__name__)
@@ -158,6 +159,10 @@ class TransactionService:
         base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
         if base_currency is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        normalized_base_currency = normalize_currency_code(str(base_currency))
+        resolved_reporting_currency = (
+            normalize_currency_code(reporting_currency) if reporting_currency is not None else None
+        )
 
         effective_as_of_date = (
             as_of_date or await self.repo.get_latest_business_date() or date.today()
@@ -176,20 +181,20 @@ class TransactionService:
 
         currency_totals = self._realized_tax_currency_totals(tax_transactions)
         reporting_currency_total = None
-        if reporting_currency is not None:
+        if resolved_reporting_currency is not None:
             reporting_currency_total = Decimal("0")
             for total in currency_totals:
                 reporting_currency_total += await self._convert_amount(
                     amount=total.total_tax_amount,
                     from_currency=total.currency,
-                    to_currency=reporting_currency,
+                    to_currency=resolved_reporting_currency,
                     as_of_date=effective_as_of_date,
                 )
 
         return PortfolioRealizedTaxSummaryResponse(
             portfolio_id=portfolio_id,
-            base_currency=base_currency,
-            reporting_currency=reporting_currency,
+            base_currency=normalized_base_currency,
+            reporting_currency=resolved_reporting_currency,
             start_date=start_date,
             end_date=end_date,
             source_transaction_count=source_transaction_count,
@@ -220,7 +225,7 @@ class TransactionService:
     ) -> list[RealizedTaxCurrencyTotal]:
         totals: dict[str, _RealizedTaxAccumulator] = {}
         for transaction in transactions:
-            currency = getattr(transaction, "currency")
+            currency = normalize_currency_code(str(getattr(transaction, "currency")))
             bucket = totals.setdefault(currency, _RealizedTaxAccumulator())
             withholding_tax = getattr(transaction, "withholding_tax_amount") or Decimal("0")
             other_deductions = getattr(transaction, "other_interest_deductions_amount") or Decimal(
@@ -305,9 +310,13 @@ class TransactionService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return amount
-        rate = await self._get_fx_rate(from_currency, to_currency, as_of_date)
+        rate = await self._get_fx_rate(
+            normalized_from_currency, normalized_to_currency, as_of_date
+        )
         return amount * rate
 
     async def _get_fx_rate(
@@ -316,17 +325,20 @@ class TransactionService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        cache_key = (from_currency, to_currency, as_of_date)
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
         if cache_key in self._fx_cache:
             return self._fx_cache[cache_key]
         rate = await self.repo.get_latest_fx_rate(
-            from_currency=from_currency,
-            to_currency=to_currency,
+            from_currency=normalized_from_currency,
+            to_currency=normalized_to_currency,
             as_of_date=as_of_date,
         )
         if rate is None:
             raise ValueError(
-                f"FX rate not found for {from_currency}/{to_currency} as of {as_of_date}."
+                "FX rate not found for "
+                f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
             )
         resolved_rate = Decimal(str(rate))
         self._fx_cache[cache_key] = resolved_rate

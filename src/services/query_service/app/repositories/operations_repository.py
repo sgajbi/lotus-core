@@ -24,6 +24,9 @@ from sqlalchemy import Date, and_, case, cast, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from .currency_codes import normalize_currency_code
+from .identifier_normalization import normalize_security_id
+
 
 @dataclass(frozen=True)
 class JobHealthSummary:
@@ -137,11 +140,49 @@ class OperationsRepository:
         self.db = db
 
     @staticmethod
+    def _support_job_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
+    def _reprocessing_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
+    def _reconciliation_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
+    def _portfolio_control_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
+    def _finding_severity_expr(severity_column):
+        return func.upper(func.trim(severity_column))
+
+    @staticmethod
+    def _snapshot_valuation_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
+    def _security_id_expr(security_id_column):
+        return func.trim(security_id_column)
+
+    @staticmethod
+    def _currency_code_expr(currency_code_column):
+        return func.upper(func.trim(currency_code_column))
+
+    @staticmethod
     def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
         superseding_job = aliased(PortfolioValuationJob)
+        valuation_job_security_id = OperationsRepository._security_id_expr(
+            PortfolioValuationJob.security_id
+        )
+        superseding_job_security_id = OperationsRepository._security_id_expr(
+            superseding_job.security_id
+        )
         superseded_pending_exists = select(superseding_job.id).where(
             superseding_job.portfolio_id == PortfolioValuationJob.portfolio_id,
-            superseding_job.security_id == PortfolioValuationJob.security_id,
+            superseding_job_security_id == valuation_job_security_id,
             superseding_job.valuation_date == PortfolioValuationJob.valuation_date,
             superseding_job.epoch > PortfolioValuationJob.epoch,
         )
@@ -151,16 +192,23 @@ class OperationsRepository:
             )
 
         return or_(
-            PortfolioValuationJob.status != "PENDING",
+            OperationsRepository._support_job_status_expr(PortfolioValuationJob.status)
+            != "PENDING",
             ~superseded_pending_exists.correlate(PortfolioValuationJob).exists(),
         )
 
     @staticmethod
     def _has_superseding_valuation_epoch(*, as_of: Optional[datetime] = None):
         superseding_job = aliased(PortfolioValuationJob)
+        valuation_job_security_id = OperationsRepository._security_id_expr(
+            PortfolioValuationJob.security_id
+        )
+        superseding_job_security_id = OperationsRepository._security_id_expr(
+            superseding_job.security_id
+        )
         superseding_exists = select(superseding_job.id).where(
             superseding_job.portfolio_id == PortfolioValuationJob.portfolio_id,
-            superseding_job.security_id == PortfolioValuationJob.security_id,
+            superseding_job_security_id == valuation_job_security_id,
             superseding_job.valuation_date == PortfolioValuationJob.valuation_date,
             superseding_job.epoch > PortfolioValuationJob.epoch,
         )
@@ -174,6 +222,12 @@ class OperationsRepository:
         security_id_expr,
         impacted_date_expr,
     ):
+        position_state_security_id = OperationsRepository._security_id_expr(
+            PositionState.security_id
+        )
+        position_history_security_id = OperationsRepository._security_id_expr(
+            PositionHistory.security_id
+        )
         latest_history = (
             select(
                 PositionHistory.quantity.label("quantity"),
@@ -188,14 +242,14 @@ class OperationsRepository:
                 PositionState,
                 and_(
                     PositionState.portfolio_id == PositionHistory.portfolio_id,
-                    PositionState.security_id == PositionHistory.security_id,
+                    position_state_security_id == position_history_security_id,
                     PositionState.epoch == PositionHistory.epoch,
                 ),
             )
             .where(
                 PositionState.portfolio_id == portfolio_id,
-                PositionState.security_id == security_id_expr,
-                PositionHistory.security_id == security_id_expr,
+                position_state_security_id == security_id_expr,
+                position_history_security_id == security_id_expr,
                 PositionHistory.position_date <= impacted_date_expr,
             )
             .correlate(ReprocessingJob)
@@ -211,53 +265,62 @@ class OperationsRepository:
 
     @staticmethod
     def _support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
+        normalized_status = OperationsRepository._support_job_status_expr(status_column)
         return case(
-            (status_column == "FAILED", 0),
+            (normalized_status == "FAILED", 0),
             (
-                and_(status_column == "PROCESSING", updated_at_column < stale_threshold),
+                and_(normalized_status == "PROCESSING", updated_at_column < stale_threshold),
                 1,
             ),
-            (status_column == "PROCESSING", 2),
-            (status_column == "PENDING", 3),
+            (normalized_status == "PROCESSING", 2),
+            (normalized_status == "PENDING", 3),
             else_=9,
         )
 
     @staticmethod
+    def _analytics_export_status_expr(status_column):
+        return func.lower(func.trim(status_column))
+
+    @staticmethod
     def _analytics_export_job_priority(status_column, updated_at_column, stale_threshold: datetime):
+        normalized_status = OperationsRepository._analytics_export_status_expr(status_column)
         return case(
-            (status_column == "failed", 0),
+            (normalized_status == "failed", 0),
             (
-                and_(status_column == "running", updated_at_column < stale_threshold),
+                and_(normalized_status == "running", updated_at_column < stale_threshold),
                 1,
             ),
-            (status_column == "running", 2),
-            (status_column == "accepted", 3),
+            (normalized_status == "running", 2),
+            (normalized_status == "accepted", 3),
             else_=9,
         )
 
     @staticmethod
     def _reconciliation_run_priority(status_column):
+        normalized_status = OperationsRepository._reconciliation_status_expr(status_column)
         return case(
-            (status_column.in_(("FAILED", "REQUIRES_REPLAY")), 0),
-            (status_column == "RUNNING", 1),
+            (normalized_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
+            (normalized_status == "RUNNING", 1),
             else_=9,
         )
 
     @staticmethod
     def _portfolio_control_stage_priority(status_column):
+        normalized_status = OperationsRepository._portfolio_control_status_expr(status_column)
         return case(
-            (status_column.in_(("FAILED", "REQUIRES_REPLAY")), 0),
+            (normalized_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
             else_=9,
         )
 
     @staticmethod
     def _reprocessing_key_priority(status_column, updated_at_column, stale_threshold: datetime):
+        normalized_status = OperationsRepository._reprocessing_status_expr(status_column)
         return case(
             (
-                and_(status_column == "REPROCESSING", updated_at_column < stale_threshold),
+                and_(normalized_status == "REPROCESSING", updated_at_column < stale_threshold),
                 0,
             ),
-            (status_column == "REPROCESSING", 1),
+            (normalized_status == "REPROCESSING", 1),
             else_=9,
         )
 
@@ -345,7 +408,7 @@ class OperationsRepository:
             )
 
         valuation_base = select(
-            PortfolioValuationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioValuationJob.status).label("status"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.updated_at.label("updated_at"),
         ).where(
@@ -357,7 +420,7 @@ class OperationsRepository:
         valuation_subq = valuation_base.subquery()
 
         aggregation_base = select(
-            PortfolioAggregationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioAggregationJob.status).label("status"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
         ).where(PortfolioAggregationJob.portfolio_id.like(portfolio_pattern))
@@ -385,13 +448,13 @@ class OperationsRepository:
         )
         valuation_handoff_base = select(
             PortfolioValuationJob.portfolio_id.label("portfolio_id"),
-            PortfolioValuationJob.security_id.label("security_id"),
+            self._security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.epoch.label("epoch"),
             PortfolioValuationJob.updated_at.label("valuation_completed_at_utc"),
         ).where(
             PortfolioValuationJob.portfolio_id.like(portfolio_pattern),
-            PortfolioValuationJob.status == "COMPLETE",
+            self._support_job_status_expr(PortfolioValuationJob.status) == "COMPLETE",
             ~self._has_superseding_valuation_epoch(as_of=as_of),
         )
         if as_of is not None:
@@ -401,7 +464,8 @@ class OperationsRepository:
         valuation_handoff_subq = valuation_handoff_base.subquery()
         valuation_to_position_join = and_(
             PositionTimeseries.portfolio_id == valuation_handoff_subq.c.portfolio_id,
-            PositionTimeseries.security_id == valuation_handoff_subq.c.security_id,
+            self._security_id_expr(PositionTimeseries.security_id)
+            == valuation_handoff_subq.c.security_id,
             PositionTimeseries.date == valuation_handoff_subq.c.valuation_date,
             PositionTimeseries.epoch == valuation_handoff_subq.c.epoch,
         )
@@ -644,10 +708,10 @@ class OperationsRepository:
     ) -> ReprocessingHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         base_stmt = select(
-            PositionState.status.label("status"),
+            self._reprocessing_status_expr(PositionState.status).label("status"),
             PositionState.updated_at.label("updated_at"),
             PositionState.watermark_date.label("watermark_date"),
-            PositionState.security_id.label("security_id"),
+            self._security_id_expr(PositionState.security_id).label("security_id"),
             PositionState.epoch.label("epoch"),
         ).where(PositionState.portfolio_id == portfolio_id)
         if as_of is not None:
@@ -702,7 +766,7 @@ class OperationsRepository:
             active_keys=int(row.active_keys or 0),
             stale_reprocessing_keys=int(row.stale_reprocessing_keys or 0),
             oldest_reprocessing_watermark_date=row.oldest_reprocessing_watermark_date,
-            oldest_reprocessing_security_id=row.security_id,
+            oldest_reprocessing_security_id=normalize_security_id(row.security_id),
             oldest_reprocessing_epoch=row.epoch,
             oldest_reprocessing_updated_at=row.updated_at,
         )
@@ -718,12 +782,12 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            PortfolioValuationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioValuationJob.status).label("status"),
             PortfolioValuationJob.updated_at.label("updated_at"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.id.label("id"),
             PortfolioValuationJob.correlation_id.label("correlation_id"),
-            PortfolioValuationJob.security_id.label("security_id"),
+            self._security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
         ).where(
             PortfolioValuationJob.portfolio_id == portfolio_id,
             self._is_actionable_valuation_job(as_of=as_of),
@@ -798,7 +862,7 @@ class OperationsRepository:
             oldest_open_job_date=row.oldest_open_job_date,
             oldest_open_job_id=row.id,
             oldest_open_job_correlation_id=row.correlation_id,
-            oldest_open_security_id=row.security_id,
+            oldest_open_security_id=normalize_security_id(row.security_id),
         )
 
     async def get_aggregation_job_health_summary(
@@ -812,7 +876,7 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            PortfolioAggregationJob.status.label("status"),
+            self._support_job_status_expr(PortfolioAggregationJob.status).label("status"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.id.label("id"),
@@ -900,7 +964,7 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            AnalyticsExportJob.status.label("status"),
+            self._analytics_export_status_expr(AnalyticsExportJob.status).label("status"),
             AnalyticsExportJob.updated_at.label("updated_at"),
             AnalyticsExportJob.created_at.label("created_at"),
             AnalyticsExportJob.job_id.label("job_id"),
@@ -1009,13 +1073,15 @@ class OperationsRepository:
     async def get_latest_snapshot_date_for_current_epoch(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[date]:
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(func.max(DailyPositionSnapshot.date))
             .join(
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
@@ -1034,13 +1100,15 @@ class OperationsRepository:
         as_of_date: date,
         snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(func.max(DailyPositionSnapshot.date))
             .join(
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
@@ -1059,10 +1127,13 @@ class OperationsRepository:
     async def get_position_snapshot_history_mismatch_count(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> int:
+        history_security_id = self._security_id_expr(PositionHistory.security_id)
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         latest_history = (
             select(
                 PositionHistory.portfolio_id,
-                PositionHistory.security_id,
+                history_security_id.label("security_id"),
                 PositionHistory.epoch,
                 func.max(PositionHistory.position_date).label("latest_history_date"),
             )
@@ -1070,7 +1141,7 @@ class OperationsRepository:
                 PositionState,
                 and_(
                     PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    PositionHistory.security_id == PositionState.security_id,
+                    history_security_id == state_security_id,
                     PositionHistory.epoch == PositionState.epoch,
                 ),
             )
@@ -1082,12 +1153,12 @@ class OperationsRepository:
                 PositionState.updated_at <= as_of,
             )
         latest_history = latest_history.group_by(
-            PositionHistory.portfolio_id, PositionHistory.security_id, PositionHistory.epoch
+            PositionHistory.portfolio_id, history_security_id, PositionHistory.epoch
         ).subquery()
         latest_snapshot = (
             select(
                 DailyPositionSnapshot.portfolio_id,
-                DailyPositionSnapshot.security_id,
+                snapshot_security_id.label("security_id"),
                 DailyPositionSnapshot.epoch,
                 func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
             )
@@ -1095,7 +1166,7 @@ class OperationsRepository:
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
@@ -1108,7 +1179,7 @@ class OperationsRepository:
             )
         latest_snapshot = latest_snapshot.group_by(
             DailyPositionSnapshot.portfolio_id,
-            DailyPositionSnapshot.security_id,
+            snapshot_security_id,
             DailyPositionSnapshot.epoch,
         ).subquery()
         joined = latest_history.outerjoin(
@@ -1143,13 +1214,18 @@ class OperationsRepository:
                 unvalued_positions=0,
             )
 
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(
                 func.count().label("total_positions"),
                 func.count()
                 .filter(
                     DailyPositionSnapshot.valuation_status.is_not(None),
-                    DailyPositionSnapshot.valuation_status != "UNVALUED",
+                    self._snapshot_valuation_status_expr(
+                        DailyPositionSnapshot.valuation_status
+                    )
+                    != "UNVALUED",
                 )
                 .label("valued_positions"),
             )
@@ -1158,7 +1234,7 @@ class OperationsRepository:
                 PositionState,
                 and_(
                     DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    DailyPositionSnapshot.security_id == PositionState.security_id,
+                    snapshot_security_id == state_security_id,
                     DailyPositionSnapshot.epoch == PositionState.epoch,
                 ),
             )
@@ -1189,19 +1265,21 @@ class OperationsRepository:
         snapshot_as_of: Optional[datetime] = None,
         sample_limit: int = 10,
     ) -> MissingHistoricalFxDependencySummary:
+        trade_currency = self._currency_code_expr(Transaction.trade_currency)
+        portfolio_currency = self._currency_code_expr(Portfolio.base_currency)
         base_stmt = (
             select(
                 Transaction.transaction_id.label("transaction_id"),
-                Transaction.security_id.label("security_id"),
+                self._security_id_expr(Transaction.security_id).label("security_id"),
                 cast(func.date(Transaction.transaction_date), Date).label("transaction_date"),
-                Transaction.trade_currency.label("trade_currency"),
-                Portfolio.base_currency.label("portfolio_currency"),
+                trade_currency.label("trade_currency"),
+                portfolio_currency.label("portfolio_currency"),
             )
             .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
                 Transaction.portfolio_id == portfolio_id,
                 cast(func.date(Transaction.transaction_date), Date) <= as_of_date,
-                Transaction.trade_currency != Portfolio.base_currency,
+                trade_currency != portfolio_currency,
                 Transaction.transaction_fx_rate.is_(None),
             )
         )
@@ -1237,10 +1315,10 @@ class OperationsRepository:
             sample_records=[
                 MissingHistoricalFxDependencyRecord(
                     transaction_id=row.transaction_id,
-                    security_id=row.security_id,
+                    security_id=normalize_security_id(row.security_id),
                     transaction_date=row.transaction_date,
-                    trade_currency=row.trade_currency,
-                    portfolio_currency=row.portfolio_currency,
+                    trade_currency=normalize_currency_code(row.trade_currency or ""),
+                    portfolio_currency=normalize_currency_code(row.portfolio_currency or ""),
                 )
                 for row in sample_rows
             ],
@@ -1289,9 +1367,13 @@ class OperationsRepository:
     async def get_position_state(
         self, portfolio_id: str, security_id: str, as_of: Optional[datetime] = None
     ) -> Optional[PositionState]:
+        normalized_security_id = normalize_security_id(security_id)
+        if not normalized_security_id:
+            return None
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = select(PositionState).where(
             PositionState.portfolio_id == portfolio_id,
-            PositionState.security_id == security_id,
+            state_security_id == normalized_security_id,
         )
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
@@ -1300,9 +1382,13 @@ class OperationsRepository:
     async def get_latest_position_history_date(
         self, portfolio_id: str, security_id: str, epoch: int, as_of: Optional[datetime] = None
     ) -> Optional[date]:
+        normalized_security_id = normalize_security_id(security_id)
+        if not normalized_security_id:
+            return None
+        history_security_id = self._security_id_expr(PositionHistory.security_id)
         stmt = select(func.max(PositionHistory.position_date)).where(
             PositionHistory.portfolio_id == portfolio_id,
-            PositionHistory.security_id == security_id,
+            history_security_id == normalized_security_id,
             PositionHistory.epoch == epoch,
         )
         if as_of is not None:
@@ -1312,9 +1398,13 @@ class OperationsRepository:
     async def get_latest_daily_snapshot_date(
         self, portfolio_id: str, security_id: str, epoch: int, as_of: Optional[datetime] = None
     ) -> Optional[date]:
+        normalized_security_id = normalize_security_id(security_id)
+        if not normalized_security_id:
+            return None
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
         stmt = select(func.max(DailyPositionSnapshot.date)).where(
             DailyPositionSnapshot.portfolio_id == portfolio_id,
-            DailyPositionSnapshot.security_id == security_id,
+            snapshot_security_id == normalized_security_id,
             DailyPositionSnapshot.epoch == epoch,
         )
         if as_of is not None:
@@ -1328,9 +1418,13 @@ class OperationsRepository:
         epoch: int,
         as_of: Optional[datetime] = None,
     ) -> Optional[PortfolioValuationJob]:
+        normalized_security_id = normalize_security_id(security_id)
+        if not normalized_security_id:
+            return None
+        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
         stmt = select(PortfolioValuationJob).where(
             PortfolioValuationJob.portfolio_id == portfolio_id,
-            PortfolioValuationJob.security_id == security_id,
+            valuation_job_security_id == normalized_security_id,
             PortfolioValuationJob.epoch == epoch,
         )
         if as_of is not None:
@@ -1351,6 +1445,12 @@ class OperationsRepository:
         security_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return 0
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(func.count())
             .select_from(PositionState)
@@ -1359,9 +1459,11 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if reprocessing_status:
-            stmt = stmt.where(PositionState.status == reprocessing_status)
-        if security_id:
-            stmt = stmt.where(PositionState.security_id == security_id)
+            stmt = stmt.where(
+                self._reprocessing_status_expr(PositionState.status) == reprocessing_status
+            )
+        if normalized_security_id:
+            stmt = stmt.where(state_security_id == normalized_security_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_lineage_keys(
@@ -1373,9 +1475,18 @@ class OperationsRepository:
         security_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ):
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return []
+        position_state_security_id = self._security_id_expr(PositionState.security_id)
+        position_history_security_id = self._security_id_expr(PositionHistory.security_id)
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
         latest_position_history_date = select(func.max(PositionHistory.position_date)).where(
             PositionHistory.portfolio_id == PositionState.portfolio_id,
-            PositionHistory.security_id == PositionState.security_id,
+            position_history_security_id == position_state_security_id,
             PositionHistory.epoch == PositionState.epoch,
         )
         if as_of is not None:
@@ -1387,7 +1498,7 @@ class OperationsRepository:
         ).scalar_subquery()
         latest_daily_snapshot_date = select(func.max(DailyPositionSnapshot.date)).where(
             DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-            DailyPositionSnapshot.security_id == PositionState.security_id,
+            snapshot_security_id == position_state_security_id,
             DailyPositionSnapshot.epoch == PositionState.epoch,
         )
         if as_of is not None:
@@ -1399,7 +1510,7 @@ class OperationsRepository:
         ).scalar_subquery()
         latest_valuation_job_date = select(PortfolioValuationJob.valuation_date).where(
             PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            PortfolioValuationJob.security_id == PositionState.security_id,
+            valuation_job_security_id == position_state_security_id,
             PortfolioValuationJob.epoch == PositionState.epoch,
         )
         if as_of is not None:
@@ -1418,7 +1529,7 @@ class OperationsRepository:
         )
         latest_valuation_job_id = select(PortfolioValuationJob.id).where(
             PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            PortfolioValuationJob.security_id == PositionState.security_id,
+            valuation_job_security_id == position_state_security_id,
             PortfolioValuationJob.epoch == PositionState.epoch,
         )
         if as_of is not None:
@@ -1435,9 +1546,11 @@ class OperationsRepository:
             .correlate(PositionState)
             .scalar_subquery()
         )
-        latest_valuation_job_status = select(PortfolioValuationJob.status).where(
+        latest_valuation_job_status = select(
+            self._support_job_status_expr(PortfolioValuationJob.status)
+        ).where(
             PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            PortfolioValuationJob.security_id == PositionState.security_id,
+            valuation_job_security_id == position_state_security_id,
             PortfolioValuationJob.epoch == PositionState.epoch,
         )
         if as_of is not None:
@@ -1456,7 +1569,7 @@ class OperationsRepository:
         )
         latest_valuation_job_correlation_id = select(PortfolioValuationJob.correlation_id).where(
             PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            PortfolioValuationJob.security_id == PositionState.security_id,
+            valuation_job_security_id == position_state_security_id,
             PortfolioValuationJob.epoch == PositionState.epoch,
         )
         if as_of is not None:
@@ -1498,7 +1611,7 @@ class OperationsRepository:
             else_=False,
         )
         lineage_priority = case(
-            (PositionState.status == "REPROCESSING", 0),
+            (self._reprocessing_status_expr(PositionState.status) == "REPROCESSING", 0),
             (
                 and_(has_artifact_gap.is_(True), latest_valuation_job_status == "FAILED"),
                 1,
@@ -1507,7 +1620,7 @@ class OperationsRepository:
             else_=9,
         )
         stmt = select(
-            PositionState.security_id,
+            position_state_security_id.label("security_id"),
             PositionState.epoch,
             PositionState.watermark_date,
             PositionState.status.label("reprocessing_status"),
@@ -1521,14 +1634,16 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if reprocessing_status:
-            stmt = stmt.where(PositionState.status == reprocessing_status)
-        if security_id:
-            stmt = stmt.where(PositionState.security_id == security_id)
+            stmt = stmt.where(
+                self._reprocessing_status_expr(PositionState.status) == reprocessing_status
+            )
+        if normalized_security_id:
+            stmt = stmt.where(position_state_security_id == normalized_security_id)
         stmt = (
             stmt.order_by(
                 lineage_priority.asc(),
                 latest_position_history_date.desc().nullslast(),
-                PositionState.security_id.asc(),
+                position_state_security_id.asc(),
             )
             .offset(skip)
             .limit(limit)
@@ -1545,6 +1660,12 @@ class OperationsRepository:
         correlation_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return 0
+        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
         stmt = (
             select(func.count())
             .select_from(PortfolioValuationJob)
@@ -1555,11 +1676,11 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioValuationJob.status == status)
+            stmt = stmt.where(self._support_job_status_expr(PortfolioValuationJob.status) == status)
         if business_date:
             stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
-        if security_id:
-            stmt = stmt.where(PortfolioValuationJob.security_id == security_id)
+        if normalized_security_id:
+            stmt = stmt.where(valuation_job_security_id == normalized_security_id)
         if job_id is not None:
             stmt = stmt.where(PortfolioValuationJob.id == job_id)
         if correlation_id:
@@ -1580,6 +1701,12 @@ class OperationsRepository:
         reference_now: Optional[datetime] = None,
         as_of: Optional[datetime] = None,
     ) -> list[PortfolioValuationJob]:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return []
+        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PortfolioValuationJob).where(
@@ -1590,11 +1717,11 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioValuationJob.status == status)
+            stmt = stmt.where(self._support_job_status_expr(PortfolioValuationJob.status) == status)
         if business_date:
             stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
-        if security_id:
-            stmt = stmt.where(PortfolioValuationJob.security_id == security_id)
+        if normalized_security_id:
+            stmt = stmt.where(valuation_job_security_id == normalized_security_id)
         if job_id is not None:
             stmt = stmt.where(PortfolioValuationJob.id == job_id)
         if correlation_id:
@@ -1632,7 +1759,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioAggregationJob.status == status)
+            stmt = stmt.where(
+                self._support_job_status_expr(PortfolioAggregationJob.status) == status
+            )
         if business_date:
             stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
         if job_id is not None:
@@ -1662,7 +1791,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PortfolioAggregationJob.status == status)
+            stmt = stmt.where(
+                self._support_job_status_expr(PortfolioAggregationJob.status) == status
+            )
         if business_date:
             stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
         if job_id is not None:
@@ -1701,7 +1832,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(AnalyticsExportJob.status == status)
+            stmt = stmt.where(
+                self._analytics_export_status_expr(AnalyticsExportJob.status) == status
+            )
         if job_id:
             stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
         if request_fingerprint:
@@ -1726,7 +1859,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(AnalyticsExportJob.status == status)
+            stmt = stmt.where(
+                self._analytics_export_status_expr(AnalyticsExportJob.status) == status
+            )
         if job_id:
             stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
         if request_fingerprint:
@@ -1775,7 +1910,9 @@ class OperationsRepository:
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
-            stmt = stmt.where(FinancialReconciliationRun.status == status)
+            stmt = stmt.where(
+                self._reconciliation_status_expr(FinancialReconciliationRun.status) == status
+            )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_runs(
@@ -1807,7 +1944,9 @@ class OperationsRepository:
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
-            stmt = stmt.where(FinancialReconciliationRun.status == status)
+            stmt = stmt.where(
+                self._reconciliation_status_expr(FinancialReconciliationRun.status) == status
+            )
         stmt = (
             stmt.order_by(
                 self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
@@ -1840,10 +1979,19 @@ class OperationsRepository:
         transaction_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> list[FinancialReconciliationFinding]:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return []
+        finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
+        normalized_severity = self._finding_severity_expr(
+            FinancialReconciliationFinding.severity
+        )
         severity_rank = case(
-            (FinancialReconciliationFinding.severity == "ERROR", 0),
-            (FinancialReconciliationFinding.severity == "WARNING", 1),
-            (FinancialReconciliationFinding.severity == "INFO", 2),
+            (normalized_severity == "ERROR", 0),
+            (normalized_severity == "WARNING", 1),
+            (normalized_severity == "INFO", 2),
             else_=9,
         )
         stmt = select(FinancialReconciliationFinding).where(
@@ -1853,8 +2001,8 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
         if finding_id:
             stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
-        if security_id:
-            stmt = stmt.where(FinancialReconciliationFinding.security_id == security_id)
+        if normalized_security_id:
+            stmt = stmt.where(finding_security_id == normalized_security_id)
         if transaction_id:
             stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
         stmt = stmt.order_by(
@@ -1873,6 +2021,12 @@ class OperationsRepository:
         transaction_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return 0
+        finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
         stmt = (
             select(func.count())
             .select_from(FinancialReconciliationFinding)
@@ -1882,8 +2036,8 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
         if finding_id:
             stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
-        if security_id:
-            stmt = stmt.where(FinancialReconciliationFinding.security_id == security_id)
+        if normalized_security_id:
+            stmt = stmt.where(finding_security_id == normalized_security_id)
         if transaction_id:
             stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
@@ -1892,12 +2046,16 @@ class OperationsRepository:
         self, run_id: str, as_of: Optional[datetime] = None
     ) -> ReconciliationFindingSummary:
         base_stmt = select(
-            FinancialReconciliationFinding.severity.label("severity"),
+            self._finding_severity_expr(FinancialReconciliationFinding.severity).label(
+                "severity"
+            ),
             FinancialReconciliationFinding.created_at.label("created_at"),
             FinancialReconciliationFinding.id.label("id"),
             FinancialReconciliationFinding.finding_id.label("finding_id"),
             FinancialReconciliationFinding.finding_type.label("finding_type"),
-            FinancialReconciliationFinding.security_id.label("security_id"),
+            self._security_id_expr(FinancialReconciliationFinding.security_id).label(
+                "security_id"
+            ),
             FinancialReconciliationFinding.transaction_id.label("transaction_id"),
         ).where(FinancialReconciliationFinding.run_id == run_id)
         if as_of is not None:
@@ -1942,7 +2100,7 @@ class OperationsRepository:
             blocking_findings=int(row.blocking_findings or 0),
             top_blocking_finding_id=row.finding_id,
             top_blocking_finding_type=row.finding_type,
-            top_blocking_finding_security_id=row.security_id,
+            top_blocking_finding_security_id=normalize_security_id(row.security_id),
             top_blocking_finding_transaction_id=row.transaction_id,
         )
 
@@ -1972,7 +2130,9 @@ class OperationsRepository:
         if business_date:
             stmt = stmt.where(PipelineStageState.business_date == business_date)
         if status:
-            stmt = stmt.where(PipelineStageState.status == status)
+            stmt = stmt.where(
+                self._portfolio_control_status_expr(PipelineStageState.status) == status
+            )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_portfolio_control_stages(
@@ -1999,7 +2159,9 @@ class OperationsRepository:
         if business_date:
             stmt = stmt.where(PipelineStageState.business_date == business_date)
         if status:
-            stmt = stmt.where(PipelineStageState.status == status)
+            stmt = stmt.where(
+                self._portfolio_control_status_expr(PipelineStageState.status) == status
+            )
         stmt = (
             stmt.order_by(
                 self._portfolio_control_stage_priority(PipelineStageState.status).asc(),
@@ -2021,6 +2183,12 @@ class OperationsRepository:
         watermark_date: Optional[date] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return 0
+        state_security_id = self._security_id_expr(PositionState.security_id)
         stmt = (
             select(func.count())
             .select_from(PositionState)
@@ -2029,9 +2197,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PositionState.status == status)
-        if security_id:
-            stmt = stmt.where(PositionState.security_id == security_id)
+            stmt = stmt.where(self._reprocessing_status_expr(PositionState.status) == status)
+        if normalized_security_id:
+            stmt = stmt.where(state_security_id == normalized_security_id)
         if watermark_date:
             stmt = stmt.where(PositionState.watermark_date == watermark_date)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
@@ -2048,15 +2216,21 @@ class OperationsRepository:
         reference_now: Optional[datetime] = None,
         as_of: Optional[datetime] = None,
     ) -> list[PositionState]:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return []
+        state_security_id = self._security_id_expr(PositionState.security_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = select(PositionState).where(PositionState.portfolio_id == portfolio_id)
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PositionState.status == status)
-        if security_id:
-            stmt = stmt.where(PositionState.security_id == security_id)
+            stmt = stmt.where(self._reprocessing_status_expr(PositionState.status) == status)
+        if normalized_security_id:
+            stmt = stmt.where(state_security_id == normalized_security_id)
         if watermark_date:
             stmt = stmt.where(PositionState.watermark_date == watermark_date)
         stmt = (
@@ -2067,7 +2241,7 @@ class OperationsRepository:
                     stale_threshold,
                 ).asc(),
                 PositionState.updated_at.asc(),
-                PositionState.security_id.asc(),
+                state_security_id.asc(),
             )
             .offset(skip)
             .limit(limit)
@@ -2083,7 +2257,12 @@ class OperationsRepository:
         correlation_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        security_id_expr = ReprocessingJob.payload["security_id"].as_string()
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return 0
+        security_id_expr = func.trim(ReprocessingJob.payload["security_id"].as_string())
         impacted_date_expr = cast(
             ReprocessingJob.payload["earliest_impacted_date"].as_string(),
             Date,
@@ -2104,9 +2283,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(ReprocessingJob.status == status)
-        if security_id:
-            stmt = stmt.where(security_id_expr == security_id)
+            stmt = stmt.where(self._support_job_status_expr(ReprocessingJob.status) == status)
+        if normalized_security_id:
+            stmt = stmt.where(security_id_expr == normalized_security_id)
         if job_id is not None:
             stmt = stmt.where(ReprocessingJob.id == job_id)
         if correlation_id:
@@ -2126,7 +2305,12 @@ class OperationsRepository:
         reference_now: Optional[datetime] = None,
         as_of: Optional[datetime] = None,
     ):
-        security_id_expr = ReprocessingJob.payload["security_id"].as_string()
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return []
+        security_id_expr = func.trim(ReprocessingJob.payload["security_id"].as_string())
         impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
         impacted_date_cast = cast(impacted_date_expr, Date)
         reference_now = reference_now or datetime.now(timezone.utc)
@@ -2154,9 +2338,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(ReprocessingJob.status == status)
-        if security_id:
-            stmt = stmt.where(security_id_expr == security_id)
+            stmt = stmt.where(self._support_job_status_expr(ReprocessingJob.status) == status)
+        if normalized_security_id:
+            stmt = stmt.where(security_id_expr == normalized_security_id)
         if job_id is not None:
             stmt = stmt.where(ReprocessingJob.id == job_id)
         if correlation_id:

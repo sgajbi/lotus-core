@@ -26,7 +26,8 @@ def _dividend_event() -> TransactionEvent:
 
 
 def test_enrich_dividend_metadata_populates_defaults() -> None:
-    enriched = enrich_dividend_transaction_metadata(_dividend_event())
+    event = _dividend_event().model_copy(update={"transaction_type": " dividend "})
+    enriched = enrich_dividend_transaction_metadata(event)
     assert enriched.economic_event_id == "EVT-DIVIDEND-PORT-LINK-001-DIV-LINK-001"
     assert enriched.linked_transaction_group_id == "LTG-DIVIDEND-PORT-LINK-001-DIV-LINK-001"
     assert enriched.calculation_policy_id == DIVIDEND_DEFAULT_POLICY_ID

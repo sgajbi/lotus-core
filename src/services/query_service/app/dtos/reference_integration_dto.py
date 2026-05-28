@@ -1752,6 +1752,16 @@ class InstrumentEligibilityBulkRequest(BaseModel):
         examples=[False],
     )
 
+    @model_validator(mode="after")
+    def validate_security_ids(self) -> "InstrumentEligibilityBulkRequest":
+        normalized = [security_id.strip() for security_id in self.security_ids]
+        if any(not security_id for security_id in normalized):
+            raise ValueError("security_ids must contain non-empty identifiers")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("security_ids must not contain duplicates")
+        self.security_ids = normalized
+        return self
+
     model_config = ConfigDict()
 
 
@@ -3332,7 +3342,8 @@ class DpmPortfolioUniverseCandidateRequest(BaseModel):
         False,
         description=(
             "When false, only active discretionary authority bindings are returned. Inactive "
-            "bindings remain source-visible for exception dashboards only when explicitly requested."
+            "bindings remain source-visible for exception dashboards only when explicitly "
+            "requested."
         ),
     )
     page: ReferencePageRequest = Field(

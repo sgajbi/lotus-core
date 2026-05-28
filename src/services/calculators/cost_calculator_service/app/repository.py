@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
+from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     FxRate,
@@ -15,12 +16,12 @@ from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import select
+from portfolio_common.identifiers import normalize_lookup_identifier
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
-
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -109,7 +110,8 @@ class CostCalculatorRepository:
         return result.scalars().first()
 
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        stmt = select(Instrument).where(Instrument.security_id == security_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        stmt = select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
@@ -117,11 +119,15 @@ class CostCalculatorRepository:
         self, from_currency: str, to_currency: str, a_date: date
     ) -> Optional[FxRate]:
         """Fetches the latest FX rate on or before a given date."""
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
+        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
         stmt = (
             select(FxRate)
             .filter(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
             .order_by(FxRate.rate_date.desc())
@@ -136,10 +142,16 @@ class CostCalculatorRepository:
         Fetches all transactions for a given security in a portfolio,
         optionally excluding one by its transaction_id.
         """
-        stmt = select(DBTransaction).filter_by(portfolio_id=portfolio_id, security_id=security_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        stmt = select(DBTransaction).where(
+            func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
+            func.trim(DBTransaction.security_id) == normalized_security_id,
+        )
 
         if exclude_id:
-            stmt = stmt.filter(DBTransaction.transaction_id != exclude_id)
+            normalized_exclude_id = normalize_lookup_identifier(exclude_id)
+            stmt = stmt.where(func.trim(DBTransaction.transaction_id) != normalized_exclude_id)
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -292,9 +304,11 @@ class CostCalculatorRepository:
         open_quantities_by_source_transaction_id: dict[str, Decimal],
     ) -> None:
         """Reconciles persisted lot state with the latest engine-derived remaining quantities."""
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = select(PositionLotState).where(
-            PositionLotState.portfolio_id == portfolio_id,
-            PositionLotState.security_id == security_id,
+            func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
+            func.trim(PositionLotState.security_id) == normalized_security_id,
         )
         lot_rows = (await self.db.execute(stmt)).scalars().all()
         for lot_row in lot_rows:

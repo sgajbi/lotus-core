@@ -216,6 +216,52 @@ async def test_valuation_consumer_uses_kafka_delivery_identity_for_idempotency(
     assert claimed_event_id == "valuation.job.requested-0-1"
 
 
+async def test_valuation_consumer_normalizes_same_currency_without_fx_lookup(
+    consumer: ValuationConsumer,
+    mock_kafka_message: MagicMock,
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+):
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency=" usd ",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency=" USD ",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("90"),
+        currency=" usd ",
+        price_date=mock_event.valuation_date,
+    )
+    mock_valuation_repo.upsert_daily_snapshot.return_value = DailyPositionSnapshot(
+        id=1,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.valuation_date,
+        epoch=mock_event.epoch,
+        valuation_status="VALUED_CURRENT",
+    )
+
+    await consumer.process_message(mock_kafka_message)
+
+    mock_valuation_repo.get_fx_rate.assert_not_awaited()
+    persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
+    assert persisted_snapshot.market_value == Decimal("9000")
+    assert persisted_snapshot.market_value_local == Decimal("9000")
+    assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
+    mock_outbox_repo.create_outbox_event.assert_called_once()
+
+
 async def test_process_message_handles_data_not_found_error(
     consumer: ValuationConsumer,
     mock_kafka_message: MagicMock,

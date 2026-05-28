@@ -8,8 +8,10 @@ from portfolio_common.database_models import (
     PositionLotState,
     Transaction,
 )
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .identifier_normalization import normalize_security_id
 
 
 class BuyStateRepository:
@@ -23,11 +25,15 @@ class BuyStateRepository:
     async def get_position_lots(
         self, portfolio_id: str, security_id: str
     ) -> list[PositionLotState]:
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return []
+
         stmt = (
             select(PositionLotState)
             .where(
                 PositionLotState.portfolio_id == portfolio_id,
-                PositionLotState.security_id == security_id,
+                func.trim(PositionLotState.security_id) == security_id,
             )
             .order_by(PositionLotState.acquisition_date.asc(), PositionLotState.id.asc())
         )
@@ -49,8 +55,15 @@ class BuyStateRepository:
             PositionLotState.acquisition_date <= as_of_date,
         ]
         if security_ids:
-            filters.append(PositionLotState.security_id.in_(security_ids))
-        status_filter = (lot_status_filter or "").upper()
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            ]
+            if not normalized_security_ids:
+                return []
+            filters.append(func.trim(PositionLotState.security_id).in_(normalized_security_ids))
+        status_filter = (lot_status_filter or "").strip().upper()
         if status_filter == "OPEN" or (not include_closed_lots and status_filter != "CLOSED"):
             filters.append(PositionLotState.open_quantity > 0)
         elif status_filter == "CLOSED":
@@ -84,11 +97,15 @@ class BuyStateRepository:
     async def get_accrued_offsets(
         self, portfolio_id: str, security_id: str
     ) -> list[AccruedIncomeOffsetState]:
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return []
+
         stmt = (
             select(AccruedIncomeOffsetState)
             .where(
                 AccruedIncomeOffsetState.portfolio_id == portfolio_id,
-                AccruedIncomeOffsetState.security_id == security_id,
+                func.trim(AccruedIncomeOffsetState.security_id) == security_id,
             )
             .order_by(AccruedIncomeOffsetState.id.asc())
         )

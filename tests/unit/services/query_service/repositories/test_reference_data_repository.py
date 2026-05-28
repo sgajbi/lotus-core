@@ -59,13 +59,59 @@ async def test_reference_data_repository_lists_latest_market_data_windows() -> N
         as_of_date=date(2026, 4, 10),
     )
     fx_rows = await repo.list_latest_fx_rates(
-        currency_pairs=[("USD", "SGD")],
+        currency_pairs=[(" usd ", " sgd ")],
         as_of_date=date(2026, 4, 10),
     )
 
     assert price_rows[0].security_id == "EQ_US_AAPL"
     assert fx_rows[0].from_currency == "USD"
     assert db.execute.await_count == 2
+    price_stmt = db.execute.await_args_list[0].args[0]
+    price_sql = str(price_stmt.compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "trim(market_prices.security_id) in ('eq_us_aapl')" in price_sql
+    fx_stmt = db.execute.await_args_list[1].args[0]
+    fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "upper(trim(fx_rates.from_currency)), upper(trim(fx_rates.to_currency))" in fx_sql
+    assert "('USD', 'SGD')" in fx_sql
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_normalizes_market_reference_currency_filters() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [
+        _FakeExecuteResult([]),
+        _FakeExecuteResult([]),
+        _FakeExecuteResult([]),
+    ]
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_benchmark_definitions(
+        as_of_date=date(2026, 1, 31),
+        benchmark_currency=" usd ",
+    )
+    await repo.list_index_definitions(
+        as_of_date=date(2026, 1, 31),
+        index_currency=" sgd ",
+    )
+    await repo.list_risk_free_series(
+        currency=" eur ",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
+
+    benchmark_sql = str(
+        db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    index_sql = str(
+        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    risk_free_sql = str(
+        db.execute.await_args_list[2].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+
+    assert "benchmark_definitions.benchmark_currency = 'USD'" in benchmark_sql
+    assert "index_definitions.index_currency = 'SGD'" in index_sql
+    assert "risk_free_series.series_currency = 'EUR'" in risk_free_sql
 
 
 @pytest.mark.asyncio
@@ -207,12 +253,16 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert risk_free_coverage["total_points"] >= 0
 
     fx_rates = await repo.get_fx_rates(
-        from_currency="EUR",
-        to_currency="USD",
+        from_currency=" eur ",
+        to_currency=" usd ",
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 2),
     )
     assert fx_rates[date(2026, 1, 1)] == Decimal("1.1")
+    fx_stmt = db.execute.await_args_list[19].args[0]
+    fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
+    assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql
 
 
 @pytest.mark.asyncio
@@ -552,6 +602,13 @@ async def test_list_instrument_eligibility_profiles_returns_latest_effective_row
         ("AAPL", "APPROVED"),
         ("MSFT", "APPROVED"),
     ]
+    eligibility_stmt = db.execute.await_args.args[0]
+    eligibility_sql = str(
+        eligibility_stmt.compile(compile_kwargs={"literal_binds": True})
+    ).lower()
+    assert "trim(instrument_eligibility_profiles.security_id) in ('aapl', 'msft')" in (
+        eligibility_sql
+    )
 
 
 @pytest.mark.asyncio
@@ -664,7 +721,7 @@ async def test_resolve_model_portfolio_definition_uses_approved_effective_model(
     assert row.model_portfolio_id == "MODEL_SG_BALANCED_DPM"
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "model_portfolio_definitions.model_portfolio_id = 'MODEL_SG_BALANCED_DPM'" in compiled
-    assert "model_portfolio_definitions.approval_status = 'approved'" in compiled
+    assert "lower(trim(model_portfolio_definitions.approval_status)) = 'approved'" in compiled
     assert "model_portfolio_definitions.effective_from <= '2026-03-31'" in compiled
 
 
@@ -709,7 +766,7 @@ async def test_list_model_portfolio_targets_returns_latest_active_targets_by_def
         ("FI_US_TREASURY_10Y", Decimal("0.40")),
     ]
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "model_portfolio_targets.target_status = 'active'" in compiled
+    assert "lower(trim(model_portfolio_targets.target_status)) = 'active'" in compiled
 
 
 @pytest.mark.asyncio
@@ -726,7 +783,7 @@ async def test_list_model_portfolio_targets_can_include_inactive_targets() -> No
     )
 
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "model_portfolio_targets.target_status =" not in compiled
+    assert "lower(trim(model_portfolio_targets.target_status)) =" not in compiled
 
 
 @pytest.mark.asyncio
@@ -759,7 +816,10 @@ async def test_list_model_portfolio_affected_mandates_uses_source_filters() -> N
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
-    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
+    assert (
+        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) = 'active'"
+        in compiled
+    )
 
 
 @pytest.mark.asyncio
@@ -775,7 +835,10 @@ async def test_list_model_portfolio_affected_mandates_can_include_inactive_autho
     )
 
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "discretionary_authority_status =" not in compiled
+    assert (
+        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) ="
+        not in compiled
+    )
 
 
 @pytest.mark.asyncio
@@ -814,8 +877,14 @@ async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cu
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
-    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
-    assert "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')" in compiled
+    assert (
+        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) = 'active'"
+        in compiled
+    )
+    assert (
+        "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')"
+        in compiled
+    )
 
 
 @pytest.mark.asyncio
@@ -840,6 +909,82 @@ async def test_resolve_discretionary_mandate_binding_uses_effective_filters() ->
     assert "portfolio_mandate_bindings.effective_from <= '2026-04-10'" in compiled
     assert "portfolio_mandate_bindings.mandate_id = 'MANDATE_PB_SG_GLOBAL_BAL_001'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
+
+
+@pytest.mark.asyncio
+async def test_client_source_data_filters_use_normalized_active_statuses() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [_FakeExecuteResult([]) for _ in range(7)]
+    repo = ReferenceDataRepository(db)
+
+    common_kwargs = {
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "client_id": "CLIENT_SG_001",
+        "as_of_date": date(2026, 5, 3),
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+    }
+
+    await repo.list_client_restriction_profiles(**common_kwargs)
+    await repo.list_sustainability_preference_profiles(**common_kwargs)
+    await repo.list_client_tax_profiles(**common_kwargs)
+    await repo.list_client_tax_rule_sets(**common_kwargs)
+    await repo.list_client_income_needs_schedules(**common_kwargs)
+    await repo.list_liquidity_reserve_requirements(**common_kwargs)
+    await repo.list_planned_withdrawal_schedules(**common_kwargs, horizon_days=90)
+
+    compiled_statements = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in db.execute.await_args_list
+    ]
+
+    assert (
+        "lower(trim(client_restriction_profiles.restriction_status)) = 'active'"
+        in compiled_statements[0]
+    )
+    assert (
+        "lower(trim(sustainability_preference_profiles.preference_status)) = 'active'"
+        in compiled_statements[1]
+    )
+    assert "lower(trim(client_tax_profiles.profile_status)) = 'active'" in compiled_statements[2]
+    assert "lower(trim(client_tax_rule_sets.rule_status)) = 'active'" in compiled_statements[3]
+    assert (
+        "lower(trim(client_income_needs_schedules.need_status)) = 'active'"
+        in compiled_statements[4]
+    )
+    assert (
+        "lower(trim(liquidity_reserve_requirements.reserve_status)) = 'active'"
+        in compiled_statements[5]
+    )
+    assert (
+        "lower(trim(planned_withdrawal_schedules.withdrawal_status)) = 'active'"
+        in compiled_statements[6]
+    )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_and_index_status_filters_are_normalized() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [_FakeExecuteResult([]), _FakeExecuteResult([])]
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_benchmark_definitions(
+        as_of_date=date(2026, 5, 3),
+        benchmark_status=" Active ",
+    )
+    await repo.list_index_definitions(
+        as_of_date=date(2026, 5, 3),
+        index_status=" Active ",
+    )
+
+    benchmark_sql = str(
+        db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    index_sql = str(
+        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+
+    assert "lower(trim(benchmark_definitions.benchmark_status)) = 'active'" in benchmark_sql
+    assert "lower(trim(index_definitions.index_status)) = 'active'" in index_sql
 
 
 @pytest.mark.asyncio
@@ -888,10 +1033,17 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
         [
             SimpleNamespace(
                 series_date=date(2026, 1, 1),
-                quality_status="accepted",
+                quality_status=" Accepted ",
                 source_timestamp=None,
                 risk_free_curve_id="USD_FRONT_OFFICE",
                 series_id="front_office",
+            ),
+            SimpleNamespace(
+                series_date=date(2026, 1, 1),
+                quality_status="stale",
+                source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
+                risk_free_curve_id="USD_STALE_VENDOR",
+                series_id="stale_vendor",
             ),
             SimpleNamespace(
                 series_date=date(2026, 1, 1),
@@ -917,6 +1069,82 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
     assert [row.series_date for row in rows] == [date(2026, 1, 1), date(2026, 1, 2)]
     assert rows[0].series_id == "front_office"
     assert rows[1].series_id == "demo"
+
+
+@pytest.mark.asyncio
+async def test_market_reference_series_canonicalizes_duplicate_business_dates() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    accepted_row = SimpleNamespace(
+        index_id="IDX_A",
+        benchmark_id="B1",
+        series_date=date(2026, 1, 1),
+        quality_status=" Accepted ",
+        source_timestamp=None,
+        series_id="front_office",
+    )
+    stale_vendor_row = SimpleNamespace(
+        index_id="IDX_A",
+        benchmark_id="B1",
+        series_date=date(2026, 1, 1),
+        quality_status="stale",
+        source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
+        series_id="stale_vendor",
+    )
+    db.execute.side_effect = [
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+    ]
+
+    repo = ReferenceDataRepository(db)
+
+    index_prices = await repo.list_index_price_points(
+        ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
+    )
+    index_returns = await repo.list_index_return_points(
+        ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
+    )
+    benchmark_returns = await repo.list_benchmark_return_points(
+        "B1", date(2026, 1, 1), date(2026, 1, 1)
+    )
+    index_price_series = await repo.list_index_price_series(
+        "IDX_A", date(2026, 1, 1), date(2026, 1, 1)
+    )
+    index_return_series = await repo.list_index_return_series(
+        "IDX_A", date(2026, 1, 1), date(2026, 1, 1)
+    )
+
+    result_sets = [
+        index_prices,
+        index_returns,
+        benchmark_returns,
+        index_price_series,
+        index_return_series,
+    ]
+    assert all(len(rows) == 1 for rows in result_sets)
+    assert all(rows[0].series_id == "front_office" for rows in result_sets)
+
+
+@pytest.mark.asyncio
+async def test_get_risk_free_coverage_normalizes_quality_status_counts() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_risk_free_series = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 1), quality_status=" Accepted "),
+            SimpleNamespace(series_date=date(2026, 1, 2), quality_status="STALE"),
+            SimpleNamespace(series_date=date(2026, 1, 3), quality_status=None),
+        ]
+    )
+
+    coverage = await repo.get_risk_free_coverage("USD", date(2026, 1, 1), date(2026, 1, 3))
+
+    assert coverage["quality_status_counts"] == {
+        "accepted": 1,
+        "stale": 1,
+        "unknown": 1,
+    }
 
 
 @pytest.mark.asyncio

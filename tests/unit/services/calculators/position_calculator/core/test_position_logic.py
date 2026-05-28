@@ -521,6 +521,35 @@ def test_calculate_next_position_for_sell_uses_net_cost():
     assert new_state.cost_basis_local == Decimal("500")
 
 
+def test_calculate_next_position_normalizes_transaction_type_before_calculation() -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("10"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+    buy_event = TransactionEvent(
+        transaction_id="BUY_LOWERCASE_TYPE_01",
+        transaction_type=" buy ",
+        quantity=Decimal("5"),
+        net_cost=Decimal("55"),
+        net_cost_local=Decimal("55"),
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime.now(),
+        price=Decimal("11"),
+        gross_transaction_amount=Decimal("55"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    new_state = PositionCalculator.calculate_next_position(initial_state, buy_event)
+
+    assert new_state.quantity == Decimal("15")
+    assert new_state.cost_basis == Decimal("155")
+    assert new_state.cost_basis_local == Decimal("155")
+
+
 def test_calculate_next_position_for_adjustment_uses_movement_direction():
     initial_state = PositionStateDTO(
         quantity=Decimal("1000"),
@@ -558,6 +587,36 @@ def test_calculate_next_position_for_adjustment_uses_movement_direction():
     assert mid_state.cost_basis == Decimal("1050")
     assert final_state.quantity == Decimal("1030")
     assert final_state.cost_basis == Decimal("1030")
+
+
+def test_calculate_next_position_for_adjustment_normalizes_movement_direction():
+    initial_state = PositionStateDTO(
+        quantity=Decimal("1000"),
+        cost_basis=Decimal("1000"),
+        cost_basis_local=Decimal("1000"),
+    )
+    outflow_event = TransactionEvent(
+        transaction_id="ADJ_PADDED_OUT_01",
+        transaction_type="ADJUSTMENT",
+        movement_direction=" outflow ",
+        quantity=Decimal("0"),
+        net_cost=Decimal("0"),
+        net_cost_local=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("20"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, outflow_event)
+
+    assert next_state.quantity == Decimal("980")
+    assert next_state.cost_basis == Decimal("980")
+    assert next_state.cost_basis_local == Decimal("980")
 
 
 def test_calculate_next_position_for_fx_cash_settlement_buy_updates_cash_position() -> None:
@@ -699,6 +758,47 @@ def test_cash_portfolio_flows_treat_zero_booked_cost_as_amount_fallback(
         currency="USD",
         net_cost=Decimal("0"),
         net_cost_local=Decimal("0"),
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+
+    assert next_state.quantity == expected_quantity
+    assert next_state.cost_basis == expected_cost
+    assert next_state.cost_basis_local == expected_cost
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "quantity", "expected_quantity", "expected_cost"),
+    [
+        ("DEPOSIT", Decimal("25"), Decimal("125"), Decimal("125")),
+        ("WITHDRAWAL", Decimal("30"), Decimal("70"), Decimal("70")),
+        ("FEE", Decimal("5"), Decimal("95"), Decimal("95")),
+        ("TAX", Decimal("7"), Decimal("93"), Decimal("93")),
+    ],
+)
+def test_cash_portfolio_flows_fall_back_to_quantity_when_gross_amount_is_zero(
+    transaction_type: str,
+    quantity: Decimal,
+    expected_quantity: Decimal,
+    expected_cost: Decimal,
+) -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+    event = TransactionEvent(
+        transaction_id=f"{transaction_type}_QUANTITY_AMOUNT_01",
+        transaction_type=transaction_type,
+        quantity=quantity,
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
     )
 
     next_state = PositionCalculator.calculate_next_position(initial_state, event)

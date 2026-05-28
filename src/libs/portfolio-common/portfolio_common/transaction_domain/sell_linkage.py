@@ -1,6 +1,8 @@
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.events import TransactionEvent
 
+from .control_code_normalization import normalize_transaction_control_code
+
 SELL_FIFO_POLICY_ID = "SELL_FIFO_POLICY"
 SELL_AVCO_POLICY_ID = "SELL_AVCO_POLICY"
 SELL_DEFAULT_POLICY_VERSION = "1.0.0"
@@ -13,7 +15,7 @@ def enrich_sell_transaction_metadata(
     Ensures SELL events carry deterministic linkage and policy metadata.
     Existing upstream-provided values are preserved.
     """
-    if event.transaction_type.upper() != "SELL":
+    if normalize_transaction_control_code(event.transaction_type) != "SELL":
         return event
 
     economic_event_id = (

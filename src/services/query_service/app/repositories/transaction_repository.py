@@ -11,7 +11,9 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .date_filters import start_of_day, start_of_next_day
+from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +58,17 @@ class TransactionRepository:
         to_currency: str,
         as_of_date: date,
     ) -> Optional[float | Decimal]:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return Decimal("1")
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         stmt = (
             select(FxRate.rate)
             .where(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= as_of_date,
             )
             .order_by(FxRate.rate_date.desc())
@@ -92,7 +98,9 @@ class TransactionRepository:
         if instrument_id:
             stmt = stmt.filter_by(instrument_id=instrument_id)
         if security_id:
-            stmt = stmt.filter_by(security_id=security_id)
+            normalized_security_id = normalize_security_id(security_id)
+            if normalized_security_id:
+                stmt = stmt.where(func.trim(Transaction.security_id) == normalized_security_id)
         if transaction_type:
             stmt = stmt.filter_by(transaction_type=transaction_type)
         if component_type:
@@ -274,7 +282,14 @@ class TransactionRepository:
             )
         )
         if security_ids:
-            stmt = stmt.where(Transaction.security_id.in_(security_ids))
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            ]
+            if not normalized_security_ids:
+                return []
+            stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
         if transaction_types:
             stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
         stmt = stmt.order_by(

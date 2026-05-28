@@ -33,18 +33,44 @@ async def test_get_position_lots_returns_rows():
     db = AsyncMock()
     db.execute.return_value = _mock_result(scalars_all=[SimpleNamespace(lot_id="LOT-1")])
     repo = BuyStateRepository(db)
-    rows = await repo.get_position_lots("PORT-1", "SEC-1")
+    rows = await repo.get_position_lots("PORT-1", " SEC-1 ")
     assert len(rows) == 1
     assert rows[0].lot_id == "LOT-1"
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(position_lot_state.security_id) = 'SEC-1'" in compiled_query
 
 
 async def test_get_accrued_offsets_returns_rows():
     db = AsyncMock()
     db.execute.return_value = _mock_result(scalars_all=[SimpleNamespace(offset_id="AIO-1")])
     repo = BuyStateRepository(db)
-    rows = await repo.get_accrued_offsets("PORT-1", "SEC-1")
+    rows = await repo.get_accrued_offsets("PORT-1", " SEC-1 ")
     assert len(rows) == 1
     assert rows[0].offset_id == "AIO-1"
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(accrued_income_offset_state.security_id) = 'SEC-1'" in compiled_query
+
+
+async def test_get_position_lots_skips_blank_security_id():
+    db = AsyncMock()
+    repo = BuyStateRepository(db)
+
+    rows = await repo.get_position_lots("PORT-1", " ")
+
+    assert rows == []
+    db.execute.assert_not_awaited()
+
+
+async def test_get_accrued_offsets_skips_blank_security_id():
+    db = AsyncMock()
+    repo = BuyStateRepository(db)
+
+    rows = await repo.get_accrued_offsets("PORT-1", " ")
+
+    assert rows == []
+    db.execute.assert_not_awaited()
 
 
 async def test_get_buy_cash_linkage_returns_tuple():
@@ -71,3 +97,27 @@ async def test_list_portfolio_tax_lots_returns_rows_with_currency():
     )
 
     assert rows == [(SimpleNamespace(lot_id="LOT-1"), "USD")]
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "trim(position_lot_state.security_id) in ('sec-1')" in compiled_query
+
+
+async def test_list_portfolio_tax_lots_normalizes_closed_status_filter():
+    db = AsyncMock()
+    db.execute.return_value = _mock_result(all_rows=[])
+    repo = BuyStateRepository(db)
+
+    await repo.list_portfolio_tax_lots(
+        portfolio_id="PORT-1",
+        as_of_date=date(2026, 4, 10),
+        security_ids=None,
+        include_closed_lots=False,
+        lot_status_filter=" closed ",
+        after_sort_key=None,
+        limit=251,
+    )
+
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_lot_state.open_quantity <= 0" in compiled_query
+    assert "position_lot_state.open_quantity > 0" not in compiled_query

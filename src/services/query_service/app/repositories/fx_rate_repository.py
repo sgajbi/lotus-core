@@ -3,9 +3,11 @@ import logging
 from datetime import date
 from typing import List, Optional
 
+from portfolio_common.database_models import FxRate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from portfolio_common.database_models import FxRate
+
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,14 @@ class FxRateRepository:
         Retrieves a list of FX rates for a currency pair, with optional
         date range filtering.
         """
-        stmt = select(FxRate).filter_by(from_currency=from_currency, to_currency=to_currency)
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
+        stmt = select(FxRate).where(
+            from_currency_expr == normalized_from_currency,
+            to_currency_expr == normalized_to_currency,
+        )
 
         if start_date:
             stmt = stmt.filter(FxRate.rate_date >= start_date)
@@ -40,6 +49,9 @@ class FxRateRepository:
         results = await self.db.execute(stmt.order_by(FxRate.rate_date.asc()))
         fx_rates = results.scalars().all()
         logger.info(
-            f"Found {len(fx_rates)} FX rates for '{from_currency}-{to_currency}' with given filters."
+            "Found %s FX rates for '%s-%s' with given filters.",
+            len(fx_rates),
+            normalized_from_currency,
+            normalized_to_currency,
         )
         return fx_rates

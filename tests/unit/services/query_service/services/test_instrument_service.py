@@ -19,7 +19,7 @@ def mock_instrument_repo() -> AsyncMock:
     # Mock the data returned by the repository
     repo.get_instruments.return_value = [
         Instrument(
-            security_id="SEC1",
+            security_id=" SEC1 ",
             name="Test Instrument 1",
             isin="ISIN1",
             currency="USD",
@@ -58,13 +58,13 @@ async def test_get_instruments_by_ids(mock_instrument_repo: AsyncMock):
         return_value=mock_instrument_repo,
     ):
         service = InstrumentService(AsyncMock(spec=AsyncSession))
-        security_ids = ["SEC1", "SEC2"]
+        security_ids = [" SEC1 ", "SEC2", "", "SEC1"]
 
         # ACT
         response_dto = await service.get_instruments_by_ids(security_ids)
 
         # ASSERT
-        mock_instrument_repo.get_by_security_ids.assert_awaited_once_with(security_ids)
+        mock_instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC1", "SEC2"])
         assert len(response_dto) == 2
         assert response_dto[0].security_id == "SEC1"
 
@@ -85,7 +85,7 @@ async def test_get_instruments(mock_instrument_repo: AsyncMock):
         mock_db_session = AsyncMock(spec=AsyncSession)
         service = InstrumentService(mock_db_session)
 
-        params = {"skip": 10, "limit": 20, "security_id": "SEC1", "product_type": "Equity"}
+        params = {"skip": 10, "limit": 20, "security_id": " SEC1 ", "product_type": "Equity"}
 
         # ACT
         response_dto = await service.get_instruments(**params)
@@ -93,9 +93,14 @@ async def test_get_instruments(mock_instrument_repo: AsyncMock):
         # ASSERT
         # 1. Assert the repository methods were called correctly
         mock_instrument_repo.get_instruments_count.assert_awaited_once_with(
-            security_id=params["security_id"], product_type=params["product_type"]
+            security_id="SEC1", product_type=params["product_type"]
         )
-        mock_instrument_repo.get_instruments.assert_awaited_once_with(**params)
+        mock_instrument_repo.get_instruments.assert_awaited_once_with(
+            skip=10,
+            limit=20,
+            security_id="SEC1",
+            product_type="Equity",
+        )
 
         # 2. Assert the paginated response DTO is correct
         assert response_dto.total == 50

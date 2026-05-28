@@ -5,11 +5,10 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
-
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import BusinessDate
 from portfolio_common.db import SessionLocal
+from sqlalchemy import func, select
 
 from ..dtos.capabilities_dto import (
     ConsumerSystem,
@@ -18,7 +17,6 @@ from ..dtos.capabilities_dto import (
     WorkflowCapability,
 )
 from ..settings import env_bool, load_query_service_settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +76,8 @@ class CapabilitiesService:
                     return latest
         except Exception:
             logger.warning(
-                "Failed to resolve as_of_date from business_dates; falling back to current UTC date.",
+                "Failed to resolve as_of_date from business_dates; "
+                "falling back to current UTC date.",
                 exc_info=True,
             )
         return datetime.now(UTC).date()
@@ -102,7 +101,8 @@ class CapabilitiesService:
 
         if not isinstance(decoded, dict):
             logger.warning(
-                "LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON must be a JSON object; ignoring tenant overrides.",
+                "LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON must be a JSON object; "
+                "ignoring tenant overrides.",
             )
             return {}
 

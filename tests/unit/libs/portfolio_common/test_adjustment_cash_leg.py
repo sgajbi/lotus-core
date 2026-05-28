@@ -37,7 +37,8 @@ def test_should_auto_generate_cash_leg_requires_explicit_settlement_account() ->
 
 
 def test_build_auto_generated_adjustment_cash_leg_builds_linked_adjustment_event() -> None:
-    cash_leg = build_auto_generated_adjustment_cash_leg(_base_dividend_event())
+    event = _base_dividend_event().model_copy(update={"transaction_type": " dividend "})
+    cash_leg = build_auto_generated_adjustment_cash_leg(event)
     assert cash_leg.transaction_type == "ADJUSTMENT"
     assert cash_leg.transaction_id == "DIV-001-CASHLEG"
     assert cash_leg.originating_transaction_id == "DIV-001"
@@ -45,6 +46,23 @@ def test_build_auto_generated_adjustment_cash_leg_builds_linked_adjustment_event
     assert cash_leg.movement_direction == "INFLOW"
     assert cash_leg.gross_transaction_amount == Decimal("98.00")
     assert cash_leg.instrument_id == "CASH-USD"
+
+
+def test_build_auto_generated_adjustment_cash_leg_normalizes_interest_direction() -> None:
+    event = _base_dividend_event().model_copy(
+        update={
+            "transaction_type": " interest ",
+            "gross_transaction_amount": Decimal("25.00"),
+            "trade_fee": Decimal("1.00"),
+            "interest_direction": " expense ",
+        }
+    )
+    cash_leg = build_auto_generated_adjustment_cash_leg(event)
+
+    assert cash_leg.originating_transaction_type == "INTEREST"
+    assert cash_leg.movement_direction == "OUTFLOW"
+    assert cash_leg.adjustment_reason == "INTEREST_CHARGE_SETTLEMENT"
+    assert cash_leg.gross_transaction_amount == Decimal("24.00")
 
 
 def test_build_auto_generated_adjustment_cash_leg_rejects_non_eligible_transaction() -> None:

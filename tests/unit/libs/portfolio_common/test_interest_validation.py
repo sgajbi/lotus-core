@@ -31,7 +31,8 @@ def _base_txn() -> InterestCanonicalTransaction:
 
 
 def test_validate_interest_transaction_happy_path() -> None:
-    issues = validate_interest_transaction(_base_txn())
+    txn = _base_txn().model_copy(update={"transaction_type": " interest "})
+    issues = validate_interest_transaction(txn)
     assert issues == []
 
 
@@ -60,7 +61,7 @@ def test_validate_interest_transaction_rejects_unknown_direction() -> None:
 
 
 def test_validate_interest_transaction_accepts_expense_direction() -> None:
-    txn = _base_txn().model_copy(update={"interest_direction": "EXPENSE"})
+    txn = _base_txn().model_copy(update={"interest_direction": " expense "})
     issues = validate_interest_transaction(txn)
     assert not any(
         i.code == InterestValidationReasonCode.INVALID_INTEREST_DIRECTION for i in issues

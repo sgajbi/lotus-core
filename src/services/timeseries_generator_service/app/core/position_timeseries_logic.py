@@ -59,7 +59,7 @@ class PositionTimeseriesLogic:
                 else:  # EOD
                     eod_cf_port += cf.amount
 
-            if str(cf.classification).upper() == "EXPENSE":
+            if str(cf.classification or "").strip().upper() == "EXPENSE":
                 total_fees += abs(Decimal(cf.amount))
 
         return PositionTimeseries(

@@ -20,6 +20,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.types import Date
 
 from .config import DEFAULT_BUSINESS_CALENDAR_CODE
+from .currency_codes import normalize_currency_code
 from .database_models import (
     BusinessDate,
     DailyPositionSnapshot,
@@ -31,6 +32,7 @@ from .database_models import (
     PositionHistory,
     PositionState,
 )
+from .identifiers import normalize_lookup_identifier
 from .utils import async_timed
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,10 @@ class ValuationRepositoryBase:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _normalize_currency_code(currency_code: str) -> str:
+        return normalize_currency_code(currency_code)
 
     def _observe_jobs_claimed(self, claimed_count: int) -> None:
         """Hook for service-local metrics."""
@@ -190,9 +196,16 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_portfolios_by_ids")
     async def get_portfolios_by_ids(self, portfolio_ids: List[str]) -> List[Portfolio]:
-        if not portfolio_ids:
+        normalized_portfolio_ids = [
+            normalized
+            for portfolio_id in portfolio_ids
+            if (normalized := normalize_lookup_identifier(portfolio_id))
+        ]
+        if not normalized_portfolio_ids:
             return []
-        stmt = select(Portfolio).where(Portfolio.portfolio_id.in_(portfolio_ids))
+        stmt = select(Portfolio).where(
+            func.trim(Portfolio.portfolio_id).in_(normalized_portfolio_ids)
+        )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
@@ -311,9 +324,8 @@ class ValuationRepositoryBase:
             .correlate(dps)
             .scalar_subquery()
         )
-        snapshot_quantity_matches_history = (
-            latest_history_quantity_for_snapshot.is_(None)
-            | (dps.quantity == latest_history_quantity_for_snapshot)
+        snapshot_quantity_matches_history = latest_history_quantity_for_snapshot.is_(None) | (
+            dps.quantity == latest_history_quantity_for_snapshot
         )
 
         first_gap_subq = (
@@ -391,11 +403,13 @@ class ValuationRepositoryBase:
     async def get_last_position_history_before_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> Optional[PositionHistory]:
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             select(PositionHistory)
             .filter(
-                PositionHistory.portfolio_id == portfolio_id,
-                PositionHistory.security_id == security_id,
+                func.trim(PositionHistory.portfolio_id) == normalized_portfolio_id,
+                func.trim(PositionHistory.security_id) == normalized_security_id,
                 PositionHistory.position_date <= a_date,
                 PositionHistory.epoch == epoch,
             )
@@ -440,11 +454,13 @@ class ValuationRepositoryBase:
         if failure_reason:
             values_to_update["failure_reason"] = failure_reason
 
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             update(PortfolioValuationJob)
             .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
-                PortfolioValuationJob.security_id == security_id,
+                func.trim(PortfolioValuationJob.portfolio_id) == normalized_portfolio_id,
+                func.trim(PortfolioValuationJob.security_id) == normalized_security_id,
                 PortfolioValuationJob.valuation_date == valuation_date,
                 PortfolioValuationJob.epoch == epoch,
                 PortfolioValuationJob.status == "PROCESSING",
@@ -516,13 +532,15 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
-        stmt = select(Portfolio).filter_by(portfolio_id=portfolio_id)
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        stmt = select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
     @async_timed(repository="ValuationRepository", method="get_instrument")
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        stmt = select(Instrument).filter_by(security_id=security_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        stmt = select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
@@ -530,11 +548,15 @@ class ValuationRepositoryBase:
     async def get_fx_rate(
         self, from_currency: str, to_currency: str, a_date: date
     ) -> Optional[FxRate]:
+        normalized_from_currency = self._normalize_currency_code(from_currency)
+        normalized_to_currency = self._normalize_currency_code(to_currency)
+        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
+        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
         stmt = (
             select(FxRate)
             .filter(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
             .order_by(FxRate.rate_date.desc())
@@ -546,9 +568,14 @@ class ValuationRepositoryBase:
     async def get_latest_price_for_position(
         self, security_id: str, position_date: date
     ) -> Optional[MarketPrice]:
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        market_price_security_id = func.trim(MarketPrice.security_id)
         stmt = (
             select(MarketPrice)
-            .filter(MarketPrice.security_id == security_id, MarketPrice.price_date <= position_date)
+            .filter(
+                market_price_security_id == normalized_security_id,
+                MarketPrice.price_date <= position_date,
+            )
             .order_by(MarketPrice.price_date.desc())
         )
         result = await self.db.execute(stmt)
@@ -730,10 +757,12 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_next_price_date")
     async def get_next_price_date(self, security_id: str, after_date: date) -> Optional[date]:
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        market_price_security_id = func.trim(MarketPrice.security_id)
         stmt = (
             select(MarketPrice.price_date)
             .filter(
-                MarketPrice.security_id == security_id,
+                market_price_security_id == normalized_security_id,
                 MarketPrice.price_date > after_date,
             )
             .order_by(MarketPrice.price_date.asc())

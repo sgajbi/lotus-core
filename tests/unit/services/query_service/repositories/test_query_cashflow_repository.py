@@ -236,7 +236,7 @@ async def test_cashflow_repository_income_cashflows_query_joins_epoch_matched_po
 
     rows = await repository.get_income_cashflows_for_position(
         portfolio_id="P1",
-        security_id="SEC-IBM",
+        security_id=" SEC-IBM ",
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 17),
     )
@@ -245,7 +245,24 @@ async def test_cashflow_repository_income_cashflows_query_joins_epoch_matched_po
     stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_state.portfolio_id = cashflows.portfolio_id" in compiled_query.lower()
-    assert "position_state.security_id = cashflows.security_id" in compiled_query.lower()
+    assert "trim(position_state.security_id) = trim(cashflows.security_id)" in compiled_query
     assert "position_state.epoch = cashflows.epoch" in compiled_query.lower()
+    assert "trim(cashflows.security_id) = 'SEC-IBM'" in compiled_query
     assert "cashflows.classification = 'INCOME'" in compiled_query
     assert "cashflows.cashflow_date BETWEEN '2026-04-01' AND '2026-04-17'" in compiled_query
+
+
+async def test_cashflow_repository_income_cashflows_skips_blank_security_id(
+    mock_db_session: AsyncMock,
+) -> None:
+    repository = CashflowRepository(mock_db_session)
+
+    rows = await repository.get_income_cashflows_for_position(
+        portfolio_id="P1",
+        security_id="   ",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 17),
+    )
+
+    assert rows == []
+    mock_db_session.execute.assert_not_awaited()

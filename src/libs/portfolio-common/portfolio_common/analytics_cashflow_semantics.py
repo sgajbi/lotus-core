@@ -19,6 +19,7 @@ def normalize_position_flow_amount(*, amount: Decimal, classification: str) -> D
     Convert stored cash-movement direction into the position-view flow direction used by
     position-timeseries and analytics payloads.
     """
+    classification = str(classification or "").strip().upper()
     if classification in {"INVESTMENT_OUTFLOW", "INVESTMENT_INFLOW", "INCOME"}:
         return -amount
     return amount
@@ -33,6 +34,7 @@ def classify_analytics_cash_flow(
     """
     Map canonical cashflow classifications into analytics-facing semantics.
     """
+    classification = str(classification or "").strip().upper()
     if classification in {"CASHFLOW_IN", "CASHFLOW_OUT"}:
         return ("external_flow", "external")
 

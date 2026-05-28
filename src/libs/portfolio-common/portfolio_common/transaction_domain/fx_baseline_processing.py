@@ -3,6 +3,9 @@ from __future__ import annotations
 from decimal import Decimal
 
 from portfolio_common.events import TransactionEvent
+from portfolio_common.transaction_domain.control_code_normalization import (
+    normalize_transaction_control_code,
+)
 from portfolio_common.transaction_domain.fx_models import FxCanonicalTransaction
 from portfolio_common.transaction_domain.fx_validation import validate_fx_transaction
 
@@ -12,8 +15,9 @@ def build_fx_processed_event(event: TransactionEvent) -> TransactionEvent:
     Establishes explicit baseline processing semantics for FX rows until
     richer realized-P&L and valuation treatment is implemented.
     """
-    realized_mode = (event.fx_realized_pnl_mode or "NONE").upper()
+    realized_mode = normalize_transaction_control_code(event.fx_realized_pnl_mode or "NONE")
     update: dict[str, object] = {
+        "fx_realized_pnl_mode": realized_mode,
         "gross_cost": event.gross_cost if event.gross_cost is not None else Decimal(0),
         "net_cost": event.net_cost if event.net_cost is not None else Decimal(0),
         "realized_gain_loss": (

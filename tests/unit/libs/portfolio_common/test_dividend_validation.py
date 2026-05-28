@@ -31,7 +31,8 @@ def _base_txn() -> DividendCanonicalTransaction:
 
 
 def test_validate_dividend_transaction_happy_path() -> None:
-    issues = validate_dividend_transaction(_base_txn())
+    txn = _base_txn().model_copy(update={"transaction_type": " dividend "})
+    issues = validate_dividend_transaction(txn)
     assert issues == []
 
 
@@ -94,19 +95,5 @@ def test_validate_dividend_transaction_requires_settlement_cash_account_for_auto
     issues = validate_dividend_transaction(txn)
     assert any(
         i.code == DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT for i in issues
-    )
-
-
-def test_validate_dividend_transaction_requires_settlement_cash_account_for_auto_mode() -> None:
-    txn = _base_txn().model_copy(
-        update={
-            "cash_entry_mode": "AUTO_GENERATE",
-            "settlement_cash_account_id": None,
-        }
-    )
-    issues = validate_dividend_transaction(txn)
-    assert any(
-        i.code == DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT
-        for i in issues
     )
 

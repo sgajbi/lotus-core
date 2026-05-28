@@ -4,7 +4,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, condecimal, model_validator
+from portfolio_common.currency_codes import (
+    normalize_currency_code,
+    normalize_optional_currency_code,
+)
+from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator, model_validator
 
 
 class PortfolioBenchmarkAssignmentRecord(BaseModel):
@@ -354,7 +358,13 @@ class ClientTaxRuleSetRecord(BaseModel):
     applies_to_income_types: list[str] = Field(default_factory=list)
     rate: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(None)
     threshold_amount: condecimal(ge=Decimal(0)) | None = Field(None)
-    threshold_currency: str | None = Field(None)
+    threshold_currency: str | None = Field(
+        None,
+        description=(
+            "Canonical three-letter currency for the threshold amount when the tax rule "
+            "contains monetary threshold evidence."
+        ),
+    )
     effective_from: date = Field(..., description="Tax rule effective start date.")
     effective_to: date | None = Field(None, description="Tax rule effective end date.")
     rule_version: int = Field(1, ge=1)
@@ -362,6 +372,11 @@ class ClientTaxRuleSetRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("threshold_currency", mode="before")
+    @classmethod
+    def _normalize_threshold_currency(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
 
     @model_validator(mode="after")
     def validate_rule(self) -> "ClientTaxRuleSetRecord":
@@ -398,7 +413,13 @@ class ClientIncomeNeedsScheduleRecord(BaseModel):
     amount: condecimal(gt=Decimal(0)) = Field(
         ..., description="Source-supplied amount for the income need."
     )
-    currency: str = Field(..., min_length=3, max_length=3)
+    currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter currency for the income-needs amount used by cashflow, "
+            "liquidity, and funding calculations."
+        ),
+    )
     frequency: Literal["ONE_TIME", "MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "ANNUAL"] = Field(
         ..., description="Source-supplied income-needs frequency."
     )
@@ -410,6 +431,11 @@ class ClientIncomeNeedsScheduleRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "ClientIncomeNeedsScheduleRecord":
@@ -436,7 +462,13 @@ class LiquidityReserveRequirementRecord(BaseModel):
     required_amount: condecimal(gt=Decimal(0)) = Field(
         ..., description="Required reserve amount supplied by the source."
     )
-    currency: str = Field(..., min_length=3, max_length=3)
+    currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter currency for the reserve amount used by liquidity and "
+            "policy-compliance calculations."
+        ),
+    )
     horizon_days: int = Field(..., ge=0)
     priority: int = Field(1, ge=1)
     policy_source: str = Field(..., description="Source policy or bank reference for requirement.")
@@ -447,6 +479,11 @@ class LiquidityReserveRequirementRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     @model_validator(mode="after")
     def validate_requirement(self) -> "LiquidityReserveRequirementRecord":
@@ -471,7 +508,13 @@ class PlannedWithdrawalScheduleRecord(BaseModel):
     amount: condecimal(gt=Decimal(0)) = Field(
         ..., description="Source-supplied planned withdrawal amount."
     )
-    currency: str = Field(..., min_length=3, max_length=3)
+    currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter currency for the planned withdrawal amount used by "
+            "cashflow and liquidity planning calculations."
+        ),
+    )
     scheduled_date: date = Field(..., description="Scheduled withdrawal date.")
     recurrence_frequency: (
         Literal["ONE_TIME", "MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "ANNUAL"] | None
@@ -481,6 +524,11 @@ class PlannedWithdrawalScheduleRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -588,7 +636,14 @@ class ModelPortfolioDefinitionRecord(BaseModel):
         description="Business display name for the model portfolio.",
         examples=["Singapore Balanced DPM Model"],
     )
-    base_currency: str = Field(..., description="Model base currency.", examples=["SGD"])
+    base_currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter model base currency used for target model, rebalancing, "
+            "mandate, and benchmark-alignment calculations."
+        ),
+        examples=["SGD"],
+    )
     risk_profile: str = Field(
         ...,
         description="Mandate risk profile aligned to this model.",
@@ -646,6 +701,11 @@ class ModelPortfolioDefinitionRecord(BaseModel):
         description="Data quality status for the model definition.",
         examples=["accepted"],
     )
+
+    @field_validator("base_currency", mode="before")
+    @classmethod
+    def _normalize_base_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -746,7 +806,14 @@ class BenchmarkDefinitionRecord(BaseModel):
         description="Benchmark type.",
         examples=["composite"],
     )
-    benchmark_currency: str = Field(..., description="Benchmark currency.", examples=["USD"])
+    benchmark_currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter benchmark currency used for performance comparison, "
+            "policy evidence, and reporting alignment."
+        ),
+        examples=["USD"],
+    )
     return_convention: Literal["price_return_index", "total_return_index"] = Field(
         ...,
         description="Benchmark return convention.",
@@ -794,6 +861,11 @@ class BenchmarkDefinitionRecord(BaseModel):
         None, description="Source record identifier.", examples=["bmk_v20260131"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("benchmark_currency", mode="before")
+    @classmethod
+    def _normalize_benchmark_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -846,7 +918,14 @@ class IndexDefinitionRecord(BaseModel):
     index_name: str = Field(
         ..., description="Index display name.", examples=["MSCI World Total Return"]
     )
-    index_currency: str = Field(..., description="Index currency.", examples=["USD"])
+    index_currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter index currency used for benchmark construction, "
+            "performance comparison, and reporting alignment."
+        ),
+        examples=["USD"],
+    )
     index_type: str | None = Field(
         None, description="Index type descriptor.", examples=["equity_index"]
     )
@@ -884,6 +963,11 @@ class IndexDefinitionRecord(BaseModel):
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
 
+    @field_validator("index_currency", mode="before")
+    @classmethod
+    def _normalize_index_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
     model_config = ConfigDict()
 
 
@@ -896,7 +980,11 @@ class IndexPriceSeriesRecord(BaseModel):
     index_price: condecimal(gt=Decimal(0)) = Field(
         ..., description="Index price value.", examples=["4567.1234000000"]
     )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the index price series.",
+        examples=["USD"],
+    )
     value_convention: str = Field(
         ..., description="Value convention label.", examples=["close_price"]
     )
@@ -911,6 +999,11 @@ class IndexPriceSeriesRecord(BaseModel):
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
 
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
     model_config = ConfigDict()
 
 
@@ -923,7 +1016,11 @@ class IndexReturnSeriesRecord(BaseModel):
     return_convention: str = Field(
         ..., description="Return convention label.", examples=["total_return_index"]
     )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the index return series.",
+        examples=["USD"],
+    )
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for the index return series record.",
@@ -934,6 +1031,11 @@ class IndexReturnSeriesRecord(BaseModel):
         None, description="Source record identifier.", examples=["idxr_20260102"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -951,7 +1053,11 @@ class BenchmarkReturnSeriesRecord(BaseModel):
     return_convention: str = Field(
         ..., description="Return convention label.", examples=["total_return_index"]
     )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the benchmark return series.",
+        examples=["USD"],
+    )
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for the benchmark return series record.",
@@ -962,6 +1068,11 @@ class BenchmarkReturnSeriesRecord(BaseModel):
         None, description="Source record identifier.", examples=["bmkr_20260102"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -988,7 +1099,11 @@ class RiskFreeSeriesRecord(BaseModel):
         description="Compounding convention.",
         examples=["simple"],
     )
-    series_currency: str = Field(..., description="Series currency.", examples=["USD"])
+    series_currency: str = Field(
+        ...,
+        description="Canonical three-letter currency for the risk-free series.",
+        examples=["USD"],
+    )
     source_timestamp: datetime | None = Field(
         None,
         description="Source publication timestamp for the risk-free curve series record.",
@@ -999,6 +1114,11 @@ class RiskFreeSeriesRecord(BaseModel):
         None, description="Source record identifier.", examples=["rf_20260102"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("series_currency", mode="before")
+    @classmethod
+    def _normalize_series_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
@@ -1053,7 +1173,12 @@ class CashAccountMasterRecord(BaseModel):
         ..., description="Cash account display name.", examples=["USD Operating Cash"]
     )
     account_currency: str = Field(
-        ..., description="Native cash account currency.", examples=["USD"]
+        ...,
+        description=(
+            "Canonical three-letter native cash account currency used for cash balance, "
+            "settlement, liquidity, and FX readiness calculations."
+        ),
+        examples=["USD"],
     )
     account_role: str | None = Field(
         None,
@@ -1085,6 +1210,11 @@ class CashAccountMasterRecord(BaseModel):
         description="Upstream source record identifier.",
         examples=["cash-account-001"],
     )
+
+    @field_validator("account_currency", mode="before")
+    @classmethod
+    def _normalize_account_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 

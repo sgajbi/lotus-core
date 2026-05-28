@@ -8,6 +8,7 @@ from ..dtos.buy_state_dto import (
     PositionLotsResponse,
 )
 from ..repositories.buy_state_repository import BuyStateRepository
+from ..repositories.identifier_normalization import normalize_security_id
 
 
 class BuyStateService:
@@ -19,6 +20,7 @@ class BuyStateService:
     ) -> PositionLotsResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        security_id = normalize_security_id(security_id)
         lots = await self.repo.get_position_lots(portfolio_id=portfolio_id, security_id=security_id)
         if not lots:
             raise LookupError(
@@ -35,6 +37,7 @@ class BuyStateService:
     ) -> AccruedIncomeOffsetsResponse:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        security_id = normalize_security_id(security_id)
         offsets = await self.repo.get_accrued_offsets(
             portfolio_id=portfolio_id,
             security_id=security_id,

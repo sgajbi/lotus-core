@@ -19,10 +19,31 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
+from .identifier_normalization import normalize_security_id
+
 
 class AnalyticsTimeseriesRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _normalized_security_ids(security_ids: list[str]) -> list[str]:
+        return [
+            normalized
+            for security_id in security_ids
+            if (normalized := normalize_security_id(security_id))
+        ]
+
+    @staticmethod
+    def _security_ids_from_position_ids(portfolio_id: str, position_ids: list[str]) -> list[str]:
+        return [
+            normalized
+            for position_id in position_ids
+            if ":" in position_id
+            and position_id.split(":", 1)[0] == portfolio_id
+            and (normalized := normalize_security_id(position_id.split(":", 1)[1]))
+        ]
 
     @staticmethod
     def _latest_cashflow_rows_stmt(*, predicates: list[object], include_security_id: bool):
@@ -35,7 +56,7 @@ class AnalyticsTimeseriesRepository:
             Cashflow.is_portfolio_flow,
         ]
         if include_security_id:
-            partition_by.append(Cashflow.security_id)
+            partition_by.append(func.trim(Cashflow.security_id))
 
         selected_columns = [
             Cashflow.transaction_id.label("transaction_id"),
@@ -55,7 +76,7 @@ class AnalyticsTimeseriesRepository:
             .label("rn"),
         ]
         if include_security_id:
-            selected_columns.insert(1, Cashflow.security_id.label("security_id"))
+            selected_columns.insert(1, func.trim(Cashflow.security_id).label("security_id"))
 
         ranked = select(*selected_columns).where(*predicates).subquery()
 
@@ -206,9 +227,12 @@ class AnalyticsTimeseriesRepository:
         if snapshot_epoch is not None:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
         latest_history_quantity = self._latest_current_position_history_quantity()
+        position_security_id = func.trim(PositionTimeseries.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
         ranked = (
             select(
-                PositionTimeseries.security_id.label("security_id"),
+                position_security_id.label("security_id"),
                 PositionTimeseries.date.label("valuation_date"),
                 PositionTimeseries.bod_market_value.label("bod_market_value"),
                 PositionTimeseries.eod_market_value.label("eod_market_value"),
@@ -225,7 +249,7 @@ class AnalyticsTimeseriesRepository:
                 Instrument.currency.label("position_currency"),
                 func.row_number()
                 .over(
-                    partition_by=(PositionTimeseries.security_id, PositionTimeseries.date),
+                    partition_by=(position_security_id, PositionTimeseries.date),
                     order_by=(PositionTimeseries.epoch.desc(),),
                 )
                 .label("rn"),
@@ -235,11 +259,11 @@ class AnalyticsTimeseriesRepository:
                 PositionState,
                 and_(
                     PositionTimeseries.portfolio_id == PositionState.portfolio_id,
-                    PositionTimeseries.security_id == PositionState.security_id,
+                    position_security_id == state_security_id,
                     PositionTimeseries.epoch == PositionState.epoch,
                 ),
             )
-            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .join(Instrument, instrument_security_id == position_security_id)
             .where(*predicates, PositionTimeseries.quantity == latest_history_quantity)
             .subquery()
         )
@@ -258,16 +282,18 @@ class AnalyticsTimeseriesRepository:
             )
 
         if security_ids:
-            stmt = stmt.where(ranked.c.security_id.in_(security_ids))
+            normalized_security_ids = self._normalized_security_ids(security_ids)
+            if not normalized_security_ids:
+                return []
+            stmt = stmt.where(ranked.c.security_id.in_(normalized_security_ids))
 
         if position_ids:
-            security_from_position_ids = [
-                pid.split(":", 1)[1]
-                for pid in position_ids
-                if ":" in pid and pid.split(":", 1)[0] == portfolio_id
-            ]
-            if security_from_position_ids:
-                stmt = stmt.where(ranked.c.security_id.in_(security_from_position_ids))
+            security_from_position_ids = self._security_ids_from_position_ids(
+                portfolio_id, position_ids
+            )
+            if not security_from_position_ids:
+                return []
+            stmt = stmt.where(ranked.c.security_id.in_(security_from_position_ids))
 
         if "asset_class" in dimension_filters:
             stmt = stmt.where(ranked.c.asset_class.in_(dimension_filters["asset_class"]))
@@ -299,9 +325,12 @@ class AnalyticsTimeseriesRepository:
             predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
 
         latest_history_quantity = self._latest_current_position_history_quantity()
+        position_security_id = func.trim(PositionTimeseries.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
         ranked = (
             select(
-                PositionTimeseries.security_id.label("security_id"),
+                position_security_id.label("security_id"),
                 PositionTimeseries.date.label("valuation_date"),
                 PositionTimeseries.bod_market_value.label("bod_market_value"),
                 PositionTimeseries.eod_market_value.label("eod_market_value"),
@@ -316,7 +345,7 @@ class AnalyticsTimeseriesRepository:
                 Instrument.currency.label("position_currency"),
                 func.row_number()
                 .over(
-                    partition_by=(PositionTimeseries.date, PositionTimeseries.security_id),
+                    partition_by=(PositionTimeseries.date, position_security_id),
                     order_by=(PositionTimeseries.epoch.desc(),),
                 )
                 .label("rn"),
@@ -326,11 +355,11 @@ class AnalyticsTimeseriesRepository:
                 PositionState,
                 and_(
                     PositionTimeseries.portfolio_id == PositionState.portfolio_id,
-                    PositionTimeseries.security_id == PositionState.security_id,
+                    position_security_id == state_security_id,
                     PositionTimeseries.epoch == PositionState.epoch,
                 ),
             )
-            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .join(Instrument, instrument_security_id == position_security_id)
             .where(*predicates, PositionTimeseries.quantity == latest_history_quantity)
             .subquery()
         )
@@ -351,12 +380,15 @@ class AnalyticsTimeseriesRepository:
         security_ids: list[str],
         snapshot_epoch: int | None = None,
     ) -> list[Any]:
-        if not security_ids:
+        normalized_security_ids = self._normalized_security_ids(security_ids)
+        if not normalized_security_ids:
             return []
 
+        position_security_id = func.trim(PositionTimeseries.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
-            PositionTimeseries.security_id.in_(security_ids),
+            position_security_id.in_(normalized_security_ids),
             PositionTimeseries.date < before_date,
         ]
         if snapshot_epoch is not None:
@@ -365,13 +397,13 @@ class AnalyticsTimeseriesRepository:
         latest_history_quantity = self._latest_current_position_history_quantity()
         ranked = (
             select(
-                PositionTimeseries.security_id.label("security_id"),
+                position_security_id.label("security_id"),
                 PositionTimeseries.date.label("valuation_date"),
                 PositionTimeseries.eod_market_value.label("eod_market_value"),
                 PositionTimeseries.epoch.label("epoch"),
                 func.row_number()
                 .over(
-                    partition_by=(PositionTimeseries.security_id,),
+                    partition_by=(position_security_id,),
                     order_by=(PositionTimeseries.date.desc(), PositionTimeseries.epoch.desc()),
                 )
                 .label("rn"),
@@ -381,7 +413,7 @@ class AnalyticsTimeseriesRepository:
                 PositionState,
                 and_(
                     PositionTimeseries.portfolio_id == PositionState.portfolio_id,
-                    PositionTimeseries.security_id == PositionState.security_id,
+                    position_security_id == state_security_id,
                     PositionTimeseries.epoch == PositionState.epoch,
                 ),
             )
@@ -399,7 +431,7 @@ class AnalyticsTimeseriesRepository:
             select(PositionHistory.quantity)
             .where(
                 PositionHistory.portfolio_id == PositionTimeseries.portfolio_id,
-                PositionHistory.security_id == PositionTimeseries.security_id,
+                func.trim(PositionHistory.security_id) == func.trim(PositionTimeseries.security_id),
                 PositionHistory.epoch == PositionState.epoch,
                 PositionHistory.position_date <= PositionTimeseries.date,
             )
@@ -417,12 +449,13 @@ class AnalyticsTimeseriesRepository:
         valuation_dates: list[date],
         snapshot_epoch: int | None = None,
     ) -> list[Any]:
-        if not security_ids or not valuation_dates:
+        normalized_security_ids = self._normalized_security_ids(security_ids)
+        if not normalized_security_ids or not valuation_dates:
             return []
 
         predicates = [
             Cashflow.portfolio_id == portfolio_id,
-            Cashflow.security_id.in_(security_ids),
+            func.trim(Cashflow.security_id).in_(normalized_security_ids),
             Cashflow.cashflow_date.in_(valuation_dates),
             Cashflow.is_position_flow.is_(True),
         ]
@@ -483,7 +516,10 @@ class AnalyticsTimeseriesRepository:
         stmt = (
             select(func.max(PositionTimeseries.epoch))
             .select_from(PositionTimeseries)
-            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .join(
+                Instrument,
+                func.trim(Instrument.security_id) == func.trim(PositionTimeseries.security_id),
+            )
             .where(
                 PositionTimeseries.portfolio_id == portfolio_id,
                 PositionTimeseries.date >= start_date,
@@ -492,16 +528,22 @@ class AnalyticsTimeseriesRepository:
         )
 
         if security_ids:
-            stmt = stmt.where(PositionTimeseries.security_id.in_(security_ids))
+            normalized_security_ids = self._normalized_security_ids(security_ids)
+            if not normalized_security_ids:
+                return 0
+            stmt = stmt.where(
+                func.trim(PositionTimeseries.security_id).in_(normalized_security_ids)
+            )
 
         if position_ids:
-            security_from_position_ids = [
-                pid.split(":", 1)[1]
-                for pid in position_ids
-                if ":" in pid and pid.split(":", 1)[0] == portfolio_id
-            ]
-            if security_from_position_ids:
-                stmt = stmt.where(PositionTimeseries.security_id.in_(security_from_position_ids))
+            security_from_position_ids = self._security_ids_from_position_ids(
+                portfolio_id, position_ids
+            )
+            if not security_from_position_ids:
+                return 0
+            stmt = stmt.where(
+                func.trim(PositionTimeseries.security_id).in_(security_from_position_ids)
+            )
 
         if "asset_class" in dimension_filters:
             stmt = stmt.where(Instrument.asset_class.in_(dimension_filters["asset_class"]))
@@ -521,11 +563,15 @@ class AnalyticsTimeseriesRepository:
         start_date: date,
         end_date: date,
     ) -> dict[date, Decimal]:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         stmt = (
             select(FxRate.rate_date, FxRate.rate)
             .where(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date >= start_date,
                 FxRate.rate_date <= end_date,
             )

@@ -11,6 +11,7 @@ from portfolio_common.ca_bundle_a_constants import (
 from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_TARGET_IN_TYPES as CA_BUNDLE_A_IN_TYPES,
 )
+from portfolio_common.ca_bundle_a_constants import normalize_ca_bundle_a_transaction_type
 from portfolio_common.events import TransactionEvent
 
 from .ca_bundle_a_validation import is_ca_bundle_a_transaction_type
@@ -54,7 +55,7 @@ def evaluate_ca_bundle_a_reconciliation(
     target_basis_in_local = Decimal(0)
 
     for event in events:
-        transaction_type = event.transaction_type.upper()
+        transaction_type = normalize_ca_bundle_a_transaction_type(event.transaction_type)
         if transaction_type in CA_BUNDLE_A_OUT_TYPES:
             source_leg_count += 1
             source_basis_out_local += _source_basis_out_local(event)

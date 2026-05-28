@@ -20,7 +20,9 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .date_filters import start_of_next_day
+from .identifier_normalization import normalize_security_id
 
 
 @dataclass(frozen=True)
@@ -78,17 +80,21 @@ class ReportingRepository:
         portfolio_ids: list[str],
         as_of_date: date,
     ) -> list[ReportingSnapshotRow]:
+        history_security_id = func.trim(PositionHistory.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
         latest_history_subq = (
             select(
                 PositionHistory.portfolio_id.label("portfolio_id"),
-                PositionHistory.security_id.label("security_id"),
+                history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
                 func.row_number()
                 .over(
                     partition_by=(
                         PositionHistory.portfolio_id,
-                        PositionHistory.security_id,
+                        history_security_id,
                     ),
                     order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
                 )
@@ -98,7 +104,7 @@ class ReportingRepository:
                 PositionState,
                 and_(
                     PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    PositionHistory.security_id == PositionState.security_id,
+                    history_security_id == state_security_id,
                     PositionHistory.epoch == PositionState.epoch,
                 ),
             )
@@ -123,7 +129,7 @@ class ReportingRepository:
                 .over(
                     partition_by=(
                         DailyPositionSnapshot.portfolio_id,
-                        DailyPositionSnapshot.security_id,
+                        snapshot_security_id,
                     ),
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
@@ -134,8 +140,7 @@ class ReportingRepository:
                 and_(
                     DailyPositionSnapshot.portfolio_id
                     == latest_open_history_subq.c.portfolio_id,
-                    DailyPositionSnapshot.security_id
-                    == latest_open_history_subq.c.security_id,
+                    snapshot_security_id == latest_open_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_open_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_open_history_subq.c.quantity,
                 ),
@@ -158,10 +163,10 @@ class ReportingRepository:
                 ),
             )
             .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
-            .outerjoin(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
+            .outerjoin(Instrument, instrument_security_id == snapshot_security_id)
             .order_by(
                 DailyPositionSnapshot.portfolio_id.asc(),
-                DailyPositionSnapshot.security_id.asc(),
+                snapshot_security_id.asc(),
             )
         )
 
@@ -178,13 +183,17 @@ class ReportingRepository:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal | None:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return Decimal("1")
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         stmt = (
             select(FxRate.rate)
             .where(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= as_of_date,
             )
             .order_by(FxRate.rate_date.desc())
@@ -202,20 +211,29 @@ class ReportingRepository:
         if not cash_security_ids:
             return {}
 
+        normalized_cash_security_ids = [
+            security_id
+            for value in cash_security_ids
+            if (security_id := normalize_security_id(value))
+        ]
+        if not normalized_cash_security_ids:
+            return {}
+
+        cash_security_id = func.trim(Transaction.settlement_cash_instrument_id)
         ranked_txn_subq = (
             select(
-                Transaction.settlement_cash_instrument_id.label("cash_security_id"),
+                cash_security_id.label("cash_security_id"),
                 Transaction.settlement_cash_account_id.label("cash_account_id"),
                 func.row_number()
                 .over(
-                    partition_by=Transaction.settlement_cash_instrument_id,
+                    partition_by=cash_security_id,
                     order_by=(Transaction.transaction_date.desc(), Transaction.id.desc()),
                 )
                 .label("rn"),
             )
             .where(
                 Transaction.portfolio_id == portfolio_id,
-                Transaction.settlement_cash_instrument_id.in_(cash_security_ids),
+                cash_security_id.in_(normalized_cash_security_ids),
                 Transaction.settlement_cash_account_id.is_not(None),
                 Transaction.transaction_date < start_of_next_day(as_of_date),
             )
@@ -226,7 +244,11 @@ class ReportingRepository:
             ranked_txn_subq.c.cash_account_id,
         ).where(ranked_txn_subq.c.rn == 1)
         rows = (await self.db.execute(stmt)).all()
-        return {str(security_id): str(cash_account_id) for security_id, cash_account_id in rows}
+        return {
+            normalize_security_id(security_id): str(cash_account_id)
+            for security_id, cash_account_id in rows
+            if normalize_security_id(security_id)
+        }
 
     async def list_cash_account_masters(
         self,
@@ -258,22 +280,31 @@ class ReportingRepository:
         parent_security_ids: list[str],
         as_of_date: date,
     ) -> list[InstrumentLookthroughComponentRow]:
-        if not parent_security_ids:
+        normalized_parent_security_ids = [
+            security_id
+            for value in parent_security_ids
+            if (security_id := normalize_security_id(value))
+        ]
+        if not normalized_parent_security_ids:
             return []
 
+        parent_security_id = func.trim(InstrumentLookthroughComponent.parent_security_id)
+        component_security_id = func.trim(InstrumentLookthroughComponent.component_security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
         stmt = (
             select(
-                InstrumentLookthroughComponent.parent_security_id,
-                InstrumentLookthroughComponent.component_security_id,
+                parent_security_id.label("parent_security_id"),
+                component_security_id.label("component_security_id"),
                 InstrumentLookthroughComponent.component_weight,
                 Instrument,
             )
             .outerjoin(
                 Instrument,
-                Instrument.security_id == InstrumentLookthroughComponent.component_security_id,
+                instrument_security_id == component_security_id,
             )
             .where(
-                InstrumentLookthroughComponent.parent_security_id.in_(parent_security_ids),
+                parent_security_id.in_(normalized_parent_security_ids),
+                component_security_id != "",
                 InstrumentLookthroughComponent.effective_from <= as_of_date,
                 or_(
                     InstrumentLookthroughComponent.effective_to.is_(None),
@@ -281,15 +312,15 @@ class ReportingRepository:
                 ),
             )
             .order_by(
-                InstrumentLookthroughComponent.parent_security_id.asc(),
-                InstrumentLookthroughComponent.component_security_id.asc(),
+                parent_security_id.asc(),
+                component_security_id.asc(),
             )
         )
         rows = (await self.db.execute(stmt)).all()
         return [
             InstrumentLookthroughComponentRow(
-                parent_security_id=parent_security_id,
-                component_security_id=component_security_id,
+                parent_security_id=normalize_security_id(parent_security_id),
+                component_security_id=normalize_security_id(component_security_id),
                 component_weight=component_weight,
                 component_instrument=component_instrument,
             )

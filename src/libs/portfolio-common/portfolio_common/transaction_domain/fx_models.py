@@ -2,7 +2,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from portfolio_common.control_code_normalization import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
+from portfolio_common.currency_codes import normalize_currency_code
 
 FX_BUSINESS_TRANSACTION_TYPES = {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}
 FX_COMPONENT_TYPES = {
@@ -27,9 +33,7 @@ class FxCanonicalTransaction(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     transaction_id: str = Field(..., description="Unique transaction identifier.")
-    transaction_type: str = Field(
-        ..., description="Canonical FX business transaction type."
-    )
+    transaction_type: str = Field(..., description="Canonical FX business transaction type.")
     component_type: str = Field(..., description="Canonical FX component type.")
     component_id: str = Field(..., description="Unique component identifier within the FX group.")
     linked_component_ids: Optional[list[str]] = Field(
@@ -61,15 +65,36 @@ class FxCanonicalTransaction(BaseModel):
     currency: str = Field(..., description="Book currency code.")
     pair_base_currency: str = Field(..., description="Currency pair base currency.")
     pair_quote_currency: str = Field(..., description="Currency pair quote currency.")
-    fx_rate_quote_convention: str = Field(
-        ..., description="Explicit FX rate quote convention."
-    )
+    fx_rate_quote_convention: str = Field(..., description="Explicit FX rate quote convention.")
 
     buy_currency: str = Field(..., description="Currency received at settlement.")
     sell_currency: str = Field(..., description="Currency delivered at settlement.")
     buy_amount: Decimal = Field(..., description="Positive magnitude of bought currency.")
     sell_amount: Decimal = Field(..., description="Positive magnitude of sold currency.")
     contract_rate: Decimal = Field(..., description="Contractual FX rate.")
+
+    @field_validator(
+        "trade_currency",
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
+    @field_validator(
+        "transaction_type",
+        "component_type",
+        "fx_rate_quote_convention",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
 
     economic_event_id: Optional[str] = Field(
         default=None, description="Economic event id shared by all FX components."
@@ -93,6 +118,17 @@ class FxCanonicalTransaction(BaseModel):
     settlement_status: Optional[str] = Field(
         default=None, description="Settlement status for FX cash components."
     )
+
+    @field_validator(
+        "fx_cash_leg_role",
+        "settlement_status",
+        "spot_exposure_model",
+        "fx_realized_pnl_mode",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
+        return normalize_optional_transaction_control_code(value)
 
     fx_contract_id: Optional[str] = Field(
         default=None, description="Stable FX contract identifier."

@@ -70,7 +70,7 @@ async def test_get_reprocessing_health_summary(
         active_keys=3,
         stale_reprocessing_keys=1,
         oldest_reprocessing_watermark_date=date(2025, 8, 20),
-        security_id="SEC-IBM",
+        security_id=" SEC-IBM ",
         epoch=4,
         updated_at=datetime(2025, 8, 20, 9, 0, tzinfo=timezone.utc),
     )
@@ -96,6 +96,7 @@ async def test_get_reprocessing_health_summary(
     assert "status = 'REPROCESSING'" in compiled
     assert "updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "trim(position_state.security_id) AS security_id" in compiled
     assert "order by" in compiled.lower()
     assert "watermark_date asc" in compiled.lower()
     assert "security_id" in compiled.lower()
@@ -114,7 +115,7 @@ async def test_get_valuation_job_health_summary(
         failed_jobs_last_hours=1,
         oldest_open_job_date=date(2025, 8, 1),
         id=8801,
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         correlation_id="corr-val-8801",
     )
     result = MagicMock()
@@ -148,6 +149,7 @@ async def test_get_valuation_job_health_summary(
         in compiled
     )
     assert "status = 'FAILED'" in compiled
+    assert "trim(portfolio_valuation_jobs.security_id) AS security_id" in compiled
     assert "updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert (
         "updated_at >= '2025-08-30 12:00:00+00:00'"
@@ -397,6 +399,18 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
         for compiled in execute_sql
     )
     assert any(
+        "trim(portfolio_valuation_jobs.security_id) AS security_id" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
+        "trim(position_timeseries.security_id) = anon_1.security_id" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
+        "upper(trim(portfolio_valuation_jobs.status)) = 'COMPLETE'" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
         "count(distinct" in compiled.lower() and "portfolio_id" in compiled.lower()
         for compiled in execute_sql
     )
@@ -434,9 +448,13 @@ async def test_get_snapshot_valuation_coverage_summary_honors_snapshot_as_of(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled
     assert "daily_position_snapshots.date = '2026-04-17'" in compiled
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "daily_position_snapshots.created_at <= '2026-04-18 07:30:00+00:00'" in compiled
     assert "position_state.updated_at <= '2026-04-18 07:30:00+00:00'" in compiled
-    assert "valuation_status != 'UNVALUED'" in compiled
+    assert "upper(trim(daily_position_snapshots.valuation_status)) != 'UNVALUED'" in compiled
 
 
 async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_samples(
@@ -452,10 +470,10 @@ async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_s
     sample_result.all.return_value = [
         MagicMock(
             transaction_id="TXN-001",
-            security_id="SEC-IBM",
+            security_id=" SEC-IBM ",
             transaction_date=date(2026, 4, 1),
-            trade_currency="EUR",
-            portfolio_currency="USD",
+            trade_currency=" eur ",
+            portfolio_currency=" usd ",
         ),
         MagicMock(
             transaction_id="TXN-002",
@@ -478,12 +496,21 @@ async def test_get_missing_historical_fx_dependency_summary_returns_counts_and_s
     assert summary.earliest_transaction_date == date(2026, 4, 1)
     assert summary.latest_transaction_date == date(2026, 4, 4)
     assert [record.transaction_id for record in summary.sample_records] == ["TXN-001", "TXN-002"]
+    assert [record.security_id for record in summary.sample_records] == ["SEC-IBM", "SEC-NOVN"]
+    assert [record.trade_currency for record in summary.sample_records] == ["EUR", "CHF"]
+    assert [record.portfolio_currency for record in summary.sample_records] == ["USD", "USD"]
     aggregate_stmt = mock_db_session.execute.await_args_list[0].args[0]
     aggregate_compiled = str(aggregate_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "transactions.portfolio_id = 'P1'" in aggregate_compiled
+    assert "trim(transactions.security_id) AS security_id" in aggregate_compiled
+    assert "upper(trim(transactions.trade_currency)) AS trade_currency" in aggregate_compiled
+    assert "upper(trim(portfolios.base_currency)) AS portfolio_currency" in aggregate_compiled
     assert "transaction_date" in aggregate_compiled
     assert "<= '2026-04-17'" in aggregate_compiled
-    assert "transactions.trade_currency != portfolios.base_currency" in aggregate_compiled
+    assert (
+        "upper(trim(transactions.trade_currency)) != upper(trim(portfolios.base_currency))"
+        in aggregate_compiled
+    )
     assert "transactions.transaction_fx_rate IS NULL" in aggregate_compiled
     assert "transactions.created_at <= '2026-04-18 07:30:00+00:00'" in aggregate_compiled
     sample_stmt = mock_db_session.execute.await_args_list[1].args[0]
@@ -571,7 +598,7 @@ async def test_support_job_queries_honor_job_id_filters(
         "P1",
         status="PENDING",
         business_date=date(2025, 8, 31),
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         job_id=8801,
         correlation_id="corr-val-8801",
     )
@@ -581,7 +608,7 @@ async def test_support_job_queries_honor_job_id_filters(
         limit=10,
         status="PENDING",
         business_date=date(2025, 8, 31),
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         job_id=8801,
         correlation_id="corr-val-8801",
         reference_now=reference_now,
@@ -621,7 +648,7 @@ async def test_support_job_queries_honor_job_id_filters(
     await repository.get_reprocessing_jobs_count(
         "P1",
         status="PROCESSING",
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         job_id=303,
         correlation_id="corr-replay-303",
     )
@@ -630,7 +657,7 @@ async def test_support_job_queries_honor_job_id_filters(
         skip=0,
         limit=10,
         status="PROCESSING",
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         job_id=303,
         correlation_id="corr-replay-303",
         reference_now=reference_now,
@@ -641,11 +668,11 @@ async def test_support_job_queries_honor_job_id_filters(
         for call in mock_db_session.execute.call_args_list
     ]
     assert "portfolio_valuation_jobs.valuation_date = '2025-08-31'" in compiled_statements[0]
-    assert "portfolio_valuation_jobs.security_id = 'SEC-US-IBM'" in compiled_statements[0]
+    assert "trim(portfolio_valuation_jobs.security_id) = 'SEC-US-IBM'" in compiled_statements[0]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[0]
     assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[0]
     assert "portfolio_valuation_jobs.valuation_date = '2025-08-31'" in compiled_statements[1]
-    assert "portfolio_valuation_jobs.security_id = 'SEC-US-IBM'" in compiled_statements[1]
+    assert "trim(portfolio_valuation_jobs.security_id) = 'SEC-US-IBM'" in compiled_statements[1]
     assert "portfolio_valuation_jobs.id = 8801" in compiled_statements[1]
     assert "portfolio_valuation_jobs.correlation_id = 'corr-val-8801'" in compiled_statements[1]
     assert "portfolio_aggregation_jobs.aggregation_date = '2025-08-31'" in compiled_statements[2]
@@ -666,8 +693,10 @@ async def test_support_job_queries_honor_job_id_filters(
     )
     assert "reprocessing_jobs.id = 303" in compiled_statements[6]
     assert "reprocessing_jobs.correlation_id = 'corr-replay-303'" in compiled_statements[6]
+    assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled_statements[6]
     assert "reprocessing_jobs.id = 303" in compiled_statements[7]
     assert "reprocessing_jobs.correlation_id = 'corr-replay-303'" in compiled_statements[7]
+    assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled_statements[7]
 
 
 async def test_get_latest_transaction_date(
@@ -754,6 +783,10 @@ async def test_get_latest_snapshot_date_for_current_epoch(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from daily_position_snapshots" in compiled.lower()
     assert "join position_state on" in compiled.lower()
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "daily_position_snapshots.epoch = position_state.epoch" in compiled
 
 
@@ -788,6 +821,10 @@ async def test_get_latest_snapshot_date_for_current_epoch_as_of(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.date <= '2025-08-20'" in compiled
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "daily_position_snapshots.created_at <= '2025-08-20 10:00:00+00:00'" in compiled
     assert "position_state.updated_at <= '2025-08-20 10:00:00+00:00'" in compiled
 
@@ -803,6 +840,13 @@ async def test_get_position_snapshot_history_mismatch_count(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from (select position_history.portfolio_id" in compiled.lower()
+    assert "trim(position_history.security_id) AS security_id" in compiled
+    assert "trim(daily_position_snapshots.security_id) AS security_id" in compiled
+    assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled
+    assert (
+        "trim(daily_position_snapshots.security_id) = trim(position_state.security_id)"
+        in compiled
+    )
     assert "left outer join" in compiled.lower()
     assert "daily_position_snapshots" in compiled.lower()
     assert "position_state" in compiled.lower()
@@ -830,13 +874,13 @@ async def test_get_position_state(repository: OperationsRepository, mock_db_sess
     mock_state = object()
     mock_execute_scalar_one_or_none(mock_db_session, mock_state)
 
-    value = await repository.get_position_state("P1", "S1")
+    value = await repository.get_position_state("P1", " S1 ")
 
     assert value is mock_state
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in compiled.lower()
-    assert "position_state.security_id = 'S1'" in compiled
+    assert "trim(position_state.security_id) = 'S1'" in compiled
 
 
 async def test_get_position_state_honors_as_of(
@@ -951,15 +995,15 @@ async def test_get_lineage_keys_count_with_filters(
     mock_execute_scalar_one(mock_db_session, 5)
 
     value = await repository.get_lineage_keys_count(
-        portfolio_id="P1", reprocessing_status="CURRENT", security_id="S1"
+        portfolio_id="P1", reprocessing_status="CURRENT", security_id=" S1 "
     )
 
     assert value == 5
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in compiled.lower()
-    assert "position_state.status = 'CURRENT'" in compiled
-    assert "position_state.security_id = 'S1'" in compiled
+    assert "upper(trim(position_state.status)) = 'CURRENT'" in compiled
+    assert "trim(position_state.security_id) = 'S1'" in compiled
 
 
 async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_session: AsyncMock):
@@ -972,10 +1016,10 @@ async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_
     assert value == ["k1", "k2"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (position_state.status = 'REPROCESSING') THEN 0" in compiled
+    assert "CASE WHEN (upper(trim(position_state.status)) = 'REPROCESSING') THEN 0" in compiled
     assert "max(position_history.position_date)" in compiled
     assert "DESC NULLS LAST" in compiled
-    assert "position_state.security_id ASC" in compiled
+    assert "trim(position_state.security_id) ASC" in compiled
     assert "LIMIT 10 OFFSET 5" in compiled
     assert "latest_position_history_date" in compiled
     assert "latest_daily_snapshot_date" in compiled
@@ -998,7 +1042,7 @@ async def test_get_valuation_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in compiled.lower()
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
+    assert "upper(trim(portfolio_valuation_jobs.status)) = 'PENDING'" in compiled
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
 
 
@@ -1023,7 +1067,7 @@ async def test_get_valuation_jobs_query(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "CASE WHEN (upper(trim(portfolio_valuation_jobs.status)) = 'FAILED')" in compiled
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
@@ -1064,7 +1108,7 @@ async def test_get_aggregation_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_aggregation_jobs" in compiled.lower()
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+    assert "upper(trim(portfolio_aggregation_jobs.status)) = 'PROCESSING'" in compiled
 
 
 async def test_get_aggregation_jobs_query(
@@ -1088,7 +1132,7 @@ async def test_get_aggregation_jobs_query(
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "CASE WHEN (upper(trim(portfolio_aggregation_jobs.status)) = 'FAILED')" in compiled
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
@@ -1197,14 +1241,14 @@ async def test_get_lineage_keys_query_with_filters(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     value = await repository.get_lineage_keys(
-        portfolio_id="P1", skip=0, limit=10, reprocessing_status="CURRENT", security_id="S1"
+        portfolio_id="P1", skip=0, limit=10, reprocessing_status="CURRENT", security_id=" S1 "
     )
 
     assert value == ["k1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "position_state.status = 'CURRENT'" in compiled
-    assert "position_state.security_id = 'S1'" in compiled
+    assert "upper(trim(position_state.status)) = 'CURRENT'" in compiled
+    assert "trim(position_state.security_id) = 'S1'" in compiled
 
 
 async def test_get_lineage_keys_count_honors_as_of(
@@ -1260,7 +1304,7 @@ async def test_get_valuation_jobs_query_with_status(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolio_valuation_jobs.status = 'PENDING'" in compiled
+    assert "upper(trim(portfolio_valuation_jobs.status)) = 'PENDING'" in compiled
 
 
 async def test_get_aggregation_jobs_query_with_status(
@@ -1277,7 +1321,7 @@ async def test_get_aggregation_jobs_query_with_status(
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+    assert "upper(trim(portfolio_aggregation_jobs.status)) = 'PROCESSING'" in compiled
 
 
 async def test_get_analytics_export_jobs_count_with_status(
@@ -1298,7 +1342,7 @@ async def test_get_analytics_export_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "analytics_export_jobs.status = 'failed'" in compiled
+    assert "lower(trim(analytics_export_jobs.status)) = 'failed'" in compiled
     assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
 
 
@@ -1326,9 +1370,9 @@ async def test_get_analytics_export_jobs_query(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "analytics_export_jobs.status = 'running'" in compiled
+    assert "lower(trim(analytics_export_jobs.status)) = 'running'" in compiled
     assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
-    assert "CASE WHEN (analytics_export_jobs.status = 'failed')" in compiled
+    assert "CASE WHEN (lower(trim(analytics_export_jobs.status)) = 'failed')" in compiled
     assert "analytics_export_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "analytics_export_jobs.created_at ASC" in compiled
 
@@ -1366,7 +1410,7 @@ async def test_get_reconciliation_runs_count_with_filters(
         in compiled
     )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
-    assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
+    assert "upper(trim(financial_reconciliation_runs.status)) = 'FAILED'" in compiled
 
 
 async def test_get_reconciliation_runs_query(
@@ -1406,9 +1450,10 @@ async def test_get_reconciliation_runs_query(
         in compiled
     )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
-    assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
+    assert "upper(trim(financial_reconciliation_runs.status)) = 'COMPLETED'" in compiled
     assert (
-        "CASE WHEN (financial_reconciliation_runs.status IN ('FAILED', 'REQUIRES_REPLAY'))"
+        "CASE WHEN (upper(trim(financial_reconciliation_runs.status)) "
+        "IN ('FAILED', 'REQUIRES_REPLAY'))"
         in compiled
     )
     assert "financial_reconciliation_runs.started_at DESC" in compiled
@@ -1427,7 +1472,7 @@ async def test_get_reconciliation_findings_query(
         run_id="recon_123",
         limit=20,
         finding_id="rf_123",
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         transaction_id="txn_0001",
         as_of=as_of,
     )
@@ -1439,9 +1484,12 @@ async def test_get_reconciliation_findings_query(
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_findings.created_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
-    assert "financial_reconciliation_findings.security_id = 'SEC-US-IBM'" in compiled
+    assert "trim(financial_reconciliation_findings.security_id) = 'SEC-US-IBM'" in compiled
     assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
-    assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
+    assert (
+        "CASE WHEN (upper(trim(financial_reconciliation_findings.severity)) = 'ERROR') THEN 0"
+        in compiled
+    )
     assert "financial_reconciliation_findings.created_at DESC" in compiled
     assert "LIMIT 20" in compiled
 
@@ -1477,7 +1525,7 @@ async def test_get_reconciliation_findings_count(
     value = await repository.get_reconciliation_findings_count(
         run_id="recon_123",
         finding_id="rf_123",
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         transaction_id="txn_0001",
         as_of=as_of,
     )
@@ -1489,7 +1537,7 @@ async def test_get_reconciliation_findings_count(
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_findings.created_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
-    assert "financial_reconciliation_findings.security_id = 'SEC-US-IBM'" in compiled
+    assert "trim(financial_reconciliation_findings.security_id) = 'SEC-US-IBM'" in compiled
     assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
 
 
@@ -1502,7 +1550,7 @@ async def test_get_reconciliation_finding_summary(
         blocking_findings=2,
         finding_id="rf_1234567890abcdef",
         finding_type="missing_cashflow",
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         transaction_id="txn_0001",
     )
     mock_db_session.execute = AsyncMock(return_value=result)
@@ -1520,6 +1568,7 @@ async def test_get_reconciliation_finding_summary(
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "FILTER (WHERE" in compiled
+    assert "upper(trim(financial_reconciliation_findings.severity)) AS severity" in compiled
     assert "severity = 'ERROR'" in compiled
     assert "order by" in compiled.lower()
     assert "created_at desc" in compiled.lower()
@@ -1548,7 +1597,7 @@ async def test_get_portfolio_control_stages_count_with_filters(
     assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
-    assert "pipeline_stage_state.status = 'REQUIRES_REPLAY'" in compiled
+    assert "upper(trim(pipeline_stage_state.status)) = 'REQUIRES_REPLAY'" in compiled
     assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
 
 
@@ -1579,9 +1628,13 @@ async def test_get_portfolio_control_stages_query(
     assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
-    assert "pipeline_stage_state.status = 'FAILED'" in compiled
+    assert "upper(trim(pipeline_stage_state.status)) = 'FAILED'" in compiled
     assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
-    assert "CASE WHEN (pipeline_stage_state.status IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
+    assert (
+        "CASE WHEN (upper(trim(pipeline_stage_state.status)) "
+        "IN ('FAILED', 'REQUIRES_REPLAY'))"
+        in compiled
+    )
     assert "pipeline_stage_state.business_date DESC" in compiled
     assert "LIMIT 10 OFFSET 1" in compiled
 
@@ -1594,7 +1647,7 @@ async def test_get_reprocessing_keys_count_with_filters(
     value = await repository.get_reprocessing_keys_count(
         portfolio_id="P1",
         status="REPROCESSING",
-        security_id="SEC-US-IBM",
+        security_id=" SEC-US-IBM ",
         watermark_date=date(2025, 8, 1),
     )
 
@@ -1602,8 +1655,8 @@ async def test_get_reprocessing_keys_count_with_filters(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in compiled.lower()
-    assert "position_state.status = 'REPROCESSING'" in compiled
-    assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+    assert "upper(trim(position_state.status)) = 'REPROCESSING'" in compiled
+    assert "trim(position_state.security_id) = 'SEC-US-IBM'" in compiled
     assert "position_state.watermark_date = '2025-08-01'" in compiled
 
 
@@ -1646,10 +1699,10 @@ async def test_get_reprocessing_keys_query(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in compiled.lower()
-    assert "position_state.status = 'REPROCESSING'" in compiled
-    assert "position_state.security_id = 'SEC-US-IBM'" in compiled
+    assert "upper(trim(position_state.status)) = 'REPROCESSING'" in compiled
+    assert "trim(position_state.security_id) = 'SEC-US-IBM'" in compiled
     assert "position_state.watermark_date = '2025-08-01'" in compiled
-    assert "CASE WHEN (position_state.status = 'REPROCESSING'" in compiled
+    assert "CASE WHEN (upper(trim(position_state.status)) = 'REPROCESSING'" in compiled
     assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "position_state.updated_at ASC" in compiled
     assert "LIMIT 7 OFFSET 3" in compiled
@@ -1698,7 +1751,7 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
-    assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
+    assert "upper(trim(reprocessing_jobs.status)) = 'PROCESSING'" in compiled
     assert "from position_history join position_state on" in compiled.lower()
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
@@ -1749,7 +1802,7 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert "anon_1.quantity > 0" in compiled
-    assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
+    assert "upper(trim(reprocessing_jobs.status)) = 'PROCESSING'" in compiled
 
 
 async def test_get_reprocessing_jobs_count_honors_as_of(

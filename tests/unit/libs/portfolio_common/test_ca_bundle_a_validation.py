@@ -4,6 +4,7 @@ from decimal import Decimal
 from portfolio_common.events import TransactionEvent
 from portfolio_common.transaction_domain import (
     CaBundleAValidationReasonCode,
+    is_ca_bundle_a_transaction_type,
     validate_ca_bundle_a_transaction,
 )
 
@@ -31,6 +32,16 @@ def _base_event(transaction_type: str = "SPIN_OFF") -> TransactionEvent:
 
 def test_validate_ca_bundle_a_happy_path_spin_off() -> None:
     issues = validate_ca_bundle_a_transaction(_base_event("SPIN_OFF"))
+    assert issues == []
+
+
+def test_is_ca_bundle_a_transaction_type_normalizes_source_control_code() -> None:
+    assert is_ca_bundle_a_transaction_type(" spin_off ") is True
+    assert is_ca_bundle_a_transaction_type(" spin_off_reversal ") is False
+
+
+def test_validate_ca_bundle_a_normalizes_transaction_type_before_classification() -> None:
+    issues = validate_ca_bundle_a_transaction(_base_event(" spin_in "))
     assert issues == []
 
 

@@ -4,6 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from src.services.ingestion_service.app.DTOs.reference_data_dto import (
+    BenchmarkDefinitionRecord,
+    BenchmarkReturnSeriesRecord,
     ClientIncomeNeedsScheduleIngestionRequest,
     ClientIncomeNeedsScheduleRecord,
     ClientRestrictionProfileIngestionRequest,
@@ -14,14 +16,19 @@ from src.services.ingestion_service.app.DTOs.reference_data_dto import (
     ClientTaxRuleSetRecord,
     DiscretionaryMandateBindingIngestionRequest,
     DiscretionaryMandateBindingRecord,
+    IndexDefinitionRecord,
+    IndexPriceSeriesRecord,
+    IndexReturnSeriesRecord,
     InstrumentEligibilityProfileIngestionRequest,
     InstrumentEligibilityProfileRecord,
     LiquidityReserveRequirementIngestionRequest,
     LiquidityReserveRequirementRecord,
+    ModelPortfolioDefinitionRecord,
     ModelPortfolioTargetIngestionRequest,
     ModelPortfolioTargetRecord,
     PlannedWithdrawalScheduleIngestionRequest,
     PlannedWithdrawalScheduleRecord,
+    RiskFreeSeriesRecord,
     SustainabilityPreferenceProfileIngestionRequest,
     SustainabilityPreferenceProfileRecord,
 )
@@ -37,6 +44,98 @@ def _target_record(**overrides: object) -> dict[str, object]:
         "max_weight": "0.1600000000",
         "target_status": "active",
         "effective_from": "2026-03-25",
+    }
+    record.update(overrides)
+    return record
+
+
+def _model_portfolio_definition(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+        "model_portfolio_version": "2026.03",
+        "display_name": "Singapore Balanced DPM Model",
+        "base_currency": "SGD",
+        "risk_profile": "balanced",
+        "mandate_type": "discretionary",
+        "effective_from": "2026-03-25",
+    }
+    record.update(overrides)
+    return record
+
+
+def _benchmark_definition(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+        "benchmark_name": "Global Balanced 60/40 Total Return",
+        "benchmark_type": "composite",
+        "benchmark_currency": "USD",
+        "return_convention": "total_return_index",
+        "effective_from": "2025-01-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _index_definition(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "index_id": "IDX_GLOBAL_EQUITY_TR",
+        "index_name": "Global Equity Total Return",
+        "index_currency": "USD",
+        "effective_from": "2026-01-01",
+    }
+    record.update(overrides)
+    return record
+
+
+def _index_price_series(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "series_id": "series_idx_global_equity_price",
+        "index_id": "IDX_GLOBAL_EQUITY_TR",
+        "series_date": "2026-01-02",
+        "index_price": "4567.1234000000",
+        "series_currency": "USD",
+        "value_convention": "official_close",
+    }
+    record.update(overrides)
+    return record
+
+
+def _index_return_series(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "series_id": "series_idx_global_equity_return",
+        "index_id": "IDX_GLOBAL_EQUITY_TR",
+        "series_date": "2026-01-02",
+        "index_return": "-0.0150000000",
+        "return_period": "1d",
+        "return_convention": "total_return_index",
+        "series_currency": "USD",
+    }
+    record.update(overrides)
+    return record
+
+
+def _benchmark_return_series(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "series_id": "series_bmk_global_balanced_return",
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+        "series_date": "2026-01-02",
+        "benchmark_return": "-0.0065000000",
+        "return_period": "1d",
+        "return_convention": "total_return_index",
+        "series_currency": "USD",
+    }
+    record.update(overrides)
+    return record
+
+
+def _risk_free_series(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "series_id": "rf_usd_sofr_3m",
+        "risk_free_curve_id": "USD_SOFR_3M",
+        "series_date": "2026-01-02",
+        "value": "0.0350000000",
+        "value_convention": "annualized_rate",
+        "series_currency": "USD",
     }
     record.update(overrides)
     return record
@@ -225,6 +324,89 @@ def _planned_withdrawal_schedule(**overrides: object) -> dict[str, object]:
     }
     record.update(overrides)
     return record
+
+
+def test_model_portfolio_definition_normalizes_base_currency() -> None:
+    record = ModelPortfolioDefinitionRecord.model_validate(
+        _model_portfolio_definition(base_currency=" sgd ")
+    )
+
+    assert record.base_currency == "SGD"
+
+
+def test_benchmark_definition_normalizes_benchmark_currency() -> None:
+    record = BenchmarkDefinitionRecord.model_validate(
+        _benchmark_definition(benchmark_currency=" usd ")
+    )
+
+    assert record.benchmark_currency == "USD"
+
+
+@pytest.mark.parametrize(
+    ("record_type", "payload", "field_name"),
+    [
+        (IndexDefinitionRecord, _index_definition(index_currency=" usd "), "index_currency"),
+        (
+            IndexPriceSeriesRecord,
+            _index_price_series(series_currency=" usd "),
+            "series_currency",
+        ),
+        (
+            IndexReturnSeriesRecord,
+            _index_return_series(series_currency=" usd "),
+            "series_currency",
+        ),
+        (
+            BenchmarkReturnSeriesRecord,
+            _benchmark_return_series(series_currency=" usd "),
+            "series_currency",
+        ),
+        (RiskFreeSeriesRecord, _risk_free_series(series_currency=" usd "), "series_currency"),
+    ],
+)
+def test_reference_market_series_records_normalize_currency(
+    record_type, payload: dict[str, object], field_name: str
+) -> None:
+    record = record_type.model_validate(payload)
+
+    assert getattr(record, field_name) == "USD"
+
+
+@pytest.mark.parametrize(
+    ("record_type", "payload", "field_name", "expected_currency"),
+    [
+        (
+            ClientTaxRuleSetRecord,
+            _tax_rule_set(threshold_amount="250000.0000", threshold_currency=" sgd "),
+            "threshold_currency",
+            "SGD",
+        ),
+        (
+            ClientIncomeNeedsScheduleRecord,
+            _income_needs_schedule(currency=" sgd "),
+            "currency",
+            "SGD",
+        ),
+        (
+            LiquidityReserveRequirementRecord,
+            _liquidity_reserve_requirement(currency=" sgd "),
+            "currency",
+            "SGD",
+        ),
+        (
+            PlannedWithdrawalScheduleRecord,
+            _planned_withdrawal_schedule(currency=" sgd "),
+            "currency",
+            "SGD",
+        ),
+    ],
+)
+def test_private_banking_amount_currency_records_normalize_currency(
+    record_type, payload: dict[str, object], field_name: str, expected_currency: str
+) -> None:
+    record = record_type.model_validate(payload)
+
+    assert getattr(record, field_name) == expected_currency
 
 
 def test_model_portfolio_target_record_validates_target_band_order() -> None:

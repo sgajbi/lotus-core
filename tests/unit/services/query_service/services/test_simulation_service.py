@@ -306,6 +306,74 @@ async def test_projected_positions_adds_new_security_from_change(mock_dependenci
     assert response.positions[0].cost_basis_local == Decimal("0")
 
 
+async def test_projected_positions_normalizes_security_ids_for_projection(
+    mock_dependencies,
+):
+    repo, position_repo, instrument_repo = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio.return_value = [
+        (
+            SimpleNamespace(
+                security_id=" SEC_AAPL_US ",
+                quantity=100,
+                cost_basis=1000,
+                cost_basis_local=1000,
+                date=datetime(2025, 9, 11).date(),
+            ),
+            SimpleNamespace(name="Apple", asset_class="Equity"),
+            SimpleNamespace(status="CURRENT"),
+        )
+    ]
+    position_repo.get_latest_position_history_by_portfolio.return_value = []
+    repo.get_changes.return_value = [
+        SimpleNamespace(
+            change_id="C1",
+            session_id="S1",
+            portfolio_id="P1",
+            security_id=" SEC_AAPL_US ",
+            transaction_type="BUY",
+            quantity=10,
+            amount=None,
+            price=None,
+            currency="USD",
+            effective_date=None,
+            change_metadata=None,
+            created_at=datetime.now(timezone.utc),
+        ),
+        SimpleNamespace(
+            change_id="C2",
+            session_id="S1",
+            portfolio_id="P1",
+            security_id=" SEC_NEW_US ",
+            transaction_type="BUY",
+            quantity=5,
+            amount=None,
+            price=None,
+            currency="USD",
+            effective_date=None,
+            change_metadata=None,
+            created_at=datetime.now(timezone.utc),
+        ),
+    ]
+    instrument_repo.get_by_security_ids.return_value = [
+        SimpleNamespace(security_id=" SEC_AAPL_US ", name="Apple", asset_class="Equity"),
+        SimpleNamespace(security_id=" SEC_NEW_US ", name="New Security", asset_class="Bond"),
+    ]
+
+    service = SimulationService(AsyncMock())
+    response = await service.get_projected_positions("S1")
+
+    assert [position.security_id for position in response.positions] == [
+        "SEC_AAPL_US",
+        "SEC_NEW_US",
+    ]
+    assert response.positions[0].proposed_quantity == Decimal("110")
+    assert response.positions[1].instrument_name == "New Security"
+    assert response.positions[1].delta_quantity == Decimal("5")
+    instrument_repo.get_by_security_ids.assert_awaited_once_with(
+        ["SEC_AAPL_US", "SEC_NEW_US"]
+    )
+
+
 async def test_projected_positions_filters_non_positive_after_changes(mock_dependencies):
     repo, _, instrument_repo = mock_dependencies
     repo.get_changes.return_value = [

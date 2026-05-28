@@ -52,6 +52,8 @@ from ..dtos.analytics_input_dto import (
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.analytics_export_repository import AnalyticsExportRepository
 from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRepository
+from ..repositories.currency_codes import normalize_currency_code
+from ..repositories.identifier_normalization import normalize_security_id
 from ..settings import load_query_service_settings
 
 
@@ -158,11 +160,13 @@ class AnalyticsTimeseriesService:
         start_date: date,
         end_date: date,
     ) -> dict[date, Decimal]:
-        if portfolio_currency == reporting_currency:
+        normalized_portfolio_currency = normalize_currency_code(portfolio_currency)
+        normalized_reporting_currency = normalize_currency_code(reporting_currency)
+        if normalized_portfolio_currency == normalized_reporting_currency:
             return {}
         return await self.repo.get_fx_rates_map(
-            from_currency=portfolio_currency,
-            to_currency=reporting_currency,
+            from_currency=normalized_portfolio_currency,
+            to_currency=normalized_reporting_currency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -175,14 +179,20 @@ class AnalyticsTimeseriesService:
         start_date: date,
         end_date: date,
     ) -> dict[str, dict[date, Decimal]]:
+        normalized_portfolio_currency = normalize_currency_code(portfolio_currency)
+        normalized_position_currencies = {
+            normalize_currency_code(position_currency)
+            for position_currency in position_currencies
+            if position_currency
+        }
         rates: dict[str, dict[date, Decimal]] = {}
-        for position_currency in sorted(position_currencies):
-            if not position_currency or position_currency == portfolio_currency:
+        for position_currency in sorted(normalized_position_currencies):
+            if position_currency == normalized_portfolio_currency:
                 rates[position_currency] = {}
                 continue
             rates[position_currency] = await self.repo.get_fx_rates_map(
                 from_currency=position_currency,
-                to_currency=portfolio_currency,
+                to_currency=normalized_portfolio_currency,
                 start_date=start_date,
                 end_date=end_date,
             )
@@ -207,7 +217,7 @@ class AnalyticsTimeseriesService:
         )
         return CashFlowObservation(
             amount=amount,
-            timing=str(row.timing).lower(),
+            timing=str(row.timing).strip().lower(),
             cash_flow_type=cash_flow_type,
             flow_scope=flow_scope,
             source_classification=str(row.classification),
@@ -221,16 +231,19 @@ class AnalyticsTimeseriesService:
         portfolio_currency: str,
         fx_rates: dict[date, Decimal],
     ) -> dict[date, list[CashFlowObservation]]:
+        normalized_reporting_currency = normalize_currency_code(reporting_currency)
+        normalized_portfolio_currency = normalize_currency_code(portfolio_currency)
         flows_by_date: dict[date, list[CashFlowObservation]] = defaultdict(list)
         for row in cashflow_rows:
             conversion_rate = Decimal("1")
-            if reporting_currency != portfolio_currency:
+            if normalized_reporting_currency != normalized_portfolio_currency:
                 valuation_date = row.valuation_date
                 if valuation_date not in fx_rates:
                     raise AnalyticsInputError(
                         "INSUFFICIENT_DATA",
                         "Missing FX rate for "
-                        f"{portfolio_currency}/{reporting_currency} on {valuation_date}.",
+                        f"{normalized_portfolio_currency}/{normalized_reporting_currency} "
+                        f"on {valuation_date}.",
                     )
                 conversion_rate = fx_rates[valuation_date]
             flows_by_date[row.valuation_date].append(
@@ -253,7 +266,7 @@ class AnalyticsTimeseriesService:
                     amount=amount,
                     classification=str(row.classification),
                 )
-            flows_by_key[(str(row.security_id), row.valuation_date)].append(
+            flows_by_key[(normalize_security_id(row.security_id), row.valuation_date)].append(
                 self._build_cash_flow_observation(row, amount=amount)
             )
         return flows_by_key
@@ -268,8 +281,8 @@ class AnalyticsTimeseriesService:
 
     @staticmethod
     def _is_cash_book_position(row: object) -> bool:
-        asset_class = str(getattr(row, "asset_class", "") or "").casefold()
-        security_id = str(getattr(row, "security_id", "") or "").upper()
+        asset_class = str(getattr(row, "asset_class", "") or "").strip().casefold()
+        security_id = str(getattr(row, "security_id", "") or "").strip().upper()
         return asset_class == "cash" or security_id.startswith("CASH_")
 
     @staticmethod
@@ -330,6 +343,8 @@ class AnalyticsTimeseriesService:
         cursor_date: date | None,
         request_scope_fingerprint: str,
     ) -> tuple[list[PortfolioTimeseriesObservation], dict[str, int], list[date], int, str | None]:
+        portfolio_currency = normalize_currency_code(portfolio_currency)
+        reporting_currency = normalize_currency_code(reporting_currency)
         snapshot_epoch = await self.repo.get_position_snapshot_epoch(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
@@ -382,7 +397,13 @@ class AnalyticsTimeseriesService:
         )
         position_cashflow_rows = await self.repo.list_position_cashflow_rows(
             portfolio_id=portfolio_id,
-            security_ids=sorted({str(row.security_id) for row in position_rows}),
+            security_ids=sorted(
+                {
+                    security_id
+                    for row in position_rows
+                    if (security_id := normalize_security_id(row.security_id))
+                }
+            ),
             valuation_dates=page_dates,
             snapshot_epoch=snapshot_epoch,
         )
@@ -396,9 +417,13 @@ class AnalyticsTimeseriesService:
         observations: list[PortfolioTimeseriesObservation] = []
         quality_distribution: dict[str, int] = {}
         previous_eod_by_security = {
-            str(row.security_id): Decimal(row.eod_market_value)
+            normalize_security_id(row.security_id): Decimal(row.eod_market_value)
             for row in sorted(
-                position_rows, key=lambda item: (item.valuation_date, item.security_id)
+                position_rows,
+                key=lambda item: (
+                    item.valuation_date,
+                    normalize_security_id(item.security_id),
+                ),
             )
             if row.valuation_date < page_dates[0]
         }
@@ -420,7 +445,11 @@ class AnalyticsTimeseriesService:
             has_portfolio_external_flow = self._has_external_flow(portfolio_cashflows)
             current_eod_by_security: dict[str, Decimal] = {}
             for row in row_buckets.get(valuation_date, []):
-                position_currency = str(getattr(row, "position_currency", "") or "")
+                position_currency = (
+                    normalize_currency_code(str(getattr(row, "position_currency")))
+                    if getattr(row, "position_currency", None)
+                    else ""
+                )
                 position_to_portfolio_rate = Decimal("1")
                 if position_currency and position_currency != portfolio_currency:
                     rate_map = position_to_portfolio_rates.get(position_currency, {})
@@ -432,11 +461,13 @@ class AnalyticsTimeseriesService:
                         )
                     position_to_portfolio_rate = rate_map[valuation_date]
                 cash_flows = position_cashflows_by_key.get(
-                    (str(row.security_id), valuation_date), []
+                    (normalize_security_id(row.security_id), valuation_date), []
                 )
                 beginning_market_value_position = self._effective_beginning_market_value(
                     row,
-                    previous_eod_market_value=previous_eod_by_security.get(str(row.security_id)),
+                    previous_eod_market_value=previous_eod_by_security.get(
+                        normalize_security_id(row.security_id)
+                    ),
                     cash_flows=cash_flows,
                     has_portfolio_external_flow=has_portfolio_external_flow,
                 )
@@ -446,7 +477,9 @@ class AnalyticsTimeseriesService:
                 ending_market_value += (
                     Decimal(row.eod_market_value) * position_to_portfolio_rate * conversion_rate
                 )
-                current_eod_by_security[str(row.security_id)] = Decimal(row.eod_market_value)
+                current_eod_by_security[normalize_security_id(row.security_id)] = Decimal(
+                    row.eod_market_value
+                )
                 if int(row.epoch) > 0:
                     quality = "restated"
             previous_eod_by_security = current_eod_by_security
@@ -483,6 +516,7 @@ class AnalyticsTimeseriesService:
         portfolio = await self.repo.get_portfolio(portfolio_id)
         if portfolio is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
 
         resolved_window = self._resolve_window(
             as_of_date=request.as_of_date,
@@ -490,7 +524,9 @@ class AnalyticsTimeseriesService:
             period=request.period,
             inception_date=portfolio.open_date,
         )
-        reporting_currency = request.reporting_currency or portfolio.base_currency
+        reporting_currency = normalize_currency_code(
+            str(request.reporting_currency or portfolio_currency)
+        )
         request_scope_fingerprint = self._request_fingerprint(
             {
                 "endpoint": "portfolio-timeseries",
@@ -526,7 +562,7 @@ class AnalyticsTimeseriesService:
                 next_page_token,
             ) = await self._portfolio_observation_rows(
                 portfolio_id=portfolio_id,
-                portfolio_currency=portfolio.base_currency,
+                portfolio_currency=portfolio_currency,
                 reporting_currency=reporting_currency,
                 resolved_window=resolved_window,
                 page_size=request.page.page_size,
@@ -559,7 +595,7 @@ class AnalyticsTimeseriesService:
                 snapshot_epoch=snapshot_epoch,
             )
             fx_rates = await self._get_conversion_rates(
-                portfolio_currency=portfolio.base_currency,
+                portfolio_currency=portfolio_currency,
                 reporting_currency=reporting_currency,
                 start_date=resolved_window.start_date,
                 end_date=resolved_window.end_date,
@@ -576,7 +612,7 @@ class AnalyticsTimeseriesService:
                 portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
                     portfolio_cashflow_rows,
                     reporting_currency=reporting_currency,
-                    portfolio_currency=portfolio.base_currency,
+                    portfolio_currency=portfolio_currency,
                     fx_rates=fx_rates,
                 )
 
@@ -585,12 +621,12 @@ class AnalyticsTimeseriesService:
             for row in rows_page:
                 valuation_date = row.valuation_date
                 conversion_rate = Decimal("1")
-                if reporting_currency != portfolio.base_currency:
+                if reporting_currency != portfolio_currency:
                     if valuation_date not in fx_rates:
                         raise AnalyticsInputError(
                             "INSUFFICIENT_DATA",
                             "Missing FX rate for "
-                            f"{portfolio.base_currency}/{reporting_currency} on {valuation_date}.",
+                            f"{portfolio_currency}/{reporting_currency} on {valuation_date}.",
                         )
                     conversion_rate = fx_rates[valuation_date]
                 quality = self._quality_status_from_epoch(int(row.epoch))
@@ -642,7 +678,7 @@ class AnalyticsTimeseriesService:
         generated_at = datetime.now(UTC)
         return PortfolioAnalyticsTimeseriesResponse(
             portfolio_id=portfolio_id,
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             portfolio_open_date=portfolio.open_date,
             portfolio_close_date=portfolio.close_date,
@@ -688,13 +724,16 @@ class AnalyticsTimeseriesService:
         portfolio = await self.repo.get_portfolio(portfolio_id)
         if portfolio is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
         resolved_window = self._resolve_window(
             as_of_date=request.as_of_date,
             window=request.window,
             period=request.period,
             inception_date=portfolio.open_date,
         )
-        reporting_currency = request.reporting_currency or portfolio.base_currency
+        reporting_currency = normalize_currency_code(
+            str(request.reporting_currency or portfolio_currency)
+        )
         request_scope_fingerprint = self._request_fingerprint(
             {
                 "endpoint": "position-timeseries",
@@ -713,7 +752,7 @@ class AnalyticsTimeseriesService:
             }
         )
         fx_rates = await self._get_conversion_rates(
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
@@ -757,7 +796,7 @@ class AnalyticsTimeseriesService:
         )
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
             position_currencies={str(row.position_currency or "") for row in rows},
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
         )
@@ -772,7 +811,13 @@ class AnalyticsTimeseriesService:
         ):
             position_cashflow_rows = await self.repo.list_position_cashflow_rows(
                 portfolio_id=portfolio_id,
-                security_ids=sorted({str(row.security_id) for row in rows_page}),
+                security_ids=sorted(
+                    {
+                        security_id
+                        for row in rows_page
+                        if (security_id := normalize_security_id(row.security_id))
+                    }
+                ),
                 valuation_dates=sorted({row.valuation_date for row in rows_page}),
                 snapshot_epoch=snapshot_epoch,
             )
@@ -786,8 +831,8 @@ class AnalyticsTimeseriesService:
             )
             portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
                 portfolio_cashflow_rows,
-                reporting_currency=portfolio.base_currency,
-                portfolio_currency=portfolio.base_currency,
+                reporting_currency=portfolio_currency,
+                portfolio_currency=portfolio_currency,
                 fx_rates={},
             )
 
@@ -799,11 +844,17 @@ class AnalyticsTimeseriesService:
             previous_rows = await self.repo.list_latest_position_timeseries_before(
                 portfolio_id=portfolio_id,
                 before_date=first_page_date,
-                security_ids=sorted({str(row.security_id) for row in rows_page}),
+                security_ids=sorted(
+                    {
+                        security_id
+                        for row in rows_page
+                        if (security_id := normalize_security_id(row.security_id))
+                    }
+                ),
                 snapshot_epoch=snapshot_epoch,
             )
             previous_eod_by_security = {
-                str(row.security_id): Decimal(row.eod_market_value)
+                normalize_security_id(row.security_id): Decimal(row.eod_market_value)
                 for row in previous_rows
                 if row.valuation_date == first_page_date - timedelta(days=1)
             }
@@ -819,36 +870,44 @@ class AnalyticsTimeseriesService:
 
             quality = self._quality_status_from_epoch(int(row.epoch))
             quality_distribution[quality] = quality_distribution.get(quality, 0) + 1
-            position_currency = row.position_currency or portfolio.base_currency
+            position_currency = (
+                normalize_currency_code(str(row.position_currency))
+                if row.position_currency
+                else portfolio_currency
+            )
             position_to_portfolio_rate = Decimal("1")
-            if position_currency != portfolio.base_currency:
+            if position_currency != portfolio_currency:
                 rate_map = position_to_portfolio_rates.get(position_currency, {})
                 if row.valuation_date not in rate_map:
                     raise AnalyticsInputError(
                         "INSUFFICIENT_DATA",
                         "Missing FX rate for "
-                        f"{position_currency}/{portfolio.base_currency} on {row.valuation_date}.",
+                        f"{position_currency}/{portfolio_currency} on {row.valuation_date}.",
                     )
                 position_to_portfolio_rate = rate_map[row.valuation_date]
 
             portfolio_to_reporting_rate = Decimal("1")
-            if reporting_currency != portfolio.base_currency:
+            if reporting_currency != portfolio_currency:
                 if row.valuation_date not in fx_rates:
                     raise AnalyticsInputError(
                         "INSUFFICIENT_DATA",
                         "Missing FX rate for "
-                        f"{portfolio.base_currency}/{reporting_currency} on {row.valuation_date}.",
+                        f"{portfolio_currency}/{reporting_currency} on {row.valuation_date}.",
                     )
                 portfolio_to_reporting_rate = fx_rates[row.valuation_date]
 
             cash_flows = (
-                position_cashflows_by_key.get((str(row.security_id), row.valuation_date), [])
+                position_cashflows_by_key.get(
+                    (normalize_security_id(row.security_id), row.valuation_date), []
+                )
                 if request.include_cash_flows
                 else []
             )
             beginning_market_value_position = self._effective_beginning_market_value(
                 row,
-                previous_eod_market_value=previous_eod_by_security.get(str(row.security_id)),
+                previous_eod_market_value=previous_eod_by_security.get(
+                    normalize_security_id(row.security_id)
+                ),
                 cash_flows=cash_flows,
                 has_portfolio_external_flow=self._has_external_flow(
                     portfolio_cashflows_by_date.get(row.valuation_date, [])
@@ -862,15 +921,16 @@ class AnalyticsTimeseriesService:
                 ending_market_value_position * position_to_portfolio_rate
             )
 
-            position_id = f"{portfolio_id}:{row.security_id}"
+            security_id = normalize_security_id(row.security_id)
+            position_id = f"{portfolio_id}:{security_id}"
             dimensions = {dim: getattr(row, dim, None) for dim in request.dimensions}
 
             response_rows.append(
                 PositionTimeseriesRow(
                     position_id=position_id,
-                    security_id=row.security_id,
+                    security_id=security_id,
                     valuation_date=row.valuation_date,
-                    position_currency=row.position_currency,
+                    position_currency=position_currency,
                     cash_flow_currency=position_currency,
                     position_to_portfolio_fx_rate=position_to_portfolio_rate,
                     portfolio_to_reporting_fx_rate=portfolio_to_reporting_rate,
@@ -890,7 +950,7 @@ class AnalyticsTimeseriesService:
                     cash_flows=cash_flows,
                 )
             )
-            current_eod_by_security[str(row.security_id)] = ending_market_value_position
+            current_eod_by_security[security_id] = ending_market_value_position
 
         next_page_token: str | None = None
         if has_more and rows_page:
@@ -898,7 +958,7 @@ class AnalyticsTimeseriesService:
             next_page_token = self._encode_page_token(
                 {
                     "valuation_date": last.valuation_date.isoformat(),
-                    "security_id": last.security_id,
+                    "security_id": normalize_security_id(last.security_id),
                     "snapshot_epoch": snapshot_epoch,
                     "scope_fingerprint": request_scope_fingerprint,
                 }
@@ -924,7 +984,7 @@ class AnalyticsTimeseriesService:
         generated_at = datetime.now(UTC)
         return PositionAnalyticsTimeseriesResponse(
             portfolio_id=portfolio_id,
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             resolved_window=resolved_window,
             frequency=request.frequency,
@@ -1072,19 +1132,27 @@ class AnalyticsTimeseriesService:
     def _export_result_endpoint(job_id: str) -> str:
         return f"/integration/exports/analytics-timeseries/jobs/{job_id}/result"
 
+    @staticmethod
+    def _normalize_export_job_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        normalized_status = status.strip().lower()
+        return normalized_status or None
+
     @classmethod
     def _to_export_response(
         cls, row: object, *, disposition: str = "status_lookup"
     ) -> AnalyticsExportJobResponse:
+        normalized_status = cls._normalize_export_job_status(row.status)
         return AnalyticsExportJobResponse(
             job_id=row.job_id,
             dataset_type=row.dataset_type,
             portfolio_id=row.portfolio_id,
-            status=row.status,
+            status=normalized_status or row.status,
             disposition=disposition,
             lifecycle_mode=cls._EXPORT_LIFECYCLE_MODE,
             request_fingerprint=row.request_fingerprint,
-            result_available=row.status == "completed",
+            result_available=normalized_status == "completed",
             result_endpoint=cls._export_result_endpoint(row.job_id),
             result_format=row.result_format,
             compression=row.compression,
@@ -1122,9 +1190,10 @@ class AnalyticsTimeseriesService:
                 dataset_type=request.dataset_type,
             )
             if existing is not None:
-                if existing.status == "completed":
+                existing_status = self._normalize_export_job_status(existing.status)
+                if existing_status == "completed":
                     return existing, True
-                if existing.status in {"accepted", "running"}:
+                if existing_status in {"accepted", "running"}:
                     stale_threshold = datetime.now(UTC) - timedelta(
                         minutes=self._analytics_export_stale_timeout_minutes
                     )
@@ -1191,7 +1260,11 @@ class AnalyticsTimeseriesService:
             request_fingerprint=request_fingerprint,
         )
         if reused:
-            disposition = "reused_completed" if row.status == "completed" else "reused_inflight"
+            disposition = (
+                "reused_completed"
+                if self._normalize_export_job_status(row.status) == "completed"
+                else "reused_inflight"
+            )
             return self._to_export_response(row, disposition=disposition)
 
         job_id = row.job_id
@@ -1264,7 +1337,7 @@ class AnalyticsTimeseriesService:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if row.status != "completed":
+        if self._normalize_export_job_status(row.status) != "completed":
             raise AnalyticsInputError(
                 "UNSUPPORTED_CONFIGURATION",
                 "Export job is not completed yet; result unavailable.",
@@ -1279,7 +1352,7 @@ class AnalyticsTimeseriesService:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if row.status != "completed":
+        if self._normalize_export_job_status(row.status) != "completed":
             raise AnalyticsInputError(
                 "UNSUPPORTED_CONFIGURATION",
                 "Export job is not completed yet; result unavailable.",

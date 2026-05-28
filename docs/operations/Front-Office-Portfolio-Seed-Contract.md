@@ -57,7 +57,7 @@ Recommended example:
 - client id: `CIF_SG_000184`
 - portfolio display name: `Global Balanced Mandate`
 - client display name: `Anjali Raman`
-- relationship manager id: `RM_SG_001`
+- advisor id: `advisor_sg_001`
 - booking centre: `Singapore`
 - strategy: global balanced discretionary mandate
 - portfolio type: `Discretionary`

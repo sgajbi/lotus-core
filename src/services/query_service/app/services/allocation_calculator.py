@@ -64,6 +64,25 @@ ALLOCATION_DIMENSION_ACCESSORS: dict[AllocationDimension, AllocationAccessor] = 
     ),
 }
 
+UPPERCASE_ALLOCATION_DIMENSIONS: set[AllocationDimension] = {
+    "asset_class",
+    "currency",
+    "sector",
+    "country",
+    "rating",
+    "issuer_id",
+    "ultimate_parent_issuer_id",
+}
+
+
+def _allocation_bucket_key(dimension: AllocationDimension, raw_value: object | None) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        return UNCLASSIFIED_BUCKET
+    if dimension in UPPERCASE_ALLOCATION_DIMENSIONS:
+        return value.upper()
+    return value
+
 
 def calculate_allocation_views(
     *,
@@ -85,7 +104,7 @@ def calculate_allocation_views(
         for dimension in dimensions:
             accessor = ALLOCATION_DIMENSION_ACCESSORS[dimension]
             raw_value = accessor(row.instrument, row.snapshot)
-            bucket_key = str(raw_value or UNCLASSIFIED_BUCKET)
+            bucket_key = _allocation_bucket_key(dimension, raw_value)
             views_payload[dimension][bucket_key] += row.market_value_reporting_currency
             views_position_counts[dimension][bucket_key] += 1
 

@@ -188,7 +188,7 @@ async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> No
     assert (
         CoreSnapshotService._snapshot_data_quality_status(
             freshness=CoreSnapshotFreshnessMetadata(
-                freshness_status="CURRENT_SNAPSHOT",
+                freshness_status=" current_snapshot ",
                 baseline_source="position_state",
                 snapshot_timestamp=datetime(2026, 2, 27, 10, 5, tzinfo=UTC),
                 snapshot_epoch=7,
@@ -212,7 +212,7 @@ async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> No
     assert (
         CoreSnapshotService._snapshot_data_quality_status(
             freshness=CoreSnapshotFreshnessMetadata(
-                freshness_status="HISTORICAL_FALLBACK",
+                freshness_status=" historical_fallback ",
                 baseline_source="position_history",
                 fallback_reason="NO_CURRENT_POSITION_STATE_ROWS",
             ),
@@ -230,6 +230,31 @@ async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> No
             baseline_count=0,
         )
         == UNKNOWN
+    )
+
+
+async def test_core_snapshot_canonicalizes_valuation_context_currencies(mock_dependencies):
+    (_, portfolio_repo, _, _, fx_repo, _) = mock_dependencies
+    portfolio_repo.get_by_id.return_value = SimpleNamespace(
+        portfolio_id="PORT_001",
+        base_currency=" usd ",
+    )
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        reporting_currency=" sgd ",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.PORTFOLIO_TOTALS],
+    )
+
+    response = await service.get_core_snapshot("PORT_001", request)
+
+    assert response.valuation_context.portfolio_currency == "USD"
+    assert response.valuation_context.reporting_currency == "SGD"
+    fx_repo.get_fx_rates.assert_awaited_once_with(
+        from_currency="USD",
+        to_currency="SGD",
+        end_date=date(2026, 2, 27),
     )
 
 
@@ -256,6 +281,20 @@ async def test_get_instrument_enrichment_bulk_preserves_order_and_unknowns(mock_
     assert records[1].liquidity_tier is None
     assert records[2].issuer_id == "ISSUER_SEC_MSFT_US"
     assert records[2].liquidity_tier == "L2"
+
+
+async def test_get_instrument_enrichment_bulk_normalizes_returned_security_ids(
+    mock_dependencies,
+):
+    (_, _, _, _, _, instrument_repo) = mock_dependencies
+    instrument_repo.get_by_security_ids.return_value = [_instrument(" SEC_AAPL_US ")]
+
+    service = CoreSnapshotService(AsyncMock())
+    records = await service.get_instrument_enrichment_bulk([" SEC_AAPL_US "])
+
+    assert records[0].security_id == "SEC_AAPL_US"
+    assert records[0].issuer_id == "ISSUER_ SEC_AAPL_US "
+    instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC_AAPL_US"])
 
 
 async def test_core_snapshot_simulation_success(mock_dependencies):
@@ -289,6 +328,30 @@ async def test_core_snapshot_simulation_success(mock_dependencies):
     assert response.sections.positions_projected[0].quantity == Decimal("15")
     assert response.tenant_id == "default"
     assert response.policy_version == "snapshot.policy.inline.default"
+
+
+async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_dependencies):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        (
+            _snapshot_row(" SEC_PADDED ", Decimal("3"), Decimal("30"), Decimal("30")),
+            _instrument("SEC_PADDED"),
+            SimpleNamespace(status="CURRENT", epoch=7),
+        )
+    ]
+    service = CoreSnapshotService(AsyncMock())
+
+    rows, _source = await service._resolve_baseline_positions(
+        portfolio_id="PORT_001",
+        as_of_date=date(2026, 2, 27),
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    assert list(rows) == ["SEC_PADDED"]
+    assert rows["SEC_PADDED"]["security_id"] == "SEC_PADDED"
+    assert rows["SEC_PADDED"]["position_record"].security_id == "SEC_PADDED"
 
 
 async def test_core_snapshot_rejects_projected_sections_in_baseline_mode(mock_dependencies):
@@ -449,9 +512,11 @@ async def test_change_quantity_effect_rules(txn_type, quantity, amount, expected
 
 
 async def test_get_fx_rate_or_raise_identity_currency(mock_dependencies):
+    (_, _, _, _, fx_repo, _) = mock_dependencies
     service = CoreSnapshotService(AsyncMock())
-    rate = await service._get_fx_rate_or_raise("USD", "USD", date(2026, 2, 27))
+    rate = await service._get_fx_rate_or_raise(" usd ", "USD", date(2026, 2, 27))
     assert rate == Decimal("1")
+    fx_repo.get_fx_rates.assert_not_awaited()
 
 
 async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencies):
@@ -570,7 +635,7 @@ async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dep
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
         (
             _snapshot_row("SEC_CASH", Decimal("1"), Decimal("1"), Decimal("1")),
-            _instrument("SEC_CASH", "USD", "CASH"),
+            _instrument("SEC_CASH", "USD", " cash "),
             SimpleNamespace(status="CURRENT"),
         ),
         (
@@ -612,6 +677,58 @@ async def test_resolve_projected_positions_handles_non_positive_quantity_branch(
         include_cash=True,
     )
     assert projected["SEC_NEG"]["market_value_base"] == Decimal("0")
+
+
+async def test_resolve_projected_positions_normalizes_change_security_ids(mock_dependencies):
+    (_, _, simulation_repo, _, _, instrument_repo) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id=" SEC_EXISTING ",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        ),
+        SimpleNamespace(
+            security_id=" SEC_NEW ",
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            amount=None,
+        ),
+    ]
+    instrument_repo.get_by_security_ids.return_value = [_instrument(" SEC_NEW ")]
+    service = CoreSnapshotService(AsyncMock())
+
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        reporting_currency="USD",
+        baseline_positions={
+            "SEC_EXISTING": {
+                "security_id": "SEC_EXISTING",
+                "quantity": Decimal("3"),
+                "market_value_base": Decimal("30"),
+                "market_value_local": Decimal("30"),
+                "currency": "USD",
+                "instrument_name": "Existing",
+                "asset_class": "EQUITY",
+                "sector": None,
+                "country_of_risk": None,
+                "isin": None,
+                "issuer_id": None,
+                "issuer_name": None,
+                "ultimate_parent_issuer_id": None,
+                "ultimate_parent_issuer_name": None,
+                "liquidity_tier": None,
+            }
+        },
+        include_zero=True,
+        include_cash=True,
+    )
+
+    assert projected["SEC_EXISTING"]["quantity"] == Decimal("5")
+    assert projected["SEC_NEW"]["security_id"] == "SEC_NEW"
+    instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC_NEW"])
 
 
 async def test_resolve_projected_positions_prices_new_security_with_fx(mock_dependencies):
@@ -665,7 +782,7 @@ async def test_resolve_projected_positions_filters_cash_and_zero_quantity(mock_d
                 "market_value_local": Decimal("1"),
                 "currency": "USD",
                 "instrument_name": "Cash",
-                "asset_class": "CASH",
+                "asset_class": " cash ",
                 "sector": None,
                 "country_of_risk": None,
                 "isin": None,

@@ -7,6 +7,7 @@ from .cash_entry_mode import (
     is_upstream_provided_cash_entry_mode,
     normalize_cash_entry_mode,
 )
+from .control_code_normalization import normalize_transaction_control_code
 from .dividend_models import DividendCanonicalTransaction
 from .dividend_reason_codes import DividendValidationReasonCode
 
@@ -30,7 +31,7 @@ def validate_dividend_transaction(
 ) -> list[DividendValidationIssue]:
     issues: list[DividendValidationIssue] = []
 
-    if txn.transaction_type.upper() != "DIVIDEND":
+    if normalize_transaction_control_code(txn.transaction_type) != "DIVIDEND":
         issues.append(
             DividendValidationIssue(
                 code=DividendValidationReasonCode.INVALID_TRANSACTION_TYPE,

@@ -59,7 +59,7 @@ async def test_get_transactions_security_drill_down_defaults_to_latest_first(
 ):
     await repository.get_transactions(
         portfolio_id="P1",
-        security_id="SEC-HOLDING-1",
+        security_id=" SEC-HOLDING-1 ",
         skip=0,
         limit=25,
     )
@@ -67,7 +67,7 @@ async def test_get_transactions_security_drill_down_defaults_to_latest_first(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "transactions.security_id = 'SEC-HOLDING-1'" in compiled_query
+    assert "trim(transactions.security_id) = 'SEC-HOLDING-1'" in compiled_query
     assert "ORDER BY transactions.transaction_date DESC" in compiled_query
 
 
@@ -130,7 +130,7 @@ async def test_get_transactions_with_all_filters(
         portfolio_id="P1",
         skip=0,
         limit=100,
-        security_id="S1",
+        security_id=" S1 ",
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
     )
@@ -139,7 +139,7 @@ async def test_get_transactions_with_all_filters(
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "transactions.portfolio_id = 'P1'" in compiled_query
-    assert "transactions.security_id = 'S1'" in compiled_query
+    assert "trim(transactions.security_id) = 'S1'" in compiled_query
     assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
 
@@ -213,7 +213,7 @@ async def test_get_transactions_count(
     WHEN get_transactions_count is called
     THEN it should build the correct count query and return the scalar result.
     """
-    count = await repository.get_transactions_count(portfolio_id="P1", security_id="S1")
+    count = await repository.get_transactions_count(portfolio_id="P1", security_id=" S1 ")
 
     assert count == 10
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -221,7 +221,7 @@ async def test_get_transactions_count(
 
     assert "count(transactions.id)" in compiled_query.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled_query
-    assert "transactions.security_id = 'S1'" in compiled_query
+    assert "trim(transactions.security_id) = 'S1'" in compiled_query
 
 
 async def test_get_transactions_count_returns_zero_when_scalar_none(
@@ -336,7 +336,10 @@ async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loa
     assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
-    assert "transactions.security_id IN ('EQ_US_AAPL', 'FI_US_TREASURY_10Y')" in compiled_query
+    assert (
+        "trim(transactions.security_id) IN ('EQ_US_AAPL', 'FI_US_TREASURY_10Y')"
+        in compiled_query
+    )
     assert "transactions.transaction_type IN ('BUY', 'SELL')" in compiled_query
     assert "LEFT OUTER JOIN transaction_costs" in compiled_query
     assert "ORDER BY transactions.security_id ASC" in compiled_query
@@ -409,7 +412,7 @@ async def test_get_latest_fx_rate_returns_identity_for_same_currency(
     mock_db_session: AsyncMock,
 ):
     rate = await repository.get_latest_fx_rate(
-        from_currency="USD",
+        from_currency=" usd ",
         to_currency="USD",
         as_of_date=date(2026, 4, 30),
     )
@@ -427,16 +430,16 @@ async def test_get_latest_fx_rate_queries_latest_available_rate(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     rate = await repository.get_latest_fx_rate(
-        from_currency="USD",
-        to_currency="SGD",
+        from_currency=" usd ",
+        to_currency=" sgd ",
         as_of_date=date(2026, 4, 30),
     )
 
     assert rate == Decimal("1.36")
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "fx_rates.from_currency = 'USD'" in compiled_query
-    assert "fx_rates.to_currency = 'SGD'" in compiled_query
+    assert "upper(trim(fx_rates.from_currency)) = 'USD'" in compiled_query
+    assert "upper(trim(fx_rates.to_currency)) = 'SGD'" in compiled_query
     assert "fx_rates.rate_date <= '2026-04-30'" in compiled_query
     assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
 
@@ -504,7 +507,7 @@ async def test_get_latest_evidence_timestamp_applies_transaction_window_filters(
 
     result = await repository.get_latest_evidence_timestamp(
         portfolio_id="P1",
-        security_id="S1",
+        security_id=" S1 ",
         transaction_type="FX_FORWARD",
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
@@ -516,7 +519,7 @@ async def test_get_latest_evidence_timestamp_applies_transaction_window_filters(
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "max(transactions.updated_at)" in compiled_query.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled_query
-    assert "transactions.security_id = 'S1'" in compiled_query
+    assert "trim(transactions.security_id) = 'S1'" in compiled_query
     assert "transactions.transaction_type = 'FX_FORWARD'" in compiled_query
     assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query

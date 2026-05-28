@@ -94,7 +94,7 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     None
 ):
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("P1", base_currency=" usd ")
     repo.get_latest_business_date.return_value = date(2026, 3, 27)
     repo.list_portfolios.return_value = [portfolio]
     repo.list_latest_snapshot_rows.return_value = [
@@ -124,6 +124,7 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     assert response.reporting_currency == "USD"
     assert response.totals.aum_reporting_currency == Decimal("150")
     assert response.totals.position_count == 2
+    assert response.portfolios[0].portfolio_currency == "USD"
     assert response.portfolios[0].aum_portfolio_currency == Decimal("150")
 
 
@@ -174,7 +175,7 @@ async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversi
 
 async def test_get_portfolio_summary_returns_historical_restated_totals() -> None:
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("P1", base_currency=" usd ")
     portfolio.portfolio_type = "DISCRETIONARY"
     portfolio.objective = "Growth"
     portfolio.risk_exposure = "BALANCED"
@@ -193,7 +194,7 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
             instrument=_instrument(
                 "CASH_USD",
                 name="USD Cash",
-                currency="USD",
+                currency=" usd ",
                 asset_class="CASH",
                 sector="CASH",
                 product_type="CASH",
@@ -205,7 +206,7 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
                 "SEC1",
                 market_value="800",
                 quantity="10",
-                valuation_status="UNVALUED",
+                valuation_status=" unvalued ",
                 snapshot_date=date(2026, 3, 27),
             ),
             instrument=_instrument("SEC1", asset_class="EQUITY"),
@@ -216,7 +217,7 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
             cash_account_id="CASH-ACC-USD-001",
             security_id="CASH_USD",
             display_name="USD Operating Cash",
-            account_currency="USD",
+            account_currency=" usd ",
         )
     ]
     repo.get_latest_cash_account_ids.return_value = {}
@@ -228,9 +229,11 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_portfolio_summary(
-            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency=" sgd ")
         )
 
+    assert response.portfolio_currency == "USD"
+    assert response.reporting_currency == "SGD"
     assert response.totals.total_market_value_portfolio_currency == Decimal("1000")
     assert response.totals.cash_balance_portfolio_currency == Decimal("200")
     assert response.totals.invested_market_value_reporting_currency == Decimal("1200.0")
@@ -353,6 +356,56 @@ async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mod
     assert response.look_through.supported is True
 
 
+async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(" FUND1 ", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        )
+    ]
+    repo.list_instrument_lookthrough_components.return_value = [
+        InstrumentLookthroughComponentRow(
+            parent_security_id=" FUND1 ",
+            component_security_id="ETF1",
+            component_weight=Decimal("1"),
+            component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+        )
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_asset_allocation(
+            AssetAllocationQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                dimensions=["asset_class"],
+                look_through_mode="prefer_look_through",
+            )
+        )
+
+    assert response.look_through.applied_mode == "prefer_look_through"
+    assert response.look_through.decomposed_position_count == 1
+    asset_class_view = next(view for view in response.views if view.dimension == "asset_class")
+    buckets = [
+        (bucket.dimension_value, bucket.market_value_reporting_currency)
+        for bucket in asset_class_view.buckets
+    ]
+    assert buckets == [
+        ("EQUITY", Decimal("100")),
+    ]
+    repo.list_instrument_lookthrough_components.assert_awaited_once_with(
+        parent_security_ids=["FUND1"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+
 @pytest.mark.asyncio
 async def test_reporting_service_can_decompose_position_requires_complete_weights() -> None:
     assert ReportingService._can_decompose_position([]) is False
@@ -434,7 +487,7 @@ async def test_reporting_service_resolve_scope_requires_matching_portfolios() ->
 @pytest.mark.asyncio
 async def test_reporting_service_resolve_reporting_currency_covers_scope_rules() -> None:
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("P1", base_currency=" usd ")
 
     with patch(
         "src.services.query_service.app.services.reporting_service.ReportingRepository",
@@ -445,7 +498,7 @@ async def test_reporting_service_resolve_reporting_currency_covers_scope_rules()
             await service._resolve_reporting_currency(
                 scope=ReportingScope(portfolio_id="P1"),
                 portfolios=[portfolio],
-                requested_reporting_currency="SGD",
+                requested_reporting_currency=" sgd ",
             )
             == "SGD"
         )
@@ -475,13 +528,25 @@ async def test_reporting_service_get_fx_rate_uses_cache_and_raises_for_missing_r
         return_value=repo,
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
-        first = await service._get_fx_rate("EUR", "USD", date(2026, 3, 27))
+        same_currency = await service._convert_amount(
+            amount=Decimal("10"),
+            from_currency=" usd ",
+            to_currency="USD",
+            as_of_date=date(2026, 3, 27),
+        )
+        first = await service._get_fx_rate(" eur ", " usd ", date(2026, 3, 27))
         second = await service._get_fx_rate("EUR", "USD", date(2026, 3, 27))
+        assert same_currency == Decimal("10")
         assert first == Decimal("1.25")
         assert second == Decimal("1.25")
         assert repo.get_latest_fx_rate.await_count == 1
+        repo.get_latest_fx_rate.assert_awaited_once_with(
+            from_currency="EUR",
+            to_currency="USD",
+            as_of_date=date(2026, 3, 27),
+        )
         with pytest.raises(ValueError, match="FX rate not found"):
-            await service._get_fx_rate("CHF", "USD", date(2026, 3, 27))
+            await service._get_fx_rate(" chf ", " usd ", date(2026, 3, 27))
 
 
 @pytest.mark.asyncio

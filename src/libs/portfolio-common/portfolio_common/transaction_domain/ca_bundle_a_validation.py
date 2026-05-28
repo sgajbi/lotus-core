@@ -12,6 +12,7 @@ from portfolio_common.ca_bundle_a_constants import (
 )
 from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_TRANSACTION_TYPES,
+    normalize_ca_bundle_a_transaction_type,
 )
 from portfolio_common.events import TransactionEvent
 
@@ -33,12 +34,12 @@ class CaBundleAValidationError(ValueError):
 
 
 def is_ca_bundle_a_transaction_type(transaction_type: str | None) -> bool:
-    return (transaction_type or "").upper() in CA_BUNDLE_A_TRANSACTION_TYPES
+    return normalize_ca_bundle_a_transaction_type(transaction_type) in CA_BUNDLE_A_TRANSACTION_TYPES
 
 
 def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAValidationIssue]:
     issues: list[CaBundleAValidationIssue] = []
-    transaction_type = event.transaction_type.upper()
+    transaction_type = normalize_ca_bundle_a_transaction_type(event.transaction_type)
 
     if transaction_type not in CA_BUNDLE_A_TRANSACTION_TYPES:
         issues.append(

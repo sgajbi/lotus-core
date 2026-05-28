@@ -114,6 +114,81 @@ def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
     mock_disposition_engine.add_buy_lot.assert_called_once_with(dual_currency_buy)
 
 
+def test_cost_calculator_normalizes_same_currency_codes_before_fx_requirement(
+    cost_calculator, mock_disposition_engine
+):
+    same_currency_buy = Transaction(
+        transaction_id="BUY_SAME_CCY_NORMALIZE_01",
+        portfolio_id="P_USD",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency=" usd ",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=None,
+    )
+
+    cost_calculator.calculate_transaction_costs(same_currency_buy)
+
+    assert same_currency_buy.trade_currency == "USD"
+    assert same_currency_buy.portfolio_base_currency == "USD"
+    assert same_currency_buy.transaction_fx_rate == Decimal("1")
+    assert same_currency_buy.net_cost == Decimal("1000")
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(same_currency_buy)
+
+
+def test_cost_calculator_rejects_non_positive_same_currency_fx_rate(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    same_currency_buy = Transaction(
+        transaction_id="BUY_SAME_CCY_NEGATIVE_FX_01",
+        portfolio_id="P_USD",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+    same_currency_buy.transaction_fx_rate = Decimal("-1.0")
+
+    cost_calculator.calculate_transaction_costs(same_currency_buy)
+
+    assert error_reporter.has_errors_for("BUY_SAME_CCY_NEGATIVE_FX_01")
+    assert same_currency_buy.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_cost_calculator_normalizes_transaction_type_before_strategy_resolution(
+    cost_calculator, mock_disposition_engine
+):
+    lowercase_buy = Transaction(
+        transaction_id="BUY_LOWERCASE_TYPE_01",
+        portfolio_id="P_USD",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=" buy ",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(lowercase_buy)
+
+    assert lowercase_buy.transaction_type == "BUY"
+    assert lowercase_buy.net_cost == Decimal("1000.0")
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(lowercase_buy)
+
+
 def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
     cost_calculator, mock_disposition_engine
 ):
@@ -139,6 +214,33 @@ def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
     assert bond_buy.net_cost_local == Decimal("98040")
     assert bond_buy.net_cost == Decimal("98040")
     assert bond_buy.realized_gain_loss == Decimal("0")
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(bond_buy)
+
+
+def test_buy_strategy_normalizes_policy_hook_for_accrued_interest_exclusion(
+    cost_calculator, mock_disposition_engine
+):
+    bond_buy = Transaction(
+        transaction_id="BOND_BUY_PADDED_POLICY_01",
+        portfolio_id="P_USD",
+        instrument_id="UST5Y",
+        security_id="S_UST5Y",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("98000"),
+        trade_currency="USD",
+        fees=Fees(brokerage=Decimal("40")),
+        accrued_interest=Decimal("1250"),
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        calculation_policy_id=" buy_exclude_accrued_interest_from_book_cost ",
+    )
+
+    cost_calculator.calculate_transaction_costs(bond_buy)
+
+    assert bond_buy.net_cost_local == Decimal("98040")
+    assert bond_buy.net_cost == Decimal("98040")
     mock_disposition_engine.add_buy_lot.assert_called_once_with(bond_buy)
 
 
@@ -244,6 +346,18 @@ def test_sell_strategy_rejects_non_positive_consumed_quantity(
     assert error_reporter.has_errors_for("SELL001")
 
 
+def test_sell_strategy_rejects_dirty_non_positive_quantity_before_lot_consumption(
+    cost_calculator, mock_disposition_engine, error_reporter, sell_transaction
+):
+    sell_transaction.quantity = Decimal("-5")
+
+    cost_calculator.calculate_transaction_costs(sell_transaction)
+
+    assert error_reporter.has_errors_for("SELL001")
+    mock_disposition_engine.get_available_quantity.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
 def test_sell_strategy_blocks_oversold_under_strict_policy(
     cost_calculator, mock_disposition_engine, error_reporter, sell_transaction
 ):
@@ -264,6 +378,20 @@ def test_sell_strategy_reports_unsupported_oversold_policy(
     cost_calculator.calculate_transaction_costs(sell_transaction)
 
     assert error_reporter.has_errors_for("SELL001")
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_sell_strategy_normalizes_oversold_policy(
+    cost_calculator, mock_disposition_engine, error_reporter, sell_transaction
+):
+    sell_transaction.calculation_policy_id = " sell_allow_oversold_policy "
+    mock_disposition_engine.get_available_quantity.return_value = Decimal("3")
+
+    cost_calculator.calculate_transaction_costs(sell_transaction)
+
+    errors = error_reporter.get_errors()
+    assert error_reporter.has_errors_for("SELL001")
+    assert "oversold policy is configured but not supported" in errors[0].error_reason
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
@@ -345,6 +473,62 @@ def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_eng
     mock_disposition_engine.add_buy_lot.assert_called_once()
     call_args = mock_disposition_engine.add_buy_lot.call_args[0][0]
     assert call_args.quantity == Decimal("10000")
+
+
+def test_deposit_strategy_uses_quantity_when_gross_amount_is_zero(
+    cost_calculator, mock_disposition_engine
+):
+    deposit_transaction = Transaction(
+        transaction_id="DEPOSIT_QTY_AMOUNT_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.DEPOSIT,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("10000"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(deposit_transaction)
+
+    assert deposit_transaction.gross_cost == Decimal("10000")
+    assert deposit_transaction.net_cost_local == Decimal("10000")
+    assert deposit_transaction.net_cost == Decimal("10000.0")
+    mock_disposition_engine.add_buy_lot.assert_called_once()
+    cash_lot = mock_disposition_engine.add_buy_lot.call_args[0][0]
+    assert cash_lot.quantity == Decimal("10000")
+
+
+def test_deposit_strategy_uses_magnitude_for_signed_legacy_cash_amount(
+    cost_calculator, mock_disposition_engine
+):
+    deposit_transaction = Transaction(
+        transaction_id="DEPOSIT_SIGNED_LEGACY_AMOUNT_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.DEPOSIT,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("10000"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("10000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+    deposit_transaction.gross_transaction_amount = Decimal("-10000")
+
+    cost_calculator.calculate_transaction_costs(deposit_transaction)
+
+    assert deposit_transaction.gross_cost == Decimal("10000")
+    assert deposit_transaction.net_cost_local == Decimal("10000")
+    assert deposit_transaction.net_cost == Decimal("10000.0")
+    cash_lot = mock_disposition_engine.add_buy_lot.call_args[0][0]
+    assert cash_lot.quantity == Decimal("10000")
 
 
 def test_dividend_transaction_has_zero_cost(cost_calculator, mock_disposition_engine):
@@ -579,6 +763,29 @@ def test_interest_strategy_allows_expense_direction_baseline(
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
 
+def test_interest_strategy_normalizes_direction(cost_calculator, error_reporter):
+    expense_interest = Transaction(
+        transaction_id="INT_EXPENSE_PADDED_OK",
+        portfolio_id="P1",
+        instrument_id="BOND_USD",
+        security_id="S_BOND",
+        transaction_type=TransactionType.INTEREST,
+        transaction_date=datetime(2023, 1, 15),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("25.00"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        interest_direction=" expense ",
+    )
+
+    cost_calculator.calculate_transaction_costs(expense_interest)
+
+    assert not error_reporter.has_errors_for("INT_EXPENSE_PADDED_OK")
+    assert expense_interest.realized_gain_loss == Decimal("0")
+
+
 def test_interest_strategy_rejects_unknown_direction(cost_calculator, error_reporter):
     invalid_direction = Transaction(
         transaction_id="INT_BAD_DIR",
@@ -698,6 +905,95 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
     # Assert
     # Cash outflow is handled with cash semantics rather than strict security-lot disposal.
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert withdrawal_transaction.realized_gain_loss is None
+    assert withdrawal_transaction.net_cost == Decimal("-500")
+    assert withdrawal_transaction.net_cost_local == Decimal("-500")
+
+
+def test_withdrawal_strategy_uses_quantity_when_gross_amount_is_zero(
+    cost_calculator, mock_disposition_engine
+):
+    withdrawal_transaction = Transaction(
+        transaction_id="WITHDRAWAL_QTY_AMOUNT_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="WITHDRAWAL",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("500"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
+    )
+
+    cost_calculator.calculate_transaction_costs(withdrawal_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert withdrawal_transaction.realized_gain_loss is None
+    assert withdrawal_transaction.net_cost == Decimal("-500.0")
+    assert withdrawal_transaction.net_cost_local == Decimal("-500")
+
+
+def test_withdrawal_strategy_uses_magnitude_for_signed_legacy_cash_amount(
+    cost_calculator, mock_disposition_engine
+):
+    withdrawal_transaction = Transaction(
+        transaction_id="WITHDRAWAL_SIGNED_LEGACY_AMOUNT_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="WITHDRAWAL",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("500"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("500"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
+    )
+    withdrawal_transaction.gross_transaction_amount = Decimal("-500")
+
+    cost_calculator.calculate_transaction_costs(withdrawal_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert withdrawal_transaction.realized_gain_loss is None
+    assert withdrawal_transaction.net_cost == Decimal("-500.0")
+    assert withdrawal_transaction.net_cost_local == Decimal("-500")
+
+
+def test_cash_withdrawal_detection_normalizes_source_vocabulary(
+    cost_calculator, mock_disposition_engine
+):
+    withdrawal_transaction = Transaction(
+        transaction_id="WITHDRAWAL_PADDED_CASH_01",
+        portfolio_id="P1",
+        instrument_id=" cash_usd ",
+        security_id=" cash_usd ",
+        transaction_type=" withdrawal ",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("500"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency=" usd ",
+        portfolio_base_currency=" USD ",
+        transaction_fx_rate=None,
+        product_type=" cash ",
+        asset_class=" cash ",
+    )
+
+    cost_calculator.calculate_transaction_costs(withdrawal_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert withdrawal_transaction.transaction_type == "WITHDRAWAL"
+    assert withdrawal_transaction.trade_currency == "USD"
+    assert withdrawal_transaction.portfolio_base_currency == "USD"
+    assert withdrawal_transaction.transaction_fx_rate == Decimal("1")
     assert withdrawal_transaction.realized_gain_loss is None
     assert withdrawal_transaction.net_cost == Decimal("-500")
     assert withdrawal_transaction.net_cost_local == Decimal("-500")

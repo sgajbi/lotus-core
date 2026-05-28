@@ -1,5 +1,7 @@
 from portfolio_common.events import TransactionEvent
 
+from .control_code_normalization import normalize_transaction_control_code
+
 FX_DEFAULT_POLICY_ID = "FX_DEFAULT_POLICY"
 FX_DEFAULT_POLICY_VERSION = "1.0.0"
 
@@ -9,7 +11,8 @@ def enrich_fx_transaction_metadata(event: TransactionEvent) -> TransactionEvent:
     Ensures FX events carry deterministic linkage and policy metadata.
     Existing upstream-provided values are preserved.
     """
-    if event.transaction_type.upper() not in {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}:
+    transaction_type = normalize_transaction_control_code(event.transaction_type)
+    if transaction_type not in {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}:
         return event
 
     economic_event_id = (
@@ -25,23 +28,23 @@ def enrich_fx_transaction_metadata(event: TransactionEvent) -> TransactionEvent:
     near_leg_group_id = event.near_leg_group_id
     far_leg_group_id = event.far_leg_group_id
 
-    if not swap_event_id and event.transaction_type.upper() == "FX_SWAP":
+    if not swap_event_id and transaction_type == "FX_SWAP":
         swap_event_id = f"FXSWAP-{linked_transaction_group_id}"
 
-    if event.transaction_type.upper() == "FX_SWAP":
+    if transaction_type == "FX_SWAP":
         near_leg_group_id = near_leg_group_id or f"{swap_event_id}-NEAR"
         far_leg_group_id = far_leg_group_id or f"{swap_event_id}-FAR"
 
     fx_contract_id = event.fx_contract_id
-    component_type = (event.component_type or "").upper()
+    component_type = normalize_transaction_control_code(event.component_type)
     if (
         not fx_contract_id
-        and event.transaction_type.upper() == "FX_SWAP"
+        and transaction_type == "FX_SWAP"
         and component_type.startswith("FX_CONTRACT")
     ):
         fx_contract_id = f"FXC-{far_leg_group_id}"
     elif not fx_contract_id and (
-        event.transaction_type.upper() == "FX_FORWARD" or component_type.startswith("FX_CONTRACT")
+        transaction_type == "FX_FORWARD" or component_type.startswith("FX_CONTRACT")
     ):
         fx_contract_id = f"FXC-{linked_transaction_group_id}"
 
@@ -79,7 +82,11 @@ def enrich_fx_transaction_metadata(event: TransactionEvent) -> TransactionEvent:
             "security_id": security_id,
             "fx_contract_open_transaction_id": fx_contract_open_transaction_id,
             "fx_contract_close_transaction_id": fx_contract_close_transaction_id,
-            "spot_exposure_model": event.spot_exposure_model or "NONE",
-            "fx_realized_pnl_mode": event.fx_realized_pnl_mode or "NONE",
+            "spot_exposure_model": normalize_transaction_control_code(
+                event.spot_exposure_model or "NONE"
+            ),
+            "fx_realized_pnl_mode": normalize_transaction_control_code(
+                event.fx_realized_pnl_mode or "NONE"
+            ),
         }
     )

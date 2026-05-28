@@ -7,7 +7,10 @@ from time import perf_counter
 from uuid import uuid4
 
 from portfolio_common.database_models import FinancialReconciliationFinding
+from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
+from portfolio_common.market_prices import coerce_positive_market_price_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
+from portfolio_common.valuation_prices import resolve_valuation_unit_price
 
 from ..dtos import ReconciliationRunRequest
 from ..repositories import ReconciliationRepository
@@ -69,19 +72,25 @@ class ReconciliationService:
                         to_currency=to_currency,
                         business_date=position_row.date,
                     )
-                    fx_cache[cache_key] = Decimal(str(fx_rate.rate)) if fx_rate else ZERO
+                    fx_cache[cache_key] = (
+                        coerce_positive_fx_rate_or_none(fx_rate.rate) if fx_rate else None
+                    ) or ZERO
                 rate = fx_cache[cache_key]
                 if rate == ZERO:
                     continue
 
-            metrics["bod_market_value"] += Decimal(str(position_row.bod_market_value or ZERO)) * rate
-            metrics["bod_cashflow"] += Decimal(
-                str(position_row.bod_cashflow_portfolio or ZERO)
-            ) * rate
-            metrics["eod_cashflow"] += Decimal(
-                str(position_row.eod_cashflow_portfolio or ZERO)
-            ) * rate
-            metrics["eod_market_value"] += Decimal(str(position_row.eod_market_value or ZERO)) * rate
+            metrics["bod_market_value"] += (
+                Decimal(str(position_row.bod_market_value or ZERO)) * rate
+            )
+            metrics["bod_cashflow"] += (
+                Decimal(str(position_row.bod_cashflow_portfolio or ZERO)) * rate
+            )
+            metrics["eod_cashflow"] += (
+                Decimal(str(position_row.eod_cashflow_portfolio or ZERO)) * rate
+            )
+            metrics["eod_market_value"] += (
+                Decimal(str(position_row.eod_market_value or ZERO)) * rate
+            )
             metrics["fees"] += Decimal(str(position_row.fees or ZERO)) * rate
 
         return metrics, len(authoritative_rows)
@@ -94,21 +103,12 @@ class ReconciliationService:
         cost_basis_local: Decimal,
         product_type: str | None,
     ) -> Decimal:
-        normalized_product_type = (product_type or "").strip().upper()
-        valuation_price_local = market_price
-        if normalized_product_type == "BOND" and not quantity.is_zero():
-            average_cost_local = abs(cost_basis_local / quantity)
-            absolute_price_local = abs(valuation_price_local)
-            if (
-                absolute_price_local > Decimal("0")
-                and absolute_price_local < Decimal("200")
-                and average_cost_local >= Decimal("500")
-            ):
-                price_ratio = average_cost_local / absolute_price_local
-                if price_ratio >= Decimal("50"):
-                    valuation_price_local *= Decimal("100")
-                elif price_ratio >= Decimal("5"):
-                    valuation_price_local *= Decimal("10")
+        valuation_price_local = resolve_valuation_unit_price(
+            market_price=market_price,
+            quantity=quantity,
+            cost_basis_local=cost_basis_local,
+            product_type=product_type,
+        )
         return quantity * valuation_price_local
 
     @staticmethod
@@ -302,9 +302,31 @@ class ReconciliationService:
             examined += 1
             quantity = Decimal(str(snapshot.quantity))
             cost_basis_local = Decimal(str(snapshot.cost_basis_local))
+            market_price = coerce_positive_market_price_or_none(snapshot.market_price)
+            if market_price is None:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="position_valuation",
+                        finding_type="invalid_market_price",
+                        severity="ERROR",
+                        portfolio_id=snapshot.portfolio_id,
+                        security_id=snapshot.security_id,
+                        transaction_id=None,
+                        business_date=snapshot.date,
+                        epoch=snapshot.epoch,
+                        expected_value={"market_price": ">0"},
+                        observed_value={"market_price": str(snapshot.market_price)},
+                        detail={
+                            "quantity": str(snapshot.quantity),
+                            "product_type": instrument.product_type,
+                        },
+                    )
+                )
+                continue
             expected_market_value_local = self._expected_market_value_local(
                 quantity=quantity,
-                market_price=Decimal(str(snapshot.market_price)),
+                market_price=market_price,
                 cost_basis_local=cost_basis_local,
                 product_type=instrument.product_type,
             )
@@ -461,12 +483,13 @@ class ReconciliationService:
                 )
                 continue
 
-            authoritative_metrics, authoritative_position_count = (
-                await self._aggregate_authoritative_portfolio_metrics(
-                    portfolio_id=key.portfolio_id,
-                    business_date=key.business_date,
-                    epoch=key.epoch,
-                )
+            (
+                authoritative_metrics,
+                authoritative_position_count,
+            ) = await self._aggregate_authoritative_portfolio_metrics(
+                portfolio_id=key.portfolio_id,
+                business_date=key.business_date,
+                epoch=key.epoch,
             )
             authoritative_snapshot_count = await self.repository.fetch_authoritative_snapshot_count(
                 portfolio_id=key.portfolio_id,

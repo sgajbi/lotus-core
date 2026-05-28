@@ -1,12 +1,6 @@
-import base64
-import hashlib
-import hmac
-import json
 import logging
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from types import SimpleNamespace
 from typing import Any, Literal
 
 from portfolio_common.market_reference_quality import (
@@ -15,10 +9,11 @@ from portfolio_common.market_reference_quality import (
     STALE_QUALITY_STATUSES,
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
+    quality_status_summary_key,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyProvenanceMetadata
+from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse
 from ..dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
     BenchmarkCatalogResponse,
@@ -138,28 +133,23 @@ from ..dtos.reference_integration_dto import (
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.buy_state_repository import BuyStateRepository
+from ..repositories.currency_codes import normalize_currency_code
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
+from .integration_policy import build_effective_policy_response
+from .page_token_codec import PageTokenCodec
+from .reference_data_helpers import (
+    latest_effective_records,
+    latest_reference_evidence_timestamp,
+    market_reference_data_quality_status,
+    resolve_component_window_rows,
+)
+from .request_fingerprint import request_fingerprint, series_request_fingerprint
 
 logger = logging.getLogger(__name__)
-
-_CONSUMER_CANONICAL_MAP: dict[str, str] = {
-    "LOTUS-MANAGE": "lotus-manage",
-    "LOTUS-GATEWAY": "lotus-gateway",
-    "UI": "UI",
-}
-
-
-@dataclass
-class PolicyContext:
-    policy_version: str
-    policy_source: str
-    matched_rule_id: str
-    strict_mode: bool
-    allowed_sections: list[str] | None
-    warnings: list[str]
 
 
 class IntegrationService:
@@ -169,7 +159,7 @@ class IntegrationService:
         self._buy_state_repository = BuyStateRepository(db)
         self._portfolio_repository = PortfolioRepository(db)
         self._transaction_repository = TransactionRepository(db)
-        self._page_token_secret = load_query_service_settings().page_token_secret
+        self._page_token_codec = PageTokenCodec(load_query_service_settings().page_token_secret)
 
     @staticmethod
     def _as_decimal(value: Any) -> Decimal:
@@ -182,6 +172,13 @@ class IntegrationService:
         if not isinstance(value, list):
             return []
         return [str(item) for item in value if str(item).strip()]
+
+    @staticmethod
+    def _control_code(value: Any, *, default: str = "") -> str:
+        if value is None:
+            return default
+        normalized = str(value).strip().upper()
+        return normalized or default
 
     @staticmethod
     def _runtime_metadata(
@@ -213,60 +210,15 @@ class IntegrationService:
 
     @staticmethod
     def _latest_reference_evidence_timestamp(*row_groups: list[Any]) -> datetime | None:
-        timestamps: list[datetime] = []
-        for rows in row_groups:
-            for row in rows:
-                for field_name in (
-                    "observed_at",
-                    "source_timestamp",
-                    "assignment_recorded_at",
-                    "updated_at",
-                    "created_at",
-                ):
-                    value = getattr(row, field_name, None)
-                    if isinstance(value, datetime):
-                        timestamps.append(value)
-        return max(timestamps) if timestamps else None
+        return latest_reference_evidence_timestamp(*row_groups)
 
     @staticmethod
     def _market_reference_data_quality_status(rows: list[Any], required_count: int) -> str:
-        if required_count <= 0:
-            return "UNKNOWN"
-        quality_statuses = [
-            str(status).strip().upper()
-            for row in rows
-            if (status := getattr(row, "quality_status", None)) is not None
-        ]
-        if not quality_statuses:
-            return "UNKNOWN"
-        return classify_market_reference_coverage(
-            MarketReferenceCoverageSignal(
-                required_count=required_count,
-                observed_count=len(quality_statuses),
-                stale_count=sum(
-                    1 for status in quality_statuses if status in STALE_QUALITY_STATUSES
-                ),
-                estimated_count=sum(
-                    1 for status in quality_statuses if status in PARTIAL_QUALITY_STATUSES
-                ),
-                blocking_count=sum(
-                    1 for status in quality_statuses if status in BLOCKING_QUALITY_STATUSES
-                ),
-            )
-        )
-
-    @staticmethod
-    def _canonical_consumer_system(value: str | None) -> str:
-        raw = (value or "UNKNOWN").strip()
-        if not raw:
-            return "unknown"
-        key = raw.upper()
-        return _CONSUMER_CANONICAL_MAP.get(key, raw.lower())
+        return market_reference_data_quality_status(rows, required_count)
 
     @staticmethod
     def _request_fingerprint(payload: dict[str, Any]) -> str:
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
+        return request_fingerprint(payload)
 
     @staticmethod
     def _latest_effective_records(
@@ -275,20 +227,10 @@ class IntegrationService:
         key_fields: tuple[str, ...],
         effective_from_field: str,
     ) -> list[Any]:
-        latest_by_key: dict[tuple[Any, ...], Any] = {}
-        for row in sorted(
+        return latest_effective_records(
             rows,
-            key=lambda item: (
-                *[getattr(item, field) for field in key_fields],
-                getattr(item, effective_from_field),
-            ),
-            reverse=True,
-        ):
-            record_key = tuple(getattr(row, field) for field in key_fields)
-            latest_by_key.setdefault(record_key, row)
-        return sorted(
-            latest_by_key.values(),
-            key=lambda item: tuple(getattr(item, field) for field in key_fields),
+            key_fields=key_fields,
+            effective_from_field=effective_from_field,
         )
 
     @staticmethod
@@ -298,49 +240,10 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> list[Any]:
-        rows_by_index: dict[str, list[Any]] = {}
-        for row in rows:
-            rows_by_index.setdefault(row.index_id, []).append(row)
-
-        resolved_rows: list[Any] = []
-        for index_id, index_rows in rows_by_index.items():
-            sorted_rows = sorted(
-                index_rows,
-                key=lambda item: item.composition_effective_from,
-            )
-            for position, row in enumerate(sorted_rows):
-                next_start = (
-                    sorted_rows[position + 1].composition_effective_from
-                    if position + 1 < len(sorted_rows)
-                    else None
-                )
-                resolved_end = row.composition_effective_to
-                if next_start is not None:
-                    inferred_end = next_start - timedelta(days=1)
-                    if resolved_end is None or resolved_end >= next_start:
-                        resolved_end = inferred_end
-                    else:
-                        resolved_end = min(resolved_end, inferred_end)
-                if row.composition_effective_from > end_date:
-                    continue
-                if resolved_end is not None and resolved_end < start_date:
-                    continue
-                resolved_rows.append(
-                    SimpleNamespace(
-                        index_id=index_id,
-                        composition_weight=row.composition_weight,
-                        composition_effective_from=row.composition_effective_from,
-                        composition_effective_to=resolved_end,
-                        rebalance_event_id=getattr(row, "rebalance_event_id", None),
-                        quality_status=getattr(row, "quality_status", None),
-                        source_timestamp=getattr(row, "source_timestamp", None),
-                        observed_at=getattr(row, "observed_at", None),
-                        updated_at=getattr(row, "updated_at", None),
-                    )
-                )
-        return sorted(
-            resolved_rows,
-            key=lambda item: (item.composition_effective_from, item.index_id),
+        return resolve_component_window_rows(
+            rows,
+            start_date=start_date,
+            end_date=end_date,
         )
 
     @staticmethod
@@ -351,150 +254,19 @@ class IntegrationService:
         request: Any,
         extras: dict[str, Any] | None = None,
     ) -> str:
-        payload: dict[str, Any] = {
-            "series_key": series_key,
-            identifier_key: identifier_value,
-            "as_of_date": request.as_of_date.isoformat(),
-            "window": {
-                "start_date": request.window.start_date.isoformat(),
-                "end_date": request.window.end_date.isoformat(),
-            },
-            "frequency": request.frequency,
-        }
-        if extras:
-            payload.update(extras)
-        return IntegrationService._request_fingerprint(payload)
+        return series_request_fingerprint(
+            series_key=series_key,
+            identifier_key=identifier_key,
+            identifier_value=identifier_value,
+            request=request,
+            extras=extras,
+        )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        signature = hmac.new(
-            self._page_token_secret.encode("utf-8"),
-            serialized.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        envelope = {"p": payload, "s": signature}
-        return base64.urlsafe_b64encode(json.dumps(envelope).encode("utf-8")).decode("utf-8")
+        return self._page_token_codec.encode(payload)
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
-        if not token:
-            return {}
-        try:
-            decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
-            envelope = json.loads(decoded)
-            payload = envelope["p"]
-            signature = envelope["s"]
-            serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-            expected = hmac.new(
-                self._page_token_secret.encode("utf-8"),
-                serialized.encode("utf-8"),
-                hashlib.sha256,
-            ).hexdigest()
-            if not hmac.compare_digest(signature, expected):
-                raise ValueError("Invalid page token signature.")
-            if not isinstance(payload, dict):
-                raise ValueError("Malformed page token payload.")
-            return payload
-        except ValueError:
-            raise
-        except Exception as exc:
-            raise ValueError("Malformed page token.") from exc
-
-    @staticmethod
-    def _load_policy() -> dict[str, Any]:
-        raw = load_query_service_settings().integration_snapshot_policy_json
-        if not raw:
-            return {}
-        try:
-            decoded = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning("Invalid LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON; using defaults.")
-            return {}
-        if not isinstance(decoded, dict):
-            return {}
-        return decoded
-
-    @staticmethod
-    def _coerce_bool(value: Any, default: bool) -> bool:
-        if isinstance(value, bool):
-            return value
-        return default
-
-    @staticmethod
-    def _normalize_sections(raw: Any) -> list[str] | None:
-        if not isinstance(raw, list):
-            return None
-        normalized: list[str] = []
-        for item in raw:
-            if isinstance(item, str):
-                value = item.strip().upper()
-                if value:
-                    normalized.append(value)
-        return normalized
-
-    @staticmethod
-    def _resolve_consumer_sections(
-        consumers: dict[str, Any] | None,
-        consumer_system: str,
-    ) -> tuple[list[str] | None, str | None]:
-        if not isinstance(consumers, dict):
-            return None, None
-        canonical = IntegrationService._canonical_consumer_system(consumer_system)
-        for key, value in consumers.items():
-            if IntegrationService._canonical_consumer_system(str(key)) == canonical:
-                return IntegrationService._normalize_sections(value), str(key)
-        return None, None
-
-    def _resolve_policy_context(self, tenant_id: str, consumer_system: str) -> PolicyContext:
-        policy = self._load_policy()
-
-        strict_mode = self._coerce_bool(policy.get("strict_mode"), default=False)
-        policy_source = "default"
-        matched_rule_id = "default"
-        warnings: list[str] = []
-
-        allowed_sections, matched_consumer_key = self._resolve_consumer_sections(
-            policy.get("consumers"),
-            consumer_system,
-        )
-        if allowed_sections is not None:
-            policy_source = "global"
-            matched_rule_id = f"global.consumers.{matched_consumer_key}"
-
-        tenants = policy.get("tenants")
-        tenant_policy_raw = tenants.get(tenant_id) if isinstance(tenants, dict) else None
-        if isinstance(tenant_policy_raw, dict):
-            strict_mode = self._coerce_bool(
-                tenant_policy_raw.get("strict_mode"), default=strict_mode
-            )
-            tenant_consumers = tenant_policy_raw.get("consumers")
-            tenant_allowed, tenant_match_key = self._resolve_consumer_sections(
-                tenant_consumers if isinstance(tenant_consumers, dict) else None,
-                consumer_system,
-            )
-            if tenant_allowed is None:
-                tenant_allowed = self._normalize_sections(tenant_policy_raw.get("default_sections"))
-            if tenant_allowed is not None:
-                allowed_sections = tenant_allowed
-                policy_source = "tenant"
-                if tenant_match_key is not None:
-                    matched_rule_id = f"tenant.{tenant_id}.consumers.{tenant_match_key}"
-                else:
-                    matched_rule_id = f"tenant.{tenant_id}.default_sections"
-            if "strict_mode" in tenant_policy_raw and matched_rule_id == "default":
-                policy_source = "tenant"
-                matched_rule_id = f"tenant.{tenant_id}.strict_mode"
-
-        if allowed_sections is None:
-            warnings.append("NO_ALLOWED_SECTION_RESTRICTION")
-
-        return PolicyContext(
-            policy_version=load_query_service_settings().lotus_core_policy_version,
-            policy_source=policy_source,
-            matched_rule_id=matched_rule_id,
-            strict_mode=strict_mode,
-            allowed_sections=allowed_sections,
-            warnings=warnings,
-        )
+        return self._page_token_codec.decode(token)
 
     def get_effective_policy(
         self,
@@ -502,36 +274,11 @@ class IntegrationService:
         tenant_id: str,
         include_sections: list[str] | None,
     ) -> EffectiveIntegrationPolicyResponse:
-        normalized_consumer = self._canonical_consumer_system(consumer_system)
-        policy_context = self._resolve_policy_context(
+        return build_effective_policy_response(
+            consumer_system=consumer_system,
             tenant_id=tenant_id,
-            consumer_system=normalized_consumer,
-        )
-
-        if include_sections:
-            requested = [section.upper() for section in include_sections]
-            if policy_context.allowed_sections is None:
-                allowed_sections = requested
-            else:
-                allowed_set = set(policy_context.allowed_sections)
-                allowed_sections = [section for section in requested if section in allowed_set]
-        elif policy_context.allowed_sections is not None:
-            allowed_sections = policy_context.allowed_sections
-        else:
-            allowed_sections = []
-
-        return EffectiveIntegrationPolicyResponse(
-            consumer_system=normalized_consumer,
-            tenant_id=tenant_id,
+            include_sections=include_sections,
             generated_at=datetime.now(UTC),
-            policy_provenance=PolicyProvenanceMetadata(
-                policy_version=policy_context.policy_version,
-                policy_source=policy_context.policy_source,
-                matched_rule_id=policy_context.matched_rule_id,
-                strict_mode=policy_context.strict_mode,
-            ),
-            allowed_sections=allowed_sections,
-            warnings=policy_context.warnings,
         )
 
     async def resolve_benchmark_assignment(
@@ -989,7 +736,8 @@ class IntegrationService:
         missing_data_families: list[str] = []
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "MANDATE_BINDING_READY"
-        if str(row.discretionary_authority_status).lower() != "active":
+        discretionary_authority_status = self._control_code(row.discretionary_authority_status)
+        if discretionary_authority_status != "ACTIVE":
             supportability_state = "INCOMPLETE"
             supportability_reason = "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
             missing_data_families.append("active_discretionary_authority")
@@ -1024,7 +772,7 @@ class IntegrationService:
             mandate_id=row.mandate_id,
             client_id=row.client_id,
             mandate_type=row.mandate_type,
-            discretionary_authority_status=row.discretionary_authority_status,
+            discretionary_authority_status=discretionary_authority_status,
             booking_center_code=row.booking_center_code,
             jurisdiction_code=row.jurisdiction_code,
             model_portfolio_id=row.model_portfolio_id,
@@ -1060,7 +808,7 @@ class IntegrationService:
             },
             **self._runtime_metadata(
                 request.as_of_date,
-                data_quality_status=str(row.quality_status).upper(),
+                data_quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
             ),
         )
@@ -2195,11 +1943,12 @@ class IntegrationService:
             security_ids=request.security_ids,
             as_of_date=request.as_of_date,
         )
-        rows_by_security_id = {row.security_id: row for row in rows}
+        rows_by_security_id = {normalize_security_id(row.security_id): row for row in rows}
 
         records: list[InstrumentEligibilityRecord] = []
         missing_security_ids: list[str] = []
-        for security_id in request.security_ids:
+        for requested_security_id in request.security_ids:
+            security_id = normalize_security_id(requested_security_id)
             row = rows_by_security_id.get(security_id)
             if row is None:
                 missing_security_ids.append(security_id)
@@ -2230,10 +1979,14 @@ class IntegrationService:
                 continue
             records.append(
                 InstrumentEligibilityRecord(
-                    security_id=row.security_id,
+                    security_id=normalize_security_id(row.security_id),
                     found=True,
-                    eligibility_status=str(row.eligibility_status).upper(),
-                    product_shelf_status=str(row.product_shelf_status).upper(),
+                    eligibility_status=self._control_code(
+                        row.eligibility_status, default="UNKNOWN"
+                    ),
+                    product_shelf_status=self._control_code(
+                        row.product_shelf_status, default="UNKNOWN"
+                    ),
                     buy_allowed=bool(row.buy_allowed),
                     sell_allowed=bool(row.sell_allowed),
                     restriction_reason_codes=list(row.restriction_reason_codes or []),
@@ -2248,7 +2001,7 @@ class IntegrationService:
                     country_of_risk=row.country_of_risk,
                     effective_from=row.effective_from,
                     effective_to=row.effective_to,
-                    quality_status=str(row.quality_status).upper(),
+                    quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
                     source_record_id=row.source_record_id,
                 )
             )
@@ -2331,8 +2084,8 @@ class IntegrationService:
             lots.append(
                 PortfolioTaxLotRecord(
                     portfolio_id=lot.portfolio_id,
-                    security_id=lot.security_id,
-                    instrument_id=lot.instrument_id,
+                    security_id=normalize_security_id(lot.security_id),
+                    instrument_id=normalize_security_id(lot.instrument_id),
                     lot_id=lot.lot_id,
                     open_quantity=open_quantity,
                     original_quantity=self._as_decimal(lot.original_quantity),
@@ -2362,8 +2115,10 @@ class IntegrationService:
                 }
             )
 
-        requested_security_ids = set(request.security_ids or [])
-        returned_security_ids = {lot.security_id for lot in lots}
+        requested_security_ids = {
+            normalize_security_id(security_id) for security_id in request.security_ids or []
+        }
+        returned_security_ids = {normalize_security_id(lot.security_id) for lot in lots}
         missing_security_ids = (
             [] if has_more else sorted(requested_security_ids - returned_security_ids)
         )
@@ -2434,9 +2189,9 @@ class IntegrationService:
     @staticmethod
     def _transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
         return (
-            str(transaction.security_id),
-            str(transaction.transaction_type).upper(),
-            str(transaction.currency).upper(),
+            normalize_security_id(transaction.security_id),
+            str(transaction.transaction_type).strip().upper(),
+            str(transaction.currency).strip().upper(),
         )
 
     @classmethod
@@ -2576,8 +2331,10 @@ class IntegrationService:
                 }
             )
 
-        requested_security_ids = set(request.security_ids or [])
-        returned_security_ids = {point.security_id for point in all_points}
+        requested_security_ids = {
+            normalize_security_id(security_id) for security_id in request.security_ids or []
+        }
+        returned_security_ids = {normalize_security_id(point.security_id) for point in all_points}
         missing_security_ids = sorted(requested_security_ids - returned_security_ids)
 
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
@@ -2628,8 +2385,16 @@ class IntegrationService:
         self,
         request: MarketDataCoverageRequest,
     ) -> MarketDataCoverageWindowResponse:
+        instrument_ids = [
+            normalize_security_id(instrument_id) for instrument_id in request.instrument_ids
+        ]
+        valuation_currency = (
+            normalize_currency_code(request.valuation_currency)
+            if request.valuation_currency is not None
+            else None
+        )
         price_rows = await self._reference_repository.list_latest_market_prices(
-            security_ids=request.instrument_ids,
+            security_ids=instrument_ids,
             as_of_date=request.as_of_date,
         )
         fx_pairs = [(pair.from_currency, pair.to_currency) for pair in request.currency_pairs]
@@ -2638,13 +2403,13 @@ class IntegrationService:
             as_of_date=request.as_of_date,
         )
 
-        price_by_instrument = {row.security_id: row for row in price_rows}
+        price_by_instrument = {normalize_security_id(row.security_id): row for row in price_rows}
         fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
 
         price_coverage: list[MarketDataPriceCoverageRecord] = []
         missing_instrument_ids: list[str] = []
         stale_instrument_ids: list[str] = []
-        for instrument_id in request.instrument_ids:
+        for instrument_id in instrument_ids:
             row = price_by_instrument.get(instrument_id)
             if row is None:
                 missing_instrument_ids.append(instrument_id)
@@ -2721,13 +2486,13 @@ class IntegrationService:
 
         return MarketDataCoverageWindowResponse(
             as_of_date=request.as_of_date,
-            valuation_currency=request.valuation_currency,
+            valuation_currency=valuation_currency,
             price_coverage=price_coverage,
             fx_coverage=fx_coverage,
             supportability=MarketDataCoverageSupportability(
                 state=supportability_state,
                 reason=supportability_reason,
-                requested_price_count=len(request.instrument_ids),
+                requested_price_count=len(instrument_ids),
                 resolved_price_count=sum(1 for record in price_coverage if record.found),
                 requested_fx_count=len(request.currency_pairs),
                 resolved_fx_count=sum(1 for record in fx_coverage if record.found),
@@ -3409,8 +3174,9 @@ class IntegrationService:
         for component in component_series:
             for point in component.points:
                 if point.quality_status:
-                    quality_status_summary[point.quality_status] = (
-                        quality_status_summary.get(point.quality_status, 0) + 1
+                    summary_key = quality_status_summary_key(point.quality_status)
+                    quality_status_summary[summary_key] = (
+                        quality_status_summary.get(summary_key, 0) + 1
                     )
 
         return BenchmarkMarketSeriesResponse(
@@ -3590,20 +3356,21 @@ class IntegrationService:
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
+        normalized_currency = normalize_currency_code(request.currency)
         request_fingerprint = self._series_request_fingerprint(
             series_key="risk_free_series",
             identifier_key="currency",
-            identifier_value=request.currency.upper(),
+            identifier_value=normalized_currency,
             request=request,
             extras={"series_mode": request.series_mode},
         )
         rows = await self._reference_repository.list_risk_free_series(
-            currency=request.currency,
+            currency=normalized_currency,
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
         return RiskFreeSeriesResponse(
-            currency=request.currency.upper(),
+            currency=normalized_currency,
             as_of_date=request.as_of_date,
             series_mode=request.series_mode,
             resolved_window=IntegrationWindow(
@@ -3673,10 +3440,11 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
+        normalized_currency = normalize_currency_code(currency)
         request_fingerprint = self._request_fingerprint(
             {
                 "coverage_key": "risk_free_coverage",
-                "currency": currency.upper(),
+                "currency": normalized_currency,
                 "window": {
                     "start_date": start_date.isoformat(),
                     "end_date": end_date.isoformat(),
@@ -3684,7 +3452,7 @@ class IntegrationService:
             }
         )
         coverage = await self._reference_repository.get_risk_free_coverage(
-            currency=currency,
+            currency=normalized_currency,
             start_date=start_date,
             end_date=end_date,
         )

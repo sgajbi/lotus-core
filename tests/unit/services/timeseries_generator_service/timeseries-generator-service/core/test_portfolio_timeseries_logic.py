@@ -137,6 +137,34 @@ async def test_portfolio_logic_raises_error_if_fx_rate_is_missing(
     mock_repo.get_fx_rate.assert_awaited_once_with("EUR", "USD", test_date)
 
 
+async def test_portfolio_logic_raises_error_if_fx_rate_is_non_positive(
+    mock_repo: AsyncMock, sample_portfolio: Portfolio
+):
+    test_date = date(2025, 8, 8)
+    position_ts_list = [
+        PositionTimeseries(
+            security_id="EUR_STOCK",
+            bod_market_value=Decimal("100"),
+            eod_market_value=Decimal("120"),
+            date=test_date,
+        )
+    ]
+
+    mock_repo.get_instruments_by_ids.return_value = [
+        Instrument(security_id="EUR_STOCK", currency="EUR")
+    ]
+    mock_repo.get_fx_rate.return_value = SimpleNamespace(rate=Decimal("-1.08"))
+
+    with pytest.raises(FxRateNotFoundError, match="Non-positive FX rate from EUR to USD"):
+        await PortfolioTimeseriesLogic.calculate_daily_record(
+            portfolio=sample_portfolio,
+            a_date=test_date,
+            epoch=1,
+            position_timeseries_list=position_ts_list,
+            repo=mock_repo,
+        )
+
+
 # --- NEW TEST ---
 async def test_portfolio_logic_handles_non_string_currency(
     mock_repo: AsyncMock, sample_portfolio: Portfolio

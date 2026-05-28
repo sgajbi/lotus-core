@@ -56,7 +56,10 @@ class Portfolio(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (Index("ix_portfolios_booking_center_code", "booking_center_code"),)
+    __table_args__ = (
+        Index("ix_portfolios_booking_center_code", "booking_center_code"),
+        Index("ix_portfolios_norm_portfolio_id", func.trim(portfolio_id)),
+    )
 
 
 class SimulationSession(Base):
@@ -128,6 +131,14 @@ class PositionHistory(Base):
             id.desc(),
             "portfolio_id",
         ),
+        Index(
+            "ix_pos_hist_norm_port_sec_epoch_date",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            "epoch",
+            position_date.desc(),
+            id.desc(),
+        ),
     )
 
 
@@ -164,6 +175,13 @@ class DailyPositionSnapshot(Base):
             date.desc(),
             id.desc(),
         ),
+        Index(
+            "ix_daily_snap_norm_port_sec_date_epoch",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            date.desc(),
+            epoch.desc(),
+        ),
     )
 
 
@@ -184,6 +202,12 @@ class FxRate(Base):
         UniqueConstraint(
             "from_currency", "to_currency", "rate_date", name="_currency_pair_date_uc"
         ),
+        Index(
+            "ix_fx_rates_normalized_pair_rate_date",
+            func.upper(func.trim(from_currency)),
+            func.upper(func.trim(to_currency)),
+            rate_date.desc(),
+        ),
     )
 
 
@@ -202,6 +226,11 @@ class MarketPrice(Base):
 
     __table_args__ = (
         UniqueConstraint("security_id", "price_date", name="_security_price_date_uc"),
+        Index(
+            "ix_market_prices_norm_sec_price_date",
+            func.trim(security_id),
+            price_date.desc(),
+        ),
     )
 
 
@@ -1231,6 +1260,13 @@ class Transaction(Base):
             "transaction_type",
             "transaction_date",
         ),
+        Index(
+            "ix_txn_norm_port_sec_date_id",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            transaction_date,
+            transaction_id,
+        ),
     )
 
 
@@ -1289,6 +1325,13 @@ class Cashflow(Base):
             "is_portfolio_flow",
             "cashflow_date",
         ),
+        Index(
+            "ix_cashflows_norm_port_sec_date_epoch",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            cashflow_date,
+            epoch.desc(),
+        ),
     )
 
 
@@ -1317,6 +1360,14 @@ class PositionLotState(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_position_lot_norm_port_sec",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+        ),
     )
 
 
@@ -1365,6 +1416,16 @@ class PositionTimeseries(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (
+        Index(
+            "ix_pos_ts_norm_port_sec_date_epoch",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            date.desc(),
+            epoch.desc(),
+        ),
+    )
+
 
 class PortfolioTimeseries(Base):
     __tablename__ = "portfolio_timeseries"
@@ -1380,6 +1441,15 @@ class PortfolioTimeseries(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_port_ts_norm_port_date_epoch",
+            func.trim(portfolio_id),
+            date.desc(),
+            epoch.desc(),
+        ),
     )
 
     def to_dict(self):
@@ -1532,6 +1602,14 @@ class PortfolioValuationJob(Base):
             "valuation_date",
             "updated_at",
             "id",
+        ),
+        Index(
+            "ix_val_jobs_norm_port_sec_date_epoch_status",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            "valuation_date",
+            "epoch",
+            "status",
         ),
     )
 

@@ -162,7 +162,7 @@ class EnterpriseReadinessRuntime:
     def authorize_request(
         self, method: str, path: str, headers: dict[str, str]
     ) -> tuple[bool, str | None]:
-        normalized_method = method.upper()
+        normalized_method = method.strip().upper()
         required_capability = self.required_capability(normalized_method, path)
         requires_write_authz = normalized_method in WRITE_METHODS and self.env_enabled(
             "ENTERPRISE_ENFORCE_AUTHZ", "false"
@@ -200,7 +200,7 @@ class EnterpriseReadinessRuntime:
         return True, None
 
     def required_capability(self, method: str, path: str) -> str | None:
-        method = method.upper()
+        method = method.strip().upper()
         for key, capability in _rules_by_specificity(self.load_capability_rules()):
             prefix = f"{method} "
             if key.upper().startswith(prefix) and _path_matches_rule(path, key[len(prefix) :]):

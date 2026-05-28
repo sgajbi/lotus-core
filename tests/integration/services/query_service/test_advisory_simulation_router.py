@@ -92,6 +92,26 @@ def test_advisory_simulation_execution_router_returns_problem_details_on_validat
     assert body["contract_version"] == ADVISORY_SIMULATION_CONTRACT_VERSION
 
 
+def test_advisory_simulation_execution_router_rejects_nonpositive_market_data():
+    payload = _payload()
+    payload["market_data_snapshot"]["prices"][0]["price"] = "0"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/integration/advisory/proposals/simulate-execution",
+            json=payload,
+            headers={
+                ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER: ADVISORY_SIMULATION_CONTRACT_VERSION
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert body["error_code"] == "CANONICAL_SIMULATION_REQUEST_VALIDATION_FAILED"
+    assert body["contract_version"] == ADVISORY_SIMULATION_CONTRACT_VERSION
+
+
 def test_advisory_simulation_execution_router_returns_problem_details_on_execution_failure(
     monkeypatch,
 ):

@@ -11,6 +11,7 @@ def _txn(
     transaction_type: str = "BUY",
     child_sequence_hint: int | None = None,
     target_instrument_id: str | None = None,
+    settlement_date: object | None = None,
 ) -> TransactionEvent:
     return TransactionEvent(
         transaction_id=transaction_id,
@@ -25,6 +26,7 @@ def _txn(
         trade_currency="USD",
         currency="USD",
         created_at=created_at,
+        settlement_date=settlement_date,
         child_sequence_hint=child_sequence_hint,
         target_instrument_id=target_instrument_id,
     )
@@ -39,6 +41,41 @@ def test_transaction_event_ordering_key_is_deterministic_for_same_timestamp() ->
 
     ordered = sorted([txn_b, txn_a], key=transaction_event_ordering_key)
     assert [t.transaction_id for t in ordered] == ["TXN_A", "TXN_B"]
+
+
+def test_transaction_event_standardizes_temporal_fields_to_utc_aware() -> None:
+    event = _txn(
+        "TXN_TIME",
+        datetime(2026, 1, 10, 8, 0),
+        datetime(2026, 1, 10, 8, 5),
+        settlement_date="2026-01-12T10:00:00Z",
+    )
+
+    assert event.transaction_date.tzinfo == UTC
+    assert event.created_at is not None
+    assert event.created_at.tzinfo == UTC
+    assert event.settlement_date is not None
+    assert event.settlement_date.tzinfo == UTC
+
+
+def test_transaction_event_ordering_key_handles_mixed_naive_and_aware_inputs() -> None:
+    naive = _txn("TXN_NAIVE", datetime(2026, 1, 10, 8, 0), None)
+    aware = _txn("TXN_AWARE", datetime(2026, 1, 10, 8, 0, tzinfo=UTC), None)
+
+    ordered = sorted([naive, aware], key=transaction_event_ordering_key)
+
+    assert [event.transaction_id for event in ordered] == ["TXN_AWARE", "TXN_NAIVE"]
+    assert all(event.transaction_date.tzinfo == UTC for event in ordered)
+
+
+def test_transaction_event_ordering_key_handles_post_validation_naive_datetime() -> None:
+    mutated = _txn("TXN_MUTATED", datetime(2026, 1, 10, 8, 0, tzinfo=UTC), None)
+    aware = _txn("TXN_AWARE", datetime(2026, 1, 10, 8, 0, tzinfo=UTC), None)
+    mutated.transaction_date = datetime(2026, 1, 10, 8, 0)
+
+    ordered = sorted([mutated, aware], key=transaction_event_ordering_key)
+
+    assert [event.transaction_id for event in ordered] == ["TXN_AWARE", "TXN_MUTATED"]
 
 
 def test_transaction_event_ordering_key_uses_transaction_id_as_last_tiebreak() -> None:
@@ -66,8 +103,9 @@ def test_transaction_event_ordering_key_orders_bundle_a_source_before_targets() 
     assert [t.transaction_id for t in ordered] == ["TXN_SOURCE", "TXN_TARGET"]
 
 
-def test_transaction_event_ordering_key_orders_bundle_a_targets_by_sequence_then_instrument(
-) -> None:
+def test_transaction_event_ordering_key_orders_bundle_a_targets_by_sequence_then_instrument() -> (
+    None
+):
     ts = datetime(2026, 1, 10, 8, 0, tzinfo=UTC)
     target_2 = _txn(
         "TXN_TARGET_2",

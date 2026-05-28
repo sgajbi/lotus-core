@@ -3,6 +3,7 @@ from typing import Iterable
 
 from .buy_models import BuyCanonicalTransaction
 from .buy_reason_codes import BuyValidationReasonCode
+from .control_code_normalization import normalize_transaction_control_code
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ def validate_buy_transaction(
 ) -> list[BuyValidationIssue]:
     issues: list[BuyValidationIssue] = []
 
-    if txn.transaction_type.upper() != "BUY":
+    if normalize_transaction_control_code(txn.transaction_type) != "BUY":
         issues.append(
             BuyValidationIssue(
                 code=BuyValidationReasonCode.INVALID_TRANSACTION_TYPE,

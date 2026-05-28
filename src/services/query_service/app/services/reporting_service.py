@@ -24,6 +24,8 @@ from ..dtos.reporting_dto import (
     ReportingPortfolioSummary,
     ReportingScope,
 )
+from ..repositories.currency_codes import normalize_currency_code
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,
     ReportingRepository,
@@ -32,6 +34,12 @@ from .allocation_calculator import AllocationInputRow, calculate_allocation_view
 from .cash_balance_service import CashBalanceResolver
 
 ZERO = Decimal("0")
+UNVALUED_STATUS = "UNVALUED"
+
+
+def _normalize_control_code(value: Any, *, default: str = "") -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized or default
 
 
 class ReportingService:
@@ -87,7 +95,7 @@ class ReportingService:
                     portfolio_id=portfolio.portfolio_id,
                     booking_center_code=portfolio.booking_center_code,
                     client_id=portfolio.client_id,
-                    portfolio_currency=portfolio.base_currency,
+                    portfolio_currency=normalize_currency_code(str(portfolio.base_currency)),
                     aum_portfolio_currency=(
                         per_portfolio_native[portfolio.portfolio_id]
                         if request.scope.scope_type == "portfolio"
@@ -185,7 +193,10 @@ class ReportingService:
         resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for portfolio summary queries.")
-        reporting_currency = request.reporting_currency or portfolio.base_currency
+        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+        reporting_currency = normalize_currency_code(
+            str(request.reporting_currency or portfolio_currency)
+        )
 
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
@@ -218,13 +229,13 @@ class ReportingService:
             portfolio_value = Decimal(str(row.snapshot.market_value or ZERO))
             reporting_value = await self._convert_amount(
                 amount=portfolio_value,
-                from_currency=portfolio.base_currency,
+                from_currency=portfolio_currency,
                 to_currency=reporting_currency,
                 as_of_date=resolved_as_of_date,
             )
             total_portfolio += portfolio_value
             total_reporting += reporting_value
-            if str(row.snapshot.valuation_status or "").upper() == "UNVALUED":
+            if _normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
                 unvalued_position_count += 1
             else:
                 valued_position_count += 1
@@ -233,7 +244,7 @@ class ReportingService:
             portfolio_id=portfolio.portfolio_id,
             booking_center_code=portfolio.booking_center_code,
             client_id=portfolio.client_id,
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             resolved_as_of_date=resolved_as_of_date,
             portfolio_type=portfolio.portfolio_type,
@@ -277,12 +288,18 @@ class ReportingService:
             direct_rows.append((row.instrument, row.snapshot, reporting_value))
 
         component_rows = await self.repo.list_instrument_lookthrough_components(
-            parent_security_ids=[row.snapshot.security_id for row in rows],
+            parent_security_ids=[
+                security_id
+                for row in rows
+                if (security_id := normalize_security_id(row.snapshot.security_id))
+            ],
             as_of_date=as_of_date,
         )
         components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)
         for component_row in component_rows:
-            components_by_parent[component_row.parent_security_id].append(component_row)
+            components_by_parent[normalize_security_id(component_row.parent_security_id)].append(
+                component_row
+            )
         decomposable_parent_ids = {
             parent_security_id
             for parent_security_id, components in components_by_parent.items()
@@ -303,6 +320,7 @@ class ReportingService:
         undecomposed_requested_count = 0
 
         for row in rows:
+            parent_security_id = normalize_security_id(row.snapshot.security_id)
             native_value = Decimal(str(row.snapshot.market_value or ZERO))
             reporting_value = await self._convert_amount(
                 amount=native_value,
@@ -310,8 +328,8 @@ class ReportingService:
                 to_currency=reporting_currency,
                 as_of_date=as_of_date,
             )
-            components = components_by_parent.get(row.snapshot.security_id, [])
-            if row.snapshot.security_id not in decomposable_parent_ids:
+            components = components_by_parent.get(parent_security_id, [])
+            if parent_security_id not in decomposable_parent_ids:
                 allocation_rows.append((row.instrument, row.snapshot, reporting_value))
                 if not self._cash_balance_resolver.is_cash_row(row):
                     undecomposed_requested_count += 1
@@ -392,9 +410,9 @@ class ReportingService:
         requested_reporting_currency: str | None,
     ) -> str:
         if requested_reporting_currency:
-            return requested_reporting_currency
+            return normalize_currency_code(requested_reporting_currency)
         if scope.scope_type == "portfolio":
-            return str(portfolios[0].base_currency)
+            return normalize_currency_code(str(portfolios[0].base_currency))
         raise ValueError(
             "reporting_currency is required for portfolio-list and business-unit reporting queries."
         )
@@ -407,9 +425,13 @@ class ReportingService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        if from_currency == to_currency:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        if normalized_from_currency == normalized_to_currency:
             return amount
-        rate = await self._get_fx_rate(from_currency, to_currency, as_of_date)
+        rate = await self._get_fx_rate(
+            normalized_from_currency, normalized_to_currency, as_of_date
+        )
         return amount * rate
 
     async def _get_fx_rate(
@@ -418,17 +440,20 @@ class ReportingService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        cache_key = (from_currency, to_currency, as_of_date)
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
         if cache_key in self._fx_cache:
             return self._fx_cache[cache_key]
         rate = await self.repo.get_latest_fx_rate(
-            from_currency=from_currency,
-            to_currency=to_currency,
+            from_currency=normalized_from_currency,
+            to_currency=normalized_to_currency,
             as_of_date=as_of_date,
         )
         if rate is None:
             raise ValueError(
-                f"FX rate not found for {from_currency}/{to_currency} as of {as_of_date}."
+                "FX rate not found for "
+                f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
             )
         rate = Decimal(str(rate))
         self._fx_cache[cache_key] = rate

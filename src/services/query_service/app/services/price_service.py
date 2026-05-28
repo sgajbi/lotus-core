@@ -2,10 +2,12 @@
 import logging
 from datetime import date
 from typing import Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..repositories.price_repository import MarketPriceRepository
 from ..dtos.price_dto import MarketPriceRecord, MarketPriceResponse
+from ..repositories.identifier_normalization import normalize_security_id
+from ..repositories.price_repository import MarketPriceRepository
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ class MarketPriceService:
         Retrieves a filtered list of market prices for a security.
         """
         logger.info(f"Fetching market prices for security '{security_id}'.")
+        security_id = normalize_security_id(security_id)
 
         db_results = await self.repo.get_prices(
             security_id=security_id, start_date=start_date, end_date=end_date

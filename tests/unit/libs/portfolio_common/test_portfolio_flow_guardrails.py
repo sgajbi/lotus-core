@@ -35,7 +35,9 @@ def _event(transaction_type: str, cash_entry_mode: str | None) -> TransactionEve
         ("WITHDRAWAL", True),
         ("TRANSFER_IN", True),
         ("TRANSFER_OUT", True),
+        (" fee ", True),
         ("BUY", False),
+        (" deposit_reversal ", False),
         ("DIVIDEND", False),
     ],
 )
@@ -52,6 +54,14 @@ def test_is_portfolio_flow_no_auto_generate_transaction_type(
 def test_guardrail_rejects_auto_generate_for_portfolio_flows(transaction_type: str) -> None:
     with pytest.raises(ValueError, match="AUTO_GENERATE cash_entry_mode is not supported"):
         assert_portfolio_flow_cash_entry_mode_allowed(_event(transaction_type, "AUTO_GENERATE"))
+
+
+@pytest.mark.parametrize("transaction_type", [" fee ", " deposit ", " transfer_out "])
+def test_guardrail_normalizes_transaction_type_before_rejecting_auto_generate(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(ValueError, match="AUTO_GENERATE cash_entry_mode is not supported"):
+        assert_portfolio_flow_cash_entry_mode_allowed(_event(transaction_type, " auto_generate "))
 
 
 def test_guardrail_allows_upstream_provided_for_portfolio_flows() -> None:

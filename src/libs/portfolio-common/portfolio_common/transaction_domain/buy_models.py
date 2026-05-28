@@ -2,7 +2,12 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from portfolio_common.control_code_normalization import (
+    normalize_transaction_control_code,
+)
+from portfolio_common.currency_codes import normalize_currency_code
 
 
 class BuyCanonicalTransaction(BaseModel):
@@ -16,6 +21,11 @@ class BuyCanonicalTransaction(BaseModel):
 
     transaction_id: str = Field(..., description="Unique transaction identifier.")
     transaction_type: str = Field(..., description="Canonical transaction type.")
+
+    @field_validator("transaction_type", mode="before")
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
 
     portfolio_id: str = Field(..., description="Portfolio receiving the purchased exposure.")
     instrument_id: str = Field(..., description="Instrument identifier.")
@@ -35,6 +45,11 @@ class BuyCanonicalTransaction(BaseModel):
 
     trade_currency: str = Field(..., description="Trade/settlement currency.")
     currency: str = Field(..., description="Booked transaction currency.")
+
+    @field_validator("trade_currency", "currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     economic_event_id: Optional[str] = Field(
         default=None,

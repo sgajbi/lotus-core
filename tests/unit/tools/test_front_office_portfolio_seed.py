@@ -55,7 +55,7 @@ def test_front_office_bundle_uses_real_business_names_and_context():
     portfolio = bundle["portfolios"][0]
     assert portfolio["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
     assert portfolio["client_id"] == "CIF_SG_000184"
-    assert portfolio["advisor_id"] == "RM_SG_001"
+    assert portfolio["advisor_id"] == FRONT_OFFICE_SEED_CONTRACT.advisor_id
     assert portfolio["portfolio_type"] == "discretionary"
     assert portfolio["booking_center_code"] == "Singapore"
 
@@ -78,7 +78,7 @@ def test_front_office_bundle_includes_source_only_dpm_candidate_portfolios():
         portfolio = portfolios[row["portfolio_id"]]
         assert portfolio["portfolio_type"] == "discretionary"
         assert portfolio["booking_center_code"] == "Singapore"
-        assert portfolio["advisor_id"] == "RM_SG_001"
+        assert portfolio["advisor_id"] == FRONT_OFFICE_SEED_CONTRACT.advisor_id
         assert portfolio["status"] == "active"
 
 
@@ -659,10 +659,7 @@ def test_front_office_bundle_rewrites_all_benchmark_artifacts_to_dedicated_seed_
     )
     assert bundle["benchmark_return_series"][-1]["series_date"] == "2026-05-25"
     assert len(
-        {
-            (row["benchmark_id"], row["effective_from"])
-            for row in bundle["benchmark_definitions"]
-        }
+        {(row["benchmark_id"], row["effective_from"]) for row in bundle["benchmark_definitions"]}
     ) == len(bundle["benchmark_definitions"])
     assert len(
         {
@@ -985,6 +982,7 @@ def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
 
     assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
+    assert contract.advisor_id == "advisor_sg_001"
     assert contract.canonical_as_of_date == "2026-04-10"
     assert contract.seed_start_date == "2025-03-31"
     assert contract.benchmark_start_date == "2025-01-06"
@@ -1023,6 +1021,7 @@ def test_front_office_seed_contract_has_governed_fallback_when_platform_contract
 
     assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
+    assert contract.advisor_id == "advisor_sg_001"
     assert contract.canonical_as_of_date == "2026-04-10"
     assert contract.min_transactions == 30
 

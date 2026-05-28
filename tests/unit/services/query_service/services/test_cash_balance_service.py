@@ -49,7 +49,7 @@ def _snapshot(
 
 async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() -> None:
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("P1", base_currency=" usd ")
     repo.get_portfolio_by_id.return_value = portfolio
     repo.get_latest_business_date.return_value = date(2026, 3, 27)
     repo.list_latest_snapshot_rows.return_value = [
@@ -63,8 +63,8 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
             instrument=_instrument(
                 "CASH_USD",
                 name="USD Cash Account",
-                currency="USD",
-                asset_class="CASH",
+                currency=" usd ",
+                asset_class=" cash ",
             ),
         ),
         ReportingSnapshotRow(
@@ -83,10 +83,12 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
         response = await service.get_cash_balances(
             portfolio_id="P1",
-            reporting_currency="SGD",
+            reporting_currency=" sgd ",
         )
 
     assert response.portfolio_id == "P1"
+    assert response.portfolio_currency == "USD"
+    assert response.reporting_currency == "SGD"
     assert response.product_name == "HoldingsAsOf"
     assert response.product_version == "v1"
     assert response.as_of_date == date(2026, 3, 27)
@@ -94,8 +96,14 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.totals.total_balance_portfolio_currency == Decimal("250")
     assert response.totals.total_balance_reporting_currency == Decimal("300.0")
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 15, tzinfo=UTC)
+    repo.get_latest_fx_rate.assert_awaited_once_with(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2026, 3, 27),
+    )
 
 
 async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_accounts() -> None:
@@ -148,6 +156,52 @@ async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_
     assert response.data_quality_status == "COMPLETE"
 
 
+async def test_get_cash_balances_normalizes_cash_security_ids_for_master_join() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="250"),
+            instrument=_instrument(
+                "CASH_USD",
+                name="USD Cash Account",
+                currency="USD",
+                asset_class="CASH",
+            ),
+        )
+    ]
+    repo.list_cash_account_masters.return_value = [
+        SimpleNamespace(
+            cash_account_id="CASH-ACC-USD-001",
+            security_id=" CASH_USD ",
+            display_name="USD Operating Cash",
+            account_currency=" usd ",
+        )
+    ]
+    repo.get_latest_cash_account_ids.return_value = {}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(portfolio_id="P1")
+
+    assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.cash_accounts[0].security_id == "CASH_USD"
+    assert response.cash_accounts[0].account_currency == "USD"
+    assert response.cash_accounts[0].balance_portfolio_currency == Decimal("250")
+    assert response.totals.total_balance_portfolio_currency == Decimal("250")
+    repo.get_latest_cash_account_ids.assert_awaited_once_with(
+        portfolio_id="P1",
+        cash_security_ids=["CASH_USD"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
     repo = AsyncMock()
     repo.get_portfolio_by_id.return_value = None
@@ -159,3 +213,32 @@ async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_cash_balances(portfolio_id="P404")
+
+
+async def test_cash_balance_service_normalizes_fx_cache_and_identity_checks() -> None:
+    repo = AsyncMock()
+    repo.get_latest_fx_rate.return_value = Decimal("1.35")
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+
+        same_currency = await service._convert_amount(
+            amount=Decimal("10"),
+            from_currency=" sgd ",
+            to_currency="SGD",
+            as_of_date=date(2026, 3, 27),
+        )
+        first_rate = await service._get_fx_rate(" usd ", " sgd ", date(2026, 3, 27))
+        second_rate = await service._get_fx_rate("USD", "SGD", date(2026, 3, 27))
+
+    assert same_currency == Decimal("10")
+    assert first_rate == Decimal("1.35")
+    assert second_rate == Decimal("1.35")
+    repo.get_latest_fx_rate.assert_awaited_once_with(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2026, 3, 27),
+    )

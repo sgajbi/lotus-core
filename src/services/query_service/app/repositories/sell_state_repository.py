@@ -1,8 +1,10 @@
 from typing import Optional
 
 from portfolio_common.database_models import Cashflow, Portfolio, Transaction
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .identifier_normalization import normalize_security_id
 
 
 class SellStateRepository:
@@ -14,11 +16,15 @@ class SellStateRepository:
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
     async def get_sell_disposals(self, portfolio_id: str, security_id: str) -> list[Transaction]:
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return []
+
         stmt = (
             select(Transaction)
             .where(
                 Transaction.portfolio_id == portfolio_id,
-                Transaction.security_id == security_id,
+                func.trim(Transaction.security_id) == security_id,
                 Transaction.transaction_type == "SELL",
             )
             .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())

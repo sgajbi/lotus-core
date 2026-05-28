@@ -5,6 +5,7 @@ from typing import Iterable
 from portfolio_common.events import TransactionEvent
 
 from .cash_entry_mode import is_upstream_provided_cash_entry_mode
+from .control_code_normalization import normalize_transaction_control_code
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,7 @@ def validate_upstream_cash_leg_pairing(
             )
         )
 
-    if cash_leg.transaction_type.upper() != "ADJUSTMENT":
+    if normalize_transaction_control_code(cash_leg.transaction_type) != "ADJUSTMENT":
         issues.append(
             DualLegPairingIssue(
                 field="transaction_type",

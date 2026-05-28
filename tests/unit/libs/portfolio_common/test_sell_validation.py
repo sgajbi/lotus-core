@@ -27,7 +27,8 @@ def _base_txn() -> SellCanonicalTransaction:
 
 
 def test_validate_sell_transaction_happy_path() -> None:
-    issues = validate_sell_transaction(_base_txn())
+    txn = _base_txn().model_copy(update={"transaction_type": " sell "})
+    issues = validate_sell_transaction(txn)
     assert issues == []
 
 

@@ -155,7 +155,10 @@ async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_w
     assert "position_timeseries.date <= '2025-01-10'" in compiled_query
     assert "position_timeseries.epoch <= 14" in compiled_query
     assert (
-        "row_number() OVER (PARTITION BY position_timeseries.security_id ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)"
-        in compiled_query
+        "row_number() OVER (PARTITION BY trim(position_timeseries.security_id) "
+        "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)" in compiled_query
     )
+    assert "trim(position_timeseries.portfolio_id) = 'P1'" in compiled_query
+    assert "trim(position_timeseries.portfolio_id) = anon_1.portfolio_id" in compiled_query
+    assert "trim(position_timeseries.security_id) = anon_1.security_id" in compiled_query
     assert "anon_1.rn = 1" in compiled_query

@@ -442,6 +442,62 @@ async def test_consumer_rejects_invalid_fx_event(
     cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
 
 
+async def test_consumer_sends_negative_trade_fee_to_dlq(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    incoming_event_dict = json.loads(mock_buy_kafka_message.value().decode("utf-8"))
+    incoming_event_dict["trade_fee"] = "-0.01"
+    mock_buy_kafka_message.value.return_value = json.dumps(incoming_event_dict).encode("utf-8")
+
+    await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    mock_repo.get_transaction_history.assert_not_called()
+    mock_repo.update_transaction_costs.assert_not_called()
+    cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_consumer_sends_negative_core_amount_to_dlq(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    incoming_event_dict = json.loads(mock_buy_kafka_message.value().decode("utf-8"))
+    incoming_event_dict["gross_transaction_amount"] = "-1.00"
+    mock_buy_kafka_message.value.return_value = json.dumps(incoming_event_dict).encode("utf-8")
+
+    await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    mock_repo.get_transaction_history.assert_not_called()
+    mock_repo.update_transaction_costs.assert_not_called()
+    cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_transform_event_rejects_post_validation_negative_trade_fee(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+):
+    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
+    event.trade_fee = Decimal("-0.01")
+
+    with pytest.raises(ValueError, match="trade_fee"):
+        cost_calculator_consumer._transform_event_for_engine(event)
+
+
+async def test_transform_event_rejects_post_validation_negative_fee_component(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+):
+    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
+    event.brokerage = Decimal("-0.01")
+
+    with pytest.raises(ValueError, match="brokerage"):
+        cost_calculator_consumer._transform_event_for_engine(event)
+
+
 async def test_consumer_uses_trade_fee_in_calculation(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_buy_kafka_message: MagicMock,
@@ -715,6 +771,30 @@ async def test_consumer_defer_when_fx_rate_missing(
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 
 
+async def test_fx_enrichment_normalizes_same_currency_without_lookup(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    transactions = [
+        {
+            "transaction_id": "BUY_PADDED_CCY_01",
+            "transaction_date": "2025-12-05T10:00:00Z",
+            "trade_currency": " usd ",
+        }
+    ]
+
+    enriched = await cost_calculator_consumer._enrich_transactions_with_fx(
+        transactions=transactions,
+        portfolio_base_currency=" USD ",
+        repo=repo,
+    )
+
+    repo.get_fx_rate.assert_not_awaited()
+    assert enriched[0]["trade_currency"] == "USD"
+    assert enriched[0]["portfolio_base_currency"] == "USD"
+    assert "transaction_fx_rate" not in enriched[0]
+
+
 async def test_consumer_emits_sell_lifecycle_metrics(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_sell_kafka_message: MagicMock,
@@ -897,6 +977,44 @@ async def test_consumer_defers_upstream_mode_until_cash_leg_is_available(
     with pytest.raises(RetryableConsumerError):
         await cost_calculator_consumer.process_message(mock_interest_kafka_message)
 
+    cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_consumer_normalizes_upstream_adjustment_cash_leg_type(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    incoming = json.loads(mock_buy_kafka_message.value().decode("utf-8"))
+    incoming["transaction_id"] = "ADJ-UP-01"
+    incoming["transaction_type"] = " adjustment "
+    incoming["quantity"] = "0"
+    incoming["price"] = "0"
+    incoming["gross_transaction_amount"] = "25"
+    incoming["trade_fee"] = "0"
+    incoming["cash_entry_mode"] = " upstream_provided "
+    incoming["external_cash_transaction_id"] = None
+    mock_buy_kafka_message.value.return_value = json.dumps(incoming).encode("utf-8")
+
+    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_instrument.return_value = None
+
+    await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    mock_repo.get_transaction_history.assert_not_called()
+    mock_repo.update_transaction_costs.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_called_once()
+    payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
+    assert payload["transaction_type"] == "ADJUSTMENT"
+    assert payload["cash_entry_mode"] == "UPSTREAM_PROVIDED"
+    assert payload["external_cash_transaction_id"] is None
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 
 

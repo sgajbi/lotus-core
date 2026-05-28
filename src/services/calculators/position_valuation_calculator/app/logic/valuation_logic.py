@@ -1,7 +1,11 @@
 # services/calculators/position-valuation-calculator/app/logic/valuation_logic.py
 import logging
 from decimal import Decimal
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
+
+from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
+from portfolio_common.market_prices import coerce_positive_market_price_or_none
+from portfolio_common.valuation_prices import resolve_valuation_unit_price
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +15,39 @@ class ValuationLogic:
     A stateless calculator for determining the market value and unrealized
     gain/loss of a position, with full dual-currency support.
     """
+
+    @staticmethod
+    def _as_decimal(value: Any) -> Decimal:
+        return value if isinstance(value, Decimal) else Decimal(str(value))
+
+    @staticmethod
+    def _normalize_currency_code(currency_code: str) -> str:
+        return currency_code.strip().upper()
+
+    @classmethod
+    def _positive_fx_rate_or_none(
+        cls,
+        fx_rate: Decimal | None,
+        *,
+        from_currency: str,
+        to_currency: str,
+    ) -> Decimal | None:
+        if fx_rate is None:
+            logger.warning(
+                "Missing FX rate from %s to %s. Cannot value.",
+                from_currency,
+                to_currency,
+            )
+            return None
+        normalized_fx_rate = coerce_positive_fx_rate_or_none(fx_rate)
+        if normalized_fx_rate is None:
+            logger.warning(
+                "Non-positive FX rate from %s to %s. Cannot value.",
+                from_currency,
+                to_currency,
+            )
+            return None
+        return normalized_fx_rate
 
     @staticmethod
     def calculate_valuation(
@@ -31,8 +68,20 @@ class ValuationLogic:
             A tuple of (market_value_base, market_value_local, pnl_base, pnl_local),
             or None if a required FX rate is missing.
         """
-        # Defensive type conversion to prevent errors from non-Decimal inputs
-        quantity = Decimal(str(quantity))
+        quantity = ValuationLogic._as_decimal(quantity)
+        market_price = coerce_positive_market_price_or_none(market_price)
+        if market_price is None:
+            logger.warning(
+                "Non-positive market price for %s/%s. Cannot value.",
+                price_currency,
+                instrument_currency,
+            )
+            return None
+        cost_basis_base = ValuationLogic._as_decimal(cost_basis_base)
+        cost_basis_local = ValuationLogic._as_decimal(cost_basis_local)
+        price_currency = ValuationLogic._normalize_currency_code(price_currency)
+        instrument_currency = ValuationLogic._normalize_currency_code(instrument_currency)
+        portfolio_currency = ValuationLogic._normalize_currency_code(portfolio_currency)
 
         if quantity.is_zero():
             return Decimal(0), Decimal(0), Decimal(0), Decimal(0)
@@ -40,33 +89,21 @@ class ValuationLogic:
         # 1. Determine the price in the instrument's currency
         valuation_price_local = market_price
         if price_currency != instrument_currency:
-            if price_to_instrument_fx_rate is None:
-                logger.warning(
-                    "Missing FX rate from "
-                    f"{price_currency} to {instrument_currency} "
-                    "to align price. Cannot value."
-                )
-                return None
-            valuation_price_local = market_price * price_to_instrument_fx_rate
-
-        normalized_product_type = (product_type or "").strip().upper()
-        if normalized_product_type == "BOND":
-            average_cost_local = (
-                abs(cost_basis_local / quantity)
-                if not quantity.is_zero() and cost_basis_local is not None
-                else Decimal("0")
+            normalized_price_fx_rate = ValuationLogic._positive_fx_rate_or_none(
+                price_to_instrument_fx_rate,
+                from_currency=price_currency,
+                to_currency=instrument_currency,
             )
-            absolute_price_local = abs(valuation_price_local)
-            if (
-                absolute_price_local > Decimal("0")
-                and absolute_price_local < Decimal("200")
-                and average_cost_local >= Decimal("500")
-            ):
-                price_ratio = average_cost_local / absolute_price_local
-                if price_ratio >= Decimal("50"):
-                    valuation_price_local *= Decimal("100")
-                elif price_ratio >= Decimal("5"):
-                    valuation_price_local *= Decimal("10")
+            if normalized_price_fx_rate is None:
+                return None
+            valuation_price_local = market_price * normalized_price_fx_rate
+
+        valuation_price_local = resolve_valuation_unit_price(
+            market_price=valuation_price_local,
+            quantity=quantity,
+            cost_basis_local=cost_basis_local,
+            product_type=product_type,
+        )
 
         # 2. Calculate Market Value in local currency
         market_value_local = quantity * valuation_price_local
@@ -77,14 +114,14 @@ class ValuationLogic:
         # 4. Convert Market Value to portfolio's base currency
         market_value_base = market_value_local
         if instrument_currency != portfolio_currency:
-            if instrument_to_portfolio_fx_rate is None:
-                logger.warning(
-                    "Missing FX rate from "
-                    f"{instrument_currency} to {portfolio_currency} "
-                    "for reporting. Cannot value."
-                )
+            normalized_portfolio_fx_rate = ValuationLogic._positive_fx_rate_or_none(
+                instrument_to_portfolio_fx_rate,
+                from_currency=instrument_currency,
+                to_currency=portfolio_currency,
+            )
+            if normalized_portfolio_fx_rate is None:
                 return None
-            market_value_base = market_value_local * instrument_to_portfolio_fx_rate
+            market_value_base = market_value_local * normalized_portfolio_fx_rate
 
         # 5. Calculate Unrealized PnL in portfolio's base currency
         unrealized_pnl_base = market_value_base - cost_basis_base

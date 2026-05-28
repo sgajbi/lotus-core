@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, TypeVar
 
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
@@ -29,8 +29,17 @@ from portfolio_common.database_models import (
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
+from portfolio_common.market_reference_quality import (
+    normalize_quality_status,
+    quality_status_summary_key,
+)
 from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
+from .identifier_normalization import normalize_security_id
+
+T = TypeVar("T")
 
 
 def _effective_filter(
@@ -76,6 +85,37 @@ def _latest_effective_rows(rows: list[Any], *key_fields: str) -> list[Any]:
     )
 
 
+def _canonicalize_series_rows(rows: list[T], *key_fields: str) -> list[T]:
+    if not rows:
+        return []
+
+    def sort_key(row: T) -> tuple[Any, ...]:
+        quality_status = normalize_quality_status(getattr(row, "quality_status", None))
+        source_timestamp = getattr(row, "source_timestamp", None)
+        return (
+            *(getattr(row, field) for field in key_fields),
+            1 if quality_status == "ACCEPTED" else 0,
+            source_timestamp.isoformat() if source_timestamp else "",
+            getattr(row, "series_id", "") or "",
+            getattr(row, "source_vendor", "") or "",
+            getattr(row, "source_record_id", "") or "",
+            getattr(row, "id", 0) or 0,
+        )
+
+    selected_by_key: dict[tuple[Any, ...], T] = {}
+    for row in sorted(rows, key=sort_key):
+        selected_by_key[tuple(getattr(row, field) for field in key_fields)] = row
+    return [selected_by_key[key] for key in sorted(selected_by_key)]
+
+
+def _reference_status_expr(status_column: Any):
+    return func.lower(func.trim(status_column))
+
+
+def _normalize_reference_status(status: str) -> str:
+    return status.strip().lower()
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -110,7 +150,7 @@ class ReferenceDataRepository:
             select(ModelPortfolioDefinition)
             .where(
                 ModelPortfolioDefinition.model_portfolio_id == model_portfolio_id,
-                ModelPortfolioDefinition.approval_status == "approved",
+                _reference_status_expr(ModelPortfolioDefinition.approval_status) == "approved",
                 _effective_filter(
                     ModelPortfolioDefinition.effective_from,
                     ModelPortfolioDefinition.effective_to,
@@ -152,7 +192,9 @@ class ReferenceDataRepository:
             )
         )
         if not include_inactive_targets:
-            stmt = stmt.where(ModelPortfolioTarget.target_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(ModelPortfolioTarget.target_status) == "active"
+            )
         result = await self._db.execute(stmt)
         rows = list(result.scalars().all())
         return _latest_effective_rows(
@@ -193,7 +235,10 @@ class ReferenceDataRepository:
         if booking_center_code:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         if not include_inactive_mandates:
-            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
+                == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -235,7 +280,10 @@ class ReferenceDataRepository:
         if model_portfolio_ids:
             stmt = stmt.where(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
         if not include_inactive_mandates:
-            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
+                == "active"
+            )
 
         result = await self._db.execute(stmt)
         rows = _latest_effective_rows(
@@ -324,7 +372,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_restrictions:
-            stmt = stmt.where(ClientRestrictionProfile.restriction_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(ClientRestrictionProfile.restriction_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -369,7 +419,10 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_preferences:
-            stmt = stmt.where(SustainabilityPreferenceProfile.preference_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(SustainabilityPreferenceProfile.preference_status)
+                == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -412,7 +465,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_profiles:
-            stmt = stmt.where(ClientTaxProfile.profile_status == "active")
+            stmt = stmt.where(_reference_status_expr(ClientTaxProfile.profile_status) == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(list(result.scalars().all()), "tax_profile_id")
 
@@ -454,7 +507,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_rules:
-            stmt = stmt.where(ClientTaxRuleSet.rule_status == "active")
+            stmt = stmt.where(_reference_status_expr(ClientTaxRuleSet.rule_status) == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -498,7 +551,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_schedules:
-            stmt = stmt.where(ClientIncomeNeedsSchedule.need_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(ClientIncomeNeedsSchedule.need_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(list(result.scalars().all()), "schedule_id")
 
@@ -538,7 +593,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_requirements:
-            stmt = stmt.where(LiquidityReserveRequirement.reserve_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(LiquidityReserveRequirement.reserve_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -579,7 +636,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_withdrawals:
-            stmt = stmt.where(PlannedWithdrawalSchedule.withdrawal_status == "active")
+            stmt = stmt.where(
+                _reference_status_expr(PlannedWithdrawalSchedule.withdrawal_status) == "active"
+            )
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -592,12 +651,18 @@ class ReferenceDataRepository:
         security_ids: list[str],
         as_of_date: date,
     ) -> list[InstrumentEligibilityProfile]:
-        if not security_ids:
+        normalized_security_ids = [
+            normalized
+            for security_id in security_ids
+            if (normalized := normalize_security_id(security_id))
+        ]
+        if not normalized_security_ids:
             return []
+        security_id_expr = func.trim(InstrumentEligibilityProfile.security_id)
         stmt = (
             select(InstrumentEligibilityProfile)
             .where(
-                InstrumentEligibilityProfile.security_id.in_(security_ids),
+                security_id_expr.in_(normalized_security_ids),
                 _effective_filter(
                     InstrumentEligibilityProfile.effective_from,
                     InstrumentEligibilityProfile.effective_to,
@@ -605,7 +670,7 @@ class ReferenceDataRepository:
                 ),
             )
             .order_by(
-                InstrumentEligibilityProfile.security_id.asc(),
+                security_id_expr.asc(),
                 InstrumentEligibilityProfile.effective_from.desc(),
                 InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
                 InstrumentEligibilityProfile.eligibility_version.desc(),
@@ -670,9 +735,15 @@ class ReferenceDataRepository:
         if benchmark_type:
             stmt = stmt.where(BenchmarkDefinition.benchmark_type == benchmark_type)
         if benchmark_currency:
-            stmt = stmt.where(BenchmarkDefinition.benchmark_currency == benchmark_currency.upper())
+            stmt = stmt.where(
+                BenchmarkDefinition.benchmark_currency
+                == normalize_currency_code(benchmark_currency)
+            )
         if benchmark_status:
-            stmt = stmt.where(BenchmarkDefinition.benchmark_status == benchmark_status)
+            stmt = stmt.where(
+                _reference_status_expr(BenchmarkDefinition.benchmark_status)
+                == _normalize_reference_status(benchmark_status)
+            )
         result = await self._db.execute(
             stmt.order_by(
                 BenchmarkDefinition.benchmark_id.asc(),
@@ -699,11 +770,16 @@ class ReferenceDataRepository:
         if index_ids:
             stmt = stmt.where(IndexDefinition.index_id.in_(index_ids))
         if index_currency:
-            stmt = stmt.where(IndexDefinition.index_currency == index_currency.upper())
+            stmt = stmt.where(
+                IndexDefinition.index_currency == normalize_currency_code(index_currency)
+            )
         if index_type:
             stmt = stmt.where(IndexDefinition.index_type == index_type)
         if index_status:
-            stmt = stmt.where(IndexDefinition.index_status == index_status)
+            stmt = stmt.where(
+                _reference_status_expr(IndexDefinition.index_status)
+                == _normalize_reference_status(index_status)
+            )
         result = await self._db.execute(
             stmt.order_by(IndexDefinition.index_id.asc(), IndexDefinition.effective_from.desc())
         )
@@ -805,7 +881,11 @@ class ReferenceDataRepository:
             .order_by(IndexPriceSeries.index_id.asc(), IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_index_return_points(
         self,
@@ -825,7 +905,11 @@ class ReferenceDataRepository:
             .order_by(IndexReturnSeries.index_id.asc(), IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_benchmark_return_points(
         self,
@@ -843,7 +927,11 @@ class ReferenceDataRepository:
             .order_by(BenchmarkReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "benchmark_id",
+            "series_date",
+        )
 
     async def list_index_price_series(
         self, index_id: str, start_date: date, end_date: date
@@ -858,7 +946,11 @@ class ReferenceDataRepository:
             .order_by(IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_index_return_series(
         self, index_id: str, start_date: date, end_date: date
@@ -873,7 +965,11 @@ class ReferenceDataRepository:
             .order_by(IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_risk_free_series(
         self,
@@ -884,14 +980,14 @@ class ReferenceDataRepository:
         stmt = (
             select(RiskFreeSeries)
             .where(
-                RiskFreeSeries.series_currency == currency.upper(),
+                RiskFreeSeries.series_currency == normalize_currency_code(currency),
                 RiskFreeSeries.series_date >= start_date,
                 RiskFreeSeries.series_date <= end_date,
             )
             .order_by(RiskFreeSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return self._canonicalize_risk_free_series_rows(list(result.scalars().all()))
+        return _canonicalize_series_rows(list(result.scalars().all()), "series_date")
 
     async def list_taxonomy(
         self,
@@ -941,9 +1037,9 @@ class ReferenceDataRepository:
         total_points = len(price_points) + len(benchmark_returns)
         quality_counts: dict[str, int] = defaultdict(int)
         for row in price_points:
-            quality_counts[row.quality_status] += 1
+            quality_counts[quality_status_summary_key(row.quality_status)] += 1
         for row in benchmark_returns:
-            quality_counts[row.quality_status] += 1
+            quality_counts[quality_status_summary_key(row.quality_status)] += 1
 
         active_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
         for component in components:
@@ -996,7 +1092,7 @@ class ReferenceDataRepository:
         all_dates = [row.series_date for row in points]
         quality_counts: dict[str, int] = defaultdict(int)
         for row in points:
-            quality_counts[row.quality_status] += 1
+            quality_counts[quality_status_summary_key(row.quality_status)] += 1
         observed_start = min(all_dates) if all_dates else None
         observed_end = max(all_dates) if all_dates else None
         return {
@@ -1008,27 +1104,6 @@ class ReferenceDataRepository:
             "latest_evidence_timestamp": _latest_reference_evidence_timestamp(points),
         }
 
-    @staticmethod
-    def _canonicalize_risk_free_series_rows(rows: list[RiskFreeSeries]) -> list[RiskFreeSeries]:
-        if not rows:
-            return []
-
-        def sort_key(row: RiskFreeSeries) -> tuple[date, int, str, str, str]:
-            quality_status = getattr(row, "quality_status", "") or ""
-            source_timestamp = getattr(row, "source_timestamp", None)
-            return (
-                row.series_date,
-                0 if quality_status.lower() == "accepted" else 1,
-                source_timestamp.isoformat() if source_timestamp else "",
-                getattr(row, "risk_free_curve_id", "") or "",
-                getattr(row, "series_id", "") or "",
-            )
-
-        selected_by_date: dict[date, RiskFreeSeries] = {}
-        for row in sorted(rows, key=sort_key):
-            selected_by_date[row.series_date] = row
-        return [selected_by_date[current_date] for current_date in sorted(selected_by_date)]
-
     async def get_fx_rates(
         self,
         from_currency: str,
@@ -1036,11 +1111,15 @@ class ReferenceDataRepository:
         start_date: date,
         end_date: date,
     ) -> dict[date, Decimal]:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         stmt = (
             select(FxRate)
             .where(
-                FxRate.from_currency == from_currency.upper(),
-                FxRate.to_currency == to_currency.upper(),
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date >= start_date,
                 FxRate.rate_date <= end_date,
             )
@@ -1056,19 +1135,25 @@ class ReferenceDataRepository:
         security_ids: list[str],
         as_of_date: date,
     ) -> list[MarketPrice]:
-        if not security_ids:
+        normalized_security_ids = [
+            normalized
+            for security_id in security_ids
+            if (normalized := normalize_security_id(security_id))
+        ]
+        if not normalized_security_ids:
             return []
+        security_id_expr = func.trim(MarketPrice.security_id)
 
         latest_price_dates = (
             select(
-                MarketPrice.security_id,
+                security_id_expr.label("security_id"),
                 func.max(MarketPrice.price_date).label("latest_price_date"),
             )
             .where(
-                MarketPrice.security_id.in_(security_ids),
+                security_id_expr.in_(normalized_security_ids),
                 MarketPrice.price_date <= as_of_date,
             )
-            .group_by(MarketPrice.security_id)
+            .group_by(security_id_expr)
             .subquery()
         )
         stmt = (
@@ -1076,11 +1161,11 @@ class ReferenceDataRepository:
             .join(
                 latest_price_dates,
                 and_(
-                    MarketPrice.security_id == latest_price_dates.c.security_id,
+                    security_id_expr == latest_price_dates.c.security_id,
                     MarketPrice.price_date == latest_price_dates.c.latest_price_date,
                 ),
             )
-            .order_by(MarketPrice.security_id.asc())
+            .order_by(security_id_expr.asc())
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
@@ -1094,18 +1179,27 @@ class ReferenceDataRepository:
         if not currency_pairs:
             return []
 
-        normalized_pairs = [(base.upper(), quote.upper()) for base, quote in currency_pairs]
+        normalized_pairs = [
+            (normalized_base, normalized_quote)
+            for base, quote in currency_pairs
+            if (normalized_base := normalize_currency_code(base))
+            and (normalized_quote := normalize_currency_code(quote))
+        ]
+        if not normalized_pairs:
+            return []
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         latest_rate_dates = (
             select(
-                FxRate.from_currency,
-                FxRate.to_currency,
+                from_currency_expr.label("from_currency"),
+                to_currency_expr.label("to_currency"),
                 func.max(FxRate.rate_date).label("latest_rate_date"),
             )
             .where(
-                tuple_(FxRate.from_currency, FxRate.to_currency).in_(normalized_pairs),
+                tuple_(from_currency_expr, to_currency_expr).in_(normalized_pairs),
                 FxRate.rate_date <= as_of_date,
             )
-            .group_by(FxRate.from_currency, FxRate.to_currency)
+            .group_by(from_currency_expr, to_currency_expr)
             .subquery()
         )
         stmt = (
@@ -1113,12 +1207,12 @@ class ReferenceDataRepository:
             .join(
                 latest_rate_dates,
                 and_(
-                    FxRate.from_currency == latest_rate_dates.c.from_currency,
-                    FxRate.to_currency == latest_rate_dates.c.to_currency,
+                    from_currency_expr == latest_rate_dates.c.from_currency,
+                    to_currency_expr == latest_rate_dates.c.to_currency,
                     FxRate.rate_date == latest_rate_dates.c.latest_rate_date,
                 ),
             )
-            .order_by(FxRate.from_currency.asc(), FxRate.to_currency.asc())
+            .order_by(from_currency_expr.asc(), to_currency_expr.asc())
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

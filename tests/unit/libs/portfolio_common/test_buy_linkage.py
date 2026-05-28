@@ -26,7 +26,8 @@ def _buy_event() -> TransactionEvent:
 
 
 def test_enrich_buy_metadata_populates_defaults() -> None:
-    enriched = enrich_buy_transaction_metadata(_buy_event())
+    event = _buy_event().model_copy(update={"transaction_type": " buy "})
+    enriched = enrich_buy_transaction_metadata(event)
     assert enriched.economic_event_id == "EVT-BUY-PORT-LINK-001-BUY-LINK-001"
     assert enriched.linked_transaction_group_id == "LTG-BUY-PORT-LINK-001-BUY-LINK-001"
     assert enriched.calculation_policy_id == BUY_DEFAULT_POLICY_ID

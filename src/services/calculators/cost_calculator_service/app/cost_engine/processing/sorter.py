@@ -33,7 +33,7 @@ class TransactionSorter:
 
 
 def _ca_bundle_a_dependency_rank(txn: Transaction) -> int:
-    transaction_type = str(getattr(txn, "transaction_type", "") or "").upper()
+    transaction_type = _normalize_sort_code(getattr(txn, "transaction_type", ""))
     if transaction_type in {"SPIN_OFF", "DEMERGER_OUT"}:
         return 0
     if transaction_type in {"RIGHTS_ANNOUNCE", "RIGHTS_ALLOCATE"}:
@@ -65,12 +65,12 @@ def _ca_bundle_a_target_order_key(txn: Transaction) -> tuple[int, str]:
 
 
 def _cash_dependency_rank(txn: Transaction) -> int:
-    product_type = str(getattr(txn, "product_type", "") or "").upper()
-    asset_class = str(getattr(txn, "asset_class", "") or "").upper()
-    component_type = str(getattr(txn, "component_type", "") or "").upper()
-    transaction_type = str(getattr(txn, "transaction_type", "") or "").upper()
-    instrument_id = str(getattr(txn, "instrument_id", "") or "").upper()
-    security_id = str(getattr(txn, "security_id", "") or "").upper()
+    product_type = _normalize_sort_code(getattr(txn, "product_type", ""))
+    asset_class = _normalize_sort_code(getattr(txn, "asset_class", ""))
+    component_type = _normalize_sort_code(getattr(txn, "component_type", ""))
+    transaction_type = _normalize_sort_code(getattr(txn, "transaction_type", ""))
+    instrument_id = _normalize_sort_code(getattr(txn, "instrument_id", ""))
+    security_id = _normalize_sort_code(getattr(txn, "security_id", ""))
 
     is_cash = (
         product_type == "CASH"
@@ -94,3 +94,7 @@ def _cash_dependency_rank(txn: Transaction) -> int:
         return 2
 
     return 1
+
+
+def _normalize_sort_code(value: object) -> str:
+    return str(value or "").strip().upper()

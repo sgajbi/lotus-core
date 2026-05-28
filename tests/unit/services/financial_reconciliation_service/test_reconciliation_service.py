@@ -132,6 +132,47 @@ async def test_run_position_valuation_respects_bond_percent_of_par_pricing():
 
 
 @pytest.mark.asyncio
+async def test_run_position_valuation_records_invalid_market_price_without_derived_math():
+    run = SimpleNamespace(run_id="recon-invalid-price")
+    snapshot = SimpleNamespace(
+        portfolio_id="PORT-INVALID-PRICE",
+        security_id="SEC-INVALID-PRICE",
+        date=date(2026, 3, 8),
+        epoch=0,
+        quantity=Decimal("10"),
+        market_price=Decimal("-12.50"),
+        market_value_local=Decimal("-125"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+        unrealized_gain_loss_local=Decimal("-225"),
+    )
+    instrument = SimpleNamespace(currency="USD", product_type="EQUITY")
+    portfolio = SimpleNamespace(base_currency="USD")
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_position_valuation_rows.return_value = [(snapshot, instrument, portfolio)]
+
+    service = ReconciliationService(repository)
+    await service.run_position_valuation(
+        request=ReconciliationRunRequest(
+            portfolio_id="PORT-INVALID-PRICE", business_date=date(2026, 3, 8)
+        ),
+        correlation_id="corr-invalid-price",
+    )
+
+    findings = repository.add_findings.await_args.args[0]
+    assert len(findings) == 1
+    assert findings[0].finding_type == "invalid_market_price"
+    assert findings[0].expected_value == {"market_price": ">0"}
+    assert findings[0].observed_value == {"market_price": "-12.50"}
+    summary = repository.mark_run_completed.await_args.kwargs["summary"]
+    assert summary["examined_count"] == 1
+    assert summary["finding_count"] == 1
+    assert summary["error_count"] == 1
+    assert summary["passed"] is False
+
+
+@pytest.mark.asyncio
 async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
     transaction_run = SimpleNamespace(run_id="recon-tx")
     valuation_run = SimpleNamespace(run_id="recon-val")
@@ -255,7 +296,9 @@ async def test_run_timeseries_integrity_records_missing_portfolio_timeseries():
         "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
     ) as observe_metric:
         await service.run_timeseries_integrity(
-            request=ReconciliationRunRequest(portfolio_id="PORT-TS-1", business_date=date(2026, 3, 8), epoch=2),
+            request=ReconciliationRunRequest(
+                portfolio_id="PORT-TS-1", business_date=date(2026, 3, 8), epoch=2
+            ),
             correlation_id="corr-ts-1",
         )
 
@@ -306,7 +349,9 @@ async def test_run_timeseries_integrity_records_completeness_and_aggregate_misma
 
     service = ReconciliationService(repository)
     await service.run_timeseries_integrity(
-        request=ReconciliationRunRequest(portfolio_id="PORT-TS-2", business_date=date(2026, 3, 8), epoch=4),
+        request=ReconciliationRunRequest(
+            portfolio_id="PORT-TS-2", business_date=date(2026, 3, 8), epoch=4
+        ),
         correlation_id="corr-ts-2",
     )
 
@@ -316,7 +361,9 @@ async def test_run_timeseries_integrity_records_completeness_and_aggregate_misma
         "portfolio_timeseries_aggregate_mismatch",
     }
     mismatch_finding = next(
-        finding for finding in findings if finding.finding_type == "portfolio_timeseries_aggregate_mismatch"
+        finding
+        for finding in findings
+        if finding.finding_type == "portfolio_timeseries_aggregate_mismatch"
     )
     assert mismatch_finding.detail["bod_market_value"]["delta"] == "10"
     assert mismatch_finding.detail["eod_cashflow"]["delta"] == "5"
@@ -324,6 +371,41 @@ async def test_run_timeseries_integrity_records_completeness_and_aggregate_misma
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
     assert summary["finding_count"] == 2
     assert summary["passed"] is False
+
+
+@pytest.mark.asyncio
+async def test_authoritative_portfolio_metrics_skip_non_positive_fx_rates():
+    position_row = SimpleNamespace(
+        date=date(2026, 3, 8),
+        bod_market_value=Decimal("100"),
+        bod_cashflow_portfolio=Decimal("5"),
+        eod_cashflow_portfolio=Decimal("7"),
+        eod_market_value=Decimal("120"),
+        fees=Decimal("1"),
+    )
+    instrument = SimpleNamespace(currency="EUR")
+    portfolio = SimpleNamespace(base_currency="USD")
+    repository = AsyncMock()
+    repository.fetch_authoritative_position_timeseries_rows.return_value = [
+        (position_row, instrument, portfolio)
+    ]
+    repository.fetch_latest_fx_rate.return_value = SimpleNamespace(rate=Decimal("-1.08"))
+
+    service = ReconciliationService(repository)
+    metrics, row_count = await service._aggregate_authoritative_portfolio_metrics(
+        portfolio_id="PORT-TS-FX",
+        business_date=date(2026, 3, 8),
+        epoch=1,
+    )
+
+    assert row_count == 1
+    assert metrics == {
+        "bod_market_value": Decimal("0"),
+        "bod_cashflow": Decimal("0"),
+        "eod_cashflow": Decimal("0"),
+        "eod_market_value": Decimal("0"),
+        "fees": Decimal("0"),
+    }
 
 
 @pytest.mark.asyncio

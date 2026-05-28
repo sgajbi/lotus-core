@@ -25,6 +25,10 @@ CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
 
 
+def _normalize_position_code(value: object) -> str:
+    return str(value or "").strip().upper()
+
+
 class PositionCalculator:
     """
     Handles position recalculation. Detects back-dated transactions and triggers
@@ -375,13 +379,17 @@ class PositionCalculator:
 
     @staticmethod
     def _cash_position_amount_delta(transaction: TransactionEvent, txn_type: str) -> Decimal:
-        magnitude = abs(Decimal(str(transaction.gross_transaction_amount or 0)))
+        gross_amount = Decimal(str(transaction.gross_transaction_amount or 0))
+        quantity_amount = Decimal(str(transaction.quantity or 0))
+        magnitude = abs(gross_amount if not gross_amount.is_zero() else quantity_amount)
         if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {
             "ADJUSTMENT",
             "FX_CASH_SETTLEMENT_BUY",
         }:
             if txn_type == "ADJUSTMENT":
-                movement_direction = str(transaction.movement_direction or "INFLOW").upper()
+                movement_direction = _normalize_position_code(
+                    transaction.movement_direction or "INFLOW"
+                )
                 return -magnitude if movement_direction == "OUTFLOW" else magnitude
             return magnitude
         return -magnitude

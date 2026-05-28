@@ -164,3 +164,183 @@ async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
+
+
+async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    fx_rate = await repo.get_fx_rate(
+        from_currency=" eur ",
+        to_currency=" usd ",
+        a_date=date(2026, 3, 27),
+    )
+
+    assert fx_rate is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in compiled_query
+    assert "upper(trim(fx_rates.to_currency)) = 'USD'" in compiled_query
+    assert "fx_rates.rate_date <= '2026-03-27'" in compiled_query
+    assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
+
+
+async def test_get_instrument_trims_security_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    instrument = await repo.get_instrument(" SEC_A ")
+
+    assert instrument is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(instruments.security_id) = 'SEC_A'" in compiled_query
+
+
+async def test_get_portfolio_trims_portfolio_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    portfolio = await repo.get_portfolio(" PORT_001 ")
+
+    assert portfolio is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(portfolios.portfolio_id) = 'PORT_001'" in compiled_query
+
+
+async def test_get_portfolios_by_ids_trims_portfolio_ids_and_skips_blanks(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    portfolios = await repo.get_portfolios_by_ids([" PORT_001 ", "", " PORT_002 "])
+
+    assert portfolios == []
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(portfolios.portfolio_id) IN ('PORT_001', 'PORT_002')" in compiled_query
+
+
+async def test_get_portfolios_by_ids_skips_empty_identifier_list(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    portfolios = await repo.get_portfolios_by_ids([" ", ""])
+
+    assert portfolios == []
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_get_last_position_history_before_date_trims_portfolio_and_security_ids(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    history = await repo.get_last_position_history_before_date(
+        " PORT_001 ", " SEC_A ", date(2026, 3, 27), 42
+    )
+
+    assert history is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(position_history.portfolio_id) = 'PORT_001'" in compiled_query
+    assert "trim(position_history.security_id) = 'SEC_A'" in compiled_query
+    assert "position_history.position_date <= '2026-03-27'" in compiled_query
+    assert "position_history.epoch = 42" in compiled_query
+
+
+async def test_update_job_status_trims_portfolio_and_security_ids(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.rowcount = 1
+    mock_db_session.execute.return_value = result
+
+    updated = await repo.update_job_status(
+        portfolio_id=" PORT_001 ",
+        security_id=" SEC_A ",
+        valuation_date=date(2026, 3, 27),
+        epoch=42,
+        status="COMPLETED",
+    )
+
+    assert updated is True
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(portfolio_valuation_jobs.portfolio_id) = 'PORT_001'" in compiled_query
+    assert "trim(portfolio_valuation_jobs.security_id) = 'SEC_A'" in compiled_query
+    assert "portfolio_valuation_jobs.valuation_date = '2026-03-27'" in compiled_query
+    assert "portfolio_valuation_jobs.epoch = 42" in compiled_query
+    assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
+
+
+async def test_get_latest_price_for_position_trims_security_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    market_price = await repo.get_latest_price_for_position(
+        security_id=" SEC_A ",
+        position_date=date(2026, 3, 27),
+    )
+
+    assert market_price is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(market_prices.security_id) = 'SEC_A'" in compiled_query
+    assert "market_prices.price_date <= '2026-03-27'" in compiled_query
+    assert "ORDER BY market_prices.price_date DESC" in compiled_query
+
+
+async def test_get_next_price_date_trims_security_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = result
+
+    next_price_date = await repo.get_next_price_date(
+        security_id=" SEC_A ",
+        after_date=date(2026, 3, 27),
+    )
+
+    assert next_price_date is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(market_prices.security_id) = 'SEC_A'" in compiled_query
+    assert "market_prices.price_date > '2026-03-27'" in compiled_query
+    assert "ORDER BY market_prices.price_date ASC" in compiled_query
+    assert "LIMIT 1" in compiled_query

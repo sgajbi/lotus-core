@@ -3,13 +3,39 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .ca_bundle_a_ordering import (
     ca_bundle_a_dependency_rank,
     ca_bundle_a_target_order_key,
 )
+from .control_code_normalization import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
+from .currency_codes import normalize_currency_code, normalize_optional_currency_code
+from .transaction_fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
+
+
+def _standardize_event_datetime_value(value: object) -> object:
+    if value is None:
+        return value
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _aware_event_datetime(value: datetime) -> datetime:
+    normalized = _standardize_event_datetime_value(value)
+    if not isinstance(normalized, datetime):
+        raise TypeError("Expected datetime value.")
+    return normalized
 
 
 class CoreEventModel(BaseModel):
@@ -51,6 +77,11 @@ class PortfolioEvent(CoreEventModel):
     def _normalize_cost_basis_method(cls, value: object) -> CostBasisMethod:
         return normalize_cost_basis_method(value)
 
+    @field_validator("base_currency", mode="before")
+    @classmethod
+    def _normalize_base_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
 
 class FxRateEvent(CoreEventModel):
     from_currency: str = Field(...)
@@ -58,12 +89,36 @@ class FxRateEvent(CoreEventModel):
     rate_date: date = Field(...)
     rate: Decimal
 
+    @field_validator("rate")
+    @classmethod
+    def _validate_positive_rate(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0:
+            raise ValueError("FX rate must be greater than zero.")
+        return value
+
+    @field_validator("from_currency", "to_currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
 
 class MarketPriceEvent(CoreEventModel):
     security_id: str = Field(...)
     price_date: date = Field(...)
     price: Decimal
     currency: str
+
+    @field_validator("price")
+    @classmethod
+    def _validate_positive_price(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0:
+            raise ValueError("Market price must be greater than zero.")
+        return value
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
 
 class MarketPricePersistedEvent(CoreEventModel):
@@ -75,6 +130,18 @@ class MarketPricePersistedEvent(CoreEventModel):
     price_date: date
     price: Decimal
     currency: str
+
+    @field_validator("price")
+    @classmethod
+    def _validate_positive_price(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0:
+            raise ValueError("Market price must be greater than zero.")
+        return value
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
 
 class InstrumentEvent(CoreEventModel):
@@ -102,6 +169,18 @@ class InstrumentEvent(CoreEventModel):
     issuer_name: Optional[str] = Field(None)
     ultimate_parent_issuer_id: Optional[str] = Field(None)
     ultimate_parent_issuer_name: Optional[str] = Field(None)
+
+    @field_validator(
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
 
 
 class TransactionEvent(CoreEventModel):
@@ -204,6 +283,92 @@ class TransactionEvent(CoreEventModel):
     created_at: Optional[datetime] = None
     epoch: Optional[int] = None
 
+    @field_validator(
+        "trade_currency",
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        "synthetic_flow_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
+
+    @field_validator("transaction_type", mode="before")
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
+
+    @field_validator("transaction_date", "settlement_date", "created_at", mode="before")
+    @classmethod
+    def _standardize_event_datetime(cls, value: object) -> object:
+        return _standardize_event_datetime_value(value)
+
+    @field_validator(
+        "cash_entry_mode",
+        "movement_direction",
+        "originating_transaction_type",
+        "adjustment_reason",
+        "link_type",
+        "interest_direction",
+        "component_type",
+        "fx_cash_leg_role",
+        "settlement_status",
+        "fx_rate_quote_convention",
+        "spot_exposure_model",
+        "fx_realized_pnl_mode",
+        "child_role",
+        "synthetic_flow_valuation_method",
+        "synthetic_flow_classification",
+        "synthetic_flow_price_source",
+        "synthetic_flow_fx_source",
+        "synthetic_flow_source",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
+        return normalize_optional_transaction_control_code(value)
+
+    @field_validator(
+        "quantity",
+        "price",
+        "gross_transaction_amount",
+        "withholding_tax_amount",
+        "other_interest_deductions_amount",
+        "net_interest_amount",
+        "synthetic_flow_price_used",
+        "synthetic_flow_quantity_used",
+    )
+    @classmethod
+    def _validate_nonnegative_transaction_amount(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and Decimal(str(value)) < 0:
+            raise ValueError("Amount must be greater than or equal to zero.")
+        return value
+
+    @field_validator(
+        "transaction_fx_rate",
+        "buy_amount",
+        "sell_amount",
+        "contract_rate",
+        "synthetic_flow_fx_rate_to_base",
+    )
+    @classmethod
+    def _validate_positive_transaction_amount(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and Decimal(str(value)) <= 0:
+            raise ValueError("Amount must be greater than zero.")
+        return value
+
+    @model_validator(mode="after")
+    def _aggregate_fee_components(self) -> "TransactionEvent":
+        self.trade_fee = resolve_transaction_trade_fee(
+            self.trade_fee,
+            {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+        )
+        return self
+
 
 def transaction_event_ordering_key(
     event: "TransactionEvent",
@@ -219,11 +384,16 @@ def transaction_event_ordering_key(
     6) ingestion timestamp (created_at when present)
     7) stable event identity (transaction_id)
     """
-    ingestion_ts = event.created_at or datetime.fromtimestamp(0, tz=timezone.utc)
+    transaction_ts = _aware_event_datetime(event.transaction_date)
+    ingestion_ts = (
+        _aware_event_datetime(event.created_at)
+        if event.created_at is not None
+        else datetime.fromtimestamp(0, tz=timezone.utc)
+    )
     target_sequence, target_instrument = ca_bundle_a_target_order_key(event)
     return (
-        event.transaction_date.date(),
-        event.transaction_date,
+        transaction_ts.date(),
+        transaction_ts,
         ca_bundle_a_dependency_rank(event),
         target_sequence,
         target_instrument,

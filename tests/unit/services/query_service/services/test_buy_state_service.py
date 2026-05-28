@@ -51,7 +51,7 @@ def mock_buy_state_repo() -> AsyncMock:
             transaction_id="TXN-1",
             portfolio_id="PORT-1",
             instrument_id="AAPL",
-            security_id="US0378331005",
+            security_id=" US0378331005 ",
             transaction_type="BUY",
             quantity=Decimal("100"),
             price=Decimal("150"),
@@ -67,7 +67,7 @@ def mock_buy_state_repo() -> AsyncMock:
         Cashflow(
             transaction_id="TXN-1",
             portfolio_id="PORT-1",
-            security_id="US0378331005",
+            security_id=" US0378331005 ",
             cashflow_date=date(2026, 2, 28),
             amount=Decimal("-15005.5"),
             currency="USD",
@@ -87,11 +87,15 @@ async def test_get_position_lots(mock_buy_state_repo: AsyncMock):
         return_value=mock_buy_state_repo,
     ):
         service = BuyStateService(AsyncMock())
-        response = await service.get_position_lots("PORT-1", "US0378331005")
+        response = await service.get_position_lots("PORT-1", " US0378331005 ")
         assert response.portfolio_id == "PORT-1"
         assert response.security_id == "US0378331005"
         assert len(response.lots) == 1
         assert response.lots[0].lot_id == "LOT-TXN-1"
+        mock_buy_state_repo.get_position_lots.assert_awaited_once_with(
+            portfolio_id="PORT-1",
+            security_id="US0378331005",
+        )
 
 
 async def test_get_buy_cash_linkage(mock_buy_state_repo: AsyncMock):
@@ -125,11 +129,15 @@ async def test_get_accrued_offsets_success(mock_buy_state_repo: AsyncMock):
         return_value=mock_buy_state_repo,
     ):
         service = BuyStateService(AsyncMock())
-        response = await service.get_accrued_offsets("PORT-1", "US0378331005")
+        response = await service.get_accrued_offsets("PORT-1", " US0378331005 ")
         assert response.portfolio_id == "PORT-1"
         assert response.security_id == "US0378331005"
         assert len(response.offsets) == 1
         assert response.offsets[0].offset_id == "AIO-TXN-1"
+        mock_buy_state_repo.get_accrued_offsets.assert_awaited_once_with(
+            portfolio_id="PORT-1",
+            security_id="US0378331005",
+        )
 
 
 async def test_get_accrued_offsets_raises_when_portfolio_missing(mock_buy_state_repo: AsyncMock):

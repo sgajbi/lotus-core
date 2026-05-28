@@ -1,4 +1,5 @@
 # tests/unit/services/persistence_service/consumers/test_persistence_market_price_consumer.py
+import json
 from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -175,3 +176,28 @@ async def test_process_message_uses_header_correlation_on_direct_path(
         "persistence-market-prices",
         "test-corr-id",
     )
+
+
+async def test_process_message_sends_nonpositive_market_price_to_dlq(
+    market_price_consumer: MarketPriceConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    incoming_event_dict = json.loads(mock_kafka_message.value().decode("utf-8"))
+    incoming_event_dict["price"] = "0"
+    mock_kafka_message.value.return_value = json.dumps(incoming_event_dict).encode("utf-8")
+
+    with patch.object(
+        market_price_consumer, "_send_to_dlq_async", new_callable=AsyncMock
+    ) as mock_send_to_dlq:
+        with pytest.raises(ValueError, match="Poison pill"):
+            await market_price_consumer.process_message(mock_kafka_message)
+
+    mock_idempotency_repo.claim_event_processing.assert_not_called()
+    mock_repo.create_market_price.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_send_to_dlq.assert_awaited_once()

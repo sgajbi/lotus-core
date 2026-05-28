@@ -22,6 +22,7 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
                 {
                     "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
                     "model_portfolio_version": "2026.03",
+                    "base_currency": "SGD",
                     "effective_from": "2026-03-25",
                 }
             ],
@@ -206,11 +207,17 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
                 "quality_status",
             ],
         ),
-        (
-            "upsert_benchmark_definitions",
-            [{"benchmark_id": "BMK_001", "effective_from": "2026-01-01"}],
-            ["benchmark_id", "effective_from"],
-            [
+            (
+                "upsert_benchmark_definitions",
+                [
+                    {
+                        "benchmark_id": "BMK_001",
+                        "benchmark_currency": "USD",
+                        "effective_from": "2026-01-01",
+                    }
+                ],
+                ["benchmark_id", "effective_from"],
+                [
                 "benchmark_name",
                 "benchmark_type",
                 "benchmark_currency",
@@ -250,7 +257,13 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_indices",
-            [{"index_id": "IDX_001", "effective_from": "2026-01-01"}],
+            [
+                {
+                    "index_id": "IDX_001",
+                    "index_currency": "USD",
+                    "effective_from": "2026-01-01",
+                }
+            ],
             ["index_id", "effective_from"],
             [
                 "index_name",
@@ -270,7 +283,14 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_index_price_series",
-            [{"series_id": "SER_001", "index_id": "IDX_001", "series_date": "2026-01-01"}],
+            [
+                {
+                    "series_id": "SER_001",
+                    "index_id": "IDX_001",
+                    "series_date": "2026-01-01",
+                    "series_currency": "USD",
+                }
+            ],
             ["series_id", "index_id", "series_date"],
             [
                 "index_price",
@@ -284,7 +304,14 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_index_return_series",
-            [{"series_id": "SER_001", "index_id": "IDX_001", "series_date": "2026-01-01"}],
+            [
+                {
+                    "series_id": "SER_001",
+                    "index_id": "IDX_001",
+                    "series_date": "2026-01-01",
+                    "series_currency": "USD",
+                }
+            ],
             ["series_id", "index_id", "series_date"],
             [
                 "index_return",
@@ -299,7 +326,14 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
         (
             "upsert_benchmark_return_series",
-            [{"series_id": "SER_001", "benchmark_id": "BMK_001", "series_date": "2026-01-01"}],
+            [
+                {
+                    "series_id": "SER_001",
+                    "benchmark_id": "BMK_001",
+                    "series_date": "2026-01-01",
+                    "series_currency": "USD",
+                }
+            ],
             ["series_id", "benchmark_id", "series_date"],
             [
                 "benchmark_return",
@@ -319,6 +353,7 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
                     "series_id": "SER_001",
                     "risk_free_curve_id": "RFC_001",
                     "series_date": "2026-01-01",
+                    "series_currency": "USD",
                 }
             ],
             ["series_id", "risk_free_curve_id", "series_date"],
@@ -407,6 +442,31 @@ def test_get_reference_data_ingestion_service_wraps_db_session() -> None:
 
 
 @pytest.mark.asyncio
+async def test_upsert_model_portfolio_definitions_normalizes_base_currency() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await service.upsert_model_portfolio_definitions(
+        [
+            {
+                "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                "model_portfolio_version": "2026.03",
+                "display_name": "Singapore Balanced DPM Model",
+                "base_currency": " sgd ",
+                "risk_profile": "balanced",
+                "mandate_type": "discretionary",
+                "approval_status": "approved",
+                "effective_from": "2026-03-25",
+            }
+        ]
+    )
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params["base_currency_m0"] == "SGD"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_upsert_portfolio_benchmark_assignments_defaults_assignment_recorded_at() -> None:
     db = AsyncMock(spec=AsyncSession)
     service = ReferenceDataIngestionService(db)
@@ -432,6 +492,190 @@ async def test_upsert_portfolio_benchmark_assignments_defaults_assignment_record
 
 
 @pytest.mark.asyncio
+async def test_upsert_benchmark_definitions_normalizes_benchmark_currency() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await service.upsert_benchmark_definitions(
+        [
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "benchmark_name": "Global Balanced 60/40 Total Return",
+                "benchmark_type": "composite",
+                "benchmark_currency": " usd ",
+                "return_convention": "total_return_index",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    )
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params["benchmark_currency_m0"] == "USD"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "record", "compiled_param"),
+    [
+        (
+            "upsert_indices",
+            {
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "index_name": "Global Equity Total Return",
+                "index_currency": " usd ",
+                "effective_from": "2026-01-01",
+            },
+            "index_currency_m0",
+        ),
+        (
+            "upsert_index_price_series",
+            {
+                "series_id": "series_idx_global_equity_price",
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "series_date": "2026-01-02",
+                "index_price": "4567.1234000000",
+                "series_currency": " usd ",
+                "value_convention": "official_close",
+            },
+            "series_currency_m0",
+        ),
+        (
+            "upsert_index_return_series",
+            {
+                "series_id": "series_idx_global_equity_return",
+                "index_id": "IDX_GLOBAL_EQUITY_TR",
+                "series_date": "2026-01-02",
+                "index_return": "-0.0150000000",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": " usd ",
+            },
+            "series_currency_m0",
+        ),
+        (
+            "upsert_benchmark_return_series",
+            {
+                "series_id": "series_bmk_global_balanced_return",
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "series_date": "2026-01-02",
+                "benchmark_return": "-0.0065000000",
+                "return_period": "1d",
+                "return_convention": "total_return_index",
+                "series_currency": " usd ",
+            },
+            "series_currency_m0",
+        ),
+        (
+            "upsert_risk_free_series",
+            {
+                "series_id": "rf_usd_sofr_3m",
+                "risk_free_curve_id": "USD_SOFR_3M",
+                "series_date": "2026-01-02",
+                "value": "0.0350000000",
+                "value_convention": "annualized_rate",
+                "series_currency": " usd ",
+            },
+            "series_currency_m0",
+        ),
+    ],
+)
+async def test_reference_market_series_upserts_normalize_currency(
+    method_name: str, record: dict[str, object], compiled_param: str
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await getattr(service, method_name)([record])
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params[compiled_param] == "USD"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "record", "compiled_param", "expected_currency"),
+    [
+        (
+            "upsert_client_tax_rule_sets",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "rule_set_id": "TAX_RULES_SG_2026",
+                "tax_year": 2026,
+                "jurisdiction_code": "SG",
+                "rule_code": "US_DIVIDEND_WITHHOLDING",
+                "rule_category": "WITHHOLDING",
+                "rule_source": "bank_tax_reference",
+                "threshold_amount": "250000.0000",
+                "threshold_currency": " sgd ",
+                "effective_from": "2026-04-01",
+            },
+            "threshold_currency_m0",
+            "SGD",
+        ),
+        (
+            "upsert_client_income_needs_schedules",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "schedule_id": "INCOME_NEED_MONTHLY_001",
+                "amount": "25000.0000",
+                "currency": " sgd ",
+                "frequency": "MONTHLY",
+                "start_date": "2026-04-01",
+            },
+            "currency_m0",
+            "SGD",
+        ),
+        (
+            "upsert_liquidity_reserve_requirements",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "reserve_requirement_id": "RESERVE_MIN_CASH_001",
+                "required_amount": "150000.0000",
+                "currency": " sgd ",
+                "horizon_days": 90,
+                "policy_source": "POLICY_DPM_SG_BALANCED_V1",
+                "effective_from": "2026-04-01",
+            },
+            "currency_m0",
+            "SGD",
+        ),
+        (
+            "upsert_planned_withdrawal_schedules",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "withdrawal_schedule_id": "WITHDRAWAL_Q3_001",
+                "amount": "50000.0000",
+                "currency": " sgd ",
+                "scheduled_date": "2026-07-15",
+            },
+            "currency_m0",
+            "SGD",
+        ),
+    ],
+)
+async def test_private_banking_amount_currency_upserts_normalize_currency(
+    method_name: str,
+    record: dict[str, object],
+    compiled_param: str,
+    expected_currency: str,
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await getattr(service, method_name)([record])
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params[compiled_param] == expected_currency
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_upsert_cash_account_masters_uses_cash_account_id_conflict_key() -> None:
     db = AsyncMock(spec=AsyncSession)
     service = ReferenceDataIngestionService(db)
@@ -443,15 +687,17 @@ async def test_upsert_cash_account_masters_uses_cash_account_id_conflict_key() -
                 "portfolio_id": "PORT_001",
                 "security_id": "CASH_USD",
                 "display_name": "USD Operating Cash",
-                "account_currency": "USD",
+                "account_currency": " usd ",
                 "lifecycle_status": "ACTIVE",
             }
         ]
     )
 
-    compiled = str(db.execute.await_args.args[0].compile())
+    compiled_statement = db.execute.await_args.args[0].compile()
+    compiled = str(compiled_statement)
     assert "cash_account_masters" in compiled
     assert "ON CONFLICT (cash_account_id)" in compiled
+    assert compiled_statement.params["account_currency_m0"] == "USD"
     db.commit.assert_awaited_once()
 
 

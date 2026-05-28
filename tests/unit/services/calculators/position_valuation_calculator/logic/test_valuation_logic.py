@@ -210,6 +210,90 @@ def test_calculate_valuation_price_conversion_only():
     assert pnl_base == pnl_local
 
 
+def test_calculate_valuation_normalizes_currency_codes_before_fx_requirement_check():
+    result = ValuationLogic.calculate_valuation(
+        quantity=Decimal("100"),
+        market_price=Decimal("120"),
+        cost_basis_base=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+        price_currency=" usd ",
+        instrument_currency="USD",
+        portfolio_currency=" usd ",
+    )
+
+    assert result is not None
+    mv_base, mv_local, pnl_base, pnl_local = result
+    assert mv_local == Decimal("12000")
+    assert mv_base == Decimal("12000")
+    assert pnl_local == Decimal("2000")
+    assert pnl_base == Decimal("2000")
+
+
+def test_calculate_valuation_accepts_float_like_inputs_without_binary_float_math():
+    result = ValuationLogic.calculate_valuation(
+        quantity=100.5,
+        market_price=101.25,
+        cost_basis_base=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+        price_currency="USD",
+        instrument_currency="USD",
+        portfolio_currency="USD",
+    )
+
+    assert result is not None
+    mv_base, mv_local, pnl_base, pnl_local = result
+    assert mv_local == Decimal("10175.625")
+    assert mv_base == Decimal("10175.625")
+    assert pnl_local == Decimal("175.625")
+    assert pnl_base == Decimal("175.625")
+
+
+def test_calculate_valuation_rejects_zero_fx_rate():
+    result = ValuationLogic.calculate_valuation(
+        quantity=Decimal("100"),
+        market_price=Decimal("120"),
+        cost_basis_base=Decimal("11000"),
+        cost_basis_local=Decimal("10000"),
+        price_currency="EUR",
+        instrument_currency="EUR",
+        portfolio_currency="USD",
+        instrument_to_portfolio_fx_rate=Decimal("0"),
+    )
+
+    assert result is None
+
+
+def test_calculate_valuation_rejects_negative_price_alignment_fx_rate():
+    result = ValuationLogic.calculate_valuation(
+        quantity=Decimal("100"),
+        market_price=Decimal("120"),
+        cost_basis_base=Decimal("11000"),
+        cost_basis_local=Decimal("10000"),
+        price_currency="GBP",
+        instrument_currency="EUR",
+        portfolio_currency="USD",
+        price_to_instrument_fx_rate=Decimal("-0.90"),
+        instrument_to_portfolio_fx_rate=Decimal("1.10"),
+    )
+
+    assert result is None
+
+
+def test_calculate_valuation_rejects_non_positive_market_price():
+    result = ValuationLogic.calculate_valuation(
+        quantity=Decimal("100"),
+        market_price=Decimal("-120"),
+        cost_basis_base=Decimal("11000"),
+        cost_basis_local=Decimal("10000"),
+        price_currency="EUR",
+        instrument_currency="EUR",
+        portfolio_currency="USD",
+        instrument_to_portfolio_fx_rate=Decimal("1.10"),
+    )
+
+    assert result is None
+
+
 def test_calculate_valuation_scales_repo_bond_percentage_quotes_to_unit_prices():
     result = ValuationLogic.calculate_valuation(
         quantity=Decimal("75"),

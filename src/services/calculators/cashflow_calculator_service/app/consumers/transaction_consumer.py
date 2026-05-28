@@ -27,6 +27,9 @@ from portfolio_common.transaction_domain import (
     normalize_cash_entry_mode,
     resolve_effective_processing_transaction_type,
 )
+from portfolio_common.transaction_domain.control_code_normalization import (
+    normalize_transaction_control_code,
+)
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, stop_after_attempt, wait_fixed
@@ -117,7 +120,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
         logger.info("Loaded %s cashflow rules from repository.", len(rules_list))
         return CashflowRuleCacheState(
             rules_by_transaction_type={
-                rule.transaction_type.upper(): CachedCashflowRule(
+                normalize_transaction_control_code(rule.transaction_type): CachedCashflowRule(
                     classification=rule.classification,
                     timing=rule.timing,
                     is_position_flow=rule.is_position_flow,
@@ -137,7 +140,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
         """
         global _cashflow_rule_cache_state
 
-        transaction_type_key = transaction_type.upper()
+        transaction_type_key = normalize_transaction_control_code(transaction_type)
         cache_state = _cashflow_rule_cache_state
         if cache_state is not None and _cache_is_fresh(cache_state):
             rule = cache_state.rules_by_transaction_type.get(transaction_type_key)

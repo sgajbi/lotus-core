@@ -17,6 +17,7 @@ from ..dtos.liquidity_ladder_dto import (
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.cashflow_repository import CashflowRepository
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
 
 ZERO = Decimal("0")
@@ -27,6 +28,11 @@ LIQUIDITY_LADDER_BOUNDARY_NOTE = (
     "Source liquidity evidence only; not an advice, OMS execution, funding recommendation, "
     "best-execution, tax, or market-impact forecast."
 )
+
+
+def _normalize_control_code(value: Any, *, default: str = "UNCLASSIFIED") -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized or default
 
 
 @dataclass(frozen=True)
@@ -107,7 +113,7 @@ class PortfolioLiquidityLadderService:
 
         return PortfolioLiquidityLadderResponse(
             portfolio_id=portfolio.portfolio_id,
-            portfolio_currency=portfolio.base_currency,
+            portfolio_currency=normalize_currency_code(str(portfolio.base_currency)),
             resolved_as_of_date=resolved_as_of_date,
             horizon_days=horizon_days,
             include_projected=include_projected,
@@ -167,7 +173,7 @@ class PortfolioLiquidityLadderService:
         tier_values: dict[str, Decimal] = defaultdict(Decimal)
         tier_counts: dict[str, int] = defaultdict(int)
         for row in rows:
-            tier = str(getattr(row.instrument, "liquidity_tier", None) or "UNCLASSIFIED").upper()
+            tier = _normalize_control_code(getattr(row.instrument, "liquidity_tier", None))
             tier_values[tier] += _decimal_or_zero(getattr(row.snapshot, "market_value", ZERO))
             tier_counts[tier] += 1
         return [
@@ -212,7 +218,8 @@ class PortfolioLiquidityLadderService:
     def _is_cash_row(row: ReportingSnapshotRow) -> bool:
         return (
             row.instrument is not None
-            and str(getattr(row.instrument, "asset_class", "") or "").upper() == CASH_ASSET_CLASS
+            and _normalize_control_code(getattr(row.instrument, "asset_class", None), default="")
+            == CASH_ASSET_CLASS
         )
 
     @staticmethod

@@ -3,7 +3,16 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, condecimal
+from portfolio_common.control_code_normalization import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
+from portfolio_common.currency_codes import normalize_optional_currency_code
+from portfolio_common.transaction_fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
+from pydantic import BaseModel, Field, condecimal, field_validator, model_validator
 
 
 class Transaction(BaseModel):
@@ -31,6 +40,12 @@ class Transaction(BaseModel):
         description="Canonical transaction type that drives downstream calculator behavior.",
         json_schema_extra={"example": "BUY"},
     )
+
+    @field_validator("transaction_type", mode="before")
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
+
     quantity: condecimal(ge=Decimal(0)) = Field(
         description="Absolute traded quantity or units moved by the transaction.",
         json_schema_extra={"example": "10.0"},
@@ -595,6 +610,53 @@ class Transaction(BaseModel):
         description="Ingestion-side creation timestamp for lineage and troubleshooting.",
         json_schema_extra={"example": "2026-03-10T11:32:15Z"},
     )
+
+    @field_validator(
+        "trade_currency",
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        "synthetic_flow_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
+
+    @field_validator(
+        "cash_entry_mode",
+        "movement_direction",
+        "originating_transaction_type",
+        "adjustment_reason",
+        "link_type",
+        "interest_direction",
+        "component_type",
+        "fx_cash_leg_role",
+        "settlement_status",
+        "fx_rate_quote_convention",
+        "spot_exposure_model",
+        "fx_realized_pnl_mode",
+        "child_role",
+        "synthetic_flow_valuation_method",
+        "synthetic_flow_classification",
+        "synthetic_flow_price_source",
+        "synthetic_flow_fx_source",
+        "synthetic_flow_source",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
+        return normalize_optional_transaction_control_code(value)
+
+    @model_validator(mode="after")
+    def _aggregate_fee_components(self) -> "Transaction":
+        self.trade_fee = resolve_transaction_trade_fee(
+            self.trade_fee,
+            {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+        )
+        return self
 
 
 class TransactionIngestionRequest(BaseModel):

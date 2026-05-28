@@ -352,6 +352,10 @@ Most relevant current governance:
     `docs/methodologies/source-data-products/external-order-execution-acknowledgement.md` without
     claiming order generation, venue routing, best execution, OMS acknowledgement, fills,
     settlement, execution-status certification, or autonomous execution action.
+39. The canonical front-office seed now derives its Core portfolio `advisor_id` from the platform
+    canonical front-office contract's RFC-0026 advisor-cockpit scenario, with fallback
+    `advisor_sg_001`. This keeps Core portfolio master membership aligned with downstream
+    advisor-cockpit validation instead of hard-coding a separate relationship-manager identifier.
 
 ## Context Maintenance Rule
 

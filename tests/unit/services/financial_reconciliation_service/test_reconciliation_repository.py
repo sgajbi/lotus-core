@@ -55,9 +55,7 @@ async def test_create_run_returns_existing_row_after_dedupe_integrity_race(
 ):
     repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
     existing_run = MagicMock(run_id="recon-existing")
-    repository.get_run_by_dedupe_key = AsyncMock(
-        side_effect=[None, existing_run]
-    )
+    repository.get_run_by_dedupe_key = AsyncMock(side_effect=[None, existing_run])
     mock_db_session.flush.side_effect = IntegrityError("stmt", "params", Exception("duplicate"))
 
     run, created = await repository.create_run(
@@ -74,3 +72,29 @@ async def test_create_run_returns_existing_row_after_dedupe_integrity_race(
     assert run is existing_run
     assert created is False
     assert repository.get_run_by_dedupe_key.await_count == 2
+
+
+async def test_fetch_latest_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = result
+
+    fx_rate = await repository.fetch_latest_fx_rate(
+        from_currency=" eur ",
+        to_currency=" usd ",
+        business_date=date(2026, 5, 28),
+    )
+
+    assert fx_rate is None
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    ).lower()
+    assert "upper(trim(fx_rates.from_currency)) = 'eur'" in compiled_query
+    assert "upper(trim(fx_rates.to_currency)) = 'usd'" in compiled_query
+    assert "fx_rates.rate_date <= '2026-05-28'" in compiled_query
+    assert "order by fx_rates.rate_date desc" in compiled_query
+    assert "limit 1" in compiled_query

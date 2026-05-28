@@ -49,7 +49,8 @@ def _base_cash_leg() -> TransactionEvent:
 
 
 def test_validate_upstream_cash_leg_pairing_accepts_valid_pair() -> None:
-    issues = validate_upstream_cash_leg_pairing(_base_product_leg(), _base_cash_leg())
+    cash_leg = _base_cash_leg().model_copy(update={"transaction_type": " adjustment "})
+    issues = validate_upstream_cash_leg_pairing(_base_product_leg(), cash_leg)
     assert issues == []
 
 

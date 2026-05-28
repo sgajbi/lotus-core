@@ -26,7 +26,8 @@ def _interest_event() -> TransactionEvent:
 
 
 def test_enrich_interest_metadata_populates_defaults() -> None:
-    enriched = enrich_interest_transaction_metadata(_interest_event())
+    event = _interest_event().model_copy(update={"transaction_type": " interest "})
+    enriched = enrich_interest_transaction_metadata(event)
     assert enriched.economic_event_id == "EVT-INTEREST-PORT-LINK-001-INT-LINK-001"
     assert enriched.linked_transaction_group_id == "LTG-INTEREST-PORT-LINK-001-INT-LINK-001"
     assert enriched.calculation_policy_id == INTEREST_DEFAULT_POLICY_ID

@@ -15,6 +15,14 @@ from src.services.query_service.app.repositories.operations_repository import (
     ReprocessingHealthSummary,
 )
 from src.services.query_service.app.services import operations_service as operations_service_module
+from src.services.query_service.app.services.load_run_progress_builder import (
+    _ceiling_division,
+    _elapsed_seconds_between,
+    _get_valuation_to_timeseries_handoff_pressure_hint,
+    _safe_ratio,
+    get_load_run_operator_progress_state,
+    get_load_run_state,
+)
 from src.services.query_service.app.services.operations_service import OperationsService
 
 pytestmark = pytest.mark.asyncio
@@ -333,14 +341,14 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert control_call.kwargs["as_of"] == response.generated_at_utc
 
 
-async def test_operations_service_helper_branches_cover_ratio_division_and_elapsed_time() -> None:
-    assert OperationsService._safe_ratio(3, 0) == 0.0
-    assert OperationsService._safe_ratio(1, 3) == pytest.approx(0.333333)
-    assert OperationsService._ceiling_division(0, 10) == 0
-    assert OperationsService._ceiling_division(7, 3) == 3
-    assert OperationsService._elapsed_seconds_between(None, FIXED_GENERATED_AT) is None
+async def test_load_run_builder_helper_branches_cover_ratio_division_and_elapsed_time() -> None:
+    assert _safe_ratio(3, 0) == 0.0
+    assert _safe_ratio(1, 3) == pytest.approx(0.333333)
+    assert _ceiling_division(0, 10) == 0
+    assert _ceiling_division(7, 3) == 3
+    assert _elapsed_seconds_between(None, FIXED_GENERATED_AT) is None
     assert (
-        OperationsService._elapsed_seconds_between(
+        _elapsed_seconds_between(
             FIXED_GENERATED_AT,
             FIXED_GENERATED_AT - timedelta(minutes=1),
         )
@@ -348,13 +356,10 @@ async def test_operations_service_helper_branches_cover_ratio_division_and_elaps
     )
 
 
-async def test_operations_service_load_run_state_and_handoff_pressure_cover_major_paths() -> None:
+async def test_load_run_builder_state_and_handoff_pressure_cover_major_paths() -> None:
+    assert get_load_run_state(_load_run_summary(failed_valuation_jobs=1)) == "FAILED"
     assert (
-        OperationsService._get_load_run_state(_load_run_summary(failed_valuation_jobs=1))
-        == "FAILED"
-    )
-    assert (
-        OperationsService._get_load_run_state(
+        get_load_run_state(
             _load_run_summary(
                 portfolios_with_timeseries=1000,
                 open_valuation_jobs=0,
@@ -363,13 +368,10 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         )
         == "COMPLETE"
     )
+    assert get_load_run_state(_load_run_summary(transactions_ingested=0)) == "SEEDING"
+    assert get_load_run_state(_load_run_summary()) == "MATERIALIZING"
     assert (
-        OperationsService._get_load_run_state(_load_run_summary(transactions_ingested=0))
-        == "SEEDING"
-    )
-    assert OperationsService._get_load_run_state(_load_run_summary()) == "MATERIALIZING"
-    assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+        _get_valuation_to_timeseries_handoff_pressure_hint(
             _load_run_summary(
                 pending_valuation_jobs=0,
                 completed_valuation_jobs_without_position_timeseries=0,
@@ -378,7 +380,7 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "NO_HANDOFF_PRESSURE"
     )
     assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+        _get_valuation_to_timeseries_handoff_pressure_hint(
             _load_run_summary(
                 pending_valuation_jobs=10,
                 completed_valuation_jobs_without_position_timeseries=0,
@@ -387,7 +389,7 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "SCHEDULER_DISPATCH_BOUND"
     )
     assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(
+        _get_valuation_to_timeseries_handoff_pressure_hint(
             _load_run_summary(
                 pending_valuation_jobs=0,
                 completed_valuation_jobs_without_position_timeseries=3,
@@ -396,7 +398,7 @@ async def test_operations_service_load_run_state_and_handoff_pressure_cover_majo
         == "DOWNSTREAM_OF_VALUATION"
     )
     assert (
-        OperationsService._get_valuation_to_timeseries_handoff_pressure_hint(_load_run_summary())
+        _get_valuation_to_timeseries_handoff_pressure_hint(_load_run_summary())
         == "MIXED_HANDOFF_PRESSURE"
     )
 
@@ -451,21 +453,23 @@ async def test_operations_service_operational_state_helpers_cover_terminal_and_s
 async def test_operations_service_reconciliation_and_lineage_helpers_cover_blocking_logic() -> None:
     now = FIXED_GENERATED_AT
     stale_at = now - timedelta(minutes=30)
-    assert OperationsService._get_reconciliation_operational_state("FAILED") == "BLOCKING"
-    assert OperationsService._get_reconciliation_operational_state("RUNNING") == "RUNNING"
+    assert OperationsService._get_reconciliation_operational_state(" failed ") == "BLOCKING"
+    assert OperationsService._get_reconciliation_operational_state(" running ") == "RUNNING"
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
-    assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
+    assert (
+        OperationsService._get_portfolio_control_stage_operational_state(" failed ") == "BLOCKING"
+    )
     assert (
         OperationsService._get_portfolio_control_stage_operational_state("COMPLETED") == "COMPLETED"
     )
-    assert OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
+    assert OperationsService._get_reconciliation_finding_operational_state(" error ") == "BLOCKING"
     assert OperationsService._get_reconciliation_finding_operational_state("WARN") == "NON_BLOCKING"
     assert (
-        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", stale_at, now)
+        OperationsService._get_reprocessing_key_operational_state(" reprocessing ", stale_at, now)
         == "STALE_REPROCESSING"
     )
     assert (
-        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", now, now)
+        OperationsService._get_reprocessing_key_operational_state(" reprocessing ", now, now)
         == "REPROCESSING"
     )
     assert (
@@ -486,7 +490,7 @@ async def test_operations_service_reconciliation_and_lineage_helpers_cover_block
             latest_position_history_date=date(2026, 4, 17),
             latest_daily_snapshot_date=date(2026, 4, 17),
             latest_valuation_job_date=date(2026, 4, 17),
-            latest_valuation_job_status="FAILED",
+            latest_valuation_job_status=" failed ",
         )
         is True
     )
@@ -648,7 +652,7 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     mock_ops_repo.get_lineage_keys_count.return_value = 1
     mock_ops_repo.get_lineage_keys.return_value = [
         {
-            "security_id": "S1",
+            "security_id": " S1 ",
             "epoch": 2,
             "watermark_date": date(2025, 8, 1),
             "reprocessing_status": "CURRENT",
@@ -662,7 +666,7 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     ]
 
     response = await service.get_lineage_keys(
-        "P1", skip=0, limit=10, reprocessing_status="CURRENT", security_id=None
+        "P1", skip=0, limit=10, reprocessing_status=" current ", security_id=None
     )
 
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -722,7 +726,7 @@ async def test_build_lineage_key_record_replaying_state(service: OperationsServi
             "security_id": "S1",
             "epoch": 2,
             "watermark_date": date(2025, 8, 1),
-            "reprocessing_status": "REPROCESSING",
+            "reprocessing_status": " reprocessing ",
             "latest_position_history_date": date(2025, 8, 31),
             "latest_daily_snapshot_date": date(2025, 8, 30),
             "latest_valuation_job_date": date(2025, 8, 31),
@@ -747,13 +751,38 @@ async def test_build_lineage_key_record_valuation_blocked_state(service: Operati
             "latest_daily_snapshot_date": date(2025, 8, 31),
             "latest_valuation_job_date": date(2025, 8, 31),
             "latest_valuation_job_id": 102,
-            "latest_valuation_job_status": "FAILED",
+            "latest_valuation_job_status": " failed ",
             "latest_valuation_job_correlation_id": "corr-val-102",
         }
     )
 
     assert record.has_artifact_gap is True
     assert record.operational_state == "VALUATION_BLOCKED"
+
+
+async def test_build_support_job_record_normalizes_terminal_failure_status(
+    service: OperationsService,
+):
+    created_at = datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc)
+    record = service._build_support_job_record(
+        job_id=601,
+        job_type="VALUATION",
+        business_date=date(2026, 3, 13),
+        status=" failed ",
+        security_id=" S1 ",
+        epoch=4,
+        attempt_count=1,
+        correlation_id="corr-val-601",
+        created_at=created_at,
+        updated_at=created_at,
+        failure_reason="Source price missing.",
+        reference_now=created_at,
+    )
+
+    assert record.status == " failed "
+    assert record.security_id == "S1"
+    assert record.is_terminal_failure is True
+    assert record.operational_state == "FAILED"
 
 
 async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: AsyncMock):
@@ -766,7 +795,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
             (),
             {
                 "id": 101,
-                "security_id": "S1",
+                "security_id": " S1 ",
                 "valuation_date": date(2025, 8, 31),
                 "status": "PENDING",
                 "epoch": 1,
@@ -779,7 +808,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
         )()
     ]
 
-    response = await service.get_valuation_jobs("P1", skip=0, limit=20, status="PENDING")
+    response = await service.get_valuation_jobs("P1", skip=0, limit=20, status=" pending ")
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -840,7 +869,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
         )()
     ]
 
-    response = await service.get_aggregation_jobs("P1", skip=0, limit=20, status="PROCESSING")
+    response = await service.get_aggregation_jobs("P1", skip=0, limit=20, status=" processing ")
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -951,7 +980,7 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
     ]
 
     response = await service.get_reprocessing_jobs(
-        "P1", skip=0, limit=20, status="PROCESSING", security_id="S1"
+        "P1", skip=0, limit=20, status=" processing ", security_id="S1"
     )
 
     assert response.stale_threshold_minutes == 15
@@ -1058,7 +1087,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         )()
     ]
 
-    response = await service.get_analytics_export_jobs("P1", skip=0, limit=20, status="FAILED")
+    response = await service.get_analytics_export_jobs("P1", skip=0, limit=20, status=" FAILED ")
 
     assert response.stale_threshold_minutes == 15
     assert response.generated_at_utc.tzinfo == timezone.utc
@@ -1080,7 +1109,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
         portfolio_id="P1",
         skip=0,
         limit=20,
-        status="FAILED",
+        status="failed",
         job_id=None,
         request_fingerprint=None,
         stale_minutes=15,
@@ -1089,7 +1118,7 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     )
     mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
-        status="FAILED",
+        status="failed",
         job_id=None,
         request_fingerprint=None,
         as_of=response.generated_at_utc,
@@ -1299,14 +1328,14 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         "P1",
         skip=0,
         limit=20,
-        status="FAILED",
+        status=" failed ",
         job_id="aexp_1234567890abcdef",
     )
 
     assert response.total == 0
     mock_ops_repo.get_analytics_export_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
-        status="FAILED",
+        status="failed",
         job_id="aexp_1234567890abcdef",
         request_fingerprint=None,
         as_of=response.generated_at_utc,
@@ -1315,7 +1344,7 @@ async def test_get_analytics_export_jobs_forwards_job_id_filter(
         portfolio_id="P1",
         skip=0,
         limit=20,
-        status="FAILED",
+        status="failed",
         job_id="aexp_1234567890abcdef",
         request_fingerprint=None,
         stale_minutes=15,
@@ -1445,7 +1474,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
             {
                 "run_id": "recon_1234567890abcdef",
                 "reconciliation_type": "transaction_cashflow",
-                "status": "FAILED",
+                "status": " failed ",
                 "business_date": date(2026, 3, 13),
                 "epoch": 3,
                 "started_at": started_at,
@@ -1466,7 +1495,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         requested_by="pipeline_orchestrator_service",
         dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         reconciliation_type="transaction_cashflow",
-        status="FAILED",
+        status="failed",
     )
 
     assert response.total == 1
@@ -1477,7 +1506,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.reconciliation_status == BLOCKED
     assert response.items[0].run_id == "recon_1234567890abcdef"
     assert response.items[0].reconciliation_type == "transaction_cashflow"
-    assert response.items[0].status == "FAILED"
+    assert response.items[0].status == " failed "
     assert response.items[0].requested_by == "pipeline_orchestrator_service"
     assert response.items[0].dedupe_key == "recon:transaction_cashflow:P1:2026-03-13:3"
     assert response.items[0].correlation_id == "corr-recon-20260313-001"
@@ -1589,20 +1618,26 @@ async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
 
 
 async def test_support_job_retrying_only_for_active_retry_states():
-    assert OperationsService._is_support_job_retrying("PENDING", 1) is True
-    assert OperationsService._is_support_job_retrying("PROCESSING", 2) is True
+    assert OperationsService._is_support_job_retrying(" pending ", 1) is True
+    assert OperationsService._is_support_job_retrying(" processing ", 2) is True
     assert OperationsService._is_support_job_retrying("FAILED", 3) is False
     assert OperationsService._is_support_job_retrying("PENDING", 0) is False
 
 
 async def test_support_job_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
-    assert OperationsService._get_support_job_operational_state("FAILED", updated_at) == "FAILED"
     assert (
-        OperationsService._get_support_job_operational_state("SKIPPED_NO_POSITION", updated_at)
+        OperationsService._get_support_job_operational_state(" failed ", updated_at) == "FAILED"
+    )
+    assert (
+        OperationsService._get_support_job_operational_state(
+            " skipped_no_position ", updated_at
+        )
         == "SKIPPED"
     )
-    assert OperationsService._get_support_job_operational_state("PENDING", updated_at) == "PENDING"
+    assert (
+        OperationsService._get_support_job_operational_state(" pending ", updated_at) == "PENDING"
+    )
     assert (
         OperationsService._get_support_job_operational_state("COMPLETE", updated_at) == "COMPLETED"
     )
@@ -1612,10 +1647,11 @@ async def test_analytics_export_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
     assert OperationsService._normalize_analytics_export_status(None) is None
     assert (
-        OperationsService._get_analytics_export_operational_state("FAILED", updated_at) == "FAILED"
+        OperationsService._get_analytics_export_operational_state(" FAILED ", updated_at)
+        == "FAILED"
     )
     assert (
-        OperationsService._get_analytics_export_operational_state("accepted", updated_at)
+        OperationsService._get_analytics_export_operational_state(" accepted ", updated_at)
         == "ACCEPTED"
     )
     assert (
@@ -1627,10 +1663,15 @@ async def test_analytics_export_operational_state_branches():
 async def test_reconciliation_and_reprocessing_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
 
-    assert OperationsService._get_reconciliation_operational_state("REQUIRES_REPLAY") == "BLOCKING"
-    assert OperationsService._get_reconciliation_operational_state("RUNNING") == "RUNNING"
+    assert (
+        OperationsService._get_reconciliation_operational_state(" requires_replay ")
+        == "BLOCKING"
+    )
+    assert OperationsService._get_reconciliation_operational_state(" running ") == "RUNNING"
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"
-    assert OperationsService._get_portfolio_control_stage_operational_state("FAILED") == "BLOCKING"
+    assert (
+        OperationsService._get_portfolio_control_stage_operational_state(" failed ") == "BLOCKING"
+    )
     assert (
         OperationsService._get_portfolio_control_stage_operational_state("COMPLETED") == "COMPLETED"
     )
@@ -1638,7 +1679,7 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
         OperationsService._get_reprocessing_key_operational_state("CURRENT", updated_at)
         == "CURRENT"
     )
-    assert OperationsService._is_reconciliation_finding_blocking("ERROR") is True
+    assert OperationsService._is_reconciliation_finding_blocking(" error ") is True
     assert OperationsService._is_reconciliation_finding_blocking("WARNING") is False
     assert OperationsService._get_reconciliation_finding_operational_state("ERROR") == "BLOCKING"
     assert OperationsService._get_reconciliation_finding_operational_state("INFO") == "NON_BLOCKING"
@@ -1678,12 +1719,12 @@ async def test_stale_detection_helpers_cover_remaining_branches():
     fresh = datetime(2026, 3, 13, 10, 20, tzinfo=timezone.utc)
     current_fresh = datetime.now(timezone.utc)
 
-    assert OperationsService._is_support_job_stale("PROCESSING", stale, now=now) is True
+    assert OperationsService._is_support_job_stale(" processing ", stale, now=now) is True
     assert OperationsService._is_support_job_stale("PROCESSING", fresh, now=now) is False
     assert OperationsService._is_support_job_stale("FAILED", stale, now=now) is False
     assert OperationsService._is_analytics_export_job_stale("running", stale, now=now) is True
     assert OperationsService._is_analytics_export_job_stale("running", fresh, now=now) is False
-    assert OperationsService._is_reprocessing_key_stale("REPROCESSING", stale, now=now) is True
+    assert OperationsService._is_reprocessing_key_stale(" reprocessing ", stale, now=now) is True
     assert (
         OperationsService._get_support_job_operational_state("PROCESSING", current_fresh)
         == "PROCESSING"
@@ -1693,7 +1734,7 @@ async def test_stale_detection_helpers_cover_remaining_branches():
         == "RUNNING"
     )
     assert (
-        OperationsService._get_reprocessing_key_operational_state("REPROCESSING", current_fresh)
+        OperationsService._get_reprocessing_key_operational_state(" reprocessing ", current_fresh)
         == "REPROCESSING"
     )
 
@@ -1714,7 +1755,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
                 "finding_id": "rf_1234567890abcdef",
                 "finding_type": "missing_cashflow",
                 "severity": "ERROR",
-                "security_id": "SEC-US-IBM",
+                "security_id": " SEC-US-IBM ",
                 "transaction_id": "TXN-20260313-0042",
                 "business_date": date(2026, 3, 13),
                 "epoch": 3,
@@ -1742,6 +1783,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     assert response.total == 7
     assert response.items[0].finding_id == "rf_1234567890abcdef"
     assert response.items[0].severity == "ERROR"
+    assert response.items[0].security_id == "SEC-US-IBM"
     assert response.items[0].detail == {"expected_cashflow_count": 1, "observed_cashflow_count": 0}
     mock_ops_repo.get_reconciliation_run.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1813,7 +1855,7 @@ async def test_get_portfolio_control_stages(service: OperationsService, mock_ops
         stage_id=701,
         stage_name="FINANCIAL_RECONCILIATION",
         business_date=date(2026, 3, 13),
-        status="REQUIRES_REPLAY",
+        status=" requires_replay ",
     )
 
     assert response.portfolio_id == "P1"
@@ -1859,7 +1901,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
             "PositionStateStub",
             (),
             {
-                "security_id": "SEC-US-IBM",
+                "security_id": " SEC-US-IBM ",
                 "epoch": 3,
                 "watermark_date": date(2026, 3, 10),
                 "status": "REPROCESSING",
@@ -1873,7 +1915,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
         portfolio_id="P1",
         skip=0,
         limit=50,
-        status="REPROCESSING",
+        status=" reprocessing ",
         security_id="SEC-US-IBM",
     )
 
@@ -2852,35 +2894,35 @@ async def test_get_load_run_operator_progress_state_covers_running_slow_stuck_an
     )
 
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             running_summary,
             reference_now=reference_now,
         )
         == "RUNNING"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             slow_summary,
             reference_now=reference_now,
         )
         == "SLOW"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             stuck_summary,
             reference_now=reference_now,
         )
         == "STUCK"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             complete_summary,
             reference_now=reference_now,
         )
         == "COMPLETE"
     )
     assert (
-        OperationsService._get_load_run_operator_progress_state(
+        get_load_run_operator_progress_state(
             failed_summary,
             reference_now=reference_now,
         )

@@ -5,6 +5,10 @@ from typing import Optional, Protocol
 from portfolio_common.database_models import Cashflow
 from portfolio_common.events import TransactionEvent
 from portfolio_common.monitoring import CASHFLOWS_CREATED_TOTAL
+from portfolio_common.transaction_fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
 
 from .enums import CashflowClassification
 
@@ -40,6 +44,18 @@ TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
 }
 
 
+def _normalize_code(value: object, default: str = "") -> str:
+    return str(value or default).strip().upper()
+
+
+def _resolve_cashflow_trade_fee(transaction: TransactionEvent) -> Decimal:
+    trade_fee = resolve_transaction_trade_fee(
+        transaction.trade_fee,
+        {field: getattr(transaction, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+    )
+    return trade_fee or Decimal(0)
+
+
 class CashflowLogic:
     """
     A stateless calculator that generates a Cashflow object from a transaction
@@ -54,23 +70,26 @@ class CashflowLogic:
         Applies the calculation rule to a transaction to generate a cashflow.
         """
         amount = Decimal(0)
-        interest_direction = str(getattr(transaction, "interest_direction", "INCOME")).upper()
+        transaction_type = _normalize_code(transaction.transaction_type)
+        interest_direction = _normalize_code(
+            getattr(transaction, "interest_direction", None),
+            default="INCOME",
+        )
+        trade_fee = _resolve_cashflow_trade_fee(transaction)
 
         # For NET, we adjust the gross amount by the fee and honor net-settled
         # interest when withholding/deductions are provided.
-        if transaction.transaction_type == "INTEREST":
+        if transaction_type == "INTEREST":
             deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
                 transaction.other_interest_deductions_amount or Decimal(0)
             )
             amount = transaction.net_interest_amount
             if amount is None:
-                amount = transaction.gross_transaction_amount - deductions - (
-                    transaction.trade_fee or 0
-                )
-        elif transaction.transaction_type in ["BUY", "FEE"]:
-            amount = transaction.gross_transaction_amount + (transaction.trade_fee or 0)
+                amount = transaction.gross_transaction_amount - deductions - trade_fee
+        elif transaction_type in {"BUY", "FEE"}:
+            amount = transaction.gross_transaction_amount + trade_fee
         else:  # SELL, DIVIDEND, INTEREST, etc.
-            amount = transaction.gross_transaction_amount - (transaction.trade_fee or 0)
+            amount = transaction.gross_transaction_amount - trade_fee
 
         # Convention: Inflows to the portfolio are positive, outflows are negative.
         positive_classifications = [
@@ -81,7 +100,7 @@ class CashflowLogic:
         ]
 
         # INTEREST direction baseline: default INCOME (inflow), EXPENSE (outflow).
-        if transaction.transaction_type == "INTEREST":
+        if transaction_type == "INTEREST":
             if interest_direction == "EXPENSE":
                 amount = -abs(amount)
             else:
@@ -90,16 +109,18 @@ class CashflowLogic:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.FX_SELL:
             amount = -abs(amount)
-        elif transaction.transaction_type == "ADJUSTMENT":
-            movement_direction = str(getattr(transaction, "movement_direction", "INFLOW")).upper()
+        elif transaction_type == "ADJUSTMENT":
+            movement_direction = _normalize_code(
+                getattr(transaction, "movement_direction", None),
+                default="INFLOW",
+            )
             amount = abs(amount) if movement_direction == "INFLOW" else -abs(amount)
         elif rule.classification in positive_classifications:
             amount = abs(amount)
         elif rule.classification == CashflowClassification.TRANSFER:
-            tx_type = transaction.transaction_type.upper()
-            if tx_type in TRANSFER_INFLOW_TRANSACTION_TYPES:
+            if transaction_type in TRANSFER_INFLOW_TRANSACTION_TYPES:
                 amount = abs(amount)
-            elif tx_type in TRANSFER_OUTFLOW_TRANSACTION_TYPES:
+            elif transaction_type in TRANSFER_OUTFLOW_TRANSACTION_TYPES:
                 amount = -abs(amount)
             else:
                 amount = abs(amount) if transaction.quantity > 0 else -abs(amount)

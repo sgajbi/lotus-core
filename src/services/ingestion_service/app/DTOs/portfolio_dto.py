@@ -2,6 +2,7 @@ from datetime import date
 from typing import List, Optional
 
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.currency_codes import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -102,6 +103,11 @@ class Portfolio(BaseModel):
     @classmethod
     def _normalize_cost_basis_method(cls, value: object) -> CostBasisMethod:
         return normalize_cost_basis_method(value)
+
+    @field_validator("base_currency", mode="before")
+    @classmethod
+    def _normalize_base_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict(
         json_schema_extra={

@@ -78,7 +78,7 @@ def test_logic_with_portfolio_and_position_flows(current_snapshot, previous_day_
         Cashflow(
             amount=Decimal(-50),
             timing="EOD",
-            classification="EXPENSE",
+            classification=" expense ",
             is_position_flow=True,
             is_portfolio_flow=True,
         ),
@@ -108,7 +108,7 @@ def test_logic_normalizes_product_leg_position_flow_signs_for_attribution(
     cashflows = [
         Cashflow(
             amount=Decimal("-1000"),
-            classification="INVESTMENT_OUTFLOW",
+            classification=" investment_outflow ",
             timing="BOD",
             is_position_flow=True,
             is_portfolio_flow=False,

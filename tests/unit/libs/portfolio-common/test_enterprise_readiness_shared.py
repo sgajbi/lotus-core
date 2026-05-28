@@ -4,7 +4,6 @@ from unittest.mock import Mock
 import pytest
 from fastapi import Request
 from fastapi.responses import Response
-
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
     build_enterprise_audit_middleware,
@@ -226,6 +225,27 @@ def test_authorize_request_matches_fastapi_path_templates_for_source_data_rules(
 
     allowed, reason = runtime.authorize_request(
         "GET",
+        "/support/portfolios/PB1/reconciliation-runs/run-1/findings",
+        headers,
+    )
+
+    assert allowed is True
+    assert reason is None
+
+
+def test_authorize_request_normalizes_method_before_capability_lookup() -> None:
+    runtime = _runtime(read_authz_enabled=True)
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-manage",
+        "X-Capabilities": "source_data.reconciliation_evidence_bundle.read",
+    }
+
+    allowed, reason = runtime.authorize_request(
+        " get ",
         "/support/portfolios/PB1/reconciliation-runs/run-1/findings",
         headers,
     )

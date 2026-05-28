@@ -25,11 +25,8 @@ SELL_ALLOW_OVERSOLD_POLICIES = {
 
 
 def _is_accrued_interest_excluded_from_book_cost(transaction: Transaction) -> bool:
-    policy_id = getattr(transaction, "calculation_policy_id", None)
-    return (
-        isinstance(policy_id, str)
-        and policy_id in ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES
-    )
+    policy_id = _normalize_code(getattr(transaction, "calculation_policy_id", None))
+    return policy_id in ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES
 
 
 def _add_buy_invariant_error(
@@ -64,16 +61,37 @@ def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
 
 
 def _is_cash_instrument(transaction: Transaction) -> bool:
-    product_type = str(getattr(transaction, "product_type", "") or "").upper()
-    asset_class = str(getattr(transaction, "asset_class", "") or "").upper()
-    instrument_id = str(getattr(transaction, "instrument_id", "") or "").upper()
-    security_id = str(getattr(transaction, "security_id", "") or "").upper()
+    product_type = _normalize_code(getattr(transaction, "product_type", ""))
+    asset_class = _normalize_code(getattr(transaction, "asset_class", ""))
+    instrument_id = _normalize_code(getattr(transaction, "instrument_id", ""))
+    security_id = _normalize_code(getattr(transaction, "security_id", ""))
     return (
         product_type == "CASH"
         or asset_class == "CASH"
         or instrument_id.startswith("CASH")
         or security_id.startswith("CASH")
     )
+
+
+def _cash_movement_amount(transaction: Transaction) -> Decimal:
+    gross_amount = Decimal(str(transaction.gross_transaction_amount or 0))
+    quantity_amount = Decimal(str(transaction.quantity or 0))
+    movement_amount = gross_amount if not gross_amount.is_zero() else quantity_amount
+    return abs(movement_amount)
+
+
+def _normalize_code(value: object) -> str:
+    return str(value or "").strip().upper()
+
+
+def _normalize_currency_code(currency_code: str) -> str:
+    return _normalize_code(currency_code)
+
+
+def _normalize_transaction_type(transaction_type: str | TransactionType) -> str:
+    if isinstance(transaction_type, TransactionType):
+        return transaction_type.value
+    return str(transaction_type).strip().upper()
 
 
 class BuyStrategy:
@@ -154,12 +172,15 @@ class SellStrategy:
                 "net_sell_proceeds_base must be >= 0.",
             )
             return
+        if transaction.quantity <= Decimal(0):
+            _add_sell_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
+            return
 
         available_quantity = disposition_engine.get_available_quantity(
             transaction.portfolio_id, transaction.instrument_id
         )
-        policy_id = getattr(transaction, "calculation_policy_id", None)
-        allows_oversold = isinstance(policy_id, str) and policy_id in SELL_ALLOW_OVERSOLD_POLICIES
+        policy_id = _normalize_code(getattr(transaction, "calculation_policy_id", None))
+        allows_oversold = policy_id in SELL_ALLOW_OVERSOLD_POLICIES
         if transaction.quantity > available_quantity:
             if allows_oversold:
                 _add_sell_invariant_error(
@@ -217,12 +238,13 @@ class CashInflowStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        transaction.gross_cost = transaction.gross_transaction_amount
-        transaction.net_cost_local = transaction.gross_transaction_amount
+        cash_amount_local = _cash_movement_amount(transaction)
+        transaction.gross_cost = cash_amount_local
+        transaction.net_cost_local = cash_amount_local
         fx_rate = transaction.transaction_fx_rate or Decimal(1)
         transaction.net_cost = transaction.net_cost_local * fx_rate
         cash_buy_equivalent = transaction.model_copy()
-        cash_buy_equivalent.quantity = transaction.gross_transaction_amount
+        cash_buy_equivalent.quantity = cash_amount_local
 
         disposition_engine.add_buy_lot(cash_buy_equivalent)
 
@@ -234,8 +256,9 @@ class CashOutflowStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
+        cash_amount_local = _cash_movement_amount(transaction)
         fx_rate = transaction.transaction_fx_rate or Decimal(1)
-        transaction.net_cost_local = -transaction.gross_transaction_amount
+        transaction.net_cost_local = -cash_amount_local
         transaction.net_cost = transaction.net_cost_local * fx_rate
         transaction.gross_cost = transaction.net_cost
         transaction.realized_gain_loss = None
@@ -420,7 +443,7 @@ class InterestStrategy:
         if raw_direction in (None, ""):
             direction = "INCOME"
         else:
-            direction = str(raw_direction).upper()
+            direction = _normalize_code(raw_direction)
         if direction not in {"INCOME", "EXPENSE"}:
             _add_interest_invariant_error(
                 error_reporter,
@@ -550,8 +573,24 @@ class CostCalculator:
         self._default_strategy = DefaultStrategy()
 
     def _validate_fx(self, t: Transaction) -> bool:
+        t.trade_currency = _normalize_currency_code(t.trade_currency)
+        t.portfolio_base_currency = _normalize_currency_code(t.portfolio_base_currency)
+        if t.transaction_fx_rate is not None:
+            try:
+                t.transaction_fx_rate = _normalize_decimal_field(
+                    t.transaction_fx_rate, "transaction_fx_rate"
+                )
+            except ValueError as exc:
+                self._error_reporter.add_error(t.transaction_id, str(exc))
+                return False
+            if t.transaction_fx_rate <= 0:
+                self._error_reporter.add_error(
+                    t.transaction_id,
+                    "Missing/invalid FX rate for transaction.",
+                )
+                return False
         if t.trade_currency == t.portfolio_base_currency:
-            if not t.transaction_fx_rate:
+            if t.transaction_fx_rate is None:
                 t.transaction_fx_rate = Decimal(1)
             return True
         if t.transaction_fx_rate is None or t.transaction_fx_rate <= 0:
@@ -567,6 +606,7 @@ class CostCalculator:
         if not self._validate_fx(transaction):
             return
         try:
+            transaction.transaction_type = _normalize_transaction_type(transaction.transaction_type)
             if transaction.transaction_type not in TransactionType.list():
                 self._error_reporter.add_error(
                     transaction.transaction_id,

@@ -1,11 +1,17 @@
 from portfolio_common.events import TransactionEvent
 
+from .control_code_normalization import normalize_transaction_control_code
+
 FX_COMPONENT_PROCESSING_TYPES = {
     "FX_CONTRACT_OPEN",
     "FX_CONTRACT_CLOSE",
     "FX_CASH_SETTLEMENT_BUY",
     "FX_CASH_SETTLEMENT_SELL",
 }
+
+
+def normalize_processing_type(value: str | None) -> str:
+    return normalize_transaction_control_code(value)
 
 
 def resolve_effective_processing_transaction_type(event: TransactionEvent) -> str:
@@ -16,7 +22,7 @@ def resolve_effective_processing_transaction_type(event: TransactionEvent) -> st
     For FX, transaction_type remains the business deal type while component_type
     identifies the concrete row behavior required by downstream processors.
     """
-    component_type = (event.component_type or "").upper()
+    component_type = normalize_processing_type(event.component_type)
     if component_type in FX_COMPONENT_PROCESSING_TYPES:
         return component_type
-    return event.transaction_type.upper()
+    return normalize_processing_type(event.transaction_type)

@@ -3,7 +3,8 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from portfolio_common.currency_codes import normalize_optional_currency_code
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Instrument(BaseModel):
@@ -130,6 +131,18 @@ class Instrument(BaseModel):
         description="Display name for the ultimate parent issuer.",
         examples=["Barclays Group Holdings PLC"],
     )
+
+    @field_validator(
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
 
     model_config = ConfigDict(
         json_schema_extra={

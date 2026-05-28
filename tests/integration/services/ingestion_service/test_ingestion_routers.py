@@ -898,6 +898,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "index_return_series": [],
                 "benchmark_return_series": [],
                 "risk_free_series": [],
+                "model_portfolios": [],
+                "tax_rule_sets": [],
+                "income_needs_schedules": [],
+                "liquidity_reserve_requirements": [],
+                "planned_withdrawal_schedules": [],
                 "classification_taxonomy": [],
                 "cash_accounts": [],
                 "lookthrough_components": [],
@@ -935,6 +940,29 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
 
         async def upsert_risk_free_series(self, records: list[dict[str, object]]) -> None:
             self.persisted["risk_free_series"].extend(records)
+
+        async def upsert_model_portfolio_definitions(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["model_portfolios"].extend(records)
+
+        async def upsert_client_tax_rule_sets(self, records: list[dict[str, object]]) -> None:
+            self.persisted["tax_rule_sets"].extend(records)
+
+        async def upsert_client_income_needs_schedules(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["income_needs_schedules"].extend(records)
+
+        async def upsert_liquidity_reserve_requirements(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["liquidity_reserve_requirements"].extend(records)
+
+        async def upsert_planned_withdrawal_schedules(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["planned_withdrawal_schedules"].extend(records)
 
         async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
             self.persisted["classification_taxonomy"].extend(records)
@@ -1141,7 +1169,7 @@ def _portfolio_bundle_payload() -> dict[str, object]:
         "portfolios": [
             {
                 "portfolio_id": "P1",
-                "base_currency": "USD",
+                "base_currency": " usd ",
                 "open_date": "2025-01-01",
                 "client_id": "c",
                 "status": "s",
@@ -1217,6 +1245,8 @@ async def test_ingest_portfolios_endpoint(
     assert body["request_id"]
     assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["value"]["base_currency"] == "USD"
 
 
 async def test_ingest_portfolios_replays_duplicate_idempotency_key(
@@ -1475,6 +1505,13 @@ async def test_ingest_transactions_endpoint(
     """Tests the POST /ingest/transactions endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
     payload = _transaction_batch_payload("TX_BATCH_ACK_001")
+    payload["transactions"][0]["trade_currency"] = " usd "
+    payload["transactions"][0]["currency"] = " usd "
+    payload["transactions"][0]["pair_base_currency"] = " eur "
+    payload["transactions"][0]["pair_quote_currency"] = " usd "
+    payload["transactions"][0]["buy_currency"] = " usd "
+    payload["transactions"][0]["sell_currency"] = " eur "
+    payload["transactions"][0]["synthetic_flow_currency"] = " sgd "
 
     response = await async_test_client.post(
         "/ingest/transactions",
@@ -1497,6 +1534,13 @@ async def test_ingest_transactions_endpoint(
     assert publish_kwargs["topic"] == "transactions.raw.received"
     assert publish_kwargs["key"] == "P1"
     assert publish_kwargs["value"]["transaction_id"] == "TX_BATCH_ACK_001"
+    assert publish_kwargs["value"]["trade_currency"] == "USD"
+    assert publish_kwargs["value"]["currency"] == "USD"
+    assert publish_kwargs["value"]["pair_base_currency"] == "EUR"
+    assert publish_kwargs["value"]["pair_quote_currency"] == "USD"
+    assert publish_kwargs["value"]["buy_currency"] == "USD"
+    assert publish_kwargs["value"]["sell_currency"] == "EUR"
+    assert publish_kwargs["value"]["synthetic_flow_currency"] == "SGD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"transaction-batch-idem-001")
 
 
@@ -1917,6 +1961,165 @@ async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
     assert failure_history.json()["failures"][0]["failure_phase"] == "persist_bookkeeping"
 
 
+def _model_portfolio_definition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "model_portfolios": [
+            {
+                "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                "model_portfolio_version": "2026.03",
+                "display_name": "Singapore Balanced DPM Model",
+                "base_currency": "SGD",
+                "risk_profile": "balanced",
+                "mandate_type": "discretionary",
+                "approval_status": "approved",
+                "effective_from": "2026-03-25",
+            }
+        ]
+    }
+
+
+async def test_ingest_model_portfolios_normalizes_base_currency(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _model_portfolio_definition_payload()
+    payload["model_portfolios"][0]["base_currency"] = " sgd "
+
+    response = await async_test_client.post(
+        "/ingest/model-portfolios",
+        json=payload,
+        headers={"X-Idempotency-Key": "model-portfolio-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "model_portfolio"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "model-portfolio-idem-001"
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "model_portfolios"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["base_currency"] == "SGD"
+
+
+def _private_banking_amount_currency_payloads() -> list[tuple[str, dict, str, str, str]]:
+    return [
+        (
+            "/ingest/client-tax-rule-sets",
+            {
+                "tax_rule_sets": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "rule_set_id": "TAX_RULES_SG_2026",
+                        "tax_year": 2026,
+                        "jurisdiction_code": "SG",
+                        "rule_code": "US_DIVIDEND_WITHHOLDING",
+                        "rule_category": "WITHHOLDING",
+                        "rule_source": "bank_tax_reference",
+                        "applies_to_income_types": ["DIVIDEND"],
+                        "threshold_amount": "250000.0000",
+                        "threshold_currency": " sgd ",
+                        "effective_from": "2026-04-01",
+                    }
+                ]
+            },
+            "tax_rule_sets",
+            "threshold_currency",
+            "client_tax_rule_set",
+        ),
+        (
+            "/ingest/client-income-needs-schedules",
+            {
+                "income_needs_schedules": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "schedule_id": "INCOME_NEED_MONTHLY_001",
+                        "need_type": "LIVING_EXPENSE",
+                        "amount": "25000.0000",
+                        "currency": " sgd ",
+                        "frequency": "MONTHLY",
+                        "start_date": "2026-04-01",
+                    }
+                ]
+            },
+            "income_needs_schedules",
+            "currency",
+            "client_income_needs_schedule",
+        ),
+        (
+            "/ingest/liquidity-reserve-requirements",
+            {
+                "liquidity_reserve_requirements": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "reserve_requirement_id": "RESERVE_MIN_CASH_001",
+                        "reserve_type": "MIN_CASH_BUFFER",
+                        "required_amount": "150000.0000",
+                        "currency": " sgd ",
+                        "horizon_days": 90,
+                        "policy_source": "POLICY_DPM_SG_BALANCED_V1",
+                        "effective_from": "2026-04-01",
+                    }
+                ]
+            },
+            "liquidity_reserve_requirements",
+            "currency",
+            "liquidity_reserve_requirement",
+        ),
+        (
+            "/ingest/planned-withdrawal-schedules",
+            {
+                "planned_withdrawal_schedules": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "withdrawal_schedule_id": "WITHDRAWAL_Q3_001",
+                        "withdrawal_type": "PLANNED_WITHDRAWAL",
+                        "amount": "50000.0000",
+                        "currency": " sgd ",
+                        "scheduled_date": "2026-07-15",
+                    }
+                ]
+            },
+            "planned_withdrawal_schedules",
+            "currency",
+            "planned_withdrawal_schedule",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "persisted_key", "currency_field", "entity_type"),
+    _private_banking_amount_currency_payloads(),
+)
+async def test_ingest_private_banking_amount_currency_records_normalize_currency(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    path: str,
+    payload: dict,
+    persisted_key: str,
+    currency_field: str,
+    entity_type: str,
+):
+    response = await async_test_client.post(
+        path,
+        json=payload,
+        headers={"X-Idempotency-Key": f"{persisted_key}-idem-001"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["entity_type"] == entity_type
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[persisted_key]
+    assert len(persisted) == 1
+    assert persisted[0][currency_field] == "SGD"
+
+
 async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when_omitted(
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
@@ -2131,6 +2334,7 @@ async def test_ingest_benchmark_definitions_returns_ack_and_persists_full_contra
     ingestion_test_harness,
 ):
     payload = _benchmark_definition_payload()
+    payload["benchmark_definitions"][0]["benchmark_currency"] = " usd "
     payload["benchmark_definitions"][0].update(
         {
             "benchmark_family": "multi_asset_strategic",
@@ -2516,6 +2720,7 @@ async def test_ingest_indices_returns_ack_and_persists_full_contract(
     ingestion_test_harness,
 ):
     payload = _index_definition_payload()
+    payload["indices"][0]["index_currency"] = " usd "
     payload["indices"][0].update(
         {
             "index_provider": "MSCI",
@@ -2683,6 +2888,7 @@ async def test_ingest_index_price_series_returns_ack_and_persists_full_contract(
     ingestion_test_harness,
 ):
     payload = _index_price_series_payload()
+    payload["index_price_series"][0]["series_currency"] = " usd "
     payload["index_price_series"][0].update(
         {
             "source_timestamp": "2026-01-02T21:00:00Z",
@@ -2874,6 +3080,7 @@ async def test_ingest_index_return_series_returns_ack_and_persists_full_contract
     ingestion_test_harness,
 ):
     payload = _index_return_series_payload()
+    payload["index_return_series"][0]["series_currency"] = " usd "
     payload["index_return_series"][0].update(
         {
             "source_timestamp": "2026-01-02T21:00:00Z",
@@ -3066,6 +3273,7 @@ async def test_ingest_benchmark_return_series_returns_ack_and_persists_full_cont
     ingestion_test_harness,
 ):
     payload = _benchmark_return_series_payload()
+    payload["benchmark_return_series"][0]["series_currency"] = " usd "
     payload["benchmark_return_series"][0].update(
         {
             "source_timestamp": "2026-01-02T21:00:00Z",
@@ -3260,6 +3468,7 @@ async def test_ingest_risk_free_series_returns_ack_and_persists_full_contract(
     ingestion_test_harness,
 ):
     payload = _risk_free_series_payload()
+    payload["risk_free_series"][0]["series_currency"] = " usd "
     payload["risk_free_series"][0].update(
         {
             "day_count_convention": "act_360",
@@ -5136,6 +5345,11 @@ async def test_ingest_instruments_endpoint(
     """Tests the POST /ingest/instruments endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
     payload = _instrument_batch_payload("SEC_INST_ACK_001")
+    payload["instruments"][0]["currency"] = " usd "
+    payload["instruments"][0]["pair_base_currency"] = " eur "
+    payload["instruments"][0]["pair_quote_currency"] = " usd "
+    payload["instruments"][0]["buy_currency"] = " eur "
+    payload["instruments"][0]["sell_currency"] = " usd "
 
     response = await async_test_client.post(
         "/ingest/instruments",
@@ -5158,6 +5372,11 @@ async def test_ingest_instruments_endpoint(
     assert publish_kwargs["topic"] == "instruments.received"
     assert publish_kwargs["key"] == "SEC_INST_ACK_001"
     assert publish_kwargs["value"]["security_id"] == "SEC_INST_ACK_001"
+    assert publish_kwargs["value"]["currency"] == "USD"
+    assert publish_kwargs["value"]["pair_base_currency"] == "EUR"
+    assert publish_kwargs["value"]["pair_quote_currency"] == "USD"
+    assert publish_kwargs["value"]["buy_currency"] == "EUR"
+    assert publish_kwargs["value"]["sell_currency"] == "USD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"instrument-batch-idem-001")
 
 
@@ -5258,6 +5477,7 @@ async def test_ingest_market_prices_endpoint(
     """Tests the POST /ingest/market-prices endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
     payload = _market_price_batch_payload("SEC_PRICE_ACK_001")
+    payload["market_prices"][0]["currency"] = " usd "
 
     response = await async_test_client.post(
         "/ingest/market-prices",
@@ -5280,6 +5500,7 @@ async def test_ingest_market_prices_endpoint(
     assert publish_kwargs["topic"] == "market_prices.raw.received"
     assert publish_kwargs["key"] == "SEC_PRICE_ACK_001"
     assert publish_kwargs["value"]["security_id"] == "SEC_PRICE_ACK_001"
+    assert publish_kwargs["value"]["currency"] == "USD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"market-price-batch-idem-001")
 
 
@@ -5379,7 +5600,7 @@ async def test_ingest_fx_rates_endpoint(
 ):
     """Tests the POST /ingest/fx-rates endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = _fx_rate_batch_payload(("USD", "SGD"))
+    payload = _fx_rate_batch_payload((" usd ", " sgd "))
 
     response = await async_test_client.post(
         "/ingest/fx-rates",
@@ -5522,6 +5743,7 @@ async def test_ingest_cash_account_masters_returns_ack_and_persists_full_contrac
 ):
     mock_kafka_producer.publish_message.reset_mock()
     payload = _cash_account_master_payload()
+    payload["cash_accounts"][0]["account_currency"] = " usd "
     payload["cash_accounts"][0].update(
         {
             "account_role": "OPERATING_CASH",

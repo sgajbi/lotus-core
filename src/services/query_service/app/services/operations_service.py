@@ -1,7 +1,6 @@
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 
-from portfolio_common.monitoring import observe_portfolio_supportability
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     BREAK_OPEN,
@@ -12,16 +11,11 @@ from portfolio_common.reconciliation_quality import (
     classify_finding_status,
     classify_reconciliation_status,
 )
-from portfolio_common.timeseries_constants import (
-    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
-)
-from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.operations_dto import (
     AnalyticsExportJobListResponse,
     AnalyticsExportJobRecord,
-    CalculatorSloBucket,
     CalculatorSloResponse,
     LineageKeyListResponse,
     LineageKeyRecord,
@@ -29,10 +23,7 @@ from ..dtos.operations_dto import (
     LoadRunProgressResponse,
     PortfolioControlStageListResponse,
     PortfolioControlStageRecord,
-    PortfolioReadinessBucket,
-    PortfolioReadinessReason,
     PortfolioReadinessResponse,
-    PortfolioSupportabilitySummary,
     ReconciliationFindingListResponse,
     ReconciliationFindingRecord,
     ReconciliationRunListResponse,
@@ -40,14 +31,13 @@ from ..dtos.operations_dto import (
     ReprocessingJobListResponse,
     ReprocessingKeyListResponse,
     ReprocessingKeyRecord,
-    ReprocessingSloBucket,
     SupportJobListResponse,
     SupportJobRecord,
     SupportOverviewResponse,
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.operations_repository import (
-    LoadRunProgressSummary,
     MissingHistoricalFxDependencySummary,
     OperationsRepository,
     SnapshotValuationCoverageSummary,
@@ -56,123 +46,21 @@ from ..support_policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
 )
+from .calculator_slo_builder import build_calculator_slo_response
+from .load_run_progress_builder import build_load_run_progress_response
+from .portfolio_readiness_builder import (
+    PortfolioReadinessSnapshot,
+    build_portfolio_readiness_response,
+)
 from .support_overview_builder import (
     SupportOverviewSnapshot,
     build_support_overview_response,
-)
-
-_VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
-VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = (
-    _VALUATION_RUNTIME_SETTINGS.valuation_scheduler_poll_interval_seconds
-)
-VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL = (
-    _VALUATION_RUNTIME_SETTINGS.valuation_scheduler_batch_size
-    * _VALUATION_RUNTIME_SETTINGS.valuation_scheduler_dispatch_rounds
 )
 
 
 class OperationsService:
     def __init__(self, db: AsyncSession):
         self.repo = OperationsRepository(db)
-
-    @staticmethod
-    def _safe_ratio(numerator: int, denominator: int) -> float:
-        if denominator <= 0:
-            return 0.0
-        return round(numerator / denominator, 6)
-
-    @staticmethod
-    def _non_negative_gap(upstream_count: int, downstream_count: int) -> int:
-        return max(upstream_count - downstream_count, 0)
-
-    @staticmethod
-    def _ceiling_division(numerator: int, denominator: int) -> int:
-        if numerator <= 0 or denominator <= 0:
-            return 0
-        return (numerator + denominator - 1) // denominator
-
-    @staticmethod
-    def _elapsed_seconds_between(
-        older_timestamp: datetime | None,
-        newer_timestamp: datetime | None,
-    ) -> float | None:
-        if older_timestamp is None or newer_timestamp is None:
-            return None
-        return round(max((newer_timestamp - older_timestamp).total_seconds(), 0.0), 6)
-
-    @staticmethod
-    def _get_load_run_state(summary: LoadRunProgressSummary) -> str:
-        if summary.failed_valuation_jobs > 0 or summary.failed_aggregation_jobs > 0:
-            return "FAILED"
-        if (
-            summary.portfolios_ingested > 0
-            and summary.portfolios_with_timeseries == summary.portfolios_ingested
-            and summary.open_valuation_jobs == 0
-            and summary.open_aggregation_jobs == 0
-        ):
-            return "COMPLETE"
-        if summary.portfolios_ingested > 0 and summary.transactions_ingested == 0:
-            return "SEEDING"
-        return "MATERIALIZING"
-
-    @staticmethod
-    def _latest_load_run_activity_at(summary: LoadRunProgressSummary) -> datetime | None:
-        activity_timestamps = [
-            summary.latest_snapshot_materialized_at_utc,
-            summary.latest_position_timeseries_materialized_at_utc,
-            summary.latest_portfolio_timeseries_materialized_at_utc,
-            summary.latest_valuation_job_updated_at_utc,
-            summary.latest_aggregation_job_updated_at_utc,
-        ]
-        resolved_timestamps = [
-            activity_timestamp
-            for activity_timestamp in activity_timestamps
-            if activity_timestamp is not None
-        ]
-        return max(resolved_timestamps) if resolved_timestamps else None
-
-    @classmethod
-    def _get_load_run_operator_progress_state(
-        cls,
-        summary: LoadRunProgressSummary,
-        *,
-        reference_now: datetime,
-        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
-    ) -> str:
-        run_state = cls._get_load_run_state(summary)
-        if run_state in {"FAILED", "COMPLETE"}:
-            return run_state
-        latest_activity_at = cls._latest_load_run_activity_at(summary)
-        has_fresh_activity = latest_activity_at is not None and latest_activity_at >= (
-            reference_now - timedelta(minutes=stale_threshold_minutes)
-        )
-        has_open_jobs = summary.open_valuation_jobs > 0 or summary.open_aggregation_jobs > 0
-        if has_open_jobs and has_fresh_activity:
-            return "RUNNING"
-        if has_fresh_activity:
-            return "SLOW"
-        return "STUCK"
-
-    @staticmethod
-    def _get_valuation_to_timeseries_handoff_pressure_hint(
-        summary: LoadRunProgressSummary,
-    ) -> str:
-        if (
-            summary.pending_valuation_jobs <= 0
-            and summary.completed_valuation_jobs_without_position_timeseries <= 0
-        ):
-            return "NO_HANDOFF_PRESSURE"
-        if (
-            summary.pending_valuation_jobs > 0
-            and summary.completed_valuation_jobs_without_position_timeseries <= 0
-        ):
-            return "SCHEDULER_DISPATCH_BOUND"
-        if (
-            summary.pending_valuation_jobs <= 0
-            and summary.completed_valuation_jobs_without_position_timeseries > 0
-        ):
-            return "DOWNSTREAM_OF_VALUATION"
-        return "MIXED_HANDOFF_PRESSURE"
 
     @staticmethod
     def _evidence_product_runtime_metadata(
@@ -234,6 +122,17 @@ class OperationsService:
             return COMPLETE
         return UNKNOWN
 
+    @staticmethod
+    def _normalize_support_job_status(status: str | None) -> str | None:
+        if status is None:
+            return None
+        return status.strip().upper()
+
+    @classmethod
+    def _normalize_support_status_filter(cls, status: str | None) -> str | None:
+        normalized_status = cls._normalize_support_job_status(status)
+        return normalized_status or None
+
     @classmethod
     def _get_support_job_operational_state(
         cls,
@@ -242,27 +141,38 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
-        if status == "FAILED":
+        normalized_status = cls._normalize_support_job_status(status) or ""
+        if normalized_status == "FAILED":
             return "FAILED"
-        if status.startswith("SKIPPED"):
+        if normalized_status.startswith("SKIPPED"):
             return "SKIPPED"
-        if cls._is_support_job_stale(status, updated_at, now, stale_threshold_minutes):
+        if cls._is_support_job_stale(normalized_status, updated_at, now, stale_threshold_minutes):
             return "STALE_PROCESSING"
-        if status == "PROCESSING":
+        if normalized_status == "PROCESSING":
             return "PROCESSING"
-        if status == "PENDING":
+        if normalized_status == "PENDING":
             return "PENDING"
         return "COMPLETED"
 
-    @staticmethod
-    def _is_support_job_retrying(status: str, attempt_count: int | None) -> bool:
-        return (attempt_count or 0) > 0 and status in {"PENDING", "PROCESSING"}
+    @classmethod
+    def _is_terminal_failure_status(cls, status: str | None) -> bool:
+        return cls._normalize_support_job_status(status) == "FAILED"
+
+    @classmethod
+    def _is_support_job_retrying(cls, status: str, attempt_count: int | None) -> bool:
+        normalized_status = cls._normalize_support_job_status(status)
+        return (attempt_count or 0) > 0 and normalized_status in {"PENDING", "PROCESSING"}
 
     @staticmethod
     def _normalize_analytics_export_status(status: str | None) -> str | None:
         if status is None:
             return None
-        return status.lower()
+        return status.strip().lower()
+
+    @classmethod
+    def _normalize_analytics_export_status_filter(cls, status: str | None) -> str | None:
+        normalized_status = cls._normalize_analytics_export_status(status)
+        return normalized_status or None
 
     @classmethod
     def _get_analytics_export_operational_state(
@@ -285,9 +195,10 @@ class OperationsService:
 
     @classmethod
     def _get_reconciliation_operational_state(cls, status: str | None) -> str:
+        normalized_status = cls._normalize_support_job_status(status)
         if cls._is_controls_blocking(status):
             return "BLOCKING"
-        if status == "RUNNING":
+        if normalized_status == "RUNNING":
             return "RUNNING"
         return "COMPLETED"
 
@@ -295,9 +206,9 @@ class OperationsService:
     def _get_portfolio_control_stage_operational_state(cls, status: str | None) -> str:
         return "BLOCKING" if cls._is_controls_blocking(status) else "COMPLETED"
 
-    @staticmethod
-    def _is_reconciliation_finding_blocking(severity: str | None) -> bool:
-        return severity == "ERROR"
+    @classmethod
+    def _is_reconciliation_finding_blocking(cls, severity: str | None) -> bool:
+        return cls._normalize_support_job_status(severity) == "ERROR"
 
     @classmethod
     def _get_reconciliation_finding_operational_state(cls, severity: str | None) -> str:
@@ -311,14 +222,16 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
+        normalized_status = cls._normalize_support_job_status(status)
         if cls._is_reprocessing_key_stale(status, updated_at, now, stale_threshold_minutes):
             return "STALE_REPROCESSING"
-        if status == "REPROCESSING":
+        if normalized_status == "REPROCESSING":
             return "REPROCESSING"
         return "CURRENT"
 
-    @staticmethod
+    @classmethod
     def _has_lineage_artifact_gap(
+        cls,
         latest_position_history_date: date | None,
         latest_daily_snapshot_date: date | None,
         latest_valuation_job_date: date | None,
@@ -336,18 +249,24 @@ class OperationsService:
             or latest_valuation_job_date < latest_position_history_date
         ):
             return True
-        return latest_valuation_job_status in {"FAILED", "PENDING", "PROCESSING"}
+        normalized_status = cls._normalize_support_job_status(latest_valuation_job_status)
+        return normalized_status in {"FAILED", "PENDING", "PROCESSING"}
 
-    @staticmethod
+    @classmethod
     def _get_lineage_key_operational_state(
+        cls,
         reprocessing_status: str | None,
         has_artifact_gap: bool,
         latest_valuation_job_status: str | None,
     ) -> str:
-        if reprocessing_status == "REPROCESSING":
+        normalized_reprocessing_status = cls._normalize_support_job_status(reprocessing_status)
+        normalized_valuation_status = cls._normalize_support_job_status(
+            latest_valuation_job_status
+        )
+        if normalized_reprocessing_status == "REPROCESSING":
             return "REPLAYING"
         if has_artifact_gap:
-            if latest_valuation_job_status == "FAILED":
+            if normalized_valuation_status == "FAILED":
                 return "VALUATION_BLOCKED"
             return "ARTIFACT_GAP"
         return "HEALTHY"
@@ -364,7 +283,7 @@ class OperationsService:
             latest_valuation_job_status=latest_valuation_job_status,
         )
         return LineageKeyRecord(
-            security_id=key["security_id"],
+            security_id=normalize_security_id(key["security_id"]),
             epoch=key["epoch"],
             watermark_date=key["watermark_date"],
             reprocessing_status=key["reprocessing_status"],
@@ -404,7 +323,7 @@ class OperationsService:
             job_type=job_type,
             business_date=business_date,
             status=status,
-            security_id=security_id,
+            security_id=normalize_security_id(security_id) if security_id is not None else None,
             epoch=epoch,
             attempt_count=attempt_count,
             is_retrying=self._is_support_job_retrying(status, attempt_count),
@@ -418,113 +337,12 @@ class OperationsService:
                 stale_threshold_minutes,
             ),
             failure_reason=failure_reason,
-            is_terminal_failure=status == "FAILED",
+            is_terminal_failure=self._is_terminal_failure_status(status),
             operational_state=self._get_support_job_operational_state(
                 status,
                 updated_at,
                 reference_now,
                 stale_threshold_minutes,
-            ),
-        )
-
-    @staticmethod
-    def _reason(
-        *,
-        code: str,
-        domain: str,
-        severity: str,
-        message: str,
-        affected_transaction_ids: list[str] | None = None,
-        affected_security_ids: list[str] | None = None,
-    ) -> PortfolioReadinessReason:
-        return PortfolioReadinessReason(
-            code=code,
-            domain=domain,
-            severity=severity,
-            message=message,
-            affected_transaction_ids=affected_transaction_ids or [],
-            affected_security_ids=affected_security_ids or [],
-        )
-
-    @staticmethod
-    def _bucket_status(reasons: list[PortfolioReadinessReason], has_activity: bool) -> str:
-        if not has_activity:
-            return "NO_ACTIVITY"
-        if any(reason.severity == "ERROR" for reason in reasons):
-            return "BLOCKED"
-        if reasons:
-            return "PENDING"
-        return "READY"
-
-    @staticmethod
-    def _portfolio_supportability_summary(
-        *,
-        buckets: list[PortfolioReadinessBucket],
-        resolved_as_of_date: date | None,
-        generated_at_utc: datetime,
-    ) -> PortfolioSupportabilitySummary:
-        statuses = [bucket.status for bucket in buckets]
-        ready_domains = statuses.count("READY")
-        pending_domains = statuses.count("PENDING")
-        blocked_domains = statuses.count("BLOCKED")
-        no_activity_domains = statuses.count("NO_ACTIVITY")
-
-        if no_activity_domains == len(statuses):
-            state = "empty"
-            reason = "portfolio_supportability_empty"
-        elif blocked_domains > 0:
-            state = "degraded"
-            reason = "portfolio_supportability_blocked"
-        elif pending_domains > 0:
-            state = "degraded"
-            reason = "portfolio_supportability_pending"
-        else:
-            state = "ready"
-            reason = "portfolio_supportability_ready"
-
-        if resolved_as_of_date is None:
-            freshness_bucket = "unknown"
-        elif resolved_as_of_date >= generated_at_utc.date() - timedelta(days=1):
-            freshness_bucket = "current"
-        else:
-            freshness_bucket = "stale"
-
-        observe_portfolio_supportability(state, reason, freshness_bucket)
-        return PortfolioSupportabilitySummary(
-            state=state,
-            reason=reason,
-            freshness_bucket=freshness_bucket,
-            ready_domains=ready_domains,
-            pending_domains=pending_domains,
-            blocked_domains=blocked_domains,
-            no_activity_domains=no_activity_domains,
-        )
-
-    @staticmethod
-    def _blocking_reasons(
-        reasons: list[PortfolioReadinessReason],
-    ) -> list[PortfolioReadinessReason]:
-        return [reason for reason in reasons if reason.severity == "ERROR"]
-
-    def _build_missing_fx_reason(
-        self,
-        *,
-        domain: str,
-        fx_summary: MissingHistoricalFxDependencySummary,
-    ) -> PortfolioReadinessReason:
-        return self._reason(
-            code="MISSING_HISTORICAL_FX_PREREQUISITE",
-            domain=domain,
-            severity="ERROR",
-            message=(
-                "Cross-currency transactions are missing historical FX prerequisites "
-                "required for complete source-owned coverage."
-            ),
-            affected_transaction_ids=[
-                record.transaction_id for record in fx_summary.sample_records
-            ],
-            affected_security_ids=sorted(
-                {record.security_id for record in fx_summary.sample_records if record.security_id}
             ),
         )
 
@@ -545,187 +363,11 @@ class OperationsService:
         )
         if summary.portfolios_ingested == 0 and summary.transactions_ingested == 0:
             raise ValueError(f"Load run {run_id} not found")
-        valuation_pending_dispatch_polls_lower_bound = self._ceiling_division(
-            summary.pending_valuation_jobs,
-            VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL,
-        )
-        run_state = self._get_load_run_state(summary)
-        return LoadRunProgressResponse(
+        return build_load_run_progress_response(
             run_id=run_id,
             business_date=business_date,
             generated_at_utc=generated_at_utc,
-            run_state=run_state,
-            operator_progress_stale_threshold_minutes=DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
-            operator_progress_state=self._get_load_run_operator_progress_state(
-                summary,
-                reference_now=generated_at_utc,
-                stale_threshold_minutes=DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
-            ),
-            portfolios_ingested=summary.portfolios_ingested,
-            transactions_ingested=summary.transactions_ingested,
-            portfolios_with_snapshots=summary.portfolios_with_snapshots,
-            snapshot_rows=summary.snapshot_rows,
-            portfolios_with_position_timeseries=summary.portfolios_with_position_timeseries,
-            position_timeseries_rows=summary.position_timeseries_rows,
-            portfolios_with_timeseries=summary.portfolios_with_timeseries,
-            timeseries_rows=summary.timeseries_rows,
-            complete_portfolios=summary.portfolios_with_timeseries,
-            incomplete_portfolios=self._non_negative_gap(
-                summary.portfolios_ingested,
-                summary.portfolios_with_timeseries,
-            ),
-            portfolios_waiting_for_snapshots=self._non_negative_gap(
-                summary.portfolios_ingested,
-                summary.portfolios_with_snapshots,
-            ),
-            remaining_snapshot_rows=self._non_negative_gap(
-                summary.transactions_ingested,
-                summary.snapshot_rows,
-            ),
-            snapshot_portfolio_coverage_ratio=self._safe_ratio(
-                summary.portfolios_with_snapshots,
-                summary.portfolios_ingested,
-            ),
-            snapshot_portfolios_without_position_timeseries=self._non_negative_gap(
-                summary.portfolios_with_snapshots,
-                summary.portfolios_with_position_timeseries,
-            ),
-            portfolios_waiting_for_position_timeseries=self._non_negative_gap(
-                summary.portfolios_with_snapshots,
-                summary.portfolios_with_position_timeseries,
-            ),
-            remaining_position_timeseries_rows=self._non_negative_gap(
-                summary.transactions_ingested,
-                summary.position_timeseries_rows,
-            ),
-            position_timeseries_portfolio_coverage_ratio=self._safe_ratio(
-                summary.portfolios_with_position_timeseries,
-                summary.portfolios_ingested,
-            ),
-            position_timeseries_portfolios_without_portfolio_timeseries=self._non_negative_gap(
-                summary.portfolios_with_position_timeseries,
-                summary.portfolios_with_timeseries,
-            ),
-            portfolios_waiting_for_portfolio_timeseries=self._non_negative_gap(
-                summary.portfolios_with_position_timeseries,
-                summary.portfolios_with_timeseries,
-            ),
-            remaining_portfolio_timeseries_rows=self._non_negative_gap(
-                summary.portfolios_ingested,
-                summary.timeseries_rows,
-            ),
-            timeseries_portfolio_coverage_ratio=self._safe_ratio(
-                summary.portfolios_with_timeseries,
-                summary.portfolios_ingested,
-            ),
-            pending_valuation_jobs=summary.pending_valuation_jobs,
-            processing_valuation_jobs=summary.processing_valuation_jobs,
-            open_valuation_jobs=summary.open_valuation_jobs,
-            pending_aggregation_jobs=summary.pending_aggregation_jobs,
-            processing_aggregation_jobs=summary.processing_aggregation_jobs,
-            open_aggregation_jobs=summary.open_aggregation_jobs,
-            failed_valuation_jobs=summary.failed_valuation_jobs,
-            failed_aggregation_jobs=summary.failed_aggregation_jobs,
-            dependent_position_timeseries_propagation_row_cap=(
-                DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
-            ),
-            valuation_scheduler_poll_interval_seconds=(VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS),
-            valuation_scheduler_max_dispatch_jobs_per_poll=(
-                VALUATION_SCHEDULER_MAX_DISPATCH_JOBS_PER_POLL
-            ),
-            valuation_scheduler_pending_dispatch_polls_lower_bound=(
-                valuation_pending_dispatch_polls_lower_bound
-            ),
-            valuation_scheduler_pending_dispatch_time_lower_bound_seconds=(
-                valuation_pending_dispatch_polls_lower_bound
-                * VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-            ),
-            valuation_to_position_timeseries_handoff_pressure_hint=(
-                self._get_valuation_to_timeseries_handoff_pressure_hint(summary)
-            ),
-            oldest_pending_valuation_date=summary.oldest_pending_valuation_date,
-            oldest_pending_aggregation_date=summary.oldest_pending_aggregation_date,
-            latest_snapshot_date=summary.latest_snapshot_date,
-            latest_timeseries_date=summary.latest_timeseries_date,
-            latest_snapshot_materialized_at_utc=summary.latest_snapshot_materialized_at_utc,
-            latest_valuation_to_snapshot_tail_seconds=(
-                self._elapsed_seconds_between(
-                    summary.latest_valuation_job_updated_at_utc,
-                    summary.latest_snapshot_materialized_at_utc,
-                )
-            ),
-            latest_position_timeseries_materialized_at_utc=(
-                summary.latest_position_timeseries_materialized_at_utc
-            ),
-            latest_valuation_to_position_timeseries_tail_seconds=(
-                self._elapsed_seconds_between(
-                    summary.latest_valuation_job_updated_at_utc,
-                    summary.latest_position_timeseries_materialized_at_utc,
-                )
-            ),
-            latest_snapshot_to_position_timeseries_tail_seconds=(
-                self._elapsed_seconds_between(
-                    summary.latest_snapshot_materialized_at_utc,
-                    summary.latest_position_timeseries_materialized_at_utc,
-                )
-            ),
-            latest_portfolio_timeseries_materialized_at_utc=(
-                summary.latest_portfolio_timeseries_materialized_at_utc
-            ),
-            latest_position_timeseries_to_portfolio_timeseries_tail_seconds=(
-                self._elapsed_seconds_between(
-                    summary.latest_position_timeseries_materialized_at_utc,
-                    summary.latest_portfolio_timeseries_materialized_at_utc,
-                )
-            ),
-            latest_valuation_job_updated_at_utc=summary.latest_valuation_job_updated_at_utc,
-            latest_aggregation_job_updated_at_utc=summary.latest_aggregation_job_updated_at_utc,
-            completed_valuation_jobs_without_position_timeseries=(
-                summary.completed_valuation_jobs_without_position_timeseries
-            ),
-            completed_valuation_portfolios_without_position_timeseries=(
-                summary.completed_valuation_portfolios_without_position_timeseries
-            ),
-            completed_valuation_portfolios_without_position_timeseries_ratio=(
-                self._safe_ratio(
-                    summary.completed_valuation_portfolios_without_position_timeseries,
-                    summary.portfolios_ingested,
-                )
-            ),
-            completed_valuation_jobs_without_position_timeseries_per_affected_portfolio=(
-                self._safe_ratio(
-                    summary.completed_valuation_jobs_without_position_timeseries,
-                    summary.completed_valuation_portfolios_without_position_timeseries,
-                )
-            ),
-            max_completed_valuation_jobs_without_position_timeseries_single_portfolio=(
-                summary.max_completed_valuation_jobs_without_position_timeseries_single_portfolio
-            ),
-            dependent_position_timeseries_propagation_cap_risk=(
-                summary.max_completed_valuation_jobs_without_position_timeseries_single_portfolio
-                >= DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
-            ),
-            oldest_completed_valuation_without_position_timeseries_at_utc=(
-                summary.oldest_completed_valuation_without_position_timeseries_at_utc
-            ),
-            oldest_completed_valuation_without_position_timeseries_age_seconds=(
-                self._elapsed_seconds_between(
-                    summary.oldest_completed_valuation_without_position_timeseries_at_utc,
-                    generated_at_utc,
-                )
-            ),
-            valuation_to_position_timeseries_latency_sample_count=(
-                summary.valuation_to_position_timeseries_latency_sample_count
-            ),
-            valuation_to_position_timeseries_latency_p50_seconds=(
-                summary.valuation_to_position_timeseries_latency_p50_seconds
-            ),
-            valuation_to_position_timeseries_latency_p95_seconds=(
-                summary.valuation_to_position_timeseries_latency_p95_seconds
-            ),
-            valuation_to_position_timeseries_latency_max_seconds=(
-                summary.valuation_to_position_timeseries_latency_max_seconds
-            ),
+            summary=summary,
         )
 
     async def get_support_overview(
@@ -926,249 +568,24 @@ class OperationsService:
                 snapshot_as_of=generated_at_utc,
             )
 
-        has_activity = (
-            latest_booked_transaction_date is not None
-            or latest_booked_position_snapshot_date is not None
+        return build_portfolio_readiness_response(
+            PortfolioReadinessSnapshot(
+                portfolio_id=portfolio_id,
+                requested_as_of_date=as_of_date,
+                resolved_as_of_date=resolved_as_of_date,
+                generated_at_utc=generated_at_utc,
+                support_overview=support_overview,
+                latest_booked_transaction_date=latest_booked_transaction_date,
+                latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
+                snapshot_coverage=snapshot_coverage,
+                missing_fx_summary=missing_fx_summary,
+            )
         )
 
-        holdings_reasons: list[PortfolioReadinessReason] = []
-        pricing_reasons: list[PortfolioReadinessReason] = []
-        transaction_reasons: list[PortfolioReadinessReason] = []
-        reporting_reasons: list[PortfolioReadinessReason] = []
-
-        if missing_fx_summary.missing_count > 0:
-            missing_fx_transactions = self._build_missing_fx_reason(
-                domain="transactions",
-                fx_summary=missing_fx_summary,
-            )
-            missing_fx_pricing = self._build_missing_fx_reason(
-                domain="pricing",
-                fx_summary=missing_fx_summary,
-            )
-            missing_fx_reporting = self._build_missing_fx_reason(
-                domain="reporting",
-                fx_summary=missing_fx_summary,
-            )
-            missing_fx_holdings = self._build_missing_fx_reason(
-                domain="holdings",
-                fx_summary=missing_fx_summary,
-            )
-            transaction_reasons.append(missing_fx_transactions)
-            pricing_reasons.append(missing_fx_pricing)
-            reporting_reasons.append(missing_fx_reporting)
-            holdings_reasons.append(missing_fx_holdings)
-
-        if latest_booked_transaction_date is not None and (
-            latest_booked_position_snapshot_date is None
-            or latest_booked_position_snapshot_date < latest_booked_transaction_date
-        ):
-            holdings_reasons.append(
-                self._reason(
-                    code="SNAPSHOT_BEHIND_TRANSACTION_LEDGER",
-                    domain="holdings",
-                    severity="WARNING",
-                    message=(
-                        "Current-epoch position snapshots lag the booked transaction ledger "
-                        "for the resolved as-of date."
-                    ),
-                )
-            )
-
-        if support_overview.position_snapshot_history_mismatch_count > 0:
-            holdings_reasons.append(
-                self._reason(
-                    code="POSITION_HISTORY_SNAPSHOT_GAP",
-                    domain="holdings",
-                    severity="WARNING",
-                    message=(
-                        "Position history exists without matching current-epoch daily snapshots "
-                        "for one or more keys."
-                    ),
-                )
-            )
-
-        if support_overview.active_reprocessing_keys > 0:
-            holdings_reasons.append(
-                self._reason(
-                    code="REPROCESSING_KEYS_ACTIVE",
-                    domain="holdings",
-                    severity="WARNING",
-                    message=(
-                        "Replay keys are still active for this portfolio, so holdings coverage "
-                        "may still be converging."
-                    ),
-                )
-            )
-
-        if support_overview.failed_valuation_jobs > 0:
-            pricing_reasons.append(
-                self._reason(
-                    code="VALUATION_JOBS_FAILED",
-                    domain="pricing",
-                    severity="ERROR",
-                    message="One or more valuation jobs are in FAILED terminal state.",
-                )
-            )
-        if support_overview.stale_processing_valuation_jobs > 0:
-            pricing_reasons.append(
-                self._reason(
-                    code="VALUATION_JOBS_STALE",
-                    domain="pricing",
-                    severity="WARNING",
-                    message="One or more valuation jobs are stale in PROCESSING state.",
-                )
-            )
-        if (
-            support_overview.pending_valuation_jobs > 0
-            or support_overview.processing_valuation_jobs > 0
-        ):
-            pricing_reasons.append(
-                self._reason(
-                    code="VALUATION_BACKLOG_OPEN",
-                    domain="pricing",
-                    severity="WARNING",
-                    message="Valuation work is still open for this portfolio.",
-                )
-            )
-        if snapshot_coverage.unvalued_positions > 0:
-            pricing_reasons.append(
-                self._reason(
-                    code="UNVALUED_POSITIONS_REMAIN",
-                    domain="pricing",
-                    severity="WARNING",
-                    message=(
-                        "One or more current-epoch positions remain unvalued on the latest "
-                        "booked snapshot date."
-                    ),
-                )
-            )
-
-        if support_overview.controls_blocking:
-            reporting_reasons.append(
-                self._reason(
-                    code="REPORTING_PUBLICATION_BLOCKED",
-                    domain="reporting",
-                    severity="ERROR",
-                    message=(
-                        "Financial reconciliation controls are blocking downstream reporting "
-                        "publication for the portfolio."
-                    ),
-                )
-            )
-        if support_overview.failed_aggregation_jobs > 0:
-            reporting_reasons.append(
-                self._reason(
-                    code="AGGREGATION_JOBS_FAILED",
-                    domain="reporting",
-                    severity="ERROR",
-                    message="One or more aggregation jobs are in FAILED terminal state.",
-                )
-            )
-        if (
-            support_overview.pending_aggregation_jobs > 0
-            or support_overview.processing_aggregation_jobs > 0
-            or support_overview.stale_processing_aggregation_jobs > 0
-        ):
-            reporting_reasons.append(
-                self._reason(
-                    code="AGGREGATION_BACKLOG_OPEN",
-                    domain="reporting",
-                    severity="WARNING",
-                    message="Aggregation work is still open for this portfolio.",
-                )
-            )
-
-        if has_activity and holdings_reasons:
-            reporting_reasons.append(
-                self._reason(
-                    code="HOLDINGS_COVERAGE_NOT_READY",
-                    domain="reporting",
-                    severity="WARNING",
-                    message="Holdings coverage is not yet fully ready for reporting consumption.",
-                )
-            )
-        if has_activity and pricing_reasons:
-            reporting_reasons.append(
-                self._reason(
-                    code="PRICING_COVERAGE_NOT_READY",
-                    domain="reporting",
-                    severity="WARNING",
-                    message="Pricing coverage is not yet fully ready for reporting consumption.",
-                )
-            )
-
-        holdings = PortfolioReadinessBucket(
-            status=self._bucket_status(holdings_reasons, has_activity),
-            reasons=holdings_reasons,
-        )
-        pricing = PortfolioReadinessBucket(
-            status=self._bucket_status(pricing_reasons, has_activity),
-            reasons=pricing_reasons,
-        )
-        transactions = PortfolioReadinessBucket(
-            status=self._bucket_status(
-                transaction_reasons,
-                latest_booked_transaction_date is not None,
-            ),
-            reasons=transaction_reasons,
-        )
-        reporting = PortfolioReadinessBucket(
-            status=self._bucket_status(reporting_reasons, has_activity),
-            reasons=reporting_reasons,
-        )
-        supportability = self._portfolio_supportability_summary(
-            buckets=[holdings, pricing, transactions, reporting],
-            resolved_as_of_date=resolved_as_of_date,
-            generated_at_utc=generated_at_utc,
-        )
-
-        return PortfolioReadinessResponse(
-            portfolio_id=portfolio_id,
-            requested_as_of_date=as_of_date,
-            resolved_as_of_date=resolved_as_of_date,
-            generated_at_utc=generated_at_utc,
-            holdings=holdings,
-            pricing=pricing,
-            transactions=transactions,
-            reporting=reporting,
-            blocking_reasons=(
-                self._blocking_reasons(holdings_reasons)
-                + self._blocking_reasons(pricing_reasons)
-                + self._blocking_reasons(transaction_reasons)
-                + self._blocking_reasons(reporting_reasons)
-            ),
-            supportability=supportability,
-            latest_booked_transaction_date=latest_booked_transaction_date,
-            latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
-            current_epoch=support_overview.current_epoch,
-            position_snapshot_history_mismatch_count=(
-                support_overview.position_snapshot_history_mismatch_count
-            ),
-            snapshot_valuation_total_positions=snapshot_coverage.total_positions,
-            snapshot_valuation_valued_positions=snapshot_coverage.valued_positions,
-            snapshot_valuation_unvalued_positions=snapshot_coverage.unvalued_positions,
-            controls_status=support_overview.controls_status,
-            publish_allowed=support_overview.publish_allowed,
-            missing_historical_fx_dependencies={
-                "missing_count": missing_fx_summary.missing_count,
-                "earliest_transaction_date": missing_fx_summary.earliest_transaction_date,
-                "latest_transaction_date": missing_fx_summary.latest_transaction_date,
-                "sample_records": [
-                    {
-                        "transaction_id": record.transaction_id,
-                        "security_id": record.security_id,
-                        "transaction_date": record.transaction_date,
-                        "trade_currency": record.trade_currency,
-                        "portfolio_currency": record.portfolio_currency,
-                    }
-                    for record in missing_fx_summary.sample_records
-                ],
-            },
-        )
-
-    @staticmethod
-    def _is_controls_blocking(status: str | None) -> bool:
-        return status in {"FAILED", "REQUIRES_REPLAY"}
+    @classmethod
+    def _is_controls_blocking(cls, status: str | None) -> bool:
+        normalized_status = cls._normalize_support_job_status(status)
+        return normalized_status in {"FAILED", "REQUIRES_REPLAY"}
 
     async def get_calculator_slos(
         self,
@@ -1207,68 +624,15 @@ class OperationsService:
             ),
         )
 
-        reference_date = latest_business_date or generated_at_utc.date()
-        valuation_backlog_age_days = (
-            max(0, (reference_date - valuation_job_health.oldest_open_job_date).days)
-            if valuation_job_health.oldest_open_job_date is not None
-            else None
-        )
-        aggregation_backlog_age_days = (
-            max(0, (reference_date - aggregation_job_health.oldest_open_job_date).days)
-            if aggregation_job_health.oldest_open_job_date is not None
-            else None
-        )
-        reprocessing_backlog_age_days = (
-            max(0, (reference_date - reprocessing_health.oldest_reprocessing_watermark_date).days)
-            if reprocessing_health.oldest_reprocessing_watermark_date is not None
-            else None
-        )
-
-        return CalculatorSloResponse(
+        return build_calculator_slo_response(
             portfolio_id=portfolio_id,
-            business_date=latest_business_date,
+            latest_business_date=latest_business_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
             generated_at_utc=generated_at_utc,
-            valuation=CalculatorSloBucket(
-                pending_jobs=valuation_job_health.pending_jobs,
-                processing_jobs=valuation_job_health.processing_jobs,
-                stale_processing_jobs=valuation_job_health.stale_processing_jobs,
-                failed_jobs=valuation_job_health.failed_jobs,
-                failed_jobs_within_window=valuation_job_health.failed_jobs_last_hours,
-                oldest_open_job_date=valuation_job_health.oldest_open_job_date,
-                oldest_open_job_id=valuation_job_health.oldest_open_job_id,
-                oldest_open_job_correlation_id=(
-                    valuation_job_health.oldest_open_job_correlation_id
-                ),
-                backlog_age_days=valuation_backlog_age_days,
-            ),
-            aggregation=CalculatorSloBucket(
-                pending_jobs=aggregation_job_health.pending_jobs,
-                processing_jobs=aggregation_job_health.processing_jobs,
-                stale_processing_jobs=aggregation_job_health.stale_processing_jobs,
-                failed_jobs=aggregation_job_health.failed_jobs,
-                failed_jobs_within_window=aggregation_job_health.failed_jobs_last_hours,
-                oldest_open_job_date=aggregation_job_health.oldest_open_job_date,
-                oldest_open_job_id=aggregation_job_health.oldest_open_job_id,
-                oldest_open_job_correlation_id=(
-                    aggregation_job_health.oldest_open_job_correlation_id
-                ),
-                backlog_age_days=aggregation_backlog_age_days,
-            ),
-            reprocessing=ReprocessingSloBucket(
-                active_reprocessing_keys=reprocessing_health.active_keys,
-                stale_reprocessing_keys=reprocessing_health.stale_reprocessing_keys,
-                oldest_reprocessing_watermark_date=(
-                    reprocessing_health.oldest_reprocessing_watermark_date
-                ),
-                oldest_reprocessing_security_id=(
-                    reprocessing_health.oldest_reprocessing_security_id
-                ),
-                oldest_reprocessing_epoch=reprocessing_health.oldest_reprocessing_epoch,
-                oldest_reprocessing_updated_at=(reprocessing_health.oldest_reprocessing_updated_at),
-                backlog_age_days=reprocessing_backlog_age_days,
-            ),
+            reprocessing_health=reprocessing_health,
+            valuation_job_health=valuation_job_health,
+            aggregation_job_health=aggregation_job_health,
         )
 
     async def get_lineage(self, portfolio_id: str, security_id: str) -> LineageResponse:
@@ -1322,7 +686,7 @@ class OperationsService:
         return LineageResponse(
             generated_at_utc=generated_at_utc,
             portfolio_id=portfolio_id,
-            security_id=security_id,
+            security_id=normalize_security_id(security_id),
             epoch=position_state.epoch,
             watermark_date=position_state.watermark_date,
             reprocessing_status=position_state.status,
@@ -1352,10 +716,13 @@ class OperationsService:
     ) -> LineageKeyListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        normalized_reprocessing_status = self._normalize_support_status_filter(
+            reprocessing_status
+        )
         total, keys = await asyncio.gather(
             self.repo.get_lineage_keys_count(
                 portfolio_id=portfolio_id,
-                reprocessing_status=reprocessing_status,
+                reprocessing_status=normalized_reprocessing_status,
                 security_id=security_id,
                 as_of=generated_at_utc,
             ),
@@ -1363,7 +730,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                reprocessing_status=reprocessing_status,
+                reprocessing_status=normalized_reprocessing_status,
                 security_id=security_id,
                 as_of=generated_at_utc,
             ),
@@ -1406,10 +773,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_valuation_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 security_id=security_id,
                 job_id=job_id,
@@ -1420,7 +788,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 security_id=security_id,
                 job_id=job_id,
@@ -1471,10 +839,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_aggregation_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 job_id=job_id,
                 correlation_id=correlation_id,
@@ -1484,7 +853,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 business_date=business_date,
                 job_id=job_id,
                 correlation_id=correlation_id,
@@ -1533,10 +902,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_analytics_export_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_analytics_export_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 job_id=job_id,
                 request_fingerprint=request_fingerprint,
                 as_of=generated_at_utc,
@@ -1545,7 +915,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 job_id=job_id,
                 request_fingerprint=request_fingerprint,
                 stale_minutes=stale_minutes,
@@ -1609,6 +979,7 @@ class OperationsService:
     ) -> ReconciliationRunListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        normalized_status = self._normalize_support_status_filter(status)
         total, runs = await asyncio.gather(
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
@@ -1617,7 +988,7 @@ class OperationsService:
                 requested_by=requested_by,
                 dedupe_key=dedupe_key,
                 reconciliation_type=reconciliation_type,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
             self.repo.get_reconciliation_runs(
@@ -1629,7 +1000,7 @@ class OperationsService:
                 requested_by=requested_by,
                 dedupe_key=dedupe_key,
                 reconciliation_type=reconciliation_type,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
         )
@@ -1663,7 +1034,7 @@ class OperationsService:
                     dedupe_key=run.dedupe_key,
                     correlation_id=run.correlation_id,
                     failure_reason=run.failure_reason,
-                    is_terminal_failure=run.status == "FAILED",
+                    is_terminal_failure=self._is_terminal_failure_status(run.status),
                     is_blocking=self._is_controls_blocking(run.status),
                     operational_state=self._get_reconciliation_operational_state(run.status),
                 )
@@ -1728,7 +1099,7 @@ class OperationsService:
                     finding_id=finding.finding_id,
                     finding_type=finding.finding_type,
                     severity=finding.severity,
-                    security_id=finding.security_id,
+                    security_id=normalize_security_id(finding.security_id),
                     transaction_id=finding.transaction_id,
                     business_date=finding.business_date,
                     epoch=finding.epoch,
@@ -1755,13 +1126,14 @@ class OperationsService:
     ) -> PortfolioControlStageListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        normalized_status = self._normalize_support_status_filter(status)
         total, stages = await asyncio.gather(
             self.repo.get_portfolio_control_stages_count(
                 portfolio_id=portfolio_id,
                 stage_id=stage_id,
                 stage_name=stage_name,
                 business_date=business_date,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
             self.repo.get_portfolio_control_stages(
@@ -1771,7 +1143,7 @@ class OperationsService:
                 stage_id=stage_id,
                 stage_name=stage_name,
                 business_date=business_date,
-                status=status,
+                status=normalized_status,
                 as_of=generated_at_utc,
             ),
         )
@@ -1814,10 +1186,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, keys = await asyncio.gather(
             self.repo.get_reprocessing_keys_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 watermark_date=watermark_date,
                 as_of=generated_at_utc,
@@ -1826,7 +1199,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 watermark_date=watermark_date,
                 stale_minutes=stale_minutes,
@@ -1848,7 +1221,7 @@ class OperationsService:
             limit=limit,
             items=[
                 ReprocessingKeyRecord(
-                    security_id=key.security_id,
+                    security_id=normalize_security_id(key.security_id),
                     epoch=key.epoch,
                     watermark_date=key.watermark_date,
                     status=key.status,
@@ -1885,10 +1258,11 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
+        normalized_status = self._normalize_support_status_filter(status)
         total, jobs = await asyncio.gather(
             self.repo.get_reprocessing_jobs_count(
                 portfolio_id=portfolio_id,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,
@@ -1898,7 +1272,7 @@ class OperationsService:
                 portfolio_id=portfolio_id,
                 skip=skip,
                 limit=limit,
-                status=status,
+                status=normalized_status,
                 security_id=security_id,
                 job_id=job_id,
                 correlation_id=correlation_id,
@@ -1947,7 +1321,7 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
-        if status != "PROCESSING" or updated_at is None:
+        if cls._normalize_support_job_status(status) != "PROCESSING" or updated_at is None:
             return False
         reference_now = now or datetime.now(timezone.utc)
         return updated_at < reference_now - timedelta(minutes=stale_threshold_minutes)
@@ -1977,7 +1351,10 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
-        normalized_status = "PROCESSING" if status == "REPROCESSING" else status
+        normalized_status = cls._normalize_support_job_status(status)
+        normalized_status = (
+            "PROCESSING" if normalized_status == "REPROCESSING" else normalized_status
+        )
         return cls._is_support_job_stale(
             normalized_status,
             updated_at,

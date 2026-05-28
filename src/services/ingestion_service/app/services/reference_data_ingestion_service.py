@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
+from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
     BenchmarkDefinition,
@@ -37,6 +38,29 @@ class ReferenceDataIngestionService:
     def __init__(self, db: AsyncSession):
         self._db = db
 
+    @staticmethod
+    def _normalize_currency_field(
+        records: list[dict[str, Any]], field_name: str
+    ) -> list[dict[str, Any]]:
+        normalized_records = []
+        for record in records:
+            row = dict(record)
+            row[field_name] = normalize_currency_code(row[field_name])
+            normalized_records.append(row)
+        return normalized_records
+
+    @staticmethod
+    def _normalize_optional_currency_field(
+        records: list[dict[str, Any]], field_name: str
+    ) -> list[dict[str, Any]]:
+        normalized_records = []
+        for record in records:
+            row = dict(record)
+            if row.get(field_name) is not None:
+                row[field_name] = normalize_currency_code(row[field_name])
+            normalized_records.append(row)
+        return normalized_records
+
     async def upsert_portfolio_benchmark_assignments(self, records: list[dict[str, Any]]) -> None:
         now = datetime.now(UTC)
         normalized_records = []
@@ -67,7 +91,7 @@ class ReferenceDataIngestionService:
     async def upsert_model_portfolio_definitions(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=ModelPortfolioDefinition,
-            records=records,
+            records=self._normalize_currency_field(records, "base_currency"),
             conflict_columns=[
                 "model_portfolio_id",
                 "model_portfolio_version",
@@ -276,7 +300,7 @@ class ReferenceDataIngestionService:
     async def upsert_client_tax_rule_sets(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=ClientTaxRuleSet,
-            records=records,
+            records=self._normalize_optional_currency_field(records, "threshold_currency"),
             conflict_columns=[
                 "client_id",
                 "portfolio_id",
@@ -309,7 +333,7 @@ class ReferenceDataIngestionService:
     async def upsert_client_income_needs_schedules(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=ClientIncomeNeedsSchedule,
-            records=records,
+            records=self._normalize_currency_field(records, "currency"),
             conflict_columns=["client_id", "portfolio_id", "schedule_id", "start_date"],
             update_columns=[
                 "mandate_id",
@@ -331,7 +355,7 @@ class ReferenceDataIngestionService:
     async def upsert_liquidity_reserve_requirements(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=LiquidityReserveRequirement,
-            records=records,
+            records=self._normalize_currency_field(records, "currency"),
             conflict_columns=[
                 "client_id",
                 "portfolio_id",
@@ -359,7 +383,7 @@ class ReferenceDataIngestionService:
     async def upsert_planned_withdrawal_schedules(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=PlannedWithdrawalSchedule,
-            records=records,
+            records=self._normalize_currency_field(records, "currency"),
             conflict_columns=[
                 "client_id",
                 "portfolio_id",
@@ -384,7 +408,7 @@ class ReferenceDataIngestionService:
     async def upsert_benchmark_definitions(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=BenchmarkDefinition,
-            records=records,
+            records=self._normalize_currency_field(records, "benchmark_currency"),
             conflict_columns=["benchmark_id", "effective_from"],
             update_columns=[
                 "benchmark_name",
@@ -424,7 +448,7 @@ class ReferenceDataIngestionService:
     async def upsert_indices(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=IndexDefinition,
-            records=records,
+            records=self._normalize_currency_field(records, "index_currency"),
             conflict_columns=["index_id", "effective_from"],
             update_columns=[
                 "index_name",
@@ -446,7 +470,7 @@ class ReferenceDataIngestionService:
     async def upsert_index_price_series(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=IndexPriceSeries,
-            records=records,
+            records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "index_id", "series_date"],
             update_columns=[
                 "index_price",
@@ -462,7 +486,7 @@ class ReferenceDataIngestionService:
     async def upsert_index_return_series(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=IndexReturnSeries,
-            records=records,
+            records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "index_id", "series_date"],
             update_columns=[
                 "index_return",
@@ -479,7 +503,7 @@ class ReferenceDataIngestionService:
     async def upsert_benchmark_return_series(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=BenchmarkReturnSeries,
-            records=records,
+            records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "benchmark_id", "series_date"],
             update_columns=[
                 "benchmark_return",
@@ -496,7 +520,7 @@ class ReferenceDataIngestionService:
     async def upsert_risk_free_series(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=RiskFreeSeries,
-            records=records,
+            records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "risk_free_curve_id", "series_date"],
             update_columns=[
                 "value",
@@ -535,7 +559,7 @@ class ReferenceDataIngestionService:
     async def upsert_cash_account_masters(self, records: list[dict[str, Any]]) -> None:
         await self._upsert_many(
             model=CashAccountMaster,
-            records=records,
+            records=self._normalize_currency_field(records, "account_currency"),
             conflict_columns=["cash_account_id"],
             update_columns=[
                 "portfolio_id",

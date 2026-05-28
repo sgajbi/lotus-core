@@ -27,7 +27,15 @@ def _fx_forward_event() -> TransactionEvent:
 
 
 def test_enrich_fx_metadata_populates_defaults_for_forward() -> None:
-    enriched = enrich_fx_transaction_metadata(_fx_forward_event())
+    event = _fx_forward_event().model_copy(
+        update={
+            "transaction_type": " fx_forward ",
+            "component_type": " fx_contract_open ",
+            "spot_exposure_model": " none ",
+            "fx_realized_pnl_mode": " none ",
+        }
+    )
+    enriched = enrich_fx_transaction_metadata(event)
     assert enriched.economic_event_id == "EVT-FX-PORT-FX-001-FX-LINK-001"
     assert enriched.linked_transaction_group_id == "LTG-FX-PORT-FX-001-FX-LINK-001"
     assert enriched.calculation_policy_id == FX_DEFAULT_POLICY_ID
@@ -42,7 +50,7 @@ def test_enrich_fx_metadata_populates_defaults_for_forward() -> None:
 
 
 def test_enrich_fx_metadata_populates_swap_defaults() -> None:
-    event = _fx_forward_event().model_copy(update={"transaction_type": "FX_SWAP"})
+    event = _fx_forward_event().model_copy(update={"transaction_type": " fx_swap "})
     enriched = enrich_fx_transaction_metadata(event)
     assert enriched.fx_contract_id == "FXC-FXSWAP-LTG-FX-PORT-FX-001-FX-LINK-001-FAR"
     assert enriched.swap_event_id == "FXSWAP-LTG-FX-PORT-FX-001-FX-LINK-001"
@@ -53,8 +61,8 @@ def test_enrich_fx_metadata_populates_swap_defaults() -> None:
 def test_enrich_fx_metadata_infers_cash_leg_role() -> None:
     event = _fx_forward_event().model_copy(
         update={
-            "transaction_type": "FX_SPOT",
-            "component_type": "FX_CASH_SETTLEMENT_BUY",
+            "transaction_type": " fx_spot ",
+            "component_type": " fx_cash_settlement_buy ",
             "fx_contract_id": None,
         }
     )
@@ -90,7 +98,7 @@ def test_enrich_fx_metadata_preserves_upstream_values() -> None:
 def test_enrich_fx_metadata_routes_contract_close_to_contract_instrument() -> None:
     event = _fx_forward_event().model_copy(
         update={
-            "component_type": "FX_CONTRACT_CLOSE",
+            "component_type": " fx_contract_close ",
             "fx_contract_id": "FXC-UPSTREAM-002",
             "instrument_id": "LEG-INST",
             "security_id": "LEG-SEC",

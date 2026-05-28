@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from portfolio_common.events import InstrumentEvent, TransactionEvent
 
+from .control_code_normalization import normalize_transaction_control_code
+
 FX_CONTRACT_PRODUCT_TYPE = "FX_CONTRACT"
 FX_CONTRACT_ASSET_CLASS = "FX"
 
 
 def is_fx_contract_component_event(event: TransactionEvent) -> bool:
-    component_type = (event.component_type or "").upper()
+    component_type = normalize_transaction_control_code(event.component_type)
     return component_type in {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 
 
@@ -19,8 +21,8 @@ def build_fx_contract_instrument_event(event: TransactionEvent) -> InstrumentEve
     if not fx_contract_id:
         return None
 
-    buy_currency = (event.buy_currency or "").upper()
-    sell_currency = (event.sell_currency or "").upper()
+    buy_currency = normalize_transaction_control_code(event.buy_currency)
+    sell_currency = normalize_transaction_control_code(event.sell_currency)
     maturity_date = event.settlement_date.date() if event.settlement_date else None
     trade_date = event.transaction_date.date()
     pair = "/".join(part for part in [event.pair_base_currency, event.pair_quote_currency] if part)

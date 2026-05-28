@@ -33,6 +33,13 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     SustainabilityPreferenceProfileRequest,
     TransactionCostCurveRequest,
 )
+from src.services.query_service.app.services.integration_policy import (
+    canonical_consumer_system,
+    load_policy,
+    normalize_sections,
+    resolve_consumer_sections,
+    resolve_policy_context,
+)
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 
@@ -1722,7 +1729,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
             mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
             client_id="CIF_SG_000184",
             mandate_type="discretionary",
-            discretionary_authority_status="active",
+            discretionary_authority_status=" active ",
             booking_center_code="Singapore",
             jurisdiction_code="SG",
             model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
@@ -1749,7 +1756,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
             source_system="mandate_admin",
             source_record_id="mandate_001_v1",
             observed_at=observed_at,
-            quality_status="accepted",
+            quality_status=" accepted ",
         )
     )
 
@@ -1762,6 +1769,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
     assert response.product_name == "DiscretionaryMandateBinding"
     assert response.model_portfolio_id == "MODEL_PB_SG_GLOBAL_BAL_DPM"
     assert response.policy_pack_id == "POLICY_DPM_SG_BALANCED_V1"
+    assert response.discretionary_authority_status == "ACTIVE"
     assert response.mandate_objective == (
         "Preserve and grow global balanced wealth within controlled drawdown limits."
     )
@@ -1772,6 +1780,7 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
     assert response.rebalance_bands.cash_reserve_weight == Decimal("0.0200000000")
     assert response.supportability.state == "READY"
     assert response.supportability.missing_data_families == []
+    assert response.data_quality_status == "ACCEPTED"
     assert response.latest_evidence_timestamp == observed_at
     service._reference_repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -1948,8 +1957,8 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
     service._reference_repository.list_instrument_eligibility_profiles.return_value = [
         SimpleNamespace(
             security_id="MSFT",
-            eligibility_status="RESTRICTED",
-            product_shelf_status="RESTRICTED",
+            eligibility_status=" restricted ",
+            product_shelf_status=" restricted ",
             buy_allowed=False,
             sell_allowed=True,
             restriction_reason_codes=["CONCENTRATION_REVIEW"],
@@ -1966,7 +1975,7 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
             effective_to=None,
             source_record_id="MSFT-elig",
             observed_at=observed_at,
-            quality_status="accepted",
+            quality_status=" accepted ",
         ),
         SimpleNamespace(
             security_id="AAPL",
@@ -2008,7 +2017,10 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
     assert response.records[0].buy_allowed is True
     assert response.records[1].found is False
     assert response.records[1].restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
+    assert response.records[2].eligibility_status == "RESTRICTED"
+    assert response.records[2].product_shelf_status == "RESTRICTED"
     assert response.records[2].restriction_reason_codes == ["CONCENTRATION_REVIEW"]
+    assert response.records[2].quality_status == "ACCEPTED"
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.reason == "INSTRUMENT_ELIGIBILITY_MISSING"
     assert response.supportability.requested_count == 3
@@ -2021,67 +2033,111 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
     )
 
 
-def test_canonical_consumer_system_mappings() -> None:
+@pytest.mark.asyncio
+async def test_resolve_instrument_eligibility_bulk_normalizes_returned_security_ids() -> None:
     service = make_service()
-    assert service._canonical_consumer_system("lotus-manage") == "lotus-manage"
-    assert service._canonical_consumer_system("lotus-gateway") == "lotus-gateway"
-    assert service._canonical_consumer_system("UI") == "UI"
-    assert service._canonical_consumer_system("Custom-System") == "custom-system"
-    assert service._canonical_consumer_system(None) == "unknown"
-    assert service._canonical_consumer_system("   ") == "unknown"
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_instrument_eligibility_profiles=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=" EQ_US_AAPL ",
+                    eligibility_status="APPROVED",
+                    product_shelf_status="APPROVED",
+                    buy_allowed=True,
+                    sell_allowed=True,
+                    restriction_reason_codes=[],
+                    settlement_days=2,
+                    settlement_calendar_id="US_NYSE",
+                    liquidity_tier="L1",
+                    issuer_id="APPLE",
+                    issuer_name="Apple Inc.",
+                    ultimate_parent_issuer_id="APPLE_PARENT",
+                    ultimate_parent_issuer_name="Apple Inc.",
+                    asset_class="Equity",
+                    country_of_risk="US",
+                    effective_from=date(2026, 4, 1),
+                    effective_to=None,
+                    source_record_id="AAPL-elig",
+                    observed_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    quality_status="ACCEPTED",
+                )
+            ]
+        )
+    )
+
+    response = await service.resolve_instrument_eligibility_bulk(
+        instrument_eligibility_request(
+            [" EQ_US_AAPL "],
+            date(2026, 4, 10),
+        )
+    )
+
+    assert response.records[0].security_id == "EQ_US_AAPL"
+    assert response.records[0].found is True
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_security_ids == []
+    service._reference_repository.list_instrument_eligibility_profiles.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
+def test_canonical_consumer_system_mappings() -> None:
+    assert canonical_consumer_system("lotus-manage") == "lotus-manage"
+    assert canonical_consumer_system("lotus-gateway") == "lotus-gateway"
+    assert canonical_consumer_system("UI") == "UI"
+    assert canonical_consumer_system("Custom-System") == "custom-system"
+    assert canonical_consumer_system(None) == "unknown"
+    assert canonical_consumer_system("   ") == "unknown"
 
 
 def test_load_policy_variants(monkeypatch: pytest.MonkeyPatch) -> None:
-    service = make_service()
-
     monkeypatch.delenv("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", raising=False)
-    assert service._load_policy() == {}
+    assert load_policy() == {}
 
     monkeypatch.setenv("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", "not-json")
-    assert service._load_policy() == {}
+    assert load_policy() == {}
 
     monkeypatch.setenv("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", '["bad"]')
-    assert service._load_policy() == {}
+    assert load_policy() == {}
 
     monkeypatch.setenv(
         "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",
         '{"strict_mode": true, "consumers": {"lotus-manage": ["OVERVIEW"]}}',
     )
-    loaded = service._load_policy()
+    loaded = load_policy()
     assert loaded["strict_mode"] is True
     assert "consumers" in loaded
 
 
 def test_normalize_and_resolve_consumer_sections() -> None:
-    service = make_service()
-    assert service._normalize_sections(None) is None
-    assert service._normalize_sections([" overview ", "HOLDINGS", "", 123]) == [
+    assert normalize_sections(None) is None
+    assert normalize_sections([" overview ", "HOLDINGS", "", 123]) == [
         "OVERVIEW",
         "HOLDINGS",
     ]
 
-    sections, key = service._resolve_consumer_sections(None, "lotus-manage")
+    sections, key = resolve_consumer_sections(None, "lotus-manage")
     assert sections is None
     assert key is None
 
-    sections, key = service._resolve_consumer_sections(
+    sections, key = resolve_consumer_sections(
         {"lotus-manage": ["overview"], "other": ["x"]},
         "lotus-manage",
     )
     assert sections == ["OVERVIEW"]
     assert key == "lotus-manage"
 
-    sections, key = service._resolve_consumer_sections({"foo": ["x"]}, "lotus-manage")
+    sections, key = resolve_consumer_sections({"foo": ["x"]}, "lotus-manage")
     assert sections is None
     assert key is None
 
 
 def test_resolve_policy_context_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    service = make_service()
     monkeypatch.delenv("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", raising=False)
     monkeypatch.delenv("LOTUS_CORE_POLICY_VERSION", raising=False)
 
-    ctx = service._resolve_policy_context(tenant_id="default", consumer_system="lotus-manage")
+    ctx = resolve_policy_context(tenant_id="default", consumer_system="lotus-manage")
     assert ctx.policy_version == "tenant-default-v1"
     assert ctx.policy_source == "default"
     assert ctx.matched_rule_id == "default"
@@ -2091,7 +2147,6 @@ def test_resolve_policy_context_default(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_resolve_policy_context_global_and_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
-    service = make_service()
     monkeypatch.setenv(
         "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",
         (
@@ -2102,7 +2157,7 @@ def test_resolve_policy_context_global_and_tenant(monkeypatch: pytest.MonkeyPatc
     )
     monkeypatch.setenv("LOTUS_CORE_POLICY_VERSION", "tenant-v7")
 
-    global_ctx = service._resolve_policy_context(
+    global_ctx = resolve_policy_context(
         tenant_id="default",
         consumer_system="lotus-manage",
     )
@@ -2111,7 +2166,7 @@ def test_resolve_policy_context_global_and_tenant(monkeypatch: pytest.MonkeyPatc
     assert global_ctx.strict_mode is False
     assert global_ctx.allowed_sections == ["OVERVIEW", "HOLDINGS"]
 
-    tenant_ctx = service._resolve_policy_context(
+    tenant_ctx = resolve_policy_context(
         tenant_id="tenant-a",
         consumer_system="lotus-manage",
     )
@@ -2125,7 +2180,6 @@ def test_resolve_policy_context_global_and_tenant(monkeypatch: pytest.MonkeyPatc
 def test_resolve_policy_context_tenant_default_sections_and_strict_mode_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    service = make_service()
     monkeypatch.setenv(
         "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",
         (
@@ -2134,7 +2188,7 @@ def test_resolve_policy_context_tenant_default_sections_and_strict_mode_id(
         ),
     )
 
-    tenant_default_ctx = service._resolve_policy_context(
+    tenant_default_ctx = resolve_policy_context(
         tenant_id="tenant-x",
         consumer_system="lotus-manage",
     )
@@ -2143,7 +2197,7 @@ def test_resolve_policy_context_tenant_default_sections_and_strict_mode_id(
     assert tenant_default_ctx.allowed_sections == ["OVERVIEW"]
     assert tenant_default_ctx.strict_mode is True
 
-    strict_only_ctx = service._resolve_policy_context(
+    strict_only_ctx = resolve_policy_context(
         tenant_id="tenant-y",
         consumer_system="lotus-manage",
     )
@@ -2163,7 +2217,7 @@ def test_get_effective_policy_filters_requested_sections(monkeypatch: pytest.Mon
     response = service.get_effective_policy(
         consumer_system="lotus-manage",
         tenant_id="default",
-        include_sections=["overview", "allocation", "holdings"],
+        include_sections=[" overview ", "allocation", " holdings "],
     )
     assert response.consumer_system == "lotus-manage"
     assert response.allowed_sections == ["OVERVIEW", "HOLDINGS"]
@@ -2552,6 +2606,59 @@ async def test_reference_contract_methods() -> None:
 
 
 @pytest.mark.asyncio
+async def test_risk_free_products_normalize_currency_before_repository_lookup() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment] # pylint: disable=protected-access
+        list_risk_free_series=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    series_date=date(2026, 1, 1),
+                    value=Decimal("0.03"),
+                    value_convention="annualized_rate",
+                    day_count_convention="act_360",
+                    compounding_convention="simple",
+                    series_currency="USD",
+                    quality_status="accepted",
+                )
+            ]
+        ),
+        get_risk_free_coverage=AsyncMock(
+            return_value={
+                "total_points": 1,
+                "observed_start_date": date(2026, 1, 1),
+                "observed_end_date": date(2026, 1, 1),
+                "quality_status_counts": {"accepted": 1},
+            }
+        ),
+    )
+
+    risk_free = await service.get_risk_free_series(
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            currency=" usd ",
+            series_mode="annualized_rate_series",
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)),
+            frequency="daily",
+        ),
+    )
+    coverage = await service.get_risk_free_coverage(" usd ", date(2026, 1, 1), date(2026, 1, 1))
+
+    service._reference_repository.list_risk_free_series.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        currency="USD",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 1),
+    )
+    service._reference_repository.get_risk_free_coverage.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
+        currency="USD",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 1),
+    )
+    assert risk_free.currency == "USD"
+    assert risk_free.request_fingerprint
+    assert coverage.request_fingerprint
+
+
+@pytest.mark.asyncio
 async def test_market_reference_products_expose_row_backed_quality_and_evidence_timestamp() -> None:
     service = make_service()
     older_source_timestamp = datetime(2026, 1, 2, 9, 0, tzinfo=UTC)
@@ -2712,7 +2819,7 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
         "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",
         '{"tenants":{"tenant-z":{"strict_mode":false,"default_sections":["OVERVIEW"]}}}',
     )
-    ctx = service._resolve_policy_context("tenant-z", "lotus-manage")
+    ctx = resolve_policy_context("tenant-z", "lotus-manage")
     assert ctx.policy_source == "tenant"
     assert ctx.matched_rule_id == "tenant.tenant-z.default_sections"
 
@@ -3008,7 +3115,7 @@ async def test_benchmark_market_series_quality_summary_is_page_scoped() -> None:
                     series_date=date(2026, 1, 1),
                     index_price=Decimal("100"),
                     series_currency="USD",
-                    quality_status="accepted",
+                    quality_status=" Accepted ",
                 ),
                 SimpleNamespace(
                     index_id="IDX2",
@@ -3168,6 +3275,50 @@ async def test_portfolio_tax_lot_window_reports_missing_requested_security() -> 
 
 
 @pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_normalizes_returned_security_coverage() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(
+            return_value=[
+                (
+                    SimpleNamespace(
+                        portfolio_id="PB_SG_GLOBAL_BAL_001",
+                        security_id=" EQ_US_AAPL ",
+                        instrument_id=" EQ_US_AAPL ",
+                        lot_id="LOT-AAPL-001",
+                        open_quantity=Decimal("100.0000000000"),
+                        original_quantity=Decimal("100.0000000000"),
+                        acquisition_date=date(2026, 3, 25),
+                        lot_cost_base=Decimal("15005.5000000000"),
+                        lot_cost_local=Decimal("15005.5000000000"),
+                        source_transaction_id="TXN-BUY-AAPL-001",
+                        source_system="front_office_portfolio_seed",
+                        calculation_policy_id="BUY_DEFAULT_POLICY",
+                        calculation_policy_version="1.0.0",
+                        updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    ),
+                    "USD",
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["EQ_US_AAPL"],
+        ),
+    )
+
+    assert response.lots[0].security_id == "EQ_US_AAPL"
+    assert response.lots[0].instrument_id == "EQ_US_AAPL"
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_security_ids == []
+
+
+@pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_marks_empty_full_portfolio_unavailable() -> None:
     service = make_service()
     service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
@@ -3291,8 +3442,8 @@ async def test_transaction_cost_curve_groups_by_security_type_and_currency() -> 
                 transaction_cost_row(
                     transaction_id="TXN-AAPL-BUY-USD-002",
                     security_id="EQ_US_AAPL",
-                    transaction_type="BUY",
-                    currency="USD",
+                    transaction_type=" buy ",
+                    currency=" usd ",
                     gross_transaction_amount=Decimal("20000.00"),
                     trade_fee=Decimal("30.00"),
                 ),
@@ -3434,6 +3585,36 @@ async def test_transaction_cost_curve_reports_incomplete_requested_security_cove
     assert response.supportability.reason == "TRANSACTION_COST_EVIDENCE_MISSING_FOR_SECURITIES"
     assert response.supportability.missing_security_ids == ["EQ_US_MSFT"]
     assert response.data_quality_status == PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_transaction_cost_curve_normalizes_returned_security_coverage() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-001",
+                    security_id=" EQ_US_AAPL ",
+                    trade_fee=Decimal("10.00"),
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL"],
+        ),
+    )
+
+    assert response.curve_points[0].security_id == "EQ_US_AAPL"
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_security_ids == []
 
 
 @pytest.mark.asyncio
@@ -3615,6 +3796,73 @@ async def test_market_data_coverage_reports_stale_without_missing_as_degraded() 
     assert response.supportability.state == "DEGRADED"
     assert response.supportability.reason == "MARKET_DATA_STALE"
     assert response.supportability.stale_instrument_ids == ["EQ_US_AAPL"]
+    assert response.supportability.missing_instrument_ids == []
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_normalizes_instrument_and_valuation_currency() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=[" EQ_US_AAPL "],
+            valuation_currency="sgd",
+            max_staleness_days=5,
+        )
+    )
+
+    assert response.valuation_currency == "SGD"
+    assert response.price_coverage[0].instrument_id == "EQ_US_AAPL"
+    assert response.price_coverage[0].quality_status == "READY"
+    assert response.supportability.missing_instrument_ids == []
+    service._reference_repository.list_latest_market_prices.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_normalizes_returned_price_security_id() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=" EQ_US_AAPL ",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL"],
+            max_staleness_days=5,
+        )
+    )
+
+    assert response.price_coverage[0].instrument_id == "EQ_US_AAPL"
+    assert response.price_coverage[0].quality_status == "READY"
+    assert response.supportability.state == "READY"
     assert response.supportability.missing_instrument_ids == []
 
 
