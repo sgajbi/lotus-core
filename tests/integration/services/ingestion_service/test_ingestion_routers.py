@@ -2196,6 +2196,7 @@ async def test_ingest_benchmark_definitions_returns_ack_and_persists_full_contra
     ingestion_test_harness,
 ):
     payload = _benchmark_definition_payload()
+    payload["benchmark_definitions"][0]["benchmark_currency"] = " usd "
     payload["benchmark_definitions"][0].update(
         {
             "benchmark_family": "multi_asset_strategic",

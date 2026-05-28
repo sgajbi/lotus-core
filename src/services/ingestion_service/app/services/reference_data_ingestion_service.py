@@ -388,9 +388,14 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_benchmark_definitions(self, records: list[dict[str, Any]]) -> None:
+        normalized_records = []
+        for record in records:
+            row = dict(record)
+            row["benchmark_currency"] = normalize_currency_code(row["benchmark_currency"])
+            normalized_records.append(row)
         await self._upsert_many(
             model=BenchmarkDefinition,
-            records=records,
+            records=normalized_records,
             conflict_columns=["benchmark_id", "effective_from"],
             update_columns=[
                 "benchmark_name",

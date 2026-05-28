@@ -207,11 +207,17 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
                 "quality_status",
             ],
         ),
-        (
-            "upsert_benchmark_definitions",
-            [{"benchmark_id": "BMK_001", "effective_from": "2026-01-01"}],
-            ["benchmark_id", "effective_from"],
-            [
+            (
+                "upsert_benchmark_definitions",
+                [
+                    {
+                        "benchmark_id": "BMK_001",
+                        "benchmark_currency": "USD",
+                        "effective_from": "2026-01-01",
+                    }
+                ],
+                ["benchmark_id", "effective_from"],
+                [
                 "benchmark_name",
                 "benchmark_type",
                 "benchmark_currency",
@@ -454,6 +460,29 @@ async def test_upsert_portfolio_benchmark_assignments_defaults_assignment_record
     db.execute.assert_awaited_once()
     compiled_params = db.execute.await_args.args[0].compile().params
     assert isinstance(compiled_params["assignment_recorded_at_m0"], datetime)
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_upsert_benchmark_definitions_normalizes_benchmark_currency() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await service.upsert_benchmark_definitions(
+        [
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "benchmark_name": "Global Balanced 60/40 Total Return",
+                "benchmark_type": "composite",
+                "benchmark_currency": " usd ",
+                "return_convention": "total_return_index",
+                "effective_from": "2025-01-01",
+            }
+        ]
+    )
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params["benchmark_currency_m0"] == "USD"
     db.commit.assert_awaited_once()
 
 

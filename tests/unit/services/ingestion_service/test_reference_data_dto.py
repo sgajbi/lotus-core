@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.services.ingestion_service.app.DTOs.reference_data_dto import (
+    BenchmarkDefinitionRecord,
     ClientIncomeNeedsScheduleIngestionRequest,
     ClientIncomeNeedsScheduleRecord,
     ClientRestrictionProfileIngestionRequest,
@@ -52,6 +53,19 @@ def _model_portfolio_definition(**overrides: object) -> dict[str, object]:
         "risk_profile": "balanced",
         "mandate_type": "discretionary",
         "effective_from": "2026-03-25",
+    }
+    record.update(overrides)
+    return record
+
+
+def _benchmark_definition(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+        "benchmark_name": "Global Balanced 60/40 Total Return",
+        "benchmark_type": "composite",
+        "benchmark_currency": "USD",
+        "return_convention": "total_return_index",
+        "effective_from": "2025-01-01",
     }
     record.update(overrides)
     return record
@@ -248,6 +262,14 @@ def test_model_portfolio_definition_normalizes_base_currency() -> None:
     )
 
     assert record.base_currency == "SGD"
+
+
+def test_benchmark_definition_normalizes_benchmark_currency() -> None:
+    record = BenchmarkDefinitionRecord.model_validate(
+        _benchmark_definition(benchmark_currency=" usd ")
+    )
+
+    assert record.benchmark_currency == "USD"
 
 
 def test_model_portfolio_target_record_validates_target_band_order() -> None:

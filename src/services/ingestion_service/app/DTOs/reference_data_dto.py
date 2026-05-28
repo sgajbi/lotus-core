@@ -759,7 +759,14 @@ class BenchmarkDefinitionRecord(BaseModel):
         description="Benchmark type.",
         examples=["composite"],
     )
-    benchmark_currency: str = Field(..., description="Benchmark currency.", examples=["USD"])
+    benchmark_currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter benchmark currency used for performance comparison, "
+            "policy evidence, and reporting alignment."
+        ),
+        examples=["USD"],
+    )
     return_convention: Literal["price_return_index", "total_return_index"] = Field(
         ...,
         description="Benchmark return convention.",
@@ -807,6 +814,11 @@ class BenchmarkDefinitionRecord(BaseModel):
         None, description="Source record identifier.", examples=["bmk_v20260131"]
     )
     quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
+
+    @field_validator("benchmark_currency", mode="before")
+    @classmethod
+    def _normalize_benchmark_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 
