@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from portfolio_common.database_models import FinancialReconciliationFinding
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
+from portfolio_common.market_prices import coerce_positive_market_price_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
 from portfolio_common.valuation_prices import resolve_valuation_unit_price
 
@@ -301,9 +302,31 @@ class ReconciliationService:
             examined += 1
             quantity = Decimal(str(snapshot.quantity))
             cost_basis_local = Decimal(str(snapshot.cost_basis_local))
+            market_price = coerce_positive_market_price_or_none(snapshot.market_price)
+            if market_price is None:
+                findings.append(
+                    self._build_finding(
+                        run_id=run.run_id,
+                        reconciliation_type="position_valuation",
+                        finding_type="invalid_market_price",
+                        severity="ERROR",
+                        portfolio_id=snapshot.portfolio_id,
+                        security_id=snapshot.security_id,
+                        transaction_id=None,
+                        business_date=snapshot.date,
+                        epoch=snapshot.epoch,
+                        expected_value={"market_price": ">0"},
+                        observed_value={"market_price": str(snapshot.market_price)},
+                        detail={
+                            "quantity": str(snapshot.quantity),
+                            "product_type": instrument.product_type,
+                        },
+                    )
+                )
+                continue
             expected_market_value_local = self._expected_market_value_local(
                 quantity=quantity,
-                market_price=Decimal(str(snapshot.market_price)),
+                market_price=market_price,
                 cost_basis_local=cost_basis_local,
                 product_type=instrument.product_type,
             )

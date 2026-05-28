@@ -132,6 +132,47 @@ async def test_run_position_valuation_respects_bond_percent_of_par_pricing():
 
 
 @pytest.mark.asyncio
+async def test_run_position_valuation_records_invalid_market_price_without_derived_math():
+    run = SimpleNamespace(run_id="recon-invalid-price")
+    snapshot = SimpleNamespace(
+        portfolio_id="PORT-INVALID-PRICE",
+        security_id="SEC-INVALID-PRICE",
+        date=date(2026, 3, 8),
+        epoch=0,
+        quantity=Decimal("10"),
+        market_price=Decimal("-12.50"),
+        market_value_local=Decimal("-125"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+        unrealized_gain_loss_local=Decimal("-225"),
+    )
+    instrument = SimpleNamespace(currency="USD", product_type="EQUITY")
+    portfolio = SimpleNamespace(base_currency="USD")
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_position_valuation_rows.return_value = [(snapshot, instrument, portfolio)]
+
+    service = ReconciliationService(repository)
+    await service.run_position_valuation(
+        request=ReconciliationRunRequest(
+            portfolio_id="PORT-INVALID-PRICE", business_date=date(2026, 3, 8)
+        ),
+        correlation_id="corr-invalid-price",
+    )
+
+    findings = repository.add_findings.await_args.args[0]
+    assert len(findings) == 1
+    assert findings[0].finding_type == "invalid_market_price"
+    assert findings[0].expected_value == {"market_price": ">0"}
+    assert findings[0].observed_value == {"market_price": "-12.50"}
+    summary = repository.mark_run_completed.await_args.kwargs["summary"]
+    assert summary["examined_count"] == 1
+    assert summary["finding_count"] == 1
+    assert summary["error_count"] == 1
+    assert summary["passed"] is False
+
+
+@pytest.mark.asyncio
 async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
     transaction_run = SimpleNamespace(run_id="recon-tx")
     valuation_run = SimpleNamespace(run_id="recon-val")
