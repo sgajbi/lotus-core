@@ -21,6 +21,23 @@ from .transaction_fee_components import (
 )
 
 
+def _standardize_event_datetime_value(value: object) -> object:
+    if value is None:
+        return value
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _aware_event_datetime(value: datetime) -> datetime:
+    normalized = _standardize_event_datetime_value(value)
+    if not isinstance(normalized, datetime):
+        raise TypeError("Expected datetime value.")
+    return normalized
+
+
 class CoreEventModel(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
@@ -264,6 +281,11 @@ class TransactionEvent(CoreEventModel):
     def _normalize_transaction_control_code(cls, value: str | None) -> str:
         return normalize_transaction_control_code(value)
 
+    @field_validator("transaction_date", "settlement_date", "created_at", mode="before")
+    @classmethod
+    def _standardize_event_datetime(cls, value: object) -> object:
+        return _standardize_event_datetime_value(value)
+
     @field_validator(
         "cash_entry_mode",
         "movement_direction",
@@ -341,11 +363,16 @@ def transaction_event_ordering_key(
     6) ingestion timestamp (created_at when present)
     7) stable event identity (transaction_id)
     """
-    ingestion_ts = event.created_at or datetime.fromtimestamp(0, tz=timezone.utc)
+    transaction_ts = _aware_event_datetime(event.transaction_date)
+    ingestion_ts = (
+        _aware_event_datetime(event.created_at)
+        if event.created_at is not None
+        else datetime.fromtimestamp(0, tz=timezone.utc)
+    )
     target_sequence, target_instrument = ca_bundle_a_target_order_key(event)
     return (
-        event.transaction_date.date(),
-        event.transaction_date,
+        transaction_ts.date(),
+        transaction_ts,
         ca_bundle_a_dependency_rank(event),
         target_sequence,
         target_instrument,
