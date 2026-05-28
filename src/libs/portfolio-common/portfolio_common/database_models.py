@@ -1996,6 +1996,12 @@ class AnalyticsExportJob(Base):
             "status",
             "updated_at",
         ),
+        Index(
+            "ix_analytics_export_jobs_dataset_fingerprint_id",
+            "dataset_type",
+            "request_fingerprint",
+            id.desc(),
+        ),
     )
 
 
@@ -2112,6 +2118,13 @@ class FinancialReconciliationFinding(Base):
             "run_id",
             "finding_type",
             "severity",
+        ),
+        Index(
+            "ix_financial_reconciliation_findings_run_severity_created_id",
+            "run_id",
+            "severity",
+            created_at.desc(),
+            id.desc(),
         ),
     )
 

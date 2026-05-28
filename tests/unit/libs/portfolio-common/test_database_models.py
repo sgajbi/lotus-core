@@ -4,6 +4,7 @@ from portfolio_common.database_models import (
     CashAccountMaster,
     Cashflow,
     DailyPositionSnapshot,
+    FinancialReconciliationFinding,
     InstrumentLookthroughComponent,
     MarketPrice,
     Portfolio,
@@ -38,6 +39,7 @@ def test_analytics_export_job_declares_hot_path_indexes():
 
     portfolio_status_created = indexes["ix_analytics_export_jobs_portfolio_status_created_at"]
     status_updated = indexes["ix_analytics_export_jobs_status_updated_at"]
+    dataset_fingerprint_id = indexes["ix_analytics_export_jobs_dataset_fingerprint_id"]
 
     assert [column.name for column in portfolio_status_created.columns] == [
         "portfolio_id",
@@ -45,6 +47,24 @@ def test_analytics_export_job_declares_hot_path_indexes():
         "created_at",
     ]
     assert [column.name for column in status_updated.columns] == ["status", "updated_at"]
+    assert [str(expression) for expression in dataset_fingerprint_id.expressions] == [
+        "analytics_export_jobs.dataset_type",
+        "analytics_export_jobs.request_fingerprint",
+        "analytics_export_jobs.id DESC",
+    ]
+
+
+def test_financial_reconciliation_finding_declares_control_query_indexes():
+    indexes = {index.name: index for index in FinancialReconciliationFinding.__table__.indexes}
+
+    run_severity_created = indexes["ix_financial_reconciliation_findings_run_severity_created_id"]
+
+    assert [str(expression) for expression in run_severity_created.expressions] == [
+        "financial_reconciliation_findings.run_id",
+        "financial_reconciliation_findings.severity",
+        "financial_reconciliation_findings.created_at DESC",
+        "financial_reconciliation_findings.id DESC",
+    ]
 
 
 def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
