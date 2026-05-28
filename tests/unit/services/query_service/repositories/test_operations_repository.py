@@ -1366,7 +1366,7 @@ async def test_get_reconciliation_runs_count_with_filters(
         in compiled
     )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
-    assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
+    assert "upper(trim(financial_reconciliation_runs.status)) = 'FAILED'" in compiled
 
 
 async def test_get_reconciliation_runs_query(
@@ -1406,9 +1406,10 @@ async def test_get_reconciliation_runs_query(
         in compiled
     )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
-    assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
+    assert "upper(trim(financial_reconciliation_runs.status)) = 'COMPLETED'" in compiled
     assert (
-        "CASE WHEN (financial_reconciliation_runs.status IN ('FAILED', 'REQUIRES_REPLAY'))"
+        "CASE WHEN (upper(trim(financial_reconciliation_runs.status)) "
+        "IN ('FAILED', 'REQUIRES_REPLAY'))"
         in compiled
     )
     assert "financial_reconciliation_runs.started_at DESC" in compiled
@@ -1441,7 +1442,10 @@ async def test_get_reconciliation_findings_query(
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
     assert "financial_reconciliation_findings.security_id = 'SEC-US-IBM'" in compiled
     assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
-    assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
+    assert (
+        "CASE WHEN (upper(trim(financial_reconciliation_findings.severity)) = 'ERROR') THEN 0"
+        in compiled
+    )
     assert "financial_reconciliation_findings.created_at DESC" in compiled
     assert "LIMIT 20" in compiled
 
@@ -1520,6 +1524,7 @@ async def test_get_reconciliation_finding_summary(
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "FILTER (WHERE" in compiled
+    assert "upper(trim(financial_reconciliation_findings.severity)) AS severity" in compiled
     assert "severity = 'ERROR'" in compiled
     assert "order by" in compiled.lower()
     assert "created_at desc" in compiled.lower()
@@ -1548,7 +1553,7 @@ async def test_get_portfolio_control_stages_count_with_filters(
     assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
-    assert "pipeline_stage_state.status = 'REQUIRES_REPLAY'" in compiled
+    assert "upper(trim(pipeline_stage_state.status)) = 'REQUIRES_REPLAY'" in compiled
     assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
 
 
@@ -1579,9 +1584,13 @@ async def test_get_portfolio_control_stages_query(
     assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
-    assert "pipeline_stage_state.status = 'FAILED'" in compiled
+    assert "upper(trim(pipeline_stage_state.status)) = 'FAILED'" in compiled
     assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
-    assert "CASE WHEN (pipeline_stage_state.status IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
+    assert (
+        "CASE WHEN (upper(trim(pipeline_stage_state.status)) "
+        "IN ('FAILED', 'REQUIRES_REPLAY'))"
+        in compiled
+    )
     assert "pipeline_stage_state.business_date DESC" in compiled
     assert "LIMIT 10 OFFSET 1" in compiled
 

@@ -145,6 +145,18 @@ class OperationsRepository:
         return func.upper(func.trim(status_column))
 
     @staticmethod
+    def _reconciliation_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
+    def _portfolio_control_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
+    def _finding_severity_expr(severity_column):
+        return func.upper(func.trim(severity_column))
+
+    @staticmethod
     def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
         superseding_job = aliased(PortfolioValuationJob)
         superseded_pending_exists = select(superseding_job.id).where(
@@ -252,16 +264,18 @@ class OperationsRepository:
 
     @staticmethod
     def _reconciliation_run_priority(status_column):
+        normalized_status = OperationsRepository._reconciliation_status_expr(status_column)
         return case(
-            (status_column.in_(("FAILED", "REQUIRES_REPLAY")), 0),
-            (status_column == "RUNNING", 1),
+            (normalized_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
+            (normalized_status == "RUNNING", 1),
             else_=9,
         )
 
     @staticmethod
     def _portfolio_control_stage_priority(status_column):
+        normalized_status = OperationsRepository._portfolio_control_status_expr(status_column)
         return case(
-            (status_column.in_(("FAILED", "REQUIRES_REPLAY")), 0),
+            (normalized_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
             else_=9,
         )
 
@@ -1805,7 +1819,9 @@ class OperationsRepository:
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
-            stmt = stmt.where(FinancialReconciliationRun.status == status)
+            stmt = stmt.where(
+                self._reconciliation_status_expr(FinancialReconciliationRun.status) == status
+            )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_runs(
@@ -1837,7 +1853,9 @@ class OperationsRepository:
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
-            stmt = stmt.where(FinancialReconciliationRun.status == status)
+            stmt = stmt.where(
+                self._reconciliation_status_expr(FinancialReconciliationRun.status) == status
+            )
         stmt = (
             stmt.order_by(
                 self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
@@ -1870,10 +1888,13 @@ class OperationsRepository:
         transaction_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> list[FinancialReconciliationFinding]:
+        normalized_severity = self._finding_severity_expr(
+            FinancialReconciliationFinding.severity
+        )
         severity_rank = case(
-            (FinancialReconciliationFinding.severity == "ERROR", 0),
-            (FinancialReconciliationFinding.severity == "WARNING", 1),
-            (FinancialReconciliationFinding.severity == "INFO", 2),
+            (normalized_severity == "ERROR", 0),
+            (normalized_severity == "WARNING", 1),
+            (normalized_severity == "INFO", 2),
             else_=9,
         )
         stmt = select(FinancialReconciliationFinding).where(
@@ -1922,7 +1943,9 @@ class OperationsRepository:
         self, run_id: str, as_of: Optional[datetime] = None
     ) -> ReconciliationFindingSummary:
         base_stmt = select(
-            FinancialReconciliationFinding.severity.label("severity"),
+            self._finding_severity_expr(FinancialReconciliationFinding.severity).label(
+                "severity"
+            ),
             FinancialReconciliationFinding.created_at.label("created_at"),
             FinancialReconciliationFinding.id.label("id"),
             FinancialReconciliationFinding.finding_id.label("finding_id"),
@@ -2002,7 +2025,9 @@ class OperationsRepository:
         if business_date:
             stmt = stmt.where(PipelineStageState.business_date == business_date)
         if status:
-            stmt = stmt.where(PipelineStageState.status == status)
+            stmt = stmt.where(
+                self._portfolio_control_status_expr(PipelineStageState.status) == status
+            )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_portfolio_control_stages(
@@ -2029,7 +2054,9 @@ class OperationsRepository:
         if business_date:
             stmt = stmt.where(PipelineStageState.business_date == business_date)
         if status:
-            stmt = stmt.where(PipelineStageState.status == status)
+            stmt = stmt.where(
+                self._portfolio_control_status_expr(PipelineStageState.status) == status
+            )
         stmt = (
             stmt.order_by(
                 self._portfolio_control_stage_priority(PipelineStageState.status).asc(),
