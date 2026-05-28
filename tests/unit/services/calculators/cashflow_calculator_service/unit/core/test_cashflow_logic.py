@@ -86,6 +86,48 @@ def test_calculate_buy_transaction_normalizes_transaction_type(
 @patch(
     "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
 )
+def test_calculate_rejects_post_validation_negative_trade_fee(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event
+    event.trade_fee = Decimal("-0.01")
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_OUTFLOW,
+        timing=CashflowTiming.BOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    with pytest.raises(ValueError, match="trade_fee"):
+        CashflowLogic.calculate(event, rule)
+
+    mock_metric.labels.assert_not_called()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_rejects_post_validation_negative_fee_component(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event
+    event.brokerage = Decimal("-0.01")
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_OUTFLOW,
+        timing=CashflowTiming.BOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    with pytest.raises(ValueError, match="brokerage"):
+        CashflowLogic.calculate(event, rule)
+
+    mock_metric.labels.assert_not_called()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
 def test_calculate_sell_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A SELL is a positive cashflow (inflow)."""
     # ARRANGE

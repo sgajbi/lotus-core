@@ -5,6 +5,10 @@ from typing import Optional, Protocol
 from portfolio_common.database_models import Cashflow
 from portfolio_common.events import TransactionEvent
 from portfolio_common.monitoring import CASHFLOWS_CREATED_TOTAL
+from portfolio_common.transaction_fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
 
 from .enums import CashflowClassification
 
@@ -44,6 +48,14 @@ def _normalize_code(value: object, default: str = "") -> str:
     return str(value or default).strip().upper()
 
 
+def _resolve_cashflow_trade_fee(transaction: TransactionEvent) -> Decimal:
+    trade_fee = resolve_transaction_trade_fee(
+        transaction.trade_fee,
+        {field: getattr(transaction, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+    )
+    return trade_fee or Decimal(0)
+
+
 class CashflowLogic:
     """
     A stateless calculator that generates a Cashflow object from a transaction
@@ -63,6 +75,7 @@ class CashflowLogic:
             getattr(transaction, "interest_direction", None),
             default="INCOME",
         )
+        trade_fee = _resolve_cashflow_trade_fee(transaction)
 
         # For NET, we adjust the gross amount by the fee and honor net-settled
         # interest when withholding/deductions are provided.
@@ -72,13 +85,11 @@ class CashflowLogic:
             )
             amount = transaction.net_interest_amount
             if amount is None:
-                amount = transaction.gross_transaction_amount - deductions - (
-                    transaction.trade_fee or 0
-                )
+                amount = transaction.gross_transaction_amount - deductions - trade_fee
         elif transaction_type in {"BUY", "FEE"}:
-            amount = transaction.gross_transaction_amount + (transaction.trade_fee or 0)
+            amount = transaction.gross_transaction_amount + trade_fee
         else:  # SELL, DIVIDEND, INTEREST, etc.
-            amount = transaction.gross_transaction_amount - (transaction.trade_fee or 0)
+            amount = transaction.gross_transaction_amount - trade_fee
 
         # Convention: Inflows to the portfolio are positive, outflows are negative.
         positive_classifications = [
