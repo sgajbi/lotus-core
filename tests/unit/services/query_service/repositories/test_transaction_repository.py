@@ -438,8 +438,8 @@ async def test_get_latest_fx_rate_queries_latest_available_rate(
     assert rate == Decimal("1.36")
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "fx_rates.from_currency = 'USD'" in compiled_query
-    assert "fx_rates.to_currency = 'SGD'" in compiled_query
+    assert "upper(trim(fx_rates.from_currency)) = 'USD'" in compiled_query
+    assert "upper(trim(fx_rates.to_currency)) = 'SGD'" in compiled_query
     assert "fx_rates.rate_date <= '2026-04-30'" in compiled_query
     assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
 

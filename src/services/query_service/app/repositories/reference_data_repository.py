@@ -36,7 +36,7 @@ from portfolio_common.market_reference_quality import (
 from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .currency_codes import normalize_currency_code
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
 
 T = TypeVar("T")
@@ -1113,11 +1113,13 @@ class ReferenceDataRepository:
     ) -> dict[date, Decimal]:
         normalized_from_currency = normalize_currency_code(from_currency)
         normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         stmt = (
             select(FxRate)
             .where(
-                FxRate.from_currency == normalized_from_currency,
-                FxRate.to_currency == normalized_to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date >= start_date,
                 FxRate.rate_date <= end_date,
             )
@@ -1178,20 +1180,26 @@ class ReferenceDataRepository:
             return []
 
         normalized_pairs = [
-            (normalize_currency_code(base), normalize_currency_code(quote))
+            (normalized_base, normalized_quote)
             for base, quote in currency_pairs
+            if (normalized_base := normalize_currency_code(base))
+            and (normalized_quote := normalize_currency_code(quote))
         ]
+        if not normalized_pairs:
+            return []
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         latest_rate_dates = (
             select(
-                FxRate.from_currency,
-                FxRate.to_currency,
+                from_currency_expr.label("from_currency"),
+                to_currency_expr.label("to_currency"),
                 func.max(FxRate.rate_date).label("latest_rate_date"),
             )
             .where(
-                tuple_(FxRate.from_currency, FxRate.to_currency).in_(normalized_pairs),
+                tuple_(from_currency_expr, to_currency_expr).in_(normalized_pairs),
                 FxRate.rate_date <= as_of_date,
             )
-            .group_by(FxRate.from_currency, FxRate.to_currency)
+            .group_by(from_currency_expr, to_currency_expr)
             .subquery()
         )
         stmt = (
@@ -1199,12 +1207,12 @@ class ReferenceDataRepository:
             .join(
                 latest_rate_dates,
                 and_(
-                    FxRate.from_currency == latest_rate_dates.c.from_currency,
-                    FxRate.to_currency == latest_rate_dates.c.to_currency,
+                    from_currency_expr == latest_rate_dates.c.from_currency,
+                    to_currency_expr == latest_rate_dates.c.to_currency,
                     FxRate.rate_date == latest_rate_dates.c.latest_rate_date,
                 ),
             )
-            .order_by(FxRate.from_currency.asc(), FxRate.to_currency.asc())
+            .order_by(from_currency_expr.asc(), to_currency_expr.asc())
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

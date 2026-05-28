@@ -184,6 +184,12 @@ class FxRate(Base):
         UniqueConstraint(
             "from_currency", "to_currency", "rate_date", name="_currency_pair_date_uc"
         ),
+        Index(
+            "ix_fx_rates_normalized_pair_rate_date",
+            func.upper(func.trim(from_currency)),
+            func.upper(func.trim(to_currency)),
+            rate_date.desc(),
+        ),
     )
 
 

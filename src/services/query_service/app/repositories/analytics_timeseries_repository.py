@@ -19,7 +19,7 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .currency_codes import normalize_currency_code
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
 
 
@@ -565,11 +565,13 @@ class AnalyticsTimeseriesRepository:
     ) -> dict[date, Decimal]:
         normalized_from_currency = normalize_currency_code(from_currency)
         normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
+        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
         stmt = (
             select(FxRate.rate_date, FxRate.rate)
             .where(
-                FxRate.from_currency == normalized_from_currency,
-                FxRate.to_currency == normalized_to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date >= start_date,
                 FxRate.rate_date <= end_date,
             )

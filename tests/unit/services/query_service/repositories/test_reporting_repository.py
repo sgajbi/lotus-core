@@ -126,8 +126,8 @@ async def test_reporting_repository_get_latest_fx_rate_uses_desc_limit_one() -> 
     assert rate == Decimal("1.2500000000")
     stmt = db.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "fx_rates.from_currency = 'EUR'" in compiled
-    assert "fx_rates.to_currency = 'USD'" in compiled
+    assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in compiled
+    assert "upper(trim(fx_rates.to_currency)) = 'USD'" in compiled
     assert "fx_rates.rate_date <= '2026-03-27'" in compiled
     assert "ORDER BY fx_rates.rate_date DESC" in compiled
     assert "LIMIT 1" in compiled

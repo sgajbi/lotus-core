@@ -44,8 +44,8 @@ async def test_get_fx_rates_with_filters(repository: FxRateRepository, mock_db_s
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "WHERE fx_rates.from_currency = 'USD'" in compiled_query
-    assert "AND fx_rates.to_currency = 'EUR'" in compiled_query
+    assert "WHERE upper(trim(fx_rates.from_currency)) = 'USD'" in compiled_query
+    assert "AND upper(trim(fx_rates.to_currency)) = 'EUR'" in compiled_query
     assert "AND fx_rates.rate_date >= '2025-01-01'" in compiled_query
     assert "AND fx_rates.rate_date <= '2025-01-31'" in compiled_query
     assert "ORDER BY fx_rates.rate_date ASC" in compiled_query

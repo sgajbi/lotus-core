@@ -71,6 +71,7 @@ async def test_reference_data_repository_lists_latest_market_data_windows() -> N
     assert "trim(market_prices.security_id) in ('eq_us_aapl')" in price_sql
     fx_stmt = db.execute.await_args_list[1].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "upper(trim(fx_rates.from_currency)), upper(trim(fx_rates.to_currency))" in fx_sql
     assert "('USD', 'SGD')" in fx_sql
 
 
@@ -260,8 +261,8 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert fx_rates[date(2026, 1, 1)] == Decimal("1.1")
     fx_stmt = db.execute.await_args_list[19].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "fx_rates.from_currency = 'EUR'" in fx_sql
-    assert "fx_rates.to_currency = 'USD'" in fx_sql
+    assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
+    assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql
 
 
 @pytest.mark.asyncio
