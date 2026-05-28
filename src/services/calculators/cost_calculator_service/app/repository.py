@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
+from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     FxRate,
@@ -15,12 +16,11 @@ from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
-
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -117,11 +117,15 @@ class CostCalculatorRepository:
         self, from_currency: str, to_currency: str, a_date: date
     ) -> Optional[FxRate]:
         """Fetches the latest FX rate on or before a given date."""
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
+        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
         stmt = (
             select(FxRate)
             .filter(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
             .order_by(FxRate.rate_date.desc())

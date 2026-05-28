@@ -1,19 +1,45 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.database_models import FxRate
 from portfolio_common.database_models import Transaction as DBTransaction
 
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (
+from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
     Transaction as EngineTransaction,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )
 
-
 pytestmark = pytest.mark.asyncio
+
+
+async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates():
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+
+    execute_result = MagicMock()
+    expected_rate = FxRate(
+        from_currency="EUR",
+        to_currency="USD",
+        rate_date=date(2026, 5, 28),
+        rate=Decimal("1.0875"),
+    )
+    execute_result.scalars.return_value.first.return_value = expected_rate
+    db_session.execute.return_value = execute_result
+
+    fx_rate = await repository.get_fx_rate(" eur ", " usd ", date(2026, 5, 28))
+
+    assert fx_rate is expected_rate
+    compiled_query = str(
+        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    ).lower()
+    assert "upper(trim(fx_rates.from_currency)) = 'eur'" in compiled_query
+    assert "upper(trim(fx_rates.to_currency)) = 'usd'" in compiled_query
+    assert "fx_rates.rate_date <= '2026-05-28'" in compiled_query
+    assert "order by fx_rates.rate_date desc" in compiled_query
 
 
 async def test_update_transaction_costs_persists_linkage_metadata() -> None:
