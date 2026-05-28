@@ -2,7 +2,8 @@ from datetime import date
 from decimal import Decimal
 from typing import List
 
-from pydantic import BaseModel, ConfigDict, Field, condecimal
+from portfolio_common.currency_codes import normalize_currency_code
+from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator
 
 
 class FxRate(BaseModel):
@@ -29,6 +30,11 @@ class FxRate(BaseModel):
         ),
         examples=["1.3500000000"],
     )
+
+    @field_validator("from_currency", "to_currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict(
         json_schema_extra={

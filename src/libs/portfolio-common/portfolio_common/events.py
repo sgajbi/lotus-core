@@ -10,6 +10,7 @@ from .ca_bundle_a_ordering import (
     ca_bundle_a_target_order_key,
 )
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
+from .currency_codes import normalize_currency_code
 
 
 class CoreEventModel(BaseModel):
@@ -57,6 +58,11 @@ class FxRateEvent(CoreEventModel):
     to_currency: str = Field(...)
     rate_date: date = Field(...)
     rate: Decimal
+
+    @field_validator("from_currency", "to_currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
 
 class MarketPriceEvent(CoreEventModel):

@@ -5379,7 +5379,7 @@ async def test_ingest_fx_rates_endpoint(
 ):
     """Tests the POST /ingest/fx-rates endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
-    payload = _fx_rate_batch_payload(("USD", "SGD"))
+    payload = _fx_rate_batch_payload((" usd ", " sgd "))
 
     response = await async_test_client.post(
         "/ingest/fx-rates",
