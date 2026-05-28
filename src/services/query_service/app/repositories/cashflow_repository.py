@@ -16,6 +16,8 @@ from portfolio_common.utils import async_timed
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .identifier_normalization import normalize_security_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -226,19 +228,25 @@ class CashflowRepository:
         Retrieves all income-classified cashflow records for a single position
         within a date range, ensuring data is from the correct epoch.
         """
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return []
+
+        cashflow_security_id = func.trim(Cashflow.security_id)
+        state_security_id = func.trim(PositionState.security_id)
         stmt = (
             select(Cashflow)
             .join(
                 PositionState,
                 and_(
                     PositionState.portfolio_id == Cashflow.portfolio_id,
-                    PositionState.security_id == Cashflow.security_id,
+                    state_security_id == cashflow_security_id,
                     PositionState.epoch == Cashflow.epoch,
                 ),
             )
             .where(
                 Cashflow.portfolio_id == portfolio_id,
-                Cashflow.security_id == security_id,
+                cashflow_security_id == security_id,
                 Cashflow.cashflow_date.between(start_date, end_date),
                 Cashflow.classification == "INCOME",
             )
