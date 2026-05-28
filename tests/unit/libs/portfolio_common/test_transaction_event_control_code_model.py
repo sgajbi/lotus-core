@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
 from portfolio_common.events import TransactionEvent
+from pydantic import ValidationError
 
 
 def test_transaction_event_normalizes_control_codes_without_defaulting() -> None:
@@ -97,3 +99,40 @@ def test_transaction_event_aggregates_trade_fee_from_components() -> None:
     )
 
     assert event.trade_fee == Decimal("5.00")
+
+
+def test_transaction_event_rejects_negative_trade_fee() -> None:
+    with pytest.raises(ValidationError, match="trade_fee"):
+        TransactionEvent(
+            transaction_id="EVENT_NEGATIVE_FEE_001",
+            portfolio_id="PORT_META_001",
+            instrument_id="SEC_EQ_US_001",
+            security_id="SEC_EQ_US_001",
+            transaction_date=datetime(2026, 3, 1, 10, 0),
+            transaction_type="BUY",
+            quantity=Decimal("10"),
+            price=Decimal("100"),
+            gross_transaction_amount=Decimal("1000.0"),
+            trade_currency="USD",
+            currency="USD",
+            trade_fee=Decimal("-0.01"),
+        )
+
+
+def test_transaction_event_rejects_negative_fee_component() -> None:
+    with pytest.raises(ValidationError, match="brokerage"):
+        TransactionEvent(
+            transaction_id="EVENT_NEGATIVE_COMPONENT_001",
+            portfolio_id="PORT_META_001",
+            instrument_id="SEC_EQ_US_001",
+            security_id="SEC_EQ_US_001",
+            transaction_date=datetime(2026, 3, 1, 10, 0),
+            transaction_type="BUY",
+            quantity=Decimal("10"),
+            price=Decimal("100"),
+            gross_transaction_amount=Decimal("1000.0"),
+            trade_currency="USD",
+            currency="USD",
+            trade_fee=Decimal("0.00"),
+            brokerage=Decimal("-0.01"),
+        )
