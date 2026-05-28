@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any, Optional, Tuple
 
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
+from portfolio_common.market_prices import coerce_positive_market_price_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,14 @@ class ValuationLogic:
             or None if a required FX rate is missing.
         """
         quantity = ValuationLogic._as_decimal(quantity)
-        market_price = ValuationLogic._as_decimal(market_price)
+        market_price = coerce_positive_market_price_or_none(market_price)
+        if market_price is None:
+            logger.warning(
+                "Non-positive market price for %s/%s. Cannot value.",
+                price_currency,
+                instrument_currency,
+            )
+            return None
         cost_basis_base = ValuationLogic._as_decimal(cost_basis_base)
         cost_basis_local = ValuationLogic._as_decimal(cost_basis_local)
         price_currency = ValuationLogic._normalize_currency_code(price_currency)

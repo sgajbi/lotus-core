@@ -279,6 +279,21 @@ def test_calculate_valuation_rejects_negative_price_alignment_fx_rate():
     assert result is None
 
 
+def test_calculate_valuation_rejects_non_positive_market_price():
+    result = ValuationLogic.calculate_valuation(
+        quantity=Decimal("100"),
+        market_price=Decimal("-120"),
+        cost_basis_base=Decimal("11000"),
+        cost_basis_local=Decimal("10000"),
+        price_currency="EUR",
+        instrument_currency="EUR",
+        portfolio_currency="USD",
+        instrument_to_portfolio_fx_rate=Decimal("1.10"),
+    )
+
+    assert result is None
+
+
 def test_calculate_valuation_scales_repo_bond_percentage_quotes_to_unit_prices():
     result = ValuationLogic.calculate_valuation(
         quantity=Decimal("75"),
