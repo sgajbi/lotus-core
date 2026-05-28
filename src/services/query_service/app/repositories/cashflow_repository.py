@@ -16,6 +16,7 @@ from portfolio_common.utils import async_timed
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .date_filters import start_of_day
 from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ class CashflowRepository:
                 Transaction.transaction_type.in_(("DEPOSIT", "WITHDRAWAL")),
                 Transaction.settlement_date.is_not(None),
                 settlement_date.between(start_date, end_date),
-                func.date(Transaction.transaction_date) < start_date,
+                Transaction.transaction_date < start_of_day(start_date),
             )
             .group_by(settlement_date)
             .order_by(settlement_date.asc())
@@ -151,7 +152,7 @@ class CashflowRepository:
                 Transaction.transaction_type.in_(("DEPOSIT", "WITHDRAWAL")),
                 Transaction.settlement_date.is_not(None),
                 settlement_date.between(start_date, end_date),
-                func.date(Transaction.transaction_date) < start_date,
+                Transaction.transaction_date < start_of_day(start_date),
             )
             latest_projected = (await self.db.execute(projected_stmt)).scalar_one_or_none()
 

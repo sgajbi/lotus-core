@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from .currency_codes import normalize_currency_code
+from .date_filters import start_of_next_day
 from .identifier_normalization import normalize_security_id
 
 
@@ -1041,12 +1042,13 @@ class OperationsRepository:
     async def get_latest_transaction_date(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[date]:
-        stmt = select(func.max(func.date(Transaction.transaction_date))).where(
+        stmt = select(func.max(Transaction.transaction_date)).where(
             Transaction.portfolio_id == portfolio_id
         )
         if as_of is not None:
             stmt = stmt.where(Transaction.created_at <= as_of)
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        latest_transaction_at = (await self.db.execute(stmt)).scalar_one_or_none()
+        return latest_transaction_at.date() if latest_transaction_at is not None else None
 
     async def get_latest_transaction_date_as_of(
         self,
@@ -1054,13 +1056,14 @@ class OperationsRepository:
         as_of_date: date,
         snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
-        stmt = select(func.max(func.date(Transaction.transaction_date))).where(
+        stmt = select(func.max(Transaction.transaction_date)).where(
             Transaction.portfolio_id == portfolio_id,
-            func.date(Transaction.transaction_date) <= as_of_date,
+            Transaction.transaction_date < start_of_next_day(as_of_date),
         )
         if snapshot_as_of is not None:
             stmt = stmt.where(Transaction.created_at <= snapshot_as_of)
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        latest_transaction_at = (await self.db.execute(stmt)).scalar_one_or_none()
+        return latest_transaction_at.date() if latest_transaction_at is not None else None
 
     async def get_latest_business_date(self, as_of: Optional[datetime] = None) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
@@ -1222,9 +1225,7 @@ class OperationsRepository:
                 func.count()
                 .filter(
                     DailyPositionSnapshot.valuation_status.is_not(None),
-                    self._snapshot_valuation_status_expr(
-                        DailyPositionSnapshot.valuation_status
-                    )
+                    self._snapshot_valuation_status_expr(DailyPositionSnapshot.valuation_status)
                     != "UNVALUED",
                 )
                 .label("valued_positions"),
@@ -1271,14 +1272,14 @@ class OperationsRepository:
             select(
                 Transaction.transaction_id.label("transaction_id"),
                 self._security_id_expr(Transaction.security_id).label("security_id"),
-                cast(func.date(Transaction.transaction_date), Date).label("transaction_date"),
+                cast(Transaction.transaction_date, Date).label("transaction_date"),
                 trade_currency.label("trade_currency"),
                 portfolio_currency.label("portfolio_currency"),
             )
             .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
             .where(
                 Transaction.portfolio_id == portfolio_id,
-                cast(func.date(Transaction.transaction_date), Date) <= as_of_date,
+                Transaction.transaction_date < start_of_next_day(as_of_date),
                 trade_currency != portfolio_currency,
                 Transaction.transaction_fx_rate.is_(None),
             )
@@ -1985,9 +1986,7 @@ class OperationsRepository:
         if security_id is not None and not normalized_security_id:
             return []
         finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
-        normalized_severity = self._finding_severity_expr(
-            FinancialReconciliationFinding.severity
-        )
+        normalized_severity = self._finding_severity_expr(FinancialReconciliationFinding.severity)
         severity_rank = case(
             (normalized_severity == "ERROR", 0),
             (normalized_severity == "WARNING", 1),
@@ -2046,16 +2045,12 @@ class OperationsRepository:
         self, run_id: str, as_of: Optional[datetime] = None
     ) -> ReconciliationFindingSummary:
         base_stmt = select(
-            self._finding_severity_expr(FinancialReconciliationFinding.severity).label(
-                "severity"
-            ),
+            self._finding_severity_expr(FinancialReconciliationFinding.severity).label("severity"),
             FinancialReconciliationFinding.created_at.label("created_at"),
             FinancialReconciliationFinding.id.label("id"),
             FinancialReconciliationFinding.finding_id.label("finding_id"),
             FinancialReconciliationFinding.finding_type.label("finding_type"),
-            self._security_id_expr(FinancialReconciliationFinding.security_id).label(
-                "security_id"
-            ),
+            self._security_id_expr(FinancialReconciliationFinding.security_id).label("security_id"),
             FinancialReconciliationFinding.transaction_id.label("transaction_id"),
         ).where(FinancialReconciliationFinding.run_id == run_id)
         if as_of is not None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -151,7 +151,11 @@ class ReconciliationRepository:
         if portfolio_id is not None:
             stmt = stmt.where(Transaction.portfolio_id == portfolio_id)
         if business_date is not None:
-            stmt = stmt.where(func.date(Transaction.transaction_date) == business_date)
+            stmt = stmt.where(
+                Transaction.transaction_date >= datetime.combine(business_date, time.min),
+                Transaction.transaction_date
+                < datetime.combine(business_date + timedelta(days=1), time.min),
+            )
         result = await self.db.execute(stmt.order_by(Transaction.transaction_id.asc()))
         return result.all()
 

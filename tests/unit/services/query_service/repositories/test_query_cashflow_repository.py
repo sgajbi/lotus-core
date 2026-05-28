@@ -35,7 +35,7 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
     assert (
         "date(transactions.settlement_date) BETWEEN '2026-04-18' AND '2026-04-28'" in compiled_query
     )
-    assert "date(transactions.transaction_date) < '2026-04-18'" in compiled_query
+    assert "transactions.transaction_date < '2026-04-18 00:00:00'" in compiled_query
     assert "transactions.transaction_type = 'BUY'" not in compiled_query
 
 
@@ -147,7 +147,7 @@ async def test_latest_cashflow_evidence_timestamp_uses_booked_and_projected_sour
     assert "anon_1.cashflow_date BETWEEN '2026-04-18' AND '2026-04-28'" in booked_query
     assert "max(transactions.updated_at)" in projected_query.lower()
     assert "transactions.transaction_type IN ('DEPOSIT', 'WITHDRAWAL')" in projected_query
-    assert "date(transactions.transaction_date) < '2026-04-18'" in projected_query
+    assert "transactions.transaction_date < '2026-04-18 00:00:00'" in projected_query
 
 
 async def test_latest_cashflow_evidence_timestamp_skips_projected_query_for_booked_only(

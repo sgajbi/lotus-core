@@ -98,3 +98,26 @@ async def test_fetch_latest_fx_rate_normalizes_currency_codes_and_uses_functiona
     assert "fx_rates.rate_date <= '2026-05-28'" in compiled_query
     assert "order by fx_rates.rate_date desc" in compiled_query
     assert "limit 1" in compiled_query
+
+
+async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date_range(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    rows = await repository.fetch_transaction_cashflow_rows(
+        portfolio_id="P1",
+        business_date=date(2026, 5, 28),
+    )
+
+    assert rows == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "transactions.portfolio_id = 'P1'" in compiled_query
+    assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-29 00:00:00'" in compiled_query
+    assert "date(transactions.transaction_date)" not in compiled_query.lower()

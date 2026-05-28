@@ -1,6 +1,6 @@
 # services/calculators/position_calculator/app/repositories/position_repository.py
 import logging
-from datetime import date
+from datetime import date, datetime, time
 from typing import List, Optional
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
@@ -173,7 +173,7 @@ class PositionRepository:
             .filter(
                 func.trim(Transaction.portfolio_id) == normalized_portfolio_id,
                 func.trim(Transaction.security_id) == normalized_security_id,
-                func.date(Transaction.transaction_date) >= a_date,
+                Transaction.transaction_date >= datetime.combine(a_date, time.min),
             )
             .order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
         )

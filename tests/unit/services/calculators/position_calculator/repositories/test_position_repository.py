@@ -71,7 +71,7 @@ async def test_get_transactions_on_or_after_trims_portfolio_and_security_ids():
     )
     assert "trim(transactions.portfolio_id) = 'PORT_COST_01'" in compiled_query
     assert "trim(transactions.security_id) = 'SEC01'" in compiled_query
-    assert "date(transactions.transaction_date) >= '2026-05-28'" in compiled_query
+    assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
     assert (
         "ORDER BY transactions.transaction_date ASC, transactions.transaction_id ASC"
         in compiled_query
