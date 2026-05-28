@@ -5,6 +5,7 @@ from portfolio_common.currency_codes import (
 )
 from portfolio_common.events import (
     FxRateEvent,
+    InstrumentEvent,
     MarketPriceEvent,
     MarketPricePersistedEvent,
     TransactionEvent,
@@ -77,3 +78,23 @@ def test_transaction_event_normalizes_currency_codes() -> None:
     assert event.buy_currency == "USD"
     assert event.sell_currency == "EUR"
     assert event.synthetic_flow_currency == "SGD"
+
+
+def test_instrument_event_normalizes_currency_codes() -> None:
+    event = InstrumentEvent(
+        security_id="FX_FORWARD_001",
+        name="EUR/USD Forward",
+        isin="FXFORWARD001",
+        currency=" usd ",
+        product_type="fx_forward",
+        pair_base_currency=" eur ",
+        pair_quote_currency=" usd ",
+        buy_currency=" eur ",
+        sell_currency=" usd ",
+    )
+
+    assert event.currency == "USD"
+    assert event.pair_base_currency == "EUR"
+    assert event.pair_quote_currency == "USD"
+    assert event.buy_currency == "EUR"
+    assert event.sell_currency == "USD"

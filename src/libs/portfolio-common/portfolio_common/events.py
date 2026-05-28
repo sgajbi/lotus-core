@@ -119,6 +119,18 @@ class InstrumentEvent(CoreEventModel):
     ultimate_parent_issuer_id: Optional[str] = Field(None)
     ultimate_parent_issuer_name: Optional[str] = Field(None)
 
+    @field_validator(
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
+
 
 class TransactionEvent(CoreEventModel):
     transaction_id: str

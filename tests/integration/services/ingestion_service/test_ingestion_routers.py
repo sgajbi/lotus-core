@@ -5150,6 +5150,11 @@ async def test_ingest_instruments_endpoint(
     """Tests the POST /ingest/instruments endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
     payload = _instrument_batch_payload("SEC_INST_ACK_001")
+    payload["instruments"][0]["currency"] = " usd "
+    payload["instruments"][0]["pair_base_currency"] = " eur "
+    payload["instruments"][0]["pair_quote_currency"] = " usd "
+    payload["instruments"][0]["buy_currency"] = " eur "
+    payload["instruments"][0]["sell_currency"] = " usd "
 
     response = await async_test_client.post(
         "/ingest/instruments",
@@ -5172,6 +5177,11 @@ async def test_ingest_instruments_endpoint(
     assert publish_kwargs["topic"] == "instruments.received"
     assert publish_kwargs["key"] == "SEC_INST_ACK_001"
     assert publish_kwargs["value"]["security_id"] == "SEC_INST_ACK_001"
+    assert publish_kwargs["value"]["currency"] == "USD"
+    assert publish_kwargs["value"]["pair_base_currency"] == "EUR"
+    assert publish_kwargs["value"]["pair_quote_currency"] == "USD"
+    assert publish_kwargs["value"]["buy_currency"] == "EUR"
+    assert publish_kwargs["value"]["sell_currency"] == "USD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"instrument-batch-idem-001")
 
 
