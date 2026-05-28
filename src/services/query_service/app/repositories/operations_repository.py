@@ -141,6 +141,10 @@ class OperationsRepository:
         return func.upper(func.trim(status_column))
 
     @staticmethod
+    def _reprocessing_status_expr(status_column):
+        return func.upper(func.trim(status_column))
+
+    @staticmethod
     def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
         superseding_job = aliased(PortfolioValuationJob)
         superseded_pending_exists = select(superseding_job.id).where(
@@ -263,12 +267,13 @@ class OperationsRepository:
 
     @staticmethod
     def _reprocessing_key_priority(status_column, updated_at_column, stale_threshold: datetime):
+        normalized_status = OperationsRepository._reprocessing_status_expr(status_column)
         return case(
             (
-                and_(status_column == "REPROCESSING", updated_at_column < stale_threshold),
+                and_(normalized_status == "REPROCESSING", updated_at_column < stale_threshold),
                 0,
             ),
-            (status_column == "REPROCESSING", 1),
+            (normalized_status == "REPROCESSING", 1),
             else_=9,
         )
 
@@ -655,7 +660,7 @@ class OperationsRepository:
     ) -> ReprocessingHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         base_stmt = select(
-            PositionState.status.label("status"),
+            self._reprocessing_status_expr(PositionState.status).label("status"),
             PositionState.updated_at.label("updated_at"),
             PositionState.watermark_date.label("watermark_date"),
             PositionState.security_id.label("security_id"),
@@ -1370,7 +1375,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if reprocessing_status:
-            stmt = stmt.where(PositionState.status == reprocessing_status)
+            stmt = stmt.where(
+                self._reprocessing_status_expr(PositionState.status) == reprocessing_status
+            )
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
@@ -1446,7 +1453,9 @@ class OperationsRepository:
             .correlate(PositionState)
             .scalar_subquery()
         )
-        latest_valuation_job_status = select(PortfolioValuationJob.status).where(
+        latest_valuation_job_status = select(
+            self._support_job_status_expr(PortfolioValuationJob.status)
+        ).where(
             PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
             PortfolioValuationJob.security_id == PositionState.security_id,
             PortfolioValuationJob.epoch == PositionState.epoch,
@@ -1509,7 +1518,7 @@ class OperationsRepository:
             else_=False,
         )
         lineage_priority = case(
-            (PositionState.status == "REPROCESSING", 0),
+            (self._reprocessing_status_expr(PositionState.status) == "REPROCESSING", 0),
             (
                 and_(has_artifact_gap.is_(True), latest_valuation_job_status == "FAILED"),
                 1,
@@ -1532,7 +1541,9 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if reprocessing_status:
-            stmt = stmt.where(PositionState.status == reprocessing_status)
+            stmt = stmt.where(
+                self._reprocessing_status_expr(PositionState.status) == reprocessing_status
+            )
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
         stmt = (
@@ -2048,7 +2059,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PositionState.status == status)
+            stmt = stmt.where(self._reprocessing_status_expr(PositionState.status) == status)
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
         if watermark_date:
@@ -2073,7 +2084,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
-            stmt = stmt.where(PositionState.status == status)
+            stmt = stmt.where(self._reprocessing_status_expr(PositionState.status) == status)
         if security_id:
             stmt = stmt.where(PositionState.security_id == security_id)
         if watermark_date:
@@ -2123,7 +2134,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(ReprocessingJob.status == status)
+            stmt = stmt.where(self._support_job_status_expr(ReprocessingJob.status) == status)
         if security_id:
             stmt = stmt.where(security_id_expr == security_id)
         if job_id is not None:
@@ -2173,7 +2184,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
-            stmt = stmt.where(ReprocessingJob.status == status)
+            stmt = stmt.where(self._support_job_status_expr(ReprocessingJob.status) == status)
         if security_id:
             stmt = stmt.where(security_id_expr == security_id)
         if job_id is not None:
