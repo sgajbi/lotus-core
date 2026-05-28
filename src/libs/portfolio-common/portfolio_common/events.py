@@ -71,6 +71,11 @@ class MarketPriceEvent(CoreEventModel):
     price: Decimal
     currency: str
 
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
 
 class MarketPricePersistedEvent(CoreEventModel):
     """
@@ -81,6 +86,11 @@ class MarketPricePersistedEvent(CoreEventModel):
     price_date: date
     price: Decimal
     currency: str
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
 
 class InstrumentEvent(CoreEventModel):

@@ -5258,6 +5258,7 @@ async def test_ingest_market_prices_endpoint(
     """Tests the POST /ingest/market-prices endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
     payload = _market_price_batch_payload("SEC_PRICE_ACK_001")
+    payload["market_prices"][0]["currency"] = " usd "
 
     response = await async_test_client.post(
         "/ingest/market-prices",
@@ -5280,6 +5281,7 @@ async def test_ingest_market_prices_endpoint(
     assert publish_kwargs["topic"] == "market_prices.raw.received"
     assert publish_kwargs["key"] == "SEC_PRICE_ACK_001"
     assert publish_kwargs["value"]["security_id"] == "SEC_PRICE_ACK_001"
+    assert publish_kwargs["value"]["currency"] == "USD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"market-price-batch-idem-001")
 
 
