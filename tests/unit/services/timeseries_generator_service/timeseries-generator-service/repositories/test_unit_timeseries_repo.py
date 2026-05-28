@@ -83,17 +83,18 @@ async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
     assert "position_timeseries.epoch = 14" in compiled_query
 
 
-async def test_get_fx_rate(repository: TimeseriesRepository, mock_db_session: AsyncMock):
+async def test_get_fx_rate_uses_normalized_functional_index_predicates(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
     """Verifies the query for the latest FX rate."""
-    await repository.get_fx_rate("USD", "EUR", date(2025, 1, 10))
+    await repository.get_fx_rate(" usd ", " eur ", date(2025, 1, 10))
     compiled_query = str(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
-    )
-    assert (
-        "WHERE fx_rates.from_currency = 'USD' AND fx_rates.to_currency = 'EUR' AND fx_rates.rate_date <= '2025-01-10'"  # noqa: E501
-        in compiled_query
-    )
-    assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
+    ).lower()
+    assert "upper(trim(fx_rates.from_currency)) = 'usd'" in compiled_query
+    assert "upper(trim(fx_rates.to_currency)) = 'eur'" in compiled_query
+    assert "fx_rates.rate_date <= '2025-01-10'" in compiled_query
+    assert "order by fx_rates.rate_date desc" in compiled_query
 
 
 async def test_upsert_position_timeseries(
@@ -177,8 +178,7 @@ async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_w
 
     assert (
         "row_number() OVER (PARTITION BY position_timeseries.security_id "
-        "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)"
-        in compiled_query
+        "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)" in compiled_query
     )
     assert "position_timeseries.date <= '2025-01-10'" in compiled_query
     assert "position_timeseries.epoch <= 3" in compiled_query
@@ -266,8 +266,7 @@ async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     assert "daily_position_snapshots.date > '2025-01-10'" in compiled_query
     assert (
         "row_number() OVER (PARTITION BY daily_position_snapshots.date "
-        "ORDER BY daily_position_snapshots.epoch DESC)"
-        in compiled_query
+        "ORDER BY daily_position_snapshots.epoch DESC)" in compiled_query
     )
     assert "anon_1.rn = 1" in compiled_query
     assert "ORDER BY daily_position_snapshots.date ASC" in compiled_query
@@ -291,8 +290,7 @@ async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
     )
     assert (
         "row_number() OVER (PARTITION BY anon_2.security_id "
-        "ORDER BY anon_2.date DESC, anon_2.epoch DESC)"
-        in compiled_query
+        "ORDER BY anon_2.date DESC, anon_2.epoch DESC)" in compiled_query
     )
     assert "daily_position_snapshots.date = anon_1.date" in compiled_query
     assert "daily_position_snapshots.epoch = anon_1.epoch" in compiled_query

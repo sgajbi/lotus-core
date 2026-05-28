@@ -6,6 +6,7 @@ from sqlalchemy import and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .currency_codes import normalize_currency_code
 from .database_models import (
     Cashflow,
     DailyPositionSnapshot,
@@ -238,11 +239,15 @@ class TimeseriesRepositoryBase:
     async def get_fx_rate(
         self, from_currency: str, to_currency: str, a_date: date
     ) -> Optional[FxRate]:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
+        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
         stmt = (
             select(FxRate)
             .filter(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
             .order_by(FxRate.rate_date.desc())
