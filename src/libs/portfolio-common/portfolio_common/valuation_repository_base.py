@@ -216,7 +216,11 @@ class ValuationRepositoryBase:
         stmt = (
             select(PositionState)
             .where(PositionState.watermark_date < latest_business_date)
-            .order_by(PositionState.updated_at.asc())
+            .order_by(
+                PositionState.updated_at.asc(),
+                PositionState.portfolio_id.asc(),
+                PositionState.security_id.asc(),
+            )
             .limit(limit)
         )
         result = await self.db.execute(stmt)
@@ -232,7 +236,11 @@ class ValuationRepositoryBase:
                 PositionState.status == "REPROCESSING",
                 PositionState.watermark_date >= latest_business_date,
             )
-            .order_by(PositionState.updated_at.asc())
+            .order_by(
+                PositionState.updated_at.asc(),
+                PositionState.portfolio_id.asc(),
+                PositionState.security_id.asc(),
+            )
             .limit(limit)
         )
         result = await self.db.execute(stmt)
@@ -393,7 +401,11 @@ class ValuationRepositoryBase:
             select(PositionState)
             .join(Instrument, Instrument.security_id == PositionState.security_id)
             .where(PositionState.watermark_date < latest_business_date)
-            .order_by(PositionState.updated_at.asc())
+            .order_by(
+                PositionState.updated_at.asc(),
+                PositionState.portfolio_id.asc(),
+                PositionState.security_id.asc(),
+            )
             .limit(limit)
         )
         result = await self.db.execute(stmt)

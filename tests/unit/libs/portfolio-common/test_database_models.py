@@ -326,6 +326,19 @@ def test_api_query_hot_path_indexes_are_declared():
                 "trim(position_state.security_id)",
                 "position_state.epoch",
             ],
+            "ix_position_state_updated_watermark_key": [
+                "position_state.updated_at",
+                "position_state.watermark_date",
+                "position_state.portfolio_id",
+                "position_state.security_id",
+            ],
+            "ix_position_state_status_updated_watermark_key": [
+                "position_state.status",
+                "position_state.updated_at",
+                "position_state.watermark_date",
+                "position_state.portfolio_id",
+                "position_state.security_id",
+            ],
         },
     }
 

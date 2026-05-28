@@ -1891,6 +1891,21 @@ class PositionState(Base):
             "updated_at",
         ),
         Index(
+            "ix_position_state_updated_watermark_key",
+            "updated_at",
+            "watermark_date",
+            "portfolio_id",
+            "security_id",
+        ),
+        Index(
+            "ix_position_state_status_updated_watermark_key",
+            "status",
+            "updated_at",
+            "watermark_date",
+            "portfolio_id",
+            "security_id",
+        ),
+        Index(
             "ix_position_state_port_norm_sec_epoch",
             "portfolio_id",
             func.trim(security_id),
