@@ -571,8 +571,22 @@ class CostCalculator:
     def _validate_fx(self, t: Transaction) -> bool:
         t.trade_currency = _normalize_currency_code(t.trade_currency)
         t.portfolio_base_currency = _normalize_currency_code(t.portfolio_base_currency)
+        if t.transaction_fx_rate is not None:
+            try:
+                t.transaction_fx_rate = _normalize_decimal_field(
+                    t.transaction_fx_rate, "transaction_fx_rate"
+                )
+            except ValueError as exc:
+                self._error_reporter.add_error(t.transaction_id, str(exc))
+                return False
+            if t.transaction_fx_rate <= 0:
+                self._error_reporter.add_error(
+                    t.transaction_id,
+                    "Missing/invalid FX rate for transaction.",
+                )
+                return False
         if t.trade_currency == t.portfolio_base_currency:
-            if not t.transaction_fx_rate:
+            if t.transaction_fx_rate is None:
                 t.transaction_fx_rate = Decimal(1)
             return True
         if t.transaction_fx_rate is None or t.transaction_fx_rate <= 0:
