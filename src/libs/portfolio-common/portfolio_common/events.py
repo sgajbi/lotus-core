@@ -289,6 +289,32 @@ class TransactionEvent(CoreEventModel):
     def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
         return normalize_optional_transaction_control_code(value)
 
+    @field_validator(
+        "quantity",
+        "price",
+        "gross_transaction_amount",
+        "synthetic_flow_price_used",
+        "synthetic_flow_quantity_used",
+    )
+    @classmethod
+    def _validate_nonnegative_transaction_amount(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and Decimal(str(value)) < 0:
+            raise ValueError("Amount must be greater than or equal to zero.")
+        return value
+
+    @field_validator(
+        "transaction_fx_rate",
+        "buy_amount",
+        "sell_amount",
+        "contract_rate",
+        "synthetic_flow_fx_rate_to_base",
+    )
+    @classmethod
+    def _validate_positive_transaction_amount(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and Decimal(str(value)) <= 0:
+            raise ValueError("Amount must be greater than zero.")
+        return value
+
     @model_validator(mode="after")
     def _aggregate_fee_components(self) -> "TransactionEvent":
         self.trade_fee = resolve_transaction_trade_fee(

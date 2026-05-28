@@ -136,3 +136,44 @@ def test_transaction_event_rejects_negative_fee_component() -> None:
             trade_fee=Decimal("0.00"),
             brokerage=Decimal("-0.01"),
         )
+
+
+def test_transaction_event_rejects_negative_core_amount() -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to zero"):
+        TransactionEvent(
+            transaction_id="EVENT_NEGATIVE_AMOUNT_001",
+            portfolio_id="PORT_META_001",
+            instrument_id="SEC_EQ_US_001",
+            security_id="SEC_EQ_US_001",
+            transaction_date=datetime(2026, 3, 1, 10, 0),
+            transaction_type="BUY",
+            quantity=Decimal("-1"),
+            price=Decimal("100"),
+            gross_transaction_amount=Decimal("1000.0"),
+            trade_currency="USD",
+            currency="USD",
+        )
+
+
+def test_transaction_event_rejects_nonpositive_fx_amounts_and_rates() -> None:
+    with pytest.raises(ValidationError, match="greater than zero"):
+        TransactionEvent(
+            transaction_id="EVENT_NONPOSITIVE_FX_001",
+            portfolio_id="PORT_META_001",
+            instrument_id="FX_EUR_USD_001",
+            security_id="FX_EUR_USD_001",
+            transaction_date=datetime(2026, 3, 1, 10, 0),
+            transaction_type="FX_FORWARD",
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            gross_transaction_amount=Decimal("0"),
+            trade_currency="USD",
+            currency="USD",
+            pair_base_currency="EUR",
+            pair_quote_currency="USD",
+            buy_currency="USD",
+            sell_currency="EUR",
+            buy_amount=Decimal("0"),
+            sell_amount=Decimal("1000000"),
+            contract_rate=Decimal("1.095"),
+        )

@@ -459,6 +459,23 @@ async def test_consumer_sends_negative_trade_fee_to_dlq(
     cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
 
 
+async def test_consumer_sends_negative_core_amount_to_dlq(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    incoming_event_dict = json.loads(mock_buy_kafka_message.value().decode("utf-8"))
+    incoming_event_dict["gross_transaction_amount"] = "-1.00"
+    mock_buy_kafka_message.value.return_value = json.dumps(incoming_event_dict).encode("utf-8")
+
+    await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    mock_repo.get_transaction_history.assert_not_called()
+    mock_repo.update_transaction_costs.assert_not_called()
+    cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
+
+
 async def test_consumer_uses_trade_fee_in_calculation(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_buy_kafka_message: MagicMock,
