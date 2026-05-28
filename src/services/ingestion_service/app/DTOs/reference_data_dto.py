@@ -4,7 +4,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, condecimal, model_validator
+from portfolio_common.currency_codes import normalize_currency_code
+from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator, model_validator
 
 
 class PortfolioBenchmarkAssignmentRecord(BaseModel):
@@ -1053,7 +1054,12 @@ class CashAccountMasterRecord(BaseModel):
         ..., description="Cash account display name.", examples=["USD Operating Cash"]
     )
     account_currency: str = Field(
-        ..., description="Native cash account currency.", examples=["USD"]
+        ...,
+        description=(
+            "Canonical three-letter native cash account currency used for cash balance, "
+            "settlement, liquidity, and FX readiness calculations."
+        ),
+        examples=["USD"],
     )
     account_role: str | None = Field(
         None,
@@ -1085,6 +1091,11 @@ class CashAccountMasterRecord(BaseModel):
         description="Upstream source record identifier.",
         examples=["cash-account-001"],
     )
+
+    @field_validator("account_currency", mode="before")
+    @classmethod
+    def _normalize_account_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 

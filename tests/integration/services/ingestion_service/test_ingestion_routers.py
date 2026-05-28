@@ -5550,6 +5550,7 @@ async def test_ingest_cash_account_masters_returns_ack_and_persists_full_contrac
 ):
     mock_kafka_producer.publish_message.reset_mock()
     payload = _cash_account_master_payload()
+    payload["cash_accounts"][0]["account_currency"] = " usd "
     payload["cash_accounts"][0].update(
         {
             "account_role": "OPERATING_CASH",

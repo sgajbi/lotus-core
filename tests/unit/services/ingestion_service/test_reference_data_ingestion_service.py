@@ -443,15 +443,17 @@ async def test_upsert_cash_account_masters_uses_cash_account_id_conflict_key() -
                 "portfolio_id": "PORT_001",
                 "security_id": "CASH_USD",
                 "display_name": "USD Operating Cash",
-                "account_currency": "USD",
+                "account_currency": " usd ",
                 "lifecycle_status": "ACTIVE",
             }
         ]
     )
 
-    compiled = str(db.execute.await_args.args[0].compile())
+    compiled_statement = db.execute.await_args.args[0].compile()
+    compiled = str(compiled_statement)
     assert "cash_account_masters" in compiled
     assert "ON CONFLICT (cash_account_id)" in compiled
+    assert compiled_statement.params["account_currency_m0"] == "USD"
     db.commit.assert_awaited_once()
 
 

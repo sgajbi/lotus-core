@@ -559,7 +559,8 @@ async def test_openapi_describes_cash_account_master_shared_schema(async_test_cl
         "Linked cash instrument/security identifier."
     )
     assert record_schema["properties"]["account_currency"]["description"] == (
-        "Native cash account currency."
+        "Canonical three-letter native cash account currency used for cash balance, settlement, "
+        "liquidity, and FX readiness calculations."
     )
     assert record_schema["properties"]["account_role"]["examples"] == ["OPERATING_CASH"]
     assert record_schema["properties"]["lifecycle_status"]["examples"] == ["ACTIVE"]

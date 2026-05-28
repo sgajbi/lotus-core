@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
+from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
     BenchmarkDefinition,
@@ -533,9 +534,14 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_cash_account_masters(self, records: list[dict[str, Any]]) -> None:
+        normalized_records = []
+        for record in records:
+            row = dict(record)
+            row["account_currency"] = normalize_currency_code(row["account_currency"])
+            normalized_records.append(row)
         await self._upsert_many(
             model=CashAccountMaster,
-            records=records,
+            records=normalized_records,
             conflict_columns=["cash_account_id"],
             update_columns=[
                 "portfolio_id",
