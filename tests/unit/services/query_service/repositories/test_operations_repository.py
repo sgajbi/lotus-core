@@ -397,6 +397,10 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
         for compiled in execute_sql
     )
     assert any(
+        "upper(trim(portfolio_valuation_jobs.status)) = 'COMPLETE'" in compiled
+        for compiled in execute_sql
+    )
+    assert any(
         "count(distinct" in compiled.lower() and "portfolio_id" in compiled.lower()
         for compiled in execute_sql
     )

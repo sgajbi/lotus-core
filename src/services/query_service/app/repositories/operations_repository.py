@@ -421,7 +421,7 @@ class OperationsRepository:
             PortfolioValuationJob.updated_at.label("valuation_completed_at_utc"),
         ).where(
             PortfolioValuationJob.portfolio_id.like(portfolio_pattern),
-            PortfolioValuationJob.status == "COMPLETE",
+            self._support_job_status_expr(PortfolioValuationJob.status) == "COMPLETE",
             ~self._has_superseding_valuation_epoch(as_of=as_of),
         )
         if as_of is not None:
