@@ -167,6 +167,56 @@ def test_average_cost_initial_lots_normalize_buy_transaction_type(
     assert avco_strategy.get_available_quantity("P1", "AVCO_STOCK") == Decimal("100")
 
 
+@pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])
+def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_quantity(strategy_cls):
+    strategy = strategy_cls()
+    buy_txn = Transaction(
+        transaction_id="DIRTY_NEGATIVE_QTY_BUY",
+        portfolio_id="P1",
+        instrument_id="DIRTY_STOCK",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost=Decimal("1000"),
+        net_cost_local=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    buy_txn.quantity = Decimal("-100")
+
+    with pytest.raises(ValueError, match="positive lot quantity"):
+        strategy.add_buy_lot(buy_txn)
+
+    assert strategy.get_available_quantity("P1", "DIRTY_STOCK") == Decimal("0")
+
+
+@pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])
+def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_cost_basis(strategy_cls):
+    strategy = strategy_cls()
+    buy_txn = Transaction(
+        transaction_id="DIRTY_NEGATIVE_COST_BUY",
+        portfolio_id="P1",
+        instrument_id="DIRTY_STOCK",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost=Decimal("1000"),
+        net_cost_local=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    buy_txn.net_cost = Decimal("-1000")
+
+    with pytest.raises(ValueError, match="non-negative lot cost basis"):
+        strategy.add_buy_lot(buy_txn)
+
+    assert strategy.get_available_quantity("P1", "DIRTY_STOCK") == Decimal("0")
+
+
 # --- Tests for FIFOBasisStrategy ---
 
 

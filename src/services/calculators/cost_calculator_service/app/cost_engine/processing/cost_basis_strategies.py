@@ -13,6 +13,31 @@ def _is_buy_transaction(transaction: Transaction) -> bool:
     return str(transaction.transaction_type or "").strip().upper() == "BUY"
 
 
+def _validated_buy_lot_inputs(transaction: Transaction) -> tuple[Decimal, Decimal, Decimal] | None:
+    if transaction.net_cost is None or transaction.net_cost_local is None:
+        raise ValueError(
+            "Buy transaction "
+            f"{transaction.transaction_id} must have net_cost and "
+            "net_cost_local calculated before adding as a lot."
+        )
+
+    quantity = Decimal(str(transaction.quantity))
+    net_cost = Decimal(str(transaction.net_cost))
+    net_cost_local = Decimal(str(transaction.net_cost_local))
+
+    if quantity <= Decimal(0):
+        if quantity == Decimal(0) and net_cost == Decimal(0) and net_cost_local == Decimal(0):
+            return None
+        raise ValueError(
+            f"Buy transaction {transaction.transaction_id} must have positive lot quantity."
+        )
+    if net_cost < Decimal(0) or net_cost_local < Decimal(0):
+        raise ValueError(
+            f"Buy transaction {transaction.transaction_id} must have non-negative lot cost basis."
+        )
+    return quantity, net_cost, net_cost_local
+
+
 class CostBasisStrategy(Protocol):
     def add_buy_lot(self, transaction: Transaction): ...
     def consume_sell_quantity(
@@ -34,29 +59,23 @@ class FIFOBasisStrategy:
         logger.debug("FIFOBasisStrategy initialized.")
 
     def add_buy_lot(self, transaction: Transaction):
-        if transaction.net_cost is None or transaction.net_cost_local is None:
-            raise ValueError(
-                "Buy transaction "
-                f"{transaction.transaction_id} must have net_cost and "
-                "net_cost_local calculated before adding as a lot."
-            )
-        if transaction.quantity == Decimal(0):
+        validated_inputs = _validated_buy_lot_inputs(transaction)
+        if validated_inputs is None:
             return
+        quantity, net_cost, net_cost_local = validated_inputs
 
-        cost_per_share_local = transaction.net_cost_local / transaction.quantity
-        cost_per_share_base = transaction.net_cost / transaction.quantity
+        cost_per_share_local = net_cost_local / quantity
+        cost_per_share_base = net_cost / quantity
 
         new_lot = CostLot(
             transaction_id=transaction.transaction_id,
-            quantity=transaction.quantity,
+            quantity=quantity,
             cost_per_share_local=cost_per_share_local,
             cost_per_share_base=cost_per_share_base,
         )
         key = (transaction.portfolio_id, transaction.instrument_id)
         self._open_lots[key].append(new_lot)
-        self._remaining_quantity_by_transaction_id[transaction.transaction_id] = (
-            transaction.quantity
-        )
+        self._remaining_quantity_by_transaction_id[transaction.transaction_id] = quantity
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
@@ -136,17 +155,15 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         logger.debug("AverageCostBasisStrategy initialized.")
 
     def add_buy_lot(self, transaction: Transaction):
-        if transaction.net_cost is None or transaction.net_cost_local is None:
-            raise ValueError(
-                "Buy transaction "
-                f"{transaction.transaction_id} must have net_cost and "
-                "net_cost_local calculated."
-            )
+        validated_inputs = _validated_buy_lot_inputs(transaction)
+        if validated_inputs is None:
+            return
+        quantity, net_cost, net_cost_local = validated_inputs
 
         key = (transaction.portfolio_id, transaction.instrument_id)
-        self._holdings[key]["total_qty"] += transaction.quantity
-        self._holdings[key]["total_cost_local"] += transaction.net_cost_local
-        self._holdings[key]["total_cost_base"] += transaction.net_cost
+        self._holdings[key]["total_qty"] += quantity
+        self._holdings[key]["total_cost_local"] += net_cost_local
+        self._holdings[key]["total_cost_base"] += net_cost
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
