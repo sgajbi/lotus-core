@@ -209,8 +209,9 @@ class TransactionRepository:
         normalized_sort_order = (sort_order or "desc").lower()
         sort_direction = asc if normalized_sort_order == "asc" else desc
         order_clause = sort_direction(getattr(Transaction, sort_field))
+        tie_breaker_clause = sort_direction(Transaction.id)
 
-        stmt = stmt.order_by(order_clause)
+        stmt = stmt.order_by(order_clause, tie_breaker_clause)
 
         results = await self.db.execute(stmt.offset(skip).limit(limit))
         transactions = results.scalars().unique().all()

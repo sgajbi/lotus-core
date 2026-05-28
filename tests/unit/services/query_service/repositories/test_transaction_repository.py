@@ -51,7 +51,7 @@ async def test_get_transactions_default_sort(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "ORDER BY transactions.transaction_date DESC" in compiled_query
+    assert "ORDER BY transactions.transaction_date DESC, transactions.id DESC" in compiled_query
 
 
 async def test_get_transactions_security_drill_down_defaults_to_latest_first(
@@ -68,7 +68,7 @@ async def test_get_transactions_security_drill_down_defaults_to_latest_first(
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "trim(transactions.security_id) = 'SEC-HOLDING-1'" in compiled_query
-    assert "ORDER BY transactions.transaction_date DESC" in compiled_query
+    assert "ORDER BY transactions.transaction_date DESC, transactions.id DESC" in compiled_query
 
 
 async def test_get_transactions_custom_sort(
@@ -86,7 +86,7 @@ async def test_get_transactions_custom_sort(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "ORDER BY transactions.quantity ASC" in compiled_query
+    assert "ORDER BY transactions.quantity ASC, transactions.id ASC" in compiled_query
 
 
 async def test_get_transactions_invalid_sort_falls_back_to_default(
@@ -102,7 +102,7 @@ async def test_get_transactions_invalid_sort_falls_back_to_default(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "ORDER BY transactions.transaction_date DESC" in compiled_query
+    assert "ORDER BY transactions.transaction_date DESC, transactions.id DESC" in compiled_query
 
 
 async def test_get_transactions_invalid_sort_order_falls_back_to_desc(
@@ -115,7 +115,7 @@ async def test_get_transactions_invalid_sort_order_falls_back_to_desc(
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "ORDER BY transactions.quantity DESC" in compiled_query
+    assert "ORDER BY transactions.quantity DESC, transactions.id DESC" in compiled_query
 
 
 async def test_get_transactions_with_all_filters(
@@ -337,8 +337,7 @@ async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loa
     assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
     assert (
-        "trim(transactions.security_id) IN ('EQ_US_AAPL', 'FI_US_TREASURY_10Y')"
-        in compiled_query
+        "trim(transactions.security_id) IN ('EQ_US_AAPL', 'FI_US_TREASURY_10Y')" in compiled_query
     )
     assert "transactions.transaction_type IN ('BUY', 'SELL')" in compiled_query
     assert "LEFT OUTER JOIN transaction_costs" in compiled_query
