@@ -4,7 +4,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.currency_codes import (
+    normalize_currency_code,
+    normalize_optional_currency_code,
+)
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator, model_validator
 
 
@@ -355,7 +358,13 @@ class ClientTaxRuleSetRecord(BaseModel):
     applies_to_income_types: list[str] = Field(default_factory=list)
     rate: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(None)
     threshold_amount: condecimal(ge=Decimal(0)) | None = Field(None)
-    threshold_currency: str | None = Field(None)
+    threshold_currency: str | None = Field(
+        None,
+        description=(
+            "Canonical three-letter currency for the threshold amount when the tax rule "
+            "contains monetary threshold evidence."
+        ),
+    )
     effective_from: date = Field(..., description="Tax rule effective start date.")
     effective_to: date | None = Field(None, description="Tax rule effective end date.")
     rule_version: int = Field(1, ge=1)
@@ -363,6 +372,11 @@ class ClientTaxRuleSetRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("threshold_currency", mode="before")
+    @classmethod
+    def _normalize_threshold_currency(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
 
     @model_validator(mode="after")
     def validate_rule(self) -> "ClientTaxRuleSetRecord":
@@ -399,7 +413,13 @@ class ClientIncomeNeedsScheduleRecord(BaseModel):
     amount: condecimal(gt=Decimal(0)) = Field(
         ..., description="Source-supplied amount for the income need."
     )
-    currency: str = Field(..., min_length=3, max_length=3)
+    currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter currency for the income-needs amount used by cashflow, "
+            "liquidity, and funding calculations."
+        ),
+    )
     frequency: Literal["ONE_TIME", "MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "ANNUAL"] = Field(
         ..., description="Source-supplied income-needs frequency."
     )
@@ -411,6 +431,11 @@ class ClientIncomeNeedsScheduleRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "ClientIncomeNeedsScheduleRecord":
@@ -437,7 +462,13 @@ class LiquidityReserveRequirementRecord(BaseModel):
     required_amount: condecimal(gt=Decimal(0)) = Field(
         ..., description="Required reserve amount supplied by the source."
     )
-    currency: str = Field(..., min_length=3, max_length=3)
+    currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter currency for the reserve amount used by liquidity and "
+            "policy-compliance calculations."
+        ),
+    )
     horizon_days: int = Field(..., ge=0)
     priority: int = Field(1, ge=1)
     policy_source: str = Field(..., description="Source policy or bank reference for requirement.")
@@ -448,6 +479,11 @@ class LiquidityReserveRequirementRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     @model_validator(mode="after")
     def validate_requirement(self) -> "LiquidityReserveRequirementRecord":
@@ -472,7 +508,13 @@ class PlannedWithdrawalScheduleRecord(BaseModel):
     amount: condecimal(gt=Decimal(0)) = Field(
         ..., description="Source-supplied planned withdrawal amount."
     )
-    currency: str = Field(..., min_length=3, max_length=3)
+    currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter currency for the planned withdrawal amount used by "
+            "cashflow and liquidity planning calculations."
+        ),
+    )
     scheduled_date: date = Field(..., description="Scheduled withdrawal date.")
     recurrence_frequency: (
         Literal["ONE_TIME", "MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "ANNUAL"] | None
@@ -482,6 +524,11 @@ class PlannedWithdrawalScheduleRecord(BaseModel):
     source_record_id: str | None = Field(None)
     observed_at: datetime | None = Field(None)
     quality_status: str = Field("accepted")
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _normalize_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 

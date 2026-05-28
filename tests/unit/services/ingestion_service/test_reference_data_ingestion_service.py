@@ -594,6 +594,88 @@ async def test_reference_market_series_upserts_normalize_currency(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "record", "compiled_param", "expected_currency"),
+    [
+        (
+            "upsert_client_tax_rule_sets",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "rule_set_id": "TAX_RULES_SG_2026",
+                "tax_year": 2026,
+                "jurisdiction_code": "SG",
+                "rule_code": "US_DIVIDEND_WITHHOLDING",
+                "rule_category": "WITHHOLDING",
+                "rule_source": "bank_tax_reference",
+                "threshold_amount": "250000.0000",
+                "threshold_currency": " sgd ",
+                "effective_from": "2026-04-01",
+            },
+            "threshold_currency_m0",
+            "SGD",
+        ),
+        (
+            "upsert_client_income_needs_schedules",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "schedule_id": "INCOME_NEED_MONTHLY_001",
+                "amount": "25000.0000",
+                "currency": " sgd ",
+                "frequency": "MONTHLY",
+                "start_date": "2026-04-01",
+            },
+            "currency_m0",
+            "SGD",
+        ),
+        (
+            "upsert_liquidity_reserve_requirements",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "reserve_requirement_id": "RESERVE_MIN_CASH_001",
+                "required_amount": "150000.0000",
+                "currency": " sgd ",
+                "horizon_days": 90,
+                "policy_source": "POLICY_DPM_SG_BALANCED_V1",
+                "effective_from": "2026-04-01",
+            },
+            "currency_m0",
+            "SGD",
+        ),
+        (
+            "upsert_planned_withdrawal_schedules",
+            {
+                "client_id": "CIF_SG_000184",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "withdrawal_schedule_id": "WITHDRAWAL_Q3_001",
+                "amount": "50000.0000",
+                "currency": " sgd ",
+                "scheduled_date": "2026-07-15",
+            },
+            "currency_m0",
+            "SGD",
+        ),
+    ],
+)
+async def test_private_banking_amount_currency_upserts_normalize_currency(
+    method_name: str,
+    record: dict[str, object],
+    compiled_param: str,
+    expected_currency: str,
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await getattr(service, method_name)([record])
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params[compiled_param] == expected_currency
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_upsert_cash_account_masters_uses_cash_account_id_conflict_key() -> None:
     db = AsyncMock(spec=AsyncSession)
     service = ReferenceDataIngestionService(db)

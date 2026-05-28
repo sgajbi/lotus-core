@@ -372,6 +372,43 @@ def test_reference_market_series_records_normalize_currency(
     assert getattr(record, field_name) == "USD"
 
 
+@pytest.mark.parametrize(
+    ("record_type", "payload", "field_name", "expected_currency"),
+    [
+        (
+            ClientTaxRuleSetRecord,
+            _tax_rule_set(threshold_amount="250000.0000", threshold_currency=" sgd "),
+            "threshold_currency",
+            "SGD",
+        ),
+        (
+            ClientIncomeNeedsScheduleRecord,
+            _income_needs_schedule(currency=" sgd "),
+            "currency",
+            "SGD",
+        ),
+        (
+            LiquidityReserveRequirementRecord,
+            _liquidity_reserve_requirement(currency=" sgd "),
+            "currency",
+            "SGD",
+        ),
+        (
+            PlannedWithdrawalScheduleRecord,
+            _planned_withdrawal_schedule(currency=" sgd "),
+            "currency",
+            "SGD",
+        ),
+    ],
+)
+def test_private_banking_amount_currency_records_normalize_currency(
+    record_type, payload: dict[str, object], field_name: str, expected_currency: str
+) -> None:
+    record = record_type.model_validate(payload)
+
+    assert getattr(record, field_name) == expected_currency
+
+
 def test_model_portfolio_target_record_validates_target_band_order() -> None:
     with pytest.raises(ValidationError, match="min_weight must be less than or equal"):
         ModelPortfolioTargetRecord.model_validate(_target_record(min_weight="0.1300000000"))

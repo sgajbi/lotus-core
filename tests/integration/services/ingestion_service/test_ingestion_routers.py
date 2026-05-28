@@ -899,6 +899,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "benchmark_return_series": [],
                 "risk_free_series": [],
                 "model_portfolios": [],
+                "tax_rule_sets": [],
+                "income_needs_schedules": [],
+                "liquidity_reserve_requirements": [],
+                "planned_withdrawal_schedules": [],
                 "classification_taxonomy": [],
                 "cash_accounts": [],
                 "lookthrough_components": [],
@@ -941,6 +945,24 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self, records: list[dict[str, object]]
         ) -> None:
             self.persisted["model_portfolios"].extend(records)
+
+        async def upsert_client_tax_rule_sets(self, records: list[dict[str, object]]) -> None:
+            self.persisted["tax_rule_sets"].extend(records)
+
+        async def upsert_client_income_needs_schedules(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["income_needs_schedules"].extend(records)
+
+        async def upsert_liquidity_reserve_requirements(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["liquidity_reserve_requirements"].extend(records)
+
+        async def upsert_planned_withdrawal_schedules(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["planned_withdrawal_schedules"].extend(records)
 
         async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
             self.persisted["classification_taxonomy"].extend(records)
@@ -1980,6 +2002,122 @@ async def test_ingest_model_portfolios_normalizes_base_currency(
     ]
     assert len(persisted) == 1
     assert persisted[0]["base_currency"] == "SGD"
+
+
+def _private_banking_amount_currency_payloads() -> list[tuple[str, dict, str, str, str]]:
+    return [
+        (
+            "/ingest/client-tax-rule-sets",
+            {
+                "tax_rule_sets": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "rule_set_id": "TAX_RULES_SG_2026",
+                        "tax_year": 2026,
+                        "jurisdiction_code": "SG",
+                        "rule_code": "US_DIVIDEND_WITHHOLDING",
+                        "rule_category": "WITHHOLDING",
+                        "rule_source": "bank_tax_reference",
+                        "applies_to_income_types": ["DIVIDEND"],
+                        "threshold_amount": "250000.0000",
+                        "threshold_currency": " sgd ",
+                        "effective_from": "2026-04-01",
+                    }
+                ]
+            },
+            "tax_rule_sets",
+            "threshold_currency",
+            "client_tax_rule_set",
+        ),
+        (
+            "/ingest/client-income-needs-schedules",
+            {
+                "income_needs_schedules": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "schedule_id": "INCOME_NEED_MONTHLY_001",
+                        "need_type": "LIVING_EXPENSE",
+                        "amount": "25000.0000",
+                        "currency": " sgd ",
+                        "frequency": "MONTHLY",
+                        "start_date": "2026-04-01",
+                    }
+                ]
+            },
+            "income_needs_schedules",
+            "currency",
+            "client_income_needs_schedule",
+        ),
+        (
+            "/ingest/liquidity-reserve-requirements",
+            {
+                "liquidity_reserve_requirements": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "reserve_requirement_id": "RESERVE_MIN_CASH_001",
+                        "reserve_type": "MIN_CASH_BUFFER",
+                        "required_amount": "150000.0000",
+                        "currency": " sgd ",
+                        "horizon_days": 90,
+                        "policy_source": "POLICY_DPM_SG_BALANCED_V1",
+                        "effective_from": "2026-04-01",
+                    }
+                ]
+            },
+            "liquidity_reserve_requirements",
+            "currency",
+            "liquidity_reserve_requirement",
+        ),
+        (
+            "/ingest/planned-withdrawal-schedules",
+            {
+                "planned_withdrawal_schedules": [
+                    {
+                        "client_id": "CIF_SG_000184",
+                        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                        "withdrawal_schedule_id": "WITHDRAWAL_Q3_001",
+                        "withdrawal_type": "PLANNED_WITHDRAWAL",
+                        "amount": "50000.0000",
+                        "currency": " sgd ",
+                        "scheduled_date": "2026-07-15",
+                    }
+                ]
+            },
+            "planned_withdrawal_schedules",
+            "currency",
+            "planned_withdrawal_schedule",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "persisted_key", "currency_field", "entity_type"),
+    _private_banking_amount_currency_payloads(),
+)
+async def test_ingest_private_banking_amount_currency_records_normalize_currency(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    path: str,
+    payload: dict,
+    persisted_key: str,
+    currency_field: str,
+    entity_type: str,
+):
+    response = await async_test_client.post(
+        path,
+        json=payload,
+        headers={"X-Idempotency-Key": f"{persisted_key}-idem-001"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["entity_type"] == entity_type
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[persisted_key]
+    assert len(persisted) == 1
+    assert persisted[0][currency_field] == "SGD"
 
 
 async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when_omitted(
