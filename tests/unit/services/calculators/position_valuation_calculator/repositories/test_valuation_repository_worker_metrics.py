@@ -207,6 +207,100 @@ async def test_get_instrument_trims_security_id_before_query(
     assert "trim(instruments.security_id) = 'SEC_A'" in compiled_query
 
 
+async def test_get_portfolio_trims_portfolio_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    portfolio = await repo.get_portfolio(" PORT_001 ")
+
+    assert portfolio is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(portfolios.portfolio_id) = 'PORT_001'" in compiled_query
+
+
+async def test_get_portfolios_by_ids_trims_portfolio_ids_and_skips_blanks(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    portfolios = await repo.get_portfolios_by_ids([" PORT_001 ", "", " PORT_002 "])
+
+    assert portfolios == []
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(portfolios.portfolio_id) IN ('PORT_001', 'PORT_002')" in compiled_query
+
+
+async def test_get_portfolios_by_ids_skips_empty_identifier_list(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    portfolios = await repo.get_portfolios_by_ids([" ", ""])
+
+    assert portfolios == []
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_get_last_position_history_before_date_trims_portfolio_and_security_ids(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    history = await repo.get_last_position_history_before_date(
+        " PORT_001 ", " SEC_A ", date(2026, 3, 27), 42
+    )
+
+    assert history is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(position_history.portfolio_id) = 'PORT_001'" in compiled_query
+    assert "trim(position_history.security_id) = 'SEC_A'" in compiled_query
+    assert "position_history.position_date <= '2026-03-27'" in compiled_query
+    assert "position_history.epoch = 42" in compiled_query
+
+
+async def test_update_job_status_trims_portfolio_and_security_ids(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.rowcount = 1
+    mock_db_session.execute.return_value = result
+
+    updated = await repo.update_job_status(
+        portfolio_id=" PORT_001 ",
+        security_id=" SEC_A ",
+        valuation_date=date(2026, 3, 27),
+        epoch=42,
+        status="COMPLETED",
+    )
+
+    assert updated is True
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(portfolio_valuation_jobs.portfolio_id) = 'PORT_001'" in compiled_query
+    assert "trim(portfolio_valuation_jobs.security_id) = 'SEC_A'" in compiled_query
+    assert "portfolio_valuation_jobs.valuation_date = '2026-03-27'" in compiled_query
+    assert "portfolio_valuation_jobs.epoch = 42" in compiled_query
+    assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
+
+
 async def test_get_latest_price_for_position_trims_security_id_before_query(
     mock_db_session: AsyncMock,
 ) -> None:

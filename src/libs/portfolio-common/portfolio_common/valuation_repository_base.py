@@ -51,6 +51,10 @@ class ValuationRepositoryBase:
     def _normalize_security_id(security_id: object) -> str:
         return str(security_id or "").strip()
 
+    @staticmethod
+    def _normalize_identifier(identifier: object) -> str:
+        return str(identifier or "").strip()
+
     def _observe_jobs_claimed(self, claimed_count: int) -> None:
         """Hook for service-local metrics."""
 
@@ -199,9 +203,16 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_portfolios_by_ids")
     async def get_portfolios_by_ids(self, portfolio_ids: List[str]) -> List[Portfolio]:
-        if not portfolio_ids:
+        normalized_portfolio_ids = [
+            normalized
+            for portfolio_id in portfolio_ids
+            if (normalized := self._normalize_identifier(portfolio_id))
+        ]
+        if not normalized_portfolio_ids:
             return []
-        stmt = select(Portfolio).where(Portfolio.portfolio_id.in_(portfolio_ids))
+        stmt = select(Portfolio).where(
+            func.trim(Portfolio.portfolio_id).in_(normalized_portfolio_ids)
+        )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
@@ -399,11 +410,13 @@ class ValuationRepositoryBase:
     async def get_last_position_history_before_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> Optional[PositionHistory]:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_security_id(security_id)
         stmt = (
             select(PositionHistory)
             .filter(
-                PositionHistory.portfolio_id == portfolio_id,
-                PositionHistory.security_id == security_id,
+                func.trim(PositionHistory.portfolio_id) == normalized_portfolio_id,
+                func.trim(PositionHistory.security_id) == normalized_security_id,
                 PositionHistory.position_date <= a_date,
                 PositionHistory.epoch == epoch,
             )
@@ -448,11 +461,13 @@ class ValuationRepositoryBase:
         if failure_reason:
             values_to_update["failure_reason"] = failure_reason
 
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_security_id(security_id)
         stmt = (
             update(PortfolioValuationJob)
             .where(
-                PortfolioValuationJob.portfolio_id == portfolio_id,
-                PortfolioValuationJob.security_id == security_id,
+                func.trim(PortfolioValuationJob.portfolio_id) == normalized_portfolio_id,
+                func.trim(PortfolioValuationJob.security_id) == normalized_security_id,
                 PortfolioValuationJob.valuation_date == valuation_date,
                 PortfolioValuationJob.epoch == epoch,
                 PortfolioValuationJob.status == "PROCESSING",
@@ -524,7 +539,8 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
-        stmt = select(Portfolio).filter_by(portfolio_id=portfolio_id)
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        stmt = select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
