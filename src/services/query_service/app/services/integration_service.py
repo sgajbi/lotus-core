@@ -2379,8 +2379,14 @@ class IntegrationService:
         self,
         request: MarketDataCoverageRequest,
     ) -> MarketDataCoverageWindowResponse:
+        instrument_ids = [instrument_id.strip() for instrument_id in request.instrument_ids]
+        valuation_currency = (
+            normalize_currency_code(request.valuation_currency)
+            if request.valuation_currency is not None
+            else None
+        )
         price_rows = await self._reference_repository.list_latest_market_prices(
-            security_ids=request.instrument_ids,
+            security_ids=instrument_ids,
             as_of_date=request.as_of_date,
         )
         fx_pairs = [(pair.from_currency, pair.to_currency) for pair in request.currency_pairs]
@@ -2395,7 +2401,7 @@ class IntegrationService:
         price_coverage: list[MarketDataPriceCoverageRecord] = []
         missing_instrument_ids: list[str] = []
         stale_instrument_ids: list[str] = []
-        for instrument_id in request.instrument_ids:
+        for instrument_id in instrument_ids:
             row = price_by_instrument.get(instrument_id)
             if row is None:
                 missing_instrument_ids.append(instrument_id)
@@ -2472,13 +2478,13 @@ class IntegrationService:
 
         return MarketDataCoverageWindowResponse(
             as_of_date=request.as_of_date,
-            valuation_currency=request.valuation_currency,
+            valuation_currency=valuation_currency,
             price_coverage=price_coverage,
             fx_coverage=fx_coverage,
             supportability=MarketDataCoverageSupportability(
                 state=supportability_state,
                 reason=supportability_reason,
-                requested_price_count=len(request.instrument_ids),
+                requested_price_count=len(instrument_ids),
                 resolved_price_count=sum(1 for record in price_coverage if record.found),
                 requested_fx_count=len(request.currency_pairs),
                 resolved_fx_count=sum(1 for record in fx_coverage if record.found),

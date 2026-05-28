@@ -3677,6 +3677,42 @@ async def test_market_data_coverage_reports_stale_without_missing_as_degraded() 
 
 
 @pytest.mark.asyncio
+async def test_market_data_coverage_normalizes_instrument_and_valuation_currency() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=[" EQ_US_AAPL "],
+            valuation_currency="sgd",
+            max_staleness_days=5,
+        )
+    )
+
+    assert response.valuation_currency == "SGD"
+    assert response.price_coverage[0].instrument_id == "EQ_US_AAPL"
+    assert response.price_coverage[0].quality_status == "READY"
+    assert response.supportability.missing_instrument_ids == []
+    service._reference_repository.list_latest_market_prices.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
+@pytest.mark.asyncio
 async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> None:
     service = make_service()
     service.resolve_discretionary_mandate_binding = AsyncMock(
