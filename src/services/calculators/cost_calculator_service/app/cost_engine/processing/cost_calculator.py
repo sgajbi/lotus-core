@@ -76,7 +76,8 @@ def _is_cash_instrument(transaction: Transaction) -> bool:
 def _cash_movement_amount(transaction: Transaction) -> Decimal:
     gross_amount = Decimal(str(transaction.gross_transaction_amount or 0))
     quantity_amount = Decimal(str(transaction.quantity or 0))
-    return gross_amount if not gross_amount.is_zero() else quantity_amount
+    movement_amount = gross_amount if not gross_amount.is_zero() else quantity_amount
+    return abs(movement_amount)
 
 
 def _normalize_code(value: object) -> str:
