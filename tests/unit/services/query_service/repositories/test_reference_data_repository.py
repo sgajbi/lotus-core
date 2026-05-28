@@ -901,6 +901,82 @@ async def test_resolve_discretionary_mandate_binding_uses_effective_filters() ->
 
 
 @pytest.mark.asyncio
+async def test_client_source_data_filters_use_normalized_active_statuses() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [_FakeExecuteResult([]) for _ in range(7)]
+    repo = ReferenceDataRepository(db)
+
+    common_kwargs = {
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "client_id": "CLIENT_SG_001",
+        "as_of_date": date(2026, 5, 3),
+        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+    }
+
+    await repo.list_client_restriction_profiles(**common_kwargs)
+    await repo.list_sustainability_preference_profiles(**common_kwargs)
+    await repo.list_client_tax_profiles(**common_kwargs)
+    await repo.list_client_tax_rule_sets(**common_kwargs)
+    await repo.list_client_income_needs_schedules(**common_kwargs)
+    await repo.list_liquidity_reserve_requirements(**common_kwargs)
+    await repo.list_planned_withdrawal_schedules(**common_kwargs, horizon_days=90)
+
+    compiled_statements = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in db.execute.await_args_list
+    ]
+
+    assert (
+        "lower(trim(client_restriction_profiles.restriction_status)) = 'active'"
+        in compiled_statements[0]
+    )
+    assert (
+        "lower(trim(sustainability_preference_profiles.preference_status)) = 'active'"
+        in compiled_statements[1]
+    )
+    assert "lower(trim(client_tax_profiles.profile_status)) = 'active'" in compiled_statements[2]
+    assert "lower(trim(client_tax_rule_sets.rule_status)) = 'active'" in compiled_statements[3]
+    assert (
+        "lower(trim(client_income_needs_schedules.need_status)) = 'active'"
+        in compiled_statements[4]
+    )
+    assert (
+        "lower(trim(liquidity_reserve_requirements.reserve_status)) = 'active'"
+        in compiled_statements[5]
+    )
+    assert (
+        "lower(trim(planned_withdrawal_schedules.withdrawal_status)) = 'active'"
+        in compiled_statements[6]
+    )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_and_index_status_filters_are_normalized() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [_FakeExecuteResult([]), _FakeExecuteResult([])]
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_benchmark_definitions(
+        as_of_date=date(2026, 5, 3),
+        benchmark_status=" Active ",
+    )
+    await repo.list_index_definitions(
+        as_of_date=date(2026, 5, 3),
+        index_status=" Active ",
+    )
+
+    benchmark_sql = str(
+        db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    index_sql = str(
+        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+
+    assert "lower(trim(benchmark_definitions.benchmark_status)) = 'active'" in benchmark_sql
+    assert "lower(trim(index_definitions.index_status)) = 'active'" in index_sql
+
+
+@pytest.mark.asyncio
 async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing() -> None:
     repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
     repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]
