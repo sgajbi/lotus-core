@@ -603,6 +603,65 @@ async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuit
 
 
 @pytest.mark.asyncio
+async def test_portfolio_observation_rows_normalizes_security_ids_for_continuity() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=" SEC_EXISTING ",
+                    valuation_date=date(2025, 5, 18),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("100"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                    asset_class="Equity",
+                ),
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("105"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="USD",
+                    asset_class="Equity",
+                ),
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    observations, _, _, _, _ = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date="2025-05-18", end_date="2025-05-19"),
+        page_size=10,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
+    )
+
+    second_observation = next(
+        observation
+        for observation in observations
+        if observation.valuation_date == date(2025, 5, 19)
+    )
+    assert second_observation.beginning_market_value == Decimal("100")
+    assert second_observation.ending_market_value == Decimal("105")
+    service.repo.list_position_cashflow_rows.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_ids=["SEC_EXISTING"],
+        valuation_dates=[date(2025, 5, 18), date(2025, 5, 19)],
+        snapshot_epoch=14,
+    )
+
+
+@pytest.mark.asyncio
 async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlement() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
@@ -1758,6 +1817,90 @@ async def test_get_position_timeseries_repairs_beginning_values_for_continuity()
     assert new_internal.ending_market_value_position_currency == Decimal("50")
     assert internal_bod_carry.beginning_market_value_position_currency == Decimal("100")
     assert internal_bod_carry.ending_market_value_position_currency == Decimal("101")
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_normalizes_security_ids_for_continuity_and_flows() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_EXISTING",
+                    valuation_date=date(2025, 5, 19),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("105"),
+                    bod_cashflow_position=Decimal("0"),
+                    eod_cashflow_position=Decimal("0"),
+                    bod_cashflow_portfolio=Decimal("0"),
+                    eod_cashflow_portfolio=Decimal("0"),
+                    fees=Decimal("0"),
+                    quantity=Decimal("10"),
+                    epoch=1,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                ),
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=" SEC_EXISTING ",
+                    valuation_date=date(2025, 5, 18),
+                    eod_market_value=Decimal("100"),
+                    epoch=1,
+                )
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=14),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        list_position_cashflow_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=" SEC_EXISTING ",
+                    valuation_date=date(2025, 5, 19),
+                    amount=Decimal("5"),
+                    classification="DIVIDEND",
+                    timing="BOD",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                )
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-05-19",
+            window=AnalyticsWindow(start_date="2025-05-19", end_date="2025-05-19"),
+            include_cash_flows=True,
+        ),
+    )
+
+    row = response.rows[0]
+    assert row.position_id == "P1:SEC_EXISTING"
+    assert row.security_id == "SEC_EXISTING"
+    assert row.beginning_market_value_position_currency == Decimal("100")
+    assert row.ending_market_value_position_currency == Decimal("105")
+    assert len(row.cash_flows) == 1
+    service.repo.list_latest_position_timeseries_before.assert_awaited_once_with(
+        portfolio_id="P1",
+        before_date=date(2025, 5, 19),
+        security_ids=["SEC_EXISTING"],
+        snapshot_epoch=14,
+    )
 
 
 @pytest.mark.asyncio

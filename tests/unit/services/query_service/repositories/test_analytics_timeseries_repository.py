@@ -82,11 +82,15 @@ async def test_analytics_timeseries_repository_methods() -> None:
         page_size=100,
         cursor_date=date(2025, 1, 1),
         cursor_security_id="SEC_A",
-        security_ids=["SEC_A"],
-        position_ids=["P1:SEC_A"],
+        security_ids=[" SEC_A "],
+        position_ids=["P1: SEC_A "],
         dimension_filters={"asset_class": {"Equity"}, "sector": {"Technology"}, "country": {"US"}},
     )
     assert len(position_rows) == 1
+    position_stmt = db.execute.await_args_list[4].args[0]
+    position_sql = str(position_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(position_timeseries.security_id)" in position_sql
+    assert "anon_1.security_id IN ('SEC_A')" in position_sql
 
     fx_map = await repo.get_fx_rates_map(
         from_currency=" eur ",
@@ -111,11 +115,16 @@ async def test_analytics_timeseries_repository_methods() -> None:
         portfolio_id="P1",
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
-        security_ids=["SEC_A"],
-        position_ids=["P1:SEC_A"],
+        security_ids=[" SEC_A "],
+        position_ids=["P1: SEC_A "],
         dimension_filters={"asset_class": {"Equity"}, "sector": {"Technology"}, "country": {"US"}},
     )
     assert position_snapshot_epoch == 2
+    position_snapshot_stmt = db.execute.await_args_list[7].args[0]
+    position_snapshot_sql = str(
+        position_snapshot_stmt.compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(position_timeseries.security_id) IN ('SEC_A')" in position_snapshot_sql
 
 
 @pytest.mark.asyncio
@@ -264,7 +273,8 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
     assert "position_timeseries.epoch <= 3" in prior_sql
     assert "JOIN position_state ON" in prior_sql
     assert "position_timeseries.quantity = (SELECT position_history.quantity" in prior_sql
-    assert "row_number() OVER (PARTITION BY position_timeseries.security_id" in prior_sql
+    assert "row_number() OVER (PARTITION BY trim(position_timeseries.security_id)" in prior_sql
+    assert "trim(position_timeseries.security_id) IN ('SEC_A')" in prior_sql
     assert "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC" in prior_sql
 
     position_cashflow_rows = await repo.list_position_cashflow_rows(
@@ -279,7 +289,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
         position_cashflow_stmt.compile(compile_kwargs={"literal_binds": True})
     )
     assert "cashflows.is_position_flow IS true" in position_cashflow_sql
-    assert "cashflows.security_id" in position_cashflow_sql
+    assert "trim(cashflows.security_id) IN ('SEC_A')" in position_cashflow_sql
     assert "cashflows.epoch <= 3" in position_cashflow_sql
 
     portfolio_cashflow_rows = await repo.list_portfolio_cashflow_rows(
