@@ -222,6 +222,79 @@ def test_transaction_model_accepts_cash_entry_mode_and_external_cash_link() -> N
     assert model.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
 
 
+def test_transaction_model_normalizes_control_codes_without_defaulting() -> None:
+    payload = {
+        "transaction_id": "CONTROL_CODE_001",
+        "portfolio_id": "PORT_META_001",
+        "instrument_id": "SEC_EQ_US_001",
+        "security_id": "SEC_EQ_US_001",
+        "transaction_date": "2026-03-01T10:00:00Z",
+        "transaction_type": " dividend ",
+        "quantity": "0",
+        "price": "0",
+        "gross_transaction_amount": "1000.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "cash_entry_mode": " upstream_provided ",
+        "movement_direction": " inflow ",
+        "originating_transaction_type": " buy ",
+        "adjustment_reason": " buy_settlement ",
+        "link_type": " buy_to_cash ",
+        "interest_direction": " expense ",
+        "component_type": " fx_cash_settlement_buy ",
+        "fx_cash_leg_role": " buy ",
+        "settlement_status": " settled ",
+        "fx_rate_quote_convention": " quote_per_base ",
+        "spot_exposure_model": " fx_contract ",
+        "fx_realized_pnl_mode": " upstream_provided ",
+        "child_role": " source_position_close ",
+        "synthetic_flow_valuation_method": " mvt_price_x_qty ",
+        "synthetic_flow_classification": " position_transfer_out ",
+        "synthetic_flow_price_source": " upstream ",
+        "synthetic_flow_fx_source": " fx_service ",
+        "synthetic_flow_source": " upstream_provided ",
+    }
+
+    model = Transaction(**payload)
+    implicit_model = Transaction(
+        **{
+            "transaction_id": "CONTROL_CODE_002",
+            "portfolio_id": "PORT_META_001",
+            "instrument_id": "SEC_EQ_US_001",
+            "security_id": "SEC_EQ_US_001",
+            "transaction_date": "2026-03-01T10:00:00Z",
+            "transaction_type": " dividend ",
+            "quantity": "0",
+            "price": "0",
+            "gross_transaction_amount": "1000.0",
+            "trade_currency": "USD",
+            "currency": "USD",
+        }
+    )
+
+    assert model.transaction_type == "DIVIDEND"
+    assert model.cash_entry_mode == "UPSTREAM_PROVIDED"
+    assert model.movement_direction == "INFLOW"
+    assert model.originating_transaction_type == "BUY"
+    assert model.adjustment_reason == "BUY_SETTLEMENT"
+    assert model.link_type == "BUY_TO_CASH"
+    assert model.interest_direction == "EXPENSE"
+    assert model.component_type == "FX_CASH_SETTLEMENT_BUY"
+    assert model.fx_cash_leg_role == "BUY"
+    assert model.settlement_status == "SETTLED"
+    assert model.fx_rate_quote_convention == "QUOTE_PER_BASE"
+    assert model.spot_exposure_model == "FX_CONTRACT"
+    assert model.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
+    assert model.child_role == "SOURCE_POSITION_CLOSE"
+    assert model.synthetic_flow_valuation_method == "MVT_PRICE_X_QTY"
+    assert model.synthetic_flow_classification == "POSITION_TRANSFER_OUT"
+    assert model.synthetic_flow_price_source == "UPSTREAM"
+    assert model.synthetic_flow_fx_source == "FX_SERVICE"
+    assert model.synthetic_flow_source == "UPSTREAM_PROVIDED"
+    assert implicit_model.cash_entry_mode is None
+    assert implicit_model.fx_realized_pnl_mode is None
+
+
 def test_transaction_model_accepts_interest_semantic_fields() -> None:
     payload = {
         "transaction_id": "INT_FIELDS_001",

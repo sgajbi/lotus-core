@@ -1,8 +1,9 @@
-def normalize_transaction_control_code(value: str | None) -> str:
-    return str(value or "").strip().upper()
+from portfolio_common.control_code_normalization import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
 
-
-def normalize_optional_transaction_control_code(value: str | None) -> str | None:
-    if value is None:
-        return None
-    return normalize_transaction_control_code(value)
+__all__ = [
+    "normalize_transaction_control_code",
+    "normalize_optional_transaction_control_code",
+]

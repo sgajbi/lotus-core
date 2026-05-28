@@ -3,6 +3,10 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
+from portfolio_common.control_code_normalization import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
 from portfolio_common.currency_codes import normalize_optional_currency_code
 from pydantic import BaseModel, Field, condecimal, field_validator
 
@@ -32,6 +36,12 @@ class Transaction(BaseModel):
         description="Canonical transaction type that drives downstream calculator behavior.",
         json_schema_extra={"example": "BUY"},
     )
+
+    @field_validator("transaction_type", mode="before")
+    @classmethod
+    def _normalize_transaction_control_code(cls, value: str | None) -> str:
+        return normalize_transaction_control_code(value)
+
     quantity: condecimal(ge=Decimal(0)) = Field(
         description="Absolute traded quantity or units moved by the transaction.",
         json_schema_extra={"example": "10.0"},
@@ -610,6 +620,33 @@ class Transaction(BaseModel):
     @classmethod
     def _normalize_currency_code(cls, value: object) -> str | None:
         return normalize_optional_currency_code(value)
+
+    @field_validator(
+        "cash_entry_mode",
+        "movement_direction",
+        "originating_transaction_type",
+        "adjustment_reason",
+        "link_type",
+        "interest_direction",
+        "component_type",
+        "fx_cash_leg_role",
+        "settlement_status",
+        "fx_rate_quote_convention",
+        "spot_exposure_model",
+        "fx_realized_pnl_mode",
+        "child_role",
+        "synthetic_flow_valuation_method",
+        "synthetic_flow_classification",
+        "synthetic_flow_price_source",
+        "synthetic_flow_fx_source",
+        "synthetic_flow_source",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_transaction_control_code(
+        cls, value: str | None
+    ) -> str | None:
+        return normalize_optional_transaction_control_code(value)
 
 
 class TransactionIngestionRequest(BaseModel):

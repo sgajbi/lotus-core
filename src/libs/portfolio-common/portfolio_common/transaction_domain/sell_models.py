@@ -4,10 +4,10 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from portfolio_common.currency_codes import normalize_currency_code
-from portfolio_common.transaction_domain.control_code_normalization import (
+from portfolio_common.control_code_normalization import (
     normalize_transaction_control_code,
 )
+from portfolio_common.currency_codes import normalize_currency_code
 
 
 class SellCanonicalTransaction(BaseModel):
