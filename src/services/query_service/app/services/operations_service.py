@@ -36,6 +36,7 @@ from ..dtos.operations_dto import (
     SupportOverviewResponse,
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.operations_repository import (
     MissingHistoricalFxDependencySummary,
     OperationsRepository,
@@ -282,7 +283,7 @@ class OperationsService:
             latest_valuation_job_status=latest_valuation_job_status,
         )
         return LineageKeyRecord(
-            security_id=key["security_id"],
+            security_id=normalize_security_id(key["security_id"]),
             epoch=key["epoch"],
             watermark_date=key["watermark_date"],
             reprocessing_status=key["reprocessing_status"],
@@ -322,7 +323,7 @@ class OperationsService:
             job_type=job_type,
             business_date=business_date,
             status=status,
-            security_id=security_id,
+            security_id=normalize_security_id(security_id) if security_id is not None else None,
             epoch=epoch,
             attempt_count=attempt_count,
             is_retrying=self._is_support_job_retrying(status, attempt_count),
@@ -685,7 +686,7 @@ class OperationsService:
         return LineageResponse(
             generated_at_utc=generated_at_utc,
             portfolio_id=portfolio_id,
-            security_id=security_id,
+            security_id=normalize_security_id(security_id),
             epoch=position_state.epoch,
             watermark_date=position_state.watermark_date,
             reprocessing_status=position_state.status,
@@ -1098,7 +1099,7 @@ class OperationsService:
                     finding_id=finding.finding_id,
                     finding_type=finding.finding_type,
                     severity=finding.severity,
-                    security_id=finding.security_id,
+                    security_id=normalize_security_id(finding.security_id),
                     transaction_id=finding.transaction_id,
                     business_date=finding.business_date,
                     epoch=finding.epoch,
@@ -1220,7 +1221,7 @@ class OperationsService:
             limit=limit,
             items=[
                 ReprocessingKeyRecord(
-                    security_id=key.security_id,
+                    security_id=normalize_security_id(key.security_id),
                     epoch=key.epoch,
                     watermark_date=key.watermark_date,
                     status=key.status,

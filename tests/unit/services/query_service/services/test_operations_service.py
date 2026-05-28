@@ -652,7 +652,7 @@ async def test_get_lineage_keys(service: OperationsService, mock_ops_repo: Async
     mock_ops_repo.get_lineage_keys_count.return_value = 1
     mock_ops_repo.get_lineage_keys.return_value = [
         {
-            "security_id": "S1",
+            "security_id": " S1 ",
             "epoch": 2,
             "watermark_date": date(2025, 8, 1),
             "reprocessing_status": "CURRENT",
@@ -769,7 +769,7 @@ async def test_build_support_job_record_normalizes_terminal_failure_status(
         job_type="VALUATION",
         business_date=date(2026, 3, 13),
         status=" failed ",
-        security_id="S1",
+        security_id=" S1 ",
         epoch=4,
         attempt_count=1,
         correlation_id="corr-val-601",
@@ -780,6 +780,7 @@ async def test_build_support_job_record_normalizes_terminal_failure_status(
     )
 
     assert record.status == " failed "
+    assert record.security_id == "S1"
     assert record.is_terminal_failure is True
     assert record.operational_state == "FAILED"
 
@@ -794,7 +795,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
             (),
             {
                 "id": 101,
-                "security_id": "S1",
+                "security_id": " S1 ",
                 "valuation_date": date(2025, 8, 31),
                 "status": "PENDING",
                 "epoch": 1,
@@ -1754,7 +1755,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
                 "finding_id": "rf_1234567890abcdef",
                 "finding_type": "missing_cashflow",
                 "severity": "ERROR",
-                "security_id": "SEC-US-IBM",
+                "security_id": " SEC-US-IBM ",
                 "transaction_id": "TXN-20260313-0042",
                 "business_date": date(2026, 3, 13),
                 "epoch": 3,
@@ -1782,6 +1783,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     assert response.total == 7
     assert response.items[0].finding_id == "rf_1234567890abcdef"
     assert response.items[0].severity == "ERROR"
+    assert response.items[0].security_id == "SEC-US-IBM"
     assert response.items[0].detail == {"expected_cashflow_count": 1, "observed_cashflow_count": 0}
     mock_ops_repo.get_reconciliation_run.assert_awaited_once_with(
         portfolio_id="P1",
@@ -1899,7 +1901,7 @@ async def test_get_reprocessing_keys(service: OperationsService, mock_ops_repo: 
             "PositionStateStub",
             (),
             {
-                "security_id": "SEC-US-IBM",
+                "security_id": " SEC-US-IBM ",
                 "epoch": 3,
                 "watermark_date": date(2026, 3, 10),
                 "status": "REPROCESSING",
