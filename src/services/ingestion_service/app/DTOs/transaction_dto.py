@@ -3,7 +3,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, condecimal
+from portfolio_common.currency_codes import normalize_optional_currency_code
+from pydantic import BaseModel, Field, condecimal, field_validator
 
 
 class Transaction(BaseModel):
@@ -595,6 +596,20 @@ class Transaction(BaseModel):
         description="Ingestion-side creation timestamp for lineage and troubleshooting.",
         json_schema_extra={"example": "2026-03-10T11:32:15Z"},
     )
+
+    @field_validator(
+        "trade_currency",
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        "synthetic_flow_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
 
 
 class TransactionIngestionRequest(BaseModel):

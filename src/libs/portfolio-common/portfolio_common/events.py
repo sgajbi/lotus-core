@@ -10,7 +10,7 @@ from .ca_bundle_a_ordering import (
     ca_bundle_a_target_order_key,
 )
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
-from .currency_codes import normalize_currency_code
+from .currency_codes import normalize_currency_code, normalize_optional_currency_code
 
 
 class CoreEventModel(BaseModel):
@@ -219,6 +219,20 @@ class TransactionEvent(CoreEventModel):
     synthetic_flow_source: Optional[str] = None
     created_at: Optional[datetime] = None
     epoch: Optional[int] = None
+
+    @field_validator(
+        "trade_currency",
+        "currency",
+        "pair_base_currency",
+        "pair_quote_currency",
+        "buy_currency",
+        "sell_currency",
+        "synthetic_flow_currency",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_currency_code(cls, value: object) -> str | None:
+        return normalize_optional_currency_code(value)
 
 
 def transaction_event_ordering_key(

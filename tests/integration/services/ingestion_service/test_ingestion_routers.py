@@ -1475,6 +1475,13 @@ async def test_ingest_transactions_endpoint(
     """Tests the POST /ingest/transactions endpoint."""
     mock_kafka_producer.publish_message.reset_mock()
     payload = _transaction_batch_payload("TX_BATCH_ACK_001")
+    payload["transactions"][0]["trade_currency"] = " usd "
+    payload["transactions"][0]["currency"] = " usd "
+    payload["transactions"][0]["pair_base_currency"] = " eur "
+    payload["transactions"][0]["pair_quote_currency"] = " usd "
+    payload["transactions"][0]["buy_currency"] = " usd "
+    payload["transactions"][0]["sell_currency"] = " eur "
+    payload["transactions"][0]["synthetic_flow_currency"] = " sgd "
 
     response = await async_test_client.post(
         "/ingest/transactions",
@@ -1497,6 +1504,13 @@ async def test_ingest_transactions_endpoint(
     assert publish_kwargs["topic"] == "transactions.raw.received"
     assert publish_kwargs["key"] == "P1"
     assert publish_kwargs["value"]["transaction_id"] == "TX_BATCH_ACK_001"
+    assert publish_kwargs["value"]["trade_currency"] == "USD"
+    assert publish_kwargs["value"]["currency"] == "USD"
+    assert publish_kwargs["value"]["pair_base_currency"] == "EUR"
+    assert publish_kwargs["value"]["pair_quote_currency"] == "USD"
+    assert publish_kwargs["value"]["buy_currency"] == "USD"
+    assert publish_kwargs["value"]["sell_currency"] == "EUR"
+    assert publish_kwargs["value"]["synthetic_flow_currency"] == "SGD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"transaction-batch-idem-001")
 
 
