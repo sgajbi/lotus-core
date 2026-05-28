@@ -36,7 +36,7 @@ def sample_portfolio_event() -> PortfolioEvent:
     """Provides a sample PortfolioEvent for testing."""
     return PortfolioEvent(
         portfolio_id="PORT_TEST_01",
-        base_currency="USD",
+        base_currency=" usd ",
         open_date=date(2025, 1, 1),
         client_id="CIF_TEST_1",
         status="ACTIVE",
@@ -68,7 +68,7 @@ async def test_create_or_update_portfolio(
     # 2. Check the object returned by the method
     assert isinstance(result, DBPortfolio)
     assert result.portfolio_id == sample_portfolio_event.portfolio_id
-    assert result.base_currency == sample_portfolio_event.base_currency
+    assert result.base_currency == "USD"
 
     # 3. Check the SQL statement that was generated and passed to execute
     executed_statement = mock_db_session.execute.call_args[0][0]

@@ -1141,7 +1141,7 @@ def _portfolio_bundle_payload() -> dict[str, object]:
         "portfolios": [
             {
                 "portfolio_id": "P1",
-                "base_currency": "USD",
+                "base_currency": " usd ",
                 "open_date": "2025-01-01",
                 "client_id": "c",
                 "status": "s",
@@ -1217,6 +1217,8 @@ async def test_ingest_portfolios_endpoint(
     assert body["request_id"]
     assert body["trace_id"]
     mock_kafka_producer.publish_message.assert_called_once()
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["value"]["base_currency"] == "USD"
 
 
 async def test_ingest_portfolios_replays_duplicate_idempotency_key(

@@ -8,6 +8,7 @@ from portfolio_common.events import (
     InstrumentEvent,
     MarketPriceEvent,
     MarketPricePersistedEvent,
+    PortfolioEvent,
     TransactionEvent,
 )
 
@@ -98,3 +99,19 @@ def test_instrument_event_normalizes_currency_codes() -> None:
     assert event.pair_quote_currency == "USD"
     assert event.buy_currency == "EUR"
     assert event.sell_currency == "USD"
+
+
+def test_portfolio_event_normalizes_base_currency() -> None:
+    event = PortfolioEvent(
+        portfolio_id="P1",
+        base_currency=" usd ",
+        open_date="2026-05-28",
+        risk_exposure="balanced",
+        investment_time_horizon="long_term",
+        portfolio_type="discretionary",
+        booking_center_code="SG",
+        client_id="C1",
+        status="ACTIVE",
+    )
+
+    assert event.base_currency == "USD"

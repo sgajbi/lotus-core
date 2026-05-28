@@ -52,6 +52,11 @@ class PortfolioEvent(CoreEventModel):
     def _normalize_cost_basis_method(cls, value: object) -> CostBasisMethod:
         return normalize_cost_basis_method(value)
 
+    @field_validator("base_currency", mode="before")
+    @classmethod
+    def _normalize_base_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
 
 class FxRateEvent(CoreEventModel):
     from_currency: str = Field(...)
