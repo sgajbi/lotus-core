@@ -1347,6 +1347,8 @@ class TransactionCost(Base):
 
     transaction = relationship("Transaction", back_populates="costs")
 
+    __table_args__ = (Index("ix_transaction_costs_transaction_id", "transaction_id"),)
+
 
 class Cashflow(Base):
     __tablename__ = "cashflows"
@@ -1437,6 +1439,19 @@ class PositionLotState(Base):
             func.trim(portfolio_id),
             func.trim(security_id),
         ),
+        Index(
+            "ix_position_lot_port_norm_sec_acq_id",
+            "portfolio_id",
+            func.trim(security_id),
+            acquisition_date,
+            id,
+        ),
+        Index(
+            "ix_position_lot_port_acq_lot_id",
+            "portfolio_id",
+            acquisition_date,
+            lot_id,
+        ),
     )
 
 
@@ -1461,6 +1476,15 @@ class AccruedIncomeOffsetState(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_accrued_offset_port_norm_sec_id",
+            "portfolio_id",
+            func.trim(security_id),
+            id,
+        ),
     )
 
 

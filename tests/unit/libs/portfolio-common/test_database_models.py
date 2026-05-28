@@ -1,4 +1,5 @@
 from portfolio_common.database_models import (
+    AccruedIncomeOffsetState,
     AnalyticsExportJob,
     CashAccountMaster,
     Cashflow,
@@ -15,6 +16,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     ReprocessingJob,
     Transaction,
+    TransactionCost,
 )
 
 
@@ -121,6 +123,29 @@ def test_normalized_calculation_lookup_indexes_are_declared():
             "ix_position_lot_norm_port_sec": [
                 "trim(position_lot_state.portfolio_id)",
                 "trim(position_lot_state.security_id)",
+            ],
+            "ix_position_lot_port_norm_sec_acq_id": [
+                "position_lot_state.portfolio_id",
+                "trim(position_lot_state.security_id)",
+                "position_lot_state.acquisition_date",
+                "position_lot_state.id",
+            ],
+            "ix_position_lot_port_acq_lot_id": [
+                "position_lot_state.portfolio_id",
+                "position_lot_state.acquisition_date",
+                "position_lot_state.lot_id",
+            ],
+        },
+        AccruedIncomeOffsetState: {
+            "ix_accrued_offset_port_norm_sec_id": [
+                "accrued_income_offset_state.portfolio_id",
+                "trim(accrued_income_offset_state.security_id)",
+                "accrued_income_offset_state.id",
+            ],
+        },
+        TransactionCost: {
+            "ix_transaction_costs_transaction_id": [
+                "transaction_costs.transaction_id",
             ],
         },
         PositionTimeseries: {
