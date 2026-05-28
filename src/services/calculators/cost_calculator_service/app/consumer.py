@@ -39,6 +39,7 @@ from portfolio_common.transaction_domain import (
     normalize_cash_entry_mode,
     should_auto_generate_cash_leg,
 )
+from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
@@ -147,13 +148,17 @@ class CostCalculatorConsumer(BaseConsumer):
             "gst": gst,
             "other_fees": other_fees,
         }
+        resolved_trade_fee = resolve_transaction_trade_fee(
+            Decimal(str(trade_fee_str)),
+            fee_components,
+        )
         if any(v is not None for v in fee_components.values()):
             normalized = {k: str(Decimal(str(v or "0"))) for k, v in fee_components.items()}
             event_dict["fees"] = normalized
-            event_dict["trade_fee"] = str(sum(Decimal(v) for v in normalized.values()))
-        elif Decimal(trade_fee_str) > 0:
-            event_dict["fees"] = {"brokerage": trade_fee_str}
-            event_dict["trade_fee"] = trade_fee_str
+            event_dict["trade_fee"] = str(resolved_trade_fee)
+        elif resolved_trade_fee and resolved_trade_fee > 0:
+            event_dict["fees"] = {"brokerage": str(resolved_trade_fee)}
+            event_dict["trade_fee"] = str(resolved_trade_fee)
         else:
             event_dict["trade_fee"] = "0"
 

@@ -476,6 +476,28 @@ async def test_consumer_sends_negative_core_amount_to_dlq(
     cost_calculator_consumer._send_to_dlq_async.assert_awaited_once()
 
 
+async def test_transform_event_rejects_post_validation_negative_trade_fee(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+):
+    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
+    event.trade_fee = Decimal("-0.01")
+
+    with pytest.raises(ValueError, match="trade_fee"):
+        cost_calculator_consumer._transform_event_for_engine(event)
+
+
+async def test_transform_event_rejects_post_validation_negative_fee_component(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+):
+    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
+    event.brokerage = Decimal("-0.01")
+
+    with pytest.raises(ValueError, match="brokerage"):
+        cost_calculator_consumer._transform_event_for_engine(event)
+
+
 async def test_consumer_uses_trade_fee_in_calculation(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_buy_kafka_message: MagicMock,
