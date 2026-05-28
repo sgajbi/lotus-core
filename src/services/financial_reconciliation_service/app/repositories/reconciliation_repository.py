@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
+from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     Cashflow,
     CashflowRule,
@@ -166,10 +167,10 @@ class ReconciliationRepository:
             .join(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
             .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
             .where(
-            DailyPositionSnapshot.market_price.is_not(None),
-            DailyPositionSnapshot.market_value_local.is_not(None),
-            DailyPositionSnapshot.cost_basis_local.is_not(None),
-            DailyPositionSnapshot.unrealized_gain_loss_local.is_not(None),
+                DailyPositionSnapshot.market_price.is_not(None),
+                DailyPositionSnapshot.market_value_local.is_not(None),
+                DailyPositionSnapshot.cost_basis_local.is_not(None),
+                DailyPositionSnapshot.unrealized_gain_loss_local.is_not(None),
             )
         )
         if portfolio_id is not None:
@@ -328,7 +329,10 @@ class ReconciliationRepository:
                 func.row_number()
                 .over(
                     partition_by=(DailyPositionSnapshot.security_id,),
-                    order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.epoch.desc()),
+                    order_by=(
+                        DailyPositionSnapshot.date.desc(),
+                        DailyPositionSnapshot.epoch.desc(),
+                    ),
                 )
                 .label("rn"),
             )
@@ -339,8 +343,10 @@ class ReconciliationRepository:
             )
             .subquery()
         )
-        stmt = select(func.count()).select_from(ranked_snapshot_rows).where(
-            ranked_snapshot_rows.c.rn == 1
+        stmt = (
+            select(func.count())
+            .select_from(ranked_snapshot_rows)
+            .where(ranked_snapshot_rows.c.rn == 1)
         )
         result = await self.db.execute(stmt)
         return int(result.scalar_one() or 0)
@@ -352,11 +358,15 @@ class ReconciliationRepository:
         to_currency: str,
         business_date: date,
     ) -> FxRate | None:
+        normalized_from_currency = normalize_currency_code(from_currency)
+        normalized_to_currency = normalize_currency_code(to_currency)
+        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
+        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
         stmt = (
             select(FxRate)
             .where(
-                FxRate.from_currency == from_currency,
-                FxRate.to_currency == to_currency,
+                from_currency_expr == normalized_from_currency,
+                to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= business_date,
             )
             .order_by(FxRate.rate_date.desc())
