@@ -1698,6 +1698,15 @@ class PortfolioValuationJob(Base):
             "updated_at",
         ),
         Index(
+            "ix_portfolio_valuation_jobs_claim_order_epoch",
+            "status",
+            "portfolio_id",
+            "security_id",
+            "valuation_date",
+            epoch.desc(),
+            "id",
+        ),
+        Index(
             "ix_portfolio_valuation_jobs_portfolio_status_updated",
             "portfolio_id",
             "status",

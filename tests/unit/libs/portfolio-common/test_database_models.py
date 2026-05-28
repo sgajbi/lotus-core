@@ -74,6 +74,7 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
     portfolio_status_date_updated = indexes[
         "ix_portfolio_valuation_jobs_portfolio_status_date_updated_id"
     ]
+    claim_order_epoch = indexes["ix_portfolio_valuation_jobs_claim_order_epoch"]
 
     assert [column.name for column in portfolio_status_updated.columns] == [
         "portfolio_id",
@@ -86,6 +87,14 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
         "valuation_date",
         "updated_at",
         "id",
+    ]
+    assert [str(expression) for expression in claim_order_epoch.expressions] == [
+        "portfolio_valuation_jobs.status",
+        "portfolio_valuation_jobs.portfolio_id",
+        "portfolio_valuation_jobs.security_id",
+        "portfolio_valuation_jobs.valuation_date",
+        "portfolio_valuation_jobs.epoch DESC",
+        "portfolio_valuation_jobs.id",
     ]
 
 

@@ -52,6 +52,12 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     compiled_query = str(claim_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "NOT (EXISTS" in compiled_query
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
+    assert (
+        "ORDER BY portfolio_valuation_jobs.portfolio_id ASC, "
+        "portfolio_valuation_jobs.security_id ASC, "
+        "portfolio_valuation_jobs.valuation_date ASC, "
+        "portfolio_valuation_jobs.epoch DESC"
+    ) in compiled_query
 
 
 async def test_find_and_reset_stale_jobs_emits_reset_metric(
