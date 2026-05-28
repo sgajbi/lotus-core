@@ -38,6 +38,12 @@ def _validated_buy_lot_inputs(transaction: Transaction) -> tuple[Decimal, Decima
     return quantity, net_cost, net_cost_local
 
 
+def _non_positive_sell_quantity_error(sell_quantity: Decimal) -> str | None:
+    if sell_quantity >= Decimal(0):
+        return None
+    return f"Sell quantity ({sell_quantity}) must not be negative."
+
+
 class CostBasisStrategy(Protocol):
     def add_buy_lot(self, transaction: Transaction): ...
     def consume_sell_quantity(
@@ -86,6 +92,9 @@ class FIFOBasisStrategy:
         total_matched_cost_local = Decimal(0)
         consumed_quantity = Decimal(0)
         available_qty = self.get_available_quantity(portfolio_id=key[0], instrument_id=key[1])
+        invalid_quantity_error = _non_positive_sell_quantity_error(required_quantity)
+        if invalid_quantity_error is not None:
+            return Decimal(0), Decimal(0), Decimal(0), invalid_quantity_error
 
         if required_quantity > available_qty:
             return (
@@ -172,6 +181,9 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         holding = self._holdings[key]
         total_qty = holding["total_qty"]
         required_quantity = sell_quantity
+        invalid_quantity_error = _non_positive_sell_quantity_error(required_quantity)
+        if invalid_quantity_error is not None:
+            return Decimal(0), Decimal(0), Decimal(0), invalid_quantity_error
 
         if required_quantity > total_qty:
             return (

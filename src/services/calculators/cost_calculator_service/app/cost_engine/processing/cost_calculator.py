@@ -172,6 +172,9 @@ class SellStrategy:
                 "net_sell_proceeds_base must be >= 0.",
             )
             return
+        if transaction.quantity <= Decimal(0):
+            _add_sell_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
+            return
 
         available_quantity = disposition_engine.get_available_quantity(
             transaction.portfolio_id, transaction.instrument_id

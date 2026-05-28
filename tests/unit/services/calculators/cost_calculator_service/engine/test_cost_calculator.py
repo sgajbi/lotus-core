@@ -346,6 +346,18 @@ def test_sell_strategy_rejects_non_positive_consumed_quantity(
     assert error_reporter.has_errors_for("SELL001")
 
 
+def test_sell_strategy_rejects_dirty_non_positive_quantity_before_lot_consumption(
+    cost_calculator, mock_disposition_engine, error_reporter, sell_transaction
+):
+    sell_transaction.quantity = Decimal("-5")
+
+    cost_calculator.calculate_transaction_costs(sell_transaction)
+
+    assert error_reporter.has_errors_for("SELL001")
+    mock_disposition_engine.get_available_quantity.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
 def test_sell_strategy_blocks_oversold_under_strict_policy(
     cost_calculator, mock_disposition_engine, error_reporter, sell_transaction
 ):

@@ -217,6 +217,40 @@ def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_cost_basis(strategy_
     assert strategy.get_available_quantity("P1", "DIRTY_STOCK") == Decimal("0")
 
 
+@pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])
+def test_cost_basis_strategy_rejects_non_positive_sell_quantity_without_state_change(
+    strategy_cls,
+):
+    strategy = strategy_cls()
+    buy_txn = Transaction(
+        transaction_id="SELL_GUARD_BUY",
+        portfolio_id="P1",
+        instrument_id="SELL_GUARD_STOCK",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost=Decimal("1000"),
+        net_cost_local=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    strategy.add_buy_lot(buy_txn)
+
+    cogs_base, cogs_local, consumed_quantity, error = strategy.consume_sell_quantity(
+        portfolio_id="P1",
+        instrument_id="SELL_GUARD_STOCK",
+        sell_quantity=Decimal("-10"),
+    )
+
+    assert cogs_base == Decimal("0")
+    assert cogs_local == Decimal("0")
+    assert consumed_quantity == Decimal("0")
+    assert error == "Sell quantity (-10) must not be negative."
+    assert strategy.get_available_quantity("P1", "SELL_GUARD_STOCK") == Decimal("100")
+
+
 # --- Tests for FIFOBasisStrategy ---
 
 
