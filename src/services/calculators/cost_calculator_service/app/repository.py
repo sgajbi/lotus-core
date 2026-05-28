@@ -102,6 +102,10 @@ class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _normalize_identifier(identifier: object) -> str:
+        return str(identifier or "").strip()
+
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
         """Fetches a portfolio by its portfolio_id string."""
         stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
@@ -109,7 +113,7 @@ class CostCalculatorRepository:
         return result.scalars().first()
 
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        normalized_security_id = str(security_id or "").strip()
+        normalized_security_id = self._normalize_identifier(security_id)
         stmt = select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         result = await self.db.execute(stmt)
         return result.scalars().first()
@@ -141,10 +145,16 @@ class CostCalculatorRepository:
         Fetches all transactions for a given security in a portfolio,
         optionally excluding one by its transaction_id.
         """
-        stmt = select(DBTransaction).filter_by(portfolio_id=portfolio_id, security_id=security_id)
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_identifier(security_id)
+        stmt = select(DBTransaction).where(
+            func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
+            func.trim(DBTransaction.security_id) == normalized_security_id,
+        )
 
         if exclude_id:
-            stmt = stmt.filter(DBTransaction.transaction_id != exclude_id)
+            normalized_exclude_id = self._normalize_identifier(exclude_id)
+            stmt = stmt.where(func.trim(DBTransaction.transaction_id) != normalized_exclude_id)
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -297,9 +307,11 @@ class CostCalculatorRepository:
         open_quantities_by_source_transaction_id: dict[str, Decimal],
     ) -> None:
         """Reconciles persisted lot state with the latest engine-derived remaining quantities."""
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_identifier(security_id)
         stmt = select(PositionLotState).where(
-            PositionLotState.portfolio_id == portfolio_id,
-            PositionLotState.security_id == security_id,
+            func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
+            func.trim(PositionLotState.security_id) == normalized_security_id,
         )
         lot_rows = (await self.db.execute(stmt)).scalars().all()
         for lot_row in lot_rows:
