@@ -36,14 +36,23 @@ async def test_get_prices_with_filters(
     """
     # ACT
     await repository.get_prices(
-        security_id="S1", start_date=date(2025, 1, 1), end_date=date(2025, 1, 31)
+        security_id=" S1 ", start_date=date(2025, 1, 1), end_date=date(2025, 1, 31)
     )
 
     # ASSERT
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "WHERE market_prices.security_id = 'S1'" in compiled_query
+    assert "WHERE trim(market_prices.security_id) = 'S1'" in compiled_query
     assert "AND market_prices.price_date >= '2025-01-01'" in compiled_query
     assert "AND market_prices.price_date <= '2025-01-31'" in compiled_query
     assert "ORDER BY market_prices.price_date ASC" in compiled_query
+
+
+async def test_get_prices_skips_blank_security_id(
+    repository: MarketPriceRepository, mock_db_session: AsyncMock
+):
+    prices = await repository.get_prices(security_id="  ")
+
+    assert prices == []
+    mock_db_session.execute.assert_not_awaited()

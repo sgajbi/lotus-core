@@ -32,7 +32,7 @@ async def test_get_prices(mock_price_repo: AsyncMock):
     ):
         service = MarketPriceService(AsyncMock())
         params = {
-            "security_id": "S1",
+            "security_id": " S1 ",
             "start_date": date(2025, 1, 1),
             "end_date": date(2025, 1, 31),
         }
@@ -41,7 +41,12 @@ async def test_get_prices(mock_price_repo: AsyncMock):
         response = await service.get_prices(**params)
 
         # ASSERT
-        mock_price_repo.get_prices.assert_awaited_once_with(**params)
+        mock_price_repo.get_prices.assert_awaited_once_with(
+            security_id="S1",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+        )
+        assert response.security_id == "S1"
         assert len(response.prices) == 1
         assert response.prices[0].price_date == date(2025, 1, 1)
         assert response.prices[0].price == Decimal("150.75")

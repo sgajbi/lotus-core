@@ -3,9 +3,11 @@ import logging
 from datetime import date
 from typing import List, Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from portfolio_common.database_models import MarketPrice
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,11 @@ class MarketPriceRepository:
         Retrieves a list of market prices for a security, with optional
         date range filtering.
         """
-        stmt = select(MarketPrice).filter_by(security_id=security_id)
+        security_id = normalize_security_id(security_id)
+        if not security_id:
+            return []
+
+        stmt = select(MarketPrice).where(func.trim(MarketPrice.security_id) == security_id)
 
         if start_date:
             stmt = stmt.filter(MarketPrice.price_date >= start_date)
