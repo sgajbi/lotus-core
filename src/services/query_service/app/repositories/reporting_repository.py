@@ -80,17 +80,21 @@ class ReportingRepository:
         portfolio_ids: list[str],
         as_of_date: date,
     ) -> list[ReportingSnapshotRow]:
+        history_security_id = func.trim(PositionHistory.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        instrument_security_id = func.trim(Instrument.security_id)
         latest_history_subq = (
             select(
                 PositionHistory.portfolio_id.label("portfolio_id"),
-                PositionHistory.security_id.label("security_id"),
+                history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
                 func.row_number()
                 .over(
                     partition_by=(
                         PositionHistory.portfolio_id,
-                        PositionHistory.security_id,
+                        history_security_id,
                     ),
                     order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
                 )
@@ -100,7 +104,7 @@ class ReportingRepository:
                 PositionState,
                 and_(
                     PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    PositionHistory.security_id == PositionState.security_id,
+                    history_security_id == state_security_id,
                     PositionHistory.epoch == PositionState.epoch,
                 ),
             )
@@ -125,7 +129,7 @@ class ReportingRepository:
                 .over(
                     partition_by=(
                         DailyPositionSnapshot.portfolio_id,
-                        DailyPositionSnapshot.security_id,
+                        snapshot_security_id,
                     ),
                     order_by=(DailyPositionSnapshot.date.desc(), DailyPositionSnapshot.id.desc()),
                 )
@@ -136,8 +140,7 @@ class ReportingRepository:
                 and_(
                     DailyPositionSnapshot.portfolio_id
                     == latest_open_history_subq.c.portfolio_id,
-                    DailyPositionSnapshot.security_id
-                    == latest_open_history_subq.c.security_id,
+                    snapshot_security_id == latest_open_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_open_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_open_history_subq.c.quantity,
                 ),
@@ -160,10 +163,10 @@ class ReportingRepository:
                 ),
             )
             .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
-            .outerjoin(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
+            .outerjoin(Instrument, instrument_security_id == snapshot_security_id)
             .order_by(
                 DailyPositionSnapshot.portfolio_id.asc(),
-                DailyPositionSnapshot.security_id.asc(),
+                snapshot_security_id.asc(),
             )
         )
 
