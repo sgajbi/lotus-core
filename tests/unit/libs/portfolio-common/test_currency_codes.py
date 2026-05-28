@@ -39,6 +39,17 @@ def test_fx_rate_event_normalizes_currency_codes() -> None:
     assert event.to_currency == "USD"
 
 
+@pytest.mark.parametrize("rate", ["0", "-0.0001"])
+def test_fx_rate_event_rejects_nonpositive_rates(rate: str) -> None:
+    with pytest.raises(ValueError, match="FX rate must be greater than zero"):
+        FxRateEvent(
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date="2026-05-28",
+            rate=rate,
+        )
+
+
 def test_market_price_events_normalize_currency_codes() -> None:
     raw_event = MarketPriceEvent(
         security_id="SEC_A",

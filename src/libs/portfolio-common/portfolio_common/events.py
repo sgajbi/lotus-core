@@ -89,6 +89,13 @@ class FxRateEvent(CoreEventModel):
     rate_date: date = Field(...)
     rate: Decimal
 
+    @field_validator("rate")
+    @classmethod
+    def _validate_positive_rate(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0:
+            raise ValueError("FX rate must be greater than zero.")
+        return value
+
     @field_validator("from_currency", "to_currency", mode="before")
     @classmethod
     def _normalize_currency_code(cls, value: object) -> str:
