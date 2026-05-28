@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, TypeVar
 
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
@@ -37,6 +37,8 @@ from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .currency_codes import normalize_currency_code
+
+T = TypeVar("T")
 
 
 def _effective_filter(
@@ -80,6 +82,29 @@ def _latest_effective_rows(rows: list[Any], *key_fields: str) -> list[Any]:
         latest_by_key.values(),
         key=lambda item: tuple(getattr(item, field) for field in key_fields),
     )
+
+
+def _canonicalize_series_rows(rows: list[T], *key_fields: str) -> list[T]:
+    if not rows:
+        return []
+
+    def sort_key(row: T) -> tuple[Any, ...]:
+        quality_status = normalize_quality_status(getattr(row, "quality_status", None))
+        source_timestamp = getattr(row, "source_timestamp", None)
+        return (
+            *(getattr(row, field) for field in key_fields),
+            1 if quality_status == "ACCEPTED" else 0,
+            source_timestamp.isoformat() if source_timestamp else "",
+            getattr(row, "series_id", "") or "",
+            getattr(row, "source_vendor", "") or "",
+            getattr(row, "source_record_id", "") or "",
+            getattr(row, "id", 0) or 0,
+        )
+
+    selected_by_key: dict[tuple[Any, ...], T] = {}
+    for row in sorted(rows, key=sort_key):
+        selected_by_key[tuple(getattr(row, field) for field in key_fields)] = row
+    return [selected_by_key[key] for key in sorted(selected_by_key)]
 
 
 def _reference_status_expr(status_column: Any):
@@ -849,7 +874,11 @@ class ReferenceDataRepository:
             .order_by(IndexPriceSeries.index_id.asc(), IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_index_return_points(
         self,
@@ -869,7 +898,11 @@ class ReferenceDataRepository:
             .order_by(IndexReturnSeries.index_id.asc(), IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_benchmark_return_points(
         self,
@@ -887,7 +920,11 @@ class ReferenceDataRepository:
             .order_by(BenchmarkReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "benchmark_id",
+            "series_date",
+        )
 
     async def list_index_price_series(
         self, index_id: str, start_date: date, end_date: date
@@ -902,7 +939,11 @@ class ReferenceDataRepository:
             .order_by(IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_index_return_series(
         self, index_id: str, start_date: date, end_date: date
@@ -917,7 +958,11 @@ class ReferenceDataRepository:
             .order_by(IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return _canonicalize_series_rows(
+            list(result.scalars().all()),
+            "index_id",
+            "series_date",
+        )
 
     async def list_risk_free_series(
         self,
@@ -935,7 +980,7 @@ class ReferenceDataRepository:
             .order_by(RiskFreeSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return self._canonicalize_risk_free_series_rows(list(result.scalars().all()))
+        return _canonicalize_series_rows(list(result.scalars().all()), "series_date")
 
     async def list_taxonomy(
         self,
@@ -1051,27 +1096,6 @@ class ReferenceDataRepository:
             "observed_dates": all_dates,
             "latest_evidence_timestamp": _latest_reference_evidence_timestamp(points),
         }
-
-    @staticmethod
-    def _canonicalize_risk_free_series_rows(rows: list[RiskFreeSeries]) -> list[RiskFreeSeries]:
-        if not rows:
-            return []
-
-        def sort_key(row: RiskFreeSeries) -> tuple[date, int, str, str, str]:
-            quality_status = normalize_quality_status(getattr(row, "quality_status", None))
-            source_timestamp = getattr(row, "source_timestamp", None)
-            return (
-                row.series_date,
-                1 if quality_status == "ACCEPTED" else 0,
-                source_timestamp.isoformat() if source_timestamp else "",
-                getattr(row, "risk_free_curve_id", "") or "",
-                getattr(row, "series_id", "") or "",
-            )
-
-        selected_by_date: dict[date, RiskFreeSeries] = {}
-        for row in sorted(rows, key=sort_key):
-            selected_by_date[row.series_date] = row
-        return [selected_by_date[current_date] for current_date in sorted(selected_by_date)]
 
     async def get_fx_rates(
         self,

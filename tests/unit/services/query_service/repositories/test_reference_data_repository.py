@@ -1061,6 +1061,62 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
 
 
 @pytest.mark.asyncio
+async def test_market_reference_series_canonicalizes_duplicate_business_dates() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    accepted_row = SimpleNamespace(
+        index_id="IDX_A",
+        benchmark_id="B1",
+        series_date=date(2026, 1, 1),
+        quality_status=" Accepted ",
+        source_timestamp=None,
+        series_id="front_office",
+    )
+    stale_vendor_row = SimpleNamespace(
+        index_id="IDX_A",
+        benchmark_id="B1",
+        series_date=date(2026, 1, 1),
+        quality_status="stale",
+        source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
+        series_id="stale_vendor",
+    )
+    db.execute.side_effect = [
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+    ]
+
+    repo = ReferenceDataRepository(db)
+
+    index_prices = await repo.list_index_price_points(
+        ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
+    )
+    index_returns = await repo.list_index_return_points(
+        ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
+    )
+    benchmark_returns = await repo.list_benchmark_return_points(
+        "B1", date(2026, 1, 1), date(2026, 1, 1)
+    )
+    index_price_series = await repo.list_index_price_series(
+        "IDX_A", date(2026, 1, 1), date(2026, 1, 1)
+    )
+    index_return_series = await repo.list_index_return_series(
+        "IDX_A", date(2026, 1, 1), date(2026, 1, 1)
+    )
+
+    result_sets = [
+        index_prices,
+        index_returns,
+        benchmark_returns,
+        index_price_series,
+        index_return_series,
+    ]
+    assert all(len(rows) == 1 for rows in result_sets)
+    assert all(rows[0].series_id == "front_office" for rows in result_sets)
+
+
+@pytest.mark.asyncio
 async def test_get_risk_free_coverage_normalizes_quality_status_counts() -> None:
     repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
     repo.list_risk_free_series = AsyncMock(  # type: ignore[method-assign]
