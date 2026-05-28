@@ -293,6 +293,9 @@ class TransactionEvent(CoreEventModel):
         "quantity",
         "price",
         "gross_transaction_amount",
+        "withholding_tax_amount",
+        "other_interest_deductions_amount",
+        "net_interest_amount",
         "synthetic_flow_price_used",
         "synthetic_flow_quantity_used",
     )

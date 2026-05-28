@@ -155,6 +155,24 @@ def test_transaction_event_rejects_negative_core_amount() -> None:
         )
 
 
+def test_transaction_event_rejects_negative_interest_deduction_amount() -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to zero"):
+        TransactionEvent(
+            transaction_id="EVENT_NEGATIVE_INTEREST_DEDUCTION_001",
+            portfolio_id="PORT_META_001",
+            instrument_id="SEC_BOND_US_001",
+            security_id="SEC_BOND_US_001",
+            transaction_date=datetime(2026, 3, 1, 10, 0),
+            transaction_type="INTEREST",
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            gross_transaction_amount=Decimal("100.00"),
+            trade_currency="USD",
+            currency="USD",
+            withholding_tax_amount=Decimal("-0.01"),
+        )
+
+
 def test_transaction_event_rejects_nonpositive_fx_amounts_and_rates() -> None:
     with pytest.raises(ValidationError, match="greater than zero"):
         TransactionEvent(
