@@ -149,7 +149,7 @@ async def test_list_portfolio_manager_book_members_filters_active_membership(
     assert (
         "portfolios.close_date IS NULL OR portfolios.close_date >= '2026-05-03'" in compiled_query
     )
-    assert "portfolios.status = 'ACTIVE'" in compiled_query
+    assert "upper(trim(portfolios.status)) = 'ACTIVE'" in compiled_query
     assert "ORDER BY portfolios.portfolio_id ASC" in compiled_query
 
 
@@ -166,5 +166,5 @@ async def test_list_portfolio_manager_book_members_can_include_inactive(
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "portfolios.advisor_id = 'PM_SG_DPM_001'" in compiled_query
-    assert "portfolios.status = 'ACTIVE'" not in compiled_query
+    assert "upper(trim(portfolios.status)) = 'ACTIVE'" not in compiled_query
     assert "portfolios.open_date <=" not in compiled_query
