@@ -1022,10 +1022,17 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
         [
             SimpleNamespace(
                 series_date=date(2026, 1, 1),
-                quality_status="accepted",
+                quality_status=" Accepted ",
                 source_timestamp=None,
                 risk_free_curve_id="USD_FRONT_OFFICE",
                 series_id="front_office",
+            ),
+            SimpleNamespace(
+                series_date=date(2026, 1, 1),
+                quality_status="stale",
+                source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
+                risk_free_curve_id="USD_STALE_VENDOR",
+                series_id="stale_vendor",
             ),
             SimpleNamespace(
                 series_date=date(2026, 1, 1),
@@ -1051,6 +1058,26 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
     assert [row.series_date for row in rows] == [date(2026, 1, 1), date(2026, 1, 2)]
     assert rows[0].series_id == "front_office"
     assert rows[1].series_id == "demo"
+
+
+@pytest.mark.asyncio
+async def test_get_risk_free_coverage_normalizes_quality_status_counts() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_risk_free_series = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 1), quality_status=" Accepted "),
+            SimpleNamespace(series_date=date(2026, 1, 2), quality_status="STALE"),
+            SimpleNamespace(series_date=date(2026, 1, 3), quality_status=None),
+        ]
+    )
+
+    coverage = await repo.get_risk_free_coverage("USD", date(2026, 1, 1), date(2026, 1, 3))
+
+    assert coverage["quality_status_counts"] == {
+        "accepted": 1,
+        "stale": 1,
+        "unknown": 1,
+    }
 
 
 @pytest.mark.asyncio

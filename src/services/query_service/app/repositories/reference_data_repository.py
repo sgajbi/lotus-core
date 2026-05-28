@@ -86,6 +86,11 @@ def _normalize_reference_status(status: str) -> str:
     return status.strip().lower()
 
 
+def _normalize_quality_status(status: Any) -> str:
+    normalized_status = str(status or "").strip().lower()
+    return normalized_status or "unknown"
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -981,9 +986,9 @@ class ReferenceDataRepository:
         total_points = len(price_points) + len(benchmark_returns)
         quality_counts: dict[str, int] = defaultdict(int)
         for row in price_points:
-            quality_counts[row.quality_status] += 1
+            quality_counts[_normalize_quality_status(row.quality_status)] += 1
         for row in benchmark_returns:
-            quality_counts[row.quality_status] += 1
+            quality_counts[_normalize_quality_status(row.quality_status)] += 1
 
         active_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
         for component in components:
@@ -1036,7 +1041,7 @@ class ReferenceDataRepository:
         all_dates = [row.series_date for row in points]
         quality_counts: dict[str, int] = defaultdict(int)
         for row in points:
-            quality_counts[row.quality_status] += 1
+            quality_counts[_normalize_quality_status(row.quality_status)] += 1
         observed_start = min(all_dates) if all_dates else None
         observed_end = max(all_dates) if all_dates else None
         return {
@@ -1054,11 +1059,11 @@ class ReferenceDataRepository:
             return []
 
         def sort_key(row: RiskFreeSeries) -> tuple[date, int, str, str, str]:
-            quality_status = getattr(row, "quality_status", "") or ""
+            quality_status = _normalize_quality_status(getattr(row, "quality_status", ""))
             source_timestamp = getattr(row, "source_timestamp", None)
             return (
                 row.series_date,
-                0 if quality_status.lower() == "accepted" else 1,
+                1 if quality_status == "accepted" else 0,
                 source_timestamp.isoformat() if source_timestamp else "",
                 getattr(row, "risk_free_curve_id", "") or "",
                 getattr(row, "series_id", "") or "",
