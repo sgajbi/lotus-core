@@ -2033,6 +2033,55 @@ async def test_resolve_instrument_eligibility_bulk_preserves_order_and_unknown_r
     )
 
 
+@pytest.mark.asyncio
+async def test_resolve_instrument_eligibility_bulk_normalizes_returned_security_ids() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_instrument_eligibility_profiles=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=" EQ_US_AAPL ",
+                    eligibility_status="APPROVED",
+                    product_shelf_status="APPROVED",
+                    buy_allowed=True,
+                    sell_allowed=True,
+                    restriction_reason_codes=[],
+                    settlement_days=2,
+                    settlement_calendar_id="US_NYSE",
+                    liquidity_tier="L1",
+                    issuer_id="APPLE",
+                    issuer_name="Apple Inc.",
+                    ultimate_parent_issuer_id="APPLE_PARENT",
+                    ultimate_parent_issuer_name="Apple Inc.",
+                    asset_class="Equity",
+                    country_of_risk="US",
+                    effective_from=date(2026, 4, 1),
+                    effective_to=None,
+                    source_record_id="AAPL-elig",
+                    observed_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    quality_status="ACCEPTED",
+                )
+            ]
+        )
+    )
+
+    response = await service.resolve_instrument_eligibility_bulk(
+        instrument_eligibility_request(
+            [" EQ_US_AAPL "],
+            date(2026, 4, 10),
+        )
+    )
+
+    assert response.records[0].security_id == "EQ_US_AAPL"
+    assert response.records[0].found is True
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_security_ids == []
+    service._reference_repository.list_instrument_eligibility_profiles.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
 def test_canonical_consumer_system_mappings() -> None:
     assert canonical_consumer_system("lotus-manage") == "lotus-manage"
     assert canonical_consumer_system("lotus-gateway") == "lotus-gateway"
@@ -3226,6 +3275,50 @@ async def test_portfolio_tax_lot_window_reports_missing_requested_security() -> 
 
 
 @pytest.mark.asyncio
+async def test_portfolio_tax_lot_window_normalizes_returned_security_coverage() -> None:
+    service = make_service()
+    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_portfolio_tax_lots=AsyncMock(
+            return_value=[
+                (
+                    SimpleNamespace(
+                        portfolio_id="PB_SG_GLOBAL_BAL_001",
+                        security_id=" EQ_US_AAPL ",
+                        instrument_id=" EQ_US_AAPL ",
+                        lot_id="LOT-AAPL-001",
+                        open_quantity=Decimal("100.0000000000"),
+                        original_quantity=Decimal("100.0000000000"),
+                        acquisition_date=date(2026, 3, 25),
+                        lot_cost_base=Decimal("15005.5000000000"),
+                        lot_cost_local=Decimal("15005.5000000000"),
+                        source_transaction_id="TXN-BUY-AAPL-001",
+                        source_system="front_office_portfolio_seed",
+                        calculation_policy_id="BUY_DEFAULT_POLICY",
+                        calculation_policy_version="1.0.0",
+                        updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    ),
+                    "USD",
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_portfolio_tax_lot_window(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["EQ_US_AAPL"],
+        ),
+    )
+
+    assert response.lots[0].security_id == "EQ_US_AAPL"
+    assert response.lots[0].instrument_id == "EQ_US_AAPL"
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_security_ids == []
+
+
+@pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_marks_empty_full_portfolio_unavailable() -> None:
     service = make_service()
     service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
@@ -3495,6 +3588,36 @@ async def test_transaction_cost_curve_reports_incomplete_requested_security_cove
 
 
 @pytest.mark.asyncio
+async def test_transaction_cost_curve_normalizes_returned_security_coverage() -> None:
+    service = make_service()
+    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
+        portfolio_exists=AsyncMock(return_value=True),
+        list_transaction_cost_evidence=AsyncMock(
+            return_value=[
+                transaction_cost_row(
+                    transaction_id="TXN-AAPL-001",
+                    security_id=" EQ_US_AAPL ",
+                    trade_fee=Decimal("10.00"),
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL"],
+        ),
+    )
+
+    assert response.curve_points[0].security_id == "EQ_US_AAPL"
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_security_ids == []
+
+
+@pytest.mark.asyncio
 async def test_transaction_cost_curve_pages_observed_points_deterministically() -> None:
     service = make_service()
     service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
@@ -3710,6 +3833,37 @@ async def test_market_data_coverage_normalizes_instrument_and_valuation_currency
         security_ids=["EQ_US_AAPL"],
         as_of_date=date(2026, 4, 10),
     )
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_normalizes_returned_price_security_id() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id=" EQ_US_AAPL ",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(return_value=[]),
+    )
+
+    response = await service.get_market_data_coverage(
+        MarketDataCoverageRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL"],
+            max_staleness_days=5,
+        )
+    )
+
+    assert response.price_coverage[0].instrument_id == "EQ_US_AAPL"
+    assert response.price_coverage[0].quality_status == "READY"
+    assert response.supportability.state == "READY"
+    assert response.supportability.missing_instrument_ids == []
 
 
 @pytest.mark.asyncio

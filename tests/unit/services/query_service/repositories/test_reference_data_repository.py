@@ -66,6 +66,9 @@ async def test_reference_data_repository_lists_latest_market_data_windows() -> N
     assert price_rows[0].security_id == "EQ_US_AAPL"
     assert fx_rows[0].from_currency == "USD"
     assert db.execute.await_count == 2
+    price_stmt = db.execute.await_args_list[0].args[0]
+    price_sql = str(price_stmt.compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "trim(market_prices.security_id) in ('eq_us_aapl')" in price_sql
     fx_stmt = db.execute.await_args_list[1].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "('USD', 'SGD')" in fx_sql
@@ -598,6 +601,13 @@ async def test_list_instrument_eligibility_profiles_returns_latest_effective_row
         ("AAPL", "APPROVED"),
         ("MSFT", "APPROVED"),
     ]
+    eligibility_stmt = db.execute.await_args.args[0]
+    eligibility_sql = str(
+        eligibility_stmt.compile(compile_kwargs={"literal_binds": True})
+    ).lower()
+    assert "trim(instrument_eligibility_profiles.security_id) in ('aapl', 'msft')" in (
+        eligibility_sql
+    )
 
 
 @pytest.mark.asyncio

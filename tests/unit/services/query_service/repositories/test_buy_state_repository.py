@@ -71,6 +71,9 @@ async def test_list_portfolio_tax_lots_returns_rows_with_currency():
     )
 
     assert rows == [(SimpleNamespace(lot_id="LOT-1"), "USD")]
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "trim(position_lot_state.security_id) in ('sec-1')" in compiled_query
 
 
 async def test_list_portfolio_tax_lots_normalizes_closed_status_filter():

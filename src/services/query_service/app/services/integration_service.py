@@ -134,6 +134,7 @@ from ..dtos.reference_integration_dto import (
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.currency_codes import normalize_currency_code
+from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
@@ -1942,11 +1943,12 @@ class IntegrationService:
             security_ids=request.security_ids,
             as_of_date=request.as_of_date,
         )
-        rows_by_security_id = {row.security_id: row for row in rows}
+        rows_by_security_id = {normalize_security_id(row.security_id): row for row in rows}
 
         records: list[InstrumentEligibilityRecord] = []
         missing_security_ids: list[str] = []
-        for security_id in request.security_ids:
+        for requested_security_id in request.security_ids:
+            security_id = normalize_security_id(requested_security_id)
             row = rows_by_security_id.get(security_id)
             if row is None:
                 missing_security_ids.append(security_id)
@@ -1977,7 +1979,7 @@ class IntegrationService:
                 continue
             records.append(
                 InstrumentEligibilityRecord(
-                    security_id=row.security_id,
+                    security_id=normalize_security_id(row.security_id),
                     found=True,
                     eligibility_status=self._control_code(
                         row.eligibility_status, default="UNKNOWN"
@@ -2082,8 +2084,8 @@ class IntegrationService:
             lots.append(
                 PortfolioTaxLotRecord(
                     portfolio_id=lot.portfolio_id,
-                    security_id=lot.security_id,
-                    instrument_id=lot.instrument_id,
+                    security_id=normalize_security_id(lot.security_id),
+                    instrument_id=normalize_security_id(lot.instrument_id),
                     lot_id=lot.lot_id,
                     open_quantity=open_quantity,
                     original_quantity=self._as_decimal(lot.original_quantity),
@@ -2113,8 +2115,10 @@ class IntegrationService:
                 }
             )
 
-        requested_security_ids = set(request.security_ids or [])
-        returned_security_ids = {lot.security_id for lot in lots}
+        requested_security_ids = {
+            normalize_security_id(security_id) for security_id in request.security_ids or []
+        }
+        returned_security_ids = {normalize_security_id(lot.security_id) for lot in lots}
         missing_security_ids = (
             [] if has_more else sorted(requested_security_ids - returned_security_ids)
         )
@@ -2185,7 +2189,7 @@ class IntegrationService:
     @staticmethod
     def _transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
         return (
-            str(transaction.security_id).strip(),
+            normalize_security_id(transaction.security_id),
             str(transaction.transaction_type).strip().upper(),
             str(transaction.currency).strip().upper(),
         )
@@ -2327,8 +2331,10 @@ class IntegrationService:
                 }
             )
 
-        requested_security_ids = set(request.security_ids or [])
-        returned_security_ids = {point.security_id for point in all_points}
+        requested_security_ids = {
+            normalize_security_id(security_id) for security_id in request.security_ids or []
+        }
+        returned_security_ids = {normalize_security_id(point.security_id) for point in all_points}
         missing_security_ids = sorted(requested_security_ids - returned_security_ids)
 
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
@@ -2379,7 +2385,9 @@ class IntegrationService:
         self,
         request: MarketDataCoverageRequest,
     ) -> MarketDataCoverageWindowResponse:
-        instrument_ids = [instrument_id.strip() for instrument_id in request.instrument_ids]
+        instrument_ids = [
+            normalize_security_id(instrument_id) for instrument_id in request.instrument_ids
+        ]
         valuation_currency = (
             normalize_currency_code(request.valuation_currency)
             if request.valuation_currency is not None
@@ -2395,7 +2403,7 @@ class IntegrationService:
             as_of_date=request.as_of_date,
         )
 
-        price_by_instrument = {row.security_id: row for row in price_rows}
+        price_by_instrument = {normalize_security_id(row.security_id): row for row in price_rows}
         fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
 
         price_coverage: list[MarketDataPriceCoverageRecord] = []

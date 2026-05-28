@@ -37,6 +37,7 @@ from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .currency_codes import normalize_currency_code
+from .identifier_normalization import normalize_security_id
 
 T = TypeVar("T")
 
@@ -650,12 +651,18 @@ class ReferenceDataRepository:
         security_ids: list[str],
         as_of_date: date,
     ) -> list[InstrumentEligibilityProfile]:
-        if not security_ids:
+        normalized_security_ids = [
+            normalized
+            for security_id in security_ids
+            if (normalized := normalize_security_id(security_id))
+        ]
+        if not normalized_security_ids:
             return []
+        security_id_expr = func.trim(InstrumentEligibilityProfile.security_id)
         stmt = (
             select(InstrumentEligibilityProfile)
             .where(
-                InstrumentEligibilityProfile.security_id.in_(security_ids),
+                security_id_expr.in_(normalized_security_ids),
                 _effective_filter(
                     InstrumentEligibilityProfile.effective_from,
                     InstrumentEligibilityProfile.effective_to,
@@ -663,7 +670,7 @@ class ReferenceDataRepository:
                 ),
             )
             .order_by(
-                InstrumentEligibilityProfile.security_id.asc(),
+                security_id_expr.asc(),
                 InstrumentEligibilityProfile.effective_from.desc(),
                 InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
                 InstrumentEligibilityProfile.eligibility_version.desc(),
@@ -1126,19 +1133,25 @@ class ReferenceDataRepository:
         security_ids: list[str],
         as_of_date: date,
     ) -> list[MarketPrice]:
-        if not security_ids:
+        normalized_security_ids = [
+            normalized
+            for security_id in security_ids
+            if (normalized := normalize_security_id(security_id))
+        ]
+        if not normalized_security_ids:
             return []
+        security_id_expr = func.trim(MarketPrice.security_id)
 
         latest_price_dates = (
             select(
-                MarketPrice.security_id,
+                security_id_expr.label("security_id"),
                 func.max(MarketPrice.price_date).label("latest_price_date"),
             )
             .where(
-                MarketPrice.security_id.in_(security_ids),
+                security_id_expr.in_(normalized_security_ids),
                 MarketPrice.price_date <= as_of_date,
             )
-            .group_by(MarketPrice.security_id)
+            .group_by(security_id_expr)
             .subquery()
         )
         stmt = (
@@ -1146,11 +1159,11 @@ class ReferenceDataRepository:
             .join(
                 latest_price_dates,
                 and_(
-                    MarketPrice.security_id == latest_price_dates.c.security_id,
+                    security_id_expr == latest_price_dates.c.security_id,
                     MarketPrice.price_date == latest_price_dates.c.latest_price_date,
                 ),
             )
-            .order_by(MarketPrice.security_id.asc())
+            .order_by(security_id_expr.asc())
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

@@ -8,8 +8,10 @@ from portfolio_common.database_models import (
     PositionLotState,
     Transaction,
 )
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .identifier_normalization import normalize_security_id
 
 
 class BuyStateRepository:
@@ -49,7 +51,14 @@ class BuyStateRepository:
             PositionLotState.acquisition_date <= as_of_date,
         ]
         if security_ids:
-            filters.append(PositionLotState.security_id.in_(security_ids))
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            ]
+            if not normalized_security_ids:
+                return []
+            filters.append(func.trim(PositionLotState.security_id).in_(normalized_security_ids))
         status_filter = (lot_status_filter or "").strip().upper()
         if status_filter == "OPEN" or (not include_closed_lots and status_filter != "CLOSED"):
             filters.append(PositionLotState.open_quantity > 0)

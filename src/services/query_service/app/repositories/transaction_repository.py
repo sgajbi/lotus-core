@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 
 from .currency_codes import normalize_currency_code
 from .date_filters import start_of_day, start_of_next_day
+from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,14 @@ class TransactionRepository:
             )
         )
         if security_ids:
-            stmt = stmt.where(Transaction.security_id.in_(security_ids))
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            ]
+            if not normalized_security_ids:
+                return []
+            stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
         if transaction_types:
             stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
         stmt = stmt.order_by(
