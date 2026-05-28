@@ -3,6 +3,8 @@ import logging
 from decimal import Decimal
 from typing import Any, Optional, Tuple
 
+from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,8 +37,8 @@ class ValuationLogic:
                 to_currency,
             )
             return None
-        normalized_fx_rate = cls._as_decimal(fx_rate)
-        if normalized_fx_rate <= Decimal("0"):
+        normalized_fx_rate = coerce_positive_fx_rate_or_none(fx_rate)
+        if normalized_fx_rate is None:
             logger.warning(
                 "Non-positive FX rate from %s to %s. Cannot value.",
                 from_currency,

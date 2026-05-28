@@ -7,6 +7,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from portfolio_common.database_models import FinancialReconciliationFinding
+from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
 
 from ..dtos import ReconciliationRunRequest
@@ -69,19 +70,25 @@ class ReconciliationService:
                         to_currency=to_currency,
                         business_date=position_row.date,
                     )
-                    fx_cache[cache_key] = Decimal(str(fx_rate.rate)) if fx_rate else ZERO
+                    fx_cache[cache_key] = (
+                        coerce_positive_fx_rate_or_none(fx_rate.rate) if fx_rate else None
+                    ) or ZERO
                 rate = fx_cache[cache_key]
                 if rate == ZERO:
                     continue
 
-            metrics["bod_market_value"] += Decimal(str(position_row.bod_market_value or ZERO)) * rate
-            metrics["bod_cashflow"] += Decimal(
-                str(position_row.bod_cashflow_portfolio or ZERO)
-            ) * rate
-            metrics["eod_cashflow"] += Decimal(
-                str(position_row.eod_cashflow_portfolio or ZERO)
-            ) * rate
-            metrics["eod_market_value"] += Decimal(str(position_row.eod_market_value or ZERO)) * rate
+            metrics["bod_market_value"] += (
+                Decimal(str(position_row.bod_market_value or ZERO)) * rate
+            )
+            metrics["bod_cashflow"] += (
+                Decimal(str(position_row.bod_cashflow_portfolio or ZERO)) * rate
+            )
+            metrics["eod_cashflow"] += (
+                Decimal(str(position_row.eod_cashflow_portfolio or ZERO)) * rate
+            )
+            metrics["eod_market_value"] += (
+                Decimal(str(position_row.eod_market_value or ZERO)) * rate
+            )
             metrics["fees"] += Decimal(str(position_row.fees or ZERO)) * rate
 
         return metrics, len(authoritative_rows)
@@ -461,12 +468,13 @@ class ReconciliationService:
                 )
                 continue
 
-            authoritative_metrics, authoritative_position_count = (
-                await self._aggregate_authoritative_portfolio_metrics(
-                    portfolio_id=key.portfolio_id,
-                    business_date=key.business_date,
-                    epoch=key.epoch,
-                )
+            (
+                authoritative_metrics,
+                authoritative_position_count,
+            ) = await self._aggregate_authoritative_portfolio_metrics(
+                portfolio_id=key.portfolio_id,
+                business_date=key.business_date,
+                epoch=key.epoch,
             )
             authoritative_snapshot_count = await self.repository.fetch_authoritative_snapshot_count(
                 portfolio_id=key.portfolio_id,

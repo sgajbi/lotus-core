@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     PortfolioTimeseries,
     PositionTimeseries,
 )
+from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 
 from ..repositories.timeseries_repository import TimeseriesRepository
 
@@ -118,5 +119,14 @@ class PortfolioTimeseriesLogic:
             logger.error(error_msg)
             raise FxRateNotFoundError(error_msg)
 
-        fx_rate_cache[cache_key] = fx_rate.rate
-        return fx_rate.rate
+        normalized_rate = coerce_positive_fx_rate_or_none(fx_rate.rate)
+        if normalized_rate is None:
+            error_msg = (
+                f"Non-positive FX rate from {instrument_currency} "
+                f"to {portfolio_currency} for date {valuation_date}."
+            )
+            logger.error(error_msg)
+            raise FxRateNotFoundError(error_msg)
+
+        fx_rate_cache[cache_key] = normalized_rate
+        return normalized_rate
