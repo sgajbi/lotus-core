@@ -898,6 +898,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "index_return_series": [],
                 "benchmark_return_series": [],
                 "risk_free_series": [],
+                "model_portfolios": [],
                 "classification_taxonomy": [],
                 "cash_accounts": [],
                 "lookthrough_components": [],
@@ -935,6 +936,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
 
         async def upsert_risk_free_series(self, records: list[dict[str, object]]) -> None:
             self.persisted["risk_free_series"].extend(records)
+
+        async def upsert_model_portfolio_definitions(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["model_portfolios"].extend(records)
 
         async def upsert_classification_taxonomy(self, records: list[dict[str, object]]) -> None:
             self.persisted["classification_taxonomy"].extend(records)
@@ -1931,6 +1937,49 @@ async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failure_phase"] == "persist_bookkeeping"
+
+
+def _model_portfolio_definition_payload() -> dict[str, list[dict[str, object]]]:
+    return {
+        "model_portfolios": [
+            {
+                "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                "model_portfolio_version": "2026.03",
+                "display_name": "Singapore Balanced DPM Model",
+                "base_currency": "SGD",
+                "risk_profile": "balanced",
+                "mandate_type": "discretionary",
+                "approval_status": "approved",
+                "effective_from": "2026-03-25",
+            }
+        ]
+    }
+
+
+async def test_ingest_model_portfolios_normalizes_base_currency(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = _model_portfolio_definition_payload()
+    payload["model_portfolios"][0]["base_currency"] = " sgd "
+
+    response = await async_test_client.post(
+        "/ingest/model-portfolios",
+        json=payload,
+        headers={"X-Idempotency-Key": "model-portfolio-idem-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "model_portfolio"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "model-portfolio-idem-001"
+
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "model_portfolios"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["base_currency"] == "SGD"
 
 
 async def test_ingest_benchmark_assignments_defaults_assignment_recorded_at_when_omitted(

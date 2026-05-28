@@ -66,9 +66,14 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_model_portfolio_definitions(self, records: list[dict[str, Any]]) -> None:
+        normalized_records = []
+        for record in records:
+            row = dict(record)
+            row["base_currency"] = normalize_currency_code(row["base_currency"])
+            normalized_records.append(row)
         await self._upsert_many(
             model=ModelPortfolioDefinition,
-            records=records,
+            records=normalized_records,
             conflict_columns=[
                 "model_portfolio_id",
                 "model_portfolio_version",

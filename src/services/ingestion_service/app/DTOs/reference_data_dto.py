@@ -589,7 +589,14 @@ class ModelPortfolioDefinitionRecord(BaseModel):
         description="Business display name for the model portfolio.",
         examples=["Singapore Balanced DPM Model"],
     )
-    base_currency: str = Field(..., description="Model base currency.", examples=["SGD"])
+    base_currency: str = Field(
+        ...,
+        description=(
+            "Canonical three-letter model base currency used for target model, rebalancing, "
+            "mandate, and benchmark-alignment calculations."
+        ),
+        examples=["SGD"],
+    )
     risk_profile: str = Field(
         ...,
         description="Mandate risk profile aligned to this model.",
@@ -647,6 +654,11 @@ class ModelPortfolioDefinitionRecord(BaseModel):
         description="Data quality status for the model definition.",
         examples=["accepted"],
     )
+
+    @field_validator("base_currency", mode="before")
+    @classmethod
+    def _normalize_base_currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
 
     model_config = ConfigDict()
 

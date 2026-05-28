@@ -22,6 +22,7 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
                 {
                     "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
                     "model_portfolio_version": "2026.03",
+                    "base_currency": "SGD",
                     "effective_from": "2026-03-25",
                 }
             ],
@@ -404,6 +405,31 @@ def test_get_reference_data_ingestion_service_wraps_db_session() -> None:
 
     assert isinstance(service, ReferenceDataIngestionService)
     assert service._db is db
+
+
+@pytest.mark.asyncio
+async def test_upsert_model_portfolio_definitions_normalizes_base_currency() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    await service.upsert_model_portfolio_definitions(
+        [
+            {
+                "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                "model_portfolio_version": "2026.03",
+                "display_name": "Singapore Balanced DPM Model",
+                "base_currency": " sgd ",
+                "risk_profile": "balanced",
+                "mandate_type": "discretionary",
+                "approval_status": "approved",
+                "effective_from": "2026-03-25",
+            }
+        ]
+    )
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params["base_currency_m0"] == "SGD"
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

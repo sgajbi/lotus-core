@@ -18,6 +18,7 @@ from src.services.ingestion_service.app.DTOs.reference_data_dto import (
     InstrumentEligibilityProfileRecord,
     LiquidityReserveRequirementIngestionRequest,
     LiquidityReserveRequirementRecord,
+    ModelPortfolioDefinitionRecord,
     ModelPortfolioTargetIngestionRequest,
     ModelPortfolioTargetRecord,
     PlannedWithdrawalScheduleIngestionRequest,
@@ -36,6 +37,20 @@ def _target_record(**overrides: object) -> dict[str, object]:
         "min_weight": "0.0800000000",
         "max_weight": "0.1600000000",
         "target_status": "active",
+        "effective_from": "2026-03-25",
+    }
+    record.update(overrides)
+    return record
+
+
+def _model_portfolio_definition(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+        "model_portfolio_version": "2026.03",
+        "display_name": "Singapore Balanced DPM Model",
+        "base_currency": "SGD",
+        "risk_profile": "balanced",
+        "mandate_type": "discretionary",
         "effective_from": "2026-03-25",
     }
     record.update(overrides)
@@ -225,6 +240,14 @@ def _planned_withdrawal_schedule(**overrides: object) -> dict[str, object]:
     }
     record.update(overrides)
     return record
+
+
+def test_model_portfolio_definition_normalizes_base_currency() -> None:
+    record = ModelPortfolioDefinitionRecord.model_validate(
+        _model_portfolio_definition(base_currency=" sgd ")
+    )
+
+    assert record.base_currency == "SGD"
 
 
 def test_model_portfolio_target_record_validates_target_band_order() -> None:
