@@ -47,6 +47,10 @@ class ValuationRepositoryBase:
     def _normalize_currency_code(currency_code: str) -> str:
         return normalize_currency_code(currency_code)
 
+    @staticmethod
+    def _normalize_security_id(security_id: object) -> str:
+        return str(security_id or "").strip()
+
     def _observe_jobs_claimed(self, claimed_count: int) -> None:
         """Hook for service-local metrics."""
 
@@ -554,9 +558,14 @@ class ValuationRepositoryBase:
     async def get_latest_price_for_position(
         self, security_id: str, position_date: date
     ) -> Optional[MarketPrice]:
+        normalized_security_id = self._normalize_security_id(security_id)
+        market_price_security_id = func.trim(MarketPrice.security_id)
         stmt = (
             select(MarketPrice)
-            .filter(MarketPrice.security_id == security_id, MarketPrice.price_date <= position_date)
+            .filter(
+                market_price_security_id == normalized_security_id,
+                MarketPrice.price_date <= position_date,
+            )
             .order_by(MarketPrice.price_date.desc())
         )
         result = await self.db.execute(stmt)
@@ -738,10 +747,12 @@ class ValuationRepositoryBase:
 
     @async_timed(repository="ValuationRepository", method="get_next_price_date")
     async def get_next_price_date(self, security_id: str, after_date: date) -> Optional[date]:
+        normalized_security_id = self._normalize_security_id(security_id)
+        market_price_security_id = func.trim(MarketPrice.security_id)
         stmt = (
             select(MarketPrice.price_date)
             .filter(
-                MarketPrice.security_id == security_id,
+                market_price_security_id == normalized_security_id,
                 MarketPrice.price_date > after_date,
             )
             .order_by(MarketPrice.price_date.asc())

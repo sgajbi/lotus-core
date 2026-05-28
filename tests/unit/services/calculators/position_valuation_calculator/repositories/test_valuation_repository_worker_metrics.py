@@ -188,3 +188,48 @@ async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_p
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in compiled_query
     assert "fx_rates.rate_date <= '2026-03-27'" in compiled_query
     assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
+
+
+async def test_get_latest_price_for_position_trims_security_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    market_price = await repo.get_latest_price_for_position(
+        security_id=" SEC_A ",
+        position_date=date(2026, 3, 27),
+    )
+
+    assert market_price is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(market_prices.security_id) = 'SEC_A'" in compiled_query
+    assert "market_prices.price_date <= '2026-03-27'" in compiled_query
+    assert "ORDER BY market_prices.price_date DESC" in compiled_query
+
+
+async def test_get_next_price_date_trims_security_id_before_query(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = result
+
+    next_price_date = await repo.get_next_price_date(
+        security_id=" SEC_A ",
+        after_date=date(2026, 3, 27),
+    )
+
+    assert next_price_date is None
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(market_prices.security_id) = 'SEC_A'" in compiled_query
+    assert "market_prices.price_date > '2026-03-27'" in compiled_query
+    assert "ORDER BY market_prices.price_date ASC" in compiled_query
+    assert "LIMIT 1" in compiled_query
