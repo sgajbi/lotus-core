@@ -29,10 +29,15 @@ class TimeseriesRepositoryBase:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _normalize_identifier(identifier: object) -> str:
+        return str(identifier or "").strip()
+
     @async_timed(repository="TimeseriesRepository", method="get_current_epoch_for_portfolio")
     async def get_current_epoch_for_portfolio(self, portfolio_id: str) -> int:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
         stmt = select(func.max(PositionState.epoch)).where(
-            PositionState.portfolio_id == portfolio_id
+            func.trim(PositionState.portfolio_id) == normalized_portfolio_id
         )
         result = await self.db.execute(stmt)
         max_epoch = result.scalar_one_or_none()
@@ -42,7 +47,11 @@ class TimeseriesRepositoryBase:
     async def get_all_snapshots_for_date(
         self, portfolio_id: str, a_date: date
     ) -> List[DailyPositionSnapshot]:
-        stmt = select(DailyPositionSnapshot).filter_by(portfolio_id=portfolio_id, date=a_date)
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        stmt = select(DailyPositionSnapshot).where(
+            func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
+            DailyPositionSnapshot.date == a_date,
+        )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
@@ -219,12 +228,15 @@ class TimeseriesRepositoryBase:
 
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
-        result = await self.db.execute(select(Portfolio).filter_by(portfolio_id=portfolio_id))
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        result = await self.db.execute(
+            select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
+        )
         return result.scalars().first()
 
     @async_timed(repository="TimeseriesRepository", method="get_instrument")
     async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        normalized_security_id = str(security_id or "").strip()
+        normalized_security_id = self._normalize_identifier(security_id)
         result = await self.db.execute(
             select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
         )
@@ -235,7 +247,7 @@ class TimeseriesRepositoryBase:
         normalized_security_ids = [
             normalized
             for security_id in security_ids
-            if (normalized := str(security_id or "").strip())
+            if (normalized := self._normalize_identifier(security_id))
         ]
         if not normalized_security_ids:
             return []
@@ -269,21 +281,23 @@ class TimeseriesRepositoryBase:
     async def get_all_position_timeseries_for_date(
         self, portfolio_id: str, a_date: date, epoch: int
     ) -> List[PositionTimeseries]:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        position_timeseries_security_id = func.trim(PositionTimeseries.security_id)
         ranked_position_rows = (
             select(
-                PositionTimeseries.portfolio_id.label("portfolio_id"),
-                PositionTimeseries.security_id.label("security_id"),
+                func.trim(PositionTimeseries.portfolio_id).label("portfolio_id"),
+                position_timeseries_security_id.label("security_id"),
                 PositionTimeseries.date.label("date"),
                 PositionTimeseries.epoch.label("epoch"),
                 func.row_number()
                 .over(
-                    partition_by=(PositionTimeseries.security_id,),
+                    partition_by=(position_timeseries_security_id,),
                     order_by=(PositionTimeseries.date.desc(), PositionTimeseries.epoch.desc()),
                 )
                 .label("rn"),
             )
             .where(
-                PositionTimeseries.portfolio_id == portfolio_id,
+                func.trim(PositionTimeseries.portfolio_id) == normalized_portfolio_id,
                 PositionTimeseries.date <= a_date,
                 PositionTimeseries.epoch <= epoch,
             )
@@ -295,8 +309,9 @@ class TimeseriesRepositoryBase:
             .join(
                 ranked_position_rows,
                 and_(
-                    PositionTimeseries.portfolio_id == ranked_position_rows.c.portfolio_id,
-                    PositionTimeseries.security_id == ranked_position_rows.c.security_id,
+                    func.trim(PositionTimeseries.portfolio_id)
+                    == ranked_position_rows.c.portfolio_id,
+                    func.trim(PositionTimeseries.security_id) == ranked_position_rows.c.security_id,
                     PositionTimeseries.date == ranked_position_rows.c.date,
                     PositionTimeseries.epoch == ranked_position_rows.c.epoch,
                 ),
@@ -313,6 +328,8 @@ class TimeseriesRepositoryBase:
     async def get_all_cashflows_for_security_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> List[Cashflow]:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_identifier(security_id)
         ranked_cashflows = (
             select(
                 Cashflow.id.label("id"),
@@ -324,8 +341,8 @@ class TimeseriesRepositoryBase:
                 .label("rn"),
             )
             .where(
-                Cashflow.portfolio_id == portfolio_id,
-                Cashflow.security_id == security_id,
+                func.trim(Cashflow.portfolio_id) == normalized_portfolio_id,
+                func.trim(Cashflow.security_id) == normalized_security_id,
                 Cashflow.cashflow_date == a_date,
                 Cashflow.epoch <= epoch,
             )
@@ -344,10 +361,11 @@ class TimeseriesRepositoryBase:
     async def get_last_portfolio_timeseries_before(
         self, portfolio_id: str, a_date: date
     ) -> Optional[PortfolioTimeseries]:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
         stmt = (
             select(PortfolioTimeseries)
             .filter(
-                PortfolioTimeseries.portfolio_id == portfolio_id,
+                func.trim(PortfolioTimeseries.portfolio_id) == normalized_portfolio_id,
                 PortfolioTimeseries.date < a_date,
             )
             .order_by(PortfolioTimeseries.date.desc(), PortfolioTimeseries.epoch.desc())
@@ -359,17 +377,19 @@ class TimeseriesRepositoryBase:
     async def get_latest_snapshots_for_date(
         self, portfolio_id: str, a_date: date
     ) -> List[DailyPositionSnapshot]:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         latest_snapshot_epochs = (
             select(
-                DailyPositionSnapshot.security_id.label("security_id"),
+                snapshot_security_id.label("security_id"),
                 DailyPositionSnapshot.date.label("date"),
                 func.max(DailyPositionSnapshot.epoch).label("epoch"),
             )
             .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
                 DailyPositionSnapshot.date <= a_date,
             )
-            .group_by(DailyPositionSnapshot.security_id, DailyPositionSnapshot.date)
+            .group_by(snapshot_security_id, DailyPositionSnapshot.date)
             .subquery()
         )
 
@@ -393,13 +413,13 @@ class TimeseriesRepositoryBase:
             .join(
                 ranked_snapshots,
                 and_(
-                    DailyPositionSnapshot.security_id == ranked_snapshots.c.security_id,
+                    func.trim(DailyPositionSnapshot.security_id) == ranked_snapshots.c.security_id,
                     DailyPositionSnapshot.date == ranked_snapshots.c.date,
                     DailyPositionSnapshot.epoch == ranked_snapshots.c.epoch,
                 ),
             )
             .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
+                func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
                 ranked_snapshots.c.rn == 1,
             )
             .order_by(DailyPositionSnapshot.security_id)
@@ -489,11 +509,13 @@ class TimeseriesRepositoryBase:
     async def get_last_snapshot_before(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
     ) -> Optional[DailyPositionSnapshot]:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_identifier(security_id)
         stmt = (
             select(DailyPositionSnapshot)
             .filter(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.security_id == security_id,
+                func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
+                func.trim(DailyPositionSnapshot.security_id) == normalized_security_id,
                 DailyPositionSnapshot.date < a_date,
                 DailyPositionSnapshot.epoch <= epoch,
             )
@@ -512,6 +534,8 @@ class TimeseriesRepositoryBase:
         epoch: int,
         max_rows: int,
     ) -> List[DailyPositionSnapshot]:
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_identifier(security_id)
         ranked_future_snapshots = (
             select(
                 DailyPositionSnapshot.id.label("id"),
@@ -523,8 +547,8 @@ class TimeseriesRepositoryBase:
                 .label("rn"),
             )
             .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.security_id == security_id,
+                func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
+                func.trim(DailyPositionSnapshot.security_id) == normalized_security_id,
                 DailyPositionSnapshot.date > a_date,
                 DailyPositionSnapshot.epoch <= epoch,
             )
@@ -550,6 +574,8 @@ class TimeseriesRepositoryBase:
     ) -> dict[date, List[Cashflow]]:
         if not dates:
             return {}
+        normalized_portfolio_id = self._normalize_identifier(portfolio_id)
+        normalized_security_id = self._normalize_identifier(security_id)
         ranked_cashflows = (
             select(
                 Cashflow.id.label("id"),
@@ -562,8 +588,8 @@ class TimeseriesRepositoryBase:
                 .label("rn"),
             )
             .where(
-                Cashflow.portfolio_id == portfolio_id,
-                Cashflow.security_id == security_id,
+                func.trim(Cashflow.portfolio_id) == normalized_portfolio_id,
+                func.trim(Cashflow.security_id) == normalized_security_id,
                 Cashflow.cashflow_date.in_(dates),
                 Cashflow.epoch <= epoch,
             )

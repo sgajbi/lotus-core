@@ -45,11 +45,11 @@ def repository(mock_db_session: AsyncMock) -> TimeseriesRepository:
 
 async def test_get_simple_getters(repository: TimeseriesRepository, mock_db_session: AsyncMock):
     """Tests all simple getter methods that filter by a single ID."""
-    await repository.get_portfolio("P1")
+    await repository.get_portfolio(" P1 ")
     compiled_query = str(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
     )
-    assert "WHERE portfolios.portfolio_id = 'P1'" in compiled_query
+    assert "WHERE trim(portfolios.portfolio_id) = 'P1'" in compiled_query
 
     await repository.get_instrument(" S1 ")
     compiled_query = str(
@@ -67,6 +67,29 @@ async def test_get_instruments_by_ids_trims_security_ids(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "trim(instruments.security_id) IN ('S1', 'S2')" in compiled_query
+
+
+async def test_get_current_epoch_for_portfolio_trims_portfolio_id(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.get_current_epoch_for_portfolio(" P1 ")
+
+    compiled_query = str(
+        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(position_state.portfolio_id) = 'P1'" in compiled_query
+
+
+async def test_get_all_snapshots_for_date_trims_portfolio_id(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    await repository.get_all_snapshots_for_date(" P1 ", date(2025, 1, 10))
+
+    compiled_query = str(
+        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
+    assert "daily_position_snapshots.date = '2025-01-10'" in compiled_query
 
 
 async def test_get_instruments_by_ids_skips_empty_security_ids(
@@ -197,13 +220,14 @@ async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_w
     )
 
     assert (
-        "row_number() OVER (PARTITION BY position_timeseries.security_id "
+        "row_number() OVER (PARTITION BY trim(position_timeseries.security_id) "
         "ORDER BY position_timeseries.date DESC, position_timeseries.epoch DESC)" in compiled_query
     )
+    assert "trim(position_timeseries.portfolio_id) = 'P1'" in compiled_query
     assert "position_timeseries.date <= '2025-01-10'" in compiled_query
     assert "position_timeseries.epoch <= 3" in compiled_query
-    assert "position_timeseries.portfolio_id = anon_1.portfolio_id" in compiled_query
-    assert "position_timeseries.security_id = anon_1.security_id" in compiled_query
+    assert "trim(position_timeseries.portfolio_id) = anon_1.portfolio_id" in compiled_query
+    assert "trim(position_timeseries.security_id) = anon_1.security_id" in compiled_query
     assert "position_timeseries.date = anon_1.date" in compiled_query
     assert "position_timeseries.epoch = anon_1.epoch" in compiled_query
     assert "anon_1.rn = 1" in compiled_query
@@ -220,6 +244,8 @@ async def test_get_all_cashflows_for_security_date_uses_latest_cashflow_epoch_wi
     )
 
     assert "cashflows.epoch <= 14" in compiled_query
+    assert "trim(cashflows.portfolio_id) = 'P1'" in compiled_query
+    assert "trim(cashflows.security_id) = 'S1'" in compiled_query
     assert (
         "row_number() OVER (PARTITION BY cashflows.transaction_id ORDER BY cashflows.epoch DESC)"
         in compiled_query
@@ -247,8 +273,8 @@ async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
         executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
     )
 
-    assert "cashflows.portfolio_id = 'P1'" in compiled_query
-    assert "cashflows.security_id = 'S1'" in compiled_query
+    assert "trim(cashflows.portfolio_id) = 'P1'" in compiled_query
+    assert "trim(cashflows.security_id) = 'S1'" in compiled_query
     assert "cashflows.cashflow_date IN ('2025-01-10', '2025-01-11')" in compiled_query
     assert "cashflows.epoch <= 14" in compiled_query
     assert result[date(2025, 1, 10)] == [dated_row]
@@ -266,6 +292,8 @@ async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_targe
     )
 
     assert "daily_position_snapshots.epoch <= 14" in compiled_query
+    assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
+    assert "trim(daily_position_snapshots.security_id) = 'S1'" in compiled_query
     assert (
         "ORDER BY daily_position_snapshots.date DESC, daily_position_snapshots.epoch DESC"
         in compiled_query
@@ -283,6 +311,8 @@ async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     )
 
     assert "daily_position_snapshots.epoch <= 14" in compiled_query
+    assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
+    assert "trim(daily_position_snapshots.security_id) = 'S1'" in compiled_query
     assert "daily_position_snapshots.date > '2025-01-10'" in compiled_query
     assert (
         "row_number() OVER (PARTITION BY daily_position_snapshots.date "
@@ -305,13 +335,15 @@ async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
 
     assert "daily_position_snapshots.date <= '2025-01-10'" in compiled_query
     assert (
-        "GROUP BY daily_position_snapshots.security_id, daily_position_snapshots.date"
+        "GROUP BY trim(daily_position_snapshots.security_id), daily_position_snapshots.date"
         in compiled_query
     )
     assert (
         "row_number() OVER (PARTITION BY anon_2.security_id "
         "ORDER BY anon_2.date DESC, anon_2.epoch DESC)" in compiled_query
     )
+    assert "trim(daily_position_snapshots.security_id) = anon_1.security_id" in compiled_query
+    assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
     assert "daily_position_snapshots.date = anon_1.date" in compiled_query
     assert "daily_position_snapshots.epoch = anon_1.epoch" in compiled_query
 
