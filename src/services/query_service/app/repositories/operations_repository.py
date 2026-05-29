@@ -157,6 +157,10 @@ class OperationsRepository:
         return func.upper(func.trim(status_column))
 
     @staticmethod
+    def _reconciliation_status_filter(status_column, status: str):
+        return status_column == status.strip().upper()
+
+    @staticmethod
     def _portfolio_control_status_expr(status_column):
         return func.upper(func.trim(status_column))
 
@@ -1915,7 +1919,7 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
             stmt = stmt.where(
-                self._reconciliation_status_expr(FinancialReconciliationRun.status) == status
+                self._reconciliation_status_filter(FinancialReconciliationRun.status, status)
             )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
@@ -1949,7 +1953,7 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if status:
             stmt = stmt.where(
-                self._reconciliation_status_expr(FinancialReconciliationRun.status) == status
+                self._reconciliation_status_filter(FinancialReconciliationRun.status, status)
             )
         stmt = (
             stmt.order_by(
@@ -1989,11 +1993,11 @@ class OperationsRepository:
         if security_id is not None and not normalized_security_id:
             return []
         finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
-        normalized_severity = self._finding_severity_expr(FinancialReconciliationFinding.severity)
+        severity = FinancialReconciliationFinding.severity
         severity_rank = case(
-            (normalized_severity == "ERROR", 0),
-            (normalized_severity == "WARNING", 1),
-            (normalized_severity == "INFO", 2),
+            (severity == "ERROR", 0),
+            (severity == "WARNING", 1),
+            (severity == "INFO", 2),
             else_=9,
         )
         stmt = select(FinancialReconciliationFinding).where(
@@ -2048,7 +2052,7 @@ class OperationsRepository:
         self, run_id: str, as_of: Optional[datetime] = None
     ) -> ReconciliationFindingSummary:
         base_stmt = select(
-            self._finding_severity_expr(FinancialReconciliationFinding.severity).label("severity"),
+            FinancialReconciliationFinding.severity.label("severity"),
             FinancialReconciliationFinding.created_at.label("created_at"),
             FinancialReconciliationFinding.id.label("id"),
             FinancialReconciliationFinding.finding_id.label("finding_id"),

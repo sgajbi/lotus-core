@@ -5,6 +5,7 @@ from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
+    FinancialReconciliationRun,
     Instrument,
     InstrumentLookthroughComponent,
     MarketPrice,
@@ -65,6 +66,19 @@ def test_financial_reconciliation_finding_declares_control_query_indexes():
         "financial_reconciliation_findings.severity",
         "financial_reconciliation_findings.created_at DESC",
         "financial_reconciliation_findings.id DESC",
+    ]
+
+
+def test_financial_reconciliation_run_declares_support_query_indexes():
+    indexes = {index.name: index for index in FinancialReconciliationRun.__table__.indexes}
+
+    portfolio_status_started = indexes["ix_financial_reconciliation_runs_port_status_started_id"]
+
+    assert [str(expression) for expression in portfolio_status_started.expressions] == [
+        "financial_reconciliation_runs.portfolio_id",
+        "financial_reconciliation_runs.status",
+        "financial_reconciliation_runs.started_at DESC",
+        "financial_reconciliation_runs.id ASC",
     ]
 
 

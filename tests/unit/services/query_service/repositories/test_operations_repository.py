@@ -1393,7 +1393,8 @@ async def test_get_reconciliation_runs_count_with_filters(
         in compiled
     )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
-    assert "upper(trim(financial_reconciliation_runs.status)) = 'FAILED'" in compiled
+    assert "financial_reconciliation_runs.status = 'FAILED'" in compiled
+    assert "upper(trim(financial_reconciliation_runs.status)) = 'FAILED'" not in compiled
 
 
 async def test_get_reconciliation_runs_query(
@@ -1432,7 +1433,8 @@ async def test_get_reconciliation_runs_query(
         in compiled
     )
     assert "financial_reconciliation_runs.reconciliation_type = 'transaction_cashflow'" in compiled
-    assert "upper(trim(financial_reconciliation_runs.status)) = 'COMPLETED'" in compiled
+    assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
+    assert "upper(trim(financial_reconciliation_runs.status)) = 'COMPLETED'" not in compiled
     assert (
         "CASE WHEN (upper(trim(financial_reconciliation_runs.status)) "
         "IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
@@ -1467,10 +1469,7 @@ async def test_get_reconciliation_findings_query(
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
     assert "trim(financial_reconciliation_findings.security_id) = 'SEC-US-IBM'" in compiled
     assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
-    assert (
-        "CASE WHEN (upper(trim(financial_reconciliation_findings.severity)) = 'ERROR') THEN 0"
-        in compiled
-    )
+    assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
     assert "financial_reconciliation_findings.created_at DESC" in compiled
     assert "LIMIT 20" in compiled
 
@@ -1549,7 +1548,8 @@ async def test_get_reconciliation_finding_summary(
     assert "from financial_reconciliation_findings" in compiled.lower()
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "FILTER (WHERE" in compiled
-    assert "upper(trim(financial_reconciliation_findings.severity)) AS severity" in compiled
+    assert "financial_reconciliation_findings.severity AS severity" in compiled
+    assert "upper(trim(financial_reconciliation_findings.severity)) AS severity" not in compiled
     assert "severity = 'ERROR'" in compiled
     assert "order by" in compiled.lower()
     assert "created_at desc" in compiled.lower()
