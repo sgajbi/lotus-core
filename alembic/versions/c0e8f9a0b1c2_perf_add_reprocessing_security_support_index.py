@@ -15,7 +15,7 @@ branch_labels = None
 depends_on = None
 
 
-INDEX_NAME = "ix_reprocessing_jobs_resetwatermarks_norm_security_status_created_id"
+INDEX_NAME = "ix_reproc_resetwm_sec_status_created_id"
 
 
 def upgrade() -> None:

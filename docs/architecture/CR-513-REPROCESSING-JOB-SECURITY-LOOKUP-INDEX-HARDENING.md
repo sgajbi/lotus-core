@@ -19,7 +19,7 @@ support can degrade to broader RESET_WATERMARKS scans.
 
 ## Change
 
-1. Added `ix_reprocessing_jobs_resetwatermarks_norm_security_status_created_id` on
+1. Added `ix_reproc_resetwm_sec_status_created_id` on
    `(trim(payload->>'security_id'), status, created_at, id)` for RESET_WATERMARKS jobs.
 2. Added Alembic migration `c0e8f9a0b1c2_perf_add_reprocessing_security_support_index.py`.
 3. Added model metadata and repository query-shape proof for normalized security filtering.
@@ -35,6 +35,7 @@ Commands:
 5. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0e8f9a0b1c2_perf_add_reprocessing_security_support_index.py`
 6. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0e8f9a0b1c2_perf_add_reprocessing_security_support_index.py`
 7. `git diff --check`
+8. `python scripts/test_manifest.py --suite unit-db --quiet`
 
 Results:
 
@@ -45,6 +46,7 @@ Results:
 5. Passed.
 6. Passed.
 7. Passed.
+8. Passed: 9 tests.
 
 ## Closure
 

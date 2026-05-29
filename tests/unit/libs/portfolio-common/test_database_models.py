@@ -1,6 +1,7 @@
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AnalyticsExportJob,
+    Base,
     CashAccountMaster,
     Cashflow,
     DailyPositionSnapshot,
@@ -24,13 +25,22 @@ from portfolio_common.database_models import (
 )
 
 
+def test_database_identifier_names_fit_postgresql_limit():
+    names: list[str] = []
+    for table in Base.metadata.tables.values():
+        names.extend(index.name for index in table.indexes if index.name)
+        names.extend(constraint.name for constraint in table.constraints if constraint.name)
+
+    too_long = sorted(name for name in names if len(name) > 63)
+
+    assert too_long == []
+
+
 def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
     indexes = {index.name: index for index in ReprocessingJob.__table__.indexes}
 
     uniqueness_index = indexes["uq_reprocessing_jobs_pending_reset_watermarks_security"]
-    security_support_index = indexes[
-        "ix_reprocessing_jobs_resetwatermarks_norm_security_status_created_id"
-    ]
+    security_support_index = indexes["ix_reproc_resetwm_sec_status_created_id"]
 
     assert uniqueness_index.unique is True
     assert str(next(iter(uniqueness_index.expressions))) == "(payload->>'security_id')"

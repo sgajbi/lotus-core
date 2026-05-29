@@ -2021,7 +2021,7 @@ class ReprocessingJob(Base):
             "updated_at",
         ),
         Index(
-            "ix_reprocessing_jobs_resetwatermarks_norm_security_status_created_id",
+            "ix_reproc_resetwm_sec_status_created_id",
             text("trim(payload->>'security_id')"),
             "status",
             "created_at",
