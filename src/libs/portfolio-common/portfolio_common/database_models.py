@@ -1348,6 +1348,16 @@ class Transaction(Base):
             id,
         ),
         Index(
+            "ix_txn_projected_cash_external_port_settle_txn_date_id",
+            "portfolio_id",
+            "settlement_date",
+            "transaction_date",
+            "id",
+            postgresql_where=text(
+                "transaction_type IN ('DEPOSIT', 'WITHDRAWAL') AND settlement_date IS NOT NULL"
+            ),
+        ),
+        Index(
             "ix_txn_realized_tax_evidence_port_currency_date_txn",
             "portfolio_id",
             "currency",

@@ -101,6 +101,23 @@ def test_transaction_declares_realized_tax_evidence_index():
     )
 
 
+def test_transaction_declares_projected_external_cash_index():
+    indexes = {index.name: index for index in Transaction.__table__.indexes}
+
+    projected_cash = indexes["ix_txn_projected_cash_external_port_settle_txn_date_id"]
+
+    assert [column.name for column in projected_cash.columns] == [
+        "portfolio_id",
+        "settlement_date",
+        "transaction_date",
+        "id",
+    ]
+    assert (
+        str(projected_cash.dialect_options["postgresql"]["where"])
+        == "transaction_type IN ('DEPOSIT', 'WITHDRAWAL') AND settlement_date IS NOT NULL"
+    )
+
+
 def test_financial_reconciliation_finding_declares_control_query_indexes():
     indexes = {index.name: index for index in FinancialReconciliationFinding.__table__.indexes}
 
