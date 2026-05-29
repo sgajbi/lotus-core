@@ -56,6 +56,20 @@ def test_analytics_export_job_declares_hot_path_indexes():
     ]
 
 
+def test_portfolio_declares_portfolio_manager_book_index():
+    indexes = {index.name: index for index in Portfolio.__table__.indexes}
+
+    advisor_status_open_close = indexes["ix_portfolios_advisor_status_open_close_portfolio"]
+
+    assert [column.name for column in advisor_status_open_close.columns] == [
+        "advisor_id",
+        "status",
+        "open_date",
+        "close_date",
+        "portfolio_id",
+    ]
+
+
 def test_financial_reconciliation_finding_declares_control_query_indexes():
     indexes = {index.name: index for index in FinancialReconciliationFinding.__table__.indexes}
 

@@ -4,7 +4,7 @@ from datetime import date
 from typing import List, Optional
 
 from portfolio_common.database_models import Portfolio
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class PortfolioRepository:
 
     @staticmethod
     def _portfolio_status_expr(status_column):
-        return func.upper(func.trim(status_column))
+        return status_column
 
     async def get_portfolios(
         self,

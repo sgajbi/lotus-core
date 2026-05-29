@@ -59,6 +59,14 @@ class Portfolio(Base):
     __table_args__ = (
         Index("ix_portfolios_booking_center_code", "booking_center_code"),
         Index("ix_portfolios_norm_portfolio_id", func.trim(portfolio_id)),
+        Index(
+            "ix_portfolios_advisor_status_open_close_portfolio",
+            "advisor_id",
+            "status",
+            "open_date",
+            "close_date",
+            "portfolio_id",
+        ),
     )
 
 
