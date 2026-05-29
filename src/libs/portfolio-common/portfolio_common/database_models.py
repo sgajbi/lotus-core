@@ -2154,10 +2154,11 @@ class FinancialReconciliationFinding(Base):
 
     __table_args__ = (
         Index(
-            "ix_financial_reconciliation_findings_run_type_severity",
+            "ix_financial_reconciliation_findings_run_severity_type_id",
             "run_id",
-            "finding_type",
             "severity",
+            "finding_type",
+            id.asc(),
         ),
         Index(
             "ix_financial_reconciliation_findings_run_severity_created_id",

@@ -59,8 +59,15 @@ def test_analytics_export_job_declares_hot_path_indexes():
 def test_financial_reconciliation_finding_declares_control_query_indexes():
     indexes = {index.name: index for index in FinancialReconciliationFinding.__table__.indexes}
 
+    run_severity_type_id = indexes["ix_financial_reconciliation_findings_run_severity_type_id"]
     run_severity_created = indexes["ix_financial_reconciliation_findings_run_severity_created_id"]
 
+    assert [str(expression) for expression in run_severity_type_id.expressions] == [
+        "financial_reconciliation_findings.run_id",
+        "financial_reconciliation_findings.severity",
+        "financial_reconciliation_findings.finding_type",
+        "financial_reconciliation_findings.id ASC",
+    ]
     assert [str(expression) for expression in run_severity_created.expressions] == [
         "financial_reconciliation_findings.run_id",
         "financial_reconciliation_findings.severity",
