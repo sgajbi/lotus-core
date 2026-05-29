@@ -16,7 +16,24 @@ def test_partition_candidates_cover_core_fact_tables():
         "position_timeseries",
         "portfolio_timeseries",
         "market_prices",
+        "fx_rates",
+        "index_price_series",
+        "index_return_series",
+        "benchmark_return_series",
+        "risk_free_series",
     }.issubset(candidate_tables)
+
+
+def test_partition_candidates_cover_market_reference_series_tables():
+    candidates = {
+        candidate.table_name: candidate for candidate in db_partition_advisor.PARTITION_CANDIDATES
+    }
+
+    assert candidates["fx_rates"].partition_column == "rate_date"
+    assert candidates["index_price_series"].partition_column == "series_date"
+    assert candidates["index_return_series"].partition_column == "series_date"
+    assert candidates["benchmark_return_series"].partition_column == "series_date"
+    assert candidates["risk_free_series"].partition_column == "series_date"
 
 
 def test_generate_monthly_partition_sql_uses_safe_bounds():

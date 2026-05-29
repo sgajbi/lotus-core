@@ -109,6 +109,56 @@ PARTITION_CANDIDATES: tuple[PartitionCandidate, ...] = (
             "help once vendor history becomes large."
         ),
     ),
+    PartitionCandidate(
+        table_name="fx_rates",
+        partition_column="rate_date",
+        cadence="monthly",
+        priority="medium",
+        reason=(
+            "FX rate history is pair/date oriented and is repeatedly used by "
+            "valuation, performance input, reporting, and cash restatement paths."
+        ),
+    ),
+    PartitionCandidate(
+        table_name="index_price_series",
+        partition_column="series_date",
+        cadence="monthly",
+        priority="medium",
+        reason=(
+            "Index price windows are date-ranged analytics inputs for benchmark, "
+            "performance, and risk workflows."
+        ),
+    ),
+    PartitionCandidate(
+        table_name="index_return_series",
+        partition_column="series_date",
+        cadence="monthly",
+        priority="medium",
+        reason=(
+            "Index return windows are date-ranged analytics inputs and should stay "
+            "pruneable as benchmark history expands."
+        ),
+    ),
+    PartitionCandidate(
+        table_name="benchmark_return_series",
+        partition_column="series_date",
+        cadence="monthly",
+        priority="medium",
+        reason=(
+            "Benchmark return windows are date-ranged analytics inputs consumed by "
+            "performance, risk, and reporting workflows."
+        ),
+    ),
+    PartitionCandidate(
+        table_name="risk_free_series",
+        partition_column="series_date",
+        cadence="monthly",
+        priority="medium",
+        reason=(
+            "Risk-free series windows are date-ranged analytics inputs used by "
+            "performance and risk calculations."
+        ),
+    ),
 )
 
 
