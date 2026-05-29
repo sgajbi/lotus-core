@@ -2000,6 +2000,14 @@ class ReprocessingJob(Base):
             "status",
             "updated_at",
         ),
+        Index(
+            "ix_reprocessing_jobs_resetwatermarks_norm_security_status_created_id",
+            text("trim(payload->>'security_id')"),
+            "status",
+            "created_at",
+            "id",
+            postgresql_where=text("job_type = 'RESET_WATERMARKS'"),
+        ),
     )
 
 

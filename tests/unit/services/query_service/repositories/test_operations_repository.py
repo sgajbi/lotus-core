@@ -1738,6 +1738,7 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
     assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
+    assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled
     assert "from position_history join position_state on" in compiled.lower()
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
@@ -1789,6 +1790,7 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert "anon_1.quantity > 0" in compiled
     assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
+    assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled
 
 
 async def test_get_reprocessing_jobs_count_honors_as_of(
