@@ -84,6 +84,23 @@ def test_portfolio_declares_portfolio_manager_book_index():
     ]
 
 
+def test_transaction_declares_realized_tax_evidence_index():
+    indexes = {index.name: index for index in Transaction.__table__.indexes}
+
+    realized_tax_evidence = indexes["ix_txn_realized_tax_evidence_port_currency_date_txn"]
+
+    assert [column.name for column in realized_tax_evidence.columns] == [
+        "portfolio_id",
+        "currency",
+        "transaction_date",
+        "transaction_id",
+    ]
+    assert (
+        str(realized_tax_evidence.dialect_options["postgresql"]["where"])
+        == "withholding_tax_amount IS NOT NULL OR other_interest_deductions_amount IS NOT NULL"
+    )
+
+
 def test_financial_reconciliation_finding_declares_control_query_indexes():
     indexes = {index.name: index for index in FinancialReconciliationFinding.__table__.indexes}
 

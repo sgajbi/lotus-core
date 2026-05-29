@@ -1347,6 +1347,16 @@ class Transaction(Base):
             settlement_date,
             id,
         ),
+        Index(
+            "ix_txn_realized_tax_evidence_port_currency_date_txn",
+            "portfolio_id",
+            "currency",
+            "transaction_date",
+            "transaction_id",
+            postgresql_where=text(
+                "withholding_tax_amount IS NOT NULL OR other_interest_deductions_amount IS NOT NULL"
+            ),
+        ),
     )
 
 
