@@ -166,9 +166,11 @@ class ReconciliationRepository:
         business_date: date | None,
         epoch: int | None,
     ):
+        instrument_security_id = func.trim(Instrument.security_id)
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         stmt = (
             select(DailyPositionSnapshot, Instrument, Portfolio)
-            .join(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
+            .join(Instrument, instrument_security_id == snapshot_security_id)
             .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
             .where(
                 DailyPositionSnapshot.market_price.is_not(None),
@@ -278,6 +280,8 @@ class ReconciliationRepository:
         business_date: date,
         epoch: int,
     ):
+        instrument_security_id = func.trim(Instrument.security_id)
+        position_timeseries_security_id = func.trim(PositionTimeseries.security_id)
         ranked_position_rows = (
             select(
                 PositionTimeseries.portfolio_id.label("portfolio_id"),
@@ -310,7 +314,7 @@ class ReconciliationRepository:
                     PositionTimeseries.epoch == ranked_position_rows.c.epoch,
                 ),
             )
-            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .join(Instrument, instrument_security_id == position_timeseries_security_id)
             .join(Portfolio, Portfolio.portfolio_id == PositionTimeseries.portfolio_id)
             .where(ranked_position_rows.c.rn == 1)
             .order_by(PositionTimeseries.security_id.asc())

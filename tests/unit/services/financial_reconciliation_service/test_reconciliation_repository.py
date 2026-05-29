@@ -121,3 +121,58 @@ async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date
     assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-29 00:00:00'" in compiled_query
     assert "date(transactions.transaction_date)" not in compiled_query.lower()
+
+
+async def test_fetch_position_valuation_rows_uses_normalized_instrument_join(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    rows = await repository.fetch_position_valuation_rows(
+        portfolio_id="P1",
+        business_date=date(2026, 5, 28),
+        epoch=4,
+    )
+
+    assert rows == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "JOIN instruments ON trim(instruments.security_id) = "
+        "trim(daily_position_snapshots.security_id)"
+    ) in compiled_query
+    assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled_query
+    assert "daily_position_snapshots.date = '2026-05-28'" in compiled_query
+    assert "daily_position_snapshots.epoch = 4" in compiled_query
+
+
+async def test_fetch_authoritative_position_timeseries_rows_uses_normalized_instrument_join(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    rows = await repository.fetch_authoritative_position_timeseries_rows(
+        portfolio_id="P1",
+        business_date=date(2026, 5, 28),
+        epoch=4,
+    )
+
+    assert rows == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "JOIN instruments ON trim(instruments.security_id) = trim(position_timeseries.security_id)"
+        in compiled_query
+    )
+    assert "position_timeseries.portfolio_id = 'P1'" in compiled_query
+    assert "position_timeseries.date <= '2026-05-28'" in compiled_query
+    assert "position_timeseries.epoch <= 4" in compiled_query
+    assert "ORDER BY position_timeseries.security_id ASC" in compiled_query
