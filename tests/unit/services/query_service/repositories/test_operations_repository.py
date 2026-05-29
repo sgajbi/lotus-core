@@ -988,7 +988,8 @@ async def test_get_lineage_keys_count_with_filters(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in compiled.lower()
-    assert "upper(trim(position_state.status)) = 'CURRENT'" in compiled
+    assert "position_state.status = 'CURRENT'" in compiled
+    assert "upper(trim(position_state.status))" not in compiled
     assert "trim(position_state.security_id) = 'S1'" in compiled
 
 
@@ -1002,7 +1003,8 @@ async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_
     assert value == ["k1", "k2"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (upper(trim(position_state.status)) = 'REPROCESSING') THEN 0" in compiled
+    assert "CASE WHEN (position_state.status = 'REPROCESSING') THEN 0" in compiled
+    assert "upper(trim(position_state.status))" not in compiled
     assert "max(position_history.position_date)" in compiled
     assert "DESC NULLS LAST" in compiled
     assert "trim(position_state.security_id) ASC" in compiled
@@ -1231,7 +1233,8 @@ async def test_get_lineage_keys_query_with_filters(
     assert value == ["k1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "upper(trim(position_state.status)) = 'CURRENT'" in compiled
+    assert "position_state.status = 'CURRENT'" in compiled
+    assert "upper(trim(position_state.status))" not in compiled
     assert "trim(position_state.security_id) = 'S1'" in compiled
 
 
@@ -1637,7 +1640,8 @@ async def test_get_reprocessing_keys_count_with_filters(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in compiled.lower()
-    assert "upper(trim(position_state.status)) = 'REPROCESSING'" in compiled
+    assert "position_state.status = 'REPROCESSING'" in compiled
+    assert "upper(trim(position_state.status))" not in compiled
     assert "trim(position_state.security_id) = 'SEC-US-IBM'" in compiled
     assert "position_state.watermark_date = '2025-08-01'" in compiled
 
@@ -1681,10 +1685,11 @@ async def test_get_reprocessing_keys_query(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from position_state" in compiled.lower()
-    assert "upper(trim(position_state.status)) = 'REPROCESSING'" in compiled
+    assert "position_state.status = 'REPROCESSING'" in compiled
     assert "trim(position_state.security_id) = 'SEC-US-IBM'" in compiled
     assert "position_state.watermark_date = '2025-08-01'" in compiled
-    assert "CASE WHEN (upper(trim(position_state.status)) = 'REPROCESSING'" in compiled
+    assert "CASE WHEN (position_state.status = 'REPROCESSING'" in compiled
+    assert "upper(trim(position_state.status))" not in compiled
     assert "position_state.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "position_state.updated_at ASC" in compiled
     assert "LIMIT 7 OFFSET 3" in compiled

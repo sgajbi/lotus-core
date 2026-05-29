@@ -150,7 +150,11 @@ class OperationsRepository:
 
     @staticmethod
     def _reprocessing_status_expr(status_column):
-        return func.upper(func.trim(status_column))
+        return status_column
+
+    @staticmethod
+    def _reprocessing_status_filter(status_column, status: str):
+        return status_column == status.strip().upper()
 
     @staticmethod
     def _reconciliation_status_expr(status_column):
@@ -1472,7 +1476,7 @@ class OperationsRepository:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if reprocessing_status:
             stmt = stmt.where(
-                self._reprocessing_status_expr(PositionState.status) == reprocessing_status
+                self._reprocessing_status_filter(PositionState.status, reprocessing_status)
             )
         if normalized_security_id:
             stmt = stmt.where(state_security_id == normalized_security_id)
@@ -1647,7 +1651,7 @@ class OperationsRepository:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if reprocessing_status:
             stmt = stmt.where(
-                self._reprocessing_status_expr(PositionState.status) == reprocessing_status
+                self._reprocessing_status_filter(PositionState.status, reprocessing_status)
             )
         if normalized_security_id:
             stmt = stmt.where(position_state_security_id == normalized_security_id)
@@ -2203,7 +2207,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
-            stmt = stmt.where(self._reprocessing_status_expr(PositionState.status) == status)
+            stmt = stmt.where(self._reprocessing_status_filter(PositionState.status, status))
         if normalized_security_id:
             stmt = stmt.where(state_security_id == normalized_security_id)
         if watermark_date:
@@ -2234,7 +2238,7 @@ class OperationsRepository:
         if as_of is not None:
             stmt = stmt.where(PositionState.updated_at <= as_of)
         if status:
-            stmt = stmt.where(self._reprocessing_status_expr(PositionState.status) == status)
+            stmt = stmt.where(self._reprocessing_status_filter(PositionState.status, status))
         if normalized_security_id:
             stmt = stmt.where(state_security_id == normalized_security_id)
         if watermark_date:
