@@ -229,7 +229,8 @@ async def test_get_states_needing_backfill_uses_scheduler_order(
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert (
-        "JOIN instruments ON instruments.security_id = position_state.security_id" in compiled_query
+        "JOIN instruments ON trim(instruments.security_id) = trim(position_state.security_id)"
+        in compiled_query
     )
     assert "position_state.watermark_date < '2026-03-27'" in compiled_query
     assert (

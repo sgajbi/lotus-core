@@ -399,7 +399,10 @@ class ValuationRepositoryBase:
     ) -> List[PositionState]:
         stmt = (
             select(PositionState)
-            .join(Instrument, Instrument.security_id == PositionState.security_id)
+            .join(
+                Instrument,
+                func.trim(Instrument.security_id) == func.trim(PositionState.security_id),
+            )
             .where(PositionState.watermark_date < latest_business_date)
             .order_by(
                 PositionState.updated_at.asc(),

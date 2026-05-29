@@ -5,6 +5,7 @@ from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
+    Instrument,
     InstrumentLookthroughComponent,
     MarketPrice,
     Portfolio,
@@ -124,6 +125,11 @@ def test_normalized_calculation_lookup_indexes_are_declared():
             "ix_market_prices_norm_sec_price_date": [
                 "trim(market_prices.security_id)",
                 "market_prices.price_date DESC",
+            ],
+        },
+        Instrument: {
+            "ix_instruments_norm_security_id": [
+                "trim(instruments.security_id)",
             ],
         },
         Transaction: {

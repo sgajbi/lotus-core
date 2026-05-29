@@ -283,6 +283,8 @@ class Instrument(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (Index("ix_instruments_norm_security_id", func.trim(security_id)),)
+
 
 class PortfolioBenchmarkAssignment(Base):
     __tablename__ = "portfolio_benchmark_assignments"
