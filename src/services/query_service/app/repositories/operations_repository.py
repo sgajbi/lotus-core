@@ -287,7 +287,11 @@ class OperationsRepository:
 
     @staticmethod
     def _analytics_export_status_expr(status_column):
-        return func.lower(func.trim(status_column))
+        return status_column
+
+    @staticmethod
+    def _analytics_export_status_filter(status_column, status: str):
+        return status_column == status.strip().lower()
 
     @staticmethod
     def _analytics_export_job_priority(status_column, updated_at_column, stale_threshold: datetime):
@@ -1841,7 +1845,7 @@ class OperationsRepository:
             stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(
-                self._analytics_export_status_expr(AnalyticsExportJob.status) == status
+                self._analytics_export_status_filter(AnalyticsExportJob.status, status)
             )
         if job_id:
             stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
@@ -1868,7 +1872,7 @@ class OperationsRepository:
             stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(
-                self._analytics_export_status_expr(AnalyticsExportJob.status) == status
+                self._analytics_export_status_filter(AnalyticsExportJob.status, status)
             )
         if job_id:
             stmt = stmt.where(AnalyticsExportJob.job_id == job_id)

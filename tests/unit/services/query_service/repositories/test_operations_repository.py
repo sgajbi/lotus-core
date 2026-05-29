@@ -1326,7 +1326,8 @@ async def test_get_analytics_export_jobs_count_with_status(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "lower(trim(analytics_export_jobs.status)) = 'failed'" in compiled
+    assert "analytics_export_jobs.status = 'failed'" in compiled
+    assert "lower(trim(analytics_export_jobs.status))" not in compiled
     assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
 
 
@@ -1354,9 +1355,10 @@ async def test_get_analytics_export_jobs_query(
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from analytics_export_jobs" in compiled.lower()
     assert "analytics_export_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "lower(trim(analytics_export_jobs.status)) = 'running'" in compiled
+    assert "analytics_export_jobs.status = 'running'" in compiled
     assert "analytics_export_jobs.request_fingerprint = 'pf-001:positions:csv'" in compiled
-    assert "CASE WHEN (lower(trim(analytics_export_jobs.status)) = 'failed')" in compiled
+    assert "CASE WHEN (analytics_export_jobs.status = 'failed')" in compiled
+    assert "lower(trim(analytics_export_jobs.status))" not in compiled
     assert "analytics_export_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "analytics_export_jobs.created_at ASC" in compiled
 
