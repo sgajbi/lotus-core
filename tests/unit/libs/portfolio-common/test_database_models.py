@@ -80,12 +80,19 @@ def test_financial_reconciliation_run_declares_support_query_indexes():
     indexes = {index.name: index for index in FinancialReconciliationRun.__table__.indexes}
 
     portfolio_status_started = indexes["ix_financial_reconciliation_runs_port_status_started_id"]
+    portfolio_type_started = indexes["ix_financial_reconciliation_runs_port_type_started_id"]
 
     assert [str(expression) for expression in portfolio_status_started.expressions] == [
         "financial_reconciliation_runs.portfolio_id",
         "financial_reconciliation_runs.status",
         "financial_reconciliation_runs.started_at DESC",
         "financial_reconciliation_runs.id ASC",
+    ]
+    assert [str(expression) for expression in portfolio_type_started.expressions] == [
+        "financial_reconciliation_runs.portfolio_id",
+        "financial_reconciliation_runs.reconciliation_type",
+        "financial_reconciliation_runs.started_at DESC",
+        "financial_reconciliation_runs.id DESC",
     ]
 
 

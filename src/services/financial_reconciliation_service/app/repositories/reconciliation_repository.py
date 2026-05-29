@@ -121,7 +121,10 @@ class ReconciliationRepository:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if portfolio_id is not None:
             stmt = stmt.where(FinancialReconciliationRun.portfolio_id == portfolio_id)
-        stmt = stmt.order_by(FinancialReconciliationRun.started_at.desc()).limit(limit)
+        stmt = stmt.order_by(
+            FinancialReconciliationRun.started_at.desc(),
+            FinancialReconciliationRun.id.desc(),
+        ).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 

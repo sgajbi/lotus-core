@@ -2121,6 +2121,13 @@ class FinancialReconciliationRun(Base):
             started_at.desc(),
             id.asc(),
         ),
+        Index(
+            "ix_financial_reconciliation_runs_port_type_started_id",
+            "portfolio_id",
+            "reconciliation_type",
+            started_at.desc(),
+            id.desc(),
+        ),
     )
 
 

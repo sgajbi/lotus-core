@@ -121,6 +121,34 @@ async def test_list_findings_uses_index_aligned_order(mock_db_session: AsyncMock
     ) in compiled_query
 
 
+async def test_list_runs_uses_index_aligned_deterministic_order(mock_db_session: AsyncMock):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    runs = await repository.list_runs(
+        reconciliation_type="position_valuation",
+        portfolio_id="P1",
+        limit=10,
+    )
+
+    assert runs == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "financial_reconciliation_runs.reconciliation_type = 'position_valuation'" in compiled_query
+    )
+    assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled_query
+    assert (
+        "ORDER BY financial_reconciliation_runs.started_at DESC, "
+        "financial_reconciliation_runs.id DESC"
+    ) in compiled_query
+    assert "LIMIT 10" in compiled_query
+
+
 async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date_range(
     mock_db_session: AsyncMock,
 ):
