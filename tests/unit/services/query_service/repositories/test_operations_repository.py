@@ -1583,7 +1583,8 @@ async def test_get_portfolio_control_stages_count_with_filters(
     assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
-    assert "upper(trim(pipeline_stage_state.status)) = 'REQUIRES_REPLAY'" in compiled
+    assert "pipeline_stage_state.status = 'REQUIRES_REPLAY'" in compiled
+    assert "upper(trim(pipeline_stage_state.status))" not in compiled
     assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
 
 
@@ -1614,12 +1615,10 @@ async def test_get_portfolio_control_stages_query(
     assert "pipeline_stage_state.id = 701" in compiled
     assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
     assert "pipeline_stage_state.business_date = '2026-03-13'" in compiled
-    assert "upper(trim(pipeline_stage_state.status)) = 'FAILED'" in compiled
+    assert "pipeline_stage_state.status = 'FAILED'" in compiled
     assert "pipeline_stage_state.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
-    assert (
-        "CASE WHEN (upper(trim(pipeline_stage_state.status)) "
-        "IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
-    )
+    assert "CASE WHEN (pipeline_stage_state.status IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
+    assert "upper(trim(pipeline_stage_state.status))" not in compiled
     assert "pipeline_stage_state.business_date DESC" in compiled
     assert "LIMIT 10 OFFSET 1" in compiled
 

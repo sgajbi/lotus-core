@@ -166,7 +166,11 @@ class OperationsRepository:
 
     @staticmethod
     def _portfolio_control_status_expr(status_column):
-        return func.upper(func.trim(status_column))
+        return status_column
+
+    @staticmethod
+    def _portfolio_control_status_filter(status_column, status: str):
+        return status_column == status.strip().upper()
 
     @staticmethod
     def _finding_severity_expr(severity_column):
@@ -2141,7 +2145,7 @@ class OperationsRepository:
             stmt = stmt.where(PipelineStageState.business_date == business_date)
         if status:
             stmt = stmt.where(
-                self._portfolio_control_status_expr(PipelineStageState.status) == status
+                self._portfolio_control_status_filter(PipelineStageState.status, status)
             )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
@@ -2170,7 +2174,7 @@ class OperationsRepository:
             stmt = stmt.where(PipelineStageState.business_date == business_date)
         if status:
             stmt = stmt.where(
-                self._portfolio_control_status_expr(PipelineStageState.status) == status
+                self._portfolio_control_status_filter(PipelineStageState.status, status)
             )
         stmt = (
             stmt.order_by(

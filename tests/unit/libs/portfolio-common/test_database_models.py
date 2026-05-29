@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     Instrument,
     InstrumentLookthroughComponent,
     MarketPrice,
+    PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
     PortfolioTimeseries,
@@ -386,6 +387,17 @@ def test_api_query_hot_path_indexes_are_declared():
                 "position_state.watermark_date",
                 "position_state.portfolio_id",
                 "position_state.security_id",
+            ],
+        },
+        PipelineStageState: {
+            "ix_pipeline_stage_state_port_status_date_stage_epoch_updated_id": [
+                "pipeline_stage_state.portfolio_id",
+                "pipeline_stage_state.status",
+                "pipeline_stage_state.business_date DESC",
+                "pipeline_stage_state.stage_name",
+                "pipeline_stage_state.epoch DESC",
+                "pipeline_stage_state.updated_at DESC",
+                "pipeline_stage_state.id ASC",
             ],
         },
     }
