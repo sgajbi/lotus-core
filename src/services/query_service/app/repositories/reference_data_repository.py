@@ -235,10 +235,7 @@ class ReferenceDataRepository:
         if booking_center_code:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         if not include_inactive_mandates:
-            stmt = stmt.where(
-                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
-                == "active"
-            )
+            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -280,10 +277,7 @@ class ReferenceDataRepository:
         if model_portfolio_ids:
             stmt = stmt.where(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
         if not include_inactive_mandates:
-            stmt = stmt.where(
-                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
-                == "active"
-            )
+            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
 
         result = await self._db.execute(stmt)
         rows = _latest_effective_rows(
@@ -293,9 +287,7 @@ class ReferenceDataRepository:
         )
         if after_sort_key is not None:
             rows = [
-                row
-                for row in rows
-                if (str(row.portfolio_id), str(row.mandate_id)) > after_sort_key
+                row for row in rows if (str(row.portfolio_id), str(row.mandate_id)) > after_sort_key
             ]
         if limit is not None:
             rows = rows[:limit]

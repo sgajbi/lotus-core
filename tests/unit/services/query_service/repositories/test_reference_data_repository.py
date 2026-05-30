@@ -603,9 +603,7 @@ async def test_list_instrument_eligibility_profiles_returns_latest_effective_row
         ("MSFT", "APPROVED"),
     ]
     eligibility_stmt = db.execute.await_args.args[0]
-    eligibility_sql = str(
-        eligibility_stmt.compile(compile_kwargs={"literal_binds": True})
-    ).lower()
+    eligibility_sql = str(eligibility_stmt.compile(compile_kwargs={"literal_binds": True})).lower()
     assert "trim(instrument_eligibility_profiles.security_id) in ('aapl', 'msft')" in (
         eligibility_sql
     )
@@ -816,10 +814,8 @@ async def test_list_model_portfolio_affected_mandates_uses_source_filters() -> N
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
-    assert (
-        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) = 'active'"
-        in compiled
-    )
+    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
+    assert "lower(trim(portfolio_mandate_bindings.discretionary_authority_status))" not in compiled
 
 
 @pytest.mark.asyncio
@@ -836,8 +832,7 @@ async def test_list_model_portfolio_affected_mandates_can_include_inactive_autho
 
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert (
-        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) ="
-        not in compiled
+        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) =" not in compiled
     )
 
 
@@ -877,10 +872,8 @@ async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cu
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
-    assert (
-        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) = 'active'"
-        in compiled
-    )
+    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
+    assert "lower(trim(portfolio_mandate_bindings.discretionary_authority_status))" not in compiled
     assert (
         "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')"
         in compiled
@@ -1100,9 +1093,7 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
 
     repo = ReferenceDataRepository(db)
 
-    index_prices = await repo.list_index_price_points(
-        ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
-    )
+    index_prices = await repo.list_index_price_points(["IDX_A"], date(2026, 1, 1), date(2026, 1, 1))
     index_returns = await repo.list_index_return_points(
         ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
     )

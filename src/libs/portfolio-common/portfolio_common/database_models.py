@@ -376,6 +376,18 @@ class PortfolioMandateBinding(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_mandate_binding_dpm_model_book_eff",
+            "model_portfolio_id",
+            "booking_center_code",
+            "effective_from",
+            "effective_to",
+            "portfolio_id",
+            "mandate_id",
+            postgresql_where=text(
+                "mandate_type = 'discretionary' AND discretionary_authority_status = 'active'"
+            ),
+        ),
     )
 
 

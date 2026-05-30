@@ -86,6 +86,11 @@ High-volume Core fact tables must be optimized from observed query shapes first.
 and migrated indexes when API or calculator reads use stable predicates such as portfolio/date,
 portfolio/security/date, or normalized identifier lookups.
 
+Source-data evidence tables use the same rule. When downstream DPM evidence reads filter by
+governed lifecycle status, model portfolio, booking center, and effective-date windows, prefer a
+partial model-declared index over broad table scans, and keep predicates aligned to stored governed
+values rather than wrapping status columns at read time.
+
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.
 Use `scripts/db_partition_advisor.py` to review current candidates and generate future monthly

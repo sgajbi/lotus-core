@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
+    PortfolioMandateBinding,
     PortfolioTimeseries,
     PortfolioValuationJob,
     PositionHistory,
@@ -92,6 +93,25 @@ def test_portfolio_declares_portfolio_manager_book_index():
         "close_date",
         "portfolio_id",
     ]
+
+
+def test_portfolio_mandate_binding_declares_dpm_source_index():
+    indexes = {index.name: index for index in PortfolioMandateBinding.__table__.indexes}
+
+    dpm_source = indexes["ix_mandate_binding_dpm_model_book_eff"]
+
+    assert [column.name for column in dpm_source.columns] == [
+        "model_portfolio_id",
+        "booking_center_code",
+        "effective_from",
+        "effective_to",
+        "portfolio_id",
+        "mandate_id",
+    ]
+    assert (
+        str(dpm_source.dialect_options["postgresql"]["where"]) == "mandate_type = 'discretionary' "
+        "AND discretionary_authority_status = 'active'"
+    )
 
 
 def test_transaction_declares_realized_tax_evidence_index():
