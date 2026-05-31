@@ -907,9 +907,12 @@ class OperationsRepository:
             PositionState.watermark_date.label("watermark_date"),
             self._security_id_expr(PositionState.security_id).label("security_id"),
             PositionState.epoch.label("epoch"),
-        ).where(PositionState.portfolio_id == portfolio_id)
-        if as_of is not None:
-            base_stmt = base_stmt.where(PositionState.updated_at <= as_of)
+        )
+        base_stmt = self._apply_reprocessing_key_scope(
+            base_stmt,
+            portfolio_id=portfolio_id,
+            as_of=as_of,
+        )
         base_subq = base_stmt.subquery()
         aggregate_subq = (
             select(
