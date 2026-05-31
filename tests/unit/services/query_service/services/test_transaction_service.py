@@ -372,6 +372,63 @@ async def test_get_transactions_include_projected_skips_business_date_default(
         )
 
 
+async def test_get_transactions_reads_portfolio_exists_and_default_date_concurrently() -> None:
+    repo = AsyncMock(spec=TransactionRepository)
+    portfolio_started = asyncio.Event()
+    date_started = asyncio.Event()
+    repo.get_transactions_count.return_value = 0
+
+    async def portfolio_exists(portfolio_id: str) -> bool:
+        portfolio_started.set()
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        assert portfolio_id == "P1"
+        return True
+
+    async def get_latest_business_date() -> date:
+        date_started.set()
+        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        return date(2025, 1, 15)
+
+    repo.portfolio_exists.side_effect = portfolio_exists
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await asyncio.wait_for(
+            service.get_transactions(portfolio_id="P1", skip=0, limit=10),
+            timeout=1,
+        )
+
+    assert response.as_of_date == date(2025, 1, 15)
+    assert portfolio_started.is_set()
+    assert date_started.is_set()
+    repo.get_transactions.assert_not_awaited()
+    repo.get_latest_evidence_timestamp.assert_not_awaited()
+
+
+async def test_get_transactions_explicit_date_skips_default_date_lookup(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_transactions(
+            portfolio_id="P1",
+            skip=0,
+            limit=10,
+            as_of_date=date(2025, 1, 14),
+        )
+
+    assert response.as_of_date == date(2025, 1, 14)
+    mock_transaction_repo.get_latest_business_date.assert_not_awaited()
+    mock_transaction_repo.get_transactions_count.assert_awaited_once()
+
+
 async def test_get_transactions_partial_page_reads_page_and_evidence_concurrently(
     mock_transaction_repo: AsyncMock,
 ) -> None:
