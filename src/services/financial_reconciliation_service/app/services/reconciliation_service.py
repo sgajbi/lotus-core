@@ -7,6 +7,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from portfolio_common.database_models import FinancialReconciliationFinding
+from portfolio_common.decimal_amounts import decimal_or_none, required_decimal
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 from portfolio_common.market_prices import coerce_positive_market_price_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
@@ -17,6 +18,11 @@ from ..repositories import ReconciliationRepository
 
 DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
 ZERO = Decimal("0")
+
+
+def _decimal_or_zero(value: object) -> Decimal:
+    amount = decimal_or_none(value)
+    return amount if amount is not None else ZERO
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,19 +85,11 @@ class ReconciliationService:
                 if rate == ZERO:
                     continue
 
-            metrics["bod_market_value"] += (
-                Decimal(str(position_row.bod_market_value or ZERO)) * rate
-            )
-            metrics["bod_cashflow"] += (
-                Decimal(str(position_row.bod_cashflow_portfolio or ZERO)) * rate
-            )
-            metrics["eod_cashflow"] += (
-                Decimal(str(position_row.eod_cashflow_portfolio or ZERO)) * rate
-            )
-            metrics["eod_market_value"] += (
-                Decimal(str(position_row.eod_market_value or ZERO)) * rate
-            )
-            metrics["fees"] += Decimal(str(position_row.fees or ZERO)) * rate
+            metrics["bod_market_value"] += _decimal_or_zero(position_row.bod_market_value) * rate
+            metrics["bod_cashflow"] += _decimal_or_zero(position_row.bod_cashflow_portfolio) * rate
+            metrics["eod_cashflow"] += _decimal_or_zero(position_row.eod_cashflow_portfolio) * rate
+            metrics["eod_market_value"] += _decimal_or_zero(position_row.eod_market_value) * rate
+            metrics["fees"] += _decimal_or_zero(position_row.fees) * rate
 
         return metrics, len(authoritative_rows)
 
@@ -300,8 +298,11 @@ class ReconciliationService:
         examined = 0
         for snapshot, instrument, _portfolio in rows:
             examined += 1
-            quantity = Decimal(str(snapshot.quantity))
-            cost_basis_local = Decimal(str(snapshot.cost_basis_local))
+            quantity = required_decimal(snapshot.quantity, field_name="snapshot.quantity")
+            cost_basis_local = required_decimal(
+                snapshot.cost_basis_local,
+                field_name="snapshot.cost_basis_local",
+            )
             market_price = coerce_positive_market_price_or_none(snapshot.market_price)
             if market_price is None:
                 findings.append(
@@ -331,7 +332,10 @@ class ReconciliationService:
                 product_type=instrument.product_type,
             )
             expected_unrealized = expected_market_value_local - cost_basis_local
-            observed_market_value_local = Decimal(str(snapshot.market_value_local))
+            observed_market_value_local = required_decimal(
+                snapshot.market_value_local,
+                field_name="snapshot.market_value_local",
+            )
             market_delta = observed_market_value_local - expected_market_value_local
             if abs(market_delta) > tolerance:
                 findings.append(
@@ -358,7 +362,10 @@ class ReconciliationService:
                     )
                 )
 
-            observed_unrealized = Decimal(str(snapshot.unrealized_gain_loss_local))
+            observed_unrealized = required_decimal(
+                snapshot.unrealized_gain_loss_local,
+                field_name="snapshot.unrealized_gain_loss_local",
+            )
             unrealized_delta = observed_unrealized - expected_unrealized
             if abs(unrealized_delta) > tolerance:
                 findings.append(
@@ -539,23 +546,38 @@ class ReconciliationService:
 
             metric_pairs = {
                 "bod_market_value": (
-                    Decimal(str(portfolio_row.bod_market_value)),
+                    required_decimal(
+                        portfolio_row.bod_market_value,
+                        field_name="portfolio_timeseries.bod_market_value",
+                    ),
                     authoritative_metrics["bod_market_value"],
                 ),
                 "bod_cashflow": (
-                    Decimal(str(portfolio_row.bod_cashflow)),
+                    required_decimal(
+                        portfolio_row.bod_cashflow,
+                        field_name="portfolio_timeseries.bod_cashflow",
+                    ),
                     authoritative_metrics["bod_cashflow"],
                 ),
                 "eod_cashflow": (
-                    Decimal(str(portfolio_row.eod_cashflow)),
+                    required_decimal(
+                        portfolio_row.eod_cashflow,
+                        field_name="portfolio_timeseries.eod_cashflow",
+                    ),
                     authoritative_metrics["eod_cashflow"],
                 ),
                 "eod_market_value": (
-                    Decimal(str(portfolio_row.eod_market_value)),
+                    required_decimal(
+                        portfolio_row.eod_market_value,
+                        field_name="portfolio_timeseries.eod_market_value",
+                    ),
                     authoritative_metrics["eod_market_value"],
                 ),
                 "fees": (
-                    Decimal(str(portfolio_row.fees)),
+                    required_decimal(
+                        portfolio_row.fees,
+                        field_name="portfolio_timeseries.fees",
+                    ),
                     authoritative_metrics["fees"],
                 ),
             }
