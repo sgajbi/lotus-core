@@ -1140,6 +1140,46 @@ async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing(
 
 
 @pytest.mark.asyncio
+async def test_get_benchmark_coverage_evaluates_only_active_component_candidate_dates() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                composition_effective_from=date(2026, 1, 10),
+                composition_effective_to=date(2026, 1, 12),
+            )
+        ]
+    )
+    repo.list_index_price_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 5),
+                quality_status="accepted",
+            ),
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 10),
+                quality_status="accepted",
+            ),
+        ]
+    )
+    repo.list_benchmark_return_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 5), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 10), quality_status="accepted"),
+        ]
+    )
+
+    coverage = await repo.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 31))
+
+    assert coverage["observed_dates"] == [date(2026, 1, 10)]
+    assert coverage["observed_start_date"] == date(2026, 1, 10)
+    assert coverage["observed_end_date"] == date(2026, 1, 10)
+
+
+@pytest.mark.asyncio
 async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(

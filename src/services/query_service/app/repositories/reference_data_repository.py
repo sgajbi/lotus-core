@@ -1256,32 +1256,33 @@ class ReferenceDataRepository:
         for row in benchmark_returns:
             quality_counts[quality_status_summary_key(row.quality_status)] += 1
 
-        active_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
-        for component in components:
-            component_start = max(
-                getattr(component, "composition_effective_from", start_date),
-                start_date,
-            )
-            component_end = min(
-                getattr(component, "composition_effective_to", None) or end_date,
-                end_date,
-            )
-            cursor = component_start
-            while cursor <= component_end:
-                active_index_ids_by_date[cursor].add(component.index_id)
-                cursor = cursor + timedelta(days=1)
-
         price_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
         for row in price_points:
             price_index_ids_by_date[row.series_date].add(row.index_id)
 
         benchmark_return_dates = {row.series_date for row in benchmark_returns}
+        candidate_dates = sorted(benchmark_return_dates & set(price_index_ids_by_date))
+
+        def active_component_index_ids(current_date: date) -> set[str]:
+            active_index_ids: set[str] = set()
+            for component in components:
+                component_start = max(
+                    getattr(component, "composition_effective_from", start_date),
+                    start_date,
+                )
+                component_end = min(
+                    getattr(component, "composition_effective_to", None) or end_date,
+                    end_date,
+                )
+                if component_start <= current_date <= component_end:
+                    active_index_ids.add(component.index_id)
+            return active_index_ids
+
         observed_dates = sorted(
             current_date
-            for current_date, required_index_ids in active_index_ids_by_date.items()
-            if required_index_ids
+            for current_date in candidate_dates
+            if (required_index_ids := active_component_index_ids(current_date))
             and required_index_ids.issubset(price_index_ids_by_date.get(current_date, set()))
-            and current_date in benchmark_return_dates
         )
 
         observed_start = min(observed_dates) if observed_dates else None
