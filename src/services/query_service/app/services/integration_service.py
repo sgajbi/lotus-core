@@ -67,7 +67,6 @@ from ..dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
-    InstrumentEligibilitySupportability,
     IntegrationWindow,
     LiquidityReserveRequirementRequest,
     LiquidityReserveRequirementResponse,
@@ -98,7 +97,6 @@ from ..dtos.reference_integration_dto import (
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.currency_codes import normalize_currency_code
-from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
@@ -116,6 +114,7 @@ from .dpm_source_readiness import (
     dpm_source_family_readiness,
     unavailable_dpm_source_family,
 )
+from .instrument_eligibility import build_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
 from .integration_value_normalization import as_optional_decimal, control_code
 from .market_data_coverage import (
@@ -145,9 +144,7 @@ from .reference_data_mappers import (
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
-    instrument_eligibility_record,
     liquidity_reserve_requirement_entry,
-    missing_instrument_eligibility_record,
     model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
@@ -1662,47 +1659,7 @@ class IntegrationService:
             security_ids=request.security_ids,
             as_of_date=request.as_of_date,
         )
-        rows_by_security_id = {normalize_security_id(row.security_id): row for row in rows}
-
-        records = []
-        missing_security_ids: list[str] = []
-        for requested_security_id in request.security_ids:
-            security_id = normalize_security_id(requested_security_id)
-            row = rows_by_security_id.get(security_id)
-            if row is None:
-                missing_security_ids.append(security_id)
-                records.append(missing_instrument_eligibility_record(security_id))
-                continue
-            records.append(instrument_eligibility_record(row))
-
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "INSTRUMENT_ELIGIBILITY_READY"
-        if missing_security_ids:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "INSTRUMENT_ELIGIBILITY_MISSING"
-
-        return InstrumentEligibilityBulkResponse(
-            records=records,
-            supportability=InstrumentEligibilitySupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requested_count=len(request.security_ids),
-                resolved_count=len(request.security_ids) - len(missing_security_ids),
-                missing_security_ids=missing_security_ids,
-            ),
-            lineage={
-                "source_system": "instrument_eligibility",
-                "contract_version": "rfc_087_v1",
-            },
-            **source_product_runtime_metadata(
-                request.as_of_date,
-                data_quality_status=market_reference_data_quality_status(
-                    rows,
-                    required_count=len(request.security_ids),
-                ),
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
-            ),
-        )
+        return build_instrument_eligibility_bulk_response(request=request, rows=rows)
 
     async def get_portfolio_tax_lot_window(
         self,
