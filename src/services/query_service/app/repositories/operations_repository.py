@@ -342,6 +342,38 @@ class OperationsRepository:
             else_=9,
         )
 
+    def _apply_reconciliation_run_scope(
+        self,
+        stmt,
+        *,
+        portfolio_id: str,
+        run_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        requested_by: Optional[str] = None,
+        dedupe_key: Optional[str] = None,
+        reconciliation_type: Optional[str] = None,
+        status: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(FinancialReconciliationRun.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
+        if run_id:
+            stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
+        if correlation_id:
+            stmt = stmt.where(FinancialReconciliationRun.correlation_id == correlation_id)
+        if requested_by:
+            stmt = stmt.where(FinancialReconciliationRun.requested_by == requested_by)
+        if dedupe_key:
+            stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
+        if reconciliation_type:
+            stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
+        if status:
+            stmt = stmt.where(
+                self._reconciliation_status_filter(FinancialReconciliationRun.status, status)
+            )
+        return stmt
+
     @staticmethod
     def _portfolio_control_stage_priority(status_column):
         governed_status = status_column
@@ -1852,27 +1884,17 @@ class OperationsRepository:
         status: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(FinancialReconciliationRun)
-            .where(FinancialReconciliationRun.portfolio_id == portfolio_id)
+        stmt = self._apply_reconciliation_run_scope(
+            select(func.count()).select_from(FinancialReconciliationRun),
+            portfolio_id=portfolio_id,
+            run_id=run_id,
+            correlation_id=correlation_id,
+            requested_by=requested_by,
+            dedupe_key=dedupe_key,
+            reconciliation_type=reconciliation_type,
+            status=status,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
-        if run_id:
-            stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
-        if correlation_id:
-            stmt = stmt.where(FinancialReconciliationRun.correlation_id == correlation_id)
-        if requested_by:
-            stmt = stmt.where(FinancialReconciliationRun.requested_by == requested_by)
-        if dedupe_key:
-            stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
-        if reconciliation_type:
-            stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
-        if status:
-            stmt = stmt.where(
-                self._reconciliation_status_filter(FinancialReconciliationRun.status, status)
-            )
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_runs(
@@ -1888,25 +1910,17 @@ class OperationsRepository:
         status: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> list[FinancialReconciliationRun]:
-        stmt = select(FinancialReconciliationRun).where(
-            FinancialReconciliationRun.portfolio_id == portfolio_id
+        stmt = self._apply_reconciliation_run_scope(
+            select(FinancialReconciliationRun),
+            portfolio_id=portfolio_id,
+            run_id=run_id,
+            correlation_id=correlation_id,
+            requested_by=requested_by,
+            dedupe_key=dedupe_key,
+            reconciliation_type=reconciliation_type,
+            status=status,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
-        if run_id:
-            stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
-        if correlation_id:
-            stmt = stmt.where(FinancialReconciliationRun.correlation_id == correlation_id)
-        if requested_by:
-            stmt = stmt.where(FinancialReconciliationRun.requested_by == requested_by)
-        if dedupe_key:
-            stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
-        if reconciliation_type:
-            stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
-        if status:
-            stmt = stmt.where(
-                self._reconciliation_status_filter(FinancialReconciliationRun.status, status)
-            )
         stmt = (
             stmt.order_by(
                 self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
