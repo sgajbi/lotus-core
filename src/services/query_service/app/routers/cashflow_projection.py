@@ -94,6 +94,6 @@ async def get_cashflow_projection(
         )
     except ValueError as exc:
         message = str(exc)
-        if "Portfolio with id" in message and "not found" in message:
+        if "not found" in message.lower():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
