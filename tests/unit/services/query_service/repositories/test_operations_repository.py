@@ -1055,7 +1055,8 @@ async def test_get_valuation_jobs_query(
     assert value == ["job1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (upper(trim(portfolio_valuation_jobs.status)) = 'FAILED')" in compiled
+    assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
+    assert "upper(trim(portfolio_valuation_jobs.status))" not in compiled
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
@@ -1118,7 +1119,8 @@ async def test_get_aggregation_jobs_query(
     assert value == ["agg1"]
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "CASE WHEN (upper(trim(portfolio_aggregation_jobs.status)) = 'FAILED')" in compiled
+    assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
+    assert "upper(trim(portfolio_aggregation_jobs.status))" not in compiled
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
@@ -1743,6 +1745,8 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert "anon_1.quantity > 0" in compiled
+    assert "CASE WHEN (reprocessing_jobs.status = 'FAILED')" in compiled
+    assert "upper(trim(reprocessing_jobs.status))" not in compiled
     assert "reprocessing_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "LIMIT 10 OFFSET 0" in compiled
 

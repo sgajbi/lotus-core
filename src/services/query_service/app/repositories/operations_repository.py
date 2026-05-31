@@ -142,7 +142,7 @@ class OperationsRepository:
 
     @staticmethod
     def _support_job_status_expr(status_column):
-        return func.upper(func.trim(status_column))
+        return status_column
 
     @staticmethod
     def _support_job_status_filter(status_column, status: str):
