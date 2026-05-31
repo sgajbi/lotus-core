@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -85,8 +86,36 @@ async def test_add_changes_persists_rows_and_increments_session(
     assert updated_session.version == 4
     assert len(rows) == 1
     assert rows[0].security_id == "SEC_AAPL_US"
+    assert rows[0].quantity == Decimal("10")
+    assert rows[0].price == Decimal("100.5")
+    assert rows[0].amount is None
     mock_db_session.commit.assert_awaited_once()
     assert mock_db_session.refresh.await_count >= 2
+
+
+async def test_add_changes_normalizes_blank_optional_amounts(
+    repository: SimulationRepository, mock_db_session: AsyncMock
+):
+    session = SimpleNamespace(session_id="S1", portfolio_id="P1", version=3)
+    mock_db_session.refresh = AsyncMock(side_effect=lambda obj: None)
+
+    _updated_session, rows = await repository.add_changes(
+        session,
+        [
+            {
+                "security_id": "SEC_CASH_USD",
+                "transaction_type": "CASH_ADJUSTMENT",
+                "quantity": " ",
+                "price": "",
+                "amount": "12.50",
+                "currency": "USD",
+            }
+        ],
+    )
+
+    assert rows[0].quantity is None
+    assert rows[0].price is None
+    assert rows[0].amount == Decimal("12.50")
 
 
 async def test_delete_change_rolls_back_when_change_missing(

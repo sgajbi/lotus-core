@@ -23,6 +23,11 @@ def test_to_decimal_rejects_invalid_value() -> None:
         to_decimal("bad-number")
 
 
+def test_to_decimal_rejects_blank_value() -> None:
+    with pytest.raises(ValueError):
+        to_decimal(" ")
+
+
 def test_to_decimal_handles_none_and_decimal_passthrough() -> None:
     assert to_decimal(None) == Decimal("0")
     original = Decimal("1.23")

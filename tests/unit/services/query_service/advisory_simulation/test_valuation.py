@@ -38,6 +38,13 @@ def test_get_fx_rate_supports_direct_inverse_and_same_currency() -> None:
     assert get_fx_rate(market_data, "EUR", "USD") is None
 
 
+def test_get_fx_rate_normalizes_numeric_text_rates() -> None:
+    market_data = SimpleNamespace(fx_rates=[SimpleNamespace(pair="USD/SGD", rate="1.35")])
+
+    assert get_fx_rate(market_data, "USD", "SGD") == Decimal("1.35")
+    assert get_fx_rate(market_data, "SGD", "USD") == Decimal("1") / Decimal("1.35")
+
+
 def test_value_position_uses_trust_snapshot_market_value_when_configured() -> None:
     market_data = market_data_snapshot(prices=[price("EQ_1", "100", "USD")])
     portfolio = portfolio_snapshot(

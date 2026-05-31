@@ -19,6 +19,11 @@ def test_to_decimal_rejects_invalid_value() -> None:
         to_decimal("bad-number")
 
 
+def test_to_decimal_rejects_blank_value() -> None:
+    with pytest.raises(ValueError):
+        to_decimal(" ")
+
+
 def test_money_quantization_half_even() -> None:
     assert quantize_money("1.005") == Decimal("1.00")
     assert quantize_money("1.015") == Decimal("1.02")
