@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.cashflow_repository import CashflowRepository
+from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
 
@@ -114,5 +115,5 @@ class CashflowProjectionService:
     def _sum_by_date(rows: list[tuple[date, Decimal]]) -> dict[date, Decimal]:
         totals: dict[date, Decimal] = {}
         for flow_date, amount in rows:
-            totals[flow_date] = totals.get(flow_date, Decimal("0")) + Decimal(str(amount))
+            totals[flow_date] = totals.get(flow_date, Decimal("0")) + decimal_or_zero(amount)
         return totals

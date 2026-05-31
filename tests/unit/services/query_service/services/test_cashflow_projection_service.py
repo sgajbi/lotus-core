@@ -182,4 +182,16 @@ async def test_projection_adds_same_day_booked_and_projected_movements(
         assert points[date(2026, 3, 3)].projected_cumulative_cashflow == Decimal("250.15")
         assert response.total_net_cashflow == Decimal("250.15")
         assert response.booked_total_net_cashflow == Decimal("400.25")
-        assert response.projected_settlement_total_cashflow == Decimal("-150.10")
+    assert response.projected_settlement_total_cashflow == Decimal("-150.10")
+
+
+async def test_projection_sum_by_date_treats_blank_and_null_amounts_as_zero() -> None:
+    totals = CashflowProjectionService._sum_by_date(
+        [
+            (date(2026, 3, 2), Decimal("400.25")),
+            (date(2026, 3, 2), " "),
+            (date(2026, 3, 2), None),
+        ]
+    )
+
+    assert totals == {date(2026, 3, 2): Decimal("400.25")}
