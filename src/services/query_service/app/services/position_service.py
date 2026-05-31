@@ -229,32 +229,40 @@ class PositionService:
                 )
             )
 
+        response_as_of_date = effective_as_of_date or max(
+            (position.position_date for position in positions), default=date.today()
+        )
+        market_price_security_ids = sorted(
+            {
+                security_id
+                for position in positions
+                if self._requires_market_price_freshness(position)
+                if (security_id := normalize_security_id(position.security_id))
+            }
+        )
+
         if held_since_requests:
-            held_since_map = await self.repo.get_held_since_dates(
-                portfolio_id=portfolio_id,
-                security_epoch_pairs=[
-                    (security_id, epoch) for _, security_id, epoch, _ in held_since_requests
-                ],
+            held_since_map, latest_market_price_dates = await asyncio.gather(
+                self.repo.get_held_since_dates(
+                    portfolio_id=portfolio_id,
+                    security_epoch_pairs=[
+                        (security_id, epoch) for _, security_id, epoch, _ in held_since_requests
+                    ],
+                ),
+                self.repo.get_latest_market_price_dates(
+                    security_ids=market_price_security_ids,
+                    as_of_date=response_as_of_date,
+                ),
             )
             for idx, security_id, epoch, default_date in held_since_requests:
                 positions[idx].held_since_date = held_since_map.get(
                     (security_id, epoch), default_date
                 )
-
-        response_as_of_date = effective_as_of_date or max(
-            (position.position_date for position in positions), default=date.today()
-        )
-        latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-            security_ids=sorted(
-                {
-                    normalize_security_id(position.security_id)
-                    for position in positions
-                    if self._requires_market_price_freshness(position)
-                    and normalize_security_id(position.security_id)
-                }
-            ),
-            as_of_date=response_as_of_date,
-        )
+        else:
+            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
+                security_ids=market_price_security_ids,
+                as_of_date=response_as_of_date,
+            )
         return PortfolioPositionsResponse(
             portfolio_id=portfolio_id,
             positions=positions,

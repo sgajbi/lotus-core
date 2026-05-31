@@ -195,6 +195,55 @@ async def test_get_latest_positions_reads_snapshot_and_history_concurrently(
     assert response.positions[0].security_id == "S1"
 
 
+async def test_get_latest_positions_reads_support_evidence_concurrently(
+    mock_position_repo: AsyncMock,
+) -> None:
+    held_since_started = asyncio.Event()
+    price_dates_started = asyncio.Event()
+
+    async def get_held_since_dates(
+        *,
+        portfolio_id: str,
+        security_epoch_pairs: list[tuple[str, int]],
+    ) -> dict[tuple[str, int], date]:
+        held_since_started.set()
+        await asyncio.wait_for(price_dates_started.wait(), timeout=1)
+        assert portfolio_id == "P1"
+        assert security_epoch_pairs == [("S1", 1)]
+        return {("S1", 1): date(2024, 12, 31)}
+
+    async def get_latest_market_price_dates(
+        *,
+        security_ids: list[str],
+        as_of_date: date,
+    ) -> dict[str, date]:
+        price_dates_started.set()
+        await asyncio.wait_for(held_since_started.wait(), timeout=1)
+        assert security_ids == ["S1"]
+        assert as_of_date == date(2025, 1, 1)
+        return {"S1": date(2025, 1, 1)}
+
+    mock_position_repo.get_held_since_dates.side_effect = get_held_since_dates
+    mock_position_repo.get_latest_market_price_dates.side_effect = get_latest_market_price_dates
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await asyncio.wait_for(
+            service.get_portfolio_positions(
+                portfolio_id="P1",
+                as_of_date=date(2025, 1, 1),
+            ),
+            timeout=1,
+        )
+
+    assert response.positions[0].held_since_date == date(2024, 12, 31)
+    assert held_since_started.is_set()
+    assert price_dates_started.is_set()
+
+
 async def test_get_latest_positions_falls_back_to_position_history(mock_position_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.position_service.PositionRepository",
