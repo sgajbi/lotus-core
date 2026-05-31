@@ -6,13 +6,17 @@ from typing import Any
 from ..dtos.reference_integration_dto import (
     BenchmarkComponentResponse,
     BenchmarkDefinitionResponse,
+    BenchmarkReturnSeriesPoint,
     CioModelChangeAffectedMandate,
+    ClassificationTaxonomyEntry,
     ClientIncomeNeedsScheduleEntry,
     ClientRestrictionProfileEntry,
     ClientTaxProfileEntry,
     ClientTaxRuleSetEntry,
     DpmPortfolioUniverseCandidate,
     IndexDefinitionResponse,
+    IndexPriceSeriesPoint,
+    IndexReturnSeriesPoint,
     InstrumentEligibilityRecord,
     LiquidityReserveRequirementEntry,
     MarketDataFxCoverageRecord,
@@ -21,6 +25,7 @@ from ..dtos.reference_integration_dto import (
     PlannedWithdrawalScheduleEntry,
     PortfolioManagerBookMember,
     PortfolioTaxLotRecord,
+    RiskFreeSeriesPoint,
     SustainabilityPreferenceProfileEntry,
 )
 from ..repositories.identifier_normalization import normalize_security_id
@@ -301,6 +306,63 @@ def market_data_fx_coverage_record(
         rate=_as_decimal(row.rate),
         age_days=age_days,
         quality_status=quality_status,
+    )
+
+
+def index_price_series_point(row: Any) -> IndexPriceSeriesPoint:
+    return IndexPriceSeriesPoint(
+        series_date=row.series_date,
+        index_price=_as_decimal(row.index_price),
+        series_currency=row.series_currency,
+        value_convention=row.value_convention,
+        quality_status=row.quality_status,
+    )
+
+
+def index_return_series_point(row: Any) -> IndexReturnSeriesPoint:
+    return IndexReturnSeriesPoint(
+        series_date=row.series_date,
+        index_return=_as_decimal(row.index_return),
+        return_period=row.return_period,
+        return_convention=row.return_convention,
+        series_currency=row.series_currency,
+        quality_status=row.quality_status,
+    )
+
+
+def benchmark_return_series_point(row: Any) -> BenchmarkReturnSeriesPoint:
+    return BenchmarkReturnSeriesPoint(
+        series_date=row.series_date,
+        benchmark_return=_as_decimal(row.benchmark_return),
+        return_period=row.return_period,
+        return_convention=row.return_convention,
+        series_currency=row.series_currency,
+        quality_status=row.quality_status,
+    )
+
+
+def risk_free_series_point(row: Any) -> RiskFreeSeriesPoint:
+    return RiskFreeSeriesPoint(
+        series_date=row.series_date,
+        value=_as_decimal(row.value),
+        value_convention=row.value_convention,
+        day_count_convention=row.day_count_convention,
+        compounding_convention=row.compounding_convention,
+        series_currency=row.series_currency,
+        quality_status=row.quality_status,
+    )
+
+
+def classification_taxonomy_entry(row: Any) -> ClassificationTaxonomyEntry:
+    return ClassificationTaxonomyEntry(
+        classification_set_id=row.classification_set_id,
+        taxonomy_scope=row.taxonomy_scope,
+        dimension_name=row.dimension_name,
+        dimension_value=row.dimension_value,
+        dimension_description=row.dimension_description,
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        quality_status=row.quality_status,
     )
 
 

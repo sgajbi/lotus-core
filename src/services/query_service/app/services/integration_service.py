@@ -27,7 +27,6 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     CioModelChangeAffectedCohortSupportability,
-    ClassificationTaxonomyEntry,
     ClassificationTaxonomyResponse,
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
@@ -74,9 +73,7 @@ from ..dtos.reference_integration_dto import (
     ExternalOrderExecutionAcknowledgementResponse,
     ExternalOrderExecutionAcknowledgementSupportability,
     IndexCatalogResponse,
-    IndexPriceSeriesPoint,
     IndexPriceSeriesResponse,
-    IndexReturnSeriesPoint,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
@@ -103,7 +100,6 @@ from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowSupportability,
     RebalanceBandContext,
     ReferencePageMetadata,
-    RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
     SeriesPoint,
@@ -133,13 +129,17 @@ from .reference_data_helpers import (
 )
 from .reference_data_mappers import (
     benchmark_definition_response,
+    benchmark_return_series_point,
     cio_model_change_affected_mandate,
+    classification_taxonomy_entry,
     client_income_needs_schedule_entry,
     client_restriction_profile_entry,
     client_tax_profile_entry,
     client_tax_rule_set_entry,
     dpm_portfolio_universe_candidate,
     index_definition_response,
+    index_price_series_point,
+    index_return_series_point,
     instrument_eligibility_record,
     liquidity_reserve_requirement_entry,
     market_data_fx_coverage_record,
@@ -151,6 +151,7 @@ from .reference_data_mappers import (
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
     portfolio_tax_lot_record,
+    risk_free_series_point,
     sustainability_preference_profile_entry,
 )
 from .request_fingerprint import request_fingerprint, series_request_fingerprint
@@ -2867,16 +2868,7 @@ class IntegrationService:
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
-            points=[
-                IndexPriceSeriesPoint(
-                    series_date=row.series_date,
-                    index_price=self._as_decimal(row.index_price),
-                    series_currency=row.series_currency,
-                    value_convention=row.value_convention,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            points=[index_price_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
@@ -2915,17 +2907,7 @@ class IntegrationService:
             ),
             frequency=request.frequency,
             request_fingerprint=request_fingerprint,
-            points=[
-                IndexReturnSeriesPoint(
-                    series_date=row.series_date,
-                    index_return=self._as_decimal(row.index_return),
-                    return_period=row.return_period,
-                    return_convention=row.return_convention,
-                    series_currency=row.series_currency,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            points=[index_return_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
@@ -2964,17 +2946,7 @@ class IntegrationService:
             ),
             frequency=request.frequency,
             request_fingerprint=request_fingerprint,
-            points=[
-                {
-                    "series_date": row.series_date,
-                    "benchmark_return": self._as_decimal(row.benchmark_return),
-                    "return_period": row.return_period,
-                    "return_convention": row.return_convention,
-                    "series_currency": row.series_currency,
-                    "quality_status": row.quality_status,
-                }
-                for row in rows
-            ],
+            points=[benchmark_return_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
@@ -3006,18 +2978,7 @@ class IntegrationService:
             ),
             frequency=request.frequency,
             request_fingerprint=request_fingerprint,
-            points=[
-                RiskFreeSeriesPoint(
-                    series_date=row.series_date,
-                    value=self._as_decimal(row.value),
-                    value_convention=row.value_convention,
-                    day_count_convention=row.day_count_convention,
-                    compounding_convention=row.compounding_convention,
-                    series_currency=row.series_currency,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            points=[risk_free_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
@@ -3108,19 +3069,7 @@ class IntegrationService:
         )
         return ClassificationTaxonomyResponse(
             as_of_date=as_of_date,
-            records=[
-                ClassificationTaxonomyEntry(
-                    classification_set_id=row.classification_set_id,
-                    taxonomy_scope=row.taxonomy_scope,
-                    dimension_name=row.dimension_name,
-                    dimension_value=row.dimension_value,
-                    dimension_description=row.dimension_description,
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            records=[classification_taxonomy_entry(row) for row in rows],
             request_fingerprint=request_fingerprint,
             **self._runtime_metadata_for_existing_as_of_date(
                 as_of_date,

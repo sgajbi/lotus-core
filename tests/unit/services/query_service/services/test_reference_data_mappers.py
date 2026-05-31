@@ -4,13 +4,17 @@ from types import SimpleNamespace
 
 from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_definition_response,
+    benchmark_return_series_point,
     cio_model_change_affected_mandate,
+    classification_taxonomy_entry,
     client_income_needs_schedule_entry,
     client_restriction_profile_entry,
     client_tax_profile_entry,
     client_tax_rule_set_entry,
     dpm_portfolio_universe_candidate,
     index_definition_response,
+    index_price_series_point,
+    index_return_series_point,
     instrument_eligibility_record,
     liquidity_reserve_requirement_entry,
     market_data_fx_coverage_record,
@@ -22,6 +26,7 @@ from src.services.query_service.app.services.reference_data_mappers import (
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
     portfolio_tax_lot_record,
+    risk_free_series_point,
     sustainability_preference_profile_entry,
 )
 
@@ -280,6 +285,71 @@ def test_market_data_coverage_records_map_found_missing_and_stale_rows() -> None
     assert missing_fx.from_currency == "EUR"
     assert missing_fx.to_currency == "SGD"
     assert missing_fx.quality_status == "MISSING"
+
+
+def test_market_reference_series_points_map_provider_rows() -> None:
+    series_date = date(2026, 1, 2)
+
+    price = index_price_series_point(
+        SimpleNamespace(
+            series_date=series_date,
+            index_price="4567.1234000000",
+            series_currency="USD",
+            value_convention="close_price",
+            quality_status="accepted",
+        )
+    )
+    index_return = index_return_series_point(
+        SimpleNamespace(
+            series_date=series_date,
+            index_return="0.0023000000",
+            return_period="1d",
+            return_convention="total_return_index",
+            series_currency="USD",
+            quality_status="accepted",
+        )
+    )
+    benchmark_return = benchmark_return_series_point(
+        SimpleNamespace(
+            series_date=series_date,
+            benchmark_return="0.0019000000",
+            return_period="1d",
+            return_convention="total_return_index",
+            series_currency="USD",
+            quality_status="accepted",
+        )
+    )
+    risk_free = risk_free_series_point(
+        SimpleNamespace(
+            series_date=series_date,
+            value="0.0350000000",
+            value_convention="annualized_rate",
+            day_count_convention="act_360",
+            compounding_convention="simple",
+            series_currency="USD",
+            quality_status="accepted",
+        )
+    )
+    taxonomy = classification_taxonomy_entry(
+        SimpleNamespace(
+            classification_set_id="wm_global_taxonomy_v1",
+            taxonomy_scope="instrument",
+            dimension_name="asset_class",
+            dimension_value="equity",
+            dimension_description="Listed equity",
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            quality_status="accepted",
+        )
+    )
+
+    assert price.index_price == Decimal("4567.1234000000")
+    assert index_return.index_return == Decimal("0.0023000000")
+    assert benchmark_return.benchmark_return == Decimal("0.0019000000")
+    assert risk_free.value == Decimal("0.0350000000")
+    assert risk_free.day_count_convention == "act_360"
+    assert taxonomy.dimension_name == "asset_class"
+    assert taxonomy.dimension_value == "equity"
 
 
 def test_client_tax_entries_map_source_data_rows() -> None:
