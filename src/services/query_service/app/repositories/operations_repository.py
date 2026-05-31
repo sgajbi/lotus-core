@@ -158,7 +158,7 @@ class OperationsRepository:
 
     @staticmethod
     def _reconciliation_status_expr(status_column):
-        return func.upper(func.trim(status_column))
+        return status_column
 
     @staticmethod
     def _reconciliation_status_filter(status_column, status: str):
@@ -171,10 +171,6 @@ class OperationsRepository:
     @staticmethod
     def _portfolio_control_status_filter(status_column, status: str):
         return status_column == status.strip().upper()
-
-    @staticmethod
-    def _finding_severity_expr(severity_column):
-        return func.upper(func.trim(severity_column))
 
     @staticmethod
     def _snapshot_valuation_status_expr(status_column):

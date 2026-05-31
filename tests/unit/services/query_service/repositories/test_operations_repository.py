@@ -1443,9 +1443,10 @@ async def test_get_reconciliation_runs_query(
     assert "financial_reconciliation_runs.status = 'COMPLETED'" in compiled
     assert "upper(trim(financial_reconciliation_runs.status)) = 'COMPLETED'" not in compiled
     assert (
-        "CASE WHEN (upper(trim(financial_reconciliation_runs.status)) "
-        "IN ('FAILED', 'REQUIRES_REPLAY'))" in compiled
+        "CASE WHEN (financial_reconciliation_runs.status IN ('FAILED', 'REQUIRES_REPLAY'))"
+        in compiled
     )
+    assert "upper(trim(financial_reconciliation_runs.status))" not in compiled
     assert "financial_reconciliation_runs.started_at DESC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
 
