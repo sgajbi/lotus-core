@@ -886,11 +886,11 @@ class OperationsRepository:
     async def get_current_portfolio_epoch(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[int]:
-        stmt = select(func.max(PositionState.epoch)).where(
-            PositionState.portfolio_id == portfolio_id
+        stmt = self._apply_reprocessing_key_scope(
+            select(func.max(PositionState.epoch)),
+            portfolio_id=portfolio_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_reprocessing_health_summary(
