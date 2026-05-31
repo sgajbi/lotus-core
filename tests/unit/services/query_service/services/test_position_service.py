@@ -244,6 +244,58 @@ async def test_get_latest_positions_reads_support_evidence_concurrently(
     assert price_dates_started.is_set()
 
 
+async def test_get_latest_positions_reads_portfolio_exists_and_default_date_concurrently(
+    mock_position_repo: AsyncMock,
+) -> None:
+    portfolio_started = asyncio.Event()
+    date_started = asyncio.Event()
+
+    async def portfolio_exists(portfolio_id: str) -> bool:
+        portfolio_started.set()
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        assert portfolio_id == "P1"
+        return True
+
+    async def get_latest_business_date() -> date:
+        date_started.set()
+        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        return date(2025, 1, 1)
+
+    mock_position_repo.portfolio_exists.side_effect = portfolio_exists
+    mock_position_repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await asyncio.wait_for(
+            service.get_portfolio_positions(portfolio_id="P1"),
+            timeout=1,
+        )
+
+    assert response.as_of_date == date(2025, 1, 1)
+    assert portfolio_started.is_set()
+    assert date_started.is_set()
+
+
+async def test_get_latest_positions_explicit_date_skips_default_date_lookup(
+    mock_position_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
+        )
+
+    assert response.as_of_date == date(2025, 1, 1)
+    mock_position_repo.get_latest_business_date.assert_not_awaited()
+
+
 async def test_get_latest_positions_falls_back_to_position_history(mock_position_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.position_service.PositionRepository",

@@ -85,12 +85,22 @@ class PositionService:
         """
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
-        if not await self.repo.portfolio_exists(portfolio_id):
+        needs_default_as_of_date = as_of_date is None and not include_projected
+        portfolio_exists_read = self.repo.portfolio_exists(portfolio_id)
+        if needs_default_as_of_date:
+            portfolio_exists, default_as_of_date = await asyncio.gather(
+                portfolio_exists_read,
+                self.repo.get_latest_business_date(),
+            )
+        else:
+            portfolio_exists = await portfolio_exists_read
+            default_as_of_date = as_of_date
+        if not portfolio_exists:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-        effective_as_of_date = as_of_date
-        if effective_as_of_date is None and not include_projected:
-            effective_as_of_date = await self.repo.get_latest_business_date() or date.today()
+        effective_as_of_date = default_as_of_date
+        if effective_as_of_date is None and needs_default_as_of_date:
+            effective_as_of_date = date.today()
 
         if effective_as_of_date is not None:
             snapshot_results, history_results = await asyncio.gather(
