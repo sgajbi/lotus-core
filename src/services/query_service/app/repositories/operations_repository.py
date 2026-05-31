@@ -315,6 +315,36 @@ class OperationsRepository:
             else_=9,
         )
 
+    def _apply_valuation_job_scope(
+        self,
+        stmt,
+        *,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        business_date: Optional[date] = None,
+        normalized_security_id: Optional[str] = None,
+        job_id: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(PortfolioValuationJob.portfolio_id == portfolio_id)
+        if job_id is None and correlation_id is None:
+            stmt = stmt.where(self._is_actionable_valuation_job(as_of=as_of))
+        if as_of is not None:
+            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
+        if status:
+            stmt = stmt.where(self._support_job_status_filter(PortfolioValuationJob.status, status))
+        if business_date:
+            stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
+        if normalized_security_id:
+            valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
+            stmt = stmt.where(valuation_job_security_id == normalized_security_id)
+        if job_id is not None:
+            stmt = stmt.where(PortfolioValuationJob.id == job_id)
+        if correlation_id:
+            stmt = stmt.where(PortfolioValuationJob.correlation_id == correlation_id)
+        return stmt
+
     @staticmethod
     def _analytics_export_status_filter(status_column, status: str):
         return status_column == status.strip().lower()
@@ -1780,26 +1810,16 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioValuationJob)
-            .where(PortfolioValuationJob.portfolio_id == portfolio_id)
+        stmt = self._apply_valuation_job_scope(
+            select(func.count()).select_from(PortfolioValuationJob),
+            portfolio_id=portfolio_id,
+            status=status,
+            business_date=business_date,
+            normalized_security_id=normalized_security_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=as_of,
         )
-        if job_id is None and correlation_id is None:
-            stmt = stmt.where(self._is_actionable_valuation_job(as_of=as_of))
-        if as_of is not None:
-            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._support_job_status_filter(PortfolioValuationJob.status, status))
-        if business_date:
-            stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
-        if normalized_security_id:
-            stmt = stmt.where(valuation_job_security_id == normalized_security_id)
-        if job_id is not None:
-            stmt = stmt.where(PortfolioValuationJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(PortfolioValuationJob.correlation_id == correlation_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_valuation_jobs(
@@ -1821,26 +1841,18 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = select(PortfolioValuationJob).where(
-            PortfolioValuationJob.portfolio_id == portfolio_id
+        stmt = self._apply_valuation_job_scope(
+            select(PortfolioValuationJob),
+            portfolio_id=portfolio_id,
+            status=status,
+            business_date=business_date,
+            normalized_security_id=normalized_security_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=as_of,
         )
-        if job_id is None and correlation_id is None:
-            stmt = stmt.where(self._is_actionable_valuation_job(as_of=as_of))
-        if as_of is not None:
-            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._support_job_status_filter(PortfolioValuationJob.status, status))
-        if business_date:
-            stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
-        if normalized_security_id:
-            stmt = stmt.where(valuation_job_security_id == normalized_security_id)
-        if job_id is not None:
-            stmt = stmt.where(PortfolioValuationJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(PortfolioValuationJob.correlation_id == correlation_id)
         stmt = (
             stmt.order_by(
                 self._support_job_priority(
