@@ -71,24 +71,13 @@ class ReportingService:
         per_portfolio_native: dict[str, Decimal] = defaultdict(lambda: ZERO)
         per_portfolio_positions: dict[str, int] = defaultdict(int)
 
-        row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
-        row_reporting_values = await asyncio.gather(
-            *(
-                self._convert_amount(
-                    amount=native_value,
-                    from_currency=row.portfolio.base_currency,
-                    to_currency=reporting_currency,
-                    as_of_date=resolved_as_of_date,
-                )
-                for row, native_value in row_native_values
-            )
+        row_reporting_values = await self._snapshot_reporting_values(
+            rows=rows,
+            as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
         )
 
-        for (row, native_value), reporting_value in zip(
-            row_native_values,
-            row_reporting_values,
-            strict=True,
-        ):
+        for row, native_value, reporting_value in row_reporting_values:
             per_portfolio_native[row.portfolio.portfolio_id] += native_value
             per_portfolio_reporting[row.portfolio.portfolio_id] += reporting_value
             per_portfolio_positions[row.portfolio.portfolio_id] += 1
@@ -233,24 +222,13 @@ class ReportingService:
         unvalued_position_count = 0
         snapshot_date = resolved_as_of_date
 
-        row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
-        row_reporting_values = await asyncio.gather(
-            *(
-                self._convert_amount(
-                    amount=portfolio_value,
-                    from_currency=portfolio_currency,
-                    to_currency=reporting_currency,
-                    as_of_date=resolved_as_of_date,
-                )
-                for _row, portfolio_value in row_native_values
-            )
+        row_reporting_values = await self._snapshot_reporting_values(
+            rows=rows,
+            as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
         )
 
-        for (row, portfolio_value), reporting_value in zip(
-            row_native_values,
-            row_reporting_values,
-            strict=True,
-        ):
+        for row, portfolio_value, reporting_value in row_reporting_values:
             snapshot_date = max(snapshot_date, row.snapshot.date)
             total_portfolio += portfolio_value
             total_reporting += reporting_value
@@ -286,6 +264,34 @@ class ReportingService:
                 unvalued_position_count=unvalued_position_count,
             ),
         )
+
+    async def _snapshot_reporting_values(
+        self,
+        *,
+        rows: list[Any],
+        as_of_date: date,
+        reporting_currency: str,
+    ) -> list[tuple[Any, Decimal, Decimal]]:
+        row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
+        row_reporting_values = await asyncio.gather(
+            *(
+                self._convert_amount(
+                    amount=native_value,
+                    from_currency=row.portfolio.base_currency,
+                    to_currency=reporting_currency,
+                    as_of_date=as_of_date,
+                )
+                for row, native_value in row_native_values
+            )
+        )
+        return [
+            (row, native_value, reporting_value)
+            for (row, native_value), reporting_value in zip(
+                row_native_values,
+                row_reporting_values,
+                strict=True,
+            )
+        ]
 
     async def _resolve_allocation_rows(
         self,
