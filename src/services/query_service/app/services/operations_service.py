@@ -348,6 +348,20 @@ class OperationsService:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
+    async def _resolve_portfolio_latest_business_date(
+        self,
+        portfolio_id: str,
+        *,
+        generated_at_utc: datetime,
+    ) -> date | None:
+        portfolio_exists, latest_business_date = await asyncio.gather(
+            self.repo.portfolio_exists(portfolio_id),
+            self.repo.get_latest_business_date(as_of=generated_at_utc),
+        )
+        if not portfolio_exists:
+            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        return latest_business_date
+
     async def get_load_run_progress(
         self,
         run_id: str,
@@ -374,10 +388,12 @@ class OperationsService:
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> SupportOverviewResponse:
-        await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        latest_business_date = await self._resolve_portfolio_latest_business_date(
+            portfolio_id,
+            generated_at_utc=generated_at_utc,
+        )
         (
-            latest_business_date,
             current_epoch,
             reprocessing_health,
             valuation_job_health,
@@ -388,7 +404,6 @@ class OperationsService:
             position_snapshot_history_mismatch_count,
             latest_control_stage,
         ) = await asyncio.gather(
-            self.repo.get_latest_business_date(as_of=generated_at_utc),
             self.repo.get_current_portfolio_epoch(portfolio_id, as_of=generated_at_utc),
             self.repo.get_reprocessing_health_summary(
                 portfolio_id,
@@ -591,15 +606,16 @@ class OperationsService:
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> CalculatorSloResponse:
-        await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        latest_business_date = await self._resolve_portfolio_latest_business_date(
+            portfolio_id,
+            generated_at_utc=generated_at_utc,
+        )
         (
-            latest_business_date,
             reprocessing_health,
             valuation_job_health,
             aggregation_job_health,
         ) = await asyncio.gather(
-            self.repo.get_latest_business_date(as_of=generated_at_utc),
             self.repo.get_reprocessing_health_summary(
                 portfolio_id,
                 stale_minutes=stale_threshold_minutes,

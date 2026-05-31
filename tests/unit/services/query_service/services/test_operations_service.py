@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -72,6 +73,41 @@ def service(mock_ops_repo: AsyncMock) -> OperationsService:
         return_value=mock_ops_repo,
     ):
         return OperationsService(AsyncMock(spec=AsyncSession))
+
+
+async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_concurrently(
+    service: OperationsService,
+    mock_ops_repo: AsyncMock,
+) -> None:
+    portfolio_started = asyncio.Event()
+    date_started = asyncio.Event()
+
+    async def portfolio_exists(portfolio_id: str) -> bool:
+        portfolio_started.set()
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        assert portfolio_id == "P1"
+        return True
+
+    async def get_latest_business_date(*, as_of: datetime) -> date:
+        date_started.set()
+        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        assert as_of == FIXED_GENERATED_AT
+        return date(2026, 4, 18)
+
+    mock_ops_repo.portfolio_exists.side_effect = portfolio_exists
+    mock_ops_repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    latest_business_date = await asyncio.wait_for(
+        service._resolve_portfolio_latest_business_date(
+            "P1",
+            generated_at_utc=FIXED_GENERATED_AT,
+        ),
+        timeout=1,
+    )
+
+    assert latest_business_date == date(2026, 4, 18)
+    assert portfolio_started.is_set()
+    assert date_started.is_set()
 
 
 def _load_run_summary(**overrides) -> LoadRunProgressSummary:
