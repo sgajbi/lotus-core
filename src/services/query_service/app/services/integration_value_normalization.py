@@ -13,6 +13,10 @@ def as_decimal(value: Any) -> Decimal:
     return normalized_value
 
 
+def as_optional_decimal(value: Any) -> Decimal | None:
+    return decimal_or_none(value)
+
+
 def control_code(value: Any, *, default: str = "") -> str:
     if value is None:
         return default

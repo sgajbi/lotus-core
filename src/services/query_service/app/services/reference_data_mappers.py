@@ -31,7 +31,12 @@ from ..dtos.reference_integration_dto import (
     SustainabilityPreferenceProfileEntry,
 )
 from ..repositories.identifier_normalization import normalize_security_id
-from .integration_value_normalization import as_decimal, control_code, string_list
+from .integration_value_normalization import (
+    as_decimal,
+    as_optional_decimal,
+    control_code,
+    string_list,
+)
 
 
 def benchmark_component_response(row: Any) -> BenchmarkComponentResponse:
@@ -95,8 +100,8 @@ def model_portfolio_target_row(row: Any) -> ModelPortfolioTargetRow:
     return ModelPortfolioTargetRow(
         instrument_id=row.instrument_id,
         target_weight=as_decimal(row.target_weight),
-        min_weight=as_decimal(row.min_weight) if row.min_weight is not None else None,
-        max_weight=as_decimal(row.max_weight) if row.max_weight is not None else None,
+        min_weight=as_optional_decimal(row.min_weight),
+        max_weight=as_optional_decimal(row.max_weight),
         target_status=row.target_status,
         quality_status=row.quality_status,
         source_record_id=row.source_record_id,
@@ -408,9 +413,7 @@ def client_tax_profile_entry(row: Any) -> ClientTaxProfileEntry:
         booking_tax_jurisdiction=row.booking_tax_jurisdiction,
         tax_status=row.tax_status,
         profile_status=row.profile_status,
-        withholding_tax_rate=(
-            as_decimal(row.withholding_tax_rate) if row.withholding_tax_rate is not None else None
-        ),
+        withholding_tax_rate=as_optional_decimal(row.withholding_tax_rate),
         capital_gains_tax_applicable=bool(row.capital_gains_tax_applicable),
         income_tax_applicable=bool(row.income_tax_applicable),
         treaty_codes=string_list(row.treaty_codes),
@@ -434,10 +437,8 @@ def client_tax_rule_set_entry(row: Any) -> ClientTaxRuleSetEntry:
         applies_to_asset_classes=string_list(row.applies_to_asset_classes),
         applies_to_security_ids=string_list(row.applies_to_security_ids),
         applies_to_income_types=string_list(row.applies_to_income_types),
-        rate=as_decimal(row.rate) if row.rate is not None else None,
-        threshold_amount=(
-            as_decimal(row.threshold_amount) if row.threshold_amount is not None else None
-        ),
+        rate=as_optional_decimal(row.rate),
+        threshold_amount=as_optional_decimal(row.threshold_amount),
         threshold_currency=row.threshold_currency,
         effective_from=row.effective_from,
         effective_to=row.effective_to,
@@ -504,12 +505,8 @@ def sustainability_preference_profile_entry(row: Any) -> SustainabilityPreferenc
         preference_code=row.preference_code,
         preference_status=row.preference_status,
         preference_source=row.preference_source,
-        minimum_allocation=(
-            as_decimal(row.minimum_allocation) if row.minimum_allocation is not None else None
-        ),
-        maximum_allocation=(
-            as_decimal(row.maximum_allocation) if row.maximum_allocation is not None else None
-        ),
+        minimum_allocation=as_optional_decimal(row.minimum_allocation),
+        maximum_allocation=as_optional_decimal(row.maximum_allocation),
         applies_to_asset_classes=string_list(row.applies_to_asset_classes),
         exclusion_codes=string_list(row.exclusion_codes),
         positive_tilt_codes=string_list(row.positive_tilt_codes),

@@ -172,6 +172,24 @@ def test_dpm_source_entries_map_model_and_mandate_rows() -> None:
     assert candidate.mandate_objective == "balanced_growth_income"
 
 
+def test_dpm_target_entry_treats_blank_optional_bands_as_absent() -> None:
+    target = model_portfolio_target_row(
+        SimpleNamespace(
+            instrument_id="EQ_US_AAPL",
+            target_weight="0.1200000000",
+            min_weight=" ",
+            max_weight="",
+            target_status="active",
+            quality_status="accepted",
+            source_record_id="target-1",
+        )
+    )
+
+    assert target.target_weight == Decimal("0.1200000000")
+    assert target.min_weight is None
+    assert target.max_weight is None
+
+
 def test_instrument_eligibility_records_map_found_and_missing_rows() -> None:
     found = instrument_eligibility_record(
         SimpleNamespace(
@@ -447,6 +465,52 @@ def test_client_tax_entries_map_source_data_rows() -> None:
     assert tax_rule.threshold_amount == Decimal("250000.0000")
 
 
+def test_client_tax_entries_treat_blank_optional_rates_as_absent() -> None:
+    tax_profile = client_tax_profile_entry(
+        SimpleNamespace(
+            tax_profile_id="TAX_PROFILE_SG_001",
+            tax_residency_country="SG",
+            booking_tax_jurisdiction="SG",
+            tax_status="resident",
+            profile_status="active",
+            withholding_tax_rate=" ",
+            capital_gains_tax_applicable=False,
+            income_tax_applicable=True,
+            treaty_codes=[],
+            eligible_account_types=[],
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            profile_version="2",
+            source_record_id="tax-profile-1",
+        )
+    )
+    tax_rule = client_tax_rule_set_entry(
+        SimpleNamespace(
+            rule_set_id="TAX_RULES_SG_2026",
+            tax_year="2026",
+            jurisdiction_code="SG",
+            rule_code="US_DIVIDEND_WITHHOLDING",
+            rule_category="withholding",
+            rule_status="active",
+            rule_source="tax_policy",
+            applies_to_asset_classes=[],
+            applies_to_security_ids=[],
+            applies_to_income_types=[],
+            rate="",
+            threshold_amount=" ",
+            threshold_currency="USD",
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            rule_version="3",
+            source_record_id="tax-rule-1",
+        )
+    )
+
+    assert tax_profile.withholding_tax_rate is None
+    assert tax_rule.rate is None
+    assert tax_rule.threshold_amount is None
+
+
 def test_client_liquidity_entries_map_source_data_rows() -> None:
     income = client_income_needs_schedule_entry(
         SimpleNamespace(
@@ -546,3 +610,26 @@ def test_client_governance_entries_map_source_data_rows() -> None:
     assert preference.maximum_allocation is None
     assert preference.applies_to_asset_classes == ["equity"]
     assert preference.preference_version == 3
+
+
+def test_client_governance_entry_treats_blank_optional_allocations_as_absent() -> None:
+    preference = sustainability_preference_profile_entry(
+        SimpleNamespace(
+            preference_framework="LOTUS_SUSTAINABILITY_V1",
+            preference_code="MIN_SUSTAINABLE_ALLOCATION",
+            preference_status="active",
+            preference_source="client_suitability",
+            minimum_allocation=" ",
+            maximum_allocation="",
+            applies_to_asset_classes=[],
+            exclusion_codes=[],
+            positive_tilt_codes=[],
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            preference_version="3",
+            source_record_id="preference-1",
+        )
+    )
+
+    assert preference.minimum_allocation is None
+    assert preference.maximum_allocation is None

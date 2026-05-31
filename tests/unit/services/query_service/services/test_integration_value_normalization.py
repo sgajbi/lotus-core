@@ -4,6 +4,7 @@ import pytest
 
 from src.services.query_service.app.services.integration_value_normalization import (
     as_decimal,
+    as_optional_decimal,
     control_code,
     string_list,
 )
@@ -18,6 +19,12 @@ def test_as_decimal_preserves_decimal_instances() -> None:
 def test_as_decimal_converts_stringable_values() -> None:
     assert as_decimal("0.1250") == Decimal("0.1250")
     assert as_decimal(5) == Decimal("5")
+
+
+def test_as_optional_decimal_preserves_sparse_values_as_none() -> None:
+    assert as_optional_decimal(None) is None
+    assert as_optional_decimal(" ") is None
+    assert as_optional_decimal("0.1250") == Decimal("0.1250")
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])
