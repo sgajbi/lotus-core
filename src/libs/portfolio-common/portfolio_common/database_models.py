@@ -2385,6 +2385,20 @@ class FinancialReconciliationRun(Base):
             started_at.desc(),
             id.desc(),
         ),
+        Index(
+            "ix_fin_recon_runs_port_corr_started_id",
+            "portfolio_id",
+            "correlation_id",
+            started_at.desc(),
+            id.asc(),
+        ),
+        Index(
+            "ix_fin_recon_runs_port_req_by_started_id",
+            "portfolio_id",
+            "requested_by",
+            started_at.desc(),
+            id.asc(),
+        ),
     )
 
 
