@@ -164,6 +164,29 @@ def _ranked_model_portfolio_target_ids(*predicates: Any):
     )
 
 
+def _ranked_instrument_eligibility_ids(security_id_expr: Any, *predicates: Any):
+    return (
+        select(
+            InstrumentEligibilityProfile.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=security_id_expr,
+                order_by=(
+                    InstrumentEligibilityProfile.effective_from.desc(),
+                    InstrumentEligibilityProfile.observed_at.desc().nullslast(),
+                    InstrumentEligibilityProfile.eligibility_version.desc(),
+                    InstrumentEligibilityProfile.updated_at.desc(),
+                    InstrumentEligibilityProfile.created_at.desc(),
+                    InstrumentEligibilityProfile.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -676,26 +699,23 @@ class ReferenceDataRepository:
         if not normalized_security_ids:
             return []
         security_id_expr = func.trim(InstrumentEligibilityProfile.security_id)
+        predicates = (
+            security_id_expr.in_(normalized_security_ids),
+            _effective_filter(
+                InstrumentEligibilityProfile.effective_from,
+                InstrumentEligibilityProfile.effective_to,
+                as_of_date,
+            ),
+        )
+        ranked = _ranked_instrument_eligibility_ids(security_id_expr, *predicates)
         stmt = (
             select(InstrumentEligibilityProfile)
-            .where(
-                security_id_expr.in_(normalized_security_ids),
-                _effective_filter(
-                    InstrumentEligibilityProfile.effective_from,
-                    InstrumentEligibilityProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                security_id_expr.asc(),
-                InstrumentEligibilityProfile.effective_from.desc(),
-                InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
-                InstrumentEligibilityProfile.eligibility_version.desc(),
-                InstrumentEligibilityProfile.updated_at.desc(),
-            )
+            .join(ranked, InstrumentEligibilityProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(security_id_expr.asc())
         )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(list(result.scalars().all()), "security_id")
+        return list(result.scalars().all())
 
     async def get_benchmark_definition(self, benchmark_id: str, as_of_date: date):
         stmt = (

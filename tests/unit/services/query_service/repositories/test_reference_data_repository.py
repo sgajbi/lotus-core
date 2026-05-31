@@ -594,11 +594,6 @@ async def test_list_instrument_eligibility_profiles_returns_latest_effective_row
         [
             SimpleNamespace(
                 security_id="AAPL",
-                effective_from=date(2026, 1, 1),
-                eligibility_status="RESTRICTED",
-            ),
-            SimpleNamespace(
-                security_id="AAPL",
                 effective_from=date(2026, 4, 1),
                 eligibility_status="APPROVED",
             ),
@@ -625,6 +620,11 @@ async def test_list_instrument_eligibility_profiles_returns_latest_effective_row
     assert "trim(instrument_eligibility_profiles.security_id) in ('aapl', 'msft')" in (
         eligibility_sql
     )
+    assert (
+        "row_number() over (partition by trim(instrument_eligibility_profiles.security_id)"
+        in eligibility_sql
+    )
+    assert "anon_1.rn = 1" in eligibility_sql
 
 
 @pytest.mark.asyncio

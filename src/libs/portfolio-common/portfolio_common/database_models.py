@@ -871,6 +871,15 @@ class InstrumentEligibilityProfile(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_instr_elig_norm_sec_eff",
+            func.trim(security_id),
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            eligibility_version.desc(),
+            updated_at.desc(),
+        ),
     )
 
 

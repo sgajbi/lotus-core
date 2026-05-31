@@ -15,6 +15,7 @@ from portfolio_common.database_models import (
     FinancialReconciliationRun,
     IndexDefinition,
     Instrument,
+    InstrumentEligibilityProfile,
     InstrumentLookthroughComponent,
     LiquidityReserveRequirement,
     MarketPrice,
@@ -152,6 +153,21 @@ def test_model_portfolio_tables_declare_dpm_source_indexes():
         "model_portfolio_targets.effective_to",
     ]
     assert str(active_target.dialect_options["postgresql"]["where"]) == "target_status = 'active'"
+
+
+def test_instrument_eligibility_declares_normalized_effective_index():
+    indexes = {index.name: index for index in InstrumentEligibilityProfile.__table__.indexes}
+
+    normalized_effective = indexes["ix_instr_elig_norm_sec_eff"]
+
+    assert [str(expression) for expression in normalized_effective.expressions] == [
+        "trim(instrument_eligibility_profiles.security_id)",
+        "instrument_eligibility_profiles.effective_from DESC",
+        "instrument_eligibility_profiles.effective_to",
+        "instrument_eligibility_profiles.observed_at DESC NULLS LAST",
+        "instrument_eligibility_profiles.eligibility_version DESC",
+        "instrument_eligibility_profiles.updated_at DESC",
+    ]
 
 
 def test_client_source_data_tables_declare_active_source_indexes():

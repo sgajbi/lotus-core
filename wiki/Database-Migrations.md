@@ -96,6 +96,8 @@ and deterministic ordering contracts.
 Client source-data evidence follows the same rule: restriction, sustainability, tax, income,
 liquidity-reserve, and planned-withdrawal reads should use active-status partial indexes aligned to
 their portfolio/client, effective-window, scheduled-window, and source-identity ordering contracts.
+Instrument eligibility reads that intentionally trim caller and stored security identifiers should
+use a matching normalized-security effective-window index instead of relying on raw security indexes.
 Market/reference definition reads should likewise avoid wrapping governed lifecycle statuses at
 read time and use active-status partial indexes aligned to identifier and effective-window ordering.
 Lineage support reads that resolve latest position-history, daily-snapshot, or valuation-job
