@@ -38,6 +38,7 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
+from .control_code_normalization import normalize_control_code
 from .position_flow_effects import transaction_quantity_effect_decimal
 
 CASH_ASSET_CLASS = "CASH"
@@ -59,13 +60,8 @@ class CoreSnapshotUnavailableSectionError(ValueError):
     pass
 
 
-def _normalize_control_code(value: Any, *, default: str = "") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
-
-
 def _is_cash_asset_class(value: Any) -> bool:
-    return _normalize_control_code(value) == CASH_ASSET_CLASS
+    return normalize_control_code(value) == CASH_ASSET_CLASS
 
 
 @dataclass
@@ -370,11 +366,7 @@ class CoreSnapshotService:
             quantity = Decimal(str(row.quantity))
             if not include_zero and quantity == Decimal(0):
                 continue
-            if (
-                not include_cash
-                and instrument
-                and _is_cash_asset_class(instrument.asset_class)
-            ):
+            if not include_cash and instrument and _is_cash_asset_class(instrument.asset_class):
                 continue
 
             if use_snapshot:

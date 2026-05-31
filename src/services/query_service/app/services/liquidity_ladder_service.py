@@ -19,6 +19,7 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..repositories.cashflow_repository import CashflowRepository
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
+from .control_code_normalization import normalize_control_code
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
@@ -28,11 +29,6 @@ LIQUIDITY_LADDER_BOUNDARY_NOTE = (
     "Source liquidity evidence only; not an advice, OMS execution, funding recommendation, "
     "best-execution, tax, or market-impact forecast."
 )
-
-
-def _normalize_control_code(value: Any, *, default: str = "UNCLASSIFIED") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
 
 
 @dataclass(frozen=True)
@@ -173,7 +169,10 @@ class PortfolioLiquidityLadderService:
         tier_values: dict[str, Decimal] = defaultdict(Decimal)
         tier_counts: dict[str, int] = defaultdict(int)
         for row in rows:
-            tier = _normalize_control_code(getattr(row.instrument, "liquidity_tier", None))
+            tier = normalize_control_code(
+                getattr(row.instrument, "liquidity_tier", None),
+                default="UNCLASSIFIED",
+            )
             tier_values[tier] += _decimal_or_zero(getattr(row.snapshot, "market_value", ZERO))
             tier_counts[tier] += 1
         return [
@@ -218,7 +217,7 @@ class PortfolioLiquidityLadderService:
     def _is_cash_row(row: ReportingSnapshotRow) -> bool:
         return (
             row.instrument is not None
-            and _normalize_control_code(getattr(row.instrument, "asset_class", None), default="")
+            and normalize_control_code(getattr(row.instrument, "asset_class", None), default="")
             == CASH_ASSET_CLASS
         )
 

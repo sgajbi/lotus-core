@@ -12,14 +12,10 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
+from .control_code_normalization import normalize_control_code
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
-
-
-def _normalize_control_code(value: Any, *, default: str = "") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
 
 
 class CashBalanceResolver:
@@ -155,9 +151,7 @@ class CashBalanceResolver:
                     cash_account_id=fallback_cash_account_id,
                     security_id=security_id,
                     instrument_name=(
-                        cash_row.instrument.name
-                        if cash_row.instrument is not None
-                        else security_id
+                        cash_row.instrument.name if cash_row.instrument is not None else security_id
                     ),
                     account_currency=(
                         cash_row.instrument.currency
@@ -215,7 +209,7 @@ class CashBalanceResolver:
     def is_cash_row(row: Any) -> bool:
         return (
             row.instrument is not None
-            and _normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
+            and normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
         )
 
     @staticmethod
@@ -288,9 +282,7 @@ class CashBalanceService:
         normalized_to_currency = normalize_currency_code(to_currency)
         if normalized_from_currency == normalized_to_currency:
             return amount
-        rate = await self._get_fx_rate(
-            normalized_from_currency, normalized_to_currency, as_of_date
-        )
+        rate = await self._get_fx_rate(normalized_from_currency, normalized_to_currency, as_of_date)
         return amount * rate
 
     async def _get_fx_rate(

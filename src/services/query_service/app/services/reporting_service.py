@@ -32,14 +32,10 @@ from ..repositories.reporting_repository import (
 )
 from .allocation_calculator import AllocationInputRow, calculate_allocation_views
 from .cash_balance_service import CashBalanceResolver
+from .control_code_normalization import normalize_control_code
 
 ZERO = Decimal("0")
 UNVALUED_STATUS = "UNVALUED"
-
-
-def _normalize_control_code(value: Any, *, default: str = "") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
 
 
 class ReportingService:
@@ -235,7 +231,7 @@ class ReportingService:
             )
             total_portfolio += portfolio_value
             total_reporting += reporting_value
-            if _normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
+            if normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
                 unvalued_position_count += 1
             else:
                 valued_position_count += 1
@@ -429,9 +425,7 @@ class ReportingService:
         normalized_to_currency = normalize_currency_code(to_currency)
         if normalized_from_currency == normalized_to_currency:
             return amount
-        rate = await self._get_fx_rate(
-            normalized_from_currency, normalized_to_currency, as_of_date
-        )
+        rate = await self._get_fx_rate(normalized_from_currency, normalized_to_currency, as_of_date)
         return amount * rate
 
     async def _get_fx_rate(
@@ -471,4 +465,3 @@ class ReportingService:
                 if isinstance(candidate, datetime):
                     timestamps.append(candidate)
         return max(timestamps) if timestamps else None
-
