@@ -40,6 +40,7 @@ def mock_transaction_repo() -> AsyncMock:
             trade_currency="EUR",
             currency="USD",
             cash_entry_mode="AUTO_GENERATE",
+            updated_at=datetime(2025, 1, 15, 9, 30, tzinfo=UTC),
         ),
         Transaction(
             transaction_id="T2",
@@ -227,6 +228,8 @@ async def test_get_transactions_classifies_complete_window(
         response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
 
     assert response_dto.data_quality_status == COMPLETE
+    assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
 
 
 async def test_get_transactions_classifies_empty_window_as_unknown(
@@ -246,6 +249,7 @@ async def test_get_transactions_classifies_empty_window_as_unknown(
 
     assert response_dto.data_quality_status == UNKNOWN
     assert response_dto.latest_evidence_timestamp is None
+    mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):

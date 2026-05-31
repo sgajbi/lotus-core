@@ -111,7 +111,12 @@ class TransactionService:
             sort_order=sort_order,
             **ledger_filters,
         )
-        latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(**ledger_filters)
+        if skip == 0 and len(db_results) == total_count:
+            latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(db_results)
+        else:
+            latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
+                **ledger_filters
+            )
         resolved_reporting_currency = reporting_currency
 
         transactions = []
