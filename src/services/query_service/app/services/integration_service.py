@@ -2783,13 +2783,9 @@ class IntegrationService:
         row = await self._reference_repository.get_benchmark_definition(benchmark_id, as_of_date)
         if row is None:
             return None
-        components = self._latest_effective_records(
-            await self._reference_repository.list_benchmark_components(
-                benchmark_id,
-                as_of_date,
-            ),
-            key_fields=("index_id",),
-            effective_from_field="composition_effective_from",
+        components = await self._reference_repository.list_benchmark_components(
+            benchmark_id,
+            as_of_date,
         )
         return BenchmarkDefinitionResponse(
             benchmark_id=row.benchmark_id,
@@ -2897,15 +2893,11 @@ class IntegrationService:
         benchmark_currency: str | None,
         benchmark_status: str | None,
     ) -> BenchmarkCatalogResponse:
-        rows = self._latest_effective_records(
-            await self._reference_repository.list_benchmark_definitions(
-                as_of_date=as_of_date,
-                benchmark_type=benchmark_type,
-                benchmark_currency=benchmark_currency,
-                benchmark_status=benchmark_status,
-            ),
-            key_fields=("benchmark_id",),
-            effective_from_field="effective_from",
+        rows = await self._reference_repository.list_benchmark_definitions(
+            as_of_date=as_of_date,
+            benchmark_type=benchmark_type,
+            benchmark_currency=benchmark_currency,
+            benchmark_status=benchmark_status,
         )
         components_by_benchmark = (
             await self._reference_repository.list_benchmark_components_for_benchmarks(
@@ -2915,11 +2907,7 @@ class IntegrationService:
         )
         records: list[BenchmarkDefinitionResponse] = []
         for row in rows:
-            components = self._latest_effective_records(
-                components_by_benchmark.get(row.benchmark_id, []),
-                key_fields=("index_id",),
-                effective_from_field="composition_effective_from",
-            )
+            components = components_by_benchmark.get(row.benchmark_id, [])
             records.append(
                 BenchmarkDefinitionResponse(
                     benchmark_id=row.benchmark_id,

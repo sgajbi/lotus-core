@@ -1402,9 +1402,7 @@ async def test_external_eligible_hedge_instruments_fail_closed_until_treasury_in
     assert response.supportability.state == "UNAVAILABLE"
     assert response.supportability.reason == "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED"
     assert response.supportability.instrument_count == 0
-    assert response.supportability.missing_data_families == [
-        "external_eligible_hedge_instrument"
-    ]
+    assert response.supportability.missing_data_families == ["external_eligible_hedge_instrument"]
     assert "hedge_instrument_suitability" in response.supportability.blocked_capabilities
     assert "product_recommendation" in response.supportability.blocked_capabilities
     assert "best_execution" in response.supportability.blocked_capabilities
@@ -2863,7 +2861,7 @@ async def test_benchmark_composition_window_rejects_currency_changes_within_wind
 
 
 @pytest.mark.asyncio
-async def test_benchmark_catalog_collapses_superseded_effective_rows() -> None:
+async def test_benchmark_catalog_uses_repository_ranked_current_rows() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         list_benchmark_definitions=AsyncMock(
@@ -2887,37 +2885,11 @@ async def test_benchmark_catalog_collapses_superseded_effective_rows() -> None:
                     source_vendor="vendor",
                     source_record_id="src-new",
                 ),
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    benchmark_name="Benchmark Old",
-                    benchmark_type="composite",
-                    benchmark_currency="USD",
-                    return_convention="total_return_index",
-                    benchmark_status="active",
-                    benchmark_family="family",
-                    benchmark_provider="provider",
-                    rebalance_frequency="monthly",
-                    classification_set_id="set1",
-                    classification_labels={"asset_class": "multi_asset"},
-                    effective_from=date(2023, 3, 28),
-                    effective_to=None,
-                    quality_status="accepted",
-                    source_timestamp=None,
-                    source_vendor="vendor",
-                    source_record_id="src-old",
-                ),
             ]
         ),
         list_benchmark_components_for_benchmarks=AsyncMock(
             return_value={
                 "B1": [
-                    SimpleNamespace(
-                        index_id="IDX_BOND",
-                        composition_weight=Decimal("0.4"),
-                        composition_effective_from=date(2023, 3, 28),
-                        composition_effective_to=None,
-                        rebalance_event_id="old",
-                    ),
                     SimpleNamespace(
                         index_id="IDX_BOND",
                         composition_weight=Decimal("0.4"),
@@ -2946,6 +2918,12 @@ async def test_benchmark_catalog_collapses_superseded_effective_rows() -> None:
         "IDX_EQ",
     ]
     assert response.records[0].components[0].composition_effective_from == date(2025, 3, 27)
+    service._reference_repository.list_benchmark_definitions.assert_awaited_once_with(
+        as_of_date=date(2026, 3, 27),
+        benchmark_type=None,
+        benchmark_currency=None,
+        benchmark_status=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -3017,8 +2995,7 @@ async def test_benchmark_composition_window_resolves_superseded_component_rows()
 
     assert response is not None
     assert [
-        (segment.index_id, segment.composition_effective_from)
-        for segment in response.segments
+        (segment.index_id, segment.composition_effective_from) for segment in response.segments
     ] == [("IDX_BOND", date(2025, 3, 27)), ("IDX_EQ", date(2025, 3, 27))]
     assert response.data_quality_status == "COMPLETE"
 
