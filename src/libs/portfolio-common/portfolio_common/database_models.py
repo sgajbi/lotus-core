@@ -2224,6 +2224,14 @@ class ReprocessingJob(Base):
             "id",
             postgresql_where=text("job_type = 'RESET_WATERMARKS'"),
         ),
+        Index(
+            "ix_reproc_resetwm_corr_status_created_id",
+            "correlation_id",
+            "status",
+            "created_at",
+            "id",
+            postgresql_where=text("job_type = 'RESET_WATERMARKS'"),
+        ),
     )
 
 

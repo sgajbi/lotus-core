@@ -114,6 +114,9 @@ to the requested portfolio and security set instead of scanning date-led portfol
 Benchmark composition source-data reads that resolve latest effective rows per benchmark/index
 should use benchmark, index, descending effective-from, and effective-to indexes aligned to the
 composition deduplication key instead of relying only on broad benchmark/effective-window indexes.
+Operational reprocessing job support reads should keep reset-watermark indexes scoped to
+`job_type = 'RESET_WATERMARKS'` and aligned to the requested lookup dimension, including
+normalized security and correlation-id filters used by support list/count APIs.
 
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.

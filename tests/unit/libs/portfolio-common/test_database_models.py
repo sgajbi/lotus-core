@@ -55,6 +55,7 @@ def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
 
     uniqueness_index = indexes["uq_reprocessing_jobs_pending_reset_watermarks_security"]
     security_support_index = indexes["ix_reproc_resetwm_sec_status_created_id"]
+    correlation_support_index = indexes["ix_reproc_resetwm_corr_status_created_id"]
 
     assert uniqueness_index.unique is True
     assert str(next(iter(uniqueness_index.expressions))) == "(payload->>'security_id')"
@@ -70,6 +71,16 @@ def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
     ]
     assert (
         str(security_support_index.dialect_options["postgresql"]["where"])
+        == "job_type = 'RESET_WATERMARKS'"
+    )
+    assert [column.name for column in correlation_support_index.columns] == [
+        "correlation_id",
+        "status",
+        "created_at",
+        "id",
+    ]
+    assert (
+        str(correlation_support_index.dialect_options["postgresql"]["where"])
         == "job_type = 'RESET_WATERMARKS'"
     )
 
