@@ -574,6 +574,13 @@ def test_api_query_hot_path_indexes_are_declared():
                 "daily_position_snapshots.id DESC",
                 "daily_position_snapshots.epoch",
             ],
+            "ix_daily_snap_port_date_status_norm_sec_epoch": [
+                "daily_position_snapshots.portfolio_id",
+                "daily_position_snapshots.date",
+                "daily_position_snapshots.valuation_status",
+                "trim(daily_position_snapshots.security_id)",
+                "daily_position_snapshots.epoch",
+            ],
         },
         Transaction: {
             "ix_txn_port_date_id": [

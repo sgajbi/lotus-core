@@ -174,7 +174,7 @@ class OperationsRepository:
 
     @staticmethod
     def _snapshot_valuation_status_expr(status_column):
-        return func.upper(func.trim(status_column))
+        return status_column
 
     @staticmethod
     def _security_id_expr(security_id_column):

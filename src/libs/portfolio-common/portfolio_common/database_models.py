@@ -206,6 +206,14 @@ class DailyPositionSnapshot(Base):
             id.desc(),
             "epoch",
         ),
+        Index(
+            "ix_daily_snap_port_date_status_norm_sec_epoch",
+            "portfolio_id",
+            "date",
+            "valuation_status",
+            func.trim(security_id),
+            "epoch",
+        ),
     )
 
 
