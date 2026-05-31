@@ -87,6 +87,41 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert len(response.points) == 11
 
 
+async def test_projection_reads_currency_and_default_date_concurrently(
+    mock_repo: AsyncMock,
+) -> None:
+    currency_started = asyncio.Event()
+    date_started = asyncio.Event()
+
+    async def get_portfolio_currency(portfolio_id: str) -> str:
+        currency_started.set()
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        assert portfolio_id == "P1"
+        return "USD"
+
+    async def get_latest_business_date() -> date:
+        date_started.set()
+        await asyncio.wait_for(currency_started.wait(), timeout=1)
+        return date(2026, 3, 1)
+
+    mock_repo.get_portfolio_currency.side_effect = get_portfolio_currency
+    mock_repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        response = await asyncio.wait_for(
+            service.get_cashflow_projection(portfolio_id="P1", horizon_days=1),
+            timeout=1,
+        )
+
+    assert response.range_start_date == date(2026, 3, 1)
+    assert currency_started.is_set()
+    assert date_started.is_set()
+
+
 async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
@@ -112,6 +147,7 @@ async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
         assert response.points[0].projection_date == date(2026, 3, 2)
         assert response.points[0].net_cashflow == Decimal("0")
         assert response.notes == "Booked-only view capped at as_of_date."
+        mock_repo.get_latest_business_date.assert_not_awaited()
 
 
 async def test_projection_raises_when_portfolio_missing(mock_repo: AsyncMock):
