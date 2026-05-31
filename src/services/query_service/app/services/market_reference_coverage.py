@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import date, timedelta
 from typing import Any
 
@@ -15,13 +16,38 @@ from ..dtos.reference_integration_dto import CoverageResponse
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 
 
-def _date_range(start_date: date, end_date: date) -> set[date]:
-    dates: set[date] = set()
+def _iter_dates(start_date: date, end_date: date) -> Iterator[date]:
     cursor = start_date
     while cursor <= end_date:
-        dates.add(cursor)
+        yield cursor
         cursor = cursor + timedelta(days=1)
-    return dates
+
+
+def _date_range(start_date: date, end_date: date) -> set[date]:
+    return set(_iter_dates(start_date, end_date))
+
+
+def _expected_date_count(start_date: date, end_date: date) -> int:
+    if end_date < start_date:
+        return 0
+    return (end_date - start_date).days + 1
+
+
+def _missing_date_summary(
+    *,
+    start_date: date,
+    end_date: date,
+    observed_dates: set[date],
+) -> tuple[int, list[date]]:
+    missing_count = 0
+    missing_sample: list[date] = []
+    for current_date in _iter_dates(start_date, end_date):
+        if current_date in observed_dates:
+            continue
+        missing_count += 1
+        if len(missing_sample) < 10:
+            missing_sample.append(current_date)
+    return missing_count, missing_sample
 
 
 def _observed_dates(coverage: dict[str, Any]) -> set[date]:
@@ -45,9 +71,12 @@ def market_reference_coverage_response(
     end_date: date,
     request_fingerprint: str,
 ) -> CoverageResponse:
-    expected_dates = _date_range(start_date, end_date)
     observed_dates = _observed_dates(coverage)
-    missing_dates = sorted(expected_dates - observed_dates)
+    missing_dates_count, missing_dates_sample = _missing_date_summary(
+        start_date=start_date,
+        end_date=end_date,
+        observed_dates=observed_dates,
+    )
 
     quality_counts = dict(coverage.get("quality_status_counts", {}))
     normalized_quality_counts = {
@@ -55,7 +84,7 @@ def market_reference_coverage_response(
     }
     data_quality_status = classify_market_reference_coverage(
         MarketReferenceCoverageSignal(
-            required_count=len(expected_dates),
+            required_count=_expected_date_count(start_date, end_date),
             observed_count=len(observed_dates),
             stale_count=sum(
                 count
@@ -82,8 +111,8 @@ def market_reference_coverage_response(
         expected_start_date=start_date,
         expected_end_date=end_date,
         total_points=int(coverage.get("total_points", 0)),
-        missing_dates_count=len(missing_dates),
-        missing_dates_sample=missing_dates[:10],
+        missing_dates_count=missing_dates_count,
+        missing_dates_sample=missing_dates_sample,
         quality_status_distribution=quality_counts,
         **source_data_product_runtime_metadata(
             as_of_date=end_date,

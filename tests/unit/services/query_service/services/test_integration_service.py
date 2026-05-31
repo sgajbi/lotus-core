@@ -149,6 +149,33 @@ def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
     assert response.data_quality_status == PARTIAL
 
 
+def test_to_coverage_response_streams_missing_date_sample_for_broad_windows() -> None:
+    response = market_reference_coverage_response(
+        coverage={
+            "total_points": 2,
+            "observed_dates": [date(2026, 1, 1), date(2026, 1, 20)],
+            "quality_status_counts": {"accepted": 2},
+        },
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 20),
+        request_fingerprint="fp-coverage-test",
+    )
+
+    assert response.missing_dates_count == 18
+    assert response.missing_dates_sample == [
+        date(2026, 1, 2),
+        date(2026, 1, 3),
+        date(2026, 1, 4),
+        date(2026, 1, 5),
+        date(2026, 1, 6),
+        date(2026, 1, 7),
+        date(2026, 1, 8),
+        date(2026, 1, 9),
+        date(2026, 1, 10),
+        date(2026, 1, 11),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_resolve_portfolio_manager_book_membership_returns_source_owned_members():
     service = make_service()
