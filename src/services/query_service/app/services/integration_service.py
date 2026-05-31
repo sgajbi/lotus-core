@@ -109,8 +109,8 @@ from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .dpm_source_readiness import (
+    build_dpm_source_readiness_response,
     dpm_source_family_readiness,
-    dpm_source_readiness_supportability,
     unavailable_dpm_source_family,
 )
 from .integration_policy import build_effective_policy_response
@@ -2149,25 +2149,13 @@ class IntegrationService:
                 )
             )
 
-        supportability = dpm_source_readiness_supportability(families)
-        return DpmSourceReadinessResponse(
+        return build_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=resolved_mandate_id,
-            model_portfolio_id=resolved_model_portfolio_id,
+            request=request,
+            resolved_mandate_id=resolved_mandate_id,
+            resolved_model_portfolio_id=resolved_model_portfolio_id,
             evaluated_instrument_ids=evaluated_instrument_ids,
             families=families,
-            supportability=supportability,
-            lineage={
-                "source_system": "lotus-core",
-                "contract_version": "rfc_087_v1",
-                "readiness_scope": "dpm_source_family",
-            },
-            **source_product_runtime_metadata_without_as_of_date(
-                request.as_of_date,
-                data_quality_status=("COMPLETE" if supportability.state == "READY" else "PARTIAL"),
-                latest_evidence_timestamp=None,
-            ),
         )
 
     async def get_benchmark_definition(

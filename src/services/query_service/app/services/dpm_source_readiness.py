@@ -5,8 +5,11 @@ from typing import Literal
 from ..dtos.reference_integration_dto import (
     DpmSourceFamilyReadiness,
     DpmSourceFamilyState,
+    DpmSourceReadinessRequest,
+    DpmSourceReadinessResponse,
     DpmSourceReadinessSupportability,
 )
+from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 DpmSourceFamilyName = Literal["mandate", "model_targets", "eligibility", "tax_lots", "market_data"]
 
@@ -80,4 +83,35 @@ def dpm_source_readiness_supportability(
         degraded_family_count=counts["DEGRADED"],
         incomplete_family_count=counts["INCOMPLETE"],
         unavailable_family_count=counts["UNAVAILABLE"],
+    )
+
+
+def build_dpm_source_readiness_response(
+    *,
+    portfolio_id: str,
+    request: DpmSourceReadinessRequest,
+    resolved_mandate_id: str | None,
+    resolved_model_portfolio_id: str | None,
+    evaluated_instrument_ids: list[str],
+    families: list[DpmSourceFamilyReadiness],
+) -> DpmSourceReadinessResponse:
+    supportability = dpm_source_readiness_supportability(families)
+    return DpmSourceReadinessResponse(
+        portfolio_id=portfolio_id,
+        as_of_date=request.as_of_date,
+        mandate_id=resolved_mandate_id,
+        model_portfolio_id=resolved_model_portfolio_id,
+        evaluated_instrument_ids=evaluated_instrument_ids,
+        families=families,
+        supportability=supportability,
+        lineage={
+            "source_system": "lotus-core",
+            "contract_version": "rfc_087_v1",
+            "readiness_scope": "dpm_source_family",
+        },
+        **source_product_runtime_metadata_without_as_of_date(
+            request.as_of_date,
+            data_quality_status=("COMPLETE" if supportability.state == "READY" else "PARTIAL"),
+            latest_evidence_timestamp=None,
+        ),
     )

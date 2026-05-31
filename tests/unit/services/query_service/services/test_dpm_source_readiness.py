@@ -1,4 +1,10 @@
+from datetime import date
+
+from src.services.query_service.app.dtos.reference_integration_dto import (
+    DpmSourceReadinessRequest,
+)
 from src.services.query_service.app.services.dpm_source_readiness import (
+    build_dpm_source_readiness_response,
     dpm_source_family_readiness,
     dpm_source_readiness_supportability,
     unavailable_dpm_source_family,
@@ -80,3 +86,39 @@ def test_dpm_source_readiness_supportability_returns_ready_when_all_families_rea
     assert supportability.state == "READY"
     assert supportability.reason == "DPM_SOURCE_READINESS_READY"
     assert supportability.ready_family_count == 2
+
+
+def test_build_dpm_source_readiness_response_sets_runtime_metadata_and_lineage() -> None:
+    families = [
+        dpm_source_family_readiness(
+            family="mandate",
+            product_name="DiscretionaryMandateBinding",
+            state="READY",
+            reason="MANDATE_BINDING_READY",
+            evidence_count=1,
+        )
+    ]
+
+    response = build_dpm_source_readiness_response(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL"],
+            mandate_id="MANDATE_001",
+            model_portfolio_id="MODEL_BALANCED",
+        ),
+        resolved_mandate_id="MANDATE_001",
+        resolved_model_portfolio_id="MODEL_BALANCED",
+        evaluated_instrument_ids=["EQ_US_AAPL"],
+        families=families,
+    )
+
+    assert response.product_name == "DpmSourceReadiness"
+    assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.supportability.state == "READY"
+    assert response.data_quality_status == "COMPLETE"
+    assert response.lineage == {
+        "source_system": "lotus-core",
+        "contract_version": "rfc_087_v1",
+        "readiness_scope": "dpm_source_family",
+    }
