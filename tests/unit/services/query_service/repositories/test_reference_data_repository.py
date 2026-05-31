@@ -110,7 +110,11 @@ async def test_reference_data_repository_normalizes_market_reference_currency_fi
     )
 
     assert "benchmark_definitions.benchmark_currency = 'USD'" in benchmark_sql
+    assert "row_number() OVER (PARTITION BY benchmark_definitions.benchmark_id" in benchmark_sql
+    assert "anon_1.rn = 1" in benchmark_sql
     assert "index_definitions.index_currency = 'SGD'" in index_sql
+    assert "row_number() OVER (PARTITION BY index_definitions.index_id" in index_sql
+    assert "anon_1.rn = 1" in index_sql
     assert "risk_free_series.series_currency = 'EUR'" in risk_free_sql
     assert "row_number() OVER (PARTITION BY risk_free_series.series_date" in risk_free_sql
     assert "upper(trim(risk_free_series.quality_status)) = 'ACCEPTED'" in risk_free_sql
@@ -223,6 +227,14 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert await repo.list_benchmark_definitions(date(2026, 1, 1), "composite", "USD", "active")
     assert await repo.list_index_definitions(date(2026, 1, 1), None, "USD", "equity", "active")
     assert await repo.list_benchmark_components("B1", date(2026, 1, 1))
+    benchmark_component_sql = str(
+        db.execute.await_args_list[5].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
+        "benchmark_composition_series.index_id"
+    ) in benchmark_component_sql
+    assert "anon_1.rn = 1" in benchmark_component_sql
     assert await repo.list_benchmark_components_overlapping_window(
         "B1", date(2026, 1, 1), date(2026, 1, 2)
     )
@@ -255,6 +267,11 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         "ORDER BY benchmark_composition_series.benchmark_id ASC, "
         "benchmark_composition_series.index_id ASC"
     ) in benchmark_components_sql
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
+        "benchmark_composition_series.index_id"
+    ) in benchmark_components_sql
+    assert "anon_1.rn = 1" in benchmark_components_sql
 
     benchmark_coverage = await repo.get_benchmark_coverage(
         benchmark_id="B1",
@@ -641,11 +658,6 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
             [
                 SimpleNamespace(
                     benchmark_id="B1",
-                    effective_from=date(2025, 1, 1),
-                    classification_labels={"strategy": "old"},
-                ),
-                SimpleNamespace(
-                    benchmark_id="B1",
                     effective_from=date(2025, 4, 1),
                     classification_labels={"strategy": "current"},
                 ),
@@ -659,9 +671,12 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    index_id="IDX_GLOBAL_EQUITY_TR",
+                    index_id="IDX_GLOBAL_BOND_TR",
                     effective_from=date(2025, 1, 6),
-                    classification_labels={"asset_class": "equity"},
+                    classification_labels={
+                        "asset_class": "fixed_income",
+                        "sector": "broad_market_fixed_income",
+                    },
                 ),
                 SimpleNamespace(
                     index_id="IDX_GLOBAL_EQUITY_TR",
@@ -671,24 +686,10 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
                         "sector": "broad_market_equity",
                     },
                 ),
-                SimpleNamespace(
-                    index_id="IDX_GLOBAL_BOND_TR",
-                    effective_from=date(2025, 1, 6),
-                    classification_labels={
-                        "asset_class": "fixed_income",
-                        "sector": "broad_market_fixed_income",
-                    },
-                ),
             ]
         ),
         _FakeExecuteResult(
             [
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    index_id="IDX_1",
-                    composition_effective_from=date(2025, 1, 1),
-                    composition_weight=Decimal("0.60"),
-                ),
                 SimpleNamespace(
                     benchmark_id="B1",
                     index_id="IDX_1",
@@ -725,6 +726,21 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
         ("IDX_1", Decimal("0.55")),
         ("IDX_2", Decimal("0.40")),
     ]
+    compiled_statements = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in db.execute.await_args_list
+    ]
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_definitions.benchmark_id"
+        in compiled_statements[0]
+    )
+    assert "row_number() OVER (PARTITION BY index_definitions.index_id" in compiled_statements[1]
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
+        "benchmark_composition_series.index_id"
+    ) in compiled_statements[2]
+    for compiled in compiled_statements:
+        assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio

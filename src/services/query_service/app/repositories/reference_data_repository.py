@@ -60,28 +60,6 @@ def _latest_reference_evidence_timestamp(rows: list[Any]) -> datetime | None:
     return max(timestamps) if timestamps else None
 
 
-def _latest_effective_rows(rows: list[Any], *key_fields: str) -> list[Any]:
-    latest_by_key: dict[tuple[Any, ...], Any] = {}
-    for row in sorted(
-        rows,
-        key=lambda item: (
-            tuple(getattr(item, field) for field in key_fields),
-            getattr(item, "effective_from", None)
-            or getattr(item, "composition_effective_from", None)
-            or date.min,
-            getattr(item, "updated_at", None) or datetime.min,
-            getattr(item, "created_at", None) or datetime.min,
-        ),
-        reverse=True,
-    ):
-        key = tuple(getattr(row, field) for field in key_fields)
-        latest_by_key.setdefault(key, row)
-    return sorted(
-        latest_by_key.values(),
-        key=lambda item: tuple(getattr(item, field) for field in key_fields),
-    )
-
-
 def _normalize_reference_status(status: str) -> str:
     return status.strip().lower()
 
@@ -847,32 +825,46 @@ class ReferenceDataRepository:
         benchmark_currency: str | None = None,
         benchmark_status: str | None = None,
     ) -> list[BenchmarkDefinition]:
-        stmt = select(BenchmarkDefinition).where(
+        predicates = [
             _effective_filter(
                 BenchmarkDefinition.effective_from,
                 BenchmarkDefinition.effective_to,
                 as_of_date,
             )
-        )
+        ]
         if benchmark_type:
-            stmt = stmt.where(BenchmarkDefinition.benchmark_type == benchmark_type)
+            predicates.append(BenchmarkDefinition.benchmark_type == benchmark_type)
         if benchmark_currency:
-            stmt = stmt.where(
+            predicates.append(
                 BenchmarkDefinition.benchmark_currency
                 == normalize_currency_code(benchmark_currency)
             )
         if benchmark_status:
-            stmt = stmt.where(
+            predicates.append(
                 BenchmarkDefinition.benchmark_status
                 == _normalize_reference_status(benchmark_status)
             )
-        result = await self._db.execute(
-            stmt.order_by(
-                BenchmarkDefinition.benchmark_id.asc(),
+
+        ranked = _ranked_latest_effective_ids(
+            BenchmarkDefinition,
+            BenchmarkDefinition.benchmark_id,
+            predicates=predicates,
+            order_by=(
                 BenchmarkDefinition.effective_from.desc(),
-            )
+                BenchmarkDefinition.source_timestamp.desc().nullslast(),
+                BenchmarkDefinition.updated_at.desc(),
+                BenchmarkDefinition.created_at.desc(),
+                BenchmarkDefinition.id.desc(),
+            ),
         )
-        return _latest_effective_rows(list(result.scalars().all()), "benchmark_id")
+        stmt = (
+            select(BenchmarkDefinition)
+            .join(ranked, BenchmarkDefinition.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(BenchmarkDefinition.benchmark_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_index_definitions(
         self,
@@ -882,53 +874,81 @@ class ReferenceDataRepository:
         index_type: str | None = None,
         index_status: str | None = None,
     ) -> list[IndexDefinition]:
-        stmt = select(IndexDefinition).where(
+        predicates = [
             _effective_filter(
                 IndexDefinition.effective_from,
                 IndexDefinition.effective_to,
                 as_of_date,
             )
-        )
+        ]
         if index_ids:
-            stmt = stmt.where(IndexDefinition.index_id.in_(index_ids))
+            predicates.append(IndexDefinition.index_id.in_(index_ids))
         if index_currency:
-            stmt = stmt.where(
+            predicates.append(
                 IndexDefinition.index_currency == normalize_currency_code(index_currency)
             )
         if index_type:
-            stmt = stmt.where(IndexDefinition.index_type == index_type)
+            predicates.append(IndexDefinition.index_type == index_type)
         if index_status:
-            stmt = stmt.where(
+            predicates.append(
                 IndexDefinition.index_status == _normalize_reference_status(index_status)
             )
-        result = await self._db.execute(
-            stmt.order_by(IndexDefinition.index_id.asc(), IndexDefinition.effective_from.desc())
+
+        ranked = _ranked_latest_effective_ids(
+            IndexDefinition,
+            IndexDefinition.index_id,
+            predicates=predicates,
+            order_by=(
+                IndexDefinition.effective_from.desc(),
+                IndexDefinition.source_timestamp.desc().nullslast(),
+                IndexDefinition.updated_at.desc(),
+                IndexDefinition.created_at.desc(),
+                IndexDefinition.id.desc(),
+            ),
         )
-        return _latest_effective_rows(list(result.scalars().all()), "index_id")
+        stmt = (
+            select(IndexDefinition)
+            .join(ranked, IndexDefinition.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(IndexDefinition.index_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_benchmark_components(
         self,
         benchmark_id: str,
         as_of_date: date,
     ) -> list[BenchmarkCompositionSeries]:
+        predicates = [
+            BenchmarkCompositionSeries.benchmark_id == benchmark_id,
+            _effective_filter(
+                BenchmarkCompositionSeries.composition_effective_from,
+                BenchmarkCompositionSeries.composition_effective_to,
+                as_of_date,
+            ),
+        ]
+        ranked = _ranked_latest_effective_ids(
+            BenchmarkCompositionSeries,
+            BenchmarkCompositionSeries.benchmark_id,
+            BenchmarkCompositionSeries.index_id,
+            predicates=predicates,
+            order_by=(
+                BenchmarkCompositionSeries.composition_effective_from.desc(),
+                BenchmarkCompositionSeries.source_timestamp.desc().nullslast(),
+                BenchmarkCompositionSeries.updated_at.desc(),
+                BenchmarkCompositionSeries.created_at.desc(),
+                BenchmarkCompositionSeries.id.desc(),
+            ),
+        )
         stmt = (
             select(BenchmarkCompositionSeries)
-            .where(
-                BenchmarkCompositionSeries.benchmark_id == benchmark_id,
-                _effective_filter(
-                    BenchmarkCompositionSeries.composition_effective_from,
-                    BenchmarkCompositionSeries.composition_effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, BenchmarkCompositionSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(BenchmarkCompositionSeries.index_id.asc())
         )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "benchmark_id",
-            "index_id",
-        )
+        return list(result.scalars().all())
 
     async def list_benchmark_components_overlapping_window(
         self,
@@ -962,23 +982,37 @@ class ReferenceDataRepository:
         if not benchmark_ids:
             return {}
 
+        predicates = [
+            BenchmarkCompositionSeries.benchmark_id.in_(benchmark_ids),
+            _effective_filter(
+                BenchmarkCompositionSeries.composition_effective_from,
+                BenchmarkCompositionSeries.composition_effective_to,
+                as_of_date,
+            ),
+        ]
+        ranked = _ranked_latest_effective_ids(
+            BenchmarkCompositionSeries,
+            BenchmarkCompositionSeries.benchmark_id,
+            BenchmarkCompositionSeries.index_id,
+            predicates=predicates,
+            order_by=(
+                BenchmarkCompositionSeries.composition_effective_from.desc(),
+                BenchmarkCompositionSeries.source_timestamp.desc().nullslast(),
+                BenchmarkCompositionSeries.updated_at.desc(),
+                BenchmarkCompositionSeries.created_at.desc(),
+                BenchmarkCompositionSeries.id.desc(),
+            ),
+        )
         stmt = (
             select(BenchmarkCompositionSeries)
-            .where(
-                BenchmarkCompositionSeries.benchmark_id.in_(benchmark_ids),
-                _effective_filter(
-                    BenchmarkCompositionSeries.composition_effective_from,
-                    BenchmarkCompositionSeries.composition_effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, BenchmarkCompositionSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(
                 BenchmarkCompositionSeries.benchmark_id.asc(),
                 BenchmarkCompositionSeries.index_id.asc(),
             )
         )
         rows = list((await self._db.execute(stmt)).scalars().all())
-        rows = _latest_effective_rows(rows, "benchmark_id", "index_id")
         grouped: dict[str, list[BenchmarkCompositionSeries]] = defaultdict(list)
         for row in rows:
             grouped[row.benchmark_id].append(row)
