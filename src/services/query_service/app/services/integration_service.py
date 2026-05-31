@@ -94,7 +94,6 @@ from ..dtos.reference_integration_dto import (
     SustainabilityPreferenceProfileSupportability,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
-    TransactionCostCurveSupportability,
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.buy_state_repository import BuyStateRepository
@@ -165,7 +164,10 @@ from .source_data_runtime import (
     source_product_runtime_metadata,
     source_product_runtime_metadata_without_as_of_date,
 )
-from .transaction_cost_curve import build_transaction_cost_curve_page
+from .transaction_cost_curve import (
+    build_transaction_cost_curve_page,
+    build_transaction_cost_curve_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1804,11 +1806,9 @@ class IntegrationService:
             page_size=request.page.page_size,
         )
 
-        curve_points = curve_page.points
-        has_more = curve_page.has_more
         next_page_token: str | None = None
-        if has_more and curve_points:
-            last_point = curve_points[-1]
+        if curve_page.has_more and curve_page.points:
+            last_point = curve_page.points[-1]
             next_page_token = self._encode_page_token(
                 {
                     "scope_fingerprint": request_scope_fingerprint,
@@ -1820,54 +1820,13 @@ class IntegrationService:
                 }
             )
 
-        requested_security_ids = {
-            normalize_security_id(security_id) for security_id in request.security_ids or []
-        }
-        returned_security_ids = {key[0] for key in curve_page.all_curve_keys}
-        missing_security_ids = sorted(requested_security_ids - returned_security_ids)
-
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "TRANSACTION_COST_CURVE_READY"
-        if not curve_page.all_curve_keys:
-            supportability_state = "UNAVAILABLE"
-            supportability_reason = "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
-        elif missing_security_ids:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "TRANSACTION_COST_EVIDENCE_MISSING_FOR_SECURITIES"
-        elif has_more:
-            supportability_state = "DEGRADED"
-            supportability_reason = "TRANSACTION_COST_CURVE_PAGE_PARTIAL"
-
-        return TransactionCostCurveResponse(
+        return build_transaction_cost_curve_response(
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            window=request.window,
-            curve_points=curve_points,
-            page=ReferencePageMetadata(
-                page_size=request.page.page_size,
-                sort_key="security_id:asc,transaction_type:asc,currency:asc",
-                returned_component_count=len(curve_points),
-                request_scope_fingerprint=request_scope_fingerprint,
-                next_page_token=next_page_token,
-            ),
-            supportability=TransactionCostCurveSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requested_security_count=(
-                    len(request.security_ids) if request.security_ids is not None else None
-                ),
-                returned_curve_point_count=len(curve_points),
-                missing_security_ids=missing_security_ids,
-            ),
-            lineage={
-                "source_system": "transactions",
-                "contract_version": "rfc_040_wtbd_007_v1",
-            },
-            **source_product_runtime_metadata_without_as_of_date(
-                request.as_of_date,
-                data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(transactions),
-            ),
+            request=request,
+            request_scope_fingerprint=request_scope_fingerprint,
+            curve_page=curve_page,
+            transactions=transactions,
+            next_page_token=next_page_token,
         )
 
     async def get_market_data_coverage(

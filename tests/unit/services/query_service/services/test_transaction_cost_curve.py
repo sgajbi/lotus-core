@@ -1,11 +1,15 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.services.query_service.app.dtos.reference_integration_dto import (
+    TransactionCostCurveRequest,
+)
 from src.services.query_service.app.services.transaction_cost_curve import (
     build_transaction_cost_curve_page,
     build_transaction_cost_curve_point,
     build_transaction_cost_curve_points,
+    build_transaction_cost_curve_response,
     has_observed_transaction_cost_evidence,
     transaction_cost_curve_key,
     transaction_fee_amount,
@@ -164,6 +168,86 @@ def test_transaction_cost_curve_page_builds_only_requested_slice() -> None:
 
     assert [point.security_id for point in next_page.points] == ["EQ_US_MSFT"]
     assert next_page.has_more is True
+
+
+def test_transaction_cost_curve_response_reports_page_scoped_supportability() -> None:
+    transactions = [
+        _transaction(
+            transaction_id="TXN-AAPL-001",
+            security_id="EQ_US_AAPL",
+            transaction_date=datetime(2026, 4, 1, 10, tzinfo=UTC),
+        ),
+        _transaction(
+            transaction_id="TXN-MSFT-001",
+            security_id="EQ_US_MSFT",
+            transaction_date=datetime(2026, 4, 2, 10, tzinfo=UTC),
+        ),
+    ]
+    transactions[0].updated_at = datetime(2026, 4, 1, 10, tzinfo=UTC)
+    transactions[1].updated_at = datetime(2026, 4, 2, 10, tzinfo=UTC)
+    curve_page = build_transaction_cost_curve_page(
+        portfolio_id="PB1",
+        transactions=transactions,
+        min_observation_count=1,
+        after_key=(),
+        page_size=1,
+    )
+
+    response = build_transaction_cost_curve_response(
+        portfolio_id="PB1",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 4, 10),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+            security_ids=["EQ_US_AAPL"],
+            page={"page_size": 1},
+        ),
+        request_scope_fingerprint="scope-123",
+        curve_page=curve_page,
+        transactions=transactions,
+        next_page_token="token-2",
+    )
+
+    assert response.product_name == "TransactionCostCurve"
+    assert response.page.next_page_token == "token-2"
+    assert response.page.returned_component_count == 1
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "TRANSACTION_COST_CURVE_PAGE_PARTIAL"
+    assert response.supportability.missing_security_ids == []
+    assert response.data_quality_status == "PARTIAL"
+    assert response.latest_evidence_timestamp == datetime(2026, 4, 2, 10, tzinfo=UTC)
+    assert response.lineage == {
+        "source_system": "transactions",
+        "contract_version": "rfc_040_wtbd_007_v1",
+    }
+
+
+def test_transaction_cost_curve_response_reports_missing_requested_security() -> None:
+    transactions = [_transaction(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL")]
+    curve_page = build_transaction_cost_curve_page(
+        portfolio_id="PB1",
+        transactions=transactions,
+        min_observation_count=1,
+        after_key=(),
+        page_size=10,
+    )
+
+    response = build_transaction_cost_curve_response(
+        portfolio_id="PB1",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 4, 10),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+            security_ids=["EQ_US_AAPL", "UNKNOWN_SEC"],
+        ),
+        request_scope_fingerprint="scope-123",
+        curve_page=curve_page,
+        transactions=transactions,
+        next_page_token=None,
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "TRANSACTION_COST_EVIDENCE_MISSING_FOR_SECURITIES"
+    assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert response.data_quality_status == "PARTIAL"
 
 
 def test_transaction_cost_curve_point_ignores_unusable_direct_rows() -> None:

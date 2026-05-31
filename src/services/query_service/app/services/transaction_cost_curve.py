@@ -4,9 +4,17 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from ..dtos.reference_integration_dto import TransactionCostCurvePoint
+from ..dtos.reference_integration_dto import (
+    ReferencePageMetadata,
+    TransactionCostCurvePoint,
+    TransactionCostCurveRequest,
+    TransactionCostCurveResponse,
+    TransactionCostCurveSupportability,
+)
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
+from .reference_data_helpers import latest_reference_evidence_timestamp
+from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
 @dataclass(frozen=True)
@@ -173,6 +181,66 @@ def build_transaction_cost_curve_page(
         points=points,
         all_curve_keys=all_curve_keys,
         has_more=has_more,
+    )
+
+
+def build_transaction_cost_curve_response(
+    *,
+    portfolio_id: str,
+    request: TransactionCostCurveRequest,
+    request_scope_fingerprint: str,
+    curve_page: TransactionCostCurvePage,
+    transactions: list[Any],
+    next_page_token: str | None,
+) -> TransactionCostCurveResponse:
+    requested_security_ids = {
+        normalize_security_id(security_id) for security_id in request.security_ids or []
+    }
+    returned_security_ids = {key[0] for key in curve_page.all_curve_keys}
+    missing_security_ids = sorted(requested_security_ids - returned_security_ids)
+
+    supportability_state = "READY"
+    supportability_reason = "TRANSACTION_COST_CURVE_READY"
+    if not curve_page.all_curve_keys:
+        supportability_state = "UNAVAILABLE"
+        supportability_reason = "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
+    elif missing_security_ids:
+        supportability_state = "INCOMPLETE"
+        supportability_reason = "TRANSACTION_COST_EVIDENCE_MISSING_FOR_SECURITIES"
+    elif curve_page.has_more:
+        supportability_state = "DEGRADED"
+        supportability_reason = "TRANSACTION_COST_CURVE_PAGE_PARTIAL"
+
+    return TransactionCostCurveResponse(
+        portfolio_id=portfolio_id,
+        as_of_date=request.as_of_date,
+        window=request.window,
+        curve_points=curve_page.points,
+        page=ReferencePageMetadata(
+            page_size=request.page.page_size,
+            sort_key="security_id:asc,transaction_type:asc,currency:asc",
+            returned_component_count=len(curve_page.points),
+            request_scope_fingerprint=request_scope_fingerprint,
+            next_page_token=next_page_token,
+        ),
+        supportability=TransactionCostCurveSupportability(
+            state=supportability_state,
+            reason=supportability_reason,
+            requested_security_count=(
+                len(request.security_ids) if request.security_ids is not None else None
+            ),
+            returned_curve_point_count=len(curve_page.points),
+            missing_security_ids=missing_security_ids,
+        ),
+        lineage={
+            "source_system": "transactions",
+            "contract_version": "rfc_040_wtbd_007_v1",
+        },
+        **source_product_runtime_metadata_without_as_of_date(
+            request.as_of_date,
+            data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
+            latest_evidence_timestamp=latest_reference_evidence_timestamp(transactions),
+        ),
     )
 
 
