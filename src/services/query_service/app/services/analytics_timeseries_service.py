@@ -793,13 +793,6 @@ class AnalyticsTimeseriesService:
                 "include_cash_flows": request.include_cash_flows,
             }
         )
-        fx_rates = await self._get_conversion_rates(
-            portfolio_currency=portfolio_currency,
-            reporting_currency=reporting_currency,
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
-        )
-
         cursor = self._decode_page_token(request.page.page_token)
         token_scope = cursor.get("scope_fingerprint")
         if token_scope is not None and token_scope != request_scope_fingerprint:
@@ -836,15 +829,11 @@ class AnalyticsTimeseriesService:
             dimension_filters=dimension_filters,
             snapshot_epoch=snapshot_epoch,
         )
-        position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-            position_currencies={str(row.position_currency or "") for row in rows},
-            portfolio_currency=portfolio_currency,
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
-        )
-
         has_more = len(rows) > request.page.page_size
         rows_page = rows[: request.page.page_size]
+        page_dates = sorted({row.valuation_date for row in rows_page})
+        page_start_date = min(page_dates) if page_dates else resolved_window.start_date
+        page_end_date = max(page_dates) if page_dates else resolved_window.start_date
         position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = {}
         if (
             request.include_cash_flows
@@ -860,7 +849,7 @@ class AnalyticsTimeseriesService:
                         if (security_id := normalize_security_id(row.security_id))
                     }
                 ),
-                valuation_dates=sorted({row.valuation_date for row in rows_page}),
+                valuation_dates=page_dates,
                 snapshot_epoch=snapshot_epoch,
             )
             position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
@@ -868,7 +857,7 @@ class AnalyticsTimeseriesService:
         if rows_page and hasattr(self.repo, "list_portfolio_cashflow_rows"):
             portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
                 portfolio_id=portfolio_id,
-                valuation_dates=sorted({row.valuation_date for row in rows_page}),
+                valuation_dates=page_dates,
                 snapshot_epoch=snapshot_epoch,
             )
             portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
@@ -876,6 +865,22 @@ class AnalyticsTimeseriesService:
                 reporting_currency=portfolio_currency,
                 portfolio_currency=portfolio_currency,
                 fx_rates={},
+            )
+
+        position_to_portfolio_rates: dict[str, dict[date, Decimal]] = {}
+        fx_rates: dict[date, Decimal] = {}
+        if rows_page:
+            position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
+                position_currencies={str(row.position_currency or "") for row in rows_page},
+                portfolio_currency=portfolio_currency,
+                start_date=page_start_date,
+                end_date=page_end_date,
+            )
+            fx_rates = await self._get_conversion_rates(
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+                start_date=page_start_date,
+                end_date=page_end_date,
             )
 
         quality_distribution: dict[str, int] = {}

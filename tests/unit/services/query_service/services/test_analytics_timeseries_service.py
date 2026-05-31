@@ -1194,6 +1194,12 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
     assert response.page.returned_row_count == 1
     assert response.page.sort_key == "valuation_date:asc,security_id:asc"
     assert response.page.next_page_token is not None
+    service.repo.get_fx_rates_map.assert_awaited_once_with(
+        from_currency="USD",
+        to_currency="EUR",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 1),
+    )
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
     assert "scope_fingerprint" in token_payload
@@ -2430,10 +2436,10 @@ async def test_position_timeseries_converts_values_to_portfolio_and_reporting_cu
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=3),
         get_fx_rates_map=AsyncMock(
-            side_effect=[
-                {date(2025, 1, 1): Decimal("1.30")},
-                {date(2025, 1, 1): Decimal("1.10")},
-            ]
+            side_effect=lambda *, from_currency, to_currency, start_date, end_date: {
+                ("EUR", "USD"): {date(2025, 1, 1): Decimal("1.10")},
+                ("USD", "SGD"): {date(2025, 1, 1): Decimal("1.30")},
+            }[(from_currency, to_currency)]
         ),
     )
 
@@ -2460,16 +2466,16 @@ async def test_position_timeseries_converts_values_to_portfolio_and_reporting_cu
     assert row.position_to_portfolio_fx_rate == Decimal("1.10")
     assert row.portfolio_to_reporting_fx_rate == Decimal("1.30")
     service.repo.get_fx_rates_map.assert_any_await(
-        from_currency="USD",
-        to_currency="SGD",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
-    )
-    service.repo.get_fx_rates_map.assert_any_await(
         from_currency="EUR",
         to_currency="USD",
         start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
+        end_date=date(2025, 1, 1),
+    )
+    service.repo.get_fx_rates_map.assert_any_await(
+        from_currency="USD",
+        to_currency="SGD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 1),
     )
 
 
