@@ -184,7 +184,15 @@ class TransactionService:
     ) -> PortfolioRealizedTaxSummaryResponse:
         logger.info("Fetching realized tax summary for portfolio '%s'.", portfolio_id)
 
-        base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
+        base_currency_read = self.repo.get_portfolio_base_currency(portfolio_id)
+        if as_of_date is None:
+            base_currency, default_as_of_date = await asyncio.gather(
+                base_currency_read,
+                self.repo.get_latest_business_date(),
+            )
+        else:
+            base_currency = await base_currency_read
+            default_as_of_date = as_of_date
         if base_currency is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         normalized_base_currency = normalize_currency_code(str(base_currency))
@@ -192,9 +200,7 @@ class TransactionService:
             normalize_currency_code(reporting_currency) if reporting_currency is not None else None
         )
 
-        effective_as_of_date = (
-            as_of_date or await self.repo.get_latest_business_date() or date.today()
-        )
+        effective_as_of_date = default_as_of_date or date.today()
         ledger_filters = {
             "portfolio_id": portfolio_id,
             "start_date": start_date,

@@ -686,6 +686,60 @@ async def test_get_realized_tax_summary_reads_count_and_tax_evidence_concurrentl
     )
 
 
+async def test_get_realized_tax_summary_reads_base_currency_and_default_date_concurrently() -> None:
+    repo = AsyncMock(spec=TransactionRepository)
+    currency_started = asyncio.Event()
+    date_started = asyncio.Event()
+    repo.get_transactions_count.return_value = 0
+    repo.list_realized_tax_evidence_transactions.return_value = []
+
+    async def get_portfolio_base_currency(portfolio_id: str) -> str:
+        currency_started.set()
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        assert portfolio_id == "P1"
+        return "USD"
+
+    async def get_latest_business_date() -> date:
+        date_started.set()
+        await asyncio.wait_for(currency_started.wait(), timeout=1)
+        return date(2025, 1, 15)
+
+    repo.get_portfolio_base_currency.side_effect = get_portfolio_base_currency
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        summary = await asyncio.wait_for(
+            service.get_realized_tax_summary(portfolio_id="P1"),
+            timeout=1,
+        )
+
+    assert summary.base_currency == "USD"
+    assert summary.as_of_date == date(2025, 1, 15)
+    assert currency_started.is_set()
+    assert date_started.is_set()
+
+
+async def test_get_realized_tax_summary_explicit_date_skips_default_date_lookup(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        summary = await service.get_realized_tax_summary(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 14),
+        )
+
+    assert summary.as_of_date == date(2025, 1, 14)
+    mock_transaction_repo.get_latest_business_date.assert_not_awaited()
+
+
 async def test_get_realized_tax_summary_converts_currency_totals_concurrently() -> None:
     repo = AsyncMock(spec=TransactionRepository)
     repo.get_portfolio_base_currency.return_value = "USD"
