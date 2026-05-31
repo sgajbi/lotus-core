@@ -527,6 +527,9 @@ def test_normalized_calculation_lookup_indexes_are_declared():
             "ix_transaction_costs_transaction_id": [
                 "transaction_costs.transaction_id",
             ],
+            "ix_txn_costs_positive_txn_id": [
+                "transaction_costs.transaction_id",
+            ],
         },
         PositionTimeseries: {
             "ix_pos_ts_norm_port_sec_date_epoch": [
@@ -574,6 +577,16 @@ def test_normalized_calculation_lookup_indexes_are_declared():
                 str(expression) for expression in declared_indexes[index_name].expressions
             ]
             assert actual_expressions == expected_expressions
+
+    transaction_cost_indexes = {index.name: index for index in TransactionCost.__table__.indexes}
+    assert (
+        str(
+            transaction_cost_indexes["ix_txn_costs_positive_txn_id"].dialect_options["postgresql"][
+                "where"
+            ]
+        )
+        == "amount > 0"
+    )
 
 
 def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():

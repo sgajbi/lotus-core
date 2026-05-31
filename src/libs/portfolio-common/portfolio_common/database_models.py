@@ -1552,7 +1552,14 @@ class TransactionCost(Base):
 
     transaction = relationship("Transaction", back_populates="costs")
 
-    __table_args__ = (Index("ix_transaction_costs_transaction_id", "transaction_id"),)
+    __table_args__ = (
+        Index("ix_transaction_costs_transaction_id", "transaction_id"),
+        Index(
+            "ix_txn_costs_positive_txn_id",
+            "transaction_id",
+            postgresql_where=text("amount > 0"),
+        ),
+    )
 
 
 class Cashflow(Base):
