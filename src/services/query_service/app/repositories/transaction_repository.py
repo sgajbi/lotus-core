@@ -5,9 +5,15 @@ from decimal import Decimal
 from typing import List, Optional
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
-from portfolio_common.database_models import BusinessDate, FxRate, Portfolio, Transaction
+from portfolio_common.database_models import (
+    BusinessDate,
+    FxRate,
+    Portfolio,
+    Transaction,
+    TransactionCost,
+)
 from portfolio_common.utils import async_timed
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -280,6 +286,16 @@ class TransactionRepository:
                 Transaction.transaction_date >= start_of_day(start_date),
                 Transaction.transaction_date < start_of_next_day(end_date),
                 Transaction.transaction_date < start_of_next_day(as_of_date),
+                func.abs(Transaction.gross_transaction_amount) > 0,
+                or_(
+                    Transaction.trade_fee > 0,
+                    exists(
+                        select(1).where(
+                            TransactionCost.transaction_id == Transaction.transaction_id,
+                            TransactionCost.amount > 0,
+                        )
+                    ),
+                ),
             )
         )
         if security_ids:

@@ -336,6 +336,11 @@ async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loa
     assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
+    assert "abs(transactions.gross_transaction_amount) > 0" in compiled_query
+    assert "transactions.trade_fee > 0" in compiled_query
+    assert "EXISTS (SELECT 1" in compiled_query
+    assert "transaction_costs.transaction_id = transactions.transaction_id" in compiled_query
+    assert "transaction_costs.amount > 0" in compiled_query
     assert (
         "trim(transactions.security_id) IN ('EQ_US_AAPL', 'FI_US_TREASURY_10Y')" in compiled_query
     )
