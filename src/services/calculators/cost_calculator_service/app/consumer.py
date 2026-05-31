@@ -12,6 +12,7 @@ from portfolio_common.config import (
 )
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.db import get_async_db_session
+from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
@@ -63,6 +64,15 @@ ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
 def _normalize_event_code(value: object) -> str:
     return str(value or "").strip().upper()
+
+
+def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return Decimal(0)
+    amount = decimal_or_none(value)
+    if amount is None:
+        raise ValueError(f"{field_name} must be numeric.")
+    return amount
 
 
 class FxRateNotFoundError(Exception):
@@ -134,7 +144,10 @@ class CostCalculatorConsumer(BaseConsumer):
         cost-calculator-service engine package, converting fee fields to a Fees object structure.
         """
         event_dict = event.model_dump(mode="json")
-        trade_fee_str = event_dict.pop("trade_fee", "0") or "0"
+        trade_fee = _normalize_fee_amount(
+            event_dict.pop("trade_fee", "0"),
+            field_name="trade_fee",
+        )
         brokerage = event_dict.pop("brokerage", None)
         stamp_duty = event_dict.pop("stamp_duty", None)
         exchange_fee = event_dict.pop("exchange_fee", None)
@@ -148,12 +161,16 @@ class CostCalculatorConsumer(BaseConsumer):
             "gst": gst,
             "other_fees": other_fees,
         }
+        normalized_components = {
+            key: _normalize_fee_amount(value, field_name=key)
+            for key, value in fee_components.items()
+        }
         resolved_trade_fee = resolve_transaction_trade_fee(
-            Decimal(str(trade_fee_str)),
-            fee_components,
+            trade_fee,
+            normalized_components if any(v is not None for v in fee_components.values()) else {},
         )
         if any(v is not None for v in fee_components.values()):
-            normalized = {k: str(Decimal(str(v or "0"))) for k, v in fee_components.items()}
+            normalized = {key: str(value) for key, value in normalized_components.items()}
             event_dict["fees"] = normalized
             event_dict["trade_fee"] = str(resolved_trade_fee)
         elif resolved_trade_fee and resolved_trade_fee > 0:

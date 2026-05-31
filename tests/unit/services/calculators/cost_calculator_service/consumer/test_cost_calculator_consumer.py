@@ -31,11 +31,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculatorConsumer,
     PortfolioNotFoundError,
+    _normalize_fee_amount,
 )
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 pytestmark = pytest.mark.asyncio
+
+
+class _StringCountedAmount:
+    def __init__(self, value: str) -> None:
+        self.value = value
+        self.string_call_count = 0
+
+    def __str__(self) -> str:
+        self.string_call_count += 1
+        return self.value
 
 
 @pytest.fixture
@@ -496,6 +507,14 @@ async def test_transform_event_rejects_post_validation_negative_fee_component(
 
     with pytest.raises(ValueError, match="brokerage"):
         cost_calculator_consumer._transform_event_for_engine(event)
+
+
+async def test_fee_amount_normalizer_normalizes_counted_amount_once() -> None:
+    amount = _StringCountedAmount("2.50")
+
+    assert _normalize_fee_amount(amount, field_name="brokerage") == Decimal("2.50")
+    assert _normalize_fee_amount(" ", field_name="stamp_duty") == Decimal("0")
+    assert amount.string_call_count == 1
 
 
 async def test_consumer_uses_trade_fee_in_calculation(
