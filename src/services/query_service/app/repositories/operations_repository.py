@@ -327,12 +327,17 @@ class OperationsRepository:
         requested_by: Optional[str] = None,
         dedupe_key: Optional[str] = None,
         reconciliation_type: Optional[str] = None,
+        business_date: Optional[date] = None,
+        epoch: Optional[int] = None,
         status: Optional[str] = None,
         as_of: Optional[datetime] = None,
+        include_started_as_of: bool = False,
     ):
         stmt = stmt.where(FinancialReconciliationRun.portfolio_id == portfolio_id)
         if as_of is not None:
             stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
+            if include_started_as_of:
+                stmt = stmt.where(FinancialReconciliationRun.started_at <= as_of)
         if run_id:
             stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
         if correlation_id:
@@ -343,6 +348,10 @@ class OperationsRepository:
             stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
         if reconciliation_type:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
+        if business_date is not None:
+            stmt = stmt.where(FinancialReconciliationRun.business_date == business_date)
+        if epoch is not None:
+            stmt = stmt.where(FinancialReconciliationRun.epoch == epoch)
         if status:
             stmt = stmt.where(
                 self._reconciliation_status_filter(FinancialReconciliationRun.status, status)
@@ -1511,16 +1520,14 @@ class OperationsRepository:
         epoch: int,
         as_of: Optional[datetime] = None,
     ) -> Optional[FinancialReconciliationRun]:
-        stmt = select(FinancialReconciliationRun).where(
-            FinancialReconciliationRun.portfolio_id == portfolio_id,
-            FinancialReconciliationRun.business_date == business_date,
-            FinancialReconciliationRun.epoch == epoch,
+        stmt = self._apply_reconciliation_run_scope(
+            select(FinancialReconciliationRun),
+            portfolio_id=portfolio_id,
+            business_date=business_date,
+            epoch=epoch,
+            as_of=as_of,
+            include_started_as_of=True,
         )
-        if as_of is not None:
-            stmt = stmt.where(
-                FinancialReconciliationRun.started_at <= as_of,
-                FinancialReconciliationRun.updated_at <= as_of,
-            )
         stmt = stmt.order_by(
             self._reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
             FinancialReconciliationRun.started_at.desc(),
