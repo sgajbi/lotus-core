@@ -145,6 +145,12 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
                 SimpleNamespace(valuation_date=date(2025, 1, 2)),
             ]
         ),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(valuation_date=date(2025, 1, 1)),
+                SimpleNamespace(valuation_date=date(2025, 1, 2)),
+            ]
+        ),
     ]
     repo = AnalyticsTimeseriesRepository(db)
 
@@ -169,6 +175,23 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
     observation_sql = str(observation_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_timeseries.epoch <= 6" in observation_sql
     assert "ORDER BY anon_1.valuation_date ASC" in observation_sql
+
+    position_observation_dates = await repo.list_position_observation_dates(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        snapshot_epoch=7,
+    )
+    assert position_observation_dates == [date(2025, 1, 1), date(2025, 1, 2)]
+    position_observation_stmt = db.execute.await_args_list[2].args[0]
+    position_observation_sql = str(
+        position_observation_stmt.compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "position_timeseries.epoch <= 7" in position_observation_sql
+    assert "JOIN position_state ON" in position_observation_sql
+    assert "position_timeseries.quantity = (SELECT position_history.quantity" in (
+        position_observation_sql
+    )
 
 
 @pytest.mark.asyncio

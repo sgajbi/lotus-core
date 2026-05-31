@@ -373,6 +373,57 @@ class AnalyticsTimeseriesRepository:
         result = await self.db.execute(stmt)
         return result.all()
 
+    async def list_position_observation_dates(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        snapshot_epoch: int | None = None,
+    ) -> list[date]:
+        predicates = [
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.date >= start_date,
+            PositionTimeseries.date <= end_date,
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
+
+        latest_history_quantity = self._latest_current_position_history_quantity()
+        position_security_id = func.trim(PositionTimeseries.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        ranked = (
+            select(
+                PositionTimeseries.date.label("valuation_date"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionTimeseries.date, position_security_id),
+                    order_by=(PositionTimeseries.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .select_from(PositionTimeseries)
+            .join(
+                PositionState,
+                and_(
+                    PositionTimeseries.portfolio_id == PositionState.portfolio_id,
+                    position_security_id == state_security_id,
+                    PositionTimeseries.epoch == PositionState.epoch,
+                ),
+            )
+            .where(*predicates, PositionTimeseries.quantity == latest_history_quantity)
+            .subquery()
+        )
+
+        stmt = (
+            select(ranked.c.valuation_date)
+            .where(ranked.c.rn == 1)
+            .distinct()
+            .order_by(ranked.c.valuation_date.asc())
+        )
+        result = await self.db.execute(stmt)
+        return [row.valuation_date for row in result.all()]
+
     async def list_latest_position_timeseries_before(
         self,
         *,

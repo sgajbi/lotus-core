@@ -495,6 +495,77 @@ async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -
 
 
 @pytest.mark.asyncio
+async def test_portfolio_rows_page_position_reads_by_observation_dates() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=4),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3)]
+        ),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_USD",
+                    valuation_date=date(2025, 1, 2),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("120"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=0,
+                    position_currency="USD",
+                    asset_class="equity",
+                )
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_USD",
+                    valuation_date=date(2025, 1, 1),
+                    eod_market_value=Decimal("110"),
+                    epoch=0,
+                )
+            ]
+        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+    )
+
+    observations, _, observed_dates, _, next_page_token = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-03"),
+        page_size=1,
+        cursor_date=date(2025, 1, 1),
+        request_scope_fingerprint="scope-1",
+    )
+
+    assert observed_dates == [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3)]
+    assert observations[0].valuation_date == date(2025, 1, 2)
+    assert observations[0].beginning_market_value == Decimal("110")
+    assert observations[0].ending_market_value == Decimal("120")
+    assert next_page_token is not None
+    service.repo.list_position_observation_dates.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 3),
+        snapshot_epoch=4,
+    )
+    service.repo.list_position_timeseries_rows_unpaged.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 2),
+        end_date=date(2025, 1, 2),
+        snapshot_epoch=4,
+    )
+    service.repo.list_latest_position_timeseries_before.assert_awaited_once_with(
+        portfolio_id="P1",
+        before_date=date(2025, 1, 2),
+        security_ids=["SEC_USD"],
+        snapshot_epoch=4,
+    )
+
+
+@pytest.mark.asyncio
 async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuity() -> None:
     service = make_service()
     service.repo = SimpleNamespace(

@@ -354,18 +354,35 @@ class AnalyticsTimeseriesService:
             position_ids=[],
             dimension_filters={},
         )
-        position_rows = await self.repo.list_position_timeseries_rows_unpaged(
-            portfolio_id=portfolio_id,
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
-            snapshot_epoch=snapshot_epoch,
-        )
-        observed_dates = sorted({row.valuation_date for row in position_rows})
+        has_position_observation_dates = hasattr(self.repo, "list_position_observation_dates")
+        if has_position_observation_dates:
+            observed_dates = await self.repo.list_position_observation_dates(
+                portfolio_id=portfolio_id,
+                start_date=resolved_window.start_date,
+                end_date=resolved_window.end_date,
+                snapshot_epoch=snapshot_epoch,
+            )
+        else:
+            position_rows = await self.repo.list_position_timeseries_rows_unpaged(
+                portfolio_id=portfolio_id,
+                start_date=resolved_window.start_date,
+                end_date=resolved_window.end_date,
+                snapshot_epoch=snapshot_epoch,
+            )
+            observed_dates = sorted({row.valuation_date for row in position_rows})
         paged_dates = [day for day in observed_dates if cursor_date is None or day > cursor_date]
         has_more = len(paged_dates) > page_size
         page_dates = paged_dates[:page_size]
         if not page_dates:
             return [], {}, observed_dates, snapshot_epoch, None
+
+        if has_position_observation_dates:
+            position_rows = await self.repo.list_position_timeseries_rows_unpaged(
+                portfolio_id=portfolio_id,
+                start_date=min(page_dates),
+                end_date=max(page_dates),
+                snapshot_epoch=snapshot_epoch,
+            )
 
         position_currencies = {
             str(row.position_currency)
@@ -417,17 +434,35 @@ class AnalyticsTimeseriesService:
 
         observations: list[PortfolioTimeseriesObservation] = []
         quality_distribution: dict[str, int] = {}
-        previous_eod_by_security = {
-            normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
-            for row in sorted(
-                position_rows,
-                key=lambda item: (
-                    item.valuation_date,
-                    normalize_security_id(item.security_id),
+        if has_position_observation_dates:
+            previous_rows = await self.repo.list_latest_position_timeseries_before(
+                portfolio_id=portfolio_id,
+                before_date=page_dates[0],
+                security_ids=sorted(
+                    {
+                        security_id
+                        for row in position_rows
+                        if (security_id := normalize_security_id(row.security_id))
+                    }
                 ),
+                snapshot_epoch=snapshot_epoch,
             )
-            if row.valuation_date < page_dates[0]
-        }
+            previous_eod_by_security = {
+                normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
+                for row in previous_rows
+            }
+        else:
+            previous_eod_by_security = {
+                normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
+                for row in sorted(
+                    position_rows,
+                    key=lambda item: (
+                        item.valuation_date,
+                        normalize_security_id(item.security_id),
+                    ),
+                )
+                if row.valuation_date < page_dates[0]
+            }
         for valuation_date in page_dates:
             conversion_rate = Decimal("1")
             if reporting_currency != portfolio_currency:
