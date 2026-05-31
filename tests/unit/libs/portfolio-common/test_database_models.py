@@ -4,15 +4,21 @@ from portfolio_common.database_models import (
     Base,
     CashAccountMaster,
     Cashflow,
+    ClientIncomeNeedsSchedule,
+    ClientRestrictionProfile,
+    ClientTaxProfile,
+    ClientTaxRuleSet,
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     Instrument,
     InstrumentLookthroughComponent,
+    LiquidityReserveRequirement,
     MarketPrice,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
     PipelineStageState,
+    PlannedWithdrawalSchedule,
     Portfolio,
     PortfolioAggregationJob,
     PortfolioMandateBinding,
@@ -23,6 +29,7 @@ from portfolio_common.database_models import (
     PositionState,
     PositionTimeseries,
     ReprocessingJob,
+    SustainabilityPreferenceProfile,
     Transaction,
     TransactionCost,
 )
@@ -142,6 +149,124 @@ def test_model_portfolio_tables_declare_dpm_source_indexes():
         "model_portfolio_targets.effective_to",
     ]
     assert str(active_target.dialect_options["postgresql"]["where"]) == "target_status = 'active'"
+
+
+def test_client_source_data_tables_declare_active_source_indexes():
+    expected_indexes = [
+        (
+            ClientRestrictionProfile,
+            "ix_client_restr_active_port_client_eff",
+            [
+                "client_restriction_profiles.portfolio_id",
+                "client_restriction_profiles.client_id",
+                "client_restriction_profiles.restriction_scope",
+                "client_restriction_profiles.restriction_code",
+                "client_restriction_profiles.effective_from DESC",
+                "client_restriction_profiles.effective_to",
+                "client_restriction_profiles.observed_at DESC NULLS LAST",
+                "client_restriction_profiles.restriction_version DESC",
+                "client_restriction_profiles.updated_at DESC",
+            ],
+            "restriction_status = 'active'",
+        ),
+        (
+            SustainabilityPreferenceProfile,
+            "ix_sust_pref_active_port_client_eff",
+            [
+                "sustainability_preference_profiles.portfolio_id",
+                "sustainability_preference_profiles.client_id",
+                "sustainability_preference_profiles.preference_framework",
+                "sustainability_preference_profiles.preference_code",
+                "sustainability_preference_profiles.effective_from DESC",
+                "sustainability_preference_profiles.effective_to",
+                "sustainability_preference_profiles.observed_at DESC NULLS LAST",
+                "sustainability_preference_profiles.preference_version DESC",
+                "sustainability_preference_profiles.updated_at DESC",
+            ],
+            "preference_status = 'active'",
+        ),
+        (
+            ClientTaxProfile,
+            "ix_client_tax_profile_active_eff",
+            [
+                "client_tax_profiles.portfolio_id",
+                "client_tax_profiles.client_id",
+                "client_tax_profiles.tax_profile_id",
+                "client_tax_profiles.effective_from DESC",
+                "client_tax_profiles.effective_to",
+                "client_tax_profiles.observed_at DESC NULLS LAST",
+                "client_tax_profiles.profile_version DESC",
+                "client_tax_profiles.updated_at DESC",
+            ],
+            "profile_status = 'active'",
+        ),
+        (
+            ClientTaxRuleSet,
+            "ix_client_tax_rule_active_eff",
+            [
+                "client_tax_rule_sets.portfolio_id",
+                "client_tax_rule_sets.client_id",
+                "client_tax_rule_sets.rule_set_id",
+                "client_tax_rule_sets.jurisdiction_code",
+                "client_tax_rule_sets.rule_code",
+                "client_tax_rule_sets.effective_from DESC",
+                "client_tax_rule_sets.effective_to",
+                "client_tax_rule_sets.observed_at DESC NULLS LAST",
+                "client_tax_rule_sets.rule_version DESC",
+                "client_tax_rule_sets.updated_at DESC",
+            ],
+            "rule_status = 'active'",
+        ),
+        (
+            ClientIncomeNeedsSchedule,
+            "ix_client_income_needs_active_eff",
+            [
+                "client_income_needs_schedules.portfolio_id",
+                "client_income_needs_schedules.client_id",
+                "client_income_needs_schedules.schedule_id",
+                "client_income_needs_schedules.start_date DESC",
+                "client_income_needs_schedules.end_date",
+                "client_income_needs_schedules.observed_at DESC NULLS LAST",
+                "client_income_needs_schedules.updated_at DESC",
+            ],
+            "need_status = 'active'",
+        ),
+        (
+            LiquidityReserveRequirement,
+            "ix_liquidity_reserve_active_eff",
+            [
+                "liquidity_reserve_requirements.portfolio_id",
+                "liquidity_reserve_requirements.client_id",
+                "liquidity_reserve_requirements.reserve_requirement_id",
+                "liquidity_reserve_requirements.effective_from DESC",
+                "liquidity_reserve_requirements.effective_to",
+                "liquidity_reserve_requirements.observed_at DESC NULLS LAST",
+                "liquidity_reserve_requirements.requirement_version DESC",
+                "liquidity_reserve_requirements.updated_at DESC",
+            ],
+            "reserve_status = 'active'",
+        ),
+        (
+            PlannedWithdrawalSchedule,
+            "ix_planned_withdrawal_active_window",
+            [
+                "planned_withdrawal_schedules.portfolio_id",
+                "planned_withdrawal_schedules.client_id",
+                "planned_withdrawal_schedules.scheduled_date",
+                "planned_withdrawal_schedules.withdrawal_schedule_id",
+                "planned_withdrawal_schedules.observed_at DESC NULLS LAST",
+                "planned_withdrawal_schedules.updated_at DESC",
+            ],
+            "withdrawal_status = 'active'",
+        ),
+    ]
+
+    for model, index_name, expressions, where_clause in expected_indexes:
+        indexes = {index.name: index for index in model.__table__.indexes}
+        index = indexes[index_name]
+
+        assert [str(expression) for expression in index.expressions] == expressions
+        assert str(index.dialect_options["postgresql"]["where"]) == where_clause
 
 
 def test_transaction_declares_realized_tax_evidence_index():

@@ -932,27 +932,30 @@ async def test_client_source_data_filters_use_normalized_active_statuses() -> No
         for call in db.execute.await_args_list
     ]
 
+    assert "client_restriction_profiles.restriction_status = 'active'" in compiled_statements[0]
     assert (
-        "lower(trim(client_restriction_profiles.restriction_status)) = 'active'"
-        in compiled_statements[0]
+        "lower(trim(client_restriction_profiles.restriction_status))" not in compiled_statements[0]
     )
     assert (
-        "lower(trim(sustainability_preference_profiles.preference_status)) = 'active'"
-        in compiled_statements[1]
-    )
-    assert "lower(trim(client_tax_profiles.profile_status)) = 'active'" in compiled_statements[2]
-    assert "lower(trim(client_tax_rule_sets.rule_status)) = 'active'" in compiled_statements[3]
-    assert (
-        "lower(trim(client_income_needs_schedules.need_status)) = 'active'"
-        in compiled_statements[4]
+        "sustainability_preference_profiles.preference_status = 'active'" in compiled_statements[1]
     )
     assert (
-        "lower(trim(liquidity_reserve_requirements.reserve_status)) = 'active'"
-        in compiled_statements[5]
+        "lower(trim(sustainability_preference_profiles.preference_status))"
+        not in compiled_statements[1]
     )
+    assert "client_tax_profiles.profile_status = 'active'" in compiled_statements[2]
+    assert "lower(trim(client_tax_profiles.profile_status))" not in compiled_statements[2]
+    assert "client_tax_rule_sets.rule_status = 'active'" in compiled_statements[3]
+    assert "lower(trim(client_tax_rule_sets.rule_status))" not in compiled_statements[3]
+    assert "client_income_needs_schedules.need_status = 'active'" in compiled_statements[4]
+    assert "lower(trim(client_income_needs_schedules.need_status))" not in compiled_statements[4]
+    assert "liquidity_reserve_requirements.reserve_status = 'active'" in compiled_statements[5]
     assert (
-        "lower(trim(planned_withdrawal_schedules.withdrawal_status)) = 'active'"
-        in compiled_statements[6]
+        "lower(trim(liquidity_reserve_requirements.reserve_status))" not in compiled_statements[5]
+    )
+    assert "planned_withdrawal_schedules.withdrawal_status = 'active'" in compiled_statements[6]
+    assert (
+        "lower(trim(planned_withdrawal_schedules.withdrawal_status))" not in compiled_statements[6]
     )
 
 

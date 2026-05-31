@@ -93,6 +93,9 @@ values rather than wrapping status columns at read time.
 The same posture applies to model source evidence: approved model-definition and active
 model-target reads should use partial indexes that match their lifecycle status, effective-window,
 and deterministic ordering contracts.
+Client source-data evidence follows the same rule: restriction, sustainability, tax, income,
+liquidity-reserve, and planned-withdrawal reads should use active-status partial indexes aligned to
+their portfolio/client, effective-window, scheduled-window, and source-identity ordering contracts.
 
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.

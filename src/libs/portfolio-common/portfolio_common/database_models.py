@@ -436,6 +436,19 @@ class ClientRestrictionProfile(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_client_restr_active_port_client_eff",
+            "portfolio_id",
+            "client_id",
+            "restriction_scope",
+            "restriction_code",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            restriction_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("restriction_status = 'active'"),
+        ),
     )
 
 
@@ -484,6 +497,19 @@ class SustainabilityPreferenceProfile(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_sust_pref_active_port_client_eff",
+            "portfolio_id",
+            "client_id",
+            "preference_framework",
+            "preference_code",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            preference_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("preference_status = 'active'"),
+        ),
     )
 
 
@@ -531,6 +557,18 @@ class ClientTaxProfile(Base):
             "client_id",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_client_tax_profile_active_eff",
+            "portfolio_id",
+            "client_id",
+            "tax_profile_id",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            profile_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("profile_status = 'active'"),
         ),
     )
 
@@ -585,6 +623,20 @@ class ClientTaxRuleSet(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_client_tax_rule_active_eff",
+            "portfolio_id",
+            "client_id",
+            "rule_set_id",
+            "jurisdiction_code",
+            "rule_code",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            rule_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("rule_status = 'active'"),
+        ),
     )
 
 
@@ -628,6 +680,17 @@ class ClientIncomeNeedsSchedule(Base):
             "client_id",
             "start_date",
             "end_date",
+        ),
+        Index(
+            "ix_client_income_needs_active_eff",
+            "portfolio_id",
+            "client_id",
+            "schedule_id",
+            start_date.desc(),
+            "end_date",
+            observed_at.desc().nulls_last(),
+            updated_at.desc(),
+            postgresql_where=text("need_status = 'active'"),
         ),
     )
 
@@ -675,6 +738,18 @@ class LiquidityReserveRequirement(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_liquidity_reserve_active_eff",
+            "portfolio_id",
+            "client_id",
+            "reserve_requirement_id",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            requirement_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("reserve_status = 'active'"),
+        ),
     )
 
 
@@ -715,6 +790,16 @@ class PlannedWithdrawalSchedule(Base):
             "portfolio_id",
             "client_id",
             "scheduled_date",
+        ),
+        Index(
+            "ix_planned_withdrawal_active_window",
+            "portfolio_id",
+            "client_id",
+            "scheduled_date",
+            "withdrawal_schedule_id",
+            observed_at.desc().nulls_last(),
+            updated_at.desc(),
+            postgresql_where=text("withdrawal_status = 'active'"),
         ),
     )
 

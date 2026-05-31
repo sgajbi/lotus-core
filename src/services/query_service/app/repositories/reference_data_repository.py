@@ -362,9 +362,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_restrictions:
-            stmt = stmt.where(
-                _reference_status_expr(ClientRestrictionProfile.restriction_status) == "active"
-            )
+            stmt = stmt.where(ClientRestrictionProfile.restriction_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -409,10 +407,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_preferences:
-            stmt = stmt.where(
-                _reference_status_expr(SustainabilityPreferenceProfile.preference_status)
-                == "active"
-            )
+            stmt = stmt.where(SustainabilityPreferenceProfile.preference_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -455,7 +450,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_profiles:
-            stmt = stmt.where(_reference_status_expr(ClientTaxProfile.profile_status) == "active")
+            stmt = stmt.where(ClientTaxProfile.profile_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(list(result.scalars().all()), "tax_profile_id")
 
@@ -497,7 +492,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_rules:
-            stmt = stmt.where(_reference_status_expr(ClientTaxRuleSet.rule_status) == "active")
+            stmt = stmt.where(ClientTaxRuleSet.rule_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -541,9 +536,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_schedules:
-            stmt = stmt.where(
-                _reference_status_expr(ClientIncomeNeedsSchedule.need_status) == "active"
-            )
+            stmt = stmt.where(ClientIncomeNeedsSchedule.need_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(list(result.scalars().all()), "schedule_id")
 
@@ -583,9 +576,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_requirements:
-            stmt = stmt.where(
-                _reference_status_expr(LiquidityReserveRequirement.reserve_status) == "active"
-            )
+            stmt = stmt.where(LiquidityReserveRequirement.reserve_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
@@ -626,9 +617,7 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_withdrawals:
-            stmt = stmt.where(
-                _reference_status_expr(PlannedWithdrawalSchedule.withdrawal_status) == "active"
-            )
+            stmt = stmt.where(PlannedWithdrawalSchedule.withdrawal_status == "active")
         result = await self._db.execute(stmt)
         return _latest_effective_rows(
             list(result.scalars().all()),
