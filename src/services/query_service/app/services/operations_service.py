@@ -3,6 +3,7 @@ from collections.abc import Awaitable
 from datetime import date, datetime, timezone
 from typing import TypeVar
 
+from portfolio_common.database_models import FinancialReconciliationRun, PipelineStageState
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     BREAK_OPEN,
@@ -41,6 +42,7 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.operations_models import (
     MissingHistoricalFxDependencySummary,
+    ReconciliationFindingSummary,
     SnapshotValuationCoverageSummary,
 )
 from ..repositories.operations_repository import OperationsRepository
@@ -361,6 +363,57 @@ class OperationsService:
         total, rows = await asyncio.gather(count_read, page_read)
         return total, rows
 
+    async def _read_latest_reconciliation_evidence(
+        self,
+        *,
+        portfolio_id: str,
+        latest_control_stage: PipelineStageState | None,
+    ) -> tuple[FinancialReconciliationRun | None, ReconciliationFindingSummary | None]:
+        if latest_control_stage is None:
+            return None, None
+
+        latest_reconciliation_run = await self.repo.get_latest_reconciliation_run_for_portfolio_day(
+            portfolio_id=portfolio_id,
+            business_date=latest_control_stage.business_date,
+            epoch=latest_control_stage.epoch,
+            as_of=latest_control_stage.updated_at,
+        )
+        if latest_reconciliation_run is None:
+            return None, None
+
+        latest_reconciliation_finding_summary = await self.repo.get_reconciliation_finding_summary(
+            latest_reconciliation_run.run_id,
+            as_of=latest_control_stage.updated_at,
+        )
+        return latest_reconciliation_run, latest_reconciliation_finding_summary
+
+    async def _read_latest_booked_dates(
+        self,
+        *,
+        portfolio_id: str,
+        latest_business_date: date | None,
+        generated_at_utc: datetime,
+    ) -> tuple[date | None, date | None]:
+        if latest_business_date is None:
+            return None, None
+
+        (
+            latest_booked_transaction_date,
+            latest_booked_position_snapshot_date,
+        ) = await asyncio.gather(
+            self.repo.get_latest_transaction_date_as_of(
+                portfolio_id,
+                latest_business_date,
+                snapshot_as_of=generated_at_utc,
+            ),
+            self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
+                portfolio_id,
+                latest_business_date,
+                snapshot_as_of=generated_at_utc,
+            ),
+        )
+        return latest_booked_transaction_date, latest_booked_position_snapshot_date
+
     async def get_load_run_progress(
         self,
         run_id: str,
@@ -445,43 +498,26 @@ class OperationsService:
                 as_of=generated_at_utc,
             ),
         )
-        latest_reconciliation_run = None
-        latest_reconciliation_finding_summary = None
-        if latest_control_stage is not None:
-            latest_reconciliation_run = (
-                await self.repo.get_latest_reconciliation_run_for_portfolio_day(
-                    portfolio_id=portfolio_id,
-                    business_date=latest_control_stage.business_date,
-                    epoch=latest_control_stage.epoch,
-                    as_of=latest_control_stage.updated_at,
-                )
-            )
-            if latest_reconciliation_run is not None:
-                latest_reconciliation_finding_summary = (
-                    await self.repo.get_reconciliation_finding_summary(
-                        latest_reconciliation_run.run_id,
-                        as_of=latest_control_stage.updated_at,
-                    )
-                )
-
-        latest_booked_transaction_date = None
-        latest_booked_position_snapshot_date = None
-        if latest_business_date is not None:
+        (
+            (
+                latest_reconciliation_run,
+                latest_reconciliation_finding_summary,
+            ),
             (
                 latest_booked_transaction_date,
                 latest_booked_position_snapshot_date,
-            ) = await asyncio.gather(
-                self.repo.get_latest_transaction_date_as_of(
-                    portfolio_id,
-                    latest_business_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
-                self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
-                    portfolio_id,
-                    latest_business_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
-            )
+            ),
+        ) = await asyncio.gather(
+            self._read_latest_reconciliation_evidence(
+                portfolio_id=portfolio_id,
+                latest_control_stage=latest_control_stage,
+            ),
+            self._read_latest_booked_dates(
+                portfolio_id=portfolio_id,
+                latest_business_date=latest_business_date,
+                generated_at_utc=generated_at_utc,
+            ),
+        )
 
         controls_status = latest_control_stage.status if latest_control_stage else None
         controls_blocking = self._is_controls_blocking(controls_status)

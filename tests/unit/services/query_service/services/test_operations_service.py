@@ -404,6 +404,118 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert control_call.kwargs["as_of"] == response.generated_at_utc
 
 
+async def test_support_overview_reads_reconciliation_and_booked_evidence_concurrently(
+    service: OperationsService, mock_ops_repo: AsyncMock
+) -> None:
+    reconciliation_started = asyncio.Event()
+    booked_started = asyncio.Event()
+
+    mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 2
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+        oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
+    )
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+        oldest_open_job_id=None,
+        oldest_open_request_fingerprint=None,
+    )
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
+        "ControlStageStub",
+        (),
+        {
+            "id": 701,
+            "business_date": date(2025, 8, 30),
+            "epoch": 2,
+            "status": "COMPLETED",
+            "failure_reason": None,
+            "last_source_event_type": "portfolio_day.reconciliation.completed",
+            "created_at": datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
+            "ready_emitted_at": datetime(2025, 8, 30, 10, 14, tzinfo=timezone.utc),
+            "updated_at": datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
+        },
+    )()
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_reconciliation_finding_summary.return_value = ReconciliationFindingSummary(
+        total_findings=0,
+        blocking_findings=0,
+        top_blocking_finding_id=None,
+        top_blocking_finding_type=None,
+        top_blocking_finding_security_id=None,
+        top_blocking_finding_transaction_id=None,
+    )
+
+    async def get_latest_reconciliation_run_for_portfolio_day(**_kwargs):
+        reconciliation_started.set()
+        await asyncio.wait_for(booked_started.wait(), timeout=1)
+        return type(
+            "ReconciliationRunStub",
+            (),
+            {
+                "run_id": "recon_1234567890abcdef",
+                "reconciliation_type": "transaction_cashflow",
+                "status": "COMPLETED",
+                "correlation_id": "corr-recon-20250830-001",
+                "requested_by": "pipeline_orchestrator_service",
+                "dedupe_key": "recon:transaction_cashflow:P1:2025-08-30:2",
+                "failure_reason": None,
+            },
+        )()
+
+    async def get_latest_transaction_date_as_of(*_args, **_kwargs):
+        booked_started.set()
+        await asyncio.wait_for(reconciliation_started.wait(), timeout=1)
+        return date(2025, 8, 30)
+
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.side_effect = (
+        get_latest_reconciliation_run_for_portfolio_day
+    )
+    mock_ops_repo.get_latest_transaction_date_as_of.side_effect = get_latest_transaction_date_as_of
+
+    response = await asyncio.wait_for(service.get_support_overview("P1"), timeout=1)
+
+    assert reconciliation_started.is_set()
+    assert booked_started.is_set()
+    assert response.controls_latest_reconciliation_run_id == "recon_1234567890abcdef"
+    assert response.latest_booked_transaction_date == date(2025, 8, 30)
+    assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)
+
+
 async def test_load_run_builder_helper_branches_cover_ratio_division_and_elapsed_time() -> None:
     assert _safe_ratio(3, 0) == 0.0
     assert _safe_ratio(1, 3) == pytest.approx(0.333333)
