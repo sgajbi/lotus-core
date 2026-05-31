@@ -2334,6 +2334,14 @@ class PipelineStageState(Base):
             updated_at.desc(),
             id.asc(),
         ),
+        Index(
+            "ix_pipeline_stage_state_port_stage_date_epoch_id",
+            "portfolio_id",
+            "stage_name",
+            business_date.desc(),
+            epoch.desc(),
+            id.desc(),
+        ),
     )
 
 

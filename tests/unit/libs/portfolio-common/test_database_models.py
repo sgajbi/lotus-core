@@ -768,6 +768,13 @@ def test_api_query_hot_path_indexes_are_declared():
                 "pipeline_stage_state.updated_at DESC",
                 "pipeline_stage_state.id ASC",
             ],
+            "ix_pipeline_stage_state_port_stage_date_epoch_id": [
+                "pipeline_stage_state.portfolio_id",
+                "pipeline_stage_state.stage_name",
+                "pipeline_stage_state.business_date DESC",
+                "pipeline_stage_state.epoch DESC",
+                "pipeline_stage_state.id DESC",
+            ],
         },
     }
 
