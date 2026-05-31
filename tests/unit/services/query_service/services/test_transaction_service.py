@@ -9,6 +9,7 @@ from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
+from src.services.query_service.app.services.fx_conversion import CachedFxRateConverter
 from src.services.query_service.app.services.transaction_service import TransactionService
 
 pytestmark = pytest.mark.asyncio
@@ -437,6 +438,7 @@ async def test_transaction_service_normalizes_fx_cache_and_identity_checks() -> 
         first_rate = await service._get_fx_rate(" eur ", " usd ", date(2025, 1, 15))
         second_rate = await service._get_fx_rate("EUR", "USD", date(2025, 1, 15))
 
+    assert isinstance(service._fx_converter, CachedFxRateConverter)
     assert same_currency == Decimal("10")
     assert first_rate == Decimal("1.50")
     assert second_rate == Decimal("1.50")
