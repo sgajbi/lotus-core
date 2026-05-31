@@ -125,3 +125,29 @@ async def test_get_instruments_by_ids_returns_empty_when_ids_empty(mock_instrume
         result = await service.get_instruments_by_ids([])
         assert result == []
         mock_instrument_repo.get_by_security_ids.assert_not_awaited()
+
+
+async def test_get_instruments_skips_page_read_when_count_is_zero(
+    mock_instrument_repo: AsyncMock,
+):
+    mock_instrument_repo.get_instruments_count.return_value = 0
+
+    with patch(
+        "src.services.query_service.app.services.instrument_service.InstrumentRepository",
+        return_value=mock_instrument_repo,
+    ):
+        service = InstrumentService(AsyncMock(spec=AsyncSession))
+        response = await service.get_instruments(
+            skip=0,
+            limit=50,
+            security_id=" UNKNOWN ",
+            product_type="Equity",
+        )
+
+    assert response.total == 0
+    assert response.instruments == []
+    mock_instrument_repo.get_instruments_count.assert_awaited_once_with(
+        security_id="UNKNOWN",
+        product_type="Equity",
+    )
+    mock_instrument_repo.get_instruments.assert_not_awaited()
