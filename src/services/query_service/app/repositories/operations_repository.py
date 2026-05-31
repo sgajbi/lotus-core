@@ -601,6 +601,22 @@ class OperationsRepository:
             )
         return stmt
 
+    @staticmethod
+    def _latest_transaction_date_stmt(
+        *,
+        portfolio_id: str,
+        as_of_date: Optional[date] = None,
+        snapshot_as_of: Optional[datetime] = None,
+    ):
+        stmt = select(func.max(Transaction.transaction_date)).where(
+            Transaction.portfolio_id == portfolio_id
+        )
+        if as_of_date is not None:
+            stmt = stmt.where(Transaction.transaction_date < start_of_next_day(as_of_date))
+        if snapshot_as_of is not None:
+            stmt = stmt.where(Transaction.created_at <= snapshot_as_of)
+        return stmt
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -1245,11 +1261,10 @@ class OperationsRepository:
     async def get_latest_transaction_date(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[date]:
-        stmt = select(func.max(Transaction.transaction_date)).where(
-            Transaction.portfolio_id == portfolio_id
+        stmt = self._latest_transaction_date_stmt(
+            portfolio_id=portfolio_id,
+            snapshot_as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(Transaction.created_at <= as_of)
         latest_transaction_at = (await self.db.execute(stmt)).scalar_one_or_none()
         return latest_transaction_at.date() if latest_transaction_at is not None else None
 
@@ -1259,12 +1274,11 @@ class OperationsRepository:
         as_of_date: date,
         snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
-        stmt = select(func.max(Transaction.transaction_date)).where(
-            Transaction.portfolio_id == portfolio_id,
-            Transaction.transaction_date < start_of_next_day(as_of_date),
+        stmt = self._latest_transaction_date_stmt(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+            snapshot_as_of=snapshot_as_of,
         )
-        if snapshot_as_of is not None:
-            stmt = stmt.where(Transaction.created_at <= snapshot_as_of)
         latest_transaction_at = (await self.db.execute(stmt)).scalar_one_or_none()
         return latest_transaction_at.date() if latest_transaction_at is not None else None
 
