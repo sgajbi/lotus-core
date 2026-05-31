@@ -205,7 +205,7 @@ async def test_get_latest_positions_falls_back_to_position_history(mock_position
             "P2", date(2025, 1, 1)
         )
         mock_position_repo.get_latest_snapshot_valuation_map_as_of_date.assert_awaited_once_with(
-            "P2", date(2025, 1, 1)
+            "P2", date(2025, 1, 1), security_ids=["S2"]
         )
         assert len(response.positions) == 1
         assert response.positions[0].security_id == "S2"
@@ -406,7 +406,7 @@ async def test_get_latest_positions_supplements_missing_snapshot_rows_from_histo
         assert history_position.reprocessing_status == "REPROCESSING"
         assert response.data_quality_status == "STALE"
         mock_position_repo.get_latest_snapshot_valuation_map_as_of_date.assert_awaited_once_with(
-            "P1", date(2025, 1, 1)
+            "P1", date(2025, 1, 1), security_ids=["HIST_ONLY"]
         )
 
 

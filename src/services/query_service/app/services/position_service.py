@@ -117,12 +117,24 @@ class PositionService:
         snapshot_security_ids = set(snapshot_results_by_security.keys())
         fallback_valuation_map: dict[str, dict[str, float | None]] = {}
         if history_supplements or (db_results and not snapshot_security_ids):
+            fallback_security_ids = sorted(
+                {
+                    security_id
+                    for position_row, _instrument, _pos_state in history_supplements
+                    if (security_id := normalize_security_id(position_row.security_id))
+                }
+            )
             fallback_valuation_map = (
                 await self.repo.get_latest_snapshot_valuation_map_as_of_date(
-                    portfolio_id, effective_as_of_date
+                    portfolio_id,
+                    effective_as_of_date,
+                    security_ids=fallback_security_ids or None,
                 )
                 if effective_as_of_date is not None
-                else await self.repo.get_latest_snapshot_valuation_map(portfolio_id)
+                else await self.repo.get_latest_snapshot_valuation_map(
+                    portfolio_id,
+                    security_ids=fallback_security_ids or None,
+                )
             )
 
         positions = []
