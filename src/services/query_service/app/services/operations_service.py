@@ -1,5 +1,7 @@
 import asyncio
+from collections.abc import Awaitable
 from datetime import date, datetime, timedelta, timezone
+from typing import TypeVar
 
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
@@ -56,6 +58,8 @@ from .support_overview_builder import (
     SupportOverviewSnapshot,
     build_support_overview_response,
 )
+
+_PagedRowT = TypeVar("_PagedRowT")
 
 
 class OperationsService:
@@ -361,6 +365,14 @@ class OperationsService:
         if not portfolio_exists:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
         return latest_business_date
+
+    async def _read_count_and_page(
+        self,
+        count_read: Awaitable[int],
+        page_read: Awaitable[list[_PagedRowT]],
+    ) -> tuple[int, list[_PagedRowT]]:
+        total, rows = await asyncio.gather(count_read, page_read)
+        return total, rows
 
     async def get_load_run_progress(
         self,
@@ -731,7 +743,7 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         normalized_reprocessing_status = self._normalize_support_status_filter(reprocessing_status)
-        total, keys = await asyncio.gather(
+        total, keys = await self._read_count_and_page(
             self.repo.get_lineage_keys_count(
                 portfolio_id=portfolio_id,
                 reprocessing_status=normalized_reprocessing_status,
@@ -786,7 +798,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_valuation_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -852,7 +864,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_aggregation_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -915,7 +927,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_analytics_export_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_analytics_export_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -992,7 +1004,7 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         normalized_status = self._normalize_support_status_filter(status)
-        total, runs = await asyncio.gather(
+        total, runs = await self._read_count_and_page(
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
                 run_id=run_id,
@@ -1072,7 +1084,7 @@ class OperationsService:
         )
         if run is None:
             raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
-        total, findings = await asyncio.gather(
+        total, findings = await self._read_count_and_page(
             self.repo.get_reconciliation_findings_count(
                 run_id=run_id,
                 finding_id=finding_id,
@@ -1139,7 +1151,7 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         normalized_status = self._normalize_support_status_filter(status)
-        total, stages = await asyncio.gather(
+        total, stages = await self._read_count_and_page(
             self.repo.get_portfolio_control_stages_count(
                 portfolio_id=portfolio_id,
                 stage_id=stage_id,
@@ -1199,7 +1211,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, keys = await asyncio.gather(
+        total, keys = await self._read_count_and_page(
             self.repo.get_reprocessing_keys_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -1271,7 +1283,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_reprocessing_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,

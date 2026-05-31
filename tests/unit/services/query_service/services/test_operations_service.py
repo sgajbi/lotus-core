@@ -110,6 +110,33 @@ async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_
     assert date_started.is_set()
 
 
+async def test_read_count_and_page_runs_count_and_page_reads_concurrently(
+    service: OperationsService,
+) -> None:
+    count_started = asyncio.Event()
+    page_started = asyncio.Event()
+
+    async def count_read() -> int:
+        count_started.set()
+        await asyncio.wait_for(page_started.wait(), timeout=1)
+        return 2
+
+    async def page_read() -> list[str]:
+        page_started.set()
+        await asyncio.wait_for(count_started.wait(), timeout=1)
+        return ["A", "B"]
+
+    total, rows = await asyncio.wait_for(
+        service._read_count_and_page(count_read(), page_read()),
+        timeout=1,
+    )
+
+    assert total == 2
+    assert rows == ["A", "B"]
+    assert count_started.is_set()
+    assert page_started.is_set()
+
+
 def _load_run_summary(**overrides) -> LoadRunProgressSummary:
     values = {
         "portfolios_ingested": 1000,
