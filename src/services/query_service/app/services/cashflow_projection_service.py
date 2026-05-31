@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
@@ -45,24 +46,30 @@ class CashflowProjectionService:
         range_end_date = effective_as_of_date + timedelta(days=horizon_days)
         query_end_date = range_end_date if include_projected else effective_as_of_date
 
-        booked_evidence = await self.repo.get_portfolio_cashflow_series_with_evidence(
-            portfolio_id=portfolio_id,
-            start_date=range_start_date,
-            end_date=query_end_date,
-        )
-        rows = booked_evidence.rows
-        projected_rows = []
-        latest_projected_evidence = None
         if include_projected:
-            projected_evidence = (
-                await self.repo.get_projected_settlement_cashflow_series_with_evidence(
+            booked_evidence, projected_evidence = await asyncio.gather(
+                self.repo.get_portfolio_cashflow_series_with_evidence(
                     portfolio_id=portfolio_id,
                     start_date=range_start_date,
                     end_date=query_end_date,
-                )
+                ),
+                self.repo.get_projected_settlement_cashflow_series_with_evidence(
+                    portfolio_id=portfolio_id,
+                    start_date=range_start_date,
+                    end_date=query_end_date,
+                ),
             )
             projected_rows = projected_evidence.rows
             latest_projected_evidence = projected_evidence.latest_evidence_timestamp
+        else:
+            booked_evidence = await self.repo.get_portfolio_cashflow_series_with_evidence(
+                portfolio_id=portfolio_id,
+                start_date=range_start_date,
+                end_date=query_end_date,
+            )
+            projected_rows = []
+            latest_projected_evidence = None
+        rows = booked_evidence.rows
         latest_evidence_timestamp = max(
             (
                 timestamp

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -218,6 +219,60 @@ async def test_projection_adds_same_day_booked_and_projected_movements(
         assert response.total_net_cashflow == Decimal("250.15")
         assert response.booked_total_net_cashflow == Decimal("400.25")
     assert response.projected_settlement_total_cashflow == Decimal("-150.10")
+
+
+async def test_projection_runs_booked_and_projected_reads_concurrently(
+    mock_repo: AsyncMock,
+) -> None:
+    booked_started = asyncio.Event()
+    projected_started = asyncio.Event()
+
+    async def _booked_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        booked_started.set()
+        await projected_started.wait()
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("10"))],
+            latest_evidence_timestamp=datetime(2026, 3, 1, 9, tzinfo=UTC),
+        )
+
+    async def _projected_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        await booked_started.wait()
+        projected_started.set()
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("-2"))],
+            latest_evidence_timestamp=datetime(2026, 3, 1, 10, tzinfo=UTC),
+        )
+
+    mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = _booked_evidence
+    mock_repo.get_projected_settlement_cashflow_series_with_evidence.side_effect = (
+        _projected_evidence
+    )
+
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        response = await asyncio.wait_for(
+            service.get_cashflow_projection(
+                portfolio_id="P1",
+                horizon_days=1,
+                as_of_date=date(2026, 3, 1),
+                include_projected=True,
+            ),
+            timeout=1,
+        )
+
+    assert response.total_net_cashflow == Decimal("8")
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 1, 10, tzinfo=UTC)
 
 
 async def test_projection_sum_by_date_treats_blank_and_null_amounts_as_zero() -> None:
