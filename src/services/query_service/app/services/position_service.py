@@ -17,6 +17,7 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..dtos.valuation_dto import ValuationData
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
+from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
 
@@ -183,11 +184,7 @@ class PositionService:
         total_market_value = Decimal(0)
         position_values: list[Decimal] = []
         for position in positions:
-            base_value = (
-                Decimal(str(position.valuation.market_value))
-                if position.valuation and position.valuation.market_value is not None
-                else Decimal(str(position.cost_basis))
-            )
+            base_value = self._weight_base_value(position)
             position_values.append(base_value)
             total_market_value += base_value
 
@@ -294,6 +291,12 @@ class PositionService:
             and position.valuation is not None
             and position.valuation.market_price is not None
         )
+
+    @staticmethod
+    def _weight_base_value(position: Position) -> Decimal:
+        if position.valuation is not None and position.valuation.market_value is not None:
+            return decimal_or_zero(position.valuation.market_value)
+        return decimal_or_zero(position.cost_basis)
 
     @staticmethod
     def _latest_holdings_evidence_timestamp(
