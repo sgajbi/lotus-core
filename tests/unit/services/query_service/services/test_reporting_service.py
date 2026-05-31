@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -126,6 +127,64 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     assert response.totals.position_count == 2
     assert response.portfolios[0].portfolio_currency == "USD"
     assert response.portfolios[0].aum_portfolio_currency == Decimal("150")
+
+
+async def test_get_assets_under_management_converts_snapshot_rows_concurrently() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="100"),
+            instrument=_instrument("SEC1"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2"),
+        ),
+    ]
+    first_started = asyncio.Event()
+    second_started = asyncio.Event()
+    started_by_amount = {
+        Decimal("100"): first_started,
+        Decimal("50"): second_started,
+    }
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        started_by_amount[amount].set()
+        await asyncio.wait_for(
+            asyncio.gather(first_started.wait(), second_started.wait()),
+            timeout=1,
+        )
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return amount * Decimal("1.5")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+        response = await service.get_assets_under_management(
+            AssetsUnderManagementQueryRequest(
+                scope=ReportingScope(portfolio_ids=["P1"]),
+                reporting_currency="SGD",
+            )
+        )
+
+    assert response.totals.aum_reporting_currency == Decimal("225.0")
+    assert all(event.is_set() for event in (first_started, second_started))
 
 
 async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversion() -> None:

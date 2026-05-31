@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -70,14 +71,24 @@ class ReportingService:
         per_portfolio_native: dict[str, Decimal] = defaultdict(lambda: ZERO)
         per_portfolio_positions: dict[str, int] = defaultdict(int)
 
-        for row in rows:
-            native_value = decimal_or_zero(row.snapshot.market_value)
-            reporting_value = await self._convert_amount(
-                amount=native_value,
-                from_currency=row.portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=resolved_as_of_date,
+        row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
+        row_reporting_values = await asyncio.gather(
+            *(
+                self._convert_amount(
+                    amount=native_value,
+                    from_currency=row.portfolio.base_currency,
+                    to_currency=reporting_currency,
+                    as_of_date=resolved_as_of_date,
+                )
+                for row, native_value in row_native_values
             )
+        )
+
+        for (row, native_value), reporting_value in zip(
+            row_native_values,
+            row_reporting_values,
+            strict=True,
+        ):
             per_portfolio_native[row.portfolio.portfolio_id] += native_value
             per_portfolio_reporting[row.portfolio.portfolio_id] += reporting_value
             per_portfolio_positions[row.portfolio.portfolio_id] += 1
