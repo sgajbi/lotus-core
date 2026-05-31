@@ -102,13 +102,33 @@ async def test_reporting_repository_latest_snapshot_query_is_true_historical_as_
     assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled
     assert "position_history.position_date <= '2026-03-27'" in compiled
     assert "LEFT OUTER JOIN instruments" in compiled
-    assert (
-        "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)" in compiled
-    )
+    assert "trim(instruments.security_id) = trim(daily_position_snapshots.security_id)" in compiled
     assert (
         "ORDER BY daily_position_snapshots.portfolio_id ASC, "
         "trim(daily_position_snapshots.security_id) ASC" in compiled
     )
+
+
+@pytest.mark.asyncio
+async def test_reporting_repository_latest_snapshot_query_can_scope_cash_asset_class() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReportingRepository(db)
+
+    await repo.list_latest_snapshot_rows(
+        portfolio_ids=["P1"],
+        as_of_date=date(2026, 3, 27),
+        instrument_asset_class=" cash ",
+    )
+
+    stmt = db.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    normalized = compiled.lower()
+    assert "upper(trim(instruments.asset_class)) = 'CASH'" in compiled
+    assert "trim(instruments.security_id) AS security_id" in compiled
+    assert "trim(position_history.security_id) = anon_" in normalized
+    assert "position_history.position_date <= '2026-03-27'" in compiled
+    assert "LEFT OUTER JOIN instruments" in compiled
 
 
 @pytest.mark.asyncio
@@ -173,8 +193,7 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
     normalized = compiled.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled
     assert (
-        "trim(transactions.settlement_cash_instrument_id) IN ('CASH_USD', 'CASH_SGD')"
-        in compiled
+        "trim(transactions.settlement_cash_instrument_id) IN ('CASH_USD', 'CASH_SGD')" in compiled
     )
     assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
     assert "transactions.settlement_cash_account_id IS NOT NULL" in compiled
@@ -185,8 +204,9 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_cash_account_resolution_skips_query_when_no_securities(
-) -> None:
+async def test_reporting_repository_cash_account_resolution_skips_query_when_no_securities() -> (
+    None
+):
     db = AsyncMock(spec=AsyncSession)
     repo = ReportingRepository(db)
 
@@ -201,8 +221,9 @@ async def test_reporting_repository_cash_account_resolution_skips_query_when_no_
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_cash_account_resolution_skips_query_when_securities_blank(
-) -> None:
+async def test_reporting_repository_cash_account_resolution_skips_query_when_securities_blank() -> (
+    None
+):
     db = AsyncMock(spec=AsyncSession)
     repo = ReportingRepository(db)
 
@@ -235,8 +256,7 @@ async def test_reporting_repository_cash_account_master_query_uses_effective_win
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_cash_account_master_query_omits_effective_window_without_date(
-) -> None:
+async def test_reporting_repository_cash_account_master_query_omits_effective_window_without_date():
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult([])
     repo = ReportingRepository(db)
@@ -282,8 +302,9 @@ async def test_reporting_repository_lookthrough_query_uses_effective_window() ->
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_lookthrough_query_skips_database_when_parent_list_empty(
-) -> None:
+async def test_reporting_repository_lookthrough_query_skips_database_when_parent_list_empty() -> (
+    None
+):
     db = AsyncMock(spec=AsyncSession)
     repo = ReportingRepository(db)
 
@@ -297,13 +318,10 @@ async def test_reporting_repository_lookthrough_query_skips_database_when_parent
 
 
 @pytest.mark.asyncio
-async def test_reporting_repository_lookthrough_components_return_canonical_security_ids(
-) -> None:
+async def test_reporting_repository_lookthrough_components_return_canonical_security_ids() -> None:
     instrument = SimpleNamespace(security_id=" ETF1 ")
     db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult(
-        [(" FUND1 ", " ETF1 ", Decimal("1"), instrument)]
-    )
+    db.execute.return_value = _FakeExecuteResult([(" FUND1 ", " ETF1 ", Decimal("1"), instrument)])
     repo = ReportingRepository(db)
 
     rows = await repo.list_instrument_lookthrough_components(
@@ -316,4 +334,3 @@ async def test_reporting_repository_lookthrough_components_return_canonical_secu
     assert rows[0].component_security_id == "ETF1"
     assert rows[0].component_weight == Decimal("1")
     assert rows[0].component_instrument is instrument
-

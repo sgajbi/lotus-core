@@ -99,6 +99,11 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 15, tzinfo=UTC)
+    repo.list_latest_snapshot_rows.assert_awaited_once_with(
+        portfolio_ids=["P1"],
+        as_of_date=date(2026, 3, 27),
+        instrument_asset_class="CASH",
+    )
     repo.get_latest_fx_rate.assert_awaited_once_with(
         from_currency="USD",
         to_currency="SGD",

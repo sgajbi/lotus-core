@@ -252,6 +252,7 @@ class CashBalanceService:
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
+            instrument_asset_class=CASH_ASSET_CLASS,
         )
         return await self._resolver.build_cash_balances_response(
             portfolio=portfolio,

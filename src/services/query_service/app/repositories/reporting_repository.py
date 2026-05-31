@@ -79,41 +79,52 @@ class ReportingRepository:
         *,
         portfolio_ids: list[str],
         as_of_date: date,
+        instrument_asset_class: str | None = None,
     ) -> list[ReportingSnapshotRow]:
         history_security_id = func.trim(PositionHistory.security_id)
         state_security_id = func.trim(PositionState.security_id)
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         instrument_security_id = func.trim(Instrument.security_id)
-        latest_history_subq = (
-            select(
-                PositionHistory.portfolio_id.label("portfolio_id"),
-                history_security_id.label("security_id"),
-                PositionHistory.epoch.label("epoch"),
-                PositionHistory.quantity.label("quantity"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        PositionHistory.portfolio_id,
-                        history_security_id,
-                    ),
-                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
-                )
-                .label("rn"),
-            )
-            .join(
-                PositionState,
-                and_(
-                    PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    history_security_id == state_security_id,
-                    PositionHistory.epoch == PositionState.epoch,
+        latest_history_stmt = select(
+            PositionHistory.portfolio_id.label("portfolio_id"),
+            history_security_id.label("security_id"),
+            PositionHistory.epoch.label("epoch"),
+            PositionHistory.quantity.label("quantity"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    PositionHistory.portfolio_id,
+                    history_security_id,
                 ),
+                order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
             )
-            .where(
-                PositionHistory.portfolio_id.in_(portfolio_ids),
-                PositionHistory.position_date <= as_of_date,
-            )
-            .subquery()
+            .label("rn"),
+        ).join(
+            PositionState,
+            and_(
+                PositionHistory.portfolio_id == PositionState.portfolio_id,
+                history_security_id == state_security_id,
+                PositionHistory.epoch == PositionState.epoch,
+            ),
         )
+        normalized_asset_class = str(instrument_asset_class or "").strip().upper()
+        if normalized_asset_class:
+            eligible_instrument_ids = (
+                select(instrument_security_id.label("security_id"))
+                .where(
+                    instrument_security_id != "",
+                    func.upper(func.trim(Instrument.asset_class)) == normalized_asset_class,
+                )
+                .subquery()
+            )
+            latest_history_stmt = latest_history_stmt.join(
+                eligible_instrument_ids,
+                history_security_id == eligible_instrument_ids.c.security_id,
+            )
+        latest_history_subq = latest_history_stmt.where(
+            PositionHistory.portfolio_id.in_(portfolio_ids),
+            PositionHistory.position_date <= as_of_date,
+        ).subquery()
         latest_open_history_subq = (
             select(latest_history_subq)
             .where(
@@ -138,8 +149,7 @@ class ReportingRepository:
             .join(
                 latest_open_history_subq,
                 and_(
-                    DailyPositionSnapshot.portfolio_id
-                    == latest_open_history_subq.c.portfolio_id,
+                    DailyPositionSnapshot.portfolio_id == latest_open_history_subq.c.portfolio_id,
                     snapshot_security_id == latest_open_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_open_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_open_history_subq.c.quantity,
