@@ -1,6 +1,7 @@
 # tests/unit/services/calculators/position_calculator/core/test_position_logic.py
 from datetime import date, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,6 +21,16 @@ from src.services.calculators.position_calculator.app.repositories.position_repo
 )
 
 # The module-level pytestmark is removed to apply the asyncio mark selectively.
+
+
+class _StringCountedAmount:
+    def __init__(self, value: str) -> None:
+        self.value = value
+        self.string_call_count = 0
+
+    def __str__(self) -> str:
+        self.string_call_count += 1
+        return self.value
 
 
 @pytest.fixture
@@ -808,8 +819,29 @@ def test_cash_portfolio_flows_fall_back_to_quantity_when_gross_amount_is_zero(
     assert next_state.cost_basis_local == expected_cost
 
 
-def test_calculate_next_position_for_foreign_currency_cash_flow_uses_booked_base_and_local_costs(
-) -> None:
+def test_cash_position_deltas_normalize_booked_costs_once() -> None:
+    net_cost = _StringCountedAmount("30")
+    net_cost_local = _StringCountedAmount("30")
+    transaction = SimpleNamespace(
+        gross_transaction_amount="0",
+        quantity="25",
+        net_cost=net_cost,
+        net_cost_local=net_cost_local,
+        movement_direction=None,
+    )
+
+    quantity_delta, cost_basis_delta, cost_basis_local_delta = (
+        PositionCalculator._cash_position_deltas(transaction, "DEPOSIT")
+    )
+
+    assert quantity_delta == Decimal("25")
+    assert cost_basis_delta == Decimal("30")
+    assert cost_basis_local_delta == Decimal("30")
+    assert net_cost.string_call_count == 1
+    assert net_cost_local.string_call_count == 1
+
+
+def test_foreign_currency_cash_flow_uses_booked_base_and_local_costs() -> None:
     initial_state = PositionStateDTO(
         quantity=Decimal("335000"),
         cost_basis=Decimal("359349.475"),
@@ -838,8 +870,7 @@ def test_calculate_next_position_for_foreign_currency_cash_flow_uses_booked_base
     assert next_state.cost_basis_local == Decimal("252448")
 
 
-def test_calculate_next_position_for_foreign_currency_cash_deposit_preserves_base_fx_basis(
-) -> None:
+def test_foreign_currency_cash_deposit_preserves_base_fx_basis() -> None:
     initial_state = PositionStateDTO()
     event = TransactionEvent(
         transaction_id="TXN-DEP-EUR-001",

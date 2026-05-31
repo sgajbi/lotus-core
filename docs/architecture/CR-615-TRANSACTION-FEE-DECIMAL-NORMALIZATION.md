@@ -31,7 +31,7 @@ workflow or supported-capability change.
 
 Local validation passed:
 
-1. `python -m pytest tests/unit/libs/portfolio-common/test_decimal_amounts.py tests/unit/libs/portfolio-common/test_transaction_fee_components.py -q`
+1. `python -m pytest tests/unit/libs/portfolio-common/test_portfolio_common_decimal_amounts.py tests/unit/libs/portfolio-common/test_transaction_fee_components.py -q`
 2. `python -m alembic heads`
 3. `python scripts/migration_contract_check.py --mode alembic-sql`
 4. touched-surface `python -m ruff check`

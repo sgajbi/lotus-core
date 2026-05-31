@@ -6,6 +6,7 @@ from typing import List
 
 from portfolio_common.config import KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC
 from portfolio_common.database_models import PositionHistory
+from portfolio_common.decimal_amounts import required_decimal
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 from portfolio_common.monitoring import REPROCESSING_EPOCH_BUMPED_TOTAL
@@ -168,9 +169,7 @@ class PositionCalculator:
                         "security_id": security_id,
                         "epoch": message_epoch,
                         "transaction_date": transaction_date.isoformat(),
-                        "new_watermark_date": (
-                            transaction_date - timedelta(days=1)
-                        ).isoformat(),
+                        "new_watermark_date": (transaction_date - timedelta(days=1)).isoformat(),
                     },
                 )
 
@@ -379,8 +378,14 @@ class PositionCalculator:
 
     @staticmethod
     def _cash_position_amount_delta(transaction: TransactionEvent, txn_type: str) -> Decimal:
-        gross_amount = Decimal(str(transaction.gross_transaction_amount or 0))
-        quantity_amount = Decimal(str(transaction.quantity or 0))
+        gross_amount = PositionCalculator._decimal_or_zero(
+            transaction.gross_transaction_amount,
+            field_name="gross_transaction_amount",
+        )
+        quantity_amount = PositionCalculator._decimal_or_zero(
+            transaction.quantity,
+            field_name="quantity",
+        )
         magnitude = abs(gross_amount if not gross_amount.is_zero() else quantity_amount)
         if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {
             "ADJUSTMENT",
@@ -402,18 +407,35 @@ class PositionCalculator:
         use_quantity_fallback = txn_type == "ADJUSTMENT" or txn_type in (
             CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
         )
+        net_cost = PositionCalculator._optional_decimal(
+            transaction.net_cost,
+            field_name="net_cost",
+        )
+        net_cost_local = PositionCalculator._optional_decimal(
+            transaction.net_cost_local,
+            field_name="net_cost_local",
+        )
         cost_basis_delta = (
-            Decimal(str(transaction.net_cost))
-            if transaction.net_cost is not None
-            and not (use_quantity_fallback and Decimal(str(transaction.net_cost)) == Decimal(0))
+            net_cost
+            if net_cost is not None and not (use_quantity_fallback and net_cost == Decimal(0))
             else quantity_delta
         )
         cost_basis_local_delta = (
-            Decimal(str(transaction.net_cost_local))
-            if transaction.net_cost_local is not None
-            and not (
-                use_quantity_fallback and Decimal(str(transaction.net_cost_local)) == Decimal(0)
-            )
+            net_cost_local
+            if net_cost_local is not None
+            and not (use_quantity_fallback and net_cost_local == Decimal(0))
             else quantity_delta
         )
         return quantity_delta, cost_basis_delta, cost_basis_local_delta
+
+    @staticmethod
+    def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return Decimal(0)
+        return required_decimal(value, field_name=field_name)
+
+    @staticmethod
+    def _optional_decimal(value: object, *, field_name: str) -> Decimal | None:
+        if value is None:
+            return None
+        return required_decimal(value, field_name=field_name)
