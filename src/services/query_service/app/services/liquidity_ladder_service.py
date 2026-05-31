@@ -57,11 +57,18 @@ class PortfolioLiquidityLadderService:
         if horizon_days < 0 or horizon_days > MAX_HORIZON_DAYS:
             raise ValueError(f"horizon_days must be between 0 and {MAX_HORIZON_DAYS}.")
 
-        portfolio = await self.reporting_repo.get_portfolio_by_id(portfolio_id)
+        portfolio_read = self.reporting_repo.get_portfolio_by_id(portfolio_id)
+        if as_of_date is None:
+            portfolio, resolved_as_of_date = await asyncio.gather(
+                portfolio_read,
+                self.reporting_repo.get_latest_business_date(),
+            )
+        else:
+            portfolio = await portfolio_read
+            resolved_as_of_date = as_of_date
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
-        resolved_as_of_date = as_of_date or await self.reporting_repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for liquidity ladder queries.")
 

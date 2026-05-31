@@ -332,6 +332,89 @@ async def test_liquidity_ladder_reads_snapshot_and_cashflow_evidence_concurrentl
     assert all(event.is_set() for event in all_started)
 
 
+async def test_liquidity_ladder_reads_portfolio_and_default_date_concurrently() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    portfolio_started = asyncio.Event()
+    date_started = asyncio.Event()
+    reporting_repo.list_latest_snapshot_rows.return_value = []
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[],
+        latest_evidence_timestamp=None,
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
+
+    async def get_portfolio_by_id(portfolio_id: str):
+        portfolio_started.set()
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        assert portfolio_id == "P1"
+        return _portfolio("P1")
+
+    async def get_latest_business_date() -> date:
+        date_started.set()
+        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        return date(2026, 3, 27)
+
+    reporting_repo.get_portfolio_by_id.side_effect = get_portfolio_by_id
+    reporting_repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await asyncio.wait_for(
+            service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0),
+            timeout=1,
+        )
+
+    assert response.resolved_as_of_date == date(2026, 3, 27)
+    assert portfolio_started.is_set()
+    assert date_started.is_set()
+
+
+async def test_liquidity_ladder_explicit_date_skips_default_date_lookup() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    reporting_repo.get_portfolio_by_id.return_value = _portfolio("P1")
+    reporting_repo.list_latest_snapshot_rows.return_value = []
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[],
+        latest_evidence_timestamp=None,
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 26),
+            horizon_days=0,
+        )
+
+    assert response.resolved_as_of_date == date(2026, 3, 26)
+    reporting_repo.get_latest_business_date.assert_not_awaited()
+
+
 async def test_liquidity_ladder_raises_when_portfolio_missing() -> None:
     reporting_repo = AsyncMock()
     reporting_repo.get_portfolio_by_id.return_value = None
