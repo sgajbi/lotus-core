@@ -33,6 +33,10 @@ def test_decimal_or_none_stringifies_non_decimal_values_once() -> None:
     assert value.string_call_count == 1
 
 
+def test_decimal_or_none_returns_none_for_invalid_values() -> None:
+    assert decimal_or_none("not-a-number") is None
+
+
 def test_required_decimal_rejects_missing_required_values() -> None:
     with pytest.raises(ValueError, match="quantity is required"):
         required_decimal(" ", field_name="quantity")

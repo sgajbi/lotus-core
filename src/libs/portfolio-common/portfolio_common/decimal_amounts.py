@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 
 def decimal_or_none(value: object) -> Decimal | None:
@@ -11,7 +11,10 @@ def decimal_or_none(value: object) -> Decimal | None:
     normalized = str(value).strip()
     if not normalized:
         return None
-    return Decimal(normalized)
+    try:
+        return Decimal(normalized)
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def required_decimal(value: object, *, field_name: str) -> Decimal:
