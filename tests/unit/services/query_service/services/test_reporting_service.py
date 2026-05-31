@@ -756,6 +756,44 @@ async def test_reporting_service_resolve_scope_requires_matching_portfolios() ->
 
 
 @pytest.mark.asyncio
+async def test_reporting_service_resolve_scope_reads_default_date_and_portfolios_concurrently() -> (
+    None
+):
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    date_started = asyncio.Event()
+    portfolios_started = asyncio.Event()
+
+    async def get_latest_business_date() -> date:
+        date_started.set()
+        await asyncio.wait_for(portfolios_started.wait(), timeout=1)
+        return date(2026, 3, 27)
+
+    async def list_portfolios(**_: object) -> list[object]:
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        portfolios_started.set()
+        return [portfolio]
+
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+    repo.list_portfolios.side_effect = list_portfolios
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        portfolios, resolved_as_of_date = await service._resolve_scope_portfolios_and_date(
+            ReportingScope(portfolio_id="P1"),
+            None,
+        )
+
+    assert portfolios == [portfolio]
+    assert resolved_as_of_date == date(2026, 3, 27)
+    assert date_started.is_set()
+    assert portfolios_started.is_set()
+
+
+@pytest.mark.asyncio
 async def test_reporting_service_resolve_reporting_currency_covers_scope_rules() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency=" usd ")

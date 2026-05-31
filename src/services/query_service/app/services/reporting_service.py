@@ -431,15 +431,23 @@ class ReportingService:
         scope: ReportingScope,
         requested_as_of_date: date | None,
     ) -> tuple[list, date]:
-        resolved_as_of_date = requested_as_of_date or await self.repo.get_latest_business_date()
-        if resolved_as_of_date is None:
-            raise ValueError("No business date is available for reporting queries.")
-
-        portfolios = await self.repo.list_portfolios(
+        portfolio_read = self.repo.list_portfolios(
             portfolio_id=scope.portfolio_id,
             portfolio_ids=scope.portfolio_ids or None,
             booking_center_code=scope.booking_center_code,
         )
+        if requested_as_of_date is None:
+            resolved_as_of_date, portfolios = await asyncio.gather(
+                self.repo.get_latest_business_date(),
+                portfolio_read,
+            )
+        else:
+            resolved_as_of_date = requested_as_of_date
+            portfolios = await portfolio_read
+
+        if resolved_as_of_date is None:
+            raise ValueError("No business date is available for reporting queries.")
+
         if not portfolios:
             raise ValueError("No portfolios matched the requested reporting scope.")
         return portfolios, resolved_as_of_date
