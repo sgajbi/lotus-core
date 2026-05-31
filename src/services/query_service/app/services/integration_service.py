@@ -115,7 +115,7 @@ from .dpm_source_readiness import (
     unavailable_dpm_source_family,
 )
 from .integration_policy import build_effective_policy_response
-from .integration_value_normalization import as_decimal, control_code
+from .integration_value_normalization import as_decimal, as_optional_decimal, control_code
 from .market_reference_coverage import market_reference_coverage_response
 from .page_token_codec import PageTokenCodec
 from .reference_data_helpers import (
@@ -615,7 +615,7 @@ class IntegrationService:
             supportability_reason = "MANDATE_REVIEW_OVERDUE"
 
         bands = dict(row.rebalance_bands or {})
-        default_band = as_decimal(bands.get("default_band", "0"))
+        default_band = as_optional_decimal(bands.get("default_band")) or Decimal("0")
         cash_reserve_raw = bands.get("cash_reserve_weight")
 
         return DiscretionaryMandateBindingResponse(
@@ -640,9 +640,7 @@ class IntegrationService:
             rebalance_frequency=row.rebalance_frequency,
             rebalance_bands=RebalanceBandContext(
                 default_band=default_band,
-                cash_reserve_weight=(
-                    as_decimal(cash_reserve_raw) if cash_reserve_raw is not None else None
-                ),
+                cash_reserve_weight=as_optional_decimal(cash_reserve_raw),
             ),
             effective_from=row.effective_from,
             effective_to=row.effective_to,

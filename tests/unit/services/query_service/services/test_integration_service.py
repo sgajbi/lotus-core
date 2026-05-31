@@ -1797,6 +1797,55 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
 
 
 @pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_normalizes_sparse_rebalance_bands() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="active",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective="Balanced discretionary growth",
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            review_cadence="quarterly",
+            last_review_date=date(2026, 3, 31),
+            next_review_due_date=date(2026, 6, 30),
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={
+                "default_band": " ",
+                "cash_reserve_weight": "",
+            },
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=None,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.rebalance_bands.default_band == Decimal("0")
+    assert response.rebalance_bands.cash_reserve_weight is None
+
+
+@pytest.mark.asyncio
 async def test_resolve_discretionary_mandate_binding_blocks_inactive_authority() -> None:
     service = make_service()
     service._reference_repository = AsyncMock()  # type: ignore[method-assign]
