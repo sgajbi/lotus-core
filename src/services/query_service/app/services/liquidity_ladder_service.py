@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -72,24 +73,30 @@ class PortfolioLiquidityLadderService:
         tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
 
         range_end_date = resolved_as_of_date + timedelta(days=horizon_days)
-        booked_evidence = await self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
-            portfolio_id=portfolio.portfolio_id,
-            start_date=resolved_as_of_date,
-            end_date=range_end_date,
-        )
-        booked_series = booked_evidence.rows
-        projected_series = []
-        latest_projected_evidence = None
         if include_projected:
-            projected_evidence = (
-                await self.cashflow_repo.get_projected_settlement_cashflow_series_with_evidence(
+            booked_evidence, projected_evidence = await asyncio.gather(
+                self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
                     portfolio_id=portfolio.portfolio_id,
                     start_date=resolved_as_of_date,
                     end_date=range_end_date,
-                )
+                ),
+                self.cashflow_repo.get_projected_settlement_cashflow_series_with_evidence(
+                    portfolio_id=portfolio.portfolio_id,
+                    start_date=resolved_as_of_date,
+                    end_date=range_end_date,
+                ),
             )
             projected_series = projected_evidence.rows
             latest_projected_evidence = projected_evidence.latest_evidence_timestamp
+        else:
+            booked_evidence = await self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
+                portfolio_id=portfolio.portfolio_id,
+                start_date=resolved_as_of_date,
+                end_date=range_end_date,
+            )
+            projected_series = []
+            latest_projected_evidence = None
+        booked_series = booked_evidence.rows
         latest_cashflow_evidence = max(
             (
                 timestamp

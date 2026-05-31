@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -171,6 +172,71 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
     cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
     assert response.include_projected is False
     assert response.totals.projected_cash_available_end_portfolio_currency == Decimal("900")
+
+
+async def test_liquidity_ladder_runs_booked_and_projected_reads_concurrently() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    portfolio = _portfolio("P1")
+    reporting_repo.get_portfolio_by_id.return_value = portfolio
+    reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    reporting_repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="1000"),
+            instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
+        )
+    ]
+    booked_started = asyncio.Event()
+    projected_started = asyncio.Event()
+
+    async def _booked_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        booked_started.set()
+        await projected_started.wait()
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("-100"))],
+            latest_evidence_timestamp=datetime(2026, 3, 27, 9, tzinfo=UTC),
+        )
+
+    async def _projected_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        await booked_started.wait()
+        projected_started.set()
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("-50"))],
+            latest_evidence_timestamp=datetime(2026, 3, 27, 10, tzinfo=UTC),
+        )
+
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.side_effect = _booked_evidence
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.side_effect = (
+        _projected_evidence
+    )
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await asyncio.wait_for(
+            service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0),
+            timeout=1,
+        )
+
+    assert response.buckets[0].net_cashflow_portfolio_currency == Decimal("-150")
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 10, tzinfo=UTC)
 
 
 async def test_liquidity_ladder_raises_when_portfolio_missing() -> None:
