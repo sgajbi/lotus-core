@@ -90,6 +90,9 @@ Source-data evidence tables use the same rule. When downstream DPM evidence read
 governed lifecycle status, model portfolio, booking center, and effective-date windows, prefer a
 partial model-declared index over broad table scans, and keep predicates aligned to stored governed
 values rather than wrapping status columns at read time.
+The same posture applies to model source evidence: approved model-definition and active
+model-target reads should use partial indexes that match their lifecycle status, effective-window,
+and deterministic ordering contracts.
 
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.

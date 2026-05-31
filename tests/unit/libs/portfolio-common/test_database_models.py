@@ -10,6 +10,8 @@ from portfolio_common.database_models import (
     Instrument,
     InstrumentLookthroughComponent,
     MarketPrice,
+    ModelPortfolioDefinition,
+    ModelPortfolioTarget,
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
@@ -112,6 +114,34 @@ def test_portfolio_mandate_binding_declares_dpm_source_index():
         str(dpm_source.dialect_options["postgresql"]["where"]) == "mandate_type = 'discretionary' "
         "AND discretionary_authority_status = 'active'"
     )
+
+
+def test_model_portfolio_tables_declare_dpm_source_indexes():
+    definition_indexes = {index.name: index for index in ModelPortfolioDefinition.__table__.indexes}
+    target_indexes = {index.name: index for index in ModelPortfolioTarget.__table__.indexes}
+
+    approved_definition = definition_indexes["ix_model_port_def_approved_eff_order"]
+    active_target = target_indexes["ix_model_port_tgt_active_eff_order"]
+
+    assert [str(expression) for expression in approved_definition.expressions] == [
+        "model_portfolio_definitions.model_portfolio_id",
+        "model_portfolio_definitions.effective_from DESC",
+        "model_portfolio_definitions.effective_to",
+        "model_portfolio_definitions.approved_at DESC",
+        "model_portfolio_definitions.updated_at DESC",
+    ]
+    assert (
+        str(approved_definition.dialect_options["postgresql"]["where"])
+        == "approval_status = 'approved'"
+    )
+    assert [str(expression) for expression in active_target.expressions] == [
+        "model_portfolio_targets.model_portfolio_id",
+        "model_portfolio_targets.model_portfolio_version",
+        "model_portfolio_targets.instrument_id",
+        "model_portfolio_targets.effective_from DESC",
+        "model_portfolio_targets.effective_to",
+    ]
+    assert str(active_target.dialect_options["postgresql"]["where"]) == "target_status = 'active'"
 
 
 def test_transaction_declares_realized_tax_evidence_index():

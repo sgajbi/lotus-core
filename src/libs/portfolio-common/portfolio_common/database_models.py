@@ -804,6 +804,15 @@ class ModelPortfolioDefinition(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_model_port_def_approved_eff_order",
+            "model_portfolio_id",
+            effective_from.desc(),
+            "effective_to",
+            approved_at.desc(),
+            updated_at.desc(),
+            postgresql_where=text("approval_status = 'approved'"),
+        ),
     )
 
 
@@ -843,6 +852,15 @@ class ModelPortfolioTarget(Base):
             "model_portfolio_version",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_model_port_tgt_active_eff_order",
+            "model_portfolio_id",
+            "model_portfolio_version",
+            "instrument_id",
+            effective_from.desc(),
+            "effective_to",
+            postgresql_where=text("target_status = 'active'"),
         ),
     )
 

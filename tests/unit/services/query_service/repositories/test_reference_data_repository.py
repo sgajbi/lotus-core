@@ -719,7 +719,8 @@ async def test_resolve_model_portfolio_definition_uses_approved_effective_model(
     assert row.model_portfolio_id == "MODEL_SG_BALANCED_DPM"
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "model_portfolio_definitions.model_portfolio_id = 'MODEL_SG_BALANCED_DPM'" in compiled
-    assert "lower(trim(model_portfolio_definitions.approval_status)) = 'approved'" in compiled
+    assert "model_portfolio_definitions.approval_status = 'approved'" in compiled
+    assert "lower(trim(model_portfolio_definitions.approval_status))" not in compiled
     assert "model_portfolio_definitions.effective_from <= '2026-03-31'" in compiled
 
 
@@ -764,7 +765,8 @@ async def test_list_model_portfolio_targets_returns_latest_active_targets_by_def
         ("FI_US_TREASURY_10Y", Decimal("0.40")),
     ]
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "lower(trim(model_portfolio_targets.target_status)) = 'active'" in compiled
+    assert "model_portfolio_targets.target_status = 'active'" in compiled
+    assert "lower(trim(model_portfolio_targets.target_status))" not in compiled
 
 
 @pytest.mark.asyncio

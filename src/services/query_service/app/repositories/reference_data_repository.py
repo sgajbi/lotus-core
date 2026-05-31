@@ -150,7 +150,7 @@ class ReferenceDataRepository:
             select(ModelPortfolioDefinition)
             .where(
                 ModelPortfolioDefinition.model_portfolio_id == model_portfolio_id,
-                _reference_status_expr(ModelPortfolioDefinition.approval_status) == "approved",
+                ModelPortfolioDefinition.approval_status == "approved",
                 _effective_filter(
                     ModelPortfolioDefinition.effective_from,
                     ModelPortfolioDefinition.effective_to,
@@ -192,9 +192,7 @@ class ReferenceDataRepository:
             )
         )
         if not include_inactive_targets:
-            stmt = stmt.where(
-                _reference_status_expr(ModelPortfolioTarget.target_status) == "active"
-            )
+            stmt = stmt.where(ModelPortfolioTarget.target_status == "active")
         result = await self._db.execute(stmt)
         rows = list(result.scalars().all())
         return _latest_effective_rows(
