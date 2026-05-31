@@ -73,7 +73,6 @@ from ..dtos.reference_integration_dto import (
     LiquidityReserveRequirementSupportability,
     MarketDataCoverageRequest,
     MarketDataCoverageWindowResponse,
-    ModelPortfolioSupportability,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
     PlannedWithdrawalScheduleRequest,
@@ -122,6 +121,7 @@ from .market_data_coverage import (
     market_data_coverage_read_scope,
 )
 from .market_reference_coverage import market_reference_coverage_response
+from .model_portfolio_targets import build_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
 from .portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
@@ -145,7 +145,6 @@ from .reference_data_mappers import (
     index_price_series_point,
     index_return_series_point,
     liquidity_reserve_requirement_entry,
-    model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
     risk_free_series_point,
@@ -243,53 +242,10 @@ class IntegrationService:
             as_of_date=request.as_of_date,
             include_inactive_targets=request.include_inactive_targets,
         )
-        target_rows = [model_portfolio_target_row(row) for row in targets]
-        total_weight = sum((row.target_weight for row in target_rows), Decimal("0"))
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "MODEL_TARGETS_READY"
-        if not target_rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "MODEL_TARGETS_EMPTY"
-        elif total_weight != Decimal("1.0000000000"):
-            supportability_state = "DEGRADED"
-            supportability_reason = "MODEL_TARGET_WEIGHTS_NOT_ONE"
-
-        latest_evidence_timestamp = latest_reference_evidence_timestamp(
-            [definition],
-            targets,
-        )
-        return ModelPortfolioTargetResponse(
-            model_portfolio_id=definition.model_portfolio_id,
-            model_portfolio_version=definition.model_portfolio_version,
-            display_name=definition.display_name,
-            base_currency=definition.base_currency,
-            risk_profile=definition.risk_profile,
-            mandate_type=definition.mandate_type,
-            rebalance_frequency=definition.rebalance_frequency,
-            approval_status=definition.approval_status,
-            approved_at=definition.approved_at,
-            effective_from=definition.effective_from,
-            effective_to=definition.effective_to,
-            targets=target_rows,
-            supportability=ModelPortfolioSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                target_count=len(target_rows),
-                total_target_weight=total_weight,
-            ),
-            lineage={
-                "source_system": definition.source_system or "unknown",
-                "source_record_id": definition.source_record_id or "unknown",
-                "contract_version": "rfc_087_v1",
-            },
-            **source_product_runtime_metadata(
-                request.as_of_date,
-                data_quality_status=market_reference_data_quality_status(
-                    targets,
-                    required_count=len(target_rows),
-                ),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-            ),
+        return build_model_portfolio_target_response(
+            definition=definition,
+            request=request,
+            target_rows=targets,
         )
 
     async def resolve_portfolio_manager_book_membership(
