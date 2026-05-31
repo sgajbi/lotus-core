@@ -1720,6 +1720,13 @@ class PositionTimeseries(Base):
             func.trim(security_id),
             epoch.desc(),
         ),
+        Index(
+            "ix_pos_ts_port_norm_sec_date_epoch",
+            "portfolio_id",
+            func.trim(security_id),
+            date.desc(),
+            epoch.desc(),
+        ),
     )
 
 

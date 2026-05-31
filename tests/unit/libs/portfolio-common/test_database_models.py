@@ -511,6 +511,12 @@ def test_normalized_calculation_lookup_indexes_are_declared():
                 "trim(position_timeseries.security_id)",
                 "position_timeseries.epoch DESC",
             ],
+            "ix_pos_ts_port_norm_sec_date_epoch": [
+                "position_timeseries.portfolio_id",
+                "trim(position_timeseries.security_id)",
+                "position_timeseries.date DESC",
+                "position_timeseries.epoch DESC",
+            ],
         },
         PortfolioTimeseries: {
             "ix_port_ts_norm_port_date_epoch": [

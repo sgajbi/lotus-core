@@ -105,6 +105,10 @@ status-oriented queue or list indexes.
 Cashflow read-plane queries that resolve the latest restatement per transaction should scope the
 windowed rank by portfolio and use a portfolio/transaction/descending-epoch index before applying
 date, classification, or flow-type filters to the latest row.
+Analytics-input position time-series reads that resolve each security's latest row before a
+period-start date should use raw portfolio, normalized security, and descending date/epoch indexes
+aligned to the windowed `row_number()` ordering. This keeps prior-row return calculations bounded
+to the requested portfolio and security set instead of scanning date-led portfolio windows.
 
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.
