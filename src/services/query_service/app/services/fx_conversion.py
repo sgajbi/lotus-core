@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from ..repositories.currency_codes import normalize_currency_code
+from .decimal_amounts import decimal_or_none
 
 
 class CachedFxRateConverter:
@@ -47,11 +48,11 @@ class CachedFxRateConverter:
             to_currency=normalized_to_currency,
             as_of_date=as_of_date,
         )
-        if rate is None:
+        resolved_rate = decimal_or_none(rate)
+        if resolved_rate is None:
             raise ValueError(
                 "FX rate not found for "
                 f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
             )
-        resolved_rate = Decimal(str(rate))
         self._cache[cache_key] = resolved_rate
         return resolved_rate

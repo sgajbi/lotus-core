@@ -48,3 +48,12 @@ async def test_cached_fx_rate_converter_raises_for_missing_rate() -> None:
 
     with pytest.raises(ValueError, match="FX rate not found for CHF/USD as of 2026-03-27"):
         await converter.get_fx_rate(" chf ", " usd ", date(2026, 3, 27))
+
+
+async def test_cached_fx_rate_converter_raises_for_blank_rate() -> None:
+    repo = AsyncMock()
+    repo.get_latest_fx_rate.return_value = " "
+    converter = CachedFxRateConverter(repo)
+
+    with pytest.raises(ValueError, match="FX rate not found for CHF/USD as of 2026-03-27"):
+        await converter.get_fx_rate("CHF", "USD", date(2026, 3, 27))
