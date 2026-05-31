@@ -1,3 +1,5 @@
+import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -3260,6 +3262,122 @@ async def test_benchmark_market_series_reads_page_scoped_component_evidence() ->
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 2),
     )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> None:
+    service = make_service()
+    all_started: list[asyncio.Event] = [asyncio.Event() for _ in range(5)]
+    (
+        components_started,
+        index_prices_started,
+        index_returns_started,
+        benchmark_returns_started,
+        fx_rates_started,
+    ) = all_started
+
+    async def _concurrent_read(started: asyncio.Event, result: object, **_: object) -> object:
+        started.set()
+        await asyncio.wait_for(
+            asyncio.gather(*(event.wait() for event in all_started)),
+            timeout=1,
+        )
+        return result
+
+    def _concurrent_side_effect(
+        started: asyncio.Event, result: object
+    ) -> Callable[..., Awaitable[object]]:
+        async def _read(**kwargs: object) -> object:
+            return await _concurrent_read(started, result, **kwargs)
+
+        return _read
+
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="EUR")),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX1"]),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            side_effect=_concurrent_side_effect(
+                components_started,
+                [
+                    SimpleNamespace(
+                        index_id="IDX1",
+                        composition_weight=Decimal("0.5"),
+                        composition_effective_from=date(2026, 1, 1),
+                        composition_effective_to=None,
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        list_index_price_points=AsyncMock(
+            side_effect=_concurrent_side_effect(
+                index_prices_started,
+                [
+                    SimpleNamespace(
+                        index_id="IDX1",
+                        series_date=date(2026, 1, 1),
+                        index_price=Decimal("100"),
+                        series_currency="EUR",
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        list_index_return_points=AsyncMock(
+            side_effect=_concurrent_side_effect(
+                index_returns_started,
+                [
+                    SimpleNamespace(
+                        index_id="IDX1",
+                        series_date=date(2026, 1, 1),
+                        index_return=Decimal("0.01"),
+                        series_currency="EUR",
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        list_benchmark_return_points=AsyncMock(
+            side_effect=_concurrent_side_effect(
+                benchmark_returns_started,
+                [
+                    SimpleNamespace(
+                        series_date=date(2026, 1, 1),
+                        benchmark_return=Decimal("0.008"),
+                        return_period="1d",
+                        return_convention="total_return_index",
+                        series_currency="EUR",
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        get_fx_rates=AsyncMock(
+            side_effect=_concurrent_side_effect(
+                fx_rates_started,
+                {date(2026, 1, 1): Decimal("1.1")},
+            )
+        ),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency="USD",
+            series_fields=["index_price", "index_return", "benchmark_return", "fx_rate"],
+            page=SimpleNamespace(page_size=1, page_token=None),
+        ),
+    )
+
+    assert response.component_series[0].points[0].fx_rate == Decimal("1.1")
+    assert (
+        response.normalization_status
+        == "native_component_series_with_benchmark_to_target_fx_context"
+    )
+    assert all(event.is_set() for event in all_started)
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,8 @@
+import asyncio
 import logging
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from portfolio_common.market_reference_quality import (
     quality_status_summary_key,
@@ -178,10 +179,10 @@ class IntegrationService:
         self._page_token_codec = PageTokenCodec(load_query_service_settings().page_token_secret)
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
-        return self._page_token_codec.encode(payload)
+        return cast(str, self._page_token_codec.encode(payload))
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
-        return self._page_token_codec.decode(token)
+        return cast(dict[str, Any], self._page_token_codec.decode(token))
 
     def get_effective_policy(
         self,
@@ -2436,73 +2437,89 @@ class IntegrationService:
         )
         has_more = len(candidate_index_ids) > page_size
         index_ids = candidate_index_ids[:page_size]
-        components = resolve_component_window_rows(
-            await self._reference_repository.list_benchmark_components_overlapping_window(
+        market_read_names = ["components"]
+        market_reads: list[Any] = [
+            self._reference_repository.list_benchmark_components_overlapping_window(
                 benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
                 index_ids=index_ids,
-            ),
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-
-        index_prices = (
-            await self._reference_repository.list_index_price_points(
-                index_ids=index_ids,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
             )
-            if "index_price" in requested_fields
-            else []
-        )
-        index_returns = (
-            await self._reference_repository.list_index_return_points(
-                index_ids=index_ids,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
+        ]
+        if "index_price" in requested_fields:
+            market_read_names.append("index_prices")
+            market_reads.append(
+                self._reference_repository.list_index_price_points(
+                    index_ids=index_ids,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
             )
-            if "index_return" in requested_fields
-            else []
-        )
-        benchmark_returns = (
-            await self._reference_repository.list_benchmark_return_points(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
+        if "index_return" in requested_fields:
+            market_read_names.append("index_returns")
+            market_reads.append(
+                self._reference_repository.list_index_return_points(
+                    index_ids=index_ids,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
             )
-            if "benchmark_return" in requested_fields
-            else []
-        )
+        if "benchmark_return" in requested_fields:
+            market_read_names.append("benchmark_returns")
+            market_reads.append(
+                self._reference_repository.list_benchmark_return_points(
+                    benchmark_id=benchmark_id,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
+            )
 
         fx_rates: dict[date, Decimal] = {}
         fx_context_source_currency: str | None = None
         fx_context_target_currency: str | None = None
         normalization_status = "native_component_series_only"
+        should_read_fx_rates = False
         if request.target_currency:
             fx_context_source_currency = benchmark_currency
             fx_context_target_currency = request.target_currency
             if benchmark_currency != request.target_currency and "fx_rate" in requested_fields:
-                fx_rates = await self._reference_repository.get_fx_rates(
-                    from_currency=benchmark_currency,
-                    to_currency=request.target_currency,
-                    start_date=request.window.start_date,
-                    end_date=request.window.end_date,
+                should_read_fx_rates = True
+                market_read_names.append("fx_rates")
+                market_reads.append(
+                    self._reference_repository.get_fx_rates(
+                        from_currency=benchmark_currency,
+                        to_currency=request.target_currency,
+                        start_date=request.window.start_date,
+                        end_date=request.window.end_date,
+                    )
                 )
-                if fx_rates:
-                    normalization_status = (
-                        "native_component_series_with_benchmark_to_target_fx_context"
-                    )
-                else:
-                    normalization_status = (
-                        "native_component_series_with_missing_benchmark_to_target_fx_context"
-                    )
             elif benchmark_currency == request.target_currency:
                 normalization_status = (
                     "native_component_series_with_identity_benchmark_to_target_fx_context"
                 )
             else:
                 normalization_status = "native_component_series_without_fx_context_request"
+
+        market_results = dict(
+            zip(market_read_names, await asyncio.gather(*market_reads), strict=True)
+        )
+        components = resolve_component_window_rows(
+            market_results["components"],
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
+
+        index_prices = market_results.get("index_prices", [])
+        index_returns = market_results.get("index_returns", [])
+        benchmark_returns = market_results.get("benchmark_returns", [])
+        if should_read_fx_rates:
+            fx_rates = market_results["fx_rates"]
+            if fx_rates:
+                normalization_status = "native_component_series_with_benchmark_to_target_fx_context"
+            else:
+                normalization_status = (
+                    "native_component_series_with_missing_benchmark_to_target_fx_context"
+                )
 
         prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
         returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
