@@ -615,6 +615,22 @@ class OperationsRepository:
             .subquery()
         )
 
+    @staticmethod
+    def _apply_load_run_artifact_scope(
+        stmt,
+        artifact_model,
+        *,
+        portfolio_pattern: str,
+        business_date: Optional[date] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(artifact_model.portfolio_id.like(portfolio_pattern))
+        if business_date is not None:
+            stmt = stmt.where(artifact_model.date == business_date)
+        if as_of is not None:
+            stmt = stmt.where(artifact_model.created_at <= as_of)
+        return stmt
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -638,65 +654,48 @@ class OperationsRepository:
             .select_from(Transaction)
             .where(Transaction.transaction_id.like(transaction_pattern))
         )
-        snapshot_portfolios_stmt = select(
-            func.count(func.distinct(DailyPositionSnapshot.portfolio_id))
-        ).where(
-            DailyPositionSnapshot.portfolio_id.like(portfolio_pattern),
-            DailyPositionSnapshot.date == business_date,
+        snapshot_portfolios_stmt = self._apply_load_run_artifact_scope(
+            select(func.count(func.distinct(DailyPositionSnapshot.portfolio_id))),
+            DailyPositionSnapshot,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        snapshot_rows_stmt = (
-            select(func.count())
-            .select_from(DailyPositionSnapshot)
-            .where(
-                DailyPositionSnapshot.portfolio_id.like(portfolio_pattern),
-                DailyPositionSnapshot.date == business_date,
-            )
+        snapshot_rows_stmt = self._apply_load_run_artifact_scope(
+            select(func.count()).select_from(DailyPositionSnapshot),
+            DailyPositionSnapshot,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        position_timeseries_portfolios_stmt = select(
-            func.count(func.distinct(PositionTimeseries.portfolio_id))
-        ).where(
-            PositionTimeseries.portfolio_id.like(portfolio_pattern),
-            PositionTimeseries.date == business_date,
+        position_timeseries_portfolios_stmt = self._apply_load_run_artifact_scope(
+            select(func.count(func.distinct(PositionTimeseries.portfolio_id))),
+            PositionTimeseries,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        position_timeseries_rows_stmt = (
-            select(func.count())
-            .select_from(PositionTimeseries)
-            .where(
-                PositionTimeseries.portfolio_id.like(portfolio_pattern),
-                PositionTimeseries.date == business_date,
-            )
+        position_timeseries_rows_stmt = self._apply_load_run_artifact_scope(
+            select(func.count()).select_from(PositionTimeseries),
+            PositionTimeseries,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        timeseries_portfolios_stmt = select(
-            func.count(func.distinct(PortfolioTimeseries.portfolio_id))
-        ).where(
-            PortfolioTimeseries.portfolio_id.like(portfolio_pattern),
-            PortfolioTimeseries.date == business_date,
+        timeseries_portfolios_stmt = self._apply_load_run_artifact_scope(
+            select(func.count(func.distinct(PortfolioTimeseries.portfolio_id))),
+            PortfolioTimeseries,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        timeseries_rows_stmt = (
-            select(func.count())
-            .select_from(PortfolioTimeseries)
-            .where(
-                PortfolioTimeseries.portfolio_id.like(portfolio_pattern),
-                PortfolioTimeseries.date == business_date,
-            )
+        timeseries_rows_stmt = self._apply_load_run_artifact_scope(
+            select(func.count()).select_from(PortfolioTimeseries),
+            PortfolioTimeseries,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        if as_of is not None:
-            snapshot_portfolios_stmt = snapshot_portfolios_stmt.where(
-                DailyPositionSnapshot.created_at <= as_of
-            )
-            snapshot_rows_stmt = snapshot_rows_stmt.where(DailyPositionSnapshot.created_at <= as_of)
-            position_timeseries_portfolios_stmt = position_timeseries_portfolios_stmt.where(
-                PositionTimeseries.created_at <= as_of
-            )
-            position_timeseries_rows_stmt = position_timeseries_rows_stmt.where(
-                PositionTimeseries.created_at <= as_of
-            )
-            timeseries_portfolios_stmt = timeseries_portfolios_stmt.where(
-                PortfolioTimeseries.created_at <= as_of
-            )
-            timeseries_rows_stmt = timeseries_rows_stmt.where(
-                PortfolioTimeseries.created_at <= as_of
-            )
 
         valuation_base = select(
             PortfolioValuationJob.status.label("status"),
@@ -815,50 +814,39 @@ class OperationsRepository:
         max_waiting_portfolio_depth_stmt = select(
             func.max(valuation_without_position_timeseries_by_portfolio_subq.c.waiting_count)
         )
-        latest_snapshot_stmt = select(func.max(DailyPositionSnapshot.date)).where(
-            DailyPositionSnapshot.portfolio_id.like(portfolio_pattern)
+        latest_snapshot_stmt = self._apply_load_run_artifact_scope(
+            select(func.max(DailyPositionSnapshot.date)),
+            DailyPositionSnapshot,
+            portfolio_pattern=portfolio_pattern,
+            as_of=as_of,
         )
-        latest_snapshot_materialized_stmt = select(
-            func.max(DailyPositionSnapshot.created_at)
-        ).where(
-            DailyPositionSnapshot.portfolio_id.like(portfolio_pattern),
-            DailyPositionSnapshot.date == business_date,
+        latest_snapshot_materialized_stmt = self._apply_load_run_artifact_scope(
+            select(func.max(DailyPositionSnapshot.created_at)),
+            DailyPositionSnapshot,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        latest_position_timeseries_materialized_stmt = select(
-            func.max(PositionTimeseries.created_at)
-        ).where(
-            PositionTimeseries.portfolio_id.like(portfolio_pattern),
-            PositionTimeseries.date == business_date,
+        latest_position_timeseries_materialized_stmt = self._apply_load_run_artifact_scope(
+            select(func.max(PositionTimeseries.created_at)),
+            PositionTimeseries,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        latest_timeseries_stmt = select(func.max(PortfolioTimeseries.date)).where(
-            PortfolioTimeseries.portfolio_id.like(portfolio_pattern)
+        latest_timeseries_stmt = self._apply_load_run_artifact_scope(
+            select(func.max(PortfolioTimeseries.date)),
+            PortfolioTimeseries,
+            portfolio_pattern=portfolio_pattern,
+            as_of=as_of,
         )
-        latest_portfolio_timeseries_materialized_stmt = select(
-            func.max(PortfolioTimeseries.created_at)
-        ).where(
-            PortfolioTimeseries.portfolio_id.like(portfolio_pattern),
-            PortfolioTimeseries.date == business_date,
+        latest_portfolio_timeseries_materialized_stmt = self._apply_load_run_artifact_scope(
+            select(func.max(PortfolioTimeseries.created_at)),
+            PortfolioTimeseries,
+            portfolio_pattern=portfolio_pattern,
+            business_date=business_date,
+            as_of=as_of,
         )
-        if as_of is not None:
-            latest_snapshot_stmt = latest_snapshot_stmt.where(
-                DailyPositionSnapshot.created_at <= as_of
-            )
-            latest_snapshot_materialized_stmt = latest_snapshot_materialized_stmt.where(
-                DailyPositionSnapshot.created_at <= as_of
-            )
-            latest_position_timeseries_materialized_stmt = (
-                latest_position_timeseries_materialized_stmt.where(
-                    PositionTimeseries.created_at <= as_of
-                )
-            )
-            latest_timeseries_stmt = latest_timeseries_stmt.where(
-                PortfolioTimeseries.created_at <= as_of
-            )
-            latest_portfolio_timeseries_materialized_stmt = (
-                latest_portfolio_timeseries_materialized_stmt.where(
-                    PortfolioTimeseries.created_at <= as_of
-                )
-            )
 
         portfolios_ingested = await self.db.scalar(portfolio_stmt)
         transactions_ingested = await self.db.scalar(transaction_stmt)
