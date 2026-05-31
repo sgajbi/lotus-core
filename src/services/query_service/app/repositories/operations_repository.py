@@ -631,6 +631,19 @@ class OperationsRepository:
             stmt = stmt.where(artifact_model.created_at <= as_of)
         return stmt
 
+    @staticmethod
+    def _apply_load_run_job_scope(
+        stmt,
+        job_model,
+        *,
+        portfolio_pattern: str,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(job_model.portfolio_id.like(portfolio_pattern))
+        if as_of is not None:
+            stmt = stmt.where(job_model.updated_at <= as_of)
+        return stmt
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -701,21 +714,26 @@ class OperationsRepository:
             PortfolioValuationJob.status.label("status"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.updated_at.label("updated_at"),
-        ).where(
-            PortfolioValuationJob.portfolio_id.like(portfolio_pattern),
-            self._is_actionable_valuation_job(as_of=as_of),
         )
-        if as_of is not None:
-            valuation_base = valuation_base.where(PortfolioValuationJob.updated_at <= as_of)
+        valuation_base = self._apply_load_run_job_scope(
+            valuation_base,
+            PortfolioValuationJob,
+            portfolio_pattern=portfolio_pattern,
+            as_of=as_of,
+        ).where(self._is_actionable_valuation_job(as_of=as_of))
         valuation_subq = valuation_base.subquery()
 
         aggregation_base = select(
             PortfolioAggregationJob.status.label("status"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
-        ).where(PortfolioAggregationJob.portfolio_id.like(portfolio_pattern))
-        if as_of is not None:
-            aggregation_base = aggregation_base.where(PortfolioAggregationJob.updated_at <= as_of)
+        )
+        aggregation_base = self._apply_load_run_job_scope(
+            aggregation_base,
+            PortfolioAggregationJob,
+            portfolio_pattern=portfolio_pattern,
+            as_of=as_of,
+        )
         aggregation_subq = aggregation_base.subquery()
 
         valuation_summary_stmt = select(
@@ -742,15 +760,16 @@ class OperationsRepository:
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.epoch.label("epoch"),
             PortfolioValuationJob.updated_at.label("valuation_completed_at_utc"),
+        )
+        valuation_handoff_base = self._apply_load_run_job_scope(
+            valuation_handoff_base,
+            PortfolioValuationJob,
+            portfolio_pattern=portfolio_pattern,
+            as_of=as_of,
         ).where(
-            PortfolioValuationJob.portfolio_id.like(portfolio_pattern),
             PortfolioValuationJob.status == "COMPLETE",
             ~self._has_superseding_valuation_epoch(as_of=as_of),
         )
-        if as_of is not None:
-            valuation_handoff_base = valuation_handoff_base.where(
-                PortfolioValuationJob.updated_at <= as_of
-            )
         valuation_handoff_subq = valuation_handoff_base.subquery()
         valuation_to_position_join = and_(
             PositionTimeseries.portfolio_id == valuation_handoff_subq.c.portfolio_id,
