@@ -1902,6 +1902,14 @@ class PortfolioValuationJob(Base):
             "epoch",
             "status",
         ),
+        Index(
+            "ix_val_jobs_lineage_latest",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
+            valuation_date.desc(),
+            id.desc(),
+        ),
     )
 
 

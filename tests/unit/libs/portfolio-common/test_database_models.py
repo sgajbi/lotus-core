@@ -377,6 +377,7 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
         "ix_portfolio_valuation_jobs_portfolio_status_date_updated_id"
     ]
     claim_order_epoch = indexes["ix_portfolio_valuation_jobs_claim_order_epoch"]
+    lineage_latest = indexes["ix_val_jobs_lineage_latest"]
 
     assert [column.name for column in portfolio_status_updated.columns] == [
         "portfolio_id",
@@ -397,6 +398,13 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
         "portfolio_valuation_jobs.valuation_date",
         "portfolio_valuation_jobs.epoch DESC",
         "portfolio_valuation_jobs.id",
+    ]
+    assert [str(expression) for expression in lineage_latest.expressions] == [
+        "portfolio_valuation_jobs.portfolio_id",
+        "trim(portfolio_valuation_jobs.security_id)",
+        "portfolio_valuation_jobs.epoch",
+        "portfolio_valuation_jobs.valuation_date DESC",
+        "portfolio_valuation_jobs.id DESC",
     ]
 
 
