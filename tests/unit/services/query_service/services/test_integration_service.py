@@ -44,6 +44,11 @@ from src.services.query_service.app.services.integration_service import Integrat
 from src.services.query_service.app.services.market_reference_coverage import (
     market_reference_coverage_response,
 )
+from src.services.query_service.app.services.reference_data_helpers import (
+    latest_reference_evidence_timestamp,
+    market_reference_data_quality_status,
+)
+from src.services.query_service.app.services.request_fingerprint import request_fingerprint
 
 
 def make_service() -> IntegrationService:
@@ -504,7 +509,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_accepts_scoped_page_tok
         as_of_date=date(2026, 5, 3),
         tenant_id="default",
     )
-    scope = service._request_fingerprint(  # pylint: disable=protected-access
+    scope = request_fingerprint(
         {
             "product_name": "DpmPortfolioUniverseCandidate",
             "as_of_date": "2026-05-03",
@@ -1556,21 +1561,21 @@ def test_market_reference_data_quality_classifies_reference_rows() -> None:
     ]
 
     assert (
-        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+        market_reference_data_quality_status(
             rows,
             required_count=len(rows),
         )
         == PARTIAL
     )
     assert (
-        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+        market_reference_data_quality_status(
             [SimpleNamespace(quality_status="blocked")],
             required_count=1,
         )
         == BLOCKED
     )
     assert (
-        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+        market_reference_data_quality_status(
             [SimpleNamespace()],
             required_count=1,
         )
@@ -1583,7 +1588,7 @@ def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps()
     latest_updated_at = datetime(2026, 1, 3, 11, 0, tzinfo=UTC)
 
     assert (
-        IntegrationService._latest_reference_evidence_timestamp(  # pylint: disable=protected-access
+        latest_reference_evidence_timestamp(
             [
                 SimpleNamespace(source_timestamp=older_source_timestamp),
                 SimpleNamespace(updated_at=latest_updated_at),

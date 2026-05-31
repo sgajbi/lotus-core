@@ -152,7 +152,12 @@ from .reference_data_mappers import (
     risk_free_series_point,
     sustainability_preference_profile_entry,
 )
-from .request_fingerprint import request_fingerprint, series_request_fingerprint
+from .request_fingerprint import (
+    request_fingerprint as build_request_fingerprint,
+)
+from .request_fingerprint import (
+    series_request_fingerprint,
+)
 from .transaction_cost_curve import build_transaction_cost_curve_points
 
 logger = logging.getLogger(__name__)
@@ -214,60 +219,6 @@ class IntegrationService:
         metadata.pop("as_of_date")
         return metadata
 
-    @staticmethod
-    def _latest_reference_evidence_timestamp(*row_groups: list[Any]) -> datetime | None:
-        return latest_reference_evidence_timestamp(*row_groups)
-
-    @staticmethod
-    def _market_reference_data_quality_status(rows: list[Any], required_count: int) -> str:
-        return market_reference_data_quality_status(rows, required_count)
-
-    @staticmethod
-    def _request_fingerprint(payload: dict[str, Any]) -> str:
-        return request_fingerprint(payload)
-
-    @staticmethod
-    def _latest_effective_records(
-        rows: list[Any],
-        *,
-        key_fields: tuple[str, ...],
-        effective_from_field: str,
-    ) -> list[Any]:
-        return latest_effective_records(
-            rows,
-            key_fields=key_fields,
-            effective_from_field=effective_from_field,
-        )
-
-    @staticmethod
-    def _resolve_component_window_rows(
-        rows: list[Any],
-        *,
-        start_date: date,
-        end_date: date,
-    ) -> list[Any]:
-        return resolve_component_window_rows(
-            rows,
-            start_date=start_date,
-            end_date=end_date,
-        )
-
-    @staticmethod
-    def _series_request_fingerprint(
-        series_key: str,
-        identifier_key: str,
-        identifier_value: str,
-        request: Any,
-        extras: dict[str, Any] | None = None,
-    ) -> str:
-        return series_request_fingerprint(
-            series_key=series_key,
-            identifier_key=identifier_key,
-            identifier_value=identifier_value,
-            request=request,
-            extras=extras,
-        )
-
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return self._page_token_codec.encode(payload)
 
@@ -311,7 +262,7 @@ class IntegrationService:
             **self._runtime_metadata_for_existing_as_of_date(
                 as_of_date,
                 data_quality_status="COMPLETE",
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp([row]),
             ),
         )
 
@@ -344,7 +295,7 @@ class IntegrationService:
             supportability_state = "DEGRADED"
             supportability_reason = "MODEL_TARGET_WEIGHTS_NOT_ONE"
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(
+        latest_evidence_timestamp = latest_reference_evidence_timestamp(
             [definition],
             targets,
         )
@@ -374,7 +325,7 @@ class IntegrationService:
             },
             **self._runtime_metadata(
                 request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     targets,
                     required_count=len(target_rows),
                 ),
@@ -414,7 +365,7 @@ class IntegrationService:
             supportability_state = "INCOMPLETE"
             supportability_reason = "PM_BOOK_MEMBERSHIP_EMPTY"
 
-        snapshot_id = self._request_fingerprint(
+        snapshot_id = build_request_fingerprint(
             {
                 "product_name": "PortfolioManagerBookMembership",
                 "portfolio_manager_id": portfolio_manager_id,
@@ -425,7 +376,7 @@ class IntegrationService:
                 "portfolio_ids": [member.portfolio_id for member in members],
             }
         )
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp(rows)
 
         return PortfolioManagerBookMembershipResponse(
             portfolio_manager_id=portfolio_manager_id,
@@ -482,7 +433,7 @@ class IntegrationService:
             supportability_state = "INCOMPLETE"
             supportability_reason = "CIO_MODEL_CHANGE_COHORT_EMPTY"
 
-        snapshot_fingerprint = self._request_fingerprint(
+        snapshot_fingerprint = build_request_fingerprint(
             {
                 "product_name": "CioModelChangeAffectedCohort",
                 "model_portfolio_id": model_portfolio_id,
@@ -500,7 +451,7 @@ class IntegrationService:
             f"{definition.model_portfolio_version}:"
             f"{request.as_of_date.isoformat()}:{snapshot_fingerprint}"
         )
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(
+        latest_evidence_timestamp = latest_reference_evidence_timestamp(
             [definition],
             rows,
         )
@@ -552,7 +503,7 @@ class IntegrationService:
                 if model_portfolio_id.strip()
             }
         )
-        request_scope_fingerprint = self._request_fingerprint(
+        request_scope_fingerprint = build_request_fingerprint(
             {
                 "product_name": "DpmPortfolioUniverseCandidate",
                 "as_of_date": request.as_of_date.isoformat(),
@@ -655,7 +606,7 @@ class IntegrationService:
                 as_of_date=request.as_of_date,
                 tenant_id=request.tenant_id,
                 data_quality_status=data_quality_status,
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(page_rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(page_rows),
                 source_batch_fingerprint=request_scope_fingerprint,
                 snapshot_id=f"dpm_portfolio_universe:{request_scope_fingerprint}",
             ),
@@ -751,7 +702,7 @@ class IntegrationService:
             **self._runtime_metadata(
                 request.as_of_date,
                 data_quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp([row]),
             ),
         )
 
@@ -784,7 +735,7 @@ class IntegrationService:
             supportability_reason = "CLIENT_RESTRICTION_PROFILE_EMPTY"
             missing_data_families.append("client_restrictions")
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
         return ClientRestrictionProfileResponse(
             portfolio_id=portfolio_id,
             client_id=binding.client_id,
@@ -806,7 +757,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if rows else "MISSING"),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ClientRestrictionProfile",
                         "portfolio_id": portfolio_id,
@@ -818,7 +769,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "client_restriction_profile:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -858,7 +809,7 @@ class IntegrationService:
             supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_EMPTY"
             missing_data_families.append("sustainability_preferences")
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
         return SustainabilityPreferenceProfileResponse(
             portfolio_id=portfolio_id,
             client_id=binding.client_id,
@@ -880,7 +831,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if rows else "MISSING"),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "SustainabilityPreferenceProfile",
                         "portfolio_id": portfolio_id,
@@ -892,7 +843,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "sustainability_preference_profile:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -932,7 +883,7 @@ class IntegrationService:
             supportability_reason = "CLIENT_TAX_PROFILE_EMPTY"
             missing_data_families.append("client_tax_profile")
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
         return ClientTaxProfileResponse(
             portfolio_id=portfolio_id,
             client_id=binding.client_id,
@@ -954,7 +905,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if rows else "MISSING"),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ClientTaxProfile",
                         "portfolio_id": portfolio_id,
@@ -966,7 +917,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "client_tax_profile:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1006,7 +957,7 @@ class IntegrationService:
             supportability_reason = "CLIENT_TAX_RULE_SET_EMPTY"
             missing_data_families.append("client_tax_rule_set")
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
         return ClientTaxRuleSetResponse(
             portfolio_id=portfolio_id,
             client_id=binding.client_id,
@@ -1028,7 +979,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if rows else "MISSING"),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ClientTaxRuleSet",
                         "portfolio_id": portfolio_id,
@@ -1040,7 +991,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "client_tax_rule_set:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1080,7 +1031,7 @@ class IntegrationService:
             supportability_reason = "CLIENT_INCOME_NEEDS_SCHEDULE_EMPTY"
             missing_data_families.append("client_income_needs_schedule")
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
         return ClientIncomeNeedsScheduleResponse(
             portfolio_id=portfolio_id,
             client_id=binding.client_id,
@@ -1102,7 +1053,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if rows else "MISSING"),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ClientIncomeNeedsSchedule",
                         "portfolio_id": portfolio_id,
@@ -1114,7 +1065,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "client_income_needs_schedule:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1154,7 +1105,7 @@ class IntegrationService:
             supportability_reason = "LIQUIDITY_RESERVE_REQUIREMENT_EMPTY"
             missing_data_families.append("liquidity_reserve_requirement")
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
         return LiquidityReserveRequirementResponse(
             portfolio_id=portfolio_id,
             client_id=binding.client_id,
@@ -1176,7 +1127,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if rows else "MISSING"),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "LiquidityReserveRequirement",
                         "portfolio_id": portfolio_id,
@@ -1188,7 +1139,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "liquidity_reserve_requirement:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1229,7 +1180,7 @@ class IntegrationService:
             supportability_reason = "PLANNED_WITHDRAWAL_SCHEDULE_EMPTY"
             missing_data_families.append("planned_withdrawal_schedule")
 
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
+        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
         return PlannedWithdrawalScheduleResponse(
             portfolio_id=portfolio_id,
             client_id=binding.client_id,
@@ -1252,7 +1203,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if rows else "MISSING"),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "PlannedWithdrawalSchedule",
                         "portfolio_id": portfolio_id,
@@ -1265,7 +1216,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "planned_withdrawal_schedule:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1332,7 +1283,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalHedgeExecutionReadiness",
                         "portfolio_id": portfolio_id,
@@ -1346,7 +1297,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_hedge_execution_readiness:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1413,7 +1364,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalCurrencyExposure",
                         "portfolio_id": portfolio_id,
@@ -1427,7 +1378,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_currency_exposure:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1489,7 +1440,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalOrderExecutionAcknowledgement",
                         "portfolio_id": portfolio_id,
@@ -1503,7 +1454,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_order_execution_acknowledgement:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1569,7 +1520,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalHedgePolicy",
                         "portfolio_id": portfolio_id,
@@ -1583,7 +1534,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_hedge_policy:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1649,7 +1600,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalEligibleHedgeInstrument",
                         "portfolio_id": portfolio_id,
@@ -1664,7 +1615,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_eligible_hedge_instrument:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1719,7 +1670,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalFXForwardCurve",
                         "as_of_date": request.as_of_date.isoformat(),
@@ -1731,7 +1682,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_fx_forward_curve:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "as_of_date": request.as_of_date.isoformat(),
                             "currency_pairs": sorted(request.currency_pairs),
@@ -1785,11 +1736,11 @@ class IntegrationService:
             },
             **self._runtime_metadata(
                 request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(request.security_ids),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
 
@@ -1802,7 +1753,7 @@ class IntegrationService:
         if not await self._buy_state_repository.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-        request_scope_fingerprint = self._request_fingerprint(
+        request_scope_fingerprint = build_request_fingerprint(
             {
                 "portfolio_id": portfolio_id,
                 "as_of_date": request.as_of_date.isoformat(),
@@ -1904,7 +1855,7 @@ class IntegrationService:
                     if supportability_state == "UNAVAILABLE"
                     else "PARTIAL"
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(
                     [lot for lot, _ in page_rows]
                 ),
             ),
@@ -1919,7 +1870,7 @@ class IntegrationService:
         if not await self._transaction_repository.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-        request_scope_fingerprint = self._request_fingerprint(
+        request_scope_fingerprint = build_request_fingerprint(
             {
                 "portfolio_id": portfolio_id,
                 "as_of_date": request.as_of_date.isoformat(),
@@ -2022,7 +1973,7 @@ class IntegrationService:
             **self._runtime_metadata_for_existing_as_of_date(
                 request.as_of_date,
                 data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(transactions),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(transactions),
             ),
         )
 
@@ -2132,7 +2083,7 @@ class IntegrationService:
             **self._runtime_metadata_for_existing_as_of_date(
                 request.as_of_date,
                 data_quality_status=("COMPLETE" if supportability_state == "READY" else "PARTIAL"),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(
                     price_rows,
                     fx_rows,
                 ),
@@ -2393,13 +2344,13 @@ class IntegrationService:
             raise ValueError(
                 "Benchmark definition currency changed within requested composition window."
             )
-        definitions = self._latest_effective_records(
+        definitions = latest_effective_records(
             definition_rows,
             key_fields=("benchmark_id",),
             effective_from_field="effective_from",
         )
 
-        components = self._resolve_component_window_rows(
+        components = resolve_component_window_rows(
             await self._reference_repository.list_benchmark_components_overlapping_window(
                 benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
@@ -2434,11 +2385,11 @@ class IntegrationService:
             },
             **self._runtime_metadata(
                 request.window.end_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     evidence_rows,
                     required_count=len(evidence_rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(evidence_rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(evidence_rows),
             ),
         )
 
@@ -2499,7 +2450,7 @@ class IntegrationService:
         benchmark_currency = (
             definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
         )
-        components = self._resolve_component_window_rows(
+        components = resolve_component_window_rows(
             await self._reference_repository.list_benchmark_components_overlapping_window(
                 benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
@@ -2524,7 +2475,7 @@ class IntegrationService:
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
-        request_scope_fingerprint = self._request_fingerprint(
+        request_scope_fingerprint = build_request_fingerprint(
             {
                 "benchmark_id": benchmark_id,
                 "as_of_date": request.as_of_date.isoformat(),
@@ -2684,13 +2635,13 @@ class IntegrationService:
             },
             **self._runtime_metadata_for_existing_as_of_date(
                 request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     returned_evidence_rows,
                     required_count=(
                         len(total_evidence_rows) if has_more else len(returned_evidence_rows)
                     ),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(
                     returned_evidence_rows
                 ),
             ),
@@ -2719,18 +2670,18 @@ class IntegrationService:
             },
             **self._runtime_metadata(
                 getattr(request, "as_of_date", request.window.end_date),
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
 
     async def get_index_return_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexReturnSeriesResponse:
-        request_fingerprint = self._series_request_fingerprint(
+        request_fingerprint = series_request_fingerprint(
             series_key="index_return_series",
             identifier_key="index_id",
             identifier_value=index_id,
@@ -2758,18 +2709,18 @@ class IntegrationService:
             },
             **self._runtime_metadata_for_existing_as_of_date(
                 request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
 
     async def get_benchmark_return_series(
         self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
     ) -> BenchmarkReturnSeriesResponse:
-        request_fingerprint = self._series_request_fingerprint(
+        request_fingerprint = series_request_fingerprint(
             series_key="benchmark_return_series",
             identifier_key="benchmark_id",
             identifier_value=benchmark_id,
@@ -2799,7 +2750,7 @@ class IntegrationService:
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
         normalized_currency = normalize_currency_code(request.currency)
-        request_fingerprint = self._series_request_fingerprint(
+        request_fingerprint = series_request_fingerprint(
             series_key="risk_free_series",
             identifier_key="currency",
             identifier_value=normalized_currency,
@@ -2829,11 +2780,11 @@ class IntegrationService:
             },
             **self._runtime_metadata_for_existing_as_of_date(
                 request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
 
@@ -2843,7 +2794,7 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
-        request_fingerprint = self._request_fingerprint(
+        request_fingerprint = build_request_fingerprint(
             {
                 "coverage_key": "benchmark_coverage",
                 "benchmark_id": benchmark_id,
@@ -2872,7 +2823,7 @@ class IntegrationService:
         end_date: date,
     ) -> CoverageResponse:
         normalized_currency = normalize_currency_code(currency)
-        request_fingerprint = self._request_fingerprint(
+        request_fingerprint = build_request_fingerprint(
             {
                 "coverage_key": "risk_free_coverage",
                 "currency": normalized_currency,
@@ -2899,7 +2850,7 @@ class IntegrationService:
         as_of_date: date,
         taxonomy_scope: str | None = None,
     ) -> ClassificationTaxonomyResponse:
-        request_fingerprint = self._request_fingerprint(
+        request_fingerprint = build_request_fingerprint(
             {
                 "taxonomy_key": "classification_taxonomy",
                 "as_of_date": as_of_date.isoformat(),
@@ -2916,10 +2867,10 @@ class IntegrationService:
             request_fingerprint=request_fingerprint,
             **self._runtime_metadata_for_existing_as_of_date(
                 as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
