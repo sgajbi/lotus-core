@@ -481,6 +481,25 @@ async def test_reporting_service_can_decompose_position_requires_complete_weight
                 InstrumentLookthroughComponentRow(
                     parent_security_id="FUND1",
                     component_security_id="ETF1",
+                    component_weight=" ",
+                    component_instrument=_instrument("ETF1"),
+                ),
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF2",
+                    component_weight=Decimal("1"),
+                    component_instrument=_instrument("ETF2"),
+                ),
+            ]
+        )
+        is False
+    )
+    assert (
+        ReportingService._can_decompose_position(
+            [
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF1",
                     component_weight=Decimal("0.6"),
                     component_instrument=_instrument("ETF1"),
                 ),

@@ -33,7 +33,7 @@ from ..repositories.reporting_repository import (
 from .allocation_calculator import AllocationInputRow, calculate_allocation_views
 from .cash_balance_service import CashBalanceResolver
 from .control_code_normalization import normalize_control_code
-from .decimal_amounts import decimal_or_zero
+from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .fx_conversion import CachedFxRateConverter
 
 ZERO = Decimal("0")
@@ -332,11 +332,14 @@ class ReportingService:
 
             decomposed_position_count += 1
             for component in components:
+                component_weight = self._component_weight(component)
+                if component_weight is None:
+                    continue
                 allocation_rows.append(
                     (
                         component.component_instrument,
                         SimpleNamespace(security_id=component.component_security_id),
-                        reporting_value * Decimal(str(component.component_weight)),
+                        reporting_value * component_weight,
                     )
                 )
 
@@ -373,11 +376,18 @@ class ReportingService:
     ) -> bool:
         if not components:
             return False
+        weights = [ReportingService._component_weight(component) for component in components]
+        if any(weight is None for weight in weights):
+            return False
         total_weight = sum(
-            (Decimal(str(component.component_weight)) for component in components),
+            (weight for weight in weights if weight is not None),
             ZERO,
         )
         return abs(total_weight - Decimal("1")) <= Decimal("0.000001")
+
+    @staticmethod
+    def _component_weight(component: InstrumentLookthroughComponentRow) -> Decimal | None:
+        return decimal_or_none(component.component_weight)
 
     async def _resolve_scope_portfolios_and_date(
         self,
