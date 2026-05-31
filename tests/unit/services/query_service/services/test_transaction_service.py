@@ -61,6 +61,9 @@ def mock_transaction_repo() -> AsyncMock:
     ]
     repo.get_transactions_count.return_value = 25
     repo.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    repo.get_latest_realized_tax_evidence_timestamp.return_value = datetime(
+        2025, 1, 16, 9, 30, tzinfo=UTC
+    )
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.list_realized_tax_evidence_transactions.return_value = [
@@ -472,6 +475,12 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
         end_date=date(2025, 1, 31),
         as_of_date=date(2025, 1, 15),
     )
+    mock_transaction_repo.get_latest_realized_tax_evidence_timestamp.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        as_of_date=date(2025, 1, 15),
+    )
     assert summary.product_name == "PortfolioRealizedTaxSummary"
     assert summary.product_version == "v1"
     assert summary.portfolio_id == "P1"
@@ -552,7 +561,7 @@ async def test_get_realized_tax_summary_reports_empty_evidence_without_fabricati
 ) -> None:
     mock_transaction_repo.get_transactions_count.return_value = 0
     mock_transaction_repo.list_realized_tax_evidence_transactions.return_value = []
-    mock_transaction_repo.get_latest_evidence_timestamp.return_value = None
+    mock_transaction_repo.get_latest_realized_tax_evidence_timestamp.return_value = None
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",

@@ -178,7 +178,9 @@ class TransactionService:
         tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
             **ledger_filters,
         )
-        latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(**ledger_filters)
+        latest_evidence_timestamp = await self.repo.get_latest_realized_tax_evidence_timestamp(
+            **ledger_filters
+        )
 
         currency_totals = self._realized_tax_currency_totals(tax_transactions)
         reporting_currency_total = None

@@ -41,6 +41,12 @@ class TransactionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _realized_tax_evidence_predicate():
+        return (Transaction.withholding_tax_amount.is_not(None)) | (
+            Transaction.other_interest_deductions_amount.is_not(None)
+        )
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -365,10 +371,7 @@ class TransactionRepository:
         as_of_date: Optional[date] = None,
     ) -> List[Transaction]:
         stmt = self._apply_filters(
-            select(Transaction).where(
-                (Transaction.withholding_tax_amount.is_not(None))
-                | (Transaction.other_interest_deductions_amount.is_not(None))
-            ),
+            select(Transaction).where(self._realized_tax_evidence_predicate()),
             portfolio_id=portfolio_id,
             start_date=start_date,
             end_date=end_date,
@@ -380,3 +383,20 @@ class TransactionRepository:
         )
         results = await self.db.execute(stmt)
         return list(results.scalars().all())
+
+    async def get_latest_realized_tax_evidence_timestamp(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        as_of_date: Optional[date] = None,
+    ) -> Optional[datetime]:
+        stmt = self._apply_filters(
+            select(func.max(Transaction.updated_at)).where(self._realized_tax_evidence_predicate()),
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=as_of_date,
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
