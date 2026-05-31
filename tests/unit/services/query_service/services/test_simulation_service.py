@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -121,6 +122,47 @@ async def test_projected_positions_applies_change_delta(mock_dependencies):
     assert response.positions[0].baseline_quantity == 100.0
     assert response.positions[0].proposed_quantity == 110.0
     assert response.positions[0].delta_quantity == 10.0
+
+
+async def test_projected_positions_reads_baseline_and_changes_concurrently(mock_dependencies):
+    repo, position_repo, instrument_repo = mock_dependencies
+    baseline_started = asyncio.Event()
+    changes_started = asyncio.Event()
+
+    async def get_latest_positions_by_portfolio(portfolio_id: str):
+        assert portfolio_id == "P1"
+        baseline_started.set()
+        await changes_started.wait()
+        return [
+            (
+                SimpleNamespace(
+                    security_id="SEC_AAPL_US",
+                    quantity=100,
+                    cost_basis=1000,
+                    cost_basis_local=1000,
+                    date=datetime(2025, 9, 11).date(),
+                ),
+                SimpleNamespace(name="Apple", asset_class="Equity"),
+                SimpleNamespace(status="CURRENT"),
+            )
+        ]
+
+    async def get_changes(session_id: str):
+        assert session_id == "S1"
+        await baseline_started.wait()
+        changes_started.set()
+        return []
+
+    position_repo.get_latest_positions_by_portfolio.side_effect = get_latest_positions_by_portfolio
+    repo.get_changes.side_effect = get_changes
+    instrument_repo.get_by_security_ids.return_value = []
+
+    service = SimulationService(AsyncMock())
+    response = await asyncio.wait_for(service.get_projected_positions("S1"), timeout=1)
+
+    assert response.positions[0].security_id == "SEC_AAPL_US"
+    assert response.positions[0].proposed_quantity == Decimal("100")
+    position_repo.get_latest_position_history_by_portfolio.assert_not_awaited()
 
 
 async def test_delete_change_returns_updated_changes(mock_dependencies):
