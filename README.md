@@ -89,9 +89,9 @@ Boundary rules that matter:
    preserve operational cash-movement components across a bounded one-year operational horizon
    without deriving liquidity ladders, income-needs advice, or OMS execution forecasts.
 9. `PortfolioCashMovementSummary:v1` emits source-owned cash movement totals over latest cashflow
-   rows by classification, timing, currency, and flow scope without claiming cashflow forecasting,
-   funding recommendations, treasury instructions, liquidity advice, execution quality, tax
-   methodology, or OMS acknowledgement.
+   rows by classification, timing, currency, and flow scope across a bounded one-year operational
+   window without claiming cashflow forecasting, funding recommendations, treasury instructions,
+   liquidity advice, execution quality, tax methodology, or OMS acknowledgement.
 10. RFC39-WTBD-008 external treasury source products now include active fail-closed
     `ExternalCurrencyExposure:v1`, `ExternalHedgePolicy:v1`,
     `ExternalEligibleHedgeInstrument:v1`, `ExternalFXForwardCurve:v1`, and

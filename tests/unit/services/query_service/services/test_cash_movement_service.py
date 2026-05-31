@@ -147,6 +147,23 @@ async def test_cash_movement_summary_rejects_invalid_window(mock_repo: AsyncMock
     mock_repo.get_portfolio_cash_movement_summary.assert_not_awaited()
 
 
+async def test_cash_movement_summary_rejects_excessive_window(mock_repo: AsyncMock) -> None:
+    with patch(
+        "src.services.query_service.app.services.cash_movement_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashMovementService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(ValueError, match="date window must be 366 days or less"):
+            await service.get_cash_movement_summary(
+                portfolio_id="P1",
+                start_date=date(2026, 1, 1),
+                end_date=date(2027, 1, 2),
+            )
+
+    mock_repo.get_portfolio_currency.assert_not_awaited()
+    mock_repo.get_portfolio_cash_movement_summary.assert_not_awaited()
+
+
 async def test_cash_movement_summary_raises_when_portfolio_missing(
     mock_repo: AsyncMock,
 ) -> None:

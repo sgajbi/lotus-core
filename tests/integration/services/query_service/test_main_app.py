@@ -729,14 +729,16 @@ async def test_openapi_describes_cash_movement_summary_contract_examples(async_t
     start_date = next(
         parameter for parameter in summary["parameters"] if parameter["name"] == "start_date"
     )
-    assert start_date["description"] == "Inclusive cashflow-date window start."
+    assert "inclusive window cannot exceed 366 days" in start_date["description"]
     end_date = next(
         parameter for parameter in summary["parameters"] if parameter["name"] == "end_date"
     )
-    assert end_date["description"] == "Inclusive cashflow-date window end."
+    assert "inclusive window cannot exceed 366 days" in end_date["description"]
 
     invalid_window = summary["responses"]["400"]["content"]["application/json"]["example"]
-    assert invalid_window["detail"] == "start_date must be on or before end_date"
+    assert invalid_window["detail"] == (
+        "cash movement summary date window must be 366 days or less"
+    )
     not_found = summary["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-CASH-001 not found"
 

@@ -6,12 +6,16 @@ from portfolio_common.source_data_products import source_data_product_openapi_ex
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.cash_movement_dto import PortfolioCashMovementSummaryResponse
-from ..services.cash_movement_service import CashMovementService
+from ..services.cash_movement_service import MAX_CASH_MOVEMENT_WINDOW_DAYS, CashMovementService
 
 router = APIRouter(prefix="/portfolios", tags=["Cash Movements"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-CASH-001 not found"}
-INVALID_DATE_WINDOW_RESPONSE_EXAMPLE = {"detail": "start_date must be on or before end_date"}
+INVALID_DATE_WINDOW_RESPONSE_EXAMPLE = {
+    "detail": (
+        f"cash movement summary date window must be {MAX_CASH_MOVEMENT_WINDOW_DAYS} days or less"
+    )
+}
 
 
 def get_cash_movement_service(
@@ -36,7 +40,7 @@ def get_cash_movement_service(
     summary="Get Portfolio Cash Movement Summary",
     description=(
         "What: Return source-owned portfolio cash movement totals for a bounded cashflow-date "
-        "window.\n"
+        f"window of up to {MAX_CASH_MOVEMENT_WINDOW_DAYS} days.\n"
         "How: Aggregates latest cashflow rows by source-owned classification, timing, currency, "
         "and portfolio/position flow scope while preserving source-data product metadata.\n"
         "When: Use this route when downstream outcome, reporting, or DPM consumers need cash "
@@ -53,12 +57,18 @@ async def get_cash_movement_summary(
     ),
     start_date: date = Query(
         ...,
-        description="Inclusive cashflow-date window start.",
+        description=(
+            "Inclusive cashflow-date window start. The inclusive window cannot exceed "
+            f"{MAX_CASH_MOVEMENT_WINDOW_DAYS} days."
+        ),
         examples=["2026-03-01"],
     ),
     end_date: date = Query(
         ...,
-        description="Inclusive cashflow-date window end.",
+        description=(
+            "Inclusive cashflow-date window end. The inclusive window cannot exceed "
+            f"{MAX_CASH_MOVEMENT_WINDOW_DAYS} days."
+        ),
         examples=["2026-03-31"],
     ),
     service: CashMovementService = Depends(get_cash_movement_service),
@@ -70,7 +80,10 @@ async def get_cash_movement_summary(
             end_date=end_date,
         )
     except ValueError as exc:
+        detail = str(exc)
         status_code = (
-            status.HTTP_400_BAD_REQUEST if "start_date" in str(exc) else status.HTTP_404_NOT_FOUND
+            status.HTTP_400_BAD_REQUEST
+            if "start_date" in detail or "date window" in detail
+            else status.HTTP_404_NOT_FOUND
         )
-        raise HTTPException(status_code=status_code, detail=str(exc))
+        raise HTTPException(status_code=status_code, detail=detail)

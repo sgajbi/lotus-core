@@ -9,6 +9,8 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..repositories.cashflow_repository import CashflowRepository
 from .decimal_amounts import decimal_or_zero
 
+MAX_CASH_MOVEMENT_WINDOW_DAYS = 366
+
 
 class CashMovementService:
     """Builds source-owned cash movement summaries from latest cashflow rows."""
@@ -24,6 +26,12 @@ class CashMovementService:
     ) -> PortfolioCashMovementSummaryResponse:
         if start_date > end_date:
             raise ValueError("start_date must be on or before end_date")
+        window_days = (end_date - start_date).days + 1
+        if window_days > MAX_CASH_MOVEMENT_WINDOW_DAYS:
+            raise ValueError(
+                "cash movement summary date window must be "
+                f"{MAX_CASH_MOVEMENT_WINDOW_DAYS} days or less"
+            )
 
         portfolio_currency = await self.repo.get_portfolio_currency(portfolio_id)
         if portfolio_currency is None:
