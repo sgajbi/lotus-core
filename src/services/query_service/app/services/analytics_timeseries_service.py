@@ -692,17 +692,14 @@ class AnalyticsTimeseriesService:
         }
         snapshot_epoch = int(cursor["snapshot_epoch"]) if cursor.get("snapshot_epoch") else None
         if snapshot_epoch is None:
-            if hasattr(self.repo, "get_position_snapshot_epoch"):
-                snapshot_epoch = await self.repo.get_position_snapshot_epoch(
-                    portfolio_id=portfolio_id,
-                    start_date=resolved_window.start_date,
-                    end_date=resolved_window.end_date,
-                    security_ids=request.filters.security_ids,
-                    position_ids=request.filters.position_ids,
-                    dimension_filters=dimension_filters,
-                )
-            else:
-                snapshot_epoch = 0
+            snapshot_epoch = await self.repo.get_position_snapshot_epoch(
+                portfolio_id=portfolio_id,
+                start_date=resolved_window.start_date,
+                end_date=resolved_window.end_date,
+                security_ids=request.filters.security_ids,
+                position_ids=request.filters.position_ids,
+                dimension_filters=dimension_filters,
+            )
         rows = await self.repo.list_position_timeseries_rows(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
@@ -721,11 +718,7 @@ class AnalyticsTimeseriesService:
         page_start_date = min(page_dates) if page_dates else resolved_window.start_date
         page_end_date = max(page_dates) if page_dates else resolved_window.start_date
         position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = {}
-        if (
-            request.include_cash_flows
-            and rows_page
-            and hasattr(self.repo, "list_position_cashflow_rows")
-        ):
+        if request.include_cash_flows and rows_page:
             position_cashflow_rows = await self.repo.list_position_cashflow_rows(
                 portfolio_id=portfolio_id,
                 security_ids=sorted(
@@ -740,7 +733,7 @@ class AnalyticsTimeseriesService:
             )
             position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
         portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]] = {}
-        if rows_page and hasattr(self.repo, "list_portfolio_cashflow_rows"):
+        if rows_page:
             portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
                 portfolio_id=portfolio_id,
                 valuation_dates=page_dates,
@@ -772,7 +765,7 @@ class AnalyticsTimeseriesService:
         quality_distribution: dict[str, int] = {}
         response_rows: list[PositionTimeseriesRow] = []
         previous_eod_by_security: dict[str, Decimal] = {}
-        if rows_page and hasattr(self.repo, "list_latest_position_timeseries_before"):
+        if rows_page:
             first_page_date = min(row.valuation_date for row in rows_page)
             previous_rows = await self.repo.list_latest_position_timeseries_before(
                 portfolio_id=portfolio_id,

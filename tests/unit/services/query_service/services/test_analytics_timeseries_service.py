@@ -1230,6 +1230,9 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=7),
         get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     response = await service.get_position_timeseries(
@@ -1303,6 +1306,9 @@ async def test_get_position_timeseries_normalizes_sparse_numeric_rows() -> None:
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         get_fx_rates_map=AsyncMock(return_value={}),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     response = await service.get_position_timeseries(
@@ -1472,6 +1478,9 @@ async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_
         list_position_timeseries_rows=list_rows,
         get_position_snapshot_epoch=AsyncMock(side_effect=[7, 99]),
         get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     first_page = await service.get_position_timeseries(
@@ -1735,6 +1744,7 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
             ]
         ),
         get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("1.2")}),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_position_cashflow_rows=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -1766,6 +1776,8 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
                 ),
             ]
         ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
     token = service._encode_page_token(  # pylint: disable=protected-access
         {"valuation_date": "2025-01-01", "security_id": "SEC_A"}
@@ -1880,6 +1892,8 @@ async def test_position_timeseries_distinguishes_internal_trade_from_external_fu
                 ),
             ]
         ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     response = await service.get_position_timeseries(
@@ -2336,6 +2350,8 @@ async def test_get_position_timeseries_cash_only_staged_external_flows_are_not_d
                 ),
             ]
         ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     response = await service.get_position_timeseries(
@@ -2420,6 +2436,9 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
                 {date(2025, 8, 29): Decimal("1.12")},
             ]
         ),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     day_1 = await service.get_position_timeseries(
@@ -2496,6 +2515,9 @@ async def test_position_timeseries_converts_values_to_portfolio_and_reporting_cu
                 ("USD", "SGD"): {date(2025, 1, 1): Decimal("1.30")},
             }[(from_currency, to_currency)]
         ),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     response = await service.get_position_timeseries(
@@ -2569,6 +2591,9 @@ async def test_get_position_timeseries_missing_position_to_portfolio_fx_rate() -
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=1),
         get_fx_rates_map=AsyncMock(side_effect=[{}, {}]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
     with pytest.raises(AnalyticsInputError) as exc_info:
@@ -2668,7 +2693,11 @@ async def test_get_position_timeseries_missing_fx_rate() -> None:
                 )
             ]
         ),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
         get_fx_rates_map=AsyncMock(return_value={}),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
     with pytest.raises(AnalyticsInputError) as exc_info:
         await service.get_position_timeseries(
