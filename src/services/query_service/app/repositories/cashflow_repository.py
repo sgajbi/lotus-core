@@ -74,18 +74,6 @@ class CashflowRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    @async_timed(repository="CashflowRepository", method="get_portfolio_cashflow_series")
-    async def get_portfolio_cashflow_series(
-        self, portfolio_id: str, start_date: date, end_date: date
-    ) -> List[Tuple[date, Decimal]]:
-        """Returns daily aggregated portfolio cashflows for projection windows."""
-        evidence = await self.get_portfolio_cashflow_series_with_evidence(
-            portfolio_id=portfolio_id,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        return evidence.rows
-
     async def get_portfolio_cashflow_series_with_evidence(
         self, portfolio_id: str, start_date: date, end_date: date
     ) -> CashflowSeriesEvidence:
@@ -113,21 +101,6 @@ class CashflowRepository:
                 default=None,
             ),
         )
-
-    @async_timed(repository="CashflowRepository", method="get_projected_settlement_cashflow_series")
-    async def get_projected_settlement_cashflow_series(
-        self,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-    ) -> List[Tuple[date, Decimal]]:
-        """Projects future external settlement movements not yet present in booked cashflows."""
-        evidence = await self.get_projected_settlement_cashflow_series_with_evidence(
-            portfolio_id=portfolio_id,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        return evidence.rows
 
     async def get_projected_settlement_cashflow_series_with_evidence(
         self,

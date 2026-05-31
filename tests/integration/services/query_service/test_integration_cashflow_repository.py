@@ -376,11 +376,12 @@ async def test_get_portfolio_cashflow_series_uses_latest_cashflow_epoch(
     await async_db_session.commit()
 
     repo = CashflowRepository(async_db_session)
-    results = await repo.get_portfolio_cashflow_series(
+    evidence = await repo.get_portfolio_cashflow_series_with_evidence(
         portfolio_id, date(2025, 2, 1), date(2025, 2, 1)
     )
 
-    assert results == [(date(2025, 2, 1), Decimal("-50"))]
+    assert evidence.rows == [(date(2025, 2, 1), Decimal("-50"))]
+    assert evidence.latest_evidence_timestamp is not None
 
 
 async def test_get_income_cashflows_is_epoch_aware(
@@ -421,41 +422,41 @@ async def test_cashflows_allow_same_transaction_id_across_epochs(clean_db, async
     transaction_id = "EPOCH_CASHFLOW_TXN_01"
 
     async_db_session.add(
-            Portfolio(
-                portfolio_id=portfolio_id,
-                base_currency="USD",
-                open_date=date(2024, 1, 1),
-                risk_exposure="a",
-                investment_time_horizon="b",
-                portfolio_type="c",
-                booking_center_code="d",
-                client_id="e",
-                status="f",
-            )
+        Portfolio(
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="f",
         )
+    )
     async_db_session.add(
-            Transaction(
-                transaction_id=transaction_id,
-                portfolio_id=portfolio_id,
-                instrument_id="I-EPOCH-1",
-                security_id=security_id,
-                transaction_date=date(2025, 2, 10),
-                transaction_type="BUY",
-                quantity=1,
-                price=100,
-                gross_transaction_amount=100,
-                trade_currency="USD",
-                currency="USD",
-            )
+        Transaction(
+            transaction_id=transaction_id,
+            portfolio_id=portfolio_id,
+            instrument_id="I-EPOCH-1",
+            security_id=security_id,
+            transaction_date=date(2025, 2, 10),
+            transaction_type="BUY",
+            quantity=1,
+            price=100,
+            gross_transaction_amount=100,
+            trade_currency="USD",
+            currency="USD",
         )
+    )
     async_db_session.add(
-            PositionState(
-                portfolio_id=portfolio_id,
-                security_id=security_id,
-                epoch=1,
-                watermark_date=date(2025, 2, 9),
-            )
+        PositionState(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            epoch=1,
+            watermark_date=date(2025, 2, 9),
         )
+    )
     await async_db_session.flush()
 
     async_db_session.add_all(
