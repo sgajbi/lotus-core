@@ -376,6 +376,9 @@ async def test_get_portfolio_timeseries_uses_position_horizon_when_portfolio_row
             return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
+        ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -391,6 +394,7 @@ async def test_get_portfolio_timeseries_uses_position_horizon_when_portfolio_row
                 for day in (16, 17, 18, 19, 20)
             ]
         ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(return_value={}),
@@ -416,6 +420,9 @@ async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=4),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2025, 1, 1), date(2025, 1, 2)]
+        ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -444,6 +451,7 @@ async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -
                 ),
             ]
         ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -570,6 +578,9 @@ async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuit
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2025, 5, 18), date(2025, 5, 19)]
+        ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -628,6 +639,7 @@ async def test_portfolio_observation_rows_repairs_day_boundary_capital_continuit
                 ),
             ]
         ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_position_cashflow_rows=AsyncMock(
             return_value=[
@@ -678,6 +690,9 @@ async def test_portfolio_observation_rows_normalizes_security_ids_for_continuity
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2025, 5, 18), date(2025, 5, 19)]
+        ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -702,6 +717,7 @@ async def test_portfolio_observation_rows_normalizes_security_ids_for_continuity
                 ),
             ]
         ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(return_value={}),
@@ -737,6 +753,9 @@ async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlem
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=14),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2026, 2, 27), date(2026, 2, 28)]
+        ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -781,6 +800,7 @@ async def test_portfolio_observation_rows_neutralizes_internal_cash_book_settlem
                 ),
             ]
         ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_position_cashflow_rows=AsyncMock(
             return_value=[
@@ -894,6 +914,7 @@ async def test_portfolio_observation_rows_raises_when_position_fx_missing() -> N
     service = make_service()
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=1),
+        list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -906,6 +927,7 @@ async def test_portfolio_observation_rows_raises_when_position_fx_missing() -> N
                 )
             ]
         ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(side_effect=[{}, {}]),
