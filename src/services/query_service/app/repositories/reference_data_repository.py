@@ -187,6 +187,27 @@ def _ranked_instrument_eligibility_ids(security_id_expr: Any, *predicates: Any):
     )
 
 
+def _ranked_latest_effective_ids(
+    model: Any,
+    *partition_columns: Any,
+    predicates: list[Any],
+    order_by: tuple[Any, ...],
+):
+    return (
+        select(
+            model.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=partition_columns,
+                order_by=order_by,
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -395,41 +416,50 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_restrictions: bool = False,
     ) -> list[ClientRestrictionProfile]:
-        stmt = (
-            select(ClientRestrictionProfile)
-            .where(
-                ClientRestrictionProfile.portfolio_id == portfolio_id,
-                ClientRestrictionProfile.client_id == client_id,
-                _effective_filter(
-                    ClientRestrictionProfile.effective_from,
-                    ClientRestrictionProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientRestrictionProfile.restriction_scope.asc(),
-                ClientRestrictionProfile.restriction_code.asc(),
-                ClientRestrictionProfile.effective_from.desc(),
-                ClientRestrictionProfile.observed_at.desc().nulls_last(),
-                ClientRestrictionProfile.restriction_version.desc(),
-                ClientRestrictionProfile.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientRestrictionProfile.portfolio_id == portfolio_id,
+            ClientRestrictionProfile.client_id == client_id,
+            _effective_filter(
+                ClientRestrictionProfile.effective_from,
+                ClientRestrictionProfile.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     ClientRestrictionProfile.mandate_id.is_(None),
                     ClientRestrictionProfile.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_restrictions:
-            stmt = stmt.where(ClientRestrictionProfile.restriction_status == "active")
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "restriction_scope",
-            "restriction_code",
+            predicates.append(ClientRestrictionProfile.restriction_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientRestrictionProfile,
+            ClientRestrictionProfile.restriction_scope,
+            ClientRestrictionProfile.restriction_code,
+            predicates=predicates,
+            order_by=(
+                ClientRestrictionProfile.effective_from.desc(),
+                ClientRestrictionProfile.observed_at.desc().nullslast(),
+                ClientRestrictionProfile.restriction_version.desc(),
+                ClientRestrictionProfile.updated_at.desc(),
+                ClientRestrictionProfile.created_at.desc(),
+                ClientRestrictionProfile.id.desc(),
+            ),
         )
+        stmt = (
+            select(ClientRestrictionProfile)
+            .join(ranked, ClientRestrictionProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                ClientRestrictionProfile.restriction_scope.asc(),
+                ClientRestrictionProfile.restriction_code.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_sustainability_preference_profiles(
         self,
@@ -440,41 +470,50 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_preferences: bool = False,
     ) -> list[SustainabilityPreferenceProfile]:
-        stmt = (
-            select(SustainabilityPreferenceProfile)
-            .where(
-                SustainabilityPreferenceProfile.portfolio_id == portfolio_id,
-                SustainabilityPreferenceProfile.client_id == client_id,
-                _effective_filter(
-                    SustainabilityPreferenceProfile.effective_from,
-                    SustainabilityPreferenceProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                SustainabilityPreferenceProfile.preference_framework.asc(),
-                SustainabilityPreferenceProfile.preference_code.asc(),
-                SustainabilityPreferenceProfile.effective_from.desc(),
-                SustainabilityPreferenceProfile.observed_at.desc().nulls_last(),
-                SustainabilityPreferenceProfile.preference_version.desc(),
-                SustainabilityPreferenceProfile.updated_at.desc(),
-            )
-        )
+        predicates = [
+            SustainabilityPreferenceProfile.portfolio_id == portfolio_id,
+            SustainabilityPreferenceProfile.client_id == client_id,
+            _effective_filter(
+                SustainabilityPreferenceProfile.effective_from,
+                SustainabilityPreferenceProfile.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     SustainabilityPreferenceProfile.mandate_id.is_(None),
                     SustainabilityPreferenceProfile.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_preferences:
-            stmt = stmt.where(SustainabilityPreferenceProfile.preference_status == "active")
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "preference_framework",
-            "preference_code",
+            predicates.append(SustainabilityPreferenceProfile.preference_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            SustainabilityPreferenceProfile,
+            SustainabilityPreferenceProfile.preference_framework,
+            SustainabilityPreferenceProfile.preference_code,
+            predicates=predicates,
+            order_by=(
+                SustainabilityPreferenceProfile.effective_from.desc(),
+                SustainabilityPreferenceProfile.observed_at.desc().nullslast(),
+                SustainabilityPreferenceProfile.preference_version.desc(),
+                SustainabilityPreferenceProfile.updated_at.desc(),
+                SustainabilityPreferenceProfile.created_at.desc(),
+                SustainabilityPreferenceProfile.id.desc(),
+            ),
         )
+        stmt = (
+            select(SustainabilityPreferenceProfile)
+            .join(ranked, SustainabilityPreferenceProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                SustainabilityPreferenceProfile.preference_framework.asc(),
+                SustainabilityPreferenceProfile.preference_code.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_client_tax_profiles(
         self,

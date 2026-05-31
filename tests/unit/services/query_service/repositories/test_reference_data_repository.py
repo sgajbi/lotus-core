@@ -339,11 +339,6 @@ async def test_reference_data_repository_lists_latest_client_restriction_profile
                 restriction_version=2,
             ),
             SimpleNamespace(
-                restriction_scope="asset_class",
-                restriction_code="NO_PRIVATE_CREDIT_BUY",
-                restriction_version=1,
-            ),
-            SimpleNamespace(
                 restriction_scope="country",
                 restriction_code="NO_SANCTIONED_MARKET_BUY",
                 restriction_version=1,
@@ -365,6 +360,12 @@ async def test_reference_data_repository_lists_latest_client_restriction_profile
     ]
     assert rows[0].restriction_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY client_restriction_profiles.restriction_scope, "
+        "client_restriction_profiles.restriction_code"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -376,11 +377,6 @@ async def test_reference_data_repository_lists_latest_sustainability_preferences
                 preference_framework="LOTUS_SUSTAINABILITY_V1",
                 preference_code="MIN_SUSTAINABLE_ALLOCATION",
                 preference_version=2,
-            ),
-            SimpleNamespace(
-                preference_framework="LOTUS_SUSTAINABILITY_V1",
-                preference_code="MIN_SUSTAINABLE_ALLOCATION",
-                preference_version=1,
             ),
             SimpleNamespace(
                 preference_framework="LOTUS_SUSTAINABILITY_V1",
@@ -404,6 +400,13 @@ async def test_reference_data_repository_lists_latest_sustainability_preferences
     ]
     assert rows[0].preference_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY "
+        "sustainability_preference_profiles.preference_framework, "
+        "sustainability_preference_profiles.preference_code"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
