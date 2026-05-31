@@ -1931,6 +1931,72 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_position_timeseries_reads_page_support_inputs_concurrently() -> None:
+    service = make_service()
+    portfolio_cashflow_started = asyncio.Event()
+    position_cashflow_started = asyncio.Event()
+
+    async def list_portfolio_cashflow_rows(**_: object) -> list[object]:
+        portfolio_cashflow_started.set()
+        await position_cashflow_started.wait()
+        return []
+
+    async def list_position_cashflow_rows(**_: object) -> list[object]:
+        await portfolio_cashflow_started.wait()
+        position_cashflow_started.set()
+        return []
+
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2020, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_A",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=Decimal("10"),
+                    eod_market_value=Decimal("11"),
+                    bod_cashflow_position=Decimal("0"),
+                    quantity=Decimal("1"),
+                    epoch=0,
+                    asset_class="Equity",
+                    position_currency="USD",
+                )
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_position_cashflow_rows=AsyncMock(side_effect=list_position_cashflow_rows),
+        list_portfolio_cashflow_rows=AsyncMock(side_effect=list_portfolio_cashflow_rows),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+    )
+
+    response = await asyncio.wait_for(
+        service.get_position_timeseries(
+            portfolio_id="P1",
+            request=PositionAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+                reporting_currency="USD",
+                include_cash_flows=True,
+                page=PageRequest(page_size=10),
+                dimensions=["asset_class"],
+            ),
+        ),
+        timeout=1,
+    )
+
+    assert response.rows[0].ending_market_value_position_currency == Decimal("11")
+    service.repo.list_portfolio_cashflow_rows.assert_awaited_once()
+    service.repo.list_position_cashflow_rows.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_position_timeseries_distinguishes_internal_trade_from_external_funding() -> None:
     service = make_service()
     service.repo = SimpleNamespace(

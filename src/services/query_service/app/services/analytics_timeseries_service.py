@@ -725,72 +725,84 @@ class AnalyticsTimeseriesService:
         page_start_date = min(page_dates) if page_dates else resolved_window.start_date
         page_end_date = max(page_dates) if page_dates else resolved_window.start_date
         position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = {}
-        if request.include_cash_flows and rows_page:
-            position_cashflow_rows = await self.repo.list_position_cashflow_rows(
-                portfolio_id=portfolio_id,
-                security_ids=sorted(
-                    {
-                        security_id
-                        for row in rows_page
-                        if (security_id := normalize_security_id(row.security_id))
-                    }
-                ),
-                valuation_dates=page_dates,
-                snapshot_epoch=snapshot_epoch,
-            )
-            position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
         portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]] = {}
+        position_to_portfolio_rates: dict[str, dict[date, Decimal]] = {}
+        fx_rates: dict[date, Decimal] = {}
+        previous_eod_by_security: dict[str, Decimal] = {}
         if rows_page:
-            portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
-                portfolio_id=portfolio_id,
-                valuation_dates=page_dates,
-                snapshot_epoch=snapshot_epoch,
+            first_page_date = min(row.valuation_date for row in rows_page)
+            normalized_security_ids = sorted(
+                {
+                    security_id
+                    for row in rows_page
+                    if (security_id := normalize_security_id(row.security_id))
+                }
             )
+            support_reads = [
+                self.repo.list_portfolio_cashflow_rows(
+                    portfolio_id=portfolio_id,
+                    valuation_dates=page_dates,
+                    snapshot_epoch=snapshot_epoch,
+                ),
+                self._get_position_to_portfolio_rate_maps(
+                    position_currencies={str(row.position_currency or "") for row in rows_page},
+                    portfolio_currency=portfolio_currency,
+                    start_date=page_start_date,
+                    end_date=page_end_date,
+                ),
+                self._get_conversion_rates(
+                    portfolio_currency=portfolio_currency,
+                    reporting_currency=reporting_currency,
+                    start_date=page_start_date,
+                    end_date=page_end_date,
+                ),
+                self.repo.list_latest_position_timeseries_before(
+                    portfolio_id=portfolio_id,
+                    before_date=first_page_date,
+                    security_ids=normalized_security_ids,
+                    snapshot_epoch=snapshot_epoch,
+                ),
+            ]
+            if request.include_cash_flows:
+                (
+                    portfolio_cashflow_rows,
+                    position_to_portfolio_rates,
+                    fx_rates,
+                    previous_rows,
+                    position_cashflow_rows,
+                ) = await asyncio.gather(
+                    *support_reads,
+                    self.repo.list_position_cashflow_rows(
+                        portfolio_id=portfolio_id,
+                        security_ids=normalized_security_ids,
+                        valuation_dates=page_dates,
+                        snapshot_epoch=snapshot_epoch,
+                    ),
+                )
+                position_cashflows_by_key = self._position_cash_flows_for_keys(
+                    position_cashflow_rows
+                )
+            else:
+                (
+                    portfolio_cashflow_rows,
+                    position_to_portfolio_rates,
+                    fx_rates,
+                    previous_rows,
+                ) = await asyncio.gather(*support_reads)
             portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
                 portfolio_cashflow_rows,
                 reporting_currency=portfolio_currency,
                 portfolio_currency=portfolio_currency,
                 fx_rates={},
             )
-
-        position_to_portfolio_rates: dict[str, dict[date, Decimal]] = {}
-        fx_rates: dict[date, Decimal] = {}
-        if rows_page:
-            position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-                position_currencies={str(row.position_currency or "") for row in rows_page},
-                portfolio_currency=portfolio_currency,
-                start_date=page_start_date,
-                end_date=page_end_date,
-            )
-            fx_rates = await self._get_conversion_rates(
-                portfolio_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
-                start_date=page_start_date,
-                end_date=page_end_date,
-            )
-
-        quality_distribution: dict[str, int] = {}
-        response_rows: list[PositionTimeseriesRow] = []
-        previous_eod_by_security: dict[str, Decimal] = {}
-        if rows_page:
-            first_page_date = min(row.valuation_date for row in rows_page)
-            previous_rows = await self.repo.list_latest_position_timeseries_before(
-                portfolio_id=portfolio_id,
-                before_date=first_page_date,
-                security_ids=sorted(
-                    {
-                        security_id
-                        for row in rows_page
-                        if (security_id := normalize_security_id(row.security_id))
-                    }
-                ),
-                snapshot_epoch=snapshot_epoch,
-            )
             previous_eod_by_security = {
                 normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
                 for row in previous_rows
                 if row.valuation_date == first_page_date - timedelta(days=1)
             }
+
+        quality_distribution: dict[str, int] = {}
+        response_rows: list[PositionTimeseriesRow] = []
         current_valuation_date: date | None = None
         current_eod_by_security: dict[str, Decimal] = {}
         for row in rows_page:
