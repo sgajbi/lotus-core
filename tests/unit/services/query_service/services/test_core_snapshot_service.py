@@ -671,7 +671,7 @@ async def test_resolve_projected_positions_handles_non_positive_quantity_branch(
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
         baseline_positions={},
         include_zero=True,
         include_cash=True,
@@ -702,7 +702,7 @@ async def test_resolve_projected_positions_normalizes_change_security_ids(mock_d
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
         baseline_positions={
             "SEC_EXISTING": {
                 "security_id": "SEC_EXISTING",
@@ -743,17 +743,14 @@ async def test_resolve_projected_positions_prices_new_security_with_fx(mock_depe
     ]
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_EUR", "EUR", "EQUITY")]
     price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency="EUR")]
-    fx_repo.get_fx_rates.side_effect = [
-        [SimpleNamespace(rate=Decimal("1.2"))],  # EUR -> USD portfolio
-        [SimpleNamespace(rate=Decimal("1.5"))],  # USD -> SGD reporting
-    ]
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.2"))]
     service = CoreSnapshotService(AsyncMock())
 
     projected = await service._resolve_projected_positions(
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="SGD",
+        portfolio_to_reporting_fx=Decimal("1.5"),
         baseline_positions={},
         include_zero=True,
         include_cash=True,
@@ -761,6 +758,54 @@ async def test_resolve_projected_positions_prices_new_security_with_fx(mock_depe
 
     assert projected["SEC_NEW_EUR"]["market_value_local"] == Decimal("20")
     assert projected["SEC_NEW_EUR"]["market_value_base"] == Decimal("36")
+    fx_repo.get_fx_rates.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="USD",
+        end_date=date(2026, 2, 27),
+    )
+
+
+async def test_resolve_projected_positions_reuses_market_fx_per_currency(mock_dependencies):
+    (_, _, simulation_repo, price_repo, fx_repo, instrument_repo) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_NEW_EUR_A",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        ),
+        SimpleNamespace(
+            security_id="SEC_NEW_EUR_B",
+            transaction_type="BUY",
+            quantity=Decimal("3"),
+            amount=None,
+        ),
+    ]
+    instrument_repo.get_by_security_ids.return_value = [
+        _instrument("SEC_NEW_EUR_A", "EUR", "EQUITY"),
+        _instrument("SEC_NEW_EUR_B", "EUR", "EQUITY"),
+    ]
+    price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency=" eur ")]
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.2"))]
+    service = CoreSnapshotService(AsyncMock())
+
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1.5"),
+        baseline_positions={},
+        include_zero=True,
+        include_cash=True,
+    )
+
+    assert projected["SEC_NEW_EUR_A"]["market_value_base"] == Decimal("36.0")
+    assert projected["SEC_NEW_EUR_B"]["market_value_base"] == Decimal("54.0")
+    fx_repo.get_fx_rates.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="USD",
+        end_date=date(2026, 2, 27),
+    )
 
 
 async def test_resolve_projected_positions_filters_cash_and_zero_quantity(mock_dependencies):
@@ -772,7 +817,7 @@ async def test_resolve_projected_positions_filters_cash_and_zero_quantity(mock_d
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
         baseline_positions={
             "SEC_CASH": {
                 "security_id": "SEC_CASH",

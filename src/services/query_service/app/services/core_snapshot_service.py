@@ -189,7 +189,7 @@ class CoreSnapshotService:
                 session_id=session.session_id,
                 as_of_date=request.as_of_date,
                 portfolio_base_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
+                portfolio_to_reporting_fx=reporting_fx,
                 baseline_positions=baseline_positions,
                 include_zero=request.options.include_zero_quantity_positions,
                 include_cash=request.options.include_cash_positions,
@@ -458,7 +458,7 @@ class CoreSnapshotService:
         session_id: str,
         as_of_date,
         portfolio_base_currency: str,
-        reporting_currency: str,
+        portfolio_to_reporting_fx: Decimal,
         baseline_positions: dict[str, dict[str, Any]],
         include_zero: bool,
         include_cash: bool,
@@ -518,6 +518,7 @@ class CoreSnapshotService:
             delta = self._change_quantity_effect(change)
             entry["quantity"] = entry["quantity"] + delta
 
+        market_to_portfolio_fx: dict[str, Decimal] = {}
         for security_id, entry in projected.items():
             if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
                 continue
@@ -548,20 +549,17 @@ class CoreSnapshotService:
                 )
             latest_price = prices[-1]
             local_value = Decimal(str(latest_price.price)) * quantity
-            market_currency = latest_price.currency
-            fx_to_portfolio = await self._get_fx_rate_or_raise(
-                from_currency=market_currency,
-                to_currency=portfolio_base_currency,
-                as_of_date=as_of_date,
-            )
+            market_currency = normalize_currency_code(str(latest_price.currency))
+            if market_currency not in market_to_portfolio_fx:
+                market_to_portfolio_fx[market_currency] = await self._get_fx_rate_or_raise(
+                    from_currency=market_currency,
+                    to_currency=portfolio_base_currency,
+                    as_of_date=as_of_date,
+                )
+            fx_to_portfolio = market_to_portfolio_fx[market_currency]
             portfolio_value = local_value * fx_to_portfolio
-            fx_to_reporting = await self._get_fx_rate_or_raise(
-                from_currency=portfolio_base_currency,
-                to_currency=reporting_currency,
-                as_of_date=as_of_date,
-            )
             entry["market_value_local"] = local_value
-            entry["market_value_base"] = portfolio_value * fx_to_reporting
+            entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
 
         filtered: dict[str, dict[str, Any]] = {}
         for key, value in projected.items():
