@@ -80,7 +80,6 @@ from ..dtos.reference_integration_dto import (
     PlannedWithdrawalScheduleSupportability,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
-    PortfolioManagerBookMembershipSupportability,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     RebalanceBandContext,
@@ -123,6 +122,10 @@ from .market_data_coverage import (
 from .market_reference_coverage import market_reference_coverage_response
 from .model_portfolio_targets import build_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
+from .portfolio_manager_book_membership import (
+    build_portfolio_manager_book_membership_response,
+    portfolio_manager_book_membership_portfolio_types,
+)
 from .portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
     portfolio_tax_lot_after_sort_key,
@@ -146,7 +149,6 @@ from .reference_data_mappers import (
     index_return_series_point,
     liquidity_reserve_requirement_entry,
     planned_withdrawal_schedule_entry,
-    portfolio_manager_book_member,
     risk_free_series_point,
     sustainability_preference_profile_entry,
 )
@@ -253,11 +255,7 @@ class IntegrationService:
         portfolio_manager_id: str,
         request: PortfolioManagerBookMembershipRequest,
     ) -> PortfolioManagerBookMembershipResponse:
-        portfolio_types = [
-            portfolio_type.strip().upper()
-            for portfolio_type in request.portfolio_types
-            if portfolio_type.strip()
-        ]
+        portfolio_types = portfolio_manager_book_membership_portfolio_types(request)
         rows = await self._portfolio_repository.list_portfolio_manager_book_members(
             portfolio_manager_id=portfolio_manager_id,
             as_of_date=request.as_of_date,
@@ -265,56 +263,11 @@ class IntegrationService:
             portfolio_types=portfolio_types,
             include_inactive=request.include_inactive,
         )
-        members = [portfolio_manager_book_member(row) for row in rows]
-        filters_applied = ["portfolio_manager_id", "as_of_date"]
-        if request.booking_center_code:
-            filters_applied.append("booking_center_code")
-        if portfolio_types:
-            filters_applied.append("portfolio_types")
-        if not request.include_inactive:
-            filters_applied.extend(["active_lifecycle_window", "active_status"])
-
-        supportability_state: Literal["READY", "INCOMPLETE"] = "READY"
-        supportability_reason = "PM_BOOK_MEMBERSHIP_READY"
-        if not members:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "PM_BOOK_MEMBERSHIP_EMPTY"
-
-        snapshot_id = build_request_fingerprint(
-            {
-                "product_name": "PortfolioManagerBookMembership",
-                "portfolio_manager_id": portfolio_manager_id,
-                "as_of_date": request.as_of_date.isoformat(),
-                "booking_center_code": request.booking_center_code,
-                "portfolio_types": portfolio_types,
-                "include_inactive": request.include_inactive,
-                "portfolio_ids": [member.portfolio_id for member in members],
-            }
-        )
-        latest_evidence_timestamp = latest_reference_evidence_timestamp(rows)
-
-        return PortfolioManagerBookMembershipResponse(
+        return build_portfolio_manager_book_membership_response(
             portfolio_manager_id=portfolio_manager_id,
-            booking_center_code=request.booking_center_code,
-            members=members,
-            supportability=PortfolioManagerBookMembershipSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                returned_portfolio_count=len(members),
-                filters_applied=filters_applied,
-            ),
-            lineage={
-                "source_system": "lotus-core",
-                "source_table": "portfolios",
-                "source_field": "advisor_id",
-                "contract_version": "rfc_041_pm_book_membership_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                data_quality_status="ACCEPTED" if members else "MISSING",
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                snapshot_id=f"pm_book_membership:{snapshot_id}",
-            ),
+            request=request,
+            portfolio_types=portfolio_types,
+            rows=rows,
         )
 
     async def resolve_cio_model_change_affected_cohort(
