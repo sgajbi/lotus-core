@@ -1885,6 +1885,15 @@ class PortfolioAggregationJob(Base):
             "updated_at",
             "id",
         ),
+        Index(
+            "ix_agg_jobs_port_corr_date_updated_id",
+            "portfolio_id",
+            "correlation_id",
+            "aggregation_date",
+            "updated_at",
+            "id",
+            postgresql_where=correlation_id.is_not(None),
+        ),
     )
 
 
@@ -1967,6 +1976,15 @@ class PortfolioValuationJob(Base):
             "epoch",
             valuation_date.desc(),
             id.desc(),
+        ),
+        Index(
+            "ix_val_jobs_port_corr_date_updated_id",
+            "portfolio_id",
+            "correlation_id",
+            "valuation_date",
+            "updated_at",
+            "id",
+            postgresql_where=correlation_id.is_not(None),
         ),
     )
 

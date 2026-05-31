@@ -441,6 +441,7 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
     ]
     claim_order_epoch = indexes["ix_portfolio_valuation_jobs_claim_order_epoch"]
     lineage_latest = indexes["ix_val_jobs_lineage_latest"]
+    correlation_support = indexes["ix_val_jobs_port_corr_date_updated_id"]
 
     assert [column.name for column in portfolio_status_updated.columns] == [
         "portfolio_id",
@@ -469,6 +470,17 @@ def test_portfolio_valuation_job_declares_operations_hot_path_indexes():
         "portfolio_valuation_jobs.valuation_date DESC",
         "portfolio_valuation_jobs.id DESC",
     ]
+    assert [column.name for column in correlation_support.columns] == [
+        "portfolio_id",
+        "correlation_id",
+        "valuation_date",
+        "updated_at",
+        "id",
+    ]
+    assert (
+        str(correlation_support.dialect_options["postgresql"]["where"])
+        == "portfolio_valuation_jobs.correlation_id IS NOT NULL"
+    )
 
 
 def test_normalized_calculation_lookup_indexes_are_declared():
@@ -634,6 +646,7 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
         "ix_portfolio_aggregation_jobs_portfolio_status_date_updated_id"
     ]
     claim_order = indexes["ix_portfolio_aggregation_jobs_claim_order"]
+    correlation_support = indexes["ix_agg_jobs_port_corr_date_updated_id"]
 
     assert [column.name for column in portfolio_status_updated.columns] == [
         "portfolio_id",
@@ -653,6 +666,17 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
         "aggregation_date",
         "id",
     ]
+    assert [column.name for column in correlation_support.columns] == [
+        "portfolio_id",
+        "correlation_id",
+        "aggregation_date",
+        "updated_at",
+        "id",
+    ]
+    assert (
+        str(correlation_support.dialect_options["postgresql"]["where"])
+        == "portfolio_aggregation_jobs.correlation_id IS NOT NULL"
+    )
 
 
 def test_api_query_hot_path_indexes_are_declared():
