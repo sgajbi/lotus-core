@@ -113,6 +113,32 @@ def _canonical_series_ranked_subquery(model: Any, *partition_columns: Any, predi
     )
 
 
+def _ranked_portfolio_mandate_binding_ids(*predicates: Any):
+    return (
+        select(
+            PortfolioMandateBinding.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    PortfolioMandateBinding.portfolio_id,
+                    PortfolioMandateBinding.mandate_id,
+                ),
+                order_by=(
+                    PortfolioMandateBinding.effective_from.desc(),
+                    PortfolioMandateBinding.observed_at.desc().nullslast(),
+                    PortfolioMandateBinding.binding_version.desc(),
+                    PortfolioMandateBinding.updated_at.desc(),
+                    PortfolioMandateBinding.created_at.desc(),
+                    PortfolioMandateBinding.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -207,36 +233,32 @@ class ReferenceDataRepository:
         booking_center_code: str | None = None,
         include_inactive_mandates: bool = False,
     ) -> list[PortfolioMandateBinding]:
+        predicates = [
+            PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
+            PortfolioMandateBinding.mandate_type == "discretionary",
+            _effective_filter(
+                PortfolioMandateBinding.effective_from,
+                PortfolioMandateBinding.effective_to,
+                as_of_date,
+            ),
+        ]
+        if booking_center_code:
+            predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        if not include_inactive_mandates:
+            predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
+
+        ranked = _ranked_portfolio_mandate_binding_ids(*predicates)
         stmt = (
             select(PortfolioMandateBinding)
-            .where(
-                PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
-                PortfolioMandateBinding.mandate_type == "discretionary",
-                _effective_filter(
-                    PortfolioMandateBinding.effective_from,
-                    PortfolioMandateBinding.effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(
                 PortfolioMandateBinding.portfolio_id.asc(),
                 PortfolioMandateBinding.mandate_id.asc(),
-                PortfolioMandateBinding.effective_from.desc(),
-                PortfolioMandateBinding.observed_at.desc().nulls_last(),
-                PortfolioMandateBinding.binding_version.desc(),
-                PortfolioMandateBinding.updated_at.desc(),
             )
         )
-        if booking_center_code:
-            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
-        if not include_inactive_mandates:
-            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "portfolio_id",
-            "mandate_id",
-        )
+        return list(result.scalars().all())
 
     async def list_dpm_portfolio_universe_candidates(
         self,
@@ -248,45 +270,44 @@ class ReferenceDataRepository:
         after_sort_key: tuple[str, str] | None = None,
         limit: int | None = None,
     ) -> list[PortfolioMandateBinding]:
+        predicates = [
+            PortfolioMandateBinding.mandate_type == "discretionary",
+            _effective_filter(
+                PortfolioMandateBinding.effective_from,
+                PortfolioMandateBinding.effective_to,
+                as_of_date,
+            ),
+        ]
+        if booking_center_code:
+            predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        if model_portfolio_ids:
+            predicates.append(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
+        if not include_inactive_mandates:
+            predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
+
+        ranked = _ranked_portfolio_mandate_binding_ids(*predicates)
         stmt = (
             select(PortfolioMandateBinding)
-            .where(
-                PortfolioMandateBinding.mandate_type == "discretionary",
-                _effective_filter(
-                    PortfolioMandateBinding.effective_from,
-                    PortfolioMandateBinding.effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(
                 PortfolioMandateBinding.portfolio_id.asc(),
                 PortfolioMandateBinding.mandate_id.asc(),
-                PortfolioMandateBinding.effective_from.desc(),
-                PortfolioMandateBinding.observed_at.desc().nulls_last(),
-                PortfolioMandateBinding.binding_version.desc(),
-                PortfolioMandateBinding.updated_at.desc(),
             )
         )
-        if booking_center_code:
-            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
-        if model_portfolio_ids:
-            stmt = stmt.where(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
-        if not include_inactive_mandates:
-            stmt = stmt.where(PortfolioMandateBinding.discretionary_authority_status == "active")
+        if after_sort_key is not None:
+            stmt = stmt.where(
+                tuple_(
+                    PortfolioMandateBinding.portfolio_id,
+                    PortfolioMandateBinding.mandate_id,
+                )
+                > after_sort_key
+            )
+        if limit is not None:
+            stmt = stmt.limit(limit)
 
         result = await self._db.execute(stmt)
-        rows = _latest_effective_rows(
-            list(result.scalars().all()),
-            "portfolio_id",
-            "mandate_id",
-        )
-        if after_sort_key is not None:
-            rows = [
-                row for row in rows if (str(row.portfolio_id), str(row.mandate_id)) > after_sort_key
-            ]
-        if limit is not None:
-            rows = rows[:limit]
-        return rows
+        return list(result.scalars().all())
 
     async def resolve_discretionary_mandate_binding(
         self,

@@ -836,6 +836,11 @@ async def test_list_model_portfolio_affected_mandates_uses_source_filters() -> N
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
     assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
     assert "lower(trim(portfolio_mandate_bindings.discretionary_authority_status))" not in compiled
+    assert (
+        "row_number() OVER (PARTITION BY portfolio_mandate_bindings.portfolio_id, "
+        "portfolio_mandate_bindings.mandate_id"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -861,13 +866,6 @@ async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cu
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
-            SimpleNamespace(
-                portfolio_id="PB_SG_GLOBAL_BAL_001",
-                mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-                effective_from=date(2026, 5, 1),
-                updated_at=None,
-                created_at=None,
-            ),
             SimpleNamespace(
                 portfolio_id="PB_SG_INCOME_002",
                 mandate_id="MANDATE_PB_SG_INCOME_002",
@@ -898,6 +896,12 @@ async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cu
         "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')"
         in compiled
     )
+    assert (
+        "(portfolio_mandate_bindings.portfolio_id, portfolio_mandate_bindings.mandate_id) > "
+        "('PB_SG_GLOBAL_BAL_001', 'MANDATE_PB_SG_GLOBAL_BAL_001')"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
+    assert "LIMIT 1" in compiled
 
 
 @pytest.mark.asyncio
