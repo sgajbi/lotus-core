@@ -136,18 +136,24 @@ class TransactionService:
         resolved_reporting_currency = reporting_currency
 
         transactions = []
+        reporting_currency_updates: list[Awaitable[None]] = []
         for transaction in db_results:
             record = TransactionRecord.model_validate(transaction)
             record.costs = [cost for cost in transaction.costs or []]
             if transaction.cashflow:
                 record.cashflow = transaction.cashflow
             if resolved_reporting_currency and effective_as_of_date is not None:
-                await self._apply_reporting_currency_fields(
-                    record=record,
-                    reporting_currency=resolved_reporting_currency,
-                    as_of_date=effective_as_of_date,
+                reporting_currency_updates.append(
+                    self._apply_reporting_currency_fields(
+                        record=record,
+                        reporting_currency=resolved_reporting_currency,
+                        as_of_date=effective_as_of_date,
+                    )
                 )
             transactions.append(record)
+
+        if reporting_currency_updates:
+            await asyncio.gather(*reporting_currency_updates)
 
         return PaginatedTransactionResponse(
             portfolio_id=portfolio_id,

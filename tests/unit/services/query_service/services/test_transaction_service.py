@@ -445,6 +445,52 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert mock_transaction_repo.get_latest_fx_rate.await_count == 2
 
 
+async def test_get_transactions_enriches_page_records_concurrently(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    first_started = asyncio.Event()
+    second_started = asyncio.Event()
+    started_by_transaction_id = {
+        "T1": first_started,
+        "T2": second_started,
+    }
+
+    async def apply_reporting_currency_fields(
+        *,
+        record: TransactionRecord,
+        reporting_currency: str,
+        as_of_date: date,
+    ) -> None:
+        started_by_transaction_id[record.transaction_id].set()
+        await asyncio.wait_for(
+            asyncio.gather(first_started.wait(), second_started.wait()),
+            timeout=1,
+        )
+        assert reporting_currency == "SGD"
+        assert as_of_date == date(2025, 1, 15)
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        service._apply_reporting_currency_fields = AsyncMock(  # type: ignore[method-assign]
+            side_effect=apply_reporting_currency_fields
+        )
+
+        response_dto = await service.get_transactions(
+            portfolio_id="P1",
+            skip=0,
+            limit=10,
+            reporting_currency="SGD",
+        )
+
+    assert [transaction.transaction_id for transaction in response_dto.transactions] == ["T1", "T2"]
+    assert service._apply_reporting_currency_fields.await_count == 2
+    assert first_started.is_set()
+    assert second_started.is_set()
+
+
 async def test_apply_reporting_currency_fields_converts_money_fields_concurrently() -> None:
     service = TransactionService(AsyncMock(spec=AsyncSession))
     record = TransactionRecord(
