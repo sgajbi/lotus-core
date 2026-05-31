@@ -518,6 +518,85 @@ async def test_resolve_allocation_rows_reuses_reporting_values_for_lookthrough()
 
 
 @pytest.mark.asyncio
+async def test_resolve_allocation_rows_reads_conversions_and_components_concurrently() -> None:
+    repo = AsyncMock()
+    rows = [
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot(" FUND1 ", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2", asset_class="EQUITY", country_of_risk="US"),
+        ),
+    ]
+    first_conversion_started = asyncio.Event()
+    second_conversion_started = asyncio.Event()
+    components_started = asyncio.Event()
+    all_started = [
+        first_conversion_started,
+        second_conversion_started,
+        components_started,
+    ]
+    started_by_amount = {
+        Decimal("100"): first_conversion_started,
+        Decimal("50"): second_conversion_started,
+    }
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        started_by_amount[amount].set()
+        await asyncio.wait_for(
+            asyncio.gather(*(event.wait() for event in all_started)),
+            timeout=1,
+        )
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return amount
+
+    async def list_components(
+        *,
+        parent_security_ids: list[str],
+        as_of_date: date,
+    ) -> list[InstrumentLookthroughComponentRow]:
+        components_started.set()
+        await asyncio.wait_for(
+            asyncio.gather(*(event.wait() for event in all_started)),
+            timeout=1,
+        )
+        assert parent_security_ids == ["FUND1", "SEC2"]
+        assert as_of_date == date(2026, 3, 27)
+        return []
+
+    repo.list_instrument_lookthrough_components.side_effect = list_components
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+        allocation_rows, lookthrough = await service._resolve_allocation_rows(
+            rows=rows,
+            requested_mode="direct_only",
+            as_of_date=date(2026, 3, 27),
+            reporting_currency="SGD",
+        )
+
+    assert [row[1].security_id for row in allocation_rows] == [" FUND1 ", "SEC2"]
+    assert lookthrough.applied_mode == "direct_only"
+    assert all(event.is_set() for event in all_started)
+
+
+@pytest.mark.asyncio
 async def test_reporting_service_can_decompose_position_requires_complete_weights() -> None:
     assert ReportingService._can_decompose_position([]) is False
     assert (
