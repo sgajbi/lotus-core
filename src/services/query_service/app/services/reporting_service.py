@@ -272,8 +272,12 @@ class ReportingService:
         as_of_date: date,
         reporting_currency: str,
     ) -> tuple[list[tuple[object | None, object, Decimal]], AllocationLookThroughInfo]:
-        direct_rows: list[tuple[object | None, object, Decimal]] = []
+        resolved_rows: list[tuple[Any, str, Decimal]] = []
+        parent_security_ids: list[str] = []
         for row in rows:
+            parent_security_id = normalize_security_id(row.snapshot.security_id)
+            if parent_security_id:
+                parent_security_ids.append(parent_security_id)
             native_value = Decimal(str(row.snapshot.market_value or ZERO))
             reporting_value = await self._convert_amount(
                 amount=native_value,
@@ -281,14 +285,15 @@ class ReportingService:
                 to_currency=reporting_currency,
                 as_of_date=as_of_date,
             )
-            direct_rows.append((row.instrument, row.snapshot, reporting_value))
+            resolved_rows.append((row, parent_security_id, reporting_value))
+
+        direct_rows = [
+            (row.instrument, row.snapshot, reporting_value)
+            for row, _parent_security_id, reporting_value in resolved_rows
+        ]
 
         component_rows = await self.repo.list_instrument_lookthrough_components(
-            parent_security_ids=[
-                security_id
-                for row in rows
-                if (security_id := normalize_security_id(row.snapshot.security_id))
-            ],
+            parent_security_ids=parent_security_ids,
             as_of_date=as_of_date,
         )
         components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)
@@ -315,15 +320,7 @@ class ReportingService:
         decomposed_position_count = 0
         undecomposed_requested_count = 0
 
-        for row in rows:
-            parent_security_id = normalize_security_id(row.snapshot.security_id)
-            native_value = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_value = await self._convert_amount(
-                amount=native_value,
-                from_currency=row.portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=as_of_date,
-            )
+        for row, parent_security_id, reporting_value in resolved_rows:
             components = components_by_parent.get(parent_security_id, [])
             if parent_security_id not in decomposable_parent_ids:
                 allocation_rows.append((row.instrument, row.snapshot, reporting_value))

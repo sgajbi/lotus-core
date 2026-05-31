@@ -405,6 +405,55 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
 
 
 @pytest.mark.asyncio
+async def test_resolve_allocation_rows_reuses_reporting_values_for_lookthrough() -> None:
+    repo = AsyncMock()
+    rows = [
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot(" FUND1 ", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2", asset_class="EQUITY", country_of_risk="US"),
+        ),
+    ]
+    repo.list_instrument_lookthrough_components.return_value = [
+        InstrumentLookthroughComponentRow(
+            parent_security_id="FUND1",
+            component_security_id="ETF1",
+            component_weight=Decimal("1"),
+            component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+        )
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=lambda *, amount, **_: amount)
+        allocation_rows, lookthrough = await service._resolve_allocation_rows(
+            rows=rows,
+            requested_mode="prefer_look_through",
+            as_of_date=date(2026, 3, 27),
+            reporting_currency="SGD",
+        )
+
+    assert service._convert_amount.await_count == len(rows)
+    assert lookthrough.applied_mode == "prefer_look_through"
+    assert allocation_rows == [
+        (
+            repo.list_instrument_lookthrough_components.return_value[0].component_instrument,
+            SimpleNamespace(security_id="ETF1"),
+            Decimal("100"),
+        ),
+        (rows[1].instrument, rows[1].snapshot, Decimal("50")),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_reporting_service_can_decompose_position_requires_complete_weights() -> None:
     assert ReportingService._can_decompose_position([]) is False
     assert (
