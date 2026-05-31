@@ -97,10 +97,19 @@ class CashBalanceResolver:
             for row in master_rows
             if (security_id := normalize_security_id(row.security_id))
         }
-        fallback_cash_account_id_rows = await self.repo.get_latest_cash_account_ids(
-            portfolio_id=portfolio.portfolio_id,
-            cash_security_ids=cash_security_ids,
-            as_of_date=resolved_as_of_date,
+        fallback_security_ids = [
+            security_id
+            for security_id in dict.fromkeys(cash_security_ids)
+            if security_id not in master_by_security_id
+        ]
+        fallback_cash_account_id_rows = (
+            await self.repo.get_latest_cash_account_ids(
+                portfolio_id=portfolio.portfolio_id,
+                cash_security_ids=fallback_security_ids,
+                as_of_date=resolved_as_of_date,
+            )
+            if fallback_security_ids
+            else {}
         )
         fallback_cash_account_ids = {
             normalize_security_id(security_id): cash_account_id
