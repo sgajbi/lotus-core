@@ -206,14 +206,18 @@ class TransactionService:
         currency_totals = self._realized_tax_currency_totals(tax_transactions)
         reporting_currency_total = None
         if resolved_reporting_currency is not None:
-            reporting_currency_total = Decimal("0")
-            for total in currency_totals:
-                reporting_currency_total += await self._convert_amount(
-                    amount=total.total_tax_amount,
-                    from_currency=total.currency,
-                    to_currency=resolved_reporting_currency,
-                    as_of_date=effective_as_of_date,
+            converted_currency_totals = await asyncio.gather(
+                *(
+                    self._convert_amount(
+                        amount=total.total_tax_amount,
+                        from_currency=total.currency,
+                        to_currency=resolved_reporting_currency,
+                        as_of_date=effective_as_of_date,
+                    )
+                    for total in currency_totals
                 )
+            )
+            reporting_currency_total = sum(converted_currency_totals, Decimal("0"))
 
         return PortfolioRealizedTaxSummaryResponse(
             portfolio_id=portfolio_id,

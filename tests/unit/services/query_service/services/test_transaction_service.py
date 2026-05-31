@@ -640,6 +640,76 @@ async def test_get_realized_tax_summary_reads_count_and_tax_evidence_concurrentl
     )
 
 
+async def test_get_realized_tax_summary_converts_currency_totals_concurrently() -> None:
+    repo = AsyncMock(spec=TransactionRepository)
+    repo.get_portfolio_base_currency.return_value = "USD"
+    repo.get_latest_business_date.return_value = date(2025, 1, 15)
+    repo.get_transactions_count.return_value = 2
+    repo.list_realized_tax_evidence_transactions.return_value = [
+        Transaction(
+            transaction_id="TAX-EUR",
+            transaction_date=datetime(2025, 1, 11),
+            transaction_type="DIVIDEND",
+            instrument_id="I1",
+            security_id="S1",
+            quantity=Decimal(0),
+            price=Decimal(0),
+            currency="EUR",
+            withholding_tax_amount=Decimal("7"),
+        ),
+        Transaction(
+            transaction_id="TAX-USD",
+            transaction_date=datetime(2025, 1, 12),
+            transaction_type="INTEREST",
+            instrument_id="I2",
+            security_id="S2",
+            quantity=Decimal(0),
+            price=Decimal(0),
+            currency="USD",
+            withholding_tax_amount=Decimal("5"),
+        ),
+    ]
+    eur_conversion_started = asyncio.Event()
+    usd_conversion_started = asyncio.Event()
+    started_by_currency = {
+        "EUR": eur_conversion_started,
+        "USD": usd_conversion_started,
+    }
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        started_by_currency[from_currency].set()
+        await asyncio.wait_for(
+            asyncio.gather(eur_conversion_started.wait(), usd_conversion_started.wait()),
+            timeout=1,
+        )
+        assert to_currency == "SGD"
+        assert as_of_date == date(2025, 1, 15)
+        return amount
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+
+        summary = await service.get_realized_tax_summary(
+            portfolio_id="P1",
+            reporting_currency="SGD",
+        )
+
+    assert summary.reporting_currency_total_tax_amount == Decimal("12")
+    assert service._convert_amount.await_count == 2
+    assert eur_conversion_started.is_set()
+    assert usd_conversion_started.is_set()
+
+
 async def test_get_realized_tax_summary_normalizes_currency_buckets(
     mock_transaction_repo: AsyncMock,
 ) -> None:
