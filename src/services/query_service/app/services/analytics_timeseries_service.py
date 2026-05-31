@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import gzip
 import hashlib
@@ -187,16 +188,20 @@ class AnalyticsTimeseriesService:
             if position_currency
         }
         rates: dict[str, dict[date, Decimal]] = {}
+        fx_rate_requests = {}
         for position_currency in sorted(normalized_position_currencies):
             if position_currency == normalized_portfolio_currency:
                 rates[position_currency] = {}
                 continue
-            rates[position_currency] = await self.repo.get_fx_rates_map(
+            fx_rate_requests[position_currency] = self.repo.get_fx_rates_map(
                 from_currency=position_currency,
                 to_currency=normalized_portfolio_currency,
                 start_date=start_date,
                 end_date=end_date,
             )
+        if fx_rate_requests:
+            resolved_rate_maps = await asyncio.gather(*fx_rate_requests.values())
+            rates.update(dict(zip(fx_rate_requests, resolved_rate_maps, strict=True)))
         return rates
 
     @staticmethod

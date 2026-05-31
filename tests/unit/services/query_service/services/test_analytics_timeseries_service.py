@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -88,6 +89,52 @@ async def test_analytics_service_deduplicates_position_currency_fx_maps() -> Non
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
     )
+
+
+@pytest.mark.asyncio
+async def test_analytics_service_reads_distinct_position_currency_fx_maps_concurrently() -> None:
+    service = make_service()
+    eur_started = asyncio.Event()
+    gbp_started = asyncio.Event()
+
+    async def get_fx_rates_map(
+        *,
+        from_currency: str,
+        to_currency: str,
+        start_date: date,
+        end_date: date,
+    ) -> dict[date, Decimal]:
+        assert to_currency == "USD"
+        assert start_date == date(2025, 1, 1)
+        assert end_date == date(2025, 1, 31)
+        if from_currency == "EUR":
+            eur_started.set()
+            await gbp_started.wait()
+            return {date(2025, 1, 1): Decimal("1.1")}
+        if from_currency == "GBP":
+            await eur_started.wait()
+            gbp_started.set()
+            return {date(2025, 1, 1): Decimal("1.3")}
+        raise AssertionError(f"unexpected currency {from_currency}")
+
+    service.repo = SimpleNamespace(get_fx_rates_map=AsyncMock(side_effect=get_fx_rates_map))
+
+    rates = await asyncio.wait_for(
+        service._get_position_to_portfolio_rate_maps(  # pylint: disable=protected-access
+            position_currencies={"eur", "gbp", "usd"},
+            portfolio_currency="usd",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+        ),
+        timeout=1,
+    )
+
+    assert rates == {
+        "EUR": {date(2025, 1, 1): Decimal("1.1")},
+        "GBP": {date(2025, 1, 1): Decimal("1.3")},
+        "USD": {},
+    }
+    assert service.repo.get_fx_rates_map.await_count == 2
 
 
 @pytest.mark.asyncio
