@@ -66,7 +66,6 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 11),
         )
-        mock_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
         assert response.total_net_cashflow == Decimal("-750")
         assert response.booked_total_net_cashflow == Decimal("-750")
         assert response.projected_settlement_total_cashflow == Decimal("0")
@@ -106,7 +105,6 @@ async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
             end_date=date(2026, 3, 2),
         )
         mock_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
-        mock_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
         assert response.include_projected is False
         assert response.range_end_date == date(2026, 3, 2)
         assert len(response.points) == 1

@@ -128,7 +128,6 @@ async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() ->
     )
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 10, 15, tzinfo=UTC)
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
     assert response.source_batch_fingerprint == (
         "liquidity_ladder:P1:2026-03-27:2026-04-04:include_projected=true"
     )
@@ -170,7 +169,6 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
         )
 
     cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
     assert response.include_projected is False
     assert response.totals.projected_cash_available_end_portfolio_currency == Decimal("900")
 
