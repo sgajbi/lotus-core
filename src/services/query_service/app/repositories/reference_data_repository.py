@@ -956,9 +956,37 @@ class ReferenceDataRepository:
         benchmark_id: str,
         start_date: date,
         end_date: date,
+        index_ids: list[str] | None = None,
     ) -> list[BenchmarkCompositionSeries]:
+        stmt = select(BenchmarkCompositionSeries).where(
+            BenchmarkCompositionSeries.benchmark_id == benchmark_id,
+            BenchmarkCompositionSeries.composition_effective_from <= end_date,
+            or_(
+                BenchmarkCompositionSeries.composition_effective_to.is_(None),
+                BenchmarkCompositionSeries.composition_effective_to >= start_date,
+            ),
+        )
+        if index_ids:
+            stmt = stmt.where(BenchmarkCompositionSeries.index_id.in_(index_ids))
+        stmt = stmt.order_by(
+            BenchmarkCompositionSeries.composition_effective_from.asc(),
+            BenchmarkCompositionSeries.index_id.asc(),
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_benchmark_component_index_ids_overlapping_window(
+        self,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+        *,
+        after_index_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[str]:
         stmt = (
-            select(BenchmarkCompositionSeries)
+            select(BenchmarkCompositionSeries.index_id)
+            .distinct()
             .where(
                 BenchmarkCompositionSeries.benchmark_id == benchmark_id,
                 BenchmarkCompositionSeries.composition_effective_from <= end_date,
@@ -967,11 +995,12 @@ class ReferenceDataRepository:
                     BenchmarkCompositionSeries.composition_effective_to >= start_date,
                 ),
             )
-            .order_by(
-                BenchmarkCompositionSeries.composition_effective_from.asc(),
-                BenchmarkCompositionSeries.index_id.asc(),
-            )
         )
+        if after_index_id:
+            stmt = stmt.where(BenchmarkCompositionSeries.index_id > after_index_id)
+        stmt = stmt.order_by(BenchmarkCompositionSeries.index_id.asc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 

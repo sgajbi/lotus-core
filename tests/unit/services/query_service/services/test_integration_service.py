@@ -3122,6 +3122,115 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
 
 
 @pytest.mark.asyncio
+async def test_benchmark_market_series_reads_page_scoped_component_evidence() -> None:
+    service = make_service()
+    component_rows = [
+        SimpleNamespace(
+            index_id="IDX1",
+            composition_weight=Decimal("0.5"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=None,
+            quality_status="accepted",
+        ),
+        SimpleNamespace(
+            index_id="IDX2",
+            composition_weight=Decimal("0.3"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=None,
+            quality_status="accepted",
+        ),
+    ]
+    second_page_component_rows = [
+        SimpleNamespace(
+            index_id="IDX3",
+            composition_weight=Decimal("0.2"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=None,
+            quality_status="accepted",
+        )
+    ]
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            side_effect=[["IDX1", "IDX2", "IDX3"], ["IDX3"]]
+        ),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            side_effect=[component_rows, second_page_component_rows]
+        ),
+        list_index_price_points=AsyncMock(return_value=[]),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(return_value=[]),
+        get_fx_rates=AsyncMock(return_value={}),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price"],
+            page=SimpleNamespace(page_size=2, page_token=None),
+        ),
+    )
+
+    assert [row.index_id for row in response.component_series] == ["IDX1", "IDX2"]
+    assert response.page.next_page_token is not None
+
+    second_page = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price"],
+            page=SimpleNamespace(page_size=2, page_token=response.page.next_page_token),
+        ),
+    )
+
+    assert [row.index_id for row in second_page.component_series] == ["IDX3"]
+    assert second_page.page.next_page_token is None
+    service._reference_repository.list_benchmark_component_index_ids_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        after_index_id=None,
+        limit=3,
+    )
+    service._reference_repository.list_benchmark_component_index_ids_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        after_index_id="IDX2",
+        limit=3,
+    )
+    service._reference_repository.list_benchmark_components_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        index_ids=["IDX1", "IDX2"],
+    )
+    service._reference_repository.list_benchmark_components_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        index_ids=["IDX3"],
+    )
+    service._reference_repository.list_index_price_points.assert_any_await(
+        index_ids=["IDX1", "IDX2"],
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+    )
+    service._reference_repository.list_index_price_points.assert_any_await(
+        index_ids=["IDX3"],
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+    )
+
+
+@pytest.mark.asyncio
 async def test_benchmark_market_series_quality_summary_is_page_scoped() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]

@@ -311,6 +311,50 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
 
 
 @pytest.mark.asyncio
+async def test_reference_data_repository_pages_benchmark_component_index_ids() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(["IDX2", "IDX3"])
+    repo = ReferenceDataRepository(db)
+
+    index_ids = await repo.list_benchmark_component_index_ids_overlapping_window(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        after_index_id="IDX1",
+        limit=3,
+    )
+
+    assert index_ids == ["IDX2", "IDX3"]
+    stmt = db.execute.await_args.args[0]
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SELECT DISTINCT benchmark_composition_series.index_id" in sql
+    assert "benchmark_composition_series.benchmark_id = 'B1'" in sql
+    assert "benchmark_composition_series.composition_effective_from <= '2026-01-31'" in sql
+    assert "benchmark_composition_series.composition_effective_to >= '2026-01-01'" in sql
+    assert "benchmark_composition_series.index_id > 'IDX1'" in sql
+    assert "ORDER BY benchmark_composition_series.index_id ASC" in sql
+    assert "LIMIT 3" in sql
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_filters_window_components_by_index_ids() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_benchmark_components_overlapping_window(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        index_ids=["IDX1", "IDX2"],
+    )
+
+    stmt = db.execute.await_args.args[0]
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "benchmark_composition_series.index_id IN ('IDX1', 'IDX2')" in sql
+
+
+@pytest.mark.asyncio
 async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> None:
     repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
     repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]

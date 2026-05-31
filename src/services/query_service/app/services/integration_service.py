@@ -2406,31 +2406,6 @@ class IntegrationService:
         benchmark_currency = (
             definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
         )
-        components = resolve_component_window_rows(
-            await self._reference_repository.list_benchmark_components_overlapping_window(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        index_ids = sorted({component.index_id for component in components})
-        index_prices = await self._reference_repository.list_index_price_points(
-            index_ids=index_ids,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        index_returns = await self._reference_repository.list_index_return_points(
-            index_ids=index_ids,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        benchmark_returns = await self._reference_repository.list_benchmark_return_points(
-            benchmark_id=benchmark_id,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
         request_scope_fingerprint = build_request_fingerprint(
             {
                 "benchmark_id": benchmark_id,
@@ -2452,6 +2427,62 @@ class IntegrationService:
         if token_scope and token_scope != request_scope_fingerprint:
             raise ValueError("Benchmark market series page token does not match request scope.")
         cursor_index_id = cursor.get("last_index_id")
+        supports_component_index_paging = hasattr(
+            self._reference_repository,
+            "list_benchmark_component_index_ids_overlapping_window",
+        )
+
+        has_more = False
+        if supports_component_index_paging:
+            list_component_index_ids = (
+                self._reference_repository.list_benchmark_component_index_ids_overlapping_window
+            )
+            candidate_index_ids = await list_component_index_ids(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+                after_index_id=cursor_index_id,
+                limit=page_size + 1,
+            )
+            has_more = len(candidate_index_ids) > page_size
+            index_ids = candidate_index_ids[:page_size]
+            components = resolve_component_window_rows(
+                await self._reference_repository.list_benchmark_components_overlapping_window(
+                    benchmark_id=benchmark_id,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                    index_ids=index_ids,
+                ),
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            )
+        else:
+            components = resolve_component_window_rows(
+                await self._reference_repository.list_benchmark_components_overlapping_window(
+                    benchmark_id=benchmark_id,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                ),
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            )
+            index_ids = sorted({component.index_id for component in components})
+
+        index_prices = await self._reference_repository.list_index_price_points(
+            index_ids=index_ids,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
+        index_returns = await self._reference_repository.list_index_return_points(
+            index_ids=index_ids,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
+        benchmark_returns = await self._reference_repository.list_benchmark_return_points(
+            benchmark_id=benchmark_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
 
         fx_rates: dict[date, Decimal] = {}
         fx_context_source_currency: str | None = None
@@ -2522,12 +2553,13 @@ class IntegrationService:
                 benchmark_component_series_response(index_id=index_id, points=points)
             )
 
-        if cursor_index_id:
+        if cursor_index_id and not supports_component_index_paging:
             component_series_all = [
                 series for series in component_series_all if series.index_id > cursor_index_id
             ]
 
-        has_more = len(component_series_all) > page_size
+        if not supports_component_index_paging:
+            has_more = len(component_series_all) > page_size
         component_series = component_series_all[:page_size]
         returned_index_ids = {series.index_id for series in component_series}
         returned_index_prices = [row for row in index_prices if row.index_id in returned_index_ids]
@@ -2538,7 +2570,9 @@ class IntegrationService:
         returned_evidence_rows = (
             returned_components + returned_index_prices + returned_index_returns + benchmark_returns
         )
-        total_evidence_rows = components + index_prices + index_returns + benchmark_returns
+        required_evidence_count = (
+            len(returned_evidence_rows) + 1 if has_more else len(returned_evidence_rows)
+        )
         next_page_token: str | None = None
         if has_more and component_series:
             next_page_token = self._encode_page_token(
@@ -2593,9 +2627,7 @@ class IntegrationService:
                 request.as_of_date,
                 data_quality_status=market_reference_data_quality_status(
                     returned_evidence_rows,
-                    required_count=(
-                        len(total_evidence_rows) if has_more else len(returned_evidence_rows)
-                    ),
+                    required_count=required_evidence_count,
                 ),
                 latest_evidence_timestamp=latest_reference_evidence_timestamp(
                     returned_evidence_rows
