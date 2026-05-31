@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Awaitable
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import TypeVar
 
 from portfolio_common.reconciliation_quality import (
@@ -53,6 +53,14 @@ from .load_run_progress_builder import build_load_run_progress_response
 from .portfolio_readiness_builder import (
     PortfolioReadinessSnapshot,
     build_portfolio_readiness_response,
+)
+from .support_job_record_builder import (
+    build_support_job_record,
+    get_support_job_operational_state,
+    is_support_job_retrying,
+    is_support_job_stale,
+    is_terminal_failure_status,
+    normalize_support_job_status,
 )
 from .support_overview_builder import (
     SupportOverviewSnapshot,
@@ -128,9 +136,7 @@ class OperationsService:
 
     @staticmethod
     def _normalize_support_job_status(status: str | None) -> str | None:
-        if status is None:
-            return None
-        return status.strip().upper()
+        return normalize_support_job_status(status)
 
     @classmethod
     def _normalize_support_status_filter(cls, status: str | None) -> str | None:
@@ -145,27 +151,20 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
-        normalized_status = cls._normalize_support_job_status(status) or ""
-        if normalized_status == "FAILED":
-            return "FAILED"
-        if normalized_status.startswith("SKIPPED"):
-            return "SKIPPED"
-        if cls._is_support_job_stale(normalized_status, updated_at, now, stale_threshold_minutes):
-            return "STALE_PROCESSING"
-        if normalized_status == "PROCESSING":
-            return "PROCESSING"
-        if normalized_status == "PENDING":
-            return "PENDING"
-        return "COMPLETED"
+        return get_support_job_operational_state(
+            status,
+            updated_at,
+            now,
+            stale_threshold_minutes,
+        )
 
     @classmethod
     def _is_terminal_failure_status(cls, status: str | None) -> bool:
-        return cls._normalize_support_job_status(status) == "FAILED"
+        return is_terminal_failure_status(status)
 
     @classmethod
     def _is_support_job_retrying(cls, status: str, attempt_count: int | None) -> bool:
-        normalized_status = cls._normalize_support_job_status(status)
-        return (attempt_count or 0) > 0 and normalized_status in {"PENDING", "PROCESSING"}
+        return is_support_job_retrying(status, attempt_count)
 
     @staticmethod
     def _normalize_analytics_export_status(status: str | None) -> str | None:
@@ -320,32 +319,20 @@ class OperationsService:
         reference_now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobRecord:
-        return SupportJobRecord(
+        return build_support_job_record(
             job_id=job_id,
             job_type=job_type,
             business_date=business_date,
             status=status,
-            security_id=normalize_security_id(security_id) if security_id is not None else None,
+            security_id=security_id,
             epoch=epoch,
             attempt_count=attempt_count,
-            is_retrying=self._is_support_job_retrying(status, attempt_count),
             correlation_id=correlation_id,
             created_at=created_at,
             updated_at=updated_at,
-            is_stale_processing=self._is_support_job_stale(
-                status,
-                updated_at,
-                reference_now,
-                stale_threshold_minutes,
-            ),
             failure_reason=failure_reason,
-            is_terminal_failure=self._is_terminal_failure_status(status),
-            operational_state=self._get_support_job_operational_state(
-                status,
-                updated_at,
-                reference_now,
-                stale_threshold_minutes,
-            ),
+            reference_now=reference_now,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
@@ -1345,10 +1332,7 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
-        if cls._normalize_support_job_status(status) != "PROCESSING" or updated_at is None:
-            return False
-        reference_now = now or datetime.now(timezone.utc)
-        return updated_at < reference_now - timedelta(minutes=stale_threshold_minutes)
+        return is_support_job_stale(status, updated_at, now, stale_threshold_minutes)
 
     @classmethod
     def _is_analytics_export_job_stale(
