@@ -539,7 +539,16 @@ class CoreSnapshotService:
                     f"positions_projected unavailable: missing market price for {security_id}"
                 )
             latest_price = prices[-1]
-            local_value = Decimal(str(latest_price.price)) * quantity
+            missing_price_message = (
+                f"positions_projected unavailable: missing market price for {security_id}"
+            )
+            local_value = (
+                self._required_decimal(
+                    latest_price.price,
+                    message=missing_price_message,
+                )
+                * quantity
+            )
             market_currency = normalize_currency_code(str(latest_price.currency))
             if market_currency not in market_to_portfolio_fx:
                 market_to_portfolio_fx[market_currency] = await self._get_fx_rate_or_raise(
@@ -621,7 +630,18 @@ class CoreSnapshotService:
             raise CoreSnapshotUnavailableSectionError(
                 f"missing FX rate {pair} on or before {as_of_date.isoformat()}"
             )
-        return Decimal(str(rates[-1].rate))
+        pair = f"{normalized_from_currency}/{normalized_to_currency}"
+        return self._required_decimal(
+            rates[-1].rate,
+            message=f"missing FX rate {pair} on or before {as_of_date.isoformat()}",
+        )
+
+    @staticmethod
+    def _required_decimal(value: Any, *, message: str) -> Decimal:
+        resolved_value = decimal_or_none(value)
+        if resolved_value is None:
+            raise CoreSnapshotUnavailableSectionError(message)
+        return resolved_value
 
     @staticmethod
     def _total_market_value_baseline(items: dict[str, dict[str, Any]]) -> Decimal:

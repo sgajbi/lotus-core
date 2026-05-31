@@ -518,6 +518,29 @@ async def test_core_snapshot_raises_when_new_security_has_no_market_price(mock_d
         await service.get_core_snapshot("PORT_001", request)
 
 
+async def test_core_snapshot_raises_when_new_security_has_blank_market_price(mock_dependencies):
+    (_, _, simulation_repo, price_repo, _, _) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_NEW_US",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        )
+    ]
+    price_repo.get_prices.return_value = [SimpleNamespace(price=" ", currency="USD")]
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.SIMULATION,
+        sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
+        simulation={"session_id": "SIM_1"},
+    )
+
+    with pytest.raises(CoreSnapshotUnavailableSectionError, match="missing market price"):
+        await service.get_core_snapshot("PORT_001", request)
+
+
 @pytest.mark.parametrize(
     ("txn_type", "quantity", "amount", "expected"),
     [
@@ -543,6 +566,15 @@ async def test_get_fx_rate_or_raise_identity_currency(mock_dependencies):
     rate = await service._get_fx_rate_or_raise(" usd ", "USD", date(2026, 2, 27))
     assert rate == Decimal("1")
     fx_repo.get_fx_rates.assert_not_awaited()
+
+
+async def test_get_fx_rate_or_raise_rejects_blank_rate(mock_dependencies):
+    (_, _, _, _, fx_repo, _) = mock_dependencies
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=" ")]
+    service = CoreSnapshotService(AsyncMock())
+
+    with pytest.raises(CoreSnapshotUnavailableSectionError, match="missing FX rate EUR/USD"):
+        await service._get_fx_rate_or_raise("EUR", "USD", date(2026, 2, 27))
 
 
 async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencies):
