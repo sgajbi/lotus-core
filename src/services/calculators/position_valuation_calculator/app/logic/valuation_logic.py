@@ -1,8 +1,9 @@
 # services/calculators/position-valuation-calculator/app/logic/valuation_logic.py
 import logging
 from decimal import Decimal
-from typing import Any, Optional, Tuple
+from typing import Optional, Tuple
 
+from portfolio_common.decimal_amounts import required_decimal
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 from portfolio_common.market_prices import coerce_positive_market_price_or_none
 from portfolio_common.valuation_prices import resolve_valuation_unit_price
@@ -15,10 +16,6 @@ class ValuationLogic:
     A stateless calculator for determining the market value and unrealized
     gain/loss of a position, with full dual-currency support.
     """
-
-    @staticmethod
-    def _as_decimal(value: Any) -> Decimal:
-        return value if isinstance(value, Decimal) else Decimal(str(value))
 
     @staticmethod
     def _normalize_currency_code(currency_code: str) -> str:
@@ -68,7 +65,7 @@ class ValuationLogic:
             A tuple of (market_value_base, market_value_local, pnl_base, pnl_local),
             or None if a required FX rate is missing.
         """
-        quantity = ValuationLogic._as_decimal(quantity)
+        quantity = required_decimal(quantity, field_name="quantity")
         market_price = coerce_positive_market_price_or_none(market_price)
         if market_price is None:
             logger.warning(
@@ -77,8 +74,8 @@ class ValuationLogic:
                 instrument_currency,
             )
             return None
-        cost_basis_base = ValuationLogic._as_decimal(cost_basis_base)
-        cost_basis_local = ValuationLogic._as_decimal(cost_basis_local)
+        cost_basis_base = required_decimal(cost_basis_base, field_name="cost_basis_base")
+        cost_basis_local = required_decimal(cost_basis_local, field_name="cost_basis_local")
         price_currency = ValuationLogic._normalize_currency_code(price_currency)
         instrument_currency = ValuationLogic._normalize_currency_code(instrument_currency)
         portfolio_currency = ValuationLogic._normalize_currency_code(portfolio_currency)

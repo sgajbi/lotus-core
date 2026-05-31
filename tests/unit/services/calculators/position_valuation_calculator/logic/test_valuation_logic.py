@@ -1,6 +1,8 @@
 # tests/unit/services/calculators/position-valuation-calculator/logic/test_valuation_logic.py
 from decimal import Decimal
 
+import pytest
+
 # Corrected absolute import
 from src.services.calculators.position_valuation_calculator.app.logic.valuation_logic import (
     ValuationLogic,
@@ -246,6 +248,19 @@ def test_calculate_valuation_accepts_float_like_inputs_without_binary_float_math
     assert mv_base == Decimal("10175.625")
     assert pnl_local == Decimal("175.625")
     assert pnl_base == Decimal("175.625")
+
+
+def test_calculate_valuation_rejects_missing_required_quantity():
+    with pytest.raises(ValueError, match="quantity is required"):
+        ValuationLogic.calculate_valuation(
+            quantity=" ",
+            market_price=Decimal("101.25"),
+            cost_basis_base=Decimal("10000"),
+            cost_basis_local=Decimal("10000"),
+            price_currency="USD",
+            instrument_currency="USD",
+            portfolio_currency="USD",
+        )
 
 
 def test_calculate_valuation_rejects_zero_fx_rate():
