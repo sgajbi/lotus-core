@@ -445,6 +445,28 @@ class OperationsRepository:
             else_=9,
         )
 
+    def _apply_reprocessing_key_scope(
+        self,
+        stmt,
+        *,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        normalized_security_id: Optional[str] = None,
+        watermark_date: Optional[date] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(PositionState.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(PositionState.updated_at <= as_of)
+        if status:
+            stmt = stmt.where(self._reprocessing_status_filter(PositionState.status, status))
+        if normalized_security_id:
+            state_security_id = self._security_id_expr(PositionState.security_id)
+            stmt = stmt.where(state_security_id == normalized_security_id)
+        if watermark_date:
+            stmt = stmt.where(PositionState.watermark_date == watermark_date)
+        return stmt
+
     @staticmethod
     def _support_job_health_aggregate(base_subq, open_date_column, stale_threshold, failed_since):
         open_statuses = ("PENDING", "PROCESSING")
@@ -2179,20 +2201,14 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = (
-            select(func.count())
-            .select_from(PositionState)
-            .where(PositionState.portfolio_id == portfolio_id)
+        stmt = self._apply_reprocessing_key_scope(
+            select(func.count()).select_from(PositionState),
+            portfolio_id=portfolio_id,
+            status=status,
+            normalized_security_id=normalized_security_id,
+            watermark_date=watermark_date,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._reprocessing_status_filter(PositionState.status, status))
-        if normalized_security_id:
-            stmt = stmt.where(state_security_id == normalized_security_id)
-        if watermark_date:
-            stmt = stmt.where(PositionState.watermark_date == watermark_date)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reprocessing_keys(
@@ -2215,15 +2231,14 @@ class OperationsRepository:
         state_security_id = self._security_id_expr(PositionState.security_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = select(PositionState).where(PositionState.portfolio_id == portfolio_id)
-        if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._reprocessing_status_filter(PositionState.status, status))
-        if normalized_security_id:
-            stmt = stmt.where(state_security_id == normalized_security_id)
-        if watermark_date:
-            stmt = stmt.where(PositionState.watermark_date == watermark_date)
+        stmt = self._apply_reprocessing_key_scope(
+            select(PositionState),
+            portfolio_id=portfolio_id,
+            status=status,
+            normalized_security_id=normalized_security_id,
+            watermark_date=watermark_date,
+            as_of=as_of,
+        )
         stmt = (
             stmt.order_by(
                 self._reprocessing_key_priority(
