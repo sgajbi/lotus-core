@@ -374,6 +374,28 @@ class OperationsRepository:
             )
         return stmt
 
+    def _apply_reconciliation_finding_scope(
+        self,
+        stmt,
+        *,
+        run_id: str,
+        finding_id: Optional[str] = None,
+        normalized_security_id: Optional[str] = None,
+        transaction_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(FinancialReconciliationFinding.run_id == run_id)
+        if as_of is not None:
+            stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
+        if finding_id:
+            stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
+        if normalized_security_id:
+            finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
+            stmt = stmt.where(finding_security_id == normalized_security_id)
+        if transaction_id:
+            stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
+        return stmt
+
     @staticmethod
     def _portfolio_control_stage_priority(status_column):
         governed_status = status_column
@@ -1958,7 +1980,6 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
         severity = FinancialReconciliationFinding.severity
         severity_rank = case(
             (severity == "ERROR", 0),
@@ -1966,17 +1987,14 @@ class OperationsRepository:
             (severity == "INFO", 2),
             else_=9,
         )
-        stmt = select(FinancialReconciliationFinding).where(
-            FinancialReconciliationFinding.run_id == run_id
+        stmt = self._apply_reconciliation_finding_scope(
+            select(FinancialReconciliationFinding),
+            run_id=run_id,
+            finding_id=finding_id,
+            normalized_security_id=normalized_security_id,
+            transaction_id=transaction_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
-        if finding_id:
-            stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
-        if normalized_security_id:
-            stmt = stmt.where(finding_security_id == normalized_security_id)
-        if transaction_id:
-            stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
         stmt = stmt.order_by(
             severity_rank.asc(),
             FinancialReconciliationFinding.finding_type.asc(),
@@ -1998,20 +2016,14 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
-        stmt = (
-            select(func.count())
-            .select_from(FinancialReconciliationFinding)
-            .where(FinancialReconciliationFinding.run_id == run_id)
+        stmt = self._apply_reconciliation_finding_scope(
+            select(func.count()).select_from(FinancialReconciliationFinding),
+            run_id=run_id,
+            finding_id=finding_id,
+            normalized_security_id=normalized_security_id,
+            transaction_id=transaction_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
-        if finding_id:
-            stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
-        if normalized_security_id:
-            stmt = stmt.where(finding_security_id == normalized_security_id)
-        if transaction_id:
-            stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_finding_summary(
