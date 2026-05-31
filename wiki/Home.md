@@ -21,6 +21,7 @@ Orientation and boundaries:
 Contracts and operator flows:
 
 - [System Data Flow](System-Data-Flow)
+- [Supported Features](Supported-Features)
 - [API Surface](API-Surface)
 - [Query Control Plane](Query-Control-Plane)
 - [Support and Lineage](Support-and-Lineage)
