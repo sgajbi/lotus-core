@@ -467,6 +467,33 @@ class OperationsRepository:
             stmt = stmt.where(PositionState.watermark_date == watermark_date)
         return stmt
 
+    def _apply_reprocessing_job_scope(
+        self,
+        stmt,
+        *,
+        reset_scope: ResetWatermarkReprocessingJobScope,
+        status: Optional[str] = None,
+        normalized_security_id: Optional[str] = None,
+        job_id: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(
+            ReprocessingJob.job_type == "RESET_WATERMARKS",
+            reset_scope.portfolio_scope_exists,
+        )
+        if as_of is not None:
+            stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
+        if status:
+            stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
+        if normalized_security_id:
+            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
+        if job_id is not None:
+            stmt = stmt.where(ReprocessingJob.id == job_id)
+        if correlation_id:
+            stmt = stmt.where(ReprocessingJob.correlation_id == correlation_id)
+        return stmt
+
     @staticmethod
     def _support_job_health_aggregate(base_subq, open_date_column, stale_threshold, failed_since):
         open_statuses = ("PENDING", "PROCESSING")
@@ -2269,24 +2296,15 @@ class OperationsRepository:
         if security_id is not None and not normalized_security_id:
             return 0
         reset_scope = self._reset_watermark_reprocessing_job_scope(portfolio_id)
-        stmt = (
-            select(func.count())
-            .select_from(ReprocessingJob)
-            .where(
-                ReprocessingJob.job_type == "RESET_WATERMARKS",
-                reset_scope.portfolio_scope_exists,
-            )
+        stmt = self._apply_reprocessing_job_scope(
+            select(func.count()).select_from(ReprocessingJob),
+            reset_scope=reset_scope,
+            status=status,
+            normalized_security_id=normalized_security_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
-        if normalized_security_id:
-            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
-        if job_id is not None:
-            stmt = stmt.where(ReprocessingJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(ReprocessingJob.correlation_id == correlation_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reprocessing_jobs(
@@ -2310,31 +2328,26 @@ class OperationsRepository:
         reset_scope = self._reset_watermark_reprocessing_job_scope(portfolio_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = select(
-            ReprocessingJob.id,
-            ReprocessingJob.job_type,
-            reset_scope.impacted_date_expr.label("business_date"),
-            ReprocessingJob.status,
-            reset_scope.security_id_expr.label("security_id"),
-            ReprocessingJob.attempt_count,
-            ReprocessingJob.correlation_id,
-            ReprocessingJob.created_at,
-            ReprocessingJob.updated_at,
-            ReprocessingJob.failure_reason,
-        ).where(
-            ReprocessingJob.job_type == "RESET_WATERMARKS",
-            reset_scope.portfolio_scope_exists,
+        stmt = self._apply_reprocessing_job_scope(
+            select(
+                ReprocessingJob.id,
+                ReprocessingJob.job_type,
+                reset_scope.impacted_date_expr.label("business_date"),
+                ReprocessingJob.status,
+                reset_scope.security_id_expr.label("security_id"),
+                ReprocessingJob.attempt_count,
+                ReprocessingJob.correlation_id,
+                ReprocessingJob.created_at,
+                ReprocessingJob.updated_at,
+                ReprocessingJob.failure_reason,
+            ),
+            reset_scope=reset_scope,
+            status=status,
+            normalized_security_id=normalized_security_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
-        if normalized_security_id:
-            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
-        if job_id is not None:
-            stmt = stmt.where(ReprocessingJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(ReprocessingJob.correlation_id == correlation_id)
         stmt = (
             stmt.order_by(
                 self._support_job_priority(
