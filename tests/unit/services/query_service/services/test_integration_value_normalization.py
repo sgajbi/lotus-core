@@ -3,6 +3,7 @@ from decimal import Decimal
 from src.services.query_service.app.services.integration_value_normalization import (
     as_decimal,
     control_code,
+    string_list,
 )
 
 
@@ -21,3 +22,8 @@ def test_control_code_normalizes_and_defaults_blank_values() -> None:
     assert control_code(" accepted ") == "ACCEPTED"
     assert control_code(None, default="UNKNOWN") == "UNKNOWN"
     assert control_code("   ", default="UNKNOWN") == "UNKNOWN"
+
+
+def test_string_list_keeps_nonblank_stringable_values() -> None:
+    assert string_list(["DPM", "", "  ", 42]) == ["DPM", "42"]
+    assert string_list(("DPM",)) == []

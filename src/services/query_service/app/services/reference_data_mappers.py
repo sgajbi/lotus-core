@@ -31,31 +31,13 @@ from ..dtos.reference_integration_dto import (
     SustainabilityPreferenceProfileEntry,
 )
 from ..repositories.identifier_normalization import normalize_security_id
-
-
-def _as_decimal(value: Any) -> Decimal:
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))
-
-
-def _string_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value if str(item).strip()]
-
-
-def _control_code(value: Any, *, default: str = "") -> str:
-    if value is None:
-        return default
-    code = str(value).strip().upper()
-    return code or default
+from .integration_value_normalization import as_decimal, control_code, string_list
 
 
 def benchmark_component_response(row: Any) -> BenchmarkComponentResponse:
     return BenchmarkComponentResponse(
         index_id=row.index_id,
-        composition_weight=_as_decimal(row.composition_weight),
+        composition_weight=as_decimal(row.composition_weight),
         composition_effective_from=row.composition_effective_from,
         composition_effective_to=row.composition_effective_to,
         rebalance_event_id=row.rebalance_event_id,
@@ -112,9 +94,9 @@ def index_definition_response(row: Any) -> IndexDefinitionResponse:
 def model_portfolio_target_row(row: Any) -> ModelPortfolioTargetRow:
     return ModelPortfolioTargetRow(
         instrument_id=row.instrument_id,
-        target_weight=_as_decimal(row.target_weight),
-        min_weight=_as_decimal(row.min_weight) if row.min_weight is not None else None,
-        max_weight=_as_decimal(row.max_weight) if row.max_weight is not None else None,
+        target_weight=as_decimal(row.target_weight),
+        min_weight=as_decimal(row.min_weight) if row.min_weight is not None else None,
+        max_weight=as_decimal(row.max_weight) if row.max_weight is not None else None,
         target_status=row.target_status,
         quality_status=row.quality_status,
         source_record_id=row.source_record_id,
@@ -202,8 +184,8 @@ def instrument_eligibility_record(row: Any) -> InstrumentEligibilityRecord:
     return InstrumentEligibilityRecord(
         security_id=normalize_security_id(row.security_id),
         found=True,
-        eligibility_status=_control_code(row.eligibility_status, default="UNKNOWN"),
-        product_shelf_status=_control_code(row.product_shelf_status, default="UNKNOWN"),
+        eligibility_status=control_code(row.eligibility_status, default="UNKNOWN"),
+        product_shelf_status=control_code(row.product_shelf_status, default="UNKNOWN"),
         buy_allowed=bool(row.buy_allowed),
         sell_allowed=bool(row.sell_allowed),
         restriction_reason_codes=list(row.restriction_reason_codes or []),
@@ -218,23 +200,23 @@ def instrument_eligibility_record(row: Any) -> InstrumentEligibilityRecord:
         country_of_risk=row.country_of_risk,
         effective_from=row.effective_from,
         effective_to=row.effective_to,
-        quality_status=_control_code(row.quality_status, default="UNKNOWN"),
+        quality_status=control_code(row.quality_status, default="UNKNOWN"),
         source_record_id=row.source_record_id,
     )
 
 
 def portfolio_tax_lot_record(row: Any, *, local_currency: str | None) -> PortfolioTaxLotRecord:
-    open_quantity = _as_decimal(row.open_quantity)
+    open_quantity = as_decimal(row.open_quantity)
     return PortfolioTaxLotRecord(
         portfolio_id=row.portfolio_id,
         security_id=normalize_security_id(row.security_id),
         instrument_id=normalize_security_id(row.instrument_id),
         lot_id=row.lot_id,
         open_quantity=open_quantity,
-        original_quantity=_as_decimal(row.original_quantity),
+        original_quantity=as_decimal(row.original_quantity),
         acquisition_date=row.acquisition_date,
-        cost_basis_base=_as_decimal(row.lot_cost_base),
-        cost_basis_local=_as_decimal(row.lot_cost_local),
+        cost_basis_base=as_decimal(row.lot_cost_base),
+        cost_basis_local=as_decimal(row.lot_cost_local),
         local_currency=local_currency,
         tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
         source_transaction_id=row.source_transaction_id,
@@ -270,7 +252,7 @@ def market_data_price_coverage_record(
         instrument_id=normalize_security_id(instrument_id),
         found=True,
         price_date=row.price_date,
-        price=_as_decimal(row.price),
+        price=as_decimal(row.price),
         currency=row.currency,
         age_days=age_days,
         quality_status=quality_status,
@@ -305,7 +287,7 @@ def market_data_fx_coverage_record(
         to_currency=to_currency,
         found=True,
         rate_date=row.rate_date,
-        rate=_as_decimal(row.rate),
+        rate=as_decimal(row.rate),
         age_days=age_days,
         quality_status=quality_status,
     )
@@ -314,7 +296,7 @@ def market_data_fx_coverage_record(
 def index_price_series_point(row: Any) -> IndexPriceSeriesPoint:
     return IndexPriceSeriesPoint(
         series_date=row.series_date,
-        index_price=_as_decimal(row.index_price),
+        index_price=as_decimal(row.index_price),
         series_currency=row.series_currency,
         value_convention=row.value_convention,
         quality_status=row.quality_status,
@@ -324,7 +306,7 @@ def index_price_series_point(row: Any) -> IndexPriceSeriesPoint:
 def index_return_series_point(row: Any) -> IndexReturnSeriesPoint:
     return IndexReturnSeriesPoint(
         series_date=row.series_date,
-        index_return=_as_decimal(row.index_return),
+        index_return=as_decimal(row.index_return),
         return_period=row.return_period,
         return_convention=row.return_convention,
         series_currency=row.series_currency,
@@ -335,7 +317,7 @@ def index_return_series_point(row: Any) -> IndexReturnSeriesPoint:
 def benchmark_return_series_point(row: Any) -> BenchmarkReturnSeriesPoint:
     return BenchmarkReturnSeriesPoint(
         series_date=row.series_date,
-        benchmark_return=_as_decimal(row.benchmark_return),
+        benchmark_return=as_decimal(row.benchmark_return),
         return_period=row.return_period,
         return_convention=row.return_convention,
         series_currency=row.series_currency,
@@ -366,17 +348,17 @@ def benchmark_market_series_point(
             or (benchmark_return_row and benchmark_return_row.series_currency)
         ),
         index_price=(
-            _as_decimal(price_row.index_price)
+            as_decimal(price_row.index_price)
             if price_row and "index_price" in requested_fields
             else None
         ),
         index_return=(
-            _as_decimal(return_row.index_return)
+            as_decimal(return_row.index_return)
             if return_row and "index_return" in requested_fields
             else None
         ),
         benchmark_return=(
-            _as_decimal(benchmark_return_row.benchmark_return)
+            as_decimal(benchmark_return_row.benchmark_return)
             if benchmark_return_row and "benchmark_return" in requested_fields
             else None
         ),
@@ -397,7 +379,7 @@ def benchmark_component_series_response(
 def risk_free_series_point(row: Any) -> RiskFreeSeriesPoint:
     return RiskFreeSeriesPoint(
         series_date=row.series_date,
-        value=_as_decimal(row.value),
+        value=as_decimal(row.value),
         value_convention=row.value_convention,
         day_count_convention=row.day_count_convention,
         compounding_convention=row.compounding_convention,
@@ -427,12 +409,12 @@ def client_tax_profile_entry(row: Any) -> ClientTaxProfileEntry:
         tax_status=row.tax_status,
         profile_status=row.profile_status,
         withholding_tax_rate=(
-            _as_decimal(row.withholding_tax_rate) if row.withholding_tax_rate is not None else None
+            as_decimal(row.withholding_tax_rate) if row.withholding_tax_rate is not None else None
         ),
         capital_gains_tax_applicable=bool(row.capital_gains_tax_applicable),
         income_tax_applicable=bool(row.income_tax_applicable),
-        treaty_codes=_string_list(row.treaty_codes),
-        eligible_account_types=_string_list(row.eligible_account_types),
+        treaty_codes=string_list(row.treaty_codes),
+        eligible_account_types=string_list(row.eligible_account_types),
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         profile_version=int(row.profile_version),
@@ -449,12 +431,12 @@ def client_tax_rule_set_entry(row: Any) -> ClientTaxRuleSetEntry:
         rule_category=row.rule_category,
         rule_status=row.rule_status,
         rule_source=row.rule_source,
-        applies_to_asset_classes=_string_list(row.applies_to_asset_classes),
-        applies_to_security_ids=_string_list(row.applies_to_security_ids),
-        applies_to_income_types=_string_list(row.applies_to_income_types),
-        rate=_as_decimal(row.rate) if row.rate is not None else None,
+        applies_to_asset_classes=string_list(row.applies_to_asset_classes),
+        applies_to_security_ids=string_list(row.applies_to_security_ids),
+        applies_to_income_types=string_list(row.applies_to_income_types),
+        rate=as_decimal(row.rate) if row.rate is not None else None,
         threshold_amount=(
-            _as_decimal(row.threshold_amount) if row.threshold_amount is not None else None
+            as_decimal(row.threshold_amount) if row.threshold_amount is not None else None
         ),
         threshold_currency=row.threshold_currency,
         effective_from=row.effective_from,
@@ -469,7 +451,7 @@ def client_income_needs_schedule_entry(row: Any) -> ClientIncomeNeedsScheduleEnt
         schedule_id=row.schedule_id,
         need_type=row.need_type,
         need_status=row.need_status,
-        amount=_as_decimal(row.amount),
+        amount=as_decimal(row.amount),
         currency=row.currency,
         frequency=row.frequency,
         start_date=row.start_date,
@@ -488,10 +470,10 @@ def client_restriction_profile_entry(row: Any) -> ClientRestrictionProfileEntry:
         restriction_source=row.restriction_source,
         applies_to_buy=bool(row.applies_to_buy),
         applies_to_sell=bool(row.applies_to_sell),
-        instrument_ids=_string_list(row.instrument_ids),
-        asset_classes=_string_list(row.asset_classes),
-        issuer_ids=_string_list(row.issuer_ids),
-        country_codes=_string_list(row.country_codes),
+        instrument_ids=string_list(row.instrument_ids),
+        asset_classes=string_list(row.asset_classes),
+        issuer_ids=string_list(row.issuer_ids),
+        country_codes=string_list(row.country_codes),
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         restriction_version=int(row.restriction_version),
@@ -504,7 +486,7 @@ def liquidity_reserve_requirement_entry(row: Any) -> LiquidityReserveRequirement
         reserve_requirement_id=row.reserve_requirement_id,
         reserve_type=row.reserve_type,
         reserve_status=row.reserve_status,
-        required_amount=_as_decimal(row.required_amount),
+        required_amount=as_decimal(row.required_amount),
         currency=row.currency,
         horizon_days=int(row.horizon_days),
         priority=int(row.priority),
@@ -523,14 +505,14 @@ def sustainability_preference_profile_entry(row: Any) -> SustainabilityPreferenc
         preference_status=row.preference_status,
         preference_source=row.preference_source,
         minimum_allocation=(
-            _as_decimal(row.minimum_allocation) if row.minimum_allocation is not None else None
+            as_decimal(row.minimum_allocation) if row.minimum_allocation is not None else None
         ),
         maximum_allocation=(
-            _as_decimal(row.maximum_allocation) if row.maximum_allocation is not None else None
+            as_decimal(row.maximum_allocation) if row.maximum_allocation is not None else None
         ),
-        applies_to_asset_classes=_string_list(row.applies_to_asset_classes),
-        exclusion_codes=_string_list(row.exclusion_codes),
-        positive_tilt_codes=_string_list(row.positive_tilt_codes),
+        applies_to_asset_classes=string_list(row.applies_to_asset_classes),
+        exclusion_codes=string_list(row.exclusion_codes),
+        positive_tilt_codes=string_list(row.positive_tilt_codes),
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         preference_version=int(row.preference_version),
@@ -543,7 +525,7 @@ def planned_withdrawal_schedule_entry(row: Any) -> PlannedWithdrawalScheduleEntr
         withdrawal_schedule_id=row.withdrawal_schedule_id,
         withdrawal_type=row.withdrawal_type,
         withdrawal_status=row.withdrawal_status,
-        amount=_as_decimal(row.amount),
+        amount=as_decimal(row.amount),
         currency=row.currency,
         scheduled_date=row.scheduled_date,
         recurrence_frequency=row.recurrence_frequency,

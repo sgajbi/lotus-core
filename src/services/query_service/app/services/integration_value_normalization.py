@@ -15,3 +15,9 @@ def control_code(value: Any, *, default: str = "") -> str:
         return default
     normalized = str(value).strip().upper()
     return normalized or default
+
+
+def string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
