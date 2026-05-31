@@ -15,11 +15,11 @@ def _position_timeseries(
     security_id: str,
     *,
     business_date: date = date(2026, 3, 8),
-    bod_market_value: Decimal = Decimal("100"),
-    bod_cashflow_portfolio: Decimal = Decimal("1"),
-    eod_cashflow_portfolio: Decimal = Decimal("2"),
-    eod_market_value: Decimal = Decimal("110"),
-    fees: Decimal = Decimal("0.5"),
+    bod_market_value: object = Decimal("100"),
+    bod_cashflow_portfolio: object = Decimal("1"),
+    eod_cashflow_portfolio: object = Decimal("2"),
+    eod_market_value: object = Decimal("110"),
+    fees: object = Decimal("0.5"),
 ) -> SimpleNamespace:
     return SimpleNamespace(
         security_id=security_id,
@@ -57,6 +57,40 @@ async def test_calculate_daily_record_normalizes_currency_without_fx_lookup() ->
     assert result.fees == Decimal("1.0")
     repo.get_instruments_by_ids.assert_awaited_once_with(["SEC-USD"])
     repo.get_fx_rate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_calculate_daily_record_normalizes_sparse_amounts() -> None:
+    portfolio = SimpleNamespace(portfolio_id="PORT-AGG", base_currency="USD")
+    repo = SimpleNamespace(
+        get_instruments_by_ids=AsyncMock(
+            return_value=[SimpleNamespace(security_id="SEC-USD", currency="USD")]
+        ),
+        get_fx_rate=AsyncMock(),
+    )
+
+    result = await PortfolioTimeseriesLogic.calculate_daily_record(
+        portfolio=portfolio,
+        a_date=date(2026, 3, 8),
+        epoch=2,
+        position_timeseries_list=[
+            _position_timeseries(
+                "SEC-USD",
+                bod_market_value=" ",
+                bod_cashflow_portfolio=" 3.5 ",
+                eod_cashflow_portfolio=None,
+                eod_market_value=None,
+                fees=" 0.25 ",
+            )
+        ],
+        repo=repo,
+    )
+
+    assert result.bod_market_value == Decimal("0")
+    assert result.bod_cashflow == Decimal("3.5")
+    assert result.eod_cashflow == Decimal("0")
+    assert result.eod_market_value == Decimal("0")
+    assert result.fees == Decimal("0.25")
 
 
 @pytest.mark.asyncio

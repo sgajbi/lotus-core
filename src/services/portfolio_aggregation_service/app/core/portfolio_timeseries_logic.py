@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     PortfolioTimeseries,
     PositionTimeseries,
 )
+from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 
 from ..repositories.timeseries_repository import TimeseriesRepository
@@ -73,11 +74,11 @@ class PortfolioTimeseriesLogic:
                 fx_rate_cache=fx_rate_cache,
             )
 
-            total_bod_mv += (pos_ts.bod_market_value or Decimal(0)) * rate
-            total_bod_cf += (pos_ts.bod_cashflow_portfolio or Decimal(0)) * rate
-            total_eod_mv += (pos_ts.eod_market_value or Decimal(0)) * rate
-            total_eod_cf += (pos_ts.eod_cashflow_portfolio or Decimal(0)) * rate
-            total_fees += (pos_ts.fees or Decimal(0)) * rate
+            total_bod_mv += decimal_or_zero(pos_ts.bod_market_value) * rate
+            total_bod_cf += decimal_or_zero(pos_ts.bod_cashflow_portfolio) * rate
+            total_eod_mv += decimal_or_zero(pos_ts.eod_market_value) * rate
+            total_eod_cf += decimal_or_zero(pos_ts.eod_cashflow_portfolio) * rate
+            total_fees += decimal_or_zero(pos_ts.fees) * rate
 
         return PortfolioTimeseries(
             portfolio_id=portfolio.portfolio_id,

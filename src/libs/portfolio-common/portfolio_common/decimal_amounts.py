@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+ZERO = Decimal("0")
+
 
 def decimal_or_none(value: object) -> Decimal | None:
     if value is None:
@@ -15,6 +17,10 @@ def decimal_or_none(value: object) -> Decimal | None:
         return Decimal(normalized)
     except (InvalidOperation, ValueError):
         return None
+
+
+def decimal_or_zero(value: object) -> Decimal:
+    return decimal_or_none(value) or ZERO
 
 
 def required_decimal(value: object, *, field_name: str) -> Decimal:

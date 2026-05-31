@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import pytest
-from portfolio_common.decimal_amounts import decimal_or_none, required_decimal
+from portfolio_common.decimal_amounts import decimal_or_none, decimal_or_zero, required_decimal
 
 
 class _StringCountedAmount:
@@ -35,6 +35,13 @@ def test_decimal_or_none_stringifies_non_decimal_values_once() -> None:
 
 def test_decimal_or_none_returns_none_for_invalid_values() -> None:
     assert decimal_or_none("not-a-number") is None
+
+
+def test_decimal_or_zero_defaults_missing_blank_and_invalid_values() -> None:
+    assert decimal_or_zero(None) == Decimal("0")
+    assert decimal_or_zero(" ") == Decimal("0")
+    assert decimal_or_zero("not-a-number") == Decimal("0")
+    assert decimal_or_zero(" 12.50 ") == Decimal("12.50")
 
 
 def test_required_decimal_rejects_missing_required_values() -> None:
