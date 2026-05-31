@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -2500,9 +2499,9 @@ class IntegrationService:
             else:
                 normalization_status = "native_component_series_without_fx_context_request"
 
-        market_results = dict(
-            zip(market_read_names, await asyncio.gather(*market_reads), strict=True)
-        )
+        market_results = {}
+        for name, market_read in zip(market_read_names, market_reads, strict=True):
+            market_results[name] = await market_read
         components = resolve_component_window_rows(
             market_results["components"],
             start_date=request.window.start_date,

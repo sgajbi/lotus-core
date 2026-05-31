@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -534,21 +533,12 @@ class CoreSnapshotService:
             price_required[security_id] = (entry, quantity)
 
         if price_required:
-            price_rows_by_security = dict(
-                zip(
-                    price_required,
-                    await asyncio.gather(
-                        *(
-                            self.price_repo.get_prices(
-                                security_id=security_id,
-                                end_date=as_of_date,
-                            )
-                            for security_id in price_required
-                        )
-                    ),
-                    strict=True,
+            price_rows_by_security = {}
+            for security_id in price_required:
+                price_rows_by_security[security_id] = await self.price_repo.get_prices(
+                    security_id=security_id,
+                    end_date=as_of_date,
                 )
-            )
             priced_values: dict[str, tuple[Decimal, str]] = {}
             market_currencies: set[str] = set()
             for security_id, (entry, quantity) in price_required.items():
@@ -572,22 +562,13 @@ class CoreSnapshotService:
                 priced_values[security_id] = (local_value, market_currency)
                 market_currencies.add(market_currency)
 
-            market_to_portfolio_fx = dict(
-                zip(
-                    sorted(market_currencies),
-                    await asyncio.gather(
-                        *(
-                            self._get_fx_rate_or_raise(
-                                from_currency=market_currency,
-                                to_currency=portfolio_base_currency,
-                                as_of_date=as_of_date,
-                            )
-                            for market_currency in sorted(market_currencies)
-                        )
-                    ),
-                    strict=True,
+            market_to_portfolio_fx = {}
+            for market_currency in sorted(market_currencies):
+                market_to_portfolio_fx[market_currency] = await self._get_fx_rate_or_raise(
+                    from_currency=market_currency,
+                    to_currency=portfolio_base_currency,
+                    as_of_date=as_of_date,
                 )
-            )
 
             for security_id, (local_value, market_currency) in priced_values.items():
                 entry = projected[security_id]

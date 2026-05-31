@@ -1,4 +1,3 @@
-import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -3265,30 +3264,14 @@ async def test_benchmark_market_series_reads_page_scoped_component_evidence() ->
 
 
 @pytest.mark.asyncio
-async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> None:
+async def test_benchmark_market_series_reads_evidence_inputs_sequentially() -> None:
     service = make_service()
-    all_started: list[asyncio.Event] = [asyncio.Event() for _ in range(5)]
-    (
-        components_started,
-        index_prices_started,
-        index_returns_started,
-        benchmark_returns_started,
-        fx_rates_started,
-    ) = all_started
+    call_order: list[str] = []
 
-    async def _concurrent_read(started: asyncio.Event, result: object, **_: object) -> object:
-        started.set()
-        await asyncio.wait_for(
-            asyncio.gather(*(event.wait() for event in all_started)),
-            timeout=1,
-        )
-        return result
-
-    def _concurrent_side_effect(
-        started: asyncio.Event, result: object
-    ) -> Callable[..., Awaitable[object]]:
+    def _sequential_side_effect(name: str, result: object) -> Callable[..., Awaitable[object]]:
         async def _read(**kwargs: object) -> object:
-            return await _concurrent_read(started, result, **kwargs)
+            call_order.append(name)
+            return result
 
         return _read
 
@@ -3296,8 +3279,8 @@ async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> N
         get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="EUR")),
         list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX1"]),
         list_benchmark_components_overlapping_window=AsyncMock(
-            side_effect=_concurrent_side_effect(
-                components_started,
+            side_effect=_sequential_side_effect(
+                "components",
                 [
                     SimpleNamespace(
                         index_id="IDX1",
@@ -3310,8 +3293,8 @@ async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> N
             )
         ),
         list_index_price_points=AsyncMock(
-            side_effect=_concurrent_side_effect(
-                index_prices_started,
+            side_effect=_sequential_side_effect(
+                "index_prices",
                 [
                     SimpleNamespace(
                         index_id="IDX1",
@@ -3324,8 +3307,8 @@ async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> N
             )
         ),
         list_index_return_points=AsyncMock(
-            side_effect=_concurrent_side_effect(
-                index_returns_started,
+            side_effect=_sequential_side_effect(
+                "index_returns",
                 [
                     SimpleNamespace(
                         index_id="IDX1",
@@ -3338,8 +3321,8 @@ async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> N
             )
         ),
         list_benchmark_return_points=AsyncMock(
-            side_effect=_concurrent_side_effect(
-                benchmark_returns_started,
+            side_effect=_sequential_side_effect(
+                "benchmark_returns",
                 [
                     SimpleNamespace(
                         series_date=date(2026, 1, 1),
@@ -3353,8 +3336,8 @@ async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> N
             )
         ),
         get_fx_rates=AsyncMock(
-            side_effect=_concurrent_side_effect(
-                fx_rates_started,
+            side_effect=_sequential_side_effect(
+                "fx_rates",
                 {date(2026, 1, 1): Decimal("1.1")},
             )
         ),
@@ -3377,7 +3360,13 @@ async def test_benchmark_market_series_reads_evidence_inputs_concurrently() -> N
         response.normalization_status
         == "native_component_series_with_benchmark_to_target_fx_context"
     )
-    assert all(event.is_set() for event in all_started)
+    assert call_order == [
+        "components",
+        "index_prices",
+        "index_returns",
+        "benchmark_returns",
+        "fx_rates",
+    ]
 
 
 @pytest.mark.asyncio

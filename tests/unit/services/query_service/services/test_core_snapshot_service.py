@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -867,7 +866,7 @@ async def test_resolve_projected_positions_reuses_market_fx_per_currency(mock_de
     )
 
 
-async def test_resolve_projected_positions_reads_new_security_prices_concurrently(
+async def test_resolve_projected_positions_reads_new_security_prices_sequentially(
     mock_dependencies,
 ):
     (_, _, simulation_repo, price_repo, fx_repo, instrument_repo) = mock_dependencies
@@ -889,18 +888,15 @@ async def test_resolve_projected_positions_reads_new_security_prices_concurrentl
         _instrument("SEC_NEW_US_A", "USD", "EQUITY"),
         _instrument("SEC_NEW_US_B", "USD", "EQUITY"),
     ]
-    first_price_started = asyncio.Event()
-    second_price_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def get_prices(*, security_id: str, end_date: date):
         assert end_date == date(2026, 2, 27)
         if security_id == "SEC_NEW_US_A":
-            first_price_started.set()
-            await second_price_started.wait()
+            call_order.append("SEC_NEW_US_A")
             return [SimpleNamespace(price=Decimal("10"), currency="USD")]
         if security_id == "SEC_NEW_US_B":
-            await first_price_started.wait()
-            second_price_started.set()
+            call_order.append("SEC_NEW_US_B")
             return [SimpleNamespace(price=Decimal("20"), currency="USD")]
         raise AssertionError(f"unexpected security {security_id}")
 
@@ -908,21 +904,19 @@ async def test_resolve_projected_positions_reads_new_security_prices_concurrentl
     fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1"))]
     service = CoreSnapshotService(AsyncMock())
 
-    projected = await asyncio.wait_for(
-        service._resolve_projected_positions(
-            session_id="SIM_1",
-            as_of_date=date(2026, 2, 27),
-            portfolio_base_currency="USD",
-            portfolio_to_reporting_fx=Decimal("1"),
-            baseline_positions={},
-            include_zero=True,
-            include_cash=True,
-        ),
-        timeout=1,
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
+        baseline_positions={},
+        include_zero=True,
+        include_cash=True,
     )
 
     assert projected["SEC_NEW_US_A"]["market_value_base"] == Decimal("20")
     assert projected["SEC_NEW_US_B"]["market_value_base"] == Decimal("60")
+    assert sorted(call_order) == ["SEC_NEW_US_A", "SEC_NEW_US_B"]
     assert price_repo.get_prices.await_count == 2
 
 

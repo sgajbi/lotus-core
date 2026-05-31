@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import base64
 import gzip
 import hashlib
@@ -188,20 +187,16 @@ class AnalyticsTimeseriesService:
             if position_currency
         }
         rates: dict[str, dict[date, Decimal]] = {}
-        fx_rate_requests = {}
         for position_currency in sorted(normalized_position_currencies):
             if position_currency == normalized_portfolio_currency:
                 rates[position_currency] = {}
                 continue
-            fx_rate_requests[position_currency] = self.repo.get_fx_rates_map(
+            rates[position_currency] = await self.repo.get_fx_rates_map(
                 from_currency=position_currency,
                 to_currency=normalized_portfolio_currency,
                 start_date=start_date,
                 end_date=end_date,
             )
-        if fx_rate_requests:
-            resolved_rate_maps = await asyncio.gather(*fx_rate_requests.values())
-            rates.update(dict(zip(fx_rate_requests, resolved_rate_maps, strict=True)))
         return rates
 
     @staticmethod
@@ -390,42 +385,34 @@ class AnalyticsTimeseriesService:
                 if (security_id := normalize_security_id(row.security_id))
             }
         )
-        (
-            position_to_portfolio_rates,
-            portfolio_to_reporting_rates,
-            portfolio_cashflow_rows,
-            position_cashflow_rows,
-            previous_rows,
-        ) = await asyncio.gather(
-            self._get_position_to_portfolio_rate_maps(
-                position_currencies=position_currencies,
-                portfolio_currency=portfolio_currency,
-                start_date=min(page_dates),
-                end_date=max(page_dates),
-            ),
-            self._get_conversion_rates(
-                portfolio_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
-                start_date=min(page_dates),
-                end_date=max(page_dates),
-            ),
-            self.repo.list_portfolio_cashflow_rows(
-                portfolio_id=portfolio_id,
-                valuation_dates=page_dates,
-                snapshot_epoch=snapshot_epoch,
-            ),
-            self.repo.list_position_cashflow_rows(
-                portfolio_id=portfolio_id,
-                security_ids=normalized_security_ids,
-                valuation_dates=page_dates,
-                snapshot_epoch=snapshot_epoch,
-            ),
-            self.repo.list_latest_position_timeseries_before(
-                portfolio_id=portfolio_id,
-                before_date=page_dates[0],
-                security_ids=normalized_security_ids,
-                snapshot_epoch=snapshot_epoch,
-            ),
+        position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
+            position_currencies=position_currencies,
+            portfolio_currency=portfolio_currency,
+            start_date=min(page_dates),
+            end_date=max(page_dates),
+        )
+        portfolio_to_reporting_rates = await self._get_conversion_rates(
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
+            start_date=min(page_dates),
+            end_date=max(page_dates),
+        )
+        portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
+            portfolio_id=portfolio_id,
+            valuation_dates=page_dates,
+            snapshot_epoch=snapshot_epoch,
+        )
+        position_cashflow_rows = await self.repo.list_position_cashflow_rows(
+            portfolio_id=portfolio_id,
+            security_ids=normalized_security_ids,
+            valuation_dates=page_dates,
+            snapshot_epoch=snapshot_epoch,
+        )
+        previous_rows = await self.repo.list_latest_position_timeseries_before(
+            portfolio_id=portfolio_id,
+            before_date=page_dates[0],
+            security_ids=normalized_security_ids,
+            snapshot_epoch=snapshot_epoch,
         )
         portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
             portfolio_cashflow_rows,
@@ -738,57 +725,39 @@ class AnalyticsTimeseriesService:
                     if (security_id := normalize_security_id(row.security_id))
                 }
             )
-            support_reads = [
-                self.repo.list_portfolio_cashflow_rows(
+            portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
+                portfolio_id=portfolio_id,
+                valuation_dates=page_dates,
+                snapshot_epoch=snapshot_epoch,
+            )
+            position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
+                position_currencies={str(row.position_currency or "") for row in rows_page},
+                portfolio_currency=portfolio_currency,
+                start_date=page_start_date,
+                end_date=page_end_date,
+            )
+            fx_rates = await self._get_conversion_rates(
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+                start_date=page_start_date,
+                end_date=page_end_date,
+            )
+            previous_rows = await self.repo.list_latest_position_timeseries_before(
+                portfolio_id=portfolio_id,
+                before_date=first_page_date,
+                security_ids=normalized_security_ids,
+                snapshot_epoch=snapshot_epoch,
+            )
+            if request.include_cash_flows:
+                position_cashflow_rows = await self.repo.list_position_cashflow_rows(
                     portfolio_id=portfolio_id,
+                    security_ids=normalized_security_ids,
                     valuation_dates=page_dates,
                     snapshot_epoch=snapshot_epoch,
-                ),
-                self._get_position_to_portfolio_rate_maps(
-                    position_currencies={str(row.position_currency or "") for row in rows_page},
-                    portfolio_currency=portfolio_currency,
-                    start_date=page_start_date,
-                    end_date=page_end_date,
-                ),
-                self._get_conversion_rates(
-                    portfolio_currency=portfolio_currency,
-                    reporting_currency=reporting_currency,
-                    start_date=page_start_date,
-                    end_date=page_end_date,
-                ),
-                self.repo.list_latest_position_timeseries_before(
-                    portfolio_id=portfolio_id,
-                    before_date=first_page_date,
-                    security_ids=normalized_security_ids,
-                    snapshot_epoch=snapshot_epoch,
-                ),
-            ]
-            if request.include_cash_flows:
-                (
-                    portfolio_cashflow_rows,
-                    position_to_portfolio_rates,
-                    fx_rates,
-                    previous_rows,
-                    position_cashflow_rows,
-                ) = await asyncio.gather(
-                    *support_reads,
-                    self.repo.list_position_cashflow_rows(
-                        portfolio_id=portfolio_id,
-                        security_ids=normalized_security_ids,
-                        valuation_dates=page_dates,
-                        snapshot_epoch=snapshot_epoch,
-                    ),
                 )
                 position_cashflows_by_key = self._position_cash_flows_for_keys(
                     position_cashflow_rows
                 )
-            else:
-                (
-                    portfolio_cashflow_rows,
-                    position_to_portfolio_rates,
-                    fx_rates,
-                    previous_rows,
-                ) = await asyncio.gather(*support_reads)
             portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
                 portfolio_cashflow_rows,
                 reporting_currency=portfolio_currency,

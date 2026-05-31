@@ -1,7 +1,6 @@
 # src/services/query_service/app/services/simulation_service.py
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -89,10 +88,10 @@ class SimulationService:
         if session is None:
             raise ValueError(f"Simulation session {session_id} not found")
 
-        baseline_results, changes = await asyncio.gather(
-            self.position_repo.get_latest_positions_by_portfolio(session.portfolio_id),
-            self.repo.get_changes(session_id),
+        baseline_results = await self.position_repo.get_latest_positions_by_portfolio(
+            session.portfolio_id
         )
+        changes = await self.repo.get_changes(session_id)
         use_snapshot = True
         if not baseline_results:
             baseline_results = await self.position_repo.get_latest_position_history_by_portfolio(

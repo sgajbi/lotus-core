@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -92,10 +91,9 @@ async def test_analytics_service_deduplicates_position_currency_fx_maps() -> Non
 
 
 @pytest.mark.asyncio
-async def test_analytics_service_reads_distinct_position_currency_fx_maps_concurrently() -> None:
+async def test_analytics_service_reads_distinct_position_currency_fx_maps_sequentially() -> None:
     service = make_service()
-    eur_started = asyncio.Event()
-    gbp_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def get_fx_rates_map(
         *,
@@ -108,25 +106,20 @@ async def test_analytics_service_reads_distinct_position_currency_fx_maps_concur
         assert start_date == date(2025, 1, 1)
         assert end_date == date(2025, 1, 31)
         if from_currency == "EUR":
-            eur_started.set()
-            await gbp_started.wait()
+            call_order.append("EUR")
             return {date(2025, 1, 1): Decimal("1.1")}
         if from_currency == "GBP":
-            await eur_started.wait()
-            gbp_started.set()
+            call_order.append("GBP")
             return {date(2025, 1, 1): Decimal("1.3")}
         raise AssertionError(f"unexpected currency {from_currency}")
 
     service.repo = SimpleNamespace(get_fx_rates_map=AsyncMock(side_effect=get_fx_rates_map))
 
-    rates = await asyncio.wait_for(
-        service._get_position_to_portfolio_rate_maps(  # pylint: disable=protected-access
-            position_currencies={"eur", "gbp", "usd"},
-            portfolio_currency="usd",
-            start_date=date(2025, 1, 1),
-            end_date=date(2025, 1, 31),
-        ),
-        timeout=1,
+    rates = await service._get_position_to_portfolio_rate_maps(  # pylint: disable=protected-access
+        position_currencies={"eur", "gbp", "usd"},
+        portfolio_currency="usd",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
     )
 
     assert rates == {
@@ -134,6 +127,7 @@ async def test_analytics_service_reads_distinct_position_currency_fx_maps_concur
         "GBP": {date(2025, 1, 1): Decimal("1.3")},
         "USD": {},
     }
+    assert call_order == ["EUR", "GBP"]
     assert service.repo.get_fx_rates_map.await_count == 2
 
 
@@ -645,19 +639,16 @@ async def test_portfolio_rows_page_position_reads_by_observation_dates() -> None
 
 
 @pytest.mark.asyncio
-async def test_portfolio_observation_rows_reads_page_support_inputs_concurrently() -> None:
+async def test_portfolio_observation_rows_reads_page_support_inputs_sequentially() -> None:
     service = make_service()
-    portfolio_cashflow_started = asyncio.Event()
-    position_cashflow_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def list_portfolio_cashflow_rows(**_: object) -> list[object]:
-        portfolio_cashflow_started.set()
-        await position_cashflow_started.wait()
+        call_order.append("portfolio_cashflow")
         return []
 
     async def list_position_cashflow_rows(**_: object) -> list[object]:
-        await portfolio_cashflow_started.wait()
-        position_cashflow_started.set()
+        call_order.append("position_cashflow")
         return []
 
     service.repo = SimpleNamespace(
@@ -682,20 +673,18 @@ async def test_portfolio_observation_rows_reads_page_support_inputs_concurrently
         list_position_cashflow_rows=AsyncMock(side_effect=list_position_cashflow_rows),
     )
 
-    observations, _, _, _, _ = await asyncio.wait_for(
-        service._portfolio_observation_rows(  # pylint: disable=protected-access
-            portfolio_id="P1",
-            portfolio_currency="USD",
-            reporting_currency="USD",
-            resolved_window=AnalyticsWindow(start_date="2025-01-02", end_date="2025-01-02"),
-            page_size=10,
-            cursor_date=None,
-            request_scope_fingerprint="scope-1",
-        ),
-        timeout=1,
+    observations, _, _, _, _ = await service._portfolio_observation_rows(  # pylint: disable=protected-access
+        portfolio_id="P1",
+        portfolio_currency="USD",
+        reporting_currency="USD",
+        resolved_window=AnalyticsWindow(start_date="2025-01-02", end_date="2025-01-02"),
+        page_size=10,
+        cursor_date=None,
+        request_scope_fingerprint="scope-1",
     )
 
     assert observations[0].ending_market_value == Decimal("120")
+    assert call_order == ["portfolio_cashflow", "position_cashflow"]
     service.repo.list_portfolio_cashflow_rows.assert_awaited_once()
     service.repo.list_position_cashflow_rows.assert_awaited_once()
 
@@ -1964,19 +1953,16 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_reads_page_support_inputs_concurrently() -> None:
+async def test_get_position_timeseries_reads_page_support_inputs_sequentially() -> None:
     service = make_service()
-    portfolio_cashflow_started = asyncio.Event()
-    position_cashflow_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def list_portfolio_cashflow_rows(**_: object) -> list[object]:
-        portfolio_cashflow_started.set()
-        await position_cashflow_started.wait()
+        call_order.append("portfolio_cashflow")
         return []
 
     async def list_position_cashflow_rows(**_: object) -> list[object]:
-        await portfolio_cashflow_started.wait()
-        position_cashflow_started.set()
+        call_order.append("position_cashflow")
         return []
 
     service.repo = SimpleNamespace(
@@ -2009,22 +1995,20 @@ async def test_get_position_timeseries_reads_page_support_inputs_concurrently() 
         list_latest_position_timeseries_before=AsyncMock(return_value=[]),
     )
 
-    response = await asyncio.wait_for(
-        service.get_position_timeseries(
-            portfolio_id="P1",
-            request=PositionAnalyticsTimeseriesRequest(
-                as_of_date="2025-12-31",
-                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
-                reporting_currency="USD",
-                include_cash_flows=True,
-                page=PageRequest(page_size=10),
-                dimensions=["asset_class"],
-            ),
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-12-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            reporting_currency="USD",
+            include_cash_flows=True,
+            page=PageRequest(page_size=10),
+            dimensions=["asset_class"],
         ),
-        timeout=1,
     )
 
     assert response.rows[0].ending_market_value_position_currency == Decimal("11")
+    assert call_order == ["portfolio_cashflow", "position_cashflow"]
     service.repo.list_portfolio_cashflow_rows.assert_awaited_once()
     service.repo.list_position_cashflow_rows.assert_awaited_once()
 
