@@ -127,87 +127,6 @@ class AnalyticsTimeseriesRepository:
         result = await self.db.execute(stmt)
         return [row.date for row in result.all()]
 
-    async def list_portfolio_observation_dates(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        snapshot_epoch: int | None = None,
-    ) -> list[date]:
-        predicates = [
-            PortfolioTimeseries.portfolio_id == portfolio_id,
-            PortfolioTimeseries.date >= start_date,
-            PortfolioTimeseries.date <= end_date,
-        ]
-        if snapshot_epoch is not None:
-            predicates.append(PortfolioTimeseries.epoch <= snapshot_epoch)
-        ranked = (
-            select(
-                PortfolioTimeseries.date.label("valuation_date"),
-                func.row_number()
-                .over(
-                    partition_by=PortfolioTimeseries.date,
-                    order_by=(PortfolioTimeseries.epoch.desc(),),
-                )
-                .label("rn"),
-            )
-            .where(*predicates)
-            .subquery()
-        )
-        stmt = (
-            select(ranked.c.valuation_date)
-            .where(ranked.c.rn == 1)
-            .order_by(ranked.c.valuation_date.asc())
-        )
-        result = await self.db.execute(stmt)
-        return [row.valuation_date for row in result.all()]
-
-    async def list_portfolio_timeseries_rows(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        page_size: int,
-        cursor_date: date | None,
-        snapshot_epoch: int | None = None,
-    ) -> list[Any]:
-        predicates = [
-            PortfolioTimeseries.portfolio_id == portfolio_id,
-            PortfolioTimeseries.date >= start_date,
-            PortfolioTimeseries.date <= end_date,
-        ]
-        if snapshot_epoch is not None:
-            predicates.append(PortfolioTimeseries.epoch <= snapshot_epoch)
-        ranked = (
-            select(
-                PortfolioTimeseries.date.label("valuation_date"),
-                PortfolioTimeseries.bod_market_value.label("bod_market_value"),
-                PortfolioTimeseries.eod_market_value.label("eod_market_value"),
-                PortfolioTimeseries.bod_cashflow.label("bod_cashflow"),
-                PortfolioTimeseries.eod_cashflow.label("eod_cashflow"),
-                PortfolioTimeseries.fees.label("fees"),
-                PortfolioTimeseries.epoch.label("epoch"),
-                func.row_number()
-                .over(
-                    partition_by=PortfolioTimeseries.date,
-                    order_by=(PortfolioTimeseries.epoch.desc(),),
-                )
-                .label("rn"),
-            )
-            .where(*predicates)
-            .subquery()
-        )
-
-        stmt = select(ranked).where(ranked.c.rn == 1)
-        if cursor_date is not None:
-            stmt = stmt.where(ranked.c.valuation_date > cursor_date)
-        stmt = stmt.order_by(ranked.c.valuation_date.asc()).limit(page_size + 1)
-
-        result = await self.db.execute(stmt)
-        return result.all()
-
     async def list_position_timeseries_rows(
         self,
         *,
@@ -541,21 +460,6 @@ class AnalyticsTimeseriesRepository:
         stmt = self._latest_cashflow_rows_stmt(predicates=predicates, include_security_id=False)
         result = await self.db.execute(stmt)
         return result.all()
-
-    async def get_portfolio_snapshot_epoch(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-    ) -> int:
-        stmt = select(func.max(PortfolioTimeseries.epoch)).where(
-            PortfolioTimeseries.portfolio_id == portfolio_id,
-            PortfolioTimeseries.date >= start_date,
-            PortfolioTimeseries.date <= end_date,
-        )
-        result = await self.db.execute(stmt)
-        return int(result.scalar_one_or_none() or 0)
 
     async def get_position_snapshot_epoch(
         self,

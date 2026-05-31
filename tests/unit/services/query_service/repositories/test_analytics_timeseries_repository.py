@@ -37,8 +37,6 @@ async def test_analytics_timeseries_repository_methods() -> None:
     db.execute.side_effect = [
         _FakeExecuteResult([SimpleNamespace(portfolio_id="P1")]),
         _FakeExecuteResult([date(2025, 1, 31)]),
-        _FakeExecuteResult([SimpleNamespace(valuation_date=date(2025, 1, 1))]),
-        _FakeExecuteResult([SimpleNamespace(valuation_date=date(2025, 1, 2))]),
         _FakeExecuteResult([SimpleNamespace(valuation_date=date(2025, 1, 1), security_id="SEC_A")]),
         _FakeExecuteResult(
             [
@@ -48,7 +46,6 @@ async def test_analytics_timeseries_repository_methods() -> None:
                 SimpleNamespace(rate_date=date(2025, 1, 4), rate=" 1.1400000000 "),
             ]
         ),
-        _FakeExecuteResult([3]),
         _FakeExecuteResult([2]),
     ]
     repo = AnalyticsTimeseriesRepository(db)
@@ -58,24 +55,6 @@ async def test_analytics_timeseries_repository_methods() -> None:
 
     latest_date = await repo.get_latest_portfolio_timeseries_date("P1")
     assert latest_date == date(2025, 1, 31)
-
-    portfolio_rows = await repo.list_portfolio_timeseries_rows(
-        portfolio_id="P1",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
-        page_size=100,
-        cursor_date=None,
-    )
-    assert len(portfolio_rows) == 1
-
-    portfolio_rows_with_cursor = await repo.list_portfolio_timeseries_rows(
-        portfolio_id="P1",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
-        page_size=100,
-        cursor_date=date(2025, 1, 1),
-    )
-    assert len(portfolio_rows_with_cursor) == 1
 
     position_rows = await repo.list_position_timeseries_rows(
         portfolio_id="P1",
@@ -89,7 +68,7 @@ async def test_analytics_timeseries_repository_methods() -> None:
         dimension_filters={"asset_class": {"Equity"}, "sector": {"Technology"}, "country": {"US"}},
     )
     assert len(position_rows) == 1
-    position_stmt = db.execute.await_args_list[4].args[0]
+    position_stmt = db.execute.await_args_list[2].args[0]
     position_sql = str(position_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "trim(position_timeseries.security_id)" in position_sql
     assert "anon_1.security_id IN ('SEC_A')" in position_sql
@@ -105,17 +84,10 @@ async def test_analytics_timeseries_repository_methods() -> None:
     assert date(2025, 1, 2) not in fx_map
     assert date(2025, 1, 3) not in fx_map
     assert fx_map[date(2025, 1, 4)] == Decimal("1.1400000000")
-    fx_stmt = db.execute.await_args_list[5].args[0]
+    fx_stmt = db.execute.await_args_list[3].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql
-
-    portfolio_snapshot_epoch = await repo.get_portfolio_snapshot_epoch(
-        portfolio_id="P1",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
-    )
-    assert portfolio_snapshot_epoch == 3
 
     position_snapshot_epoch = await repo.get_position_snapshot_epoch(
         portfolio_id="P1",
@@ -126,7 +98,7 @@ async def test_analytics_timeseries_repository_methods() -> None:
         dimension_filters={"asset_class": {"Equity"}, "sector": {"Technology"}, "country": {"US"}},
     )
     assert position_snapshot_epoch == 2
-    position_snapshot_stmt = db.execute.await_args_list[7].args[0]
+    position_snapshot_stmt = db.execute.await_args_list[4].args[0]
     position_snapshot_sql = str(
         position_snapshot_stmt.compile(compile_kwargs={"literal_binds": True})
     )
@@ -147,12 +119,6 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
                 SimpleNamespace(valuation_date=date(2025, 1, 2)),
             ]
         ),
-        _FakeExecuteResult(
-            [
-                SimpleNamespace(valuation_date=date(2025, 1, 1)),
-                SimpleNamespace(valuation_date=date(2025, 1, 2)),
-            ]
-        ),
     ]
     repo = AnalyticsTimeseriesRepository(db)
 
@@ -166,18 +132,6 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
     assert "business_dates.date >= '2025-01-01'" in business_sql
     assert "business_dates.date <= '2025-01-31'" in business_sql
 
-    observation_dates = await repo.list_portfolio_observation_dates(
-        portfolio_id="P1",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
-        snapshot_epoch=6,
-    )
-    assert observation_dates == [date(2025, 1, 1), date(2025, 1, 2)]
-    observation_stmt = db.execute.await_args_list[1].args[0]
-    observation_sql = str(observation_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolio_timeseries.epoch <= 6" in observation_sql
-    assert "ORDER BY anon_1.valuation_date ASC" in observation_sql
-
     position_observation_dates = await repo.list_position_observation_dates(
         portfolio_id="P1",
         start_date=date(2025, 1, 1),
@@ -185,7 +139,7 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
         snapshot_epoch=7,
     )
     assert position_observation_dates == [date(2025, 1, 1), date(2025, 1, 2)]
-    position_observation_stmt = db.execute.await_args_list[2].args[0]
+    position_observation_stmt = db.execute.await_args_list[1].args[0]
     position_observation_sql = str(
         position_observation_stmt.compile(compile_kwargs={"literal_binds": True})
     )
@@ -202,19 +156,6 @@ async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
     db.execute.return_value = _FakeExecuteResult([])
     repo = AnalyticsTimeseriesRepository(db)
 
-    await repo.list_portfolio_timeseries_rows(
-        portfolio_id="P1",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
-        page_size=10,
-        cursor_date=None,
-        snapshot_epoch=3,
-    )
-    portfolio_stmt = db.execute.await_args_list[0].args[0]
-    assert "portfolio_timeseries.epoch <= 3" in str(
-        portfolio_stmt.compile(compile_kwargs={"literal_binds": True})
-    )
-
     await repo.list_position_timeseries_rows(
         portfolio_id="P1",
         start_date=date(2025, 1, 1),
@@ -227,7 +168,7 @@ async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
         dimension_filters={},
         snapshot_epoch=4,
     )
-    position_stmt = db.execute.await_args_list[1].args[0]
+    position_stmt = db.execute.await_args_list[0].args[0]
     position_sql = str(position_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.epoch <= 4" in position_sql
     assert "JOIN position_state ON" in position_sql

@@ -106,24 +106,26 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
                 objective="Balanced growth",
             )
         ),
-        list_portfolio_timeseries_rows=AsyncMock(
+        get_fx_rates_map=AsyncMock(return_value={}),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
+                    security_id="SEC_EUR",
                     valuation_date=date(2025, 1, 31),
                     bod_market_value=Decimal("100"),
                     eod_market_value=Decimal("110"),
-                    bod_cashflow=Decimal("1"),
-                    eod_cashflow=Decimal("2"),
-                    fees=Decimal("-0.5"),
+                    bod_cashflow_position=Decimal("0"),
                     epoch=0,
+                    position_currency="EUR",
+                    asset_class="Equity",
                 )
             ]
         ),
-        get_fx_rates_map=AsyncMock(return_value={}),
-        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
-        get_portfolio_snapshot_epoch=AsyncMock(return_value=0),
-        list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
-        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -152,6 +154,7 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
                 ),
             ]
         ),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
     )
 
     response = await service.get_portfolio_timeseries(
@@ -203,24 +206,26 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
                 close_date=None,
             )
         ),
-        list_portfolio_timeseries_rows=AsyncMock(
+        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 2): Decimal("1.5")}),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
+        get_position_snapshot_epoch=AsyncMock(return_value=1),
+        list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
+        list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 2)]),
+        list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
+                    security_id="SEC_EUR",
                     valuation_date=date(2025, 1, 2),
                     bod_market_value=Decimal("100"),
                     eod_market_value=Decimal("110"),
-                    bod_cashflow=Decimal("5"),
-                    eod_cashflow=Decimal("0"),
-                    fees=Decimal("0"),
+                    bod_cashflow_position=Decimal("0"),
                     epoch=1,
+                    position_currency="EUR",
+                    asset_class="Equity",
                 )
             ]
         ),
-        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 2): Decimal("1.5")}),
-        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
-        get_portfolio_snapshot_epoch=AsyncMock(return_value=1),
-        list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
-        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 2)]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -233,6 +238,7 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
                 )
             ]
         ),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
     )
 
     response = await service.get_portfolio_timeseries(
@@ -265,46 +271,50 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
                 close_date=None,
             )
         ),
-        list_portfolio_timeseries_rows=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    valuation_date=date(2026, 3, 16),
-                    bod_market_value=Decimal("0"),
-                    eod_market_value=Decimal("10000"),
-                    bod_cashflow=Decimal("10000"),
-                    eod_cashflow=Decimal("0"),
-                    fees=Decimal("0"),
-                    epoch=0,
-                ),
-                SimpleNamespace(
-                    valuation_date=date(2026, 3, 18),
-                    bod_market_value=Decimal("10000"),
-                    eod_market_value=Decimal("15000"),
-                    bod_cashflow=Decimal("5000"),
-                    eod_cashflow=Decimal("0"),
-                    fees=Decimal("0"),
-                    epoch=0,
-                ),
-                SimpleNamespace(
-                    valuation_date=date(2026, 3, 19),
-                    bod_market_value=Decimal("15000"),
-                    eod_market_value=Decimal("13000"),
-                    bod_cashflow=Decimal("0"),
-                    eod_cashflow=Decimal("-2000"),
-                    fees=Decimal("0"),
-                    epoch=0,
-                ),
-            ]
-        ),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 3, 20)),
-        get_portfolio_snapshot_epoch=AsyncMock(return_value=0),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_business_dates=AsyncMock(
             return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
         ),
-        list_portfolio_observation_dates=AsyncMock(
+        list_position_observation_dates=AsyncMock(
             return_value=[date(2026, 3, day) for day in (16, 18, 19)]
         ),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="CASH_USD",
+                    valuation_date=date(2026, 3, 16),
+                    bod_market_value=Decimal("0"),
+                    eod_market_value=Decimal("10000"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=0,
+                    position_currency="USD",
+                    asset_class="Cash",
+                ),
+                SimpleNamespace(
+                    security_id="CASH_USD",
+                    valuation_date=date(2026, 3, 18),
+                    bod_market_value=Decimal("10000"),
+                    eod_market_value=Decimal("15000"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=0,
+                    position_currency="USD",
+                    asset_class="Cash",
+                ),
+                SimpleNamespace(
+                    security_id="CASH_USD",
+                    valuation_date=date(2026, 3, 19),
+                    bod_market_value=Decimal("15000"),
+                    eod_market_value=Decimal("13000"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=0,
+                    position_currency="USD",
+                    asset_class="Cash",
+                ),
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -336,6 +346,7 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
                 ),
             ]
         ),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
     )
 
     response = await service.get_portfolio_timeseries(
@@ -1053,7 +1064,7 @@ def test_resolve_window_rejects_inverted_window_and_supports_ytd() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_portfolio_timeseries_fallback_path_defaults_snapshot_epoch_and_pages() -> None:
+async def test_get_portfolio_timeseries_position_path_defaults_snapshot_epoch_and_pages() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(
@@ -1065,25 +1076,37 @@ async def test_get_portfolio_timeseries_fallback_path_defaults_snapshot_epoch_an
             )
         ),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
-        list_portfolio_timeseries_rows=AsyncMock(
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2025, 1, 1), date(2025, 1, 2)]
+        ),
+        list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
+                    security_id="SEC_USD",
                     valuation_date=date(2025, 1, 1),
                     bod_market_value=Decimal("100"),
                     eod_market_value=Decimal("110"),
+                    bod_cashflow_position=Decimal("0"),
                     epoch=0,
+                    position_currency="USD",
+                    asset_class="Equity",
                 ),
                 SimpleNamespace(
+                    security_id="SEC_USD",
                     valuation_date=date(2025, 1, 2),
                     bod_market_value=Decimal("110"),
                     eod_market_value=Decimal("120"),
+                    bod_cashflow_position=Decimal("0"),
                     epoch=0,
+                    position_currency="USD",
+                    asset_class="Equity",
                 ),
             ]
         ),
-        list_portfolio_observation_dates=AsyncMock(
-            return_value=[date(2025, 1, 1), date(2025, 1, 2)]
-        ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
     )
@@ -1118,17 +1141,25 @@ async def test_get_portfolio_timeseries_normalizes_sparse_numeric_rows() -> None
             )
         ),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
-        list_portfolio_timeseries_rows=AsyncMock(
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
+        list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
+                    security_id="SEC_USD",
                     valuation_date=date(2025, 1, 1),
                     bod_market_value=" ",
                     eod_market_value=None,
+                    bod_cashflow_position=Decimal("0"),
                     epoch=0,
+                    position_currency="USD",
+                    asset_class="Equity",
                 )
             ]
         ),
-        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 1)),
     )
@@ -1361,10 +1392,8 @@ async def test_page_token_scope_mismatch_raises_invalid_request() -> None:
                 close_date=None,
             )
         ),
-        list_portfolio_timeseries_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
-        get_portfolio_snapshot_epoch=AsyncMock(return_value=5),
     )
     token = service._encode_page_token(  # pylint: disable=protected-access
         {
@@ -1637,24 +1666,28 @@ async def test_get_portfolio_timeseries_period_resolution_and_missing_fx() -> No
                 close_date=None,
             )
         ),
-        list_portfolio_timeseries_rows=AsyncMock(
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
+                    security_id="SEC_EUR",
                     valuation_date=date(2025, 1, 31),
                     bod_market_value=Decimal("100"),
                     eod_market_value=Decimal("110"),
-                    bod_cashflow=Decimal("0"),
-                    eod_cashflow=Decimal("0"),
-                    fees=Decimal("0"),
+                    bod_cashflow_position=Decimal("0"),
                     epoch=0,
+                    position_currency="EUR",
+                    asset_class="Equity",
                 )
             ]
         ),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
-        get_portfolio_snapshot_epoch=AsyncMock(return_value=0),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
-        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
     )
     with pytest.raises(AnalyticsInputError) as exc_info:
         await service.get_portfolio_timeseries(
