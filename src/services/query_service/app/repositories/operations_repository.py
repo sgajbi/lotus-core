@@ -1086,12 +1086,12 @@ class OperationsRepository:
             PortfolioValuationJob.id.label("id"),
             PortfolioValuationJob.correlation_id.label("correlation_id"),
             self._security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
-        ).where(
-            PortfolioValuationJob.portfolio_id == portfolio_id,
-            self._is_actionable_valuation_job(as_of=as_of),
         )
-        if as_of is not None:
-            base_stmt = base_stmt.where(PortfolioValuationJob.updated_at <= as_of)
+        base_stmt = self._apply_valuation_job_scope(
+            base_stmt,
+            portfolio_id=portfolio_id,
+            as_of=as_of,
+        )
         base_subq = base_stmt.subquery()
         aggregate_subq = self._support_job_health_aggregate(
             base_subq,
@@ -1149,9 +1149,12 @@ class OperationsRepository:
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.id.label("id"),
             PortfolioAggregationJob.correlation_id.label("correlation_id"),
-        ).where(PortfolioAggregationJob.portfolio_id == portfolio_id)
-        if as_of is not None:
-            base_stmt = base_stmt.where(PortfolioAggregationJob.updated_at <= as_of)
+        )
+        base_stmt = self._apply_aggregation_job_scope(
+            base_stmt,
+            portfolio_id=portfolio_id,
+            as_of=as_of,
+        )
         base_subq = base_stmt.subquery()
         aggregate_subq = self._support_job_health_aggregate(
             base_subq,
@@ -1207,9 +1210,12 @@ class OperationsRepository:
             AnalyticsExportJob.created_at.label("created_at"),
             AnalyticsExportJob.job_id.label("job_id"),
             AnalyticsExportJob.request_fingerprint.label("request_fingerprint"),
-        ).where(AnalyticsExportJob.portfolio_id == portfolio_id)
-        if as_of is not None:
-            base_stmt = base_stmt.where(AnalyticsExportJob.updated_at <= as_of)
+        )
+        base_stmt = self._apply_analytics_export_job_scope(
+            base_stmt,
+            portfolio_id=portfolio_id,
+            as_of=as_of,
+        )
         base_subq = base_stmt.subquery()
         aggregate_subq = (
             select(
