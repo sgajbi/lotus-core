@@ -115,6 +115,7 @@ from .dpm_source_readiness import (
     unavailable_dpm_source_family,
 )
 from .integration_policy import build_effective_policy_response
+from .integration_value_normalization import as_decimal, control_code
 from .market_reference_coverage import market_reference_coverage_response
 from .page_token_codec import PageTokenCodec
 from .reference_data_helpers import (
@@ -175,25 +176,6 @@ class IntegrationService:
         self._portfolio_repository = PortfolioRepository(db)
         self._transaction_repository = TransactionRepository(db)
         self._page_token_codec = PageTokenCodec(load_query_service_settings().page_token_secret)
-
-    @staticmethod
-    def _as_decimal(value: Any) -> Decimal:
-        if isinstance(value, Decimal):
-            return value
-        return Decimal(str(value))
-
-    @staticmethod
-    def _string_list(value: Any) -> list[str]:
-        if not isinstance(value, list):
-            return []
-        return [str(item) for item in value if str(item).strip()]
-
-    @staticmethod
-    def _control_code(value: Any, *, default: str = "") -> str:
-        if value is None:
-            return default
-        normalized = str(value).strip().upper()
-        return normalized or default
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return self._page_token_codec.encode(payload)
@@ -605,7 +587,7 @@ class IntegrationService:
         missing_data_families: list[str] = []
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "MANDATE_BINDING_READY"
-        discretionary_authority_status = self._control_code(row.discretionary_authority_status)
+        discretionary_authority_status = control_code(row.discretionary_authority_status)
         if discretionary_authority_status != "ACTIVE":
             supportability_state = "INCOMPLETE"
             supportability_reason = "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
@@ -633,7 +615,7 @@ class IntegrationService:
             supportability_reason = "MANDATE_REVIEW_OVERDUE"
 
         bands = dict(row.rebalance_bands or {})
-        default_band = self._as_decimal(bands.get("default_band", "0"))
+        default_band = as_decimal(bands.get("default_band", "0"))
         cash_reserve_raw = bands.get("cash_reserve_weight")
 
         return DiscretionaryMandateBindingResponse(
@@ -659,7 +641,7 @@ class IntegrationService:
             rebalance_bands=RebalanceBandContext(
                 default_band=default_band,
                 cash_reserve_weight=(
-                    self._as_decimal(cash_reserve_raw) if cash_reserve_raw is not None else None
+                    as_decimal(cash_reserve_raw) if cash_reserve_raw is not None else None
                 ),
             ),
             effective_from=row.effective_from,
@@ -677,7 +659,7 @@ class IntegrationService:
             },
             **source_product_runtime_metadata(
                 request.as_of_date,
-                data_quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
+                data_quality_status=control_code(row.quality_status, default="UNKNOWN"),
                 latest_evidence_timestamp=latest_reference_evidence_timestamp([row]),
             ),
         )
@@ -2347,7 +2329,7 @@ class IntegrationService:
             segments=[
                 {
                     "index_id": component.index_id,
-                    "composition_weight": self._as_decimal(component.composition_weight),
+                    "composition_weight": as_decimal(component.composition_weight),
                     "composition_effective_from": component.composition_effective_from,
                     "composition_effective_to": component.composition_effective_to,
                     "rebalance_event_id": component.rebalance_event_id,
@@ -2525,7 +2507,7 @@ class IntegrationService:
                         segment.composition_effective_to is None
                         or segment.composition_effective_to >= current_date
                     ):
-                        component_weight = self._as_decimal(segment.composition_weight)
+                        component_weight = as_decimal(segment.composition_weight)
                         break
                 points.append(
                     benchmark_market_series_point(
