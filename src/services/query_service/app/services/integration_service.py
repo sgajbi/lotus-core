@@ -89,8 +89,6 @@ from ..dtos.reference_integration_dto import (
     MarketDataCoverageRequest,
     MarketDataCoverageSupportability,
     MarketDataCoverageWindowResponse,
-    MarketDataFxCoverageRecord,
-    MarketDataPriceCoverageRecord,
     ModelPortfolioSupportability,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
@@ -144,7 +142,11 @@ from .reference_data_mappers import (
     index_definition_response,
     instrument_eligibility_record,
     liquidity_reserve_requirement_entry,
+    market_data_fx_coverage_record,
+    market_data_price_coverage_record,
     missing_instrument_eligibility_record,
+    missing_market_data_fx_coverage_record,
+    missing_market_data_price_coverage_record,
     model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
@@ -2141,41 +2143,27 @@ class IntegrationService:
         price_by_instrument = {normalize_security_id(row.security_id): row for row in price_rows}
         fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
 
-        price_coverage: list[MarketDataPriceCoverageRecord] = []
+        price_coverage = []
         missing_instrument_ids: list[str] = []
         stale_instrument_ids: list[str] = []
         for instrument_id in instrument_ids:
             row = price_by_instrument.get(instrument_id)
             if row is None:
                 missing_instrument_ids.append(instrument_id)
-                price_coverage.append(
-                    MarketDataPriceCoverageRecord(
-                        instrument_id=instrument_id,
-                        found=False,
-                        quality_status="MISSING",
-                    )
-                )
+                price_coverage.append(missing_market_data_price_coverage_record(instrument_id))
                 continue
 
-            age_days = (request.as_of_date - row.price_date).days
-            quality_status: Literal["READY", "STALE", "MISSING"] = (
-                "STALE" if age_days > request.max_staleness_days else "READY"
+            coverage_record = market_data_price_coverage_record(
+                row,
+                instrument_id=instrument_id,
+                as_of_date=request.as_of_date,
+                max_staleness_days=request.max_staleness_days,
             )
-            if quality_status == "STALE":
+            if coverage_record.quality_status == "STALE":
                 stale_instrument_ids.append(instrument_id)
-            price_coverage.append(
-                MarketDataPriceCoverageRecord(
-                    instrument_id=instrument_id,
-                    found=True,
-                    price_date=row.price_date,
-                    price=self._as_decimal(row.price),
-                    currency=row.currency,
-                    age_days=age_days,
-                    quality_status=quality_status,
-                )
-            )
+            price_coverage.append(coverage_record)
 
-        fx_coverage: list[MarketDataFxCoverageRecord] = []
+        fx_coverage = []
         missing_currency_pairs: list[str] = []
         stale_currency_pairs: list[str] = []
         for pair in request.currency_pairs:
@@ -2185,30 +2173,23 @@ class IntegrationService:
             if row is None:
                 missing_currency_pairs.append(pair_label)
                 fx_coverage.append(
-                    MarketDataFxCoverageRecord(
+                    missing_market_data_fx_coverage_record(
                         from_currency=pair.from_currency,
                         to_currency=pair.to_currency,
-                        found=False,
-                        quality_status="MISSING",
                     )
                 )
                 continue
 
-            age_days = (request.as_of_date - row.rate_date).days
-            quality_status = "STALE" if age_days > request.max_staleness_days else "READY"
-            if quality_status == "STALE":
-                stale_currency_pairs.append(pair_label)
-            fx_coverage.append(
-                MarketDataFxCoverageRecord(
-                    from_currency=pair.from_currency,
-                    to_currency=pair.to_currency,
-                    found=True,
-                    rate_date=row.rate_date,
-                    rate=self._as_decimal(row.rate),
-                    age_days=age_days,
-                    quality_status=quality_status,
-                )
+            coverage_record = market_data_fx_coverage_record(
+                row,
+                from_currency=pair.from_currency,
+                to_currency=pair.to_currency,
+                as_of_date=request.as_of_date,
+                max_staleness_days=request.max_staleness_days,
             )
+            if coverage_record.quality_status == "STALE":
+                stale_currency_pairs.append(pair_label)
+            fx_coverage.append(coverage_record)
 
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "MARKET_DATA_READY"

@@ -15,6 +15,8 @@ from ..dtos.reference_integration_dto import (
     IndexDefinitionResponse,
     InstrumentEligibilityRecord,
     LiquidityReserveRequirementEntry,
+    MarketDataFxCoverageRecord,
+    MarketDataPriceCoverageRecord,
     ModelPortfolioTargetRow,
     PlannedWithdrawalScheduleEntry,
     PortfolioManagerBookMember,
@@ -235,6 +237,70 @@ def portfolio_tax_lot_record(row: Any, *, local_currency: str | None) -> Portfol
             "calculation_policy_id": row.calculation_policy_id or "UNKNOWN",
             "calculation_policy_version": row.calculation_policy_version or "UNKNOWN",
         },
+    )
+
+
+def missing_market_data_price_coverage_record(
+    instrument_id: str,
+) -> MarketDataPriceCoverageRecord:
+    return MarketDataPriceCoverageRecord(
+        instrument_id=normalize_security_id(instrument_id),
+        found=False,
+        quality_status="MISSING",
+    )
+
+
+def market_data_price_coverage_record(
+    row: Any,
+    *,
+    instrument_id: str,
+    as_of_date: Any,
+    max_staleness_days: int,
+) -> MarketDataPriceCoverageRecord:
+    age_days = (as_of_date - row.price_date).days
+    quality_status = "STALE" if age_days > max_staleness_days else "READY"
+    return MarketDataPriceCoverageRecord(
+        instrument_id=normalize_security_id(instrument_id),
+        found=True,
+        price_date=row.price_date,
+        price=_as_decimal(row.price),
+        currency=row.currency,
+        age_days=age_days,
+        quality_status=quality_status,
+    )
+
+
+def missing_market_data_fx_coverage_record(
+    *,
+    from_currency: str,
+    to_currency: str,
+) -> MarketDataFxCoverageRecord:
+    return MarketDataFxCoverageRecord(
+        from_currency=from_currency,
+        to_currency=to_currency,
+        found=False,
+        quality_status="MISSING",
+    )
+
+
+def market_data_fx_coverage_record(
+    row: Any,
+    *,
+    from_currency: str,
+    to_currency: str,
+    as_of_date: Any,
+    max_staleness_days: int,
+) -> MarketDataFxCoverageRecord:
+    age_days = (as_of_date - row.rate_date).days
+    quality_status = "STALE" if age_days > max_staleness_days else "READY"
+    return MarketDataFxCoverageRecord(
+        from_currency=from_currency,
+        to_currency=to_currency,
+        found=True,
+        rate_date=row.rate_date,
+        rate=_as_decimal(row.rate),
+        age_days=age_days,
+        quality_status=quality_status,
     )
 
 

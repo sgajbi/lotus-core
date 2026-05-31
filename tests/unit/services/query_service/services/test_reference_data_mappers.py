@@ -13,7 +13,11 @@ from src.services.query_service.app.services.reference_data_mappers import (
     index_definition_response,
     instrument_eligibility_record,
     liquidity_reserve_requirement_entry,
+    market_data_fx_coverage_record,
+    market_data_price_coverage_record,
     missing_instrument_eligibility_record,
+    missing_market_data_fx_coverage_record,
+    missing_market_data_price_coverage_record,
     model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
@@ -233,6 +237,49 @@ def test_portfolio_tax_lot_record_maps_lot_state_row() -> None:
         "calculation_policy_id": "BUY_DEFAULT_POLICY",
         "calculation_policy_version": "UNKNOWN",
     }
+
+
+def test_market_data_coverage_records_map_found_missing_and_stale_rows() -> None:
+    as_of_date = date(2026, 5, 31)
+    price = market_data_price_coverage_record(
+        SimpleNamespace(
+            price_date=date(2026, 5, 20),
+            price="195.2500000000",
+            currency="USD",
+        ),
+        instrument_id=" EQ_US_AAPL ",
+        as_of_date=as_of_date,
+        max_staleness_days=5,
+    )
+    missing_price = missing_market_data_price_coverage_record(" BOND_PRIVATE_CREDIT_001 ")
+    fx = market_data_fx_coverage_record(
+        SimpleNamespace(
+            rate_date=date(2026, 5, 31),
+            rate="1.3456000000",
+        ),
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=as_of_date,
+        max_staleness_days=5,
+    )
+    missing_fx = missing_market_data_fx_coverage_record(
+        from_currency="EUR",
+        to_currency="SGD",
+    )
+
+    assert price.instrument_id == "EQ_US_AAPL"
+    assert price.price == Decimal("195.2500000000")
+    assert price.age_days == 11
+    assert price.quality_status == "STALE"
+    assert missing_price.instrument_id == "BOND_PRIVATE_CREDIT_001"
+    assert missing_price.found is False
+    assert missing_price.quality_status == "MISSING"
+    assert fx.rate == Decimal("1.3456000000")
+    assert fx.age_days == 0
+    assert fx.quality_status == "READY"
+    assert missing_fx.from_currency == "EUR"
+    assert missing_fx.to_currency == "SGD"
+    assert missing_fx.quality_status == "MISSING"
 
 
 def test_client_tax_entries_map_source_data_rows() -> None:
