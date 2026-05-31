@@ -76,6 +76,29 @@ async def test_reference_data_repository_lists_latest_market_data_windows() -> N
 
 
 @pytest.mark.asyncio
+async def test_latest_market_data_queries_deduplicate_normalized_inputs() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [_FakeExecuteResult([]), _FakeExecuteResult([])]
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_latest_market_prices(
+        security_ids=[" EQ_US_AAPL ", "EQ_US_AAPL", " FI_US_TREASURY_10Y "],
+        as_of_date=date(2026, 4, 10),
+    )
+    await repo.list_latest_fx_rates(
+        currency_pairs=[(" usd ", " sgd "), ("USD", "SGD"), (" eur ", " usd ")],
+        as_of_date=date(2026, 4, 10),
+    )
+
+    price_stmt = db.execute.await_args_list[0].args[0]
+    price_params = price_stmt.compile().params
+    assert ["EQ_US_AAPL", "FI_US_TREASURY_10Y"] in price_params.values()
+    fx_stmt = db.execute.await_args_list[1].args[0]
+    fx_params = fx_stmt.compile().params
+    assert [("USD", "SGD"), ("EUR", "USD")] in fx_params.values()
+
+
+@pytest.mark.asyncio
 async def test_reference_data_repository_normalizes_market_reference_currency_filters() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [

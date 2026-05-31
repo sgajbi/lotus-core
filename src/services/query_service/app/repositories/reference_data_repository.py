@@ -1361,6 +1361,7 @@ class ReferenceDataRepository:
             for security_id in security_ids
             if (normalized := normalize_security_id(security_id))
         ]
+        normalized_security_ids = list(dict.fromkeys(normalized_security_ids))
         if not normalized_security_ids:
             return []
         security_id_expr = func.trim(MarketPrice.security_id)
@@ -1406,6 +1407,7 @@ class ReferenceDataRepository:
             if (normalized_base := normalize_currency_code(base))
             and (normalized_quote := normalize_currency_code(quote))
         ]
+        normalized_pairs = list(dict.fromkeys(normalized_pairs))
         if not normalized_pairs:
             return []
         from_currency_expr = currency_code_sql_expr(FxRate.from_currency)

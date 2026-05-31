@@ -1936,18 +1936,20 @@ class IntegrationService:
         instrument_ids = [
             normalize_security_id(instrument_id) for instrument_id in request.instrument_ids
         ]
+        unique_instrument_ids = list(dict.fromkeys(instrument_ids))
         valuation_currency = (
             normalize_currency_code(request.valuation_currency)
             if request.valuation_currency is not None
             else None
         )
         price_rows = await self._reference_repository.list_latest_market_prices(
-            security_ids=instrument_ids,
+            security_ids=unique_instrument_ids,
             as_of_date=request.as_of_date,
         )
         fx_pairs = [(pair.from_currency, pair.to_currency) for pair in request.currency_pairs]
+        unique_fx_pairs = list(dict.fromkeys(fx_pairs))
         fx_rows = await self._reference_repository.list_latest_fx_rates(
-            currency_pairs=fx_pairs,
+            currency_pairs=unique_fx_pairs,
             as_of_date=request.as_of_date,
         )
 

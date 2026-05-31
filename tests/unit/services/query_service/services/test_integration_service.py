@@ -4006,6 +4006,63 @@ async def test_market_data_coverage_normalizes_instrument_and_valuation_currency
 
 
 @pytest.mark.asyncio
+async def test_market_data_coverage_deduplicates_repository_lookup_scope() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    from_currency="USD",
+                    to_currency="SGD",
+                    rate_date=date(2026, 4, 10),
+                    rate=Decimal("1.3521000000"),
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_market_data_coverage(
+        SimpleNamespace(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=[" EQ_US_AAPL ", "EQ_US_AAPL"],
+            currency_pairs=[
+                SimpleNamespace(from_currency="USD", to_currency="SGD"),
+                SimpleNamespace(from_currency="USD", to_currency="SGD"),
+            ],
+            valuation_currency=None,
+            max_staleness_days=5,
+        )
+    )
+
+    assert [record.instrument_id for record in response.price_coverage] == [
+        "EQ_US_AAPL",
+        "EQ_US_AAPL",
+    ]
+    assert response.supportability.requested_price_count == 2
+    assert response.supportability.resolved_price_count == 2
+    assert response.supportability.requested_fx_count == 2
+    assert response.supportability.resolved_fx_count == 2
+    service._reference_repository.list_latest_market_prices.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+    service._reference_repository.list_latest_fx_rates.assert_awaited_once_with(
+        currency_pairs=[("USD", "SGD")],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
+@pytest.mark.asyncio
 async def test_market_data_coverage_normalizes_returned_price_security_id() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
