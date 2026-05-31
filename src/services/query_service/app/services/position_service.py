@@ -1,4 +1,5 @@
 # src/services/query_service/app/services/position_service.py
+import asyncio
 import logging
 from datetime import date, datetime
 from decimal import Decimal
@@ -92,15 +93,19 @@ class PositionService:
             effective_as_of_date = await self.repo.get_latest_business_date() or date.today()
 
         if effective_as_of_date is not None:
-            snapshot_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(
-                portfolio_id, effective_as_of_date
-            )
-            history_results = await self.repo.get_latest_position_history_by_portfolio_as_of_date(
-                portfolio_id, effective_as_of_date
+            snapshot_results, history_results = await asyncio.gather(
+                self.repo.get_latest_positions_by_portfolio_as_of_date(
+                    portfolio_id, effective_as_of_date
+                ),
+                self.repo.get_latest_position_history_by_portfolio_as_of_date(
+                    portfolio_id, effective_as_of_date
+                ),
             )
         else:
-            snapshot_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
-            history_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
+            snapshot_results, history_results = await asyncio.gather(
+                self.repo.get_latest_positions_by_portfolio(portfolio_id),
+                self.repo.get_latest_position_history_by_portfolio(portfolio_id),
+            )
 
         snapshot_results_by_security = {
             normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)

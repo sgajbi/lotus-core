@@ -1,4 +1,5 @@
 # tests/unit/services/query_service/services/test_position_service.py
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -153,6 +154,45 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.data_quality_status == "COMPLETE"
         assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
         assert response.correlation_id is None
+
+
+async def test_get_latest_positions_reads_snapshot_and_history_concurrently(
+    mock_position_repo: AsyncMock,
+):
+    snapshot_started = asyncio.Event()
+    history_started = asyncio.Event()
+    snapshot_rows = mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value
+
+    async def _snapshot_rows(portfolio_id: str, as_of_date: date):
+        snapshot_started.set()
+        await history_started.wait()
+        return snapshot_rows
+
+    async def _history_rows(portfolio_id: str, as_of_date: date):
+        await snapshot_started.wait()
+        history_started.set()
+        return []
+
+    mock_position_repo.get_latest_positions_by_portfolio_as_of_date.side_effect = _snapshot_rows
+    mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.side_effect = (
+        _history_rows
+    )
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await asyncio.wait_for(
+            service.get_portfolio_positions(
+                portfolio_id="P1",
+                as_of_date=date(2025, 1, 1),
+            ),
+            timeout=1,
+        )
+
+    assert len(response.positions) == 1
+    assert response.positions[0].security_id == "S1"
 
 
 async def test_get_latest_positions_falls_back_to_position_history(mock_position_repo: AsyncMock):
