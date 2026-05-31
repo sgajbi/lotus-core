@@ -540,6 +540,28 @@ class OperationsRepository:
             stmt = stmt.where(job_model.updated_at <= as_of)
         return stmt
 
+    @staticmethod
+    def _apply_portfolio_security_epoch_scope(
+        stmt,
+        evidence_model,
+        security_id_expr,
+        *,
+        portfolio_id: str,
+        normalized_security_id: str,
+        epoch: int,
+        as_of: Optional[datetime] = None,
+        as_of_columns=(),
+    ):
+        stmt = stmt.where(
+            evidence_model.portfolio_id == portfolio_id,
+            security_id_expr == normalized_security_id,
+            evidence_model.epoch == epoch,
+        )
+        if as_of is not None:
+            for as_of_column in as_of_columns:
+                stmt = stmt.where(as_of_column <= as_of)
+        return stmt
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -1527,13 +1549,16 @@ class OperationsRepository:
         if not normalized_security_id:
             return None
         history_security_id = self._security_id_expr(PositionHistory.security_id)
-        stmt = select(func.max(PositionHistory.position_date)).where(
-            PositionHistory.portfolio_id == portfolio_id,
-            history_security_id == normalized_security_id,
-            PositionHistory.epoch == epoch,
+        stmt = self._apply_portfolio_security_epoch_scope(
+            select(func.max(PositionHistory.position_date)),
+            PositionHistory,
+            history_security_id,
+            portfolio_id=portfolio_id,
+            normalized_security_id=normalized_security_id,
+            epoch=epoch,
+            as_of=as_of,
+            as_of_columns=(PositionHistory.created_at,),
         )
-        if as_of is not None:
-            stmt = stmt.where(PositionHistory.created_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_daily_snapshot_date(
@@ -1543,13 +1568,16 @@ class OperationsRepository:
         if not normalized_security_id:
             return None
         snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        stmt = select(func.max(DailyPositionSnapshot.date)).where(
-            DailyPositionSnapshot.portfolio_id == portfolio_id,
-            snapshot_security_id == normalized_security_id,
-            DailyPositionSnapshot.epoch == epoch,
+        stmt = self._apply_portfolio_security_epoch_scope(
+            select(func.max(DailyPositionSnapshot.date)),
+            DailyPositionSnapshot,
+            snapshot_security_id,
+            portfolio_id=portfolio_id,
+            normalized_security_id=normalized_security_id,
+            epoch=epoch,
+            as_of=as_of,
+            as_of_columns=(DailyPositionSnapshot.created_at,),
         )
-        if as_of is not None:
-            stmt = stmt.where(DailyPositionSnapshot.created_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_valuation_job(
@@ -1563,16 +1591,16 @@ class OperationsRepository:
         if not normalized_security_id:
             return None
         valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
-        stmt = select(PortfolioValuationJob).where(
-            PortfolioValuationJob.portfolio_id == portfolio_id,
-            valuation_job_security_id == normalized_security_id,
-            PortfolioValuationJob.epoch == epoch,
+        stmt = self._apply_portfolio_security_epoch_scope(
+            select(PortfolioValuationJob),
+            PortfolioValuationJob,
+            valuation_job_security_id,
+            portfolio_id=portfolio_id,
+            normalized_security_id=normalized_security_id,
+            epoch=epoch,
+            as_of=as_of,
+            as_of_columns=(PortfolioValuationJob.created_at, PortfolioValuationJob.updated_at),
         )
-        if as_of is not None:
-            stmt = stmt.where(
-                PortfolioValuationJob.created_at <= as_of,
-                PortfolioValuationJob.updated_at <= as_of,
-            )
         stmt = stmt.order_by(
             PortfolioValuationJob.valuation_date.desc(),
             PortfolioValuationJob.id.desc(),

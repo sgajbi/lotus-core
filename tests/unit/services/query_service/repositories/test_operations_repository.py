@@ -896,6 +896,8 @@ async def test_get_latest_position_history_date(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "max(position_history.position_date)" in compiled.lower()
+    assert "position_history.portfolio_id = 'P1'" in compiled
+    assert "trim(position_history.security_id) = 'S1'" in compiled
     assert "position_history.epoch = 2" in compiled
 
 
@@ -924,6 +926,8 @@ async def test_get_latest_daily_snapshot_date(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "max(daily_position_snapshots.date)" in compiled.lower()
+    assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled
+    assert "trim(daily_position_snapshots.security_id) = 'S1'" in compiled
     assert "daily_position_snapshots.epoch = 2" in compiled
 
 
@@ -953,6 +957,8 @@ async def test_get_latest_valuation_job(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from portfolio_valuation_jobs" in compiled.lower()
+    assert "portfolio_valuation_jobs.portfolio_id = 'P1'" in compiled
+    assert "trim(portfolio_valuation_jobs.security_id) = 'S1'" in compiled
     assert "portfolio_valuation_jobs.epoch = 2" in compiled
 
 
