@@ -16,6 +16,13 @@ class _CostObservation:
     notional: Decimal
 
 
+@dataclass(frozen=True)
+class TransactionCostCurvePage:
+    points: list[TransactionCostCurvePoint]
+    all_curve_keys: list[tuple[str, str, str]]
+    has_more: bool
+
+
 def transaction_fee_amount(transaction: Any) -> Decimal:
     costs = list(getattr(transaction, "costs", None) or [])
     if costs:
@@ -118,23 +125,72 @@ def build_transaction_cost_curve_points(
     transactions: list[Any],
     min_observation_count: int,
 ) -> list[TransactionCostCurvePoint]:
+    grouped = _group_transaction_cost_observations(transactions)
+
+    points: list[TransactionCostCurvePoint] = []
+    for key in _eligible_curve_keys(
+        grouped=grouped,
+        min_observation_count=min_observation_count,
+    ):
+        point = _build_transaction_cost_curve_point_from_observations(
+            portfolio_id=portfolio_id,
+            key=key,
+            observations=grouped[key],
+        )
+        if point is not None:
+            points.append(point)
+    return points
+
+
+def build_transaction_cost_curve_page(
+    *,
+    portfolio_id: str,
+    transactions: list[Any],
+    min_observation_count: int,
+    after_key: tuple[str, str, str] | tuple[()] = (),
+    page_size: int,
+) -> TransactionCostCurvePage:
+    grouped = _group_transaction_cost_observations(transactions)
+    all_curve_keys = _eligible_curve_keys(
+        grouped=grouped,
+        min_observation_count=min_observation_count,
+    )
+    paged_keys = [key for key in all_curve_keys if not after_key or key > after_key]
+    has_more = len(paged_keys) > page_size
+    page_keys = paged_keys[:page_size]
+
+    points: list[TransactionCostCurvePoint] = []
+    for key in page_keys:
+        point = _build_transaction_cost_curve_point_from_observations(
+            portfolio_id=portfolio_id,
+            key=key,
+            observations=grouped[key],
+        )
+        if point is not None:
+            points.append(point)
+
+    return TransactionCostCurvePage(
+        points=points,
+        all_curve_keys=all_curve_keys,
+        has_more=has_more,
+    )
+
+
+def _group_transaction_cost_observations(
+    transactions: list[Any],
+) -> dict[tuple[str, str, str], list[_CostObservation]]:
     grouped: dict[tuple[str, str, str], list[_CostObservation]] = {}
     for transaction in transactions:
         observation = _cost_observation(transaction)
         if observation is None:
             continue
         grouped.setdefault(transaction_cost_curve_key(transaction), []).append(observation)
+    return grouped
 
-    points: list[TransactionCostCurvePoint] = []
-    for key in sorted(grouped):
-        observations = grouped[key]
-        if len(observations) < min_observation_count:
-            continue
-        point = _build_transaction_cost_curve_point_from_observations(
-            portfolio_id=portfolio_id,
-            key=key,
-            observations=observations,
-        )
-        if point is not None:
-            points.append(point)
-    return points
+
+def _eligible_curve_keys(
+    *,
+    grouped: dict[tuple[str, str, str], list[_CostObservation]],
+    min_observation_count: int,
+) -> list[tuple[str, str, str]]:
+    return [key for key in sorted(grouped) if len(grouped[key]) >= min_observation_count]

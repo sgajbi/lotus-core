@@ -3,6 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from src.services.query_service.app.services.transaction_cost_curve import (
+    build_transaction_cost_curve_page,
     build_transaction_cost_curve_point,
     build_transaction_cost_curve_points,
     has_observed_transaction_cost_evidence,
@@ -127,6 +128,42 @@ def test_transaction_cost_curve_points_reuse_observations_in_bulk_path() -> None
     assert len(points) == 1
     assert points[0].total_notional == Decimal("100000.0000")
     assert gross_amount.stringify_count == 1
+
+
+def test_transaction_cost_curve_page_builds_only_requested_slice() -> None:
+    page = build_transaction_cost_curve_page(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transactions=[
+            _transaction(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL"),
+            _transaction(transaction_id="TXN-MSFT-001", security_id="EQ_US_MSFT"),
+            _transaction(transaction_id="TXN-TSLA-001", security_id="EQ_US_TSLA"),
+        ],
+        min_observation_count=1,
+        page_size=1,
+    )
+
+    assert [point.security_id for point in page.points] == ["EQ_US_AAPL"]
+    assert page.all_curve_keys == [
+        ("EQ_US_AAPL", "BUY", "USD"),
+        ("EQ_US_MSFT", "BUY", "USD"),
+        ("EQ_US_TSLA", "BUY", "USD"),
+    ]
+    assert page.has_more is True
+
+    next_page = build_transaction_cost_curve_page(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transactions=[
+            _transaction(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL"),
+            _transaction(transaction_id="TXN-MSFT-001", security_id="EQ_US_MSFT"),
+            _transaction(transaction_id="TXN-TSLA-001", security_id="EQ_US_TSLA"),
+        ],
+        min_observation_count=1,
+        after_key=("EQ_US_AAPL", "BUY", "USD"),
+        page_size=1,
+    )
+
+    assert [point.security_id for point in next_page.points] == ["EQ_US_MSFT"]
+    assert next_page.has_more is True
 
 
 def test_transaction_cost_curve_point_ignores_unusable_direct_rows() -> None:

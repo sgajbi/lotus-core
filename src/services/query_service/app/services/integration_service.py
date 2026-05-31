@@ -163,7 +163,7 @@ from .source_data_runtime import (
     source_product_runtime_metadata,
     source_product_runtime_metadata_without_as_of_date,
 )
-from .transaction_cost_curve import build_transaction_cost_curve_points
+from .transaction_cost_curve import build_transaction_cost_curve_page
 
 logger = logging.getLogger(__name__)
 
@@ -1855,20 +1855,16 @@ class IntegrationService:
             transaction_types=request.transaction_types,
         )
 
-        all_points = build_transaction_cost_curve_points(
+        curve_page = build_transaction_cost_curve_page(
             portfolio_id=portfolio_id,
             transactions=transactions,
             min_observation_count=request.min_observation_count,
+            after_key=after_key,
+            page_size=request.page.page_size,
         )
 
-        paged_candidates = [
-            point
-            for point in all_points
-            if not after_key
-            or (point.security_id, point.transaction_type, point.currency) > after_key
-        ]
-        has_more = len(paged_candidates) > request.page.page_size
-        curve_points = paged_candidates[: request.page.page_size]
+        curve_points = curve_page.points
+        has_more = curve_page.has_more
         next_page_token: str | None = None
         if has_more and curve_points:
             last_point = curve_points[-1]
@@ -1886,12 +1882,12 @@ class IntegrationService:
         requested_security_ids = {
             normalize_security_id(security_id) for security_id in request.security_ids or []
         }
-        returned_security_ids = {normalize_security_id(point.security_id) for point in all_points}
+        returned_security_ids = {key[0] for key in curve_page.all_curve_keys}
         missing_security_ids = sorted(requested_security_ids - returned_security_ids)
 
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "TRANSACTION_COST_CURVE_READY"
-        if not all_points:
+        if not curve_page.all_curve_keys:
             supportability_state = "UNAVAILABLE"
             supportability_reason = "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
         elif missing_security_ids:
