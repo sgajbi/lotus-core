@@ -571,6 +571,36 @@ class OperationsRepository:
                 stmt = stmt.where(as_of_column <= as_of)
         return stmt
 
+    def _current_epoch_snapshot_date_stmt(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date: Optional[date] = None,
+        snapshot_as_of: Optional[datetime] = None,
+    ):
+        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        state_security_id = self._security_id_expr(PositionState.security_id)
+        stmt = (
+            select(func.max(DailyPositionSnapshot.date))
+            .join(
+                PositionState,
+                and_(
+                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
+                    snapshot_security_id == state_security_id,
+                    DailyPositionSnapshot.epoch == PositionState.epoch,
+                ),
+            )
+            .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+        )
+        if as_of_date is not None:
+            stmt = stmt.where(DailyPositionSnapshot.date <= as_of_date)
+        if snapshot_as_of is not None:
+            stmt = stmt.where(
+                DailyPositionSnapshot.created_at <= snapshot_as_of,
+                PositionState.updated_at <= snapshot_as_of,
+            )
+        return stmt
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -1249,25 +1279,10 @@ class OperationsRepository:
     async def get_latest_snapshot_date_for_current_epoch(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[date]:
-        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = (
-            select(func.max(DailyPositionSnapshot.date))
-            .join(
-                PositionState,
-                and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    snapshot_security_id == state_security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
-                ),
-            )
-            .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+        stmt = self._current_epoch_snapshot_date_stmt(
+            portfolio_id=portfolio_id,
+            snapshot_as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(
-                DailyPositionSnapshot.created_at <= as_of,
-                PositionState.updated_at <= as_of,
-            )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_snapshot_date_for_current_epoch_as_of(
@@ -1276,28 +1291,11 @@ class OperationsRepository:
         as_of_date: date,
         snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
-        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = (
-            select(func.max(DailyPositionSnapshot.date))
-            .join(
-                PositionState,
-                and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    snapshot_security_id == state_security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
-                ),
-            )
-            .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.date <= as_of_date,
-            )
+        stmt = self._current_epoch_snapshot_date_stmt(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+            snapshot_as_of=snapshot_as_of,
         )
-        if snapshot_as_of is not None:
-            stmt = stmt.where(
-                DailyPositionSnapshot.created_at <= snapshot_as_of,
-                PositionState.updated_at <= snapshot_as_of,
-            )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_position_snapshot_history_mismatch_count(
