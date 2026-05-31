@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
 from ..dtos.reference_integration_dto import TransactionCostCurvePoint
 from ..repositories.identifier_normalization import normalize_security_id
+
+
+@dataclass(frozen=True)
+class _CostObservation:
+    row: Any
+    fee_amount: Decimal
+    notional: Decimal
 
 
 def _as_decimal(value: Any) -> Decimal:
@@ -31,10 +39,16 @@ def transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
     )
 
 
-def has_observed_transaction_cost_evidence(transaction: Any) -> bool:
+def _cost_observation(transaction: Any) -> _CostObservation | None:
     fee_amount = transaction_fee_amount(transaction)
     notional = abs(_as_decimal(transaction.gross_transaction_amount))
-    return fee_amount > 0 and notional > 0
+    if fee_amount <= 0 or notional <= 0:
+        return None
+    return _CostObservation(row=transaction, fee_amount=fee_amount, notional=notional)
+
+
+def has_observed_transaction_cost_evidence(transaction: Any) -> bool:
+    return _cost_observation(transaction) is not None
 
 
 def build_transaction_cost_curve_point(
@@ -44,27 +58,29 @@ def build_transaction_cost_curve_point(
     rows: list[Any],
 ) -> TransactionCostCurvePoint | None:
     security_id, transaction_type, currency = key
-    total_cost = sum(transaction_fee_amount(row) for row in rows)
-    total_notional = sum(abs(_as_decimal(row.gross_transaction_amount)) for row in rows)
+    observations = [
+        observation for row in rows if (observation := _cost_observation(row)) is not None
+    ]
+    if not observations:
+        return None
+
+    total_cost = sum(observation.fee_amount for observation in observations)
+    total_notional = sum(observation.notional for observation in observations)
     if total_cost <= 0 or total_notional <= 0:
         return None
 
     cost_bps_values = [
-        (transaction_fee_amount(row) / abs(_as_decimal(row.gross_transaction_amount)))
-        * Decimal("10000")
-        for row in rows
-        if abs(_as_decimal(row.gross_transaction_amount)) > 0
+        (observation.fee_amount / observation.notional) * Decimal("10000")
+        for observation in observations
     ]
-    if not cost_bps_values:
-        return None
 
-    observed_dates = [row.transaction_date.date() for row in rows]
+    observed_dates = [observation.row.transaction_date.date() for observation in observations]
     return TransactionCostCurvePoint(
         portfolio_id=portfolio_id,
         security_id=security_id,
         transaction_type=transaction_type,
         currency=currency,
-        observation_count=len(rows),
+        observation_count=len(observations),
         total_notional=total_notional,
         total_cost=total_cost,
         average_cost_bps=(total_cost / total_notional * Decimal("10000")).quantize(
@@ -75,7 +91,10 @@ def build_transaction_cost_curve_point(
         first_observed_date=min(observed_dates),
         last_observed_date=max(observed_dates),
         sample_transaction_ids=[
-            str(row.transaction_id) for row in sorted(rows, key=lambda row: row.transaction_id)[:5]
+            str(observation.row.transaction_id)
+            for observation in sorted(
+                observations, key=lambda observation: observation.row.transaction_id
+            )[:5]
         ],
         source_lineage={
             "source_system": "transactions",
@@ -93,7 +112,7 @@ def build_transaction_cost_curve_points(
 ) -> list[TransactionCostCurvePoint]:
     grouped: dict[tuple[str, str, str], list[Any]] = {}
     for transaction in transactions:
-        if not has_observed_transaction_cost_evidence(transaction):
+        if _cost_observation(transaction) is None:
             continue
         grouped.setdefault(transaction_cost_curve_key(transaction), []).append(transaction)
 

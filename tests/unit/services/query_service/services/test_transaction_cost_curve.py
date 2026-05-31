@@ -3,6 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from src.services.query_service.app.services.transaction_cost_curve import (
+    build_transaction_cost_curve_point,
     build_transaction_cost_curve_points,
     has_observed_transaction_cost_evidence,
     transaction_cost_curve_key,
@@ -86,3 +87,29 @@ def test_transaction_cost_curve_points_group_and_filter_evidence() -> None:
     assert point.last_observed_date.isoformat() == "2026-05-03"
     assert point.sample_transaction_ids == ["TXN-AAPL-001", "TXN-AAPL-002"]
     assert point.source_lineage["source_table"] == "transactions,transaction_costs"
+
+
+def test_transaction_cost_curve_point_ignores_unusable_direct_rows() -> None:
+    point = build_transaction_cost_curve_point(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        key=("EQ_US_AAPL", "BUY", "USD"),
+        rows=[
+            _transaction(
+                transaction_id="TXN-AAPL-ZERO-NOTIONAL",
+                gross_transaction_amount="0.0000",
+                trade_fee="50.0000",
+            ),
+            _transaction(
+                transaction_id="TXN-AAPL-001",
+                gross_transaction_amount="100000.0000",
+                trade_fee="20.0000",
+            ),
+        ],
+    )
+
+    assert point is not None
+    assert point.observation_count == 1
+    assert point.total_notional == Decimal("100000.0000")
+    assert point.total_cost == Decimal("20.0000")
+    assert point.average_cost_bps == Decimal("2.0000")
+    assert point.sample_transaction_ids == ["TXN-AAPL-001"]
