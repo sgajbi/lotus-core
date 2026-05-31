@@ -279,3 +279,26 @@ async def test_liquidity_ladder_classifies_unavailable_tier_and_missing_market_v
     assert response.asset_liquidity_tiers[0].liquidity_tier == "UNCLASSIFIED"
     assert response.asset_liquidity_tiers[0].market_value_portfolio_currency == Decimal("0")
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 8, 0, tzinfo=UTC)
+
+
+async def test_liquidity_ladder_partitions_cash_rows_with_single_classification_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [object(), object(), object()]
+    calls: list[object] = []
+
+    def fake_is_cash_row(row: object) -> bool:
+        calls.append(row)
+        return row is rows[0]
+
+    monkeypatch.setattr(
+        PortfolioLiquidityLadderService,
+        "_is_cash_row",
+        staticmethod(fake_is_cash_row),
+    )
+
+    cash_rows, non_cash_rows = PortfolioLiquidityLadderService._partition_cash_rows(rows)
+
+    assert cash_rows == [rows[0]]
+    assert non_cash_rows == [rows[1], rows[2]]
+    assert calls == rows

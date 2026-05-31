@@ -66,8 +66,7 @@ class PortfolioLiquidityLadderService:
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        cash_rows = [row for row in rows if self._is_cash_row(row)]
-        non_cash_rows = [row for row in rows if not self._is_cash_row(row)]
+        cash_rows, non_cash_rows = self._partition_cash_rows(rows)
         opening_cash_balance = self._sum_market_value(cash_rows)
         tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
 
@@ -212,6 +211,20 @@ class PortfolioLiquidityLadderService:
     @staticmethod
     def _sum_market_value(rows: list[ReportingSnapshotRow]) -> Decimal:
         return sum((_decimal_or_zero(row.snapshot.market_value) for row in rows), ZERO)
+
+    @classmethod
+    def _partition_cash_rows(
+        cls,
+        rows: list[ReportingSnapshotRow],
+    ) -> tuple[list[ReportingSnapshotRow], list[ReportingSnapshotRow]]:
+        cash_rows: list[ReportingSnapshotRow] = []
+        non_cash_rows: list[ReportingSnapshotRow] = []
+        for row in rows:
+            if cls._is_cash_row(row):
+                cash_rows.append(row)
+            else:
+                non_cash_rows.append(row)
+        return cash_rows, non_cash_rows
 
     @staticmethod
     def _is_cash_row(row: ReportingSnapshotRow) -> bool:
