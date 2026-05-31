@@ -64,22 +64,20 @@ class PortfolioLiquidityLadderService:
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for liquidity ladder queries.")
 
-        rows = await self.reporting_repo.list_latest_snapshot_rows(
+        range_end_date = resolved_as_of_date + timedelta(days=horizon_days)
+        snapshot_rows_read = self.reporting_repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        cash_rows, non_cash_rows = self._partition_cash_rows(rows)
-        opening_cash_balance = self._sum_market_value(cash_rows)
-        tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
-
-        range_end_date = resolved_as_of_date + timedelta(days=horizon_days)
+        booked_evidence_read = self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
+            portfolio_id=portfolio.portfolio_id,
+            start_date=resolved_as_of_date,
+            end_date=range_end_date,
+        )
         if include_projected:
-            booked_evidence, projected_evidence = await asyncio.gather(
-                self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
-                    portfolio_id=portfolio.portfolio_id,
-                    start_date=resolved_as_of_date,
-                    end_date=range_end_date,
-                ),
+            rows, booked_evidence, projected_evidence = await asyncio.gather(
+                snapshot_rows_read,
+                booked_evidence_read,
                 self.cashflow_repo.get_projected_settlement_cashflow_series_with_evidence(
                     portfolio_id=portfolio.portfolio_id,
                     start_date=resolved_as_of_date,
@@ -89,14 +87,15 @@ class PortfolioLiquidityLadderService:
             projected_series = projected_evidence.rows
             latest_projected_evidence = projected_evidence.latest_evidence_timestamp
         else:
-            booked_evidence = await self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
-                portfolio_id=portfolio.portfolio_id,
-                start_date=resolved_as_of_date,
-                end_date=range_end_date,
-            )
+            rows, booked_evidence = await asyncio.gather(snapshot_rows_read, booked_evidence_read)
             projected_series = []
             latest_projected_evidence = None
         booked_series = booked_evidence.rows
+
+        cash_rows, non_cash_rows = self._partition_cash_rows(rows)
+        opening_cash_balance = self._sum_market_value(cash_rows)
+        tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
+
         latest_cashflow_evidence = max(
             (
                 timestamp
