@@ -19,6 +19,7 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..services.decimal_amounts import decimal_or_none
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
 
@@ -579,4 +580,9 @@ class AnalyticsTimeseriesRepository:
         )
         result = await self.db.execute(stmt)
         rows = result.all()
-        return {row.rate_date: Decimal(row.rate) for row in rows}
+        rates: dict[date, Decimal] = {}
+        for row in rows:
+            rate = decimal_or_none(row.rate)
+            if rate is not None:
+                rates[row.rate_date] = rate
+        return rates

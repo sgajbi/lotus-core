@@ -43,7 +43,9 @@ async def test_analytics_timeseries_repository_methods() -> None:
         _FakeExecuteResult(
             [
                 SimpleNamespace(rate_date=date(2025, 1, 1), rate=Decimal("1.1200000000")),
-                SimpleNamespace(rate_date=date(2025, 1, 2), rate=Decimal("1.1300000000")),
+                SimpleNamespace(rate_date=date(2025, 1, 2), rate=" "),
+                SimpleNamespace(rate_date=date(2025, 1, 3), rate=None),
+                SimpleNamespace(rate_date=date(2025, 1, 4), rate=" 1.1400000000 "),
             ]
         ),
         _FakeExecuteResult([3]),
@@ -99,6 +101,9 @@ async def test_analytics_timeseries_repository_methods() -> None:
         end_date=date(2025, 1, 31),
     )
     assert fx_map[date(2025, 1, 1)] == Decimal("1.1200000000")
+    assert date(2025, 1, 2) not in fx_map
+    assert date(2025, 1, 3) not in fx_map
+    assert fx_map[date(2025, 1, 4)] == Decimal("1.1400000000")
     fx_stmt = db.execute.await_args_list[5].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql

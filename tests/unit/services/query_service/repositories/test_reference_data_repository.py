@@ -214,7 +214,14 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         _FakeExecuteResult(
             [SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted")]
         ),
-        _FakeExecuteResult([SimpleNamespace(rate_date=date(2026, 1, 1), rate=Decimal("1.1"))]),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(rate_date=date(2026, 1, 1), rate=Decimal("1.1")),
+                SimpleNamespace(rate_date=date(2026, 1, 2), rate=" "),
+                SimpleNamespace(rate_date=date(2026, 1, 3), rate=None),
+                SimpleNamespace(rate_date=date(2026, 1, 4), rate=" 1.4 "),
+            ]
+        ),
     ]
 
     repo = ReferenceDataRepository(db)
@@ -294,6 +301,9 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         end_date=date(2026, 1, 2),
     )
     assert fx_rates[date(2026, 1, 1)] == Decimal("1.1")
+    assert date(2026, 1, 2) not in fx_rates
+    assert date(2026, 1, 3) not in fx_rates
+    assert fx_rates[date(2026, 1, 4)] == Decimal("1.4")
     fx_stmt = db.execute.await_args_list[19].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
