@@ -40,7 +40,6 @@ from ..dtos.reference_integration_dto import (
     ClientTaxRuleSetRequest,
     ClientTaxRuleSetResponse,
     ClientTaxRuleSetSupportability,
-    ComponentSeriesResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
@@ -102,7 +101,6 @@ from ..dtos.reference_integration_dto import (
     ReferencePageMetadata,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
-    SeriesPoint,
     SustainabilityPreferenceProfileRequest,
     SustainabilityPreferenceProfileResponse,
     SustainabilityPreferenceProfileSupportability,
@@ -128,7 +126,9 @@ from .reference_data_helpers import (
     resolve_component_window_rows,
 )
 from .reference_data_mappers import (
+    benchmark_component_series_response,
     benchmark_definition_response,
+    benchmark_market_series_point,
     benchmark_return_series_point,
     cio_model_change_affected_mandate,
     classification_taxonomy_entry,
@@ -2718,9 +2718,9 @@ class IntegrationService:
         all_dates = sorted(
             {row.series_date for row in index_prices + index_returns + benchmark_returns}
         )
-        component_series_all: list[ComponentSeriesResponse] = []
+        component_series_all = []
         for index_id in sorted(index_ids):
-            points: list[SeriesPoint] = []
+            points = []
             for current_date in all_dates:
                 price_row = prices_by_index_date.get((index_id, current_date))
                 return_row = returns_by_index_date.get((index_id, current_date))
@@ -2733,44 +2733,20 @@ class IntegrationService:
                     ):
                         component_weight = self._as_decimal(segment.composition_weight)
                         break
-                quality_status = (
-                    (price_row and price_row.quality_status)
-                    or (return_row and return_row.quality_status)
-                    or (benchmark_return_row and benchmark_return_row.quality_status)
-                )
                 points.append(
-                    SeriesPoint(
+                    benchmark_market_series_point(
                         series_date=current_date,
-                        series_currency=(
-                            (price_row and price_row.series_currency)
-                            or (return_row and return_row.series_currency)
-                            or (benchmark_return_row and benchmark_return_row.series_currency)
-                        ),
-                        index_price=(
-                            self._as_decimal(price_row.index_price)
-                            if price_row and "index_price" in requested_fields
-                            else None
-                        ),
-                        index_return=(
-                            self._as_decimal(return_row.index_return)
-                            if return_row and "index_return" in requested_fields
-                            else None
-                        ),
-                        benchmark_return=(
-                            self._as_decimal(benchmark_return_row.benchmark_return)
-                            if benchmark_return_row and "benchmark_return" in requested_fields
-                            else None
-                        ),
-                        component_weight=(
-                            component_weight if "component_weight" in requested_fields else None
-                        ),
-                        fx_rate=(
-                            fx_rates.get(current_date) if "fx_rate" in requested_fields else None
-                        ),
-                        quality_status=quality_status,
+                        requested_fields=requested_fields,
+                        price_row=price_row,
+                        return_row=return_row,
+                        benchmark_return_row=benchmark_return_row,
+                        component_weight=component_weight,
+                        fx_rate=fx_rates.get(current_date),
                     )
                 )
-            component_series_all.append(ComponentSeriesResponse(index_id=index_id, points=points))
+            component_series_all.append(
+                benchmark_component_series_response(index_id=index_id, points=points)
+            )
 
         if cursor_index_id:
             component_series_all = [

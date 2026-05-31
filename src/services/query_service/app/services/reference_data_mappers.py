@@ -13,6 +13,7 @@ from ..dtos.reference_integration_dto import (
     ClientRestrictionProfileEntry,
     ClientTaxProfileEntry,
     ClientTaxRuleSetEntry,
+    ComponentSeriesResponse,
     DpmPortfolioUniverseCandidate,
     IndexDefinitionResponse,
     IndexPriceSeriesPoint,
@@ -26,6 +27,7 @@ from ..dtos.reference_integration_dto import (
     PortfolioManagerBookMember,
     PortfolioTaxLotRecord,
     RiskFreeSeriesPoint,
+    SeriesPoint,
     SustainabilityPreferenceProfileEntry,
 )
 from ..repositories.identifier_normalization import normalize_security_id
@@ -339,6 +341,57 @@ def benchmark_return_series_point(row: Any) -> BenchmarkReturnSeriesPoint:
         series_currency=row.series_currency,
         quality_status=row.quality_status,
     )
+
+
+def benchmark_market_series_point(
+    *,
+    series_date: Any,
+    requested_fields: set[str],
+    price_row: Any | None,
+    return_row: Any | None,
+    benchmark_return_row: Any | None,
+    component_weight: Decimal | None,
+    fx_rate: Decimal | None,
+) -> SeriesPoint:
+    quality_status = (
+        (price_row and price_row.quality_status)
+        or (return_row and return_row.quality_status)
+        or (benchmark_return_row and benchmark_return_row.quality_status)
+    )
+    return SeriesPoint(
+        series_date=series_date,
+        series_currency=(
+            (price_row and price_row.series_currency)
+            or (return_row and return_row.series_currency)
+            or (benchmark_return_row and benchmark_return_row.series_currency)
+        ),
+        index_price=(
+            _as_decimal(price_row.index_price)
+            if price_row and "index_price" in requested_fields
+            else None
+        ),
+        index_return=(
+            _as_decimal(return_row.index_return)
+            if return_row and "index_return" in requested_fields
+            else None
+        ),
+        benchmark_return=(
+            _as_decimal(benchmark_return_row.benchmark_return)
+            if benchmark_return_row and "benchmark_return" in requested_fields
+            else None
+        ),
+        component_weight=component_weight if "component_weight" in requested_fields else None,
+        fx_rate=fx_rate if "fx_rate" in requested_fields else None,
+        quality_status=quality_status,
+    )
+
+
+def benchmark_component_series_response(
+    *,
+    index_id: str,
+    points: list[SeriesPoint],
+) -> ComponentSeriesResponse:
+    return ComponentSeriesResponse(index_id=index_id, points=points)
 
 
 def risk_free_series_point(row: Any) -> RiskFreeSeriesPoint:

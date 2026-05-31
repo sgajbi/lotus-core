@@ -3,7 +3,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from src.services.query_service.app.services.reference_data_mappers import (
+    benchmark_component_series_response,
     benchmark_definition_response,
+    benchmark_market_series_point,
     benchmark_return_series_point,
     cio_model_change_affected_mandate,
     classification_taxonomy_entry,
@@ -350,6 +352,50 @@ def test_market_reference_series_points_map_provider_rows() -> None:
     assert risk_free.day_count_convention == "act_360"
     assert taxonomy.dimension_name == "asset_class"
     assert taxonomy.dimension_value == "equity"
+
+
+def test_benchmark_market_series_point_maps_selected_fields() -> None:
+    series_date = date(2026, 1, 2)
+    point = benchmark_market_series_point(
+        series_date=series_date,
+        requested_fields={
+            "index_price",
+            "index_return",
+            "benchmark_return",
+            "component_weight",
+            "fx_rate",
+        },
+        price_row=SimpleNamespace(
+            index_price="4567.1234000000",
+            series_currency="USD",
+            quality_status="accepted",
+        ),
+        return_row=SimpleNamespace(
+            index_return="0.0023000000",
+            series_currency="USD",
+            quality_status="accepted",
+        ),
+        benchmark_return_row=SimpleNamespace(
+            benchmark_return="0.0019000000",
+            series_currency="USD",
+            quality_status="accepted",
+        ),
+        component_weight=Decimal("0.6000000000"),
+        fx_rate=Decimal("1.3456000000"),
+    )
+    component = benchmark_component_series_response(
+        index_id="IDX_MSCI_WORLD_TR",
+        points=[point],
+    )
+
+    assert component.index_id == "IDX_MSCI_WORLD_TR"
+    assert component.points[0].series_date == series_date
+    assert component.points[0].index_price == Decimal("4567.1234000000")
+    assert component.points[0].index_return == Decimal("0.0023000000")
+    assert component.points[0].benchmark_return == Decimal("0.0019000000")
+    assert component.points[0].component_weight == Decimal("0.6000000000")
+    assert component.points[0].fx_rate == Decimal("1.3456000000")
+    assert component.points[0].quality_status == "accepted"
 
 
 def test_client_tax_entries_map_source_data_rows() -> None:
