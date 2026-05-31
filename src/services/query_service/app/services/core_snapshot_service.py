@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -509,7 +510,7 @@ class CoreSnapshotService:
             delta = self._change_quantity_effect(change)
             entry["quantity"] = entry["quantity"] + delta
 
-        market_to_portfolio_fx: dict[str, Decimal] = {}
+        price_required: dict[str, tuple[dict[str, Any], Decimal]] = {}
         for security_id, entry in projected.items():
             if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
                 continue
@@ -530,36 +531,70 @@ class CoreSnapshotService:
                 entry["market_value_local"] = Decimal(0)
                 continue
 
-            prices = await self.price_repo.get_prices(
-                security_id=security_id,
-                end_date=as_of_date,
+            price_required[security_id] = (entry, quantity)
+
+        if price_required:
+            price_rows_by_security = dict(
+                zip(
+                    price_required,
+                    await asyncio.gather(
+                        *(
+                            self.price_repo.get_prices(
+                                security_id=security_id,
+                                end_date=as_of_date,
+                            )
+                            for security_id in price_required
+                        )
+                    ),
+                    strict=True,
+                )
             )
-            if not prices:
-                raise CoreSnapshotUnavailableSectionError(
+            priced_values: dict[str, tuple[Decimal, str]] = {}
+            market_currencies: set[str] = set()
+            for security_id, (entry, quantity) in price_required.items():
+                prices = price_rows_by_security[security_id]
+                if not prices:
+                    raise CoreSnapshotUnavailableSectionError(
+                        f"positions_projected unavailable: missing market price for {security_id}"
+                    )
+                latest_price = prices[-1]
+                missing_price_message = (
                     f"positions_projected unavailable: missing market price for {security_id}"
                 )
-            latest_price = prices[-1]
-            missing_price_message = (
-                f"positions_projected unavailable: missing market price for {security_id}"
-            )
-            local_value = (
-                self._required_decimal(
-                    latest_price.price,
-                    message=missing_price_message,
+                local_value = (
+                    self._required_decimal(
+                        latest_price.price,
+                        message=missing_price_message,
+                    )
+                    * quantity
                 )
-                * quantity
-            )
-            market_currency = normalize_currency_code(str(latest_price.currency))
-            if market_currency not in market_to_portfolio_fx:
-                market_to_portfolio_fx[market_currency] = await self._get_fx_rate_or_raise(
-                    from_currency=market_currency,
-                    to_currency=portfolio_base_currency,
-                    as_of_date=as_of_date,
+                market_currency = normalize_currency_code(str(latest_price.currency))
+                priced_values[security_id] = (local_value, market_currency)
+                market_currencies.add(market_currency)
+
+            market_to_portfolio_fx = dict(
+                zip(
+                    sorted(market_currencies),
+                    await asyncio.gather(
+                        *(
+                            self._get_fx_rate_or_raise(
+                                from_currency=market_currency,
+                                to_currency=portfolio_base_currency,
+                                as_of_date=as_of_date,
+                            )
+                            for market_currency in sorted(market_currencies)
+                        )
+                    ),
+                    strict=True,
                 )
-            fx_to_portfolio = market_to_portfolio_fx[market_currency]
-            portfolio_value = local_value * fx_to_portfolio
-            entry["market_value_local"] = local_value
-            entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
+            )
+
+            for security_id, (local_value, market_currency) in priced_values.items():
+                entry = projected[security_id]
+                fx_to_portfolio = market_to_portfolio_fx[market_currency]
+                portfolio_value = local_value * fx_to_portfolio
+                entry["market_value_local"] = local_value
+                entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
 
         filtered: dict[str, dict[str, Any]] = {}
         for key, value in projected.items():
