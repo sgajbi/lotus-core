@@ -573,6 +573,12 @@ def test_api_query_hot_path_indexes_are_declared():
                 "position_history.id DESC",
                 "position_history.epoch",
             ],
+            "ix_pos_hist_lineage_latest": [
+                "position_history.portfolio_id",
+                "trim(position_history.security_id)",
+                "position_history.epoch",
+                "position_history.position_date DESC",
+            ],
         },
         DailyPositionSnapshot: {
             "ix_daily_snap_port_norm_sec_date_id": [
@@ -588,6 +594,12 @@ def test_api_query_hot_path_indexes_are_declared():
                 "daily_position_snapshots.valuation_status",
                 "trim(daily_position_snapshots.security_id)",
                 "daily_position_snapshots.epoch",
+            ],
+            "ix_daily_snap_lineage_latest": [
+                "daily_position_snapshots.portfolio_id",
+                "trim(daily_position_snapshots.security_id)",
+                "daily_position_snapshots.epoch",
+                "daily_position_snapshots.date DESC",
             ],
         },
         Transaction: {

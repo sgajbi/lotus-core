@@ -98,9 +98,10 @@ liquidity-reserve, and planned-withdrawal reads should use active-status partial
 their portfolio/client, effective-window, scheduled-window, and source-identity ordering contracts.
 Market/reference definition reads should likewise avoid wrapping governed lifecycle statuses at
 read time and use active-status partial indexes aligned to identifier and effective-window ordering.
-Lineage support reads that resolve the latest valuation job per position state should use a
-portfolio, normalized-security, epoch, and descending valuation-date/id index aligned to the
-one-row latest-job lookup rather than relying on status-oriented queue indexes.
+Lineage support reads that resolve latest position-history, daily-snapshot, or valuation-job
+evidence per position state should use portfolio, normalized-security, epoch, and descending
+business-date/id indexes aligned to one-row latest lookups rather than relying on broader
+status-oriented queue or list indexes.
 
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.

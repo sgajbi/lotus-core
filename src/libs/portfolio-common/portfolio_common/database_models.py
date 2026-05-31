@@ -155,6 +155,13 @@ class PositionHistory(Base):
             id.desc(),
             "epoch",
         ),
+        Index(
+            "ix_pos_hist_lineage_latest",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
+            position_date.desc(),
+        ),
     )
 
 
@@ -205,6 +212,13 @@ class DailyPositionSnapshot(Base):
             date.desc(),
             id.desc(),
             "epoch",
+        ),
+        Index(
+            "ix_daily_snap_lineage_latest",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
+            date.desc(),
         ),
         Index(
             "ix_daily_snap_port_date_status_norm_sec_epoch",
