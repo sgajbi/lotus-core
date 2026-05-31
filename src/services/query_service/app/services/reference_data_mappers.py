@@ -13,12 +13,14 @@ from ..dtos.reference_integration_dto import (
     ClientTaxRuleSetEntry,
     DpmPortfolioUniverseCandidate,
     IndexDefinitionResponse,
+    InstrumentEligibilityRecord,
     LiquidityReserveRequirementEntry,
     ModelPortfolioTargetRow,
     PlannedWithdrawalScheduleEntry,
     PortfolioManagerBookMember,
     SustainabilityPreferenceProfileEntry,
 )
+from ..repositories.identifier_normalization import normalize_security_id
 
 
 def _as_decimal(value: Any) -> Decimal:
@@ -31,6 +33,13 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]
+
+
+def _control_code(value: Any, *, default: str = "") -> str:
+    if value is None:
+        return default
+    code = str(value).strip().upper()
+    return code or default
 
 
 def benchmark_component_response(row: Any) -> BenchmarkComponentResponse:
@@ -150,6 +159,56 @@ def dpm_portfolio_universe_candidate(row: Any) -> DpmPortfolioUniverseCandidate:
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         binding_version=int(row.binding_version),
+        source_record_id=row.source_record_id,
+    )
+
+
+def missing_instrument_eligibility_record(security_id: str) -> InstrumentEligibilityRecord:
+    return InstrumentEligibilityRecord(
+        security_id=normalize_security_id(security_id),
+        found=False,
+        eligibility_status="UNKNOWN",
+        product_shelf_status="UNKNOWN",
+        buy_allowed=False,
+        sell_allowed=False,
+        restriction_reason_codes=["ELIGIBILITY_PROFILE_MISSING"],
+        settlement_days=None,
+        settlement_calendar_id=None,
+        liquidity_tier=None,
+        issuer_id=None,
+        issuer_name=None,
+        ultimate_parent_issuer_id=None,
+        ultimate_parent_issuer_name=None,
+        asset_class=None,
+        country_of_risk=None,
+        effective_from=None,
+        effective_to=None,
+        quality_status="MISSING",
+        source_record_id=None,
+    )
+
+
+def instrument_eligibility_record(row: Any) -> InstrumentEligibilityRecord:
+    return InstrumentEligibilityRecord(
+        security_id=normalize_security_id(row.security_id),
+        found=True,
+        eligibility_status=_control_code(row.eligibility_status, default="UNKNOWN"),
+        product_shelf_status=_control_code(row.product_shelf_status, default="UNKNOWN"),
+        buy_allowed=bool(row.buy_allowed),
+        sell_allowed=bool(row.sell_allowed),
+        restriction_reason_codes=list(row.restriction_reason_codes or []),
+        settlement_days=int(row.settlement_days),
+        settlement_calendar_id=row.settlement_calendar_id,
+        liquidity_tier=row.liquidity_tier,
+        issuer_id=row.issuer_id,
+        issuer_name=row.issuer_name,
+        ultimate_parent_issuer_id=row.ultimate_parent_issuer_id,
+        ultimate_parent_issuer_name=row.ultimate_parent_issuer_name,
+        asset_class=row.asset_class,
+        country_of_risk=row.country_of_risk,
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        quality_status=_control_code(row.quality_status, default="UNKNOWN"),
         source_record_id=row.source_record_id,
     )
 

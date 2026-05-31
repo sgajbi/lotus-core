@@ -81,7 +81,6 @@ from ..dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
-    InstrumentEligibilityRecord,
     InstrumentEligibilitySupportability,
     IntegrationWindow,
     LiquidityReserveRequirementRequest,
@@ -144,7 +143,9 @@ from .reference_data_mappers import (
     client_tax_rule_set_entry,
     dpm_portfolio_universe_candidate,
     index_definition_response,
+    instrument_eligibility_record,
     liquidity_reserve_requirement_entry,
+    missing_instrument_eligibility_record,
     model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
@@ -1750,66 +1751,16 @@ class IntegrationService:
         )
         rows_by_security_id = {normalize_security_id(row.security_id): row for row in rows}
 
-        records: list[InstrumentEligibilityRecord] = []
+        records = []
         missing_security_ids: list[str] = []
         for requested_security_id in request.security_ids:
             security_id = normalize_security_id(requested_security_id)
             row = rows_by_security_id.get(security_id)
             if row is None:
                 missing_security_ids.append(security_id)
-                records.append(
-                    InstrumentEligibilityRecord(
-                        security_id=security_id,
-                        found=False,
-                        eligibility_status="UNKNOWN",
-                        product_shelf_status="UNKNOWN",
-                        buy_allowed=False,
-                        sell_allowed=False,
-                        restriction_reason_codes=["ELIGIBILITY_PROFILE_MISSING"],
-                        settlement_days=None,
-                        settlement_calendar_id=None,
-                        liquidity_tier=None,
-                        issuer_id=None,
-                        issuer_name=None,
-                        ultimate_parent_issuer_id=None,
-                        ultimate_parent_issuer_name=None,
-                        asset_class=None,
-                        country_of_risk=None,
-                        effective_from=None,
-                        effective_to=None,
-                        quality_status="MISSING",
-                        source_record_id=None,
-                    )
-                )
+                records.append(missing_instrument_eligibility_record(security_id))
                 continue
-            records.append(
-                InstrumentEligibilityRecord(
-                    security_id=normalize_security_id(row.security_id),
-                    found=True,
-                    eligibility_status=self._control_code(
-                        row.eligibility_status, default="UNKNOWN"
-                    ),
-                    product_shelf_status=self._control_code(
-                        row.product_shelf_status, default="UNKNOWN"
-                    ),
-                    buy_allowed=bool(row.buy_allowed),
-                    sell_allowed=bool(row.sell_allowed),
-                    restriction_reason_codes=list(row.restriction_reason_codes or []),
-                    settlement_days=int(row.settlement_days),
-                    settlement_calendar_id=row.settlement_calendar_id,
-                    liquidity_tier=row.liquidity_tier,
-                    issuer_id=row.issuer_id,
-                    issuer_name=row.issuer_name,
-                    ultimate_parent_issuer_id=row.ultimate_parent_issuer_id,
-                    ultimate_parent_issuer_name=row.ultimate_parent_issuer_name,
-                    asset_class=row.asset_class,
-                    country_of_risk=row.country_of_risk,
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
-                    source_record_id=row.source_record_id,
-                )
-            )
+            records.append(instrument_eligibility_record(row))
 
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "INSTRUMENT_ELIGIBILITY_READY"

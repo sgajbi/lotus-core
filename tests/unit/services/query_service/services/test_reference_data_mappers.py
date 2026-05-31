@@ -11,7 +11,9 @@ from src.services.query_service.app.services.reference_data_mappers import (
     client_tax_rule_set_entry,
     dpm_portfolio_universe_candidate,
     index_definition_response,
+    instrument_eligibility_record,
     liquidity_reserve_requirement_entry,
+    missing_instrument_eligibility_record,
     model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
@@ -156,6 +158,45 @@ def test_dpm_source_entries_map_model_and_mandate_rows() -> None:
     assert affected_mandate.policy_pack_id == "POLICY_PACK_BALANCED"
     assert candidate.binding_version == 7
     assert candidate.mandate_objective == "balanced_growth_income"
+
+
+def test_instrument_eligibility_records_map_found_and_missing_rows() -> None:
+    found = instrument_eligibility_record(
+        SimpleNamespace(
+            security_id=" eq_us_aapl ",
+            eligibility_status=" approved ",
+            product_shelf_status="approved",
+            buy_allowed=1,
+            sell_allowed=0,
+            restriction_reason_codes=["DPM_ALLOWED"],
+            settlement_days="2",
+            settlement_calendar_id="NYSE",
+            liquidity_tier="T1",
+            issuer_id="ISSUER_AAPL",
+            issuer_name="Apple Inc.",
+            ultimate_parent_issuer_id="ISSUER_AAPL",
+            ultimate_parent_issuer_name="Apple Inc.",
+            asset_class="equity",
+            country_of_risk="US",
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            quality_status="accepted",
+            source_record_id="eligibility-1",
+        )
+    )
+    missing = missing_instrument_eligibility_record(" bond_private_credit_001 ")
+
+    assert found.security_id == "eq_us_aapl"
+    assert found.eligibility_status == "APPROVED"
+    assert found.product_shelf_status == "APPROVED"
+    assert found.buy_allowed is True
+    assert found.sell_allowed is False
+    assert found.settlement_days == 2
+    assert found.quality_status == "ACCEPTED"
+    assert missing.security_id == "bond_private_credit_001"
+    assert missing.found is False
+    assert missing.restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
+    assert missing.quality_status == "MISSING"
 
 
 def test_client_tax_entries_map_source_data_rows() -> None:
