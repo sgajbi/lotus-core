@@ -1,10 +1,11 @@
 # services/query-service/app/services/transaction_service.py
 import asyncio
 import logging
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional, cast
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,10 +49,10 @@ class TransactionService:
         skip: int,
     ) -> str:
         if total_count <= 0:
-            return UNKNOWN
+            return cast(str, UNKNOWN)
         if skip > 0 or returned_count < total_count:
-            return PARTIAL
-        return COMPLETE
+            return cast(str, PARTIAL)
+        return cast(str, COMPLETE)
 
     async def get_transactions(
         self,
@@ -105,6 +106,7 @@ class TransactionService:
 
         total_count = await self.repo.get_transactions_count(**ledger_filters)
 
+        db_results: list[Any]
         if total_count == 0:
             db_results = []
             latest_evidence_timestamp = None
@@ -307,23 +309,37 @@ class TransactionService:
             ),
             ("net_interest_amount", "net_interest_amount_reporting_currency", "book"),
         )
+        conversion_requests: list[tuple[str, Awaitable[Decimal]]] = []
         for source_field, target_field, currency_basis in money_fields:
             amount = getattr(record, source_field)
             if amount is None:
                 continue
-            setattr(
-                record,
-                target_field,
-                await self._convert_amount(
-                    amount=amount,
-                    from_currency=self._source_currency_for_field(
-                        record=record,
-                        currency_basis=currency_basis,
+            conversion_requests.append(
+                (
+                    target_field,
+                    self._convert_amount(
+                        amount=amount,
+                        from_currency=self._source_currency_for_field(
+                            record=record,
+                            currency_basis=currency_basis,
+                        ),
+                        to_currency=reporting_currency,
+                        as_of_date=as_of_date,
                     ),
-                    to_currency=reporting_currency,
-                    as_of_date=as_of_date,
-                ),
+                )
             )
+        if not conversion_requests:
+            return
+
+        converted_values = await asyncio.gather(
+            *(conversion for _, conversion in conversion_requests)
+        )
+        for (target_field, _), converted_value in zip(
+            conversion_requests,
+            converted_values,
+            strict=True,
+        ):
+            setattr(record, target_field, converted_value)
 
     @staticmethod
     def _source_currency_for_field(
@@ -332,8 +348,8 @@ class TransactionService:
         currency_basis: str,
     ) -> str:
         if currency_basis == "trade" and record.trade_currency:
-            return record.trade_currency
-        return record.currency
+            return cast(str, record.trade_currency)
+        return cast(str, record.currency)
 
     async def _convert_amount(
         self,
@@ -343,11 +359,14 @@ class TransactionService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        return await self._fx_converter.convert_amount(
-            amount=amount,
-            from_currency=from_currency,
-            to_currency=to_currency,
-            as_of_date=as_of_date,
+        return cast(
+            Decimal,
+            await self._fx_converter.convert_amount(
+                amount=amount,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                as_of_date=as_of_date,
+            ),
         )
 
     async def _get_fx_rate(
@@ -356,4 +375,7 @@ class TransactionService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        return await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date)
+        return cast(
+            Decimal,
+            await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date),
+        )
