@@ -1,4 +1,5 @@
 # tests/unit/services/query_service/services/test_transaction_service.py
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -494,6 +495,54 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
     assert summary.reason_codes == ["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"]
     assert summary.data_quality_status == COMPLETE
     assert summary.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+
+
+async def test_get_realized_tax_summary_reads_count_and_tax_evidence_concurrently() -> None:
+    count_started = asyncio.Event()
+    list_started = asyncio.Event()
+    repo = AsyncMock(spec=TransactionRepository)
+    repo.get_portfolio_base_currency.return_value = "USD"
+    repo.get_latest_business_date.return_value = date(2025, 1, 15)
+
+    async def get_transactions_count(**_: object) -> int:
+        count_started.set()
+        await list_started.wait()
+        return 2
+
+    async def list_realized_tax_evidence_transactions(**_: object) -> list[Transaction]:
+        await count_started.wait()
+        list_started.set()
+        return []
+
+    repo.get_transactions_count.side_effect = get_transactions_count
+    repo.list_realized_tax_evidence_transactions.side_effect = (
+        list_realized_tax_evidence_transactions
+    )
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        summary = await asyncio.wait_for(
+            service.get_realized_tax_summary(portfolio_id="P1"),
+            timeout=1,
+        )
+
+    assert summary.source_transaction_count == 2
+    assert summary.tax_evidence_transaction_count == 0
+    repo.get_transactions_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=None,
+        end_date=None,
+        as_of_date=date(2025, 1, 15),
+    )
+    repo.list_realized_tax_evidence_transactions.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=None,
+        end_date=None,
+        as_of_date=date(2025, 1, 15),
+    )
 
 
 async def test_get_realized_tax_summary_normalizes_currency_buckets(

@@ -1,4 +1,5 @@
 # services/query-service/app/services/transaction_service.py
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -183,9 +184,11 @@ class TransactionService:
             "end_date": end_date,
             "as_of_date": effective_as_of_date,
         }
-        source_transaction_count = await self.repo.get_transactions_count(**ledger_filters)
-        tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
-            **ledger_filters,
+        source_transaction_count, tax_transactions = await asyncio.gather(
+            self.repo.get_transactions_count(**ledger_filters),
+            self.repo.list_realized_tax_evidence_transactions(
+                **ledger_filters,
+            ),
         )
         latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(tax_transactions)
 
