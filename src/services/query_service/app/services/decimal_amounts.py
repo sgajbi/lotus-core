@@ -15,3 +15,14 @@ def decimal_or_zero(value: Any) -> Decimal:
     if not normalized:
         return ZERO
     return Decimal(normalized)
+
+
+def decimal_or_none(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    return Decimal(normalized)
