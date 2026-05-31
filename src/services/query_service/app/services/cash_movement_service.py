@@ -33,28 +33,30 @@ class CashMovementService:
             start_date=start_date,
             end_date=end_date,
         )
-        buckets = [
-            CashMovementBucket(
-                classification=classification,
-                timing=timing,
-                currency=currency,
-                is_position_flow=is_position_flow,
-                is_portfolio_flow=is_portfolio_flow,
-                cashflow_count=int(cashflow_count or 0),
-                total_amount=Decimal(str(total_amount or 0)),
-                movement_direction=self._movement_direction(Decimal(str(total_amount or 0))),
+        buckets: list[CashMovementBucket] = []
+        for (
+            classification,
+            timing,
+            currency,
+            is_position_flow,
+            is_portfolio_flow,
+            cashflow_count,
+            total_amount,
+            _latest_timestamp,
+        ) in rows:
+            resolved_total_amount = Decimal(str(total_amount or 0))
+            buckets.append(
+                CashMovementBucket(
+                    classification=classification,
+                    timing=timing,
+                    currency=currency,
+                    is_position_flow=is_position_flow,
+                    is_portfolio_flow=is_portfolio_flow,
+                    cashflow_count=int(cashflow_count or 0),
+                    total_amount=resolved_total_amount,
+                    movement_direction=self._movement_direction(resolved_total_amount),
+                )
             )
-            for (
-                classification,
-                timing,
-                currency,
-                is_position_flow,
-                is_portfolio_flow,
-                cashflow_count,
-                total_amount,
-                _latest_timestamp,
-            ) in rows
-        ]
         cashflow_count = sum(bucket.cashflow_count for bucket in buckets)
         latest_evidence_timestamp = max(
             (row[7] for row in rows if row[7] is not None),
