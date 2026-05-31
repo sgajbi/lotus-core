@@ -4,7 +4,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +19,7 @@ from ..repositories.cashflow_repository import CashflowRepository
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
 from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_zero
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
@@ -173,7 +173,7 @@ class PortfolioLiquidityLadderService:
                 getattr(row.instrument, "liquidity_tier", None),
                 default="UNCLASSIFIED",
             )
-            tier_values[tier] += _decimal_or_zero(getattr(row.snapshot, "market_value", ZERO))
+            tier_values[tier] += decimal_or_zero(getattr(row.snapshot, "market_value", ZERO))
             tier_counts[tier] += 1
         return [
             AssetLiquidityTierExposure(
@@ -211,7 +211,7 @@ class PortfolioLiquidityLadderService:
 
     @staticmethod
     def _sum_market_value(rows: list[ReportingSnapshotRow]) -> Decimal:
-        return sum((_decimal_or_zero(row.snapshot.market_value) for row in rows), ZERO)
+        return sum((decimal_or_zero(row.snapshot.market_value) for row in rows), ZERO)
 
     @classmethod
     def _partition_cash_rows(
@@ -275,17 +275,9 @@ def _date_buckets(*, as_of_date: date, horizon_days: int) -> list[LadderDateBuck
 def _sum_series(series: dict[date, Decimal], bucket: LadderDateBucket) -> Decimal:
     return sum(
         (
-            _decimal_or_zero(amount)
+            decimal_or_zero(amount)
             for flow_date, amount in series.items()
             if bucket.start_date <= flow_date <= bucket.end_date
         ),
         ZERO,
     )
-
-
-def _decimal_or_zero(value: Any) -> Decimal:
-    if value is None:
-        return ZERO
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))

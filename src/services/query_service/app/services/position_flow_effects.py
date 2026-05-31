@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from .decimal_amounts import decimal_or_zero
+
 POSITION_INCREASE_TRANSACTION_TYPES = {
     "BUY",
     "TRANSFER_IN",
@@ -36,22 +38,18 @@ CASH_POSITION_INCREASE_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_DECREASE_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
 
 
-def _decimal_or_zero(value) -> Decimal:
-    return Decimal(str(value or 0))
-
-
 def transaction_quantity_effect_decimal(
     transaction_type: str | None, quantity, amount=None
 ) -> Decimal:
     normalized_type = str(transaction_type or "").strip().upper()
     if normalized_type in POSITION_INCREASE_TRANSACTION_TYPES:
-        magnitude = _decimal_or_zero(quantity)
+        magnitude = decimal_or_zero(quantity)
         return magnitude
     if normalized_type in POSITION_DECREASE_TRANSACTION_TYPES:
-        magnitude = _decimal_or_zero(quantity)
+        magnitude = decimal_or_zero(quantity)
         return -magnitude
     if normalized_type in CASH_POSITION_INCREASE_TRANSACTION_TYPES:
-        return abs(_decimal_or_zero(amount))
+        return abs(decimal_or_zero(amount))
     if normalized_type in CASH_POSITION_DECREASE_TRANSACTION_TYPES:
-        return -abs(_decimal_or_zero(amount))
+        return -abs(decimal_or_zero(amount))
     return Decimal(0)
