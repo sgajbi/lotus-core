@@ -37,11 +37,11 @@ from ..dtos.operations_dto import (
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.identifier_normalization import normalize_security_id
-from ..repositories.operations_repository import (
+from ..repositories.operations_models import (
     MissingHistoricalFxDependencySummary,
-    OperationsRepository,
     SnapshotValuationCoverageSummary,
 )
+from ..repositories.operations_repository import OperationsRepository
 from ..support_policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
@@ -260,9 +260,7 @@ class OperationsService:
         latest_valuation_job_status: str | None,
     ) -> str:
         normalized_reprocessing_status = cls._normalize_support_job_status(reprocessing_status)
-        normalized_valuation_status = cls._normalize_support_job_status(
-            latest_valuation_job_status
-        )
+        normalized_valuation_status = cls._normalize_support_job_status(latest_valuation_job_status)
         if normalized_reprocessing_status == "REPROCESSING":
             return "REPLAYING"
         if has_artifact_gap:
@@ -716,9 +714,7 @@ class OperationsService:
     ) -> LineageKeyListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
-        normalized_reprocessing_status = self._normalize_support_status_filter(
-            reprocessing_status
-        )
+        normalized_reprocessing_status = self._normalize_support_status_filter(reprocessing_status)
         total, keys = await asyncio.gather(
             self.repo.get_lineage_keys_count(
                 portfolio_id=portfolio_id,

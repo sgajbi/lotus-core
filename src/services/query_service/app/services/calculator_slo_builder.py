@@ -5,7 +5,7 @@ from ..dtos.operations_dto import (
     CalculatorSloResponse,
     ReprocessingSloBucket,
 )
-from ..repositories.operations_repository import JobHealthSummary, ReprocessingHealthSummary
+from ..repositories.operations_models import JobHealthSummary, ReprocessingHealthSummary
 
 
 def _backlog_age_days(

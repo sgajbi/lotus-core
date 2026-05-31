@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 
-from src.services.query_service.app.repositories.operations_repository import (
+from src.services.query_service.app.repositories.operations_models import (
     JobHealthSummary,
     ReprocessingHealthSummary,
 )

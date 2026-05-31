@@ -7,7 +7,7 @@ from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLET
 from prometheus_client import REGISTRY, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.repositories.operations_repository import (
+from src.services.query_service.app.repositories.operations_models import (
     ExportJobHealthSummary,
     JobHealthSummary,
     LoadRunProgressSummary,
@@ -1626,13 +1626,9 @@ async def test_support_job_retrying_only_for_active_retry_states():
 
 async def test_support_job_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
+    assert OperationsService._get_support_job_operational_state(" failed ", updated_at) == "FAILED"
     assert (
-        OperationsService._get_support_job_operational_state(" failed ", updated_at) == "FAILED"
-    )
-    assert (
-        OperationsService._get_support_job_operational_state(
-            " skipped_no_position ", updated_at
-        )
+        OperationsService._get_support_job_operational_state(" skipped_no_position ", updated_at)
         == "SKIPPED"
     )
     assert (
@@ -1664,8 +1660,7 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
 
     assert (
-        OperationsService._get_reconciliation_operational_state(" requires_replay ")
-        == "BLOCKING"
+        OperationsService._get_reconciliation_operational_state(" requires_replay ") == "BLOCKING"
     )
     assert OperationsService._get_reconciliation_operational_state(" running ") == "RUNNING"
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"

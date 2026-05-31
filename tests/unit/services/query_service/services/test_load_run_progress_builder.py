@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from src.services.query_service.app.repositories.operations_repository import (
+from src.services.query_service.app.repositories.operations_models import (
     LoadRunProgressSummary,
 )
 from src.services.query_service.app.services.load_run_progress_builder import (
@@ -131,23 +131,38 @@ def test_get_load_run_operator_progress_state_covers_terminal_and_stale_states()
     )
     failed_summary = _summary(failed_valuation_jobs=1)
 
-    assert get_load_run_operator_progress_state(
-        running_summary,
-        reference_now=GENERATED_AT,
-    ) == "RUNNING"
-    assert get_load_run_operator_progress_state(
-        slow_summary,
-        reference_now=GENERATED_AT,
-    ) == "SLOW"
-    assert get_load_run_operator_progress_state(
-        stuck_summary,
-        reference_now=GENERATED_AT,
-    ) == "STUCK"
-    assert get_load_run_operator_progress_state(
-        complete_summary,
-        reference_now=GENERATED_AT,
-    ) == "COMPLETE"
-    assert get_load_run_operator_progress_state(
-        failed_summary,
-        reference_now=GENERATED_AT,
-    ) == "FAILED"
+    assert (
+        get_load_run_operator_progress_state(
+            running_summary,
+            reference_now=GENERATED_AT,
+        )
+        == "RUNNING"
+    )
+    assert (
+        get_load_run_operator_progress_state(
+            slow_summary,
+            reference_now=GENERATED_AT,
+        )
+        == "SLOW"
+    )
+    assert (
+        get_load_run_operator_progress_state(
+            stuck_summary,
+            reference_now=GENERATED_AT,
+        )
+        == "STUCK"
+    )
+    assert (
+        get_load_run_operator_progress_state(
+            complete_summary,
+            reference_now=GENERATED_AT,
+        )
+        == "COMPLETE"
+    )
+    assert (
+        get_load_run_operator_progress_state(
+            failed_summary,
+            reference_now=GENERATED_AT,
+        )
+        == "FAILED"
+    )
