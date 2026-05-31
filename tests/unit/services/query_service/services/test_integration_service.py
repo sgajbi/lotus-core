@@ -2415,6 +2415,7 @@ async def test_reference_contract_methods() -> None:
                 )
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX1"]),
         list_benchmark_components_for_benchmarks=AsyncMock(
             return_value={
                 "B1": [
@@ -2799,6 +2800,7 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
         list_benchmark_definitions_overlapping_window=AsyncMock(return_value=[]),
         list_benchmark_components=AsyncMock(return_value=[]),
         list_benchmark_components_overlapping_window=AsyncMock(return_value=[]),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=[]),
         list_benchmark_components_for_benchmarks=AsyncMock(return_value={}),
         list_benchmark_definitions=AsyncMock(
             return_value=[
@@ -3111,6 +3113,9 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
                 ),
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            side_effect=[["IDX1", "IDX2", "IDX3"], ["IDX3"]]
+        ),
         list_index_price_points=AsyncMock(return_value=[]),
         list_index_return_points=AsyncMock(return_value=[]),
         list_benchmark_return_points=AsyncMock(return_value=[]),
@@ -3277,6 +3282,9 @@ async def test_benchmark_market_series_quality_summary_is_page_scoped() -> None:
                     composition_effective_to=None,
                 ),
             ]
+        ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            return_value=["IDX1", "IDX2"]
         ),
         list_index_price_points=AsyncMock(
             return_value=[
@@ -4304,6 +4312,9 @@ async def test_benchmark_market_series_honors_window_rebalances() -> None:
                 ),
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            return_value=["IDX_A", "IDX_B", "IDX_C"]
+        ),
         list_index_price_points=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -4395,6 +4406,7 @@ async def test_benchmark_market_series_honors_requested_series_fields() -> None:
                 ),
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX_A"]),
         list_index_price_points=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -4469,6 +4481,7 @@ async def test_benchmark_market_series_uses_fx_dates_when_only_fx_rate_requested
                 ),
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX_A"]),
         list_index_price_points=AsyncMock(return_value=[]),
         list_index_return_points=AsyncMock(return_value=[]),
         list_benchmark_return_points=AsyncMock(return_value=[]),

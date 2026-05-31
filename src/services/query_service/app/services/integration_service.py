@@ -2425,46 +2425,27 @@ class IntegrationService:
         if token_scope and token_scope != request_scope_fingerprint:
             raise ValueError("Benchmark market series page token does not match request scope.")
         cursor_index_id = cursor.get("last_index_id")
-        supports_component_index_paging = hasattr(
-            self._reference_repository,
-            "list_benchmark_component_index_ids_overlapping_window",
-        )
-
-        has_more = False
-        if supports_component_index_paging:
-            list_component_index_ids = (
-                self._reference_repository.list_benchmark_component_index_ids_overlapping_window
-            )
-            candidate_index_ids = await list_component_index_ids(
+        candidate_index_ids = (
+            await self._reference_repository.list_benchmark_component_index_ids_overlapping_window(
                 benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
                 after_index_id=cursor_index_id,
                 limit=page_size + 1,
             )
-            has_more = len(candidate_index_ids) > page_size
-            index_ids = candidate_index_ids[:page_size]
-            components = resolve_component_window_rows(
-                await self._reference_repository.list_benchmark_components_overlapping_window(
-                    benchmark_id=benchmark_id,
-                    start_date=request.window.start_date,
-                    end_date=request.window.end_date,
-                    index_ids=index_ids,
-                ),
+        )
+        has_more = len(candidate_index_ids) > page_size
+        index_ids = candidate_index_ids[:page_size]
+        components = resolve_component_window_rows(
+            await self._reference_repository.list_benchmark_components_overlapping_window(
+                benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
-            )
-        else:
-            components = resolve_component_window_rows(
-                await self._reference_repository.list_benchmark_components_overlapping_window(
-                    benchmark_id=benchmark_id,
-                    start_date=request.window.start_date,
-                    end_date=request.window.end_date,
-                ),
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            )
-            index_ids = sorted({component.index_id for component in components})
+                index_ids=index_ids,
+            ),
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        )
 
         index_prices = (
             await self._reference_repository.list_index_price_points(
@@ -2564,13 +2545,6 @@ class IntegrationService:
                 benchmark_component_series_response(index_id=index_id, points=points)
             )
 
-        if cursor_index_id and not supports_component_index_paging:
-            component_series_all = [
-                series for series in component_series_all if series.index_id > cursor_index_id
-            ]
-
-        if not supports_component_index_paging:
-            has_more = len(component_series_all) > page_size
         component_series = component_series_all[:page_size]
         returned_index_ids = {series.index_id for series in component_series}
         returned_index_prices = [row for row in index_prices if row.index_id in returned_index_ids]
