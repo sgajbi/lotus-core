@@ -345,6 +345,32 @@ class OperationsRepository:
             stmt = stmt.where(PortfolioValuationJob.correlation_id == correlation_id)
         return stmt
 
+    def _apply_aggregation_job_scope(
+        self,
+        stmt,
+        *,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        business_date: Optional[date] = None,
+        job_id: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(PortfolioAggregationJob.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
+        if status:
+            stmt = stmt.where(
+                self._support_job_status_filter(PortfolioAggregationJob.status, status)
+            )
+        if business_date:
+            stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
+        if job_id is not None:
+            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
+        if correlation_id:
+            stmt = stmt.where(PortfolioAggregationJob.correlation_id == correlation_id)
+        return stmt
+
     @staticmethod
     def _analytics_export_status_filter(status_column, status: str):
         return status_column == status.strip().lower()
@@ -1878,23 +1904,15 @@ class OperationsRepository:
         correlation_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(PortfolioAggregationJob)
-            .where(PortfolioAggregationJob.portfolio_id == portfolio_id)
+        stmt = self._apply_aggregation_job_scope(
+            select(func.count()).select_from(PortfolioAggregationJob),
+            portfolio_id=portfolio_id,
+            status=status,
+            business_date=business_date,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(
-                self._support_job_status_filter(PortfolioAggregationJob.status, status)
-            )
-        if business_date:
-            stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
-        if job_id is not None:
-            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(PortfolioAggregationJob.correlation_id == correlation_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_aggregation_jobs(
@@ -1912,21 +1930,15 @@ class OperationsRepository:
     ) -> list[PortfolioAggregationJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = select(PortfolioAggregationJob).where(
-            PortfolioAggregationJob.portfolio_id == portfolio_id
+        stmt = self._apply_aggregation_job_scope(
+            select(PortfolioAggregationJob),
+            portfolio_id=portfolio_id,
+            status=status,
+            business_date=business_date,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(
-                self._support_job_status_filter(PortfolioAggregationJob.status, status)
-            )
-        if business_date:
-            stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
-        if job_id is not None:
-            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(PortfolioAggregationJob.correlation_id == correlation_id)
         stmt = (
             stmt.order_by(
                 self._support_job_priority(
