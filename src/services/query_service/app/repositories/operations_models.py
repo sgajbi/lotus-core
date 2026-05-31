@@ -108,3 +108,10 @@ class LoadRunProgressSummary:
     valuation_to_position_timeseries_latency_p50_seconds: Optional[float]
     valuation_to_position_timeseries_latency_p95_seconds: Optional[float]
     valuation_to_position_timeseries_latency_max_seconds: Optional[float]
+
+
+@dataclass(frozen=True)
+class ResetWatermarkReprocessingJobScope:
+    security_id_expr: object
+    impacted_date_expr: object
+    portfolio_scope_exists: object

@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -35,15 +34,9 @@ from .operations_models import (
     MissingHistoricalFxDependencySummary,
     ReconciliationFindingSummary,
     ReprocessingHealthSummary,
+    ResetWatermarkReprocessingJobScope,
     SnapshotValuationCoverageSummary,
 )
-
-
-@dataclass(frozen=True)
-class ResetWatermarkReprocessingJobScope:
-    security_id_expr: object
-    impacted_date_expr: object
-    portfolio_scope_exists: object
 
 
 class OperationsRepository:
