@@ -36,17 +36,22 @@ CASH_POSITION_INCREASE_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_DECREASE_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
 
 
+def _decimal_or_zero(value) -> Decimal:
+    return Decimal(str(value or 0))
+
+
 def transaction_quantity_effect_decimal(
     transaction_type: str | None, quantity, amount=None
 ) -> Decimal:
     normalized_type = str(transaction_type or "").strip().upper()
-    magnitude = Decimal(str(quantity or 0))
     if normalized_type in POSITION_INCREASE_TRANSACTION_TYPES:
+        magnitude = _decimal_or_zero(quantity)
         return magnitude
     if normalized_type in POSITION_DECREASE_TRANSACTION_TYPES:
+        magnitude = _decimal_or_zero(quantity)
         return -magnitude
     if normalized_type in CASH_POSITION_INCREASE_TRANSACTION_TYPES:
-        return abs(Decimal(str(amount or 0)))
+        return abs(_decimal_or_zero(amount))
     if normalized_type in CASH_POSITION_DECREASE_TRANSACTION_TYPES:
-        return -abs(Decimal(str(amount or 0)))
+        return -abs(_decimal_or_zero(amount))
     return Decimal(0)
