@@ -37,8 +37,6 @@ from ..dtos.reference_integration_dto import (
     DiscretionaryMandateBindingSupportability,
     DpmPortfolioUniverseCandidateRequest,
     DpmPortfolioUniverseCandidateResponse,
-    DpmPortfolioUniverseCandidateSelectionBasis,
-    DpmPortfolioUniverseCandidateSupportability,
     DpmSourceFamilyReadiness,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
@@ -82,7 +80,6 @@ from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     RebalanceBandContext,
-    ReferencePageMetadata,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
     SustainabilityPreferenceProfileRequest,
@@ -107,6 +104,12 @@ from .benchmark_market_series import (
     build_benchmark_market_series_response,
 )
 from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
+from .dpm_portfolio_universe import (
+    build_dpm_portfolio_universe_response,
+    dpm_portfolio_universe_after_sort_key,
+    dpm_portfolio_universe_next_page_token_payload,
+    dpm_portfolio_universe_read_scope,
+)
 from .dpm_source_readiness import (
     build_dpm_source_readiness_response,
     dpm_source_family_readiness,
@@ -142,7 +145,6 @@ from .reference_data_mappers import (
     client_restriction_profile_entry,
     client_tax_profile_entry,
     client_tax_rule_set_entry,
-    dpm_portfolio_universe_candidate,
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
@@ -297,125 +299,39 @@ class IntegrationService:
         self,
         request: DpmPortfolioUniverseCandidateRequest,
     ) -> DpmPortfolioUniverseCandidateResponse:
-        booking_center_code = (
-            request.booking_center_code.strip() if request.booking_center_code else None
-        )
-        if booking_center_code == "":
-            booking_center_code = None
-        model_portfolio_ids = sorted(
-            {
-                model_portfolio_id.strip()
-                for model_portfolio_id in request.model_portfolio_ids
-                if model_portfolio_id.strip()
-            }
-        )
-        request_scope_fingerprint = build_request_fingerprint(
-            {
-                "product_name": "DpmPortfolioUniverseCandidate",
-                "as_of_date": request.as_of_date.isoformat(),
-                "booking_center_code": booking_center_code,
-                "model_portfolio_ids": model_portfolio_ids,
-                "include_inactive_mandates": request.include_inactive_mandates,
-                "tenant_id": request.tenant_id,
-            }
-        )
+        read_scope = dpm_portfolio_universe_read_scope(request)
         cursor = self._decode_page_token(request.page.page_token)
-        token_scope = cursor.get("scope_fingerprint")
-        if token_scope and token_scope != request_scope_fingerprint:
-            raise ValueError("DPM portfolio-universe page token does not match request scope.")
-
-        after_sort_key: tuple[str, str] | None = None
-        if cursor.get("last_portfolio_id") and cursor.get("last_mandate_id"):
-            after_sort_key = (str(cursor["last_portfolio_id"]), str(cursor["last_mandate_id"]))
+        after_sort_key = dpm_portfolio_universe_after_sort_key(
+            cursor=cursor,
+            request_scope_fingerprint=read_scope.request_scope_fingerprint,
+        )
 
         rows = await self._reference_repository.list_dpm_portfolio_universe_candidates(
             as_of_date=request.as_of_date,
-            booking_center_code=booking_center_code,
-            model_portfolio_ids=model_portfolio_ids,
+            booking_center_code=read_scope.booking_center_code,
+            model_portfolio_ids=read_scope.model_portfolio_ids,
             include_inactive_mandates=request.include_inactive_mandates,
             after_sort_key=after_sort_key,
             limit=request.page.page_size + 1,
         )
         has_more = len(rows) > request.page.page_size
         page_rows = rows[: request.page.page_size]
-        candidates = [dpm_portfolio_universe_candidate(row) for row in page_rows]
 
         next_page_token: str | None = None
-        if has_more and candidates:
-            last_candidate = candidates[-1]
-            next_page_token = self._encode_page_token(
-                {
-                    "scope_fingerprint": request_scope_fingerprint,
-                    "last_portfolio_id": last_candidate.portfolio_id,
-                    "last_mandate_id": last_candidate.mandate_id,
-                }
-            )
+        token_payload = dpm_portfolio_universe_next_page_token_payload(
+            request_scope_fingerprint=read_scope.request_scope_fingerprint,
+            page_rows=page_rows,
+            has_more=has_more,
+        )
+        if token_payload:
+            next_page_token = self._encode_page_token(token_payload)
 
-        filters_applied = ["as_of_date"]
-        if booking_center_code:
-            filters_applied.append("booking_center_code")
-        if model_portfolio_ids:
-            filters_applied.append("model_portfolio_ids")
-        if not request.include_inactive_mandates:
-            filters_applied.append("active_discretionary_authority")
-
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE"] = "READY"
-        supportability_reason = "DPM_PORTFOLIO_UNIVERSE_READY"
-        data_quality_status = "ACCEPTED"
-        if not candidates:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "DPM_PORTFOLIO_UNIVERSE_EMPTY"
-            data_quality_status = "MISSING"
-        elif has_more:
-            supportability_state = "DEGRADED"
-            supportability_reason = "DPM_PORTFOLIO_UNIVERSE_PAGE_PARTIAL"
-            data_quality_status = "PARTIAL"
-
-        return DpmPortfolioUniverseCandidateResponse(
-            candidates=candidates,
-            page=ReferencePageMetadata(
-                page_size=request.page.page_size,
-                sort_key="portfolio_id:asc,mandate_id:asc",
-                returned_component_count=len(candidates),
-                request_scope_fingerprint=request_scope_fingerprint,
-                next_page_token=next_page_token,
-            ),
-            supportability=DpmPortfolioUniverseCandidateSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                returned_candidate_count=len(candidates),
-                filters_applied=filters_applied,
-                page_truncated=has_more,
-            ),
-            selection_basis=DpmPortfolioUniverseCandidateSelectionBasis(
-                basis_type="EFFECTIVE_DISCRETIONARY_MANDATE_BINDING",
-                source_table="portfolio_mandate_bindings",
-                included_when=[
-                    "mandate_type=discretionary",
-                    "effective_from<=as_of_date",
-                    "effective_to is null or effective_to>=as_of_date",
-                    "active authority unless include_inactive_mandates=true",
-                ],
-                downstream_boundary=(
-                    "Candidate membership is not relationship householding, suitability approval, "
-                    "portfolio-manager ranking, execution readiness, client communication "
-                    "workflow, or external workflow ownership."
-                ),
-            ),
-            lineage={
-                "source_system": "lotus-core",
-                "source_table": "portfolio_mandate_bindings",
-                "source_filter": "mandate_type=discretionary",
-                "contract_version": "rfc_037_dpm_portfolio_universe_candidate_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=data_quality_status,
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(page_rows),
-                source_batch_fingerprint=request_scope_fingerprint,
-                snapshot_id=f"dpm_portfolio_universe:{request_scope_fingerprint}",
-            ),
+        return build_dpm_portfolio_universe_response(
+            request=request,
+            read_scope=read_scope,
+            page_rows=page_rows,
+            has_more=has_more,
+            next_page_token=next_page_token,
         )
 
     async def resolve_discretionary_mandate_binding(
