@@ -158,6 +158,10 @@ from .request_fingerprint import (
 from .request_fingerprint import (
     series_request_fingerprint,
 )
+from .source_data_runtime import (
+    source_product_runtime_metadata,
+    source_product_runtime_metadata_without_as_of_date,
+)
 from .transaction_cost_curve import build_transaction_cost_curve_points
 
 logger = logging.getLogger(__name__)
@@ -190,34 +194,6 @@ class IntegrationService:
             return default
         normalized = str(value).strip().upper()
         return normalized or default
-
-    @staticmethod
-    def _runtime_metadata(
-        as_of_date: date,
-        *,
-        data_quality_status: str | None = None,
-        latest_evidence_timestamp: datetime | None = None,
-    ) -> dict[str, object]:
-        return source_data_product_runtime_metadata(
-            as_of_date=as_of_date,
-            data_quality_status=data_quality_status or "UNKNOWN",
-            latest_evidence_timestamp=latest_evidence_timestamp,
-        )
-
-    @staticmethod
-    def _runtime_metadata_for_existing_as_of_date(
-        as_of_date: date,
-        *,
-        data_quality_status: str | None = None,
-        latest_evidence_timestamp: datetime | None = None,
-    ) -> dict[str, object]:
-        metadata = source_data_product_runtime_metadata(
-            as_of_date=as_of_date,
-            data_quality_status=data_quality_status or "UNKNOWN",
-            latest_evidence_timestamp=latest_evidence_timestamp,
-        )
-        metadata.pop("as_of_date")
-        return metadata
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return self._page_token_codec.encode(payload)
@@ -259,7 +235,7 @@ class IntegrationService:
             source_system=row.source_system,
             assignment_recorded_at=row.assignment_recorded_at,
             assignment_version=int(row.assignment_version),
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 as_of_date,
                 data_quality_status="COMPLETE",
                 latest_evidence_timestamp=latest_reference_evidence_timestamp([row]),
@@ -323,7 +299,7 @@ class IntegrationService:
                 "source_record_id": definition.source_record_id or "unknown",
                 "contract_version": "rfc_087_v1",
             },
-            **self._runtime_metadata(
+            **source_product_runtime_metadata(
                 request.as_of_date,
                 data_quality_status=market_reference_data_quality_status(
                     targets,
@@ -699,7 +675,7 @@ class IntegrationService:
                 "source_record_id": row.source_record_id or "unknown",
                 "contract_version": "rfc_087_v1",
             },
-            **self._runtime_metadata(
+            **source_product_runtime_metadata(
                 request.as_of_date,
                 data_quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
                 latest_evidence_timestamp=latest_reference_evidence_timestamp([row]),
@@ -1734,7 +1710,7 @@ class IntegrationService:
                 "source_system": "instrument_eligibility",
                 "contract_version": "rfc_087_v1",
             },
-            **self._runtime_metadata(
+            **source_product_runtime_metadata(
                 request.as_of_date,
                 data_quality_status=market_reference_data_quality_status(
                     rows,
@@ -1846,7 +1822,7 @@ class IntegrationService:
                 "source_system": "position_lot_state",
                 "contract_version": "rfc_087_v1",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
                 data_quality_status=(
                     "COMPLETE"
@@ -1970,7 +1946,7 @@ class IntegrationService:
                 "source_system": "transactions",
                 "contract_version": "rfc_040_wtbd_007_v1",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
                 data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
                 latest_evidence_timestamp=latest_reference_evidence_timestamp(transactions),
@@ -2080,7 +2056,7 @@ class IntegrationService:
                 "source_system": "market_prices+fx_rates",
                 "contract_version": "rfc_087_v1",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
                 data_quality_status=("COMPLETE" if supportability_state == "READY" else "PARTIAL"),
                 latest_evidence_timestamp=latest_reference_evidence_timestamp(
@@ -2305,7 +2281,7 @@ class IntegrationService:
                 "contract_version": "rfc_087_v1",
                 "readiness_scope": "dpm_source_family",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
                 data_quality_status=("COMPLETE" if supportability.state == "READY" else "PARTIAL"),
                 latest_evidence_timestamp=None,
@@ -2383,7 +2359,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.benchmark_composition_window",
             },
-            **self._runtime_metadata(
+            **source_product_runtime_metadata(
                 request.window.end_date,
                 data_quality_status=market_reference_data_quality_status(
                     evidence_rows,
@@ -2633,7 +2609,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.market_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
                 data_quality_status=market_reference_data_quality_status(
                     returned_evidence_rows,
@@ -2668,7 +2644,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_price_series",
             },
-            **self._runtime_metadata(
+            **source_product_runtime_metadata(
                 getattr(request, "as_of_date", request.window.end_date),
                 data_quality_status=market_reference_data_quality_status(
                     rows,
@@ -2707,7 +2683,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_return_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
                 data_quality_status=market_reference_data_quality_status(
                     rows,
@@ -2778,7 +2754,7 @@ class IntegrationService:
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.risk_free_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
                 data_quality_status=market_reference_data_quality_status(
                     rows,
@@ -2865,7 +2841,7 @@ class IntegrationService:
             as_of_date=as_of_date,
             records=[classification_taxonomy_entry(row) for row in rows],
             request_fingerprint=request_fingerprint,
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 as_of_date,
                 data_quality_status=market_reference_data_quality_status(
                     rows,
