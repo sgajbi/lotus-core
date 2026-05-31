@@ -397,6 +397,7 @@ def test_financial_reconciliation_run_declares_support_query_indexes():
     portfolio_type_started = indexes["ix_financial_reconciliation_runs_port_type_started_id"]
     portfolio_correlation_started = indexes["ix_fin_recon_runs_port_corr_started_id"]
     portfolio_requested_started = indexes["ix_fin_recon_runs_port_req_by_started_id"]
+    portfolio_date_epoch_started = indexes["ix_fin_recon_runs_port_date_epoch_started_id"]
 
     assert [str(expression) for expression in portfolio_status_started.expressions] == [
         "financial_reconciliation_runs.portfolio_id",
@@ -421,6 +422,13 @@ def test_financial_reconciliation_run_declares_support_query_indexes():
         "financial_reconciliation_runs.requested_by",
         "financial_reconciliation_runs.started_at DESC",
         "financial_reconciliation_runs.id ASC",
+    ]
+    assert [str(expression) for expression in portfolio_date_epoch_started.expressions] == [
+        "financial_reconciliation_runs.portfolio_id",
+        "financial_reconciliation_runs.business_date",
+        "financial_reconciliation_runs.epoch",
+        "financial_reconciliation_runs.started_at DESC",
+        "financial_reconciliation_runs.id DESC",
     ]
 
 

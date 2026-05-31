@@ -2407,6 +2407,14 @@ class FinancialReconciliationRun(Base):
             started_at.desc(),
             id.asc(),
         ),
+        Index(
+            "ix_fin_recon_runs_port_date_epoch_started_id",
+            "portfolio_id",
+            "business_date",
+            "epoch",
+            started_at.desc(),
+            id.desc(),
+        ),
     )
 
 
