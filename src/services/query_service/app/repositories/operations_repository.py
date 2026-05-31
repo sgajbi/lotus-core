@@ -578,20 +578,34 @@ class OperationsRepository:
         as_of_date: Optional[date] = None,
         snapshot_as_of: Optional[datetime] = None,
     ):
+        return self._apply_current_epoch_snapshot_scope(
+            select(func.max(DailyPositionSnapshot.date)),
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+            snapshot_as_of=snapshot_as_of,
+        )
+
+    def _apply_current_epoch_snapshot_scope(
+        self,
+        stmt,
+        *,
+        portfolio_id: str,
+        snapshot_date: Optional[date] = None,
+        as_of_date: Optional[date] = None,
+        snapshot_as_of: Optional[datetime] = None,
+    ):
         snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
         state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = (
-            select(func.max(DailyPositionSnapshot.date))
-            .join(
-                PositionState,
-                and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    snapshot_security_id == state_security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
-                ),
-            )
-            .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
-        )
+        stmt = stmt.join(
+            PositionState,
+            and_(
+                DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
+                snapshot_security_id == state_security_id,
+                DailyPositionSnapshot.epoch == PositionState.epoch,
+            ),
+        ).where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+        if snapshot_date is not None:
+            stmt = stmt.where(DailyPositionSnapshot.date == snapshot_date)
         if as_of_date is not None:
             stmt = stmt.where(DailyPositionSnapshot.date <= as_of_date)
         if snapshot_as_of is not None:
@@ -1402,37 +1416,21 @@ class OperationsRepository:
                 unvalued_positions=0,
             )
 
-        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = (
-            select(
-                func.count().label("total_positions"),
-                func.count()
-                .filter(
-                    DailyPositionSnapshot.valuation_status.is_not(None),
-                    DailyPositionSnapshot.valuation_status != "UNVALUED",
-                )
-                .label("valued_positions"),
+        stmt = select(
+            func.count().label("total_positions"),
+            func.count()
+            .filter(
+                DailyPositionSnapshot.valuation_status.is_not(None),
+                DailyPositionSnapshot.valuation_status != "UNVALUED",
             )
-            .select_from(DailyPositionSnapshot)
-            .join(
-                PositionState,
-                and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    snapshot_security_id == state_security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
-                ),
-            )
-            .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.date == snapshot_date,
-            )
+            .label("valued_positions"),
+        ).select_from(DailyPositionSnapshot)
+        stmt = self._apply_current_epoch_snapshot_scope(
+            stmt,
+            portfolio_id=portfolio_id,
+            snapshot_date=snapshot_date,
+            snapshot_as_of=snapshot_as_of,
         )
-        if snapshot_as_of is not None:
-            stmt = stmt.where(
-                DailyPositionSnapshot.created_at <= snapshot_as_of,
-                PositionState.updated_at <= snapshot_as_of,
-            )
         row = (await self.db.execute(stmt)).one()
         total_positions = int(row.total_positions or 0)
         valued_positions = int(row.valued_positions or 0)
