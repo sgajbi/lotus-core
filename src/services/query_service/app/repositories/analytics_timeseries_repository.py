@@ -30,21 +30,23 @@ class AnalyticsTimeseriesRepository:
 
     @staticmethod
     def _normalized_security_ids(security_ids: list[str]) -> list[str]:
-        return [
+        normalized_security_ids = [
             normalized
             for security_id in security_ids
             if (normalized := normalize_security_id(security_id))
         ]
+        return list(dict.fromkeys(normalized_security_ids))
 
     @staticmethod
     def _security_ids_from_position_ids(portfolio_id: str, position_ids: list[str]) -> list[str]:
-        return [
+        normalized_security_ids = [
             normalized
             for position_id in position_ids
             if ":" in position_id
             and position_id.split(":", 1)[0] == portfolio_id
             and (normalized := normalize_security_id(position_id.split(":", 1)[1]))
         ]
+        return list(dict.fromkeys(normalized_security_ids))
 
     @staticmethod
     def _latest_cashflow_rows_stmt(*, predicates: list[object], include_security_id: bool):
