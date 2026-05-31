@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ from ..services.liquidity_ladder_service import (
     MAX_HORIZON_DAYS,
     PortfolioLiquidityLadderService,
 )
+from .http_errors import raise_value_error_as_resolution_http
 
 router = APIRouter(prefix="/portfolios", tags=["Liquidity Ladder"])
 
@@ -89,7 +90,4 @@ async def get_liquidity_ladder(
             include_projected=include_projected,
         )
     except ValueError as exc:
-        message = str(exc)
-        if "Portfolio with id" in message and "not found" in message:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        raise_value_error_as_resolution_http(exc)

@@ -152,7 +152,7 @@ where `X_c = 1` when portfolio currency equals reporting currency.
 | Condition | Behavior |
 | --- | --- |
 | Portfolio id does not exist for positions | Service raises `LookupError`; the API maps it to HTTP `404`. |
-| Portfolio id does not exist for cash balances | Service raises `ValueError`; the API maps it to HTTP `404` or `400` depending on route handling. |
+| Portfolio id does not exist for cash balances | Service raises `ValueError`; the API maps not-found service errors to HTTP `404`. |
 | No business date exists for default cash balances | Service raises `ValueError`; the route does not invent an as-of date. |
 | Cash `reporting_currency` has no FX rate as of `A` | Service raises `ValueError`; the route does not return restated balances with missing FX evidence. |
 | No positions are returned | Returns `data_quality_status=UNKNOWN`. |

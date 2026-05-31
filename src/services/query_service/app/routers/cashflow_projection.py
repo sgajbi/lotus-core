@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from ..services.cashflow_projection_service import (
     MAX_HORIZON_DAYS,
     CashflowProjectionService,
 )
+from .http_errors import raise_value_error_as_resolution_http
 
 router = APIRouter(prefix="/portfolios", tags=["Cashflow Projection"])
 
@@ -93,7 +94,4 @@ async def get_cashflow_projection(
             include_projected=include_projected,
         )
     except ValueError as exc:
-        message = str(exc)
-        if "not found" in message.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        raise_value_error_as_resolution_http(exc)
