@@ -830,6 +830,7 @@ async def test_get_position_snapshot_history_mismatch_count(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from (select position_history.portfolio_id" in compiled.lower()
+    assert "position_history.portfolio_id = 'P1'" in compiled
     assert "trim(position_history.security_id) AS security_id" in compiled
     assert "trim(daily_position_snapshots.security_id) AS security_id" in compiled
     assert "trim(position_history.security_id) = trim(position_state.security_id)" in compiled
@@ -1798,6 +1799,7 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     assert "from reprocessing_jobs" in compiled.lower()
     assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled
     assert "from position_history join position_state on" in compiled.lower()
+    assert "position_history.portfolio_id = 'P1'" in compiled
     assert "position_history.position_date <=" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert "anon_1.quantity > 0" in compiled

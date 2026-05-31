@@ -144,33 +144,24 @@ class OperationsRepository:
         position_history_security_id = OperationsRepository._security_id_expr(
             PositionHistory.security_id
         )
-        latest_history = (
-            select(
-                PositionHistory.quantity.label("quantity"),
-                func.row_number()
-                .over(
-                    partition_by=PositionHistory.portfolio_id,
-                    order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
-                )
-                .label("rn"),
+        latest_history = select(
+            PositionHistory.quantity.label("quantity"),
+            func.row_number()
+            .over(
+                partition_by=PositionHistory.portfolio_id,
+                order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
             )
-            .join(
-                PositionState,
-                and_(
-                    PositionState.portfolio_id == PositionHistory.portfolio_id,
-                    position_state_security_id == position_history_security_id,
-                    PositionState.epoch == PositionHistory.epoch,
-                ),
-            )
-            .where(
-                PositionState.portfolio_id == portfolio_id,
-                position_state_security_id == security_id_expr,
-                position_history_security_id == security_id_expr,
-                PositionHistory.position_date <= impacted_date_expr,
-            )
-            .correlate(ReprocessingJob)
-            .subquery()
+            .label("rn"),
         )
+        latest_history = OperationsRepository._apply_current_position_history_scope(
+            latest_history,
+            portfolio_id=portfolio_id,
+            position_history_security_id=position_history_security_id,
+            position_state_security_id=position_state_security_id,
+            normalized_security_id=security_id_expr,
+            history_date_on_or_before=impacted_date_expr,
+        )
+        latest_history = latest_history.correlate(ReprocessingJob).subquery()
 
         return (
             select(1)
@@ -569,6 +560,49 @@ class OperationsRepository:
         if as_of is not None:
             for as_of_column in as_of_columns:
                 stmt = stmt.where(as_of_column <= as_of)
+        return stmt
+
+    @staticmethod
+    def _apply_current_position_history_scope(
+        stmt,
+        *,
+        portfolio_id: str,
+        position_history_security_id=None,
+        position_state_security_id=None,
+        normalized_security_id=None,
+        history_date_on_or_before=None,
+        history_as_of: Optional[datetime] = None,
+    ):
+        position_history_security_id = (
+            position_history_security_id
+            if position_history_security_id is not None
+            else OperationsRepository._security_id_expr(PositionHistory.security_id)
+        )
+        position_state_security_id = (
+            position_state_security_id
+            if position_state_security_id is not None
+            else OperationsRepository._security_id_expr(PositionState.security_id)
+        )
+        stmt = stmt.join(
+            PositionState,
+            and_(
+                PositionHistory.portfolio_id == PositionState.portfolio_id,
+                position_history_security_id == position_state_security_id,
+                PositionHistory.epoch == PositionState.epoch,
+            ),
+        ).where(PositionHistory.portfolio_id == portfolio_id)
+        if normalized_security_id is not None:
+            stmt = stmt.where(
+                position_history_security_id == normalized_security_id,
+                position_state_security_id == normalized_security_id,
+            )
+        if history_date_on_or_before is not None:
+            stmt = stmt.where(PositionHistory.position_date <= history_date_on_or_before)
+        if history_as_of is not None:
+            stmt = stmt.where(
+                PositionHistory.created_at <= history_as_of,
+                PositionState.updated_at <= history_as_of,
+            )
         return stmt
 
     def _current_epoch_snapshot_date_stmt(
@@ -1331,29 +1365,18 @@ class OperationsRepository:
     ) -> int:
         history_security_id = self._security_id_expr(PositionHistory.security_id)
         snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        latest_history = (
-            select(
-                PositionHistory.portfolio_id,
-                history_security_id.label("security_id"),
-                PositionHistory.epoch,
-                func.max(PositionHistory.position_date).label("latest_history_date"),
-            )
-            .join(
-                PositionState,
-                and_(
-                    PositionHistory.portfolio_id == PositionState.portfolio_id,
-                    history_security_id == state_security_id,
-                    PositionHistory.epoch == PositionState.epoch,
-                ),
-            )
-            .where(PositionHistory.portfolio_id == portfolio_id)
+        latest_history = select(
+            PositionHistory.portfolio_id,
+            history_security_id.label("security_id"),
+            PositionHistory.epoch,
+            func.max(PositionHistory.position_date).label("latest_history_date"),
         )
-        if as_of is not None:
-            latest_history = latest_history.where(
-                PositionHistory.created_at <= as_of,
-                PositionState.updated_at <= as_of,
-            )
+        latest_history = self._apply_current_position_history_scope(
+            latest_history,
+            portfolio_id=portfolio_id,
+            position_history_security_id=history_security_id,
+            history_as_of=as_of,
+        )
         latest_history = latest_history.group_by(
             PositionHistory.portfolio_id, history_security_id, PositionHistory.epoch
         ).subquery()
