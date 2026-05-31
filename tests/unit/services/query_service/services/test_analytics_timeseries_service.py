@@ -479,6 +479,21 @@ async def test_get_portfolio_timeseries_uses_position_horizon_when_portfolio_row
 @pytest.mark.asyncio
 async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -> None:
     service = make_service()
+
+    async def get_fx_rates_map(
+        *,
+        from_currency: str,
+        to_currency: str,
+        start_date: date,
+        end_date: date,
+    ) -> dict[date, Decimal]:
+        assert start_date == date(2025, 1, 1)
+        assert end_date == date(2025, 1, 1)
+        return {
+            ("EUR", "USD"): {date(2025, 1, 1): Decimal("1.2")},
+            ("USD", "SGD"): {date(2025, 1, 1): Decimal("1.5")},
+        }[(from_currency, to_currency)]
+
     service.repo = SimpleNamespace(
         get_position_snapshot_epoch=AsyncMock(return_value=4),
         list_position_observation_dates=AsyncMock(
@@ -526,12 +541,7 @@ async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -
             ]
         ),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
-        get_fx_rates_map=AsyncMock(
-            side_effect=[
-                {date(2025, 1, 1): Decimal("1.2")},
-                {date(2025, 1, 1): Decimal("1.5")},
-            ]
-        ),
+        get_fx_rates_map=AsyncMock(side_effect=get_fx_rates_map),
     )
 
     (
@@ -632,6 +642,62 @@ async def test_portfolio_rows_page_position_reads_by_observation_dates() -> None
         security_ids=["SEC_USD"],
         snapshot_epoch=4,
     )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_observation_rows_reads_page_support_inputs_concurrently() -> None:
+    service = make_service()
+    portfolio_cashflow_started = asyncio.Event()
+    position_cashflow_started = asyncio.Event()
+
+    async def list_portfolio_cashflow_rows(**_: object) -> list[object]:
+        portfolio_cashflow_started.set()
+        await position_cashflow_started.wait()
+        return []
+
+    async def list_position_cashflow_rows(**_: object) -> list[object]:
+        await portfolio_cashflow_started.wait()
+        position_cashflow_started.set()
+        return []
+
+    service.repo = SimpleNamespace(
+        get_position_snapshot_epoch=AsyncMock(return_value=4),
+        list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 2)]),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_USD",
+                    valuation_date=date(2025, 1, 2),
+                    bod_market_value=Decimal("100"),
+                    eod_market_value=Decimal("120"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=0,
+                    position_currency="USD",
+                    asset_class="equity",
+                )
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(side_effect=list_portfolio_cashflow_rows),
+        list_position_cashflow_rows=AsyncMock(side_effect=list_position_cashflow_rows),
+    )
+
+    observations, _, _, _, _ = await asyncio.wait_for(
+        service._portfolio_observation_rows(  # pylint: disable=protected-access
+            portfolio_id="P1",
+            portfolio_currency="USD",
+            reporting_currency="USD",
+            resolved_window=AnalyticsWindow(start_date="2025-01-02", end_date="2025-01-02"),
+            page_size=10,
+            cursor_date=None,
+            request_scope_fingerprint="scope-1",
+        ),
+        timeout=1,
+    )
+
+    assert observations[0].ending_market_value == Decimal("120")
+    service.repo.list_portfolio_cashflow_rows.assert_awaited_once()
+    service.repo.list_position_cashflow_rows.assert_awaited_once()
 
 
 @pytest.mark.asyncio

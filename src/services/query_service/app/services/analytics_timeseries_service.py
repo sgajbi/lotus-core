@@ -383,41 +383,55 @@ class AnalyticsTimeseriesService:
             for row in position_rows
             if getattr(row, "position_currency", None)
         }
-        position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-            position_currencies=position_currencies,
-            portfolio_currency=portfolio_currency,
-            start_date=min(page_dates),
-            end_date=max(page_dates),
+        normalized_security_ids = sorted(
+            {
+                security_id
+                for row in position_rows
+                if (security_id := normalize_security_id(row.security_id))
+            }
         )
-        portfolio_to_reporting_rates = await self._get_conversion_rates(
-            portfolio_currency=portfolio_currency,
-            reporting_currency=reporting_currency,
-            start_date=min(page_dates),
-            end_date=max(page_dates),
-        )
-
-        portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
-            portfolio_id=portfolio_id,
-            valuation_dates=page_dates,
-            snapshot_epoch=snapshot_epoch,
+        (
+            position_to_portfolio_rates,
+            portfolio_to_reporting_rates,
+            portfolio_cashflow_rows,
+            position_cashflow_rows,
+            previous_rows,
+        ) = await asyncio.gather(
+            self._get_position_to_portfolio_rate_maps(
+                position_currencies=position_currencies,
+                portfolio_currency=portfolio_currency,
+                start_date=min(page_dates),
+                end_date=max(page_dates),
+            ),
+            self._get_conversion_rates(
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+                start_date=min(page_dates),
+                end_date=max(page_dates),
+            ),
+            self.repo.list_portfolio_cashflow_rows(
+                portfolio_id=portfolio_id,
+                valuation_dates=page_dates,
+                snapshot_epoch=snapshot_epoch,
+            ),
+            self.repo.list_position_cashflow_rows(
+                portfolio_id=portfolio_id,
+                security_ids=normalized_security_ids,
+                valuation_dates=page_dates,
+                snapshot_epoch=snapshot_epoch,
+            ),
+            self.repo.list_latest_position_timeseries_before(
+                portfolio_id=portfolio_id,
+                before_date=page_dates[0],
+                security_ids=normalized_security_ids,
+                snapshot_epoch=snapshot_epoch,
+            ),
         )
         portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
             portfolio_cashflow_rows,
             reporting_currency=reporting_currency,
             portfolio_currency=portfolio_currency,
             fx_rates=portfolio_to_reporting_rates,
-        )
-        position_cashflow_rows = await self.repo.list_position_cashflow_rows(
-            portfolio_id=portfolio_id,
-            security_ids=sorted(
-                {
-                    security_id
-                    for row in position_rows
-                    if (security_id := normalize_security_id(row.security_id))
-                }
-            ),
-            valuation_dates=page_dates,
-            snapshot_epoch=snapshot_epoch,
         )
         position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
 
@@ -428,18 +442,6 @@ class AnalyticsTimeseriesService:
 
         observations: list[PortfolioTimeseriesObservation] = []
         quality_distribution: dict[str, int] = {}
-        previous_rows = await self.repo.list_latest_position_timeseries_before(
-            portfolio_id=portfolio_id,
-            before_date=page_dates[0],
-            security_ids=sorted(
-                {
-                    security_id
-                    for row in position_rows
-                    if (security_id := normalize_security_id(row.security_id))
-                }
-            ),
-            snapshot_epoch=snapshot_epoch,
-        )
         previous_eod_by_security = {
             normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
             for row in previous_rows
