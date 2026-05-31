@@ -249,6 +249,7 @@ async def test_get_transactions_classifies_empty_window_as_unknown(
 
     assert response_dto.data_quality_status == UNKNOWN
     assert response_dto.latest_evidence_timestamp is None
+    mock_transaction_repo.get_transactions.assert_not_awaited()
     mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
 
 
