@@ -981,8 +981,10 @@ async def test_benchmark_and_index_status_filters_are_normalized() -> None:
         db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
     )
 
-    assert "lower(trim(benchmark_definitions.benchmark_status)) = 'active'" in benchmark_sql
-    assert "lower(trim(index_definitions.index_status)) = 'active'" in index_sql
+    assert "benchmark_definitions.benchmark_status = 'active'" in benchmark_sql
+    assert "lower(trim(benchmark_definitions.benchmark_status))" not in benchmark_sql
+    assert "index_definitions.index_status = 'active'" in index_sql
+    assert "lower(trim(index_definitions.index_status))" not in index_sql
 
 
 @pytest.mark.asyncio

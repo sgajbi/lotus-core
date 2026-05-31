@@ -982,6 +982,13 @@ class BenchmarkDefinition(Base):
             "effective_from",
             name="_benchmark_definition_effective_uc",
         ),
+        Index(
+            "ix_benchmark_def_active_id_eff",
+            "benchmark_id",
+            effective_from.desc(),
+            "effective_to",
+            postgresql_where=text("benchmark_status = 'active'"),
+        ),
     )
 
 
@@ -1011,6 +1018,13 @@ class IndexDefinition(Base):
 
     __table_args__ = (
         UniqueConstraint("index_id", "effective_from", name="_index_definition_effective_uc"),
+        Index(
+            "ix_index_def_active_id_eff",
+            "index_id",
+            effective_from.desc(),
+            "effective_to",
+            postgresql_where=text("index_status = 'active'"),
+        ),
     )
 
 

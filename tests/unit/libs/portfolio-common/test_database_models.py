@@ -2,6 +2,7 @@ from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AnalyticsExportJob,
     Base,
+    BenchmarkDefinition,
     CashAccountMaster,
     Cashflow,
     ClientIncomeNeedsSchedule,
@@ -11,6 +12,7 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    IndexDefinition,
     Instrument,
     InstrumentLookthroughComponent,
     LiquidityReserveRequirement,
@@ -267,6 +269,30 @@ def test_client_source_data_tables_declare_active_source_indexes():
 
         assert [str(expression) for expression in index.expressions] == expressions
         assert str(index.dialect_options["postgresql"]["where"]) == where_clause
+
+
+def test_market_reference_definition_tables_declare_active_source_indexes():
+    benchmark_indexes = {index.name: index for index in BenchmarkDefinition.__table__.indexes}
+    index_indexes = {index.name: index for index in IndexDefinition.__table__.indexes}
+
+    active_benchmark = benchmark_indexes["ix_benchmark_def_active_id_eff"]
+    active_index = index_indexes["ix_index_def_active_id_eff"]
+
+    assert [str(expression) for expression in active_benchmark.expressions] == [
+        "benchmark_definitions.benchmark_id",
+        "benchmark_definitions.effective_from DESC",
+        "benchmark_definitions.effective_to",
+    ]
+    assert (
+        str(active_benchmark.dialect_options["postgresql"]["where"])
+        == "benchmark_status = 'active'"
+    )
+    assert [str(expression) for expression in active_index.expressions] == [
+        "index_definitions.index_id",
+        "index_definitions.effective_from DESC",
+        "index_definitions.effective_to",
+    ]
+    assert str(active_index.dialect_options["postgresql"]["where"]) == "index_status = 'active'"
 
 
 def test_transaction_declares_realized_tax_evidence_index():

@@ -720,7 +720,7 @@ class ReferenceDataRepository:
             )
         if benchmark_status:
             stmt = stmt.where(
-                _reference_status_expr(BenchmarkDefinition.benchmark_status)
+                BenchmarkDefinition.benchmark_status
                 == _normalize_reference_status(benchmark_status)
             )
         result = await self._db.execute(
@@ -756,8 +756,7 @@ class ReferenceDataRepository:
             stmt = stmt.where(IndexDefinition.index_type == index_type)
         if index_status:
             stmt = stmt.where(
-                _reference_status_expr(IndexDefinition.index_status)
-                == _normalize_reference_status(index_status)
+                IndexDefinition.index_status == _normalize_reference_status(index_status)
             )
         result = await self._db.execute(
             stmt.order_by(IndexDefinition.index_id.asc(), IndexDefinition.effective_from.desc())
