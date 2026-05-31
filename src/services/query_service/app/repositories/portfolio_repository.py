@@ -18,10 +18,6 @@ class PortfolioRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    @staticmethod
-    def _portfolio_status_expr(status_column):
-        return status_column
-
     async def get_portfolios(
         self,
         portfolio_id: Optional[str] = None,
@@ -80,7 +76,7 @@ class PortfolioRepository:
             stmt = stmt.where(
                 or_(Portfolio.close_date.is_(None), Portfolio.close_date >= as_of_date)
             )
-            stmt = stmt.where(self._portfolio_status_expr(Portfolio.status) == "ACTIVE")
+            stmt = stmt.where(Portfolio.status == "ACTIVE")
 
         result = await self.db.execute(stmt.order_by(Portfolio.portfolio_id.asc()))
         return list(result.scalars().all())
