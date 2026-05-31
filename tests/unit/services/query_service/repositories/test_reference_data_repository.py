@@ -112,6 +112,9 @@ async def test_reference_data_repository_normalizes_market_reference_currency_fi
     assert "benchmark_definitions.benchmark_currency = 'USD'" in benchmark_sql
     assert "index_definitions.index_currency = 'SGD'" in index_sql
     assert "risk_free_series.series_currency = 'EUR'" in risk_free_sql
+    assert "row_number() OVER (PARTITION BY risk_free_series.series_date" in risk_free_sql
+    assert "upper(trim(risk_free_series.quality_status)) = 'ACCEPTED'" in risk_free_sql
+    assert "anon_1.rn = 1" in risk_free_sql
 
 
 @pytest.mark.asyncio
@@ -1048,24 +1051,10 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
         [
             SimpleNamespace(
                 series_date=date(2026, 1, 1),
-                quality_status=" Accepted ",
+                quality_status="accepted",
                 source_timestamp=None,
                 risk_free_curve_id="USD_FRONT_OFFICE",
                 series_id="front_office",
-            ),
-            SimpleNamespace(
-                series_date=date(2026, 1, 1),
-                quality_status="stale",
-                source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
-                risk_free_curve_id="USD_STALE_VENDOR",
-                series_id="stale_vendor",
-            ),
-            SimpleNamespace(
-                series_date=date(2026, 1, 1),
-                quality_status="accepted",
-                source_timestamp=None,
-                risk_free_curve_id="USD_DEMO",
-                series_id="demo",
             ),
             SimpleNamespace(
                 series_date=date(2026, 1, 2),
@@ -1084,6 +1073,14 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
     assert [row.series_date for row in rows] == [date(2026, 1, 1), date(2026, 1, 2)]
     assert rows[0].series_id == "front_office"
     assert rows[1].series_id == "demo"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER (PARTITION BY risk_free_series.series_date" in compiled
+    assert "ORDER BY CASE WHEN (upper(trim(risk_free_series.quality_status)) = 'ACCEPTED')" in (
+        compiled
+    )
+    assert "risk_free_series.source_timestamp DESC NULLS LAST" in compiled
+    assert "risk_free_series.series_id DESC" in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio

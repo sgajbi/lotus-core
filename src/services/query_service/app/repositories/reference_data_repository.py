@@ -33,7 +33,7 @@ from portfolio_common.market_reference_quality import (
     normalize_quality_status,
     quality_status_summary_key,
 )
-from sqlalchemy import and_, func, or_, select, tuple_
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
@@ -951,17 +951,42 @@ class ReferenceDataRepository:
         start_date: date,
         end_date: date,
     ) -> list[RiskFreeSeries]:
-        stmt = (
-            select(RiskFreeSeries)
+        accepted_quality_rank = case(
+            (func.upper(func.trim(RiskFreeSeries.quality_status)) == "ACCEPTED", 1),
+            else_=0,
+        )
+        ranked = (
+            select(
+                RiskFreeSeries.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=RiskFreeSeries.series_date,
+                    order_by=(
+                        accepted_quality_rank.desc(),
+                        RiskFreeSeries.source_timestamp.desc().nullslast(),
+                        RiskFreeSeries.series_id.desc(),
+                        RiskFreeSeries.source_vendor.desc().nullslast(),
+                        RiskFreeSeries.source_record_id.desc().nullslast(),
+                        RiskFreeSeries.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
             .where(
                 RiskFreeSeries.series_currency == normalize_currency_code(currency),
                 RiskFreeSeries.series_date >= start_date,
                 RiskFreeSeries.series_date <= end_date,
             )
+            .subquery()
+        )
+        stmt = (
+            select(RiskFreeSeries)
+            .join(ranked, RiskFreeSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(RiskFreeSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(list(result.scalars().all()), "series_date")
+        return list(result.scalars().all())
 
     async def list_taxonomy(
         self,
