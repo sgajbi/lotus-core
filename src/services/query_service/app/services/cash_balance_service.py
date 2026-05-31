@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
@@ -121,27 +122,28 @@ class CashBalanceResolver:
             if (security_id := normalize_security_id(row.snapshot.security_id))
         }
 
-        account_records: list[CashAccountBalanceRecord] = []
+        record_inputs: list[dict[str, Any]] = []
         emitted_cash_account_ids: set[str] = set()
 
         for master_row in master_rows:
             security_id = normalize_security_id(master_row.security_id)
             snapshot_row = snapshot_by_security_id.get(security_id)
-            account_record = await self._build_cash_account_balance_record(
-                portfolio=portfolio,
-                snapshot_row=snapshot_row,
-                resolved_as_of_date=resolved_as_of_date,
-                reporting_currency=reporting_currency,
-                cash_account_id=master_row.cash_account_id,
-                security_id=security_id,
-                instrument_name=(
-                    snapshot_row.instrument.name
-                    if snapshot_row and snapshot_row.instrument
-                    else master_row.display_name
-                ),
-                account_currency=master_row.account_currency,
+            record_inputs.append(
+                {
+                    "portfolio": portfolio,
+                    "snapshot_row": snapshot_row,
+                    "resolved_as_of_date": resolved_as_of_date,
+                    "reporting_currency": reporting_currency,
+                    "cash_account_id": master_row.cash_account_id,
+                    "security_id": security_id,
+                    "instrument_name": (
+                        snapshot_row.instrument.name
+                        if snapshot_row and snapshot_row.instrument
+                        else master_row.display_name
+                    ),
+                    "account_currency": master_row.account_currency,
+                }
             )
-            account_records.append(account_record)
             emitted_cash_account_ids.add(master_row.cash_account_id)
 
         for cash_row in cash_rows:
@@ -154,24 +156,34 @@ class CashBalanceResolver:
             )
             if fallback_cash_account_id in emitted_cash_account_ids:
                 continue
-            account_records.append(
-                await self._build_cash_account_balance_record(
-                    portfolio=portfolio,
-                    snapshot_row=cash_row,
-                    resolved_as_of_date=resolved_as_of_date,
-                    reporting_currency=reporting_currency,
-                    cash_account_id=fallback_cash_account_id,
-                    security_id=security_id,
-                    instrument_name=(
+            record_inputs.append(
+                {
+                    "portfolio": portfolio,
+                    "snapshot_row": cash_row,
+                    "resolved_as_of_date": resolved_as_of_date,
+                    "reporting_currency": reporting_currency,
+                    "cash_account_id": fallback_cash_account_id,
+                    "security_id": security_id,
+                    "instrument_name": (
                         cash_row.instrument.name if cash_row.instrument is not None else security_id
                     ),
-                    account_currency=(
+                    "account_currency": (
                         cash_row.instrument.currency
                         if cash_row.instrument and cash_row.instrument.currency
                         else portfolio.base_currency
                     ),
+                }
+            )
+            emitted_cash_account_ids.add(fallback_cash_account_id)
+
+        account_records = list(
+            await asyncio.gather(
+                *(
+                    self._build_cash_account_balance_record(**record_input)
+                    for record_input in record_inputs
                 )
             )
+        )
 
         account_records.sort(key=lambda row: (row.account_currency, row.cash_account_id))
         return account_records

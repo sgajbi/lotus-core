@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -7,7 +8,10 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
-from src.services.query_service.app.services.cash_balance_service import CashBalanceService
+from src.services.query_service.app.services.cash_balance_service import (
+    CashBalanceResolver,
+    CashBalanceService,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -211,6 +215,75 @@ async def test_get_cash_balances_queries_fallback_account_ids_only_for_unmatched
         cash_security_ids=["CASH_EUR"],
         as_of_date=date(2026, 3, 27),
     )
+
+
+async def test_cash_balance_records_build_account_conversions_concurrently() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.list_cash_account_masters.return_value = [
+        SimpleNamespace(
+            cash_account_id="CASH-ACC-USD-001",
+            security_id="CASH_USD",
+            display_name="USD Operating Cash",
+            account_currency="USD",
+        )
+    ]
+    repo.get_latest_cash_account_ids.return_value = {"CASH_EUR": "CASH-ACC-EUR-LEGACY"}
+    cash_rows = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="250"),
+            instrument=_instrument("CASH_USD", currency="USD", asset_class="CASH"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_EUR", market_value="125"),
+            instrument=_instrument("CASH_EUR", currency="EUR", asset_class="CASH"),
+        ),
+    ]
+    usd_started = asyncio.Event()
+    eur_started = asyncio.Event()
+    started_by_amount = {
+        Decimal("250"): usd_started,
+        Decimal("125"): eur_started,
+    }
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        started_by_amount[amount].set()
+        await asyncio.wait_for(
+            asyncio.gather(usd_started.wait(), eur_started.wait()),
+            timeout=1,
+        )
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return amount * Decimal("1.2")
+
+    resolver = CashBalanceResolver(repo=repo, convert_amount=convert_amount)
+
+    records = await resolver.build_cash_account_balance_records(
+        portfolio=portfolio,
+        cash_rows=cash_rows,
+        resolved_as_of_date=date(2026, 3, 27),
+        reporting_currency="SGD",
+    )
+
+    assert [record.cash_account_id for record in records] == [
+        "CASH-ACC-EUR-LEGACY",
+        "CASH-ACC-USD-001",
+    ]
+    assert [record.balance_reporting_currency for record in records] == [
+        Decimal("150.0"),
+        Decimal("300.0"),
+    ]
+    assert usd_started.is_set()
+    assert eur_started.is_set()
 
 
 async def test_get_cash_balances_normalizes_cash_security_ids_for_master_join() -> None:
