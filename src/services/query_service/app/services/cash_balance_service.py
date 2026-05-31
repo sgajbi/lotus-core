@@ -13,6 +13,7 @@ from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
 from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_zero
 from .fx_conversion import CachedFxRateConverter
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
@@ -188,8 +189,8 @@ class CashBalanceResolver:
                 or snapshot_row.snapshot.market_value
                 or ZERO
             )
-            native_balance = Decimal(str(native_source_value))
-            portfolio_balance = Decimal(str(snapshot_row.snapshot.market_value or ZERO))
+            native_balance = decimal_or_zero(native_source_value)
+            portfolio_balance = decimal_or_zero(snapshot_row.snapshot.market_value)
         reporting_balance = await self._convert_amount(
             amount=portfolio_balance,
             from_currency=portfolio.base_currency,

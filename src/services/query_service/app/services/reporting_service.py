@@ -33,6 +33,7 @@ from ..repositories.reporting_repository import (
 from .allocation_calculator import AllocationInputRow, calculate_allocation_views
 from .cash_balance_service import CashBalanceResolver
 from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_zero
 from .fx_conversion import CachedFxRateConverter
 
 ZERO = Decimal("0")
@@ -70,7 +71,7 @@ class ReportingService:
         per_portfolio_positions: dict[str, int] = defaultdict(int)
 
         for row in rows:
-            native_value = Decimal(str(row.snapshot.market_value or ZERO))
+            native_value = decimal_or_zero(row.snapshot.market_value)
             reporting_value = await self._convert_amount(
                 amount=native_value,
                 from_currency=row.portfolio.base_currency,
@@ -223,7 +224,7 @@ class ReportingService:
 
         for row in rows:
             snapshot_date = max(snapshot_date, row.snapshot.date)
-            portfolio_value = Decimal(str(row.snapshot.market_value or ZERO))
+            portfolio_value = decimal_or_zero(row.snapshot.market_value)
             reporting_value = await self._convert_amount(
                 amount=portfolio_value,
                 from_currency=portfolio_currency,
@@ -279,7 +280,7 @@ class ReportingService:
             parent_security_id = normalize_security_id(row.snapshot.security_id)
             if parent_security_id:
                 parent_security_ids.append(parent_security_id)
-            native_value = Decimal(str(row.snapshot.market_value or ZERO))
+            native_value = decimal_or_zero(row.snapshot.market_value)
             reporting_value = await self._convert_amount(
                 amount=native_value,
                 from_currency=row.portfolio.base_currency,

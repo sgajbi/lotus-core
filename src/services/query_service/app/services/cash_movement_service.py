@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.cash_movement_dto import CashMovementBucket, PortfolioCashMovementSummaryResponse
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.cashflow_repository import CashflowRepository
+from .decimal_amounts import decimal_or_zero
 
 
 class CashMovementService:
@@ -44,7 +45,7 @@ class CashMovementService:
             total_amount,
             _latest_timestamp,
         ) in rows:
-            resolved_total_amount = Decimal(str(total_amount or 0))
+            resolved_total_amount = decimal_or_zero(total_amount)
             buckets.append(
                 CashMovementBucket(
                     classification=classification,
