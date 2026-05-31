@@ -355,6 +355,22 @@ async def test_reference_data_repository_filters_window_components_by_index_ids(
 
 
 @pytest.mark.asyncio
+async def test_reference_data_repository_skips_empty_component_index_filter() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_benchmark_components_overlapping_window(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        index_ids=[],
+    )
+
+    assert rows == []
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> None:
     repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
     repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]

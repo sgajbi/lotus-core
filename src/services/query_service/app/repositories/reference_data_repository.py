@@ -958,6 +958,9 @@ class ReferenceDataRepository:
         end_date: date,
         index_ids: list[str] | None = None,
     ) -> list[BenchmarkCompositionSeries]:
+        if index_ids is not None and not index_ids:
+            return []
+
         stmt = select(BenchmarkCompositionSeries).where(
             BenchmarkCompositionSeries.benchmark_id == benchmark_id,
             BenchmarkCompositionSeries.composition_effective_from <= end_date,
