@@ -41,6 +41,16 @@ def cost_calculator(mock_disposition_engine, error_reporter):
     return CostCalculator(disposition_engine=mock_disposition_engine, error_reporter=error_reporter)
 
 
+class _StringCountedAmount:
+    def __init__(self, value: str) -> None:
+        self.value = value
+        self.string_call_count = 0
+
+    def __str__(self) -> str:
+        self.string_call_count += 1
+        return self.value
+
+
 @pytest.fixture
 def buy_transaction():
     return Transaction(
@@ -162,6 +172,31 @@ def test_cost_calculator_rejects_non_positive_same_currency_fx_rate(
 
     assert error_reporter.has_errors_for("BUY_SAME_CCY_NEGATIVE_FX_01")
     assert same_currency_buy.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
+def test_cost_calculator_reports_invalid_fx_rate_text(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    same_currency_buy = Transaction(
+        transaction_id="BUY_INVALID_FX_TEXT_01",
+        portfolio_id="P_USD",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.BUY,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+    same_currency_buy.transaction_fx_rate = "not-a-number"
+
+    cost_calculator.calculate_transaction_costs(same_currency_buy)
+
+    assert error_reporter.has_errors_for("BUY_INVALID_FX_TEXT_01")
+    assert "invalid decimal for transaction_fx_rate" in error_reporter.get_errors()[0].error_reason
     mock_disposition_engine.add_buy_lot.assert_not_called()
 
 
@@ -499,6 +534,37 @@ def test_deposit_strategy_uses_quantity_when_gross_amount_is_zero(
     assert deposit_transaction.net_cost_local == Decimal("10000")
     assert deposit_transaction.net_cost == Decimal("10000.0")
     mock_disposition_engine.add_buy_lot.assert_called_once()
+    cash_lot = mock_disposition_engine.add_buy_lot.call_args[0][0]
+    assert cash_lot.quantity == Decimal("10000")
+
+
+def test_deposit_strategy_normalizes_blank_gross_amount_to_quantity_once(
+    cost_calculator, mock_disposition_engine
+):
+    deposit_transaction = Transaction(
+        transaction_id="DEPOSIT_BLANK_GROSS_AMOUNT_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=TransactionType.DEPOSIT,
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("10000"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+    quantity = _StringCountedAmount("10000")
+    deposit_transaction.gross_transaction_amount = " "
+    deposit_transaction.quantity = quantity
+
+    cost_calculator.calculate_transaction_costs(deposit_transaction)
+
+    assert deposit_transaction.gross_cost == Decimal("10000")
+    assert deposit_transaction.net_cost_local == Decimal("10000")
+    assert deposit_transaction.net_cost == Decimal("10000.0")
+    assert quantity.string_call_count == 1
     cash_lot = mock_disposition_engine.add_buy_lot.call_args[0][0]
     assert cash_lot.quantity == Decimal("10000")
 
