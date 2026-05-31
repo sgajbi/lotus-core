@@ -481,6 +481,10 @@ def test_normalized_calculation_lookup_indexes_are_declared():
             "ix_instruments_norm_security_id": [
                 "trim(instruments.security_id)",
             ],
+            "ix_instruments_norm_asset_cls_sec": [
+                "upper(trim(instruments.asset_class))",
+                "trim(instruments.security_id)",
+            ],
         },
         Transaction: {
             "ix_txn_norm_port_sec_date_id": [

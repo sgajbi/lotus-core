@@ -313,7 +313,14 @@ class Instrument(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (Index("ix_instruments_norm_security_id", func.trim(security_id)),)
+    __table_args__ = (
+        Index("ix_instruments_norm_security_id", func.trim(security_id)),
+        Index(
+            "ix_instruments_norm_asset_cls_sec",
+            func.upper(func.trim(asset_class)),
+            func.trim(security_id),
+        ),
+    )
 
 
 class PortfolioBenchmarkAssignment(Base):
