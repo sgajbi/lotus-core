@@ -141,40 +141,20 @@ class OperationsRepository:
         self.db = db
 
     @staticmethod
-    def _support_job_status_expr(status_column):
-        return status_column
-
-    @staticmethod
     def _support_job_status_filter(status_column, status: str):
         return status_column == status.strip().upper()
-
-    @staticmethod
-    def _reprocessing_status_expr(status_column):
-        return status_column
 
     @staticmethod
     def _reprocessing_status_filter(status_column, status: str):
         return status_column == status.strip().upper()
 
     @staticmethod
-    def _reconciliation_status_expr(status_column):
-        return status_column
-
-    @staticmethod
     def _reconciliation_status_filter(status_column, status: str):
         return status_column == status.strip().upper()
 
     @staticmethod
-    def _portfolio_control_status_expr(status_column):
-        return status_column
-
-    @staticmethod
     def _portfolio_control_status_filter(status_column, status: str):
         return status_column == status.strip().upper()
-
-    @staticmethod
-    def _snapshot_valuation_status_expr(status_column):
-        return status_column
 
     @staticmethod
     def _security_id_expr(security_id_column):
@@ -273,21 +253,17 @@ class OperationsRepository:
 
     @staticmethod
     def _support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
-        normalized_status = OperationsRepository._support_job_status_expr(status_column)
+        governed_status = status_column
         return case(
-            (normalized_status == "FAILED", 0),
+            (governed_status == "FAILED", 0),
             (
-                and_(normalized_status == "PROCESSING", updated_at_column < stale_threshold),
+                and_(governed_status == "PROCESSING", updated_at_column < stale_threshold),
                 1,
             ),
-            (normalized_status == "PROCESSING", 2),
-            (normalized_status == "PENDING", 3),
+            (governed_status == "PROCESSING", 2),
+            (governed_status == "PENDING", 3),
             else_=9,
         )
-
-    @staticmethod
-    def _analytics_export_status_expr(status_column):
-        return status_column
 
     @staticmethod
     def _analytics_export_status_filter(status_column, status: str):
@@ -295,44 +271,44 @@ class OperationsRepository:
 
     @staticmethod
     def _analytics_export_job_priority(status_column, updated_at_column, stale_threshold: datetime):
-        normalized_status = OperationsRepository._analytics_export_status_expr(status_column)
+        governed_status = status_column
         return case(
-            (normalized_status == "failed", 0),
+            (governed_status == "failed", 0),
             (
-                and_(normalized_status == "running", updated_at_column < stale_threshold),
+                and_(governed_status == "running", updated_at_column < stale_threshold),
                 1,
             ),
-            (normalized_status == "running", 2),
-            (normalized_status == "accepted", 3),
+            (governed_status == "running", 2),
+            (governed_status == "accepted", 3),
             else_=9,
         )
 
     @staticmethod
     def _reconciliation_run_priority(status_column):
-        normalized_status = OperationsRepository._reconciliation_status_expr(status_column)
+        governed_status = status_column
         return case(
-            (normalized_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
-            (normalized_status == "RUNNING", 1),
+            (governed_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
+            (governed_status == "RUNNING", 1),
             else_=9,
         )
 
     @staticmethod
     def _portfolio_control_stage_priority(status_column):
-        normalized_status = OperationsRepository._portfolio_control_status_expr(status_column)
+        governed_status = status_column
         return case(
-            (normalized_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
+            (governed_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
             else_=9,
         )
 
     @staticmethod
     def _reprocessing_key_priority(status_column, updated_at_column, stale_threshold: datetime):
-        normalized_status = OperationsRepository._reprocessing_status_expr(status_column)
+        governed_status = status_column
         return case(
             (
-                and_(normalized_status == "REPROCESSING", updated_at_column < stale_threshold),
+                and_(governed_status == "REPROCESSING", updated_at_column < stale_threshold),
                 0,
             ),
-            (normalized_status == "REPROCESSING", 1),
+            (governed_status == "REPROCESSING", 1),
             else_=9,
         )
 
@@ -420,7 +396,7 @@ class OperationsRepository:
             )
 
         valuation_base = select(
-            self._support_job_status_expr(PortfolioValuationJob.status).label("status"),
+            PortfolioValuationJob.status.label("status"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.updated_at.label("updated_at"),
         ).where(
@@ -432,7 +408,7 @@ class OperationsRepository:
         valuation_subq = valuation_base.subquery()
 
         aggregation_base = select(
-            self._support_job_status_expr(PortfolioAggregationJob.status).label("status"),
+            PortfolioAggregationJob.status.label("status"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
         ).where(PortfolioAggregationJob.portfolio_id.like(portfolio_pattern))
@@ -720,7 +696,7 @@ class OperationsRepository:
     ) -> ReprocessingHealthSummary:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         base_stmt = select(
-            self._reprocessing_status_expr(PositionState.status).label("status"),
+            PositionState.status.label("status"),
             PositionState.updated_at.label("updated_at"),
             PositionState.watermark_date.label("watermark_date"),
             self._security_id_expr(PositionState.security_id).label("security_id"),
@@ -794,7 +770,7 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            self._support_job_status_expr(PortfolioValuationJob.status).label("status"),
+            PortfolioValuationJob.status.label("status"),
             PortfolioValuationJob.updated_at.label("updated_at"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.id.label("id"),
@@ -888,7 +864,7 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            self._support_job_status_expr(PortfolioAggregationJob.status).label("status"),
+            PortfolioAggregationJob.status.label("status"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.id.label("id"),
@@ -976,7 +952,7 @@ class OperationsRepository:
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         failed_since = reference_now - timedelta(hours=failed_window_hours)
         base_stmt = select(
-            self._analytics_export_status_expr(AnalyticsExportJob.status).label("status"),
+            AnalyticsExportJob.status.label("status"),
             AnalyticsExportJob.updated_at.label("updated_at"),
             AnalyticsExportJob.created_at.label("created_at"),
             AnalyticsExportJob.job_id.label("job_id"),
@@ -1236,8 +1212,7 @@ class OperationsRepository:
                 func.count()
                 .filter(
                     DailyPositionSnapshot.valuation_status.is_not(None),
-                    self._snapshot_valuation_status_expr(DailyPositionSnapshot.valuation_status)
-                    != "UNVALUED",
+                    DailyPositionSnapshot.valuation_status != "UNVALUED",
                 )
                 .label("valued_positions"),
             )
@@ -1558,9 +1533,7 @@ class OperationsRepository:
             .correlate(PositionState)
             .scalar_subquery()
         )
-        latest_valuation_job_status = select(
-            self._support_job_status_expr(PortfolioValuationJob.status)
-        ).where(
+        latest_valuation_job_status = select(PortfolioValuationJob.status).where(
             PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
             valuation_job_security_id == position_state_security_id,
             PortfolioValuationJob.epoch == PositionState.epoch,
@@ -1623,7 +1596,7 @@ class OperationsRepository:
             else_=False,
         )
         lineage_priority = case(
-            (self._reprocessing_status_expr(PositionState.status) == "REPROCESSING", 0),
+            (PositionState.status == "REPROCESSING", 0),
             (
                 and_(has_artifact_gap.is_(True), latest_valuation_job_status == "FAILED"),
                 1,
