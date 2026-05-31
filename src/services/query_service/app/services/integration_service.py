@@ -1,14 +1,9 @@
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
 from portfolio_common.market_reference_quality import (
-    BLOCKING_QUALITY_STATUSES,
-    PARTIAL_QUALITY_STATUSES,
-    STALE_QUALITY_STATUSES,
-    MarketReferenceCoverageSignal,
-    classify_market_reference_coverage,
     quality_status_summary_key,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,6 +115,7 @@ from .dpm_source_readiness import (
     unavailable_dpm_source_family,
 )
 from .integration_policy import build_effective_policy_response
+from .market_reference_coverage import market_reference_coverage_response
 from .page_token_codec import PageTokenCodec
 from .reference_data_helpers import (
     latest_effective_records,
@@ -2862,10 +2858,10 @@ class IntegrationService:
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(
-            coverage,
-            start_date,
-            end_date,
+        return market_reference_coverage_response(
+            coverage=coverage,
+            start_date=start_date,
+            end_date=end_date,
             request_fingerprint=request_fingerprint,
         )
 
@@ -2891,10 +2887,10 @@ class IntegrationService:
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(
-            coverage,
-            start_date,
-            end_date,
+        return market_reference_coverage_response(
+            coverage=coverage,
+            start_date=start_date,
+            end_date=end_date,
             request_fingerprint=request_fingerprint,
         )
 
@@ -2925,74 +2921,5 @@ class IntegrationService:
                     required_count=len(rows),
                 ),
                 latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
-            ),
-        )
-
-    @staticmethod
-    def _to_coverage_response(
-        coverage: dict[str, Any],
-        start_date: date,
-        end_date: date,
-        request_fingerprint: str,
-    ) -> CoverageResponse:
-        expected_dates: set[date] = set()
-        cursor = start_date
-        while cursor <= end_date:
-            expected_dates.add(cursor)
-            cursor = cursor + timedelta(days=1)
-
-        observed_start = coverage.get("observed_start_date")
-        observed_end = coverage.get("observed_end_date")
-        observed_dates = {
-            value for value in coverage.get("observed_dates", []) if isinstance(value, date)
-        }
-        if not observed_dates and observed_start and observed_end:
-            observed_cursor = observed_start
-            while observed_cursor <= observed_end:
-                observed_dates.add(observed_cursor)
-                observed_cursor = observed_cursor + timedelta(days=1)
-
-        missing_dates = sorted(expected_dates - observed_dates)
-        quality_counts = dict(coverage.get("quality_status_counts", {}))
-        normalized_quality_counts = {
-            str(status).strip().upper(): int(count)
-            for status, count in quality_counts.items()
-            if count
-        }
-        data_quality_status = classify_market_reference_coverage(
-            MarketReferenceCoverageSignal(
-                required_count=len(expected_dates),
-                observed_count=len(observed_dates),
-                stale_count=sum(
-                    count
-                    for status, count in normalized_quality_counts.items()
-                    if status in STALE_QUALITY_STATUSES
-                ),
-                estimated_count=sum(
-                    count
-                    for status, count in normalized_quality_counts.items()
-                    if status in PARTIAL_QUALITY_STATUSES
-                ),
-                blocking_count=sum(
-                    count
-                    for status, count in normalized_quality_counts.items()
-                    if status in BLOCKING_QUALITY_STATUSES
-                ),
-            )
-        )
-        return CoverageResponse(
-            request_fingerprint=request_fingerprint,
-            observed_start_date=observed_start,
-            observed_end_date=observed_end,
-            expected_start_date=start_date,
-            expected_end_date=end_date,
-            total_points=int(coverage.get("total_points", 0)),
-            missing_dates_count=len(missing_dates),
-            missing_dates_sample=missing_dates[:10],
-            quality_status_distribution=quality_counts,
-            **IntegrationService._runtime_metadata(
-                end_date,
-                data_quality_status=data_quality_status,
-                latest_evidence_timestamp=coverage.get("latest_evidence_timestamp"),
             ),
         )

@@ -41,6 +41,9 @@ from src.services.query_service.app.services.integration_policy import (
     resolve_policy_context,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+from src.services.query_service.app.services.market_reference_coverage import (
+    market_reference_coverage_response,
+)
 
 
 def make_service() -> IntegrationService:
@@ -122,7 +125,7 @@ def instrument_eligibility_request(
 
 
 def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
-    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+    response = market_reference_coverage_response(
         coverage={
             "total_points": 6,
             "observed_start_date": date(2026, 1, 1),
@@ -1517,7 +1520,7 @@ def test_to_coverage_response_classifies_data_quality_status(
     coverage: dict[str, object],
     expected_status: str,
 ) -> None:
-    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+    response = market_reference_coverage_response(
         coverage=coverage,
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 3),
@@ -1530,7 +1533,7 @@ def test_to_coverage_response_classifies_data_quality_status(
 def test_to_coverage_response_carries_latest_evidence_timestamp() -> None:
     latest_evidence_timestamp = datetime(2026, 1, 3, 14, 30, tzinfo=UTC)
 
-    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+    response = market_reference_coverage_response(
         coverage={
             "total_points": 3,
             "observed_dates": [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)],
