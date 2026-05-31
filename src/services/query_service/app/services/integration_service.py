@@ -3,9 +3,6 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Literal, cast
 
-from portfolio_common.market_reference_quality import (
-    quality_status_summary_key,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse
@@ -112,13 +109,17 @@ from .benchmark_composition import (
     benchmark_composition_definition_context,
     build_benchmark_composition_window_response,
 )
+from .benchmark_market_series import (
+    benchmark_market_series_fx_context,
+    build_benchmark_market_series_response,
+)
 from .dpm_source_readiness import (
     build_dpm_source_readiness_response,
     dpm_source_family_readiness,
     unavailable_dpm_source_family,
 )
 from .integration_policy import build_effective_policy_response
-from .integration_value_normalization import as_decimal, as_optional_decimal, control_code
+from .integration_value_normalization import as_optional_decimal, control_code
 from .market_data_coverage import (
     build_market_data_coverage_response,
     market_data_coverage_read_scope,
@@ -128,12 +129,9 @@ from .page_token_codec import PageTokenCodec
 from .reference_data_helpers import (
     latest_reference_evidence_timestamp,
     market_reference_data_quality_status,
-    resolve_component_window_rows,
 )
 from .reference_data_mappers import (
-    benchmark_component_series_response,
     benchmark_definition_response,
-    benchmark_market_series_point,
     benchmark_return_series_point,
     cio_model_change_affected_mandate,
     classification_taxonomy_entry,
@@ -2292,6 +2290,11 @@ class IntegrationService:
         )
         has_more = len(candidate_index_ids) > page_size
         index_ids = candidate_index_ids[:page_size]
+        fx_context = benchmark_market_series_fx_context(
+            benchmark_currency=benchmark_currency,
+            target_currency=request.target_currency,
+            requested_fields=requested_fields,
+        )
         market_read_names = ["components"]
         market_reads: list[Any] = [
             self._reference_repository.list_benchmark_components_overlapping_window(
@@ -2329,167 +2332,44 @@ class IntegrationService:
                 )
             )
 
-        fx_rates: dict[date, Decimal] = {}
-        fx_context_source_currency: str | None = None
-        fx_context_target_currency: str | None = None
-        normalization_status = "native_component_series_only"
-        should_read_fx_rates = False
-        if request.target_currency:
-            fx_context_source_currency = benchmark_currency
-            fx_context_target_currency = request.target_currency
-            if benchmark_currency != request.target_currency and "fx_rate" in requested_fields:
-                should_read_fx_rates = True
-                market_read_names.append("fx_rates")
-                market_reads.append(
-                    self._reference_repository.get_fx_rates(
-                        from_currency=benchmark_currency,
-                        to_currency=request.target_currency,
-                        start_date=request.window.start_date,
-                        end_date=request.window.end_date,
-                    )
+        if fx_context.should_read_fx_rates:
+            market_read_names.append("fx_rates")
+            market_reads.append(
+                self._reference_repository.get_fx_rates(
+                    from_currency=benchmark_currency,
+                    to_currency=request.target_currency,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
                 )
-            elif benchmark_currency == request.target_currency:
-                normalization_status = (
-                    "native_component_series_with_identity_benchmark_to_target_fx_context"
-                )
-            else:
-                normalization_status = "native_component_series_without_fx_context_request"
+            )
 
         market_results = {}
         for name, market_read in zip(market_read_names, market_reads, strict=True):
             market_results[name] = await market_read
-        components = resolve_component_window_rows(
-            market_results["components"],
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-
-        index_prices = market_results.get("index_prices", [])
-        index_returns = market_results.get("index_returns", [])
-        benchmark_returns = market_results.get("benchmark_returns", [])
-        if should_read_fx_rates:
-            fx_rates = market_results["fx_rates"]
-            if fx_rates:
-                normalization_status = "native_component_series_with_benchmark_to_target_fx_context"
-            else:
-                normalization_status = (
-                    "native_component_series_with_missing_benchmark_to_target_fx_context"
-                )
-
-        prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
-        returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
-        benchmark_return_by_date = {row.series_date: row for row in benchmark_returns}
-        component_segments_by_index: dict[str, list[Any]] = {}
-        for row in components:
-            component_segments_by_index.setdefault(row.index_id, []).append(row)
-
-        all_dates = sorted(
-            {row.series_date for row in index_prices + index_returns + benchmark_returns}
-            | set(fx_rates.keys())
-        )
-        component_series_all = []
-        for index_id in sorted(index_ids):
-            points = []
-            for current_date in all_dates:
-                price_row = prices_by_index_date.get((index_id, current_date))
-                return_row = returns_by_index_date.get((index_id, current_date))
-                benchmark_return_row = benchmark_return_by_date.get(current_date)
-                component_weight = None
-                for segment in component_segments_by_index.get(index_id, []):
-                    if segment.composition_effective_from <= current_date and (
-                        segment.composition_effective_to is None
-                        or segment.composition_effective_to >= current_date
-                    ):
-                        component_weight = as_decimal(segment.composition_weight)
-                        break
-                points.append(
-                    benchmark_market_series_point(
-                        series_date=current_date,
-                        requested_fields=requested_fields,
-                        price_row=price_row,
-                        return_row=return_row,
-                        benchmark_return_row=benchmark_return_row,
-                        component_weight=component_weight,
-                        fx_rate=fx_rates.get(current_date),
-                    )
-                )
-            component_series_all.append(
-                benchmark_component_series_response(index_id=index_id, points=points)
-            )
-
-        component_series = component_series_all[:page_size]
-        returned_index_ids = {series.index_id for series in component_series}
-        returned_index_prices = [row for row in index_prices if row.index_id in returned_index_ids]
-        returned_index_returns = [
-            row for row in index_returns if row.index_id in returned_index_ids
-        ]
-        returned_components = [row for row in components if row.index_id in returned_index_ids]
-        returned_evidence_rows = (
-            returned_components + returned_index_prices + returned_index_returns + benchmark_returns
-        )
-        required_evidence_count = (
-            len(returned_evidence_rows) + 1 if has_more else len(returned_evidence_rows)
-        )
         next_page_token: str | None = None
-        if has_more and component_series:
+        if has_more and index_ids:
             next_page_token = self._encode_page_token(
                 {
                     "scope_fingerprint": request_scope_fingerprint,
-                    "last_index_id": component_series[-1].index_id,
+                    "last_index_id": index_ids[-1],
                 }
             )
 
-        quality_status_summary: dict[str, int] = {}
-        for component in component_series:
-            for point in component.points:
-                if point.quality_status:
-                    summary_key = quality_status_summary_key(point.quality_status)
-                    quality_status_summary[summary_key] = (
-                        quality_status_summary.get(summary_key, 0) + 1
-                    )
-
-        return BenchmarkMarketSeriesResponse(
+        return build_benchmark_market_series_response(
             benchmark_id=benchmark_id,
-            as_of_date=request.as_of_date,
+            request=request,
             benchmark_currency=benchmark_currency,
-            target_currency=request.target_currency,
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            frequency=request.frequency,
-            component_series=component_series,
-            quality_status_summary=quality_status_summary,
-            fx_context_source_currency=fx_context_source_currency,
-            fx_context_target_currency=fx_context_target_currency,
-            normalization_policy="native_component_series_downstream_normalization_required",
-            normalization_status=normalization_status,
-            component_metadata_policy=(
-                "targeted_index_catalog_lookup_required_for_component_metadata"
-            ),
-            request_fingerprint=request_scope_fingerprint,
-            page=ReferencePageMetadata(
-                page_size=page_size,
-                sort_key="index_id:asc",
-                returned_component_count=len(component_series),
-                request_scope_fingerprint=request_scope_fingerprint,
-                next_page_token=next_page_token,
-            ),
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.market_series",
-            },
-            **source_product_runtime_metadata_without_as_of_date(
-                request.as_of_date,
-                data_quality_status=market_reference_data_quality_status(
-                    returned_evidence_rows,
-                    required_count=required_evidence_count,
-                ),
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(
-                    returned_evidence_rows
-                ),
-            ),
+            request_scope_fingerprint=request_scope_fingerprint,
+            page_size=page_size,
+            has_more=has_more,
+            next_page_token=next_page_token,
+            index_ids=index_ids,
+            component_rows=market_results["components"],
+            index_prices=market_results.get("index_prices", []),
+            index_returns=market_results.get("index_returns", []),
+            benchmark_returns=market_results.get("benchmark_returns", []),
+            fx_rates=market_results.get("fx_rates", {}),
+            fx_context=fx_context,
         )
 
     async def get_index_price_series(
