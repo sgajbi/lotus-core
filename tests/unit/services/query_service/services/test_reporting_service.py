@@ -364,6 +364,75 @@ async def test_get_portfolio_summary_converts_snapshot_rows_concurrently() -> No
     assert all(event.is_set() for event in (first_started, second_started))
 
 
+async def test_get_portfolio_summary_reads_portfolio_and_default_date_concurrently() -> None:
+    repo = AsyncMock()
+    portfolio_started = asyncio.Event()
+    date_started = asyncio.Event()
+    repo.list_latest_snapshot_rows.return_value = []
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {}
+
+    async def get_portfolio_by_id(portfolio_id: str):
+        portfolio_started.set()
+        await asyncio.wait_for(date_started.wait(), timeout=1)
+        portfolio = _portfolio(portfolio_id, base_currency="USD")
+        portfolio.portfolio_type = "DISCRETIONARY"
+        portfolio.objective = "Growth"
+        portfolio.risk_exposure = "BALANCED"
+        portfolio.status = "ACTIVE"
+        return portfolio
+
+    async def get_latest_business_date() -> date:
+        date_started.set()
+        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        return date(2026, 3, 27)
+
+    repo.get_portfolio_by_id.side_effect = get_portfolio_by_id
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await asyncio.wait_for(
+            service.get_portfolio_summary(PortfolioSummaryQueryRequest(portfolio_id="P1")),
+            timeout=1,
+        )
+
+    assert response.resolved_as_of_date == date(2026, 3, 27)
+    assert portfolio_started.is_set()
+    assert date_started.is_set()
+
+
+async def test_get_portfolio_summary_explicit_date_skips_default_date_lookup() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio.portfolio_type = "DISCRETIONARY"
+    portfolio.objective = "Growth"
+    portfolio.risk_exposure = "BALANCED"
+    portfolio.status = "ACTIVE"
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = []
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {}
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(
+                portfolio_id="P1",
+                as_of_date=date(2026, 3, 26),
+            )
+        )
+
+    assert response.resolved_as_of_date == date(2026, 3, 26)
+    repo.get_latest_business_date.assert_not_awaited()
+
+
 async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio() -> None:
     repo = AsyncMock()
     repo.get_portfolio_by_id.return_value = None

@@ -184,11 +184,18 @@ class ReportingService:
     async def get_portfolio_summary(
         self, request: PortfolioSummaryQueryRequest
     ) -> PortfolioSummaryResponse:
-        portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
+        portfolio_read = self.repo.get_portfolio_by_id(request.portfolio_id)
+        if request.as_of_date is None:
+            portfolio, resolved_as_of_date = await asyncio.gather(
+                portfolio_read,
+                self.repo.get_latest_business_date(),
+            )
+        else:
+            portfolio = await portfolio_read
+            resolved_as_of_date = request.as_of_date
         if portfolio is None:
             raise LookupError(f"Portfolio with id {request.portfolio_id} not found")
 
-        resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for portfolio summary queries.")
         portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
