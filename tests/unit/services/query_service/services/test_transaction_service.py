@@ -371,6 +371,45 @@ async def test_get_transactions_include_projected_skips_business_date_default(
         )
 
 
+async def test_get_transactions_partial_page_reads_page_and_evidence_concurrently(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    page_started = asyncio.Event()
+    timestamp_started = asyncio.Event()
+    page_rows = mock_transaction_repo.get_transactions.return_value[:1]
+    latest_evidence_timestamp = datetime(2025, 1, 20, 9, 30, tzinfo=UTC)
+    mock_transaction_repo.get_transactions_count.return_value = 2
+
+    async def get_transactions(**_: object) -> list[Transaction]:
+        page_started.set()
+        await timestamp_started.wait()
+        return page_rows
+
+    async def get_latest_evidence_timestamp(**_: object) -> datetime:
+        await page_started.wait()
+        timestamp_started.set()
+        return latest_evidence_timestamp
+
+    mock_transaction_repo.get_transactions.side_effect = get_transactions
+    mock_transaction_repo.get_latest_evidence_timestamp.side_effect = get_latest_evidence_timestamp
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await asyncio.wait_for(
+            service.get_transactions(portfolio_id="P1", skip=0, limit=1),
+            timeout=1,
+        )
+
+    assert response.total == 2
+    assert response.transactions[0].transaction_id == "T1"
+    assert response.latest_evidence_timestamp == latest_evidence_timestamp
+    mock_transaction_repo.get_transactions.assert_awaited_once()
+    mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once()
+
+
 async def test_get_transactions_applies_reporting_currency_restated_fields(
     mock_transaction_repo: AsyncMock,
 ) -> None:

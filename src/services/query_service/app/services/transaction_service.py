@@ -109,19 +109,28 @@ class TransactionService:
             db_results = []
             latest_evidence_timestamp = None
         else:
-            db_results = await self.repo.get_transactions(
+            page_read = self.repo.get_transactions(
                 skip=skip,
                 limit=limit,
                 sort_by=sort_by,
                 sort_order=sort_order,
                 **ledger_filters,
             )
-            if skip == 0 and len(db_results) == total_count:
-                latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(db_results)
-            else:
-                latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
-                    **ledger_filters
+            if skip > 0 or limit < total_count:
+                db_results, latest_evidence_timestamp = await asyncio.gather(
+                    page_read,
+                    self.repo.get_latest_evidence_timestamp(**ledger_filters),
                 )
+            else:
+                db_results = await page_read
+                if len(db_results) == total_count:
+                    latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(
+                        db_results
+                    )
+                else:
+                    latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
+                        **ledger_filters
+                    )
         resolved_reporting_currency = reporting_currency
 
         transactions = []
