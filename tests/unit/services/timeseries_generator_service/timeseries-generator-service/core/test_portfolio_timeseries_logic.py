@@ -244,6 +244,41 @@ async def test_portfolio_logic_uses_position_timeseries_for_bod_and_eod_reconcil
     mock_repo.get_latest_snapshots_for_date.assert_not_awaited()
 
 
+async def test_portfolio_logic_normalizes_string_and_blank_amounts(
+    mock_repo: AsyncMock, sample_portfolio: Portfolio
+):
+    test_date = date(2025, 8, 8)
+    position_ts_list = [
+        SimpleNamespace(
+            security_id="SEC_AAPL",
+            date=test_date,
+            bod_market_value="10000",
+            eod_market_value="12000",
+            bod_cashflow_portfolio=" ",
+            eod_cashflow_portfolio=None,
+            fees="",
+        )
+    ]
+
+    mock_repo.get_instruments_by_ids.return_value = [
+        Instrument(security_id="SEC_AAPL", currency="USD"),
+    ]
+
+    result = await PortfolioTimeseriesLogic.calculate_daily_record(
+        portfolio=sample_portfolio,
+        a_date=test_date,
+        epoch=2,
+        position_timeseries_list=position_ts_list,
+        repo=mock_repo,
+    )
+
+    assert result.bod_market_value == Decimal("10000")
+    assert result.eod_market_value == Decimal("12000")
+    assert result.bod_cashflow == Decimal("0")
+    assert result.eod_cashflow == Decimal("0")
+    assert result.fees == Decimal("0")
+
+
 async def test_portfolio_logic_uses_explicit_fee_field_not_negative_external_flow_signs(
     mock_repo: AsyncMock, sample_portfolio: Portfolio
 ):
