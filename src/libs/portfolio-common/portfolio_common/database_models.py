@@ -1082,6 +1082,13 @@ class BenchmarkCompositionSeries(Base):
             "composition_effective_from",
             "composition_effective_to",
         ),
+        Index(
+            "ix_bench_comp_benchmark_index_eff",
+            "benchmark_id",
+            "index_id",
+            composition_effective_from.desc(),
+            "composition_effective_to",
+        ),
     )
 
 

@@ -237,6 +237,21 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         as_of_date=date(2026, 1, 1),
     )
     assert grouped_components["B1"][0].index_id == "IDX_1"
+    benchmark_components_stmt = db.execute.await_args_list[14].args[0]
+    benchmark_components_sql = str(
+        benchmark_components_stmt.compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "benchmark_composition_series.benchmark_id IN ('B1')" in benchmark_components_sql
+    assert "benchmark_composition_series.composition_effective_from <= '2026-01-01'" in (
+        benchmark_components_sql
+    )
+    assert "benchmark_composition_series.composition_effective_to IS NULL" in (
+        benchmark_components_sql
+    )
+    assert (
+        "ORDER BY benchmark_composition_series.benchmark_id ASC, "
+        "benchmark_composition_series.index_id ASC"
+    ) in benchmark_components_sql
 
     benchmark_coverage = await repo.get_benchmark_coverage(
         benchmark_id="B1",

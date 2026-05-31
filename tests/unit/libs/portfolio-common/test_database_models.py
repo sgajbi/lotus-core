@@ -2,6 +2,7 @@ from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AnalyticsExportJob,
     Base,
+    BenchmarkCompositionSeries,
     BenchmarkDefinition,
     CashAccountMaster,
     Cashflow,
@@ -293,6 +294,19 @@ def test_market_reference_definition_tables_declare_active_source_indexes():
         "index_definitions.effective_to",
     ]
     assert str(active_index.dialect_options["postgresql"]["where"]) == "index_status = 'active'"
+
+
+def test_benchmark_composition_declares_latest_effective_index():
+    indexes = {index.name: index for index in BenchmarkCompositionSeries.__table__.indexes}
+
+    latest_effective = indexes["ix_bench_comp_benchmark_index_eff"]
+
+    assert [str(expression) for expression in latest_effective.expressions] == [
+        "benchmark_composition_series.benchmark_id",
+        "benchmark_composition_series.index_id",
+        "benchmark_composition_series.composition_effective_from DESC",
+        "benchmark_composition_series.composition_effective_to",
+    ]
 
 
 def test_transaction_declares_realized_tax_evidence_index():
