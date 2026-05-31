@@ -49,10 +49,8 @@ from ..dtos.reference_integration_dto import (
     DpmPortfolioUniverseCandidateSelectionBasis,
     DpmPortfolioUniverseCandidateSupportability,
     DpmSourceFamilyReadiness,
-    DpmSourceFamilyState,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
-    DpmSourceReadinessSupportability,
     ExternalCurrencyExposureRequest,
     ExternalCurrencyExposureResponse,
     ExternalCurrencyExposureSupportability,
@@ -116,6 +114,11 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
+from .dpm_source_readiness import (
+    dpm_source_family_readiness,
+    dpm_source_readiness_supportability,
+    unavailable_dpm_source_family,
+)
 from .integration_policy import build_effective_policy_response
 from .page_token_codec import PageTokenCodec
 from .reference_data_helpers import (
@@ -2165,10 +2168,9 @@ class IntegrationService:
             mandate_response = None
         if mandate_response is None:
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="mandate",
                     product_name="DiscretionaryMandateBinding",
-                    state="UNAVAILABLE",
                     reason="MANDATE_BINDING_UNAVAILABLE",
                     missing_items=["mandate_binding"],
                 )
@@ -2179,7 +2181,7 @@ class IntegrationService:
                 resolved_model_portfolio_id or mandate_response.model_portfolio_id
             )
             families.append(
-                DpmSourceFamilyReadiness(
+                dpm_source_family_readiness(
                     family="mandate",
                     product_name="DiscretionaryMandateBinding",
                     state=mandate_response.supportability.state,
@@ -2192,10 +2194,9 @@ class IntegrationService:
         target_instrument_ids: list[str] = []
         if resolved_model_portfolio_id is None:
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="model_targets",
                     product_name="DpmModelPortfolioTarget",
-                    state="UNAVAILABLE",
                     reason="MODEL_PORTFOLIO_ID_UNAVAILABLE",
                     missing_items=["model_portfolio_id"],
                 )
@@ -2214,10 +2215,9 @@ class IntegrationService:
                 model_response = None
             if model_response is None:
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    unavailable_dpm_source_family(
                         family="model_targets",
                         product_name="DpmModelPortfolioTarget",
-                        state="UNAVAILABLE",
                         reason="MODEL_TARGETS_UNAVAILABLE",
                         missing_items=[resolved_model_portfolio_id],
                     )
@@ -2225,7 +2225,7 @@ class IntegrationService:
             else:
                 target_instrument_ids = [target.instrument_id for target in model_response.targets]
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    dpm_source_family_readiness(
                         family="model_targets",
                         product_name="DpmModelPortfolioTarget",
                         state=model_response.supportability.state,
@@ -2246,7 +2246,7 @@ class IntegrationService:
                     )
                 )
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    dpm_source_family_readiness(
                         family="eligibility",
                         product_name="InstrumentEligibilityProfile",
                         state=eligibility.supportability.state,
@@ -2257,20 +2257,18 @@ class IntegrationService:
                 )
             except (LookupError, ValueError):
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    unavailable_dpm_source_family(
                         family="eligibility",
                         product_name="InstrumentEligibilityProfile",
-                        state="UNAVAILABLE",
                         reason="INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
                         missing_items=evaluated_instrument_ids[:10],
                     )
                 )
         else:
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="eligibility",
                     product_name="InstrumentEligibilityProfile",
-                    state="UNAVAILABLE",
                     reason="DPM_INSTRUMENT_UNIVERSE_EMPTY",
                     missing_items=["instrument_ids"],
                 )
@@ -2286,7 +2284,7 @@ class IntegrationService:
                 ),
             )
             families.append(
-                DpmSourceFamilyReadiness(
+                dpm_source_family_readiness(
                     family="tax_lots",
                     product_name="PortfolioTaxLotWindow",
                     state=tax_lots.supportability.state,
@@ -2297,10 +2295,9 @@ class IntegrationService:
             )
         except (LookupError, ValueError):
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="tax_lots",
                     product_name="PortfolioTaxLotWindow",
-                    state="UNAVAILABLE",
                     reason="PORTFOLIO_TAX_LOTS_UNAVAILABLE",
                     missing_items=[portfolio_id],
                 )
@@ -2318,7 +2315,7 @@ class IntegrationService:
                 )
             )
             families.append(
-                DpmSourceFamilyReadiness(
+                dpm_source_family_readiness(
                     family="market_data",
                     product_name="MarketDataCoverageWindow",
                     state=market_data.supportability.state,
@@ -2339,16 +2336,15 @@ class IntegrationService:
             )
         except (LookupError, ValueError):
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="market_data",
                     product_name="MarketDataCoverageWindow",
-                    state="UNAVAILABLE",
                     reason="MARKET_DATA_COVERAGE_UNAVAILABLE",
                     missing_items=["market_data_coverage"],
                 )
             )
 
-        supportability = self._dpm_source_readiness_supportability(families)
+        supportability = dpm_source_readiness_supportability(families)
         return DpmSourceReadinessResponse(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
@@ -2367,39 +2363,6 @@ class IntegrationService:
                 data_quality_status=("COMPLETE" if supportability.state == "READY" else "PARTIAL"),
                 latest_evidence_timestamp=None,
             ),
-        )
-
-    @staticmethod
-    def _dpm_source_readiness_supportability(
-        families: list[DpmSourceFamilyReadiness],
-    ) -> DpmSourceReadinessSupportability:
-        counts: dict[DpmSourceFamilyState, int] = {
-            "READY": 0,
-            "DEGRADED": 0,
-            "INCOMPLETE": 0,
-            "UNAVAILABLE": 0,
-        }
-        for family in families:
-            counts[family.state] += 1
-        if counts["UNAVAILABLE"]:
-            state: DpmSourceFamilyState = "UNAVAILABLE"
-            reason = "DPM_SOURCE_READINESS_UNAVAILABLE"
-        elif counts["INCOMPLETE"]:
-            state = "INCOMPLETE"
-            reason = "DPM_SOURCE_READINESS_INCOMPLETE"
-        elif counts["DEGRADED"]:
-            state = "DEGRADED"
-            reason = "DPM_SOURCE_READINESS_DEGRADED"
-        else:
-            state = "READY"
-            reason = "DPM_SOURCE_READINESS_READY"
-        return DpmSourceReadinessSupportability(
-            state=state,
-            reason=reason,
-            ready_family_count=counts["READY"],
-            degraded_family_count=counts["DEGRADED"],
-            incomplete_family_count=counts["INCOMPLETE"],
-            unavailable_family_count=counts["UNAVAILABLE"],
         )
 
     async def get_benchmark_definition(
