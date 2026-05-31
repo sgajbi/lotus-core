@@ -108,6 +108,10 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
+from .benchmark_composition import (
+    benchmark_composition_definition_context,
+    build_benchmark_composition_window_response,
+)
 from .dpm_source_readiness import (
     build_dpm_source_readiness_response,
     dpm_source_family_readiness,
@@ -122,7 +126,6 @@ from .market_data_coverage import (
 from .market_reference_coverage import market_reference_coverage_response
 from .page_token_codec import PageTokenCodec
 from .reference_data_helpers import (
-    latest_effective_records,
     latest_reference_evidence_timestamp,
     market_reference_data_quality_status,
     resolve_component_window_rows,
@@ -2182,61 +2185,22 @@ class IntegrationService:
                 end_date=request.window.end_date,
             )
         )
-        if not definition_rows:
+        definition_context = benchmark_composition_definition_context(definition_rows)
+        if definition_context is None:
             return None
 
-        benchmark_currencies = {row.benchmark_currency for row in definition_rows}
-        if len(benchmark_currencies) != 1:
-            raise ValueError(
-                "Benchmark definition currency changed within requested composition window."
-            )
-        definitions = latest_effective_records(
-            definition_rows,
-            key_fields=("benchmark_id",),
-            effective_from_field="effective_from",
-        )
-
-        components = resolve_component_window_rows(
+        component_rows = (
             await self._reference_repository.list_benchmark_components_overlapping_window(
                 benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
-            ),
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
+            )
         )
-
-        evidence_rows = definitions + components
-        return BenchmarkCompositionWindowResponse(
+        return build_benchmark_composition_window_response(
             benchmark_id=benchmark_id,
-            benchmark_currency=next(iter(benchmark_currencies)),
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            segments=[
-                {
-                    "index_id": component.index_id,
-                    "composition_weight": as_decimal(component.composition_weight),
-                    "composition_effective_from": component.composition_effective_from,
-                    "composition_effective_to": component.composition_effective_to,
-                    "rebalance_event_id": component.rebalance_event_id,
-                }
-                for component in components
-            ],
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.benchmark_composition_window",
-            },
-            **source_product_runtime_metadata(
-                request.window.end_date,
-                data_quality_status=market_reference_data_quality_status(
-                    evidence_rows,
-                    required_count=len(evidence_rows),
-                ),
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(evidence_rows),
-            ),
+            request=request,
+            definition_context=definition_context,
+            component_rows=component_rows,
         )
 
     async def list_benchmark_catalog(
