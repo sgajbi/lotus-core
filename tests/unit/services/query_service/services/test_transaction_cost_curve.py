@@ -56,6 +56,16 @@ def test_transaction_cost_curve_uses_explicit_cost_rows_before_trade_fee() -> No
     assert transaction_cost_curve_key(transaction) == ("EQ_US_AAPL", "BUY", "USD")
 
 
+def test_transaction_cost_curve_fee_amount_treats_blank_cost_as_zero() -> None:
+    transaction = _transaction(
+        transaction_id="TXN-AAPL-001",
+        trade_fee="999.0000",
+        costs=[SimpleNamespace(amount=" "), SimpleNamespace(amount=Decimal("7.5000"))],
+    )
+
+    assert transaction_fee_amount(transaction) == Decimal("7.5000")
+
+
 def test_transaction_cost_curve_points_group_and_filter_evidence() -> None:
     points = build_transaction_cost_curve_points(
         portfolio_id="PB_SG_GLOBAL_BAL_001",

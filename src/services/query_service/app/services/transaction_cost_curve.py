@@ -6,6 +6,7 @@ from typing import Any
 
 from ..dtos.reference_integration_dto import TransactionCostCurvePoint
 from ..repositories.identifier_normalization import normalize_security_id
+from .decimal_amounts import decimal_or_zero
 
 
 @dataclass(frozen=True)
@@ -15,20 +16,14 @@ class _CostObservation:
     notional: Decimal
 
 
-def _as_decimal(value: Any) -> Decimal:
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))
-
-
 def transaction_fee_amount(transaction: Any) -> Decimal:
     costs = list(getattr(transaction, "costs", None) or [])
     if costs:
-        return sum((_as_decimal(getattr(cost, "amount", Decimal("0")))) for cost in costs)
+        return sum((decimal_or_zero(getattr(cost, "amount", Decimal("0"))) for cost in costs))
     trade_fee = getattr(transaction, "trade_fee", None)
     if trade_fee is None:
         return Decimal("0")
-    return _as_decimal(trade_fee)
+    return decimal_or_zero(trade_fee)
 
 
 def transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
@@ -41,7 +36,7 @@ def transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
 
 def _cost_observation(transaction: Any) -> _CostObservation | None:
     fee_amount = transaction_fee_amount(transaction)
-    notional = abs(_as_decimal(transaction.gross_transaction_amount))
+    notional = abs(decimal_or_zero(transaction.gross_transaction_amount))
     if fee_amount <= 0 or notional <= 0:
         return None
     return _CostObservation(row=transaction, fee_amount=fee_amount, notional=notional)
