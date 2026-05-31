@@ -24,7 +24,7 @@ from sqlalchemy import Date, and_, case, cast, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from .currency_codes import normalize_currency_code
+from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .date_filters import start_of_next_day
 from .identifier_normalization import normalize_security_id
 
@@ -179,10 +179,6 @@ class OperationsRepository:
     @staticmethod
     def _security_id_expr(security_id_column):
         return func.trim(security_id_column)
-
-    @staticmethod
-    def _currency_code_expr(currency_code_column):
-        return func.upper(func.trim(currency_code_column))
 
     @staticmethod
     def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
@@ -1281,8 +1277,8 @@ class OperationsRepository:
         snapshot_as_of: Optional[datetime] = None,
         sample_limit: int = 10,
     ) -> MissingHistoricalFxDependencySummary:
-        trade_currency = self._currency_code_expr(Transaction.trade_currency)
-        portfolio_currency = self._currency_code_expr(Portfolio.base_currency)
+        trade_currency = currency_code_sql_expr(Transaction.trade_currency)
+        portfolio_currency = currency_code_sql_expr(Portfolio.base_currency)
         base_stmt = (
             select(
                 Transaction.transaction_id.label("transaction_id"),
