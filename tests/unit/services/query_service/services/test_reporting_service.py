@@ -1,4 +1,3 @@
-import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -129,7 +128,7 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     assert response.portfolios[0].aum_portfolio_currency == Decimal("150")
 
 
-async def test_get_assets_under_management_converts_snapshot_rows_concurrently() -> None:
+async def test_get_assets_under_management_converts_snapshot_rows_sequentially() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
     repo.get_latest_business_date.return_value = date(2026, 3, 27)
@@ -146,12 +145,7 @@ async def test_get_assets_under_management_converts_snapshot_rows_concurrently()
             instrument=_instrument("SEC2"),
         ),
     ]
-    first_started = asyncio.Event()
-    second_started = asyncio.Event()
-    started_by_amount = {
-        Decimal("100"): first_started,
-        Decimal("50"): second_started,
-    }
+    call_order: list[Decimal] = []
 
     async def convert_amount(
         *,
@@ -160,11 +154,7 @@ async def test_get_assets_under_management_converts_snapshot_rows_concurrently()
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        started_by_amount[amount].set()
-        await asyncio.wait_for(
-            asyncio.gather(first_started.wait(), second_started.wait()),
-            timeout=1,
-        )
+        call_order.append(amount)
         assert from_currency == "USD"
         assert to_currency == "SGD"
         assert as_of_date == date(2026, 3, 27)
@@ -184,7 +174,7 @@ async def test_get_assets_under_management_converts_snapshot_rows_concurrently()
         )
 
     assert response.totals.aum_reporting_currency == Decimal("225.0")
-    assert all(event.is_set() for event in (first_started, second_started))
+    assert call_order == [Decimal("100"), Decimal("50")]
 
 
 async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversion() -> None:
@@ -302,7 +292,7 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
     assert response.snapshot_metadata.unvalued_position_count == 1
 
 
-async def test_get_portfolio_summary_converts_snapshot_rows_concurrently() -> None:
+async def test_get_portfolio_summary_converts_snapshot_rows_sequentially() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
     portfolio.portfolio_type = "DISCRETIONARY"
@@ -325,12 +315,7 @@ async def test_get_portfolio_summary_converts_snapshot_rows_concurrently() -> No
             instrument=_instrument("SEC2", asset_class="BOND"),
         ),
     ]
-    first_started = asyncio.Event()
-    second_started = asyncio.Event()
-    started_by_amount = {
-        Decimal("800"): first_started,
-        Decimal("200"): second_started,
-    }
+    call_order: list[Decimal] = []
 
     async def convert_amount(
         *,
@@ -339,11 +324,7 @@ async def test_get_portfolio_summary_converts_snapshot_rows_concurrently() -> No
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        started_by_amount[amount].set()
-        await asyncio.wait_for(
-            asyncio.gather(first_started.wait(), second_started.wait()),
-            timeout=1,
-        )
+        call_order.append(amount)
         assert from_currency == "USD"
         assert to_currency == "SGD"
         assert as_of_date == date(2026, 3, 27)
@@ -361,10 +342,10 @@ async def test_get_portfolio_summary_converts_snapshot_rows_concurrently() -> No
 
     assert response.totals.total_market_value_reporting_currency == Decimal("1500.0")
     assert response.snapshot_metadata.valued_position_count == 2
-    assert all(event.is_set() for event in (first_started, second_started))
+    assert call_order == [Decimal("800"), Decimal("200")]
 
 
-async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_concurrently() -> (
+async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_sequentially() -> (
     None
 ):
     repo = AsyncMock()
@@ -382,12 +363,10 @@ async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_co
             instrument=_instrument("SEC1", asset_class="EQUITY"),
         )
     ]
-    cash_started = asyncio.Event()
-    reporting_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def build_cash_account_balance_records(**_kwargs):
-        cash_started.set()
-        await asyncio.wait_for(reporting_started.wait(), timeout=1)
+        call_order.append("cash")
         return []
 
     async def convert_amount(
@@ -397,8 +376,7 @@ async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_co
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        reporting_started.set()
-        await asyncio.wait_for(cash_started.wait(), timeout=1)
+        call_order.append("reporting")
         assert amount == Decimal("800")
         assert from_currency == "USD"
         assert to_currency == "SGD"
@@ -414,30 +392,24 @@ async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_co
             side_effect=build_cash_account_balance_records
         )
         service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
-        response = await asyncio.wait_for(
-            service.get_portfolio_summary(
-                PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
-            ),
-            timeout=1,
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
         )
 
     assert response.totals.total_market_value_reporting_currency == Decimal("1200.0")
     assert response.snapshot_metadata.cash_account_count == 0
-    assert cash_started.is_set()
-    assert reporting_started.is_set()
+    assert call_order == ["cash", "reporting"]
 
 
-async def test_get_portfolio_summary_reads_portfolio_and_default_date_concurrently() -> None:
+async def test_get_portfolio_summary_reads_portfolio_and_default_date_sequentially() -> None:
     repo = AsyncMock()
-    portfolio_started = asyncio.Event()
-    date_started = asyncio.Event()
+    call_order: list[str] = []
     repo.list_latest_snapshot_rows.return_value = []
     repo.list_cash_account_masters.return_value = []
     repo.get_latest_cash_account_ids.return_value = {}
 
     async def get_portfolio_by_id(portfolio_id: str):
-        portfolio_started.set()
-        await asyncio.wait_for(date_started.wait(), timeout=1)
+        call_order.append("portfolio")
         portfolio = _portfolio(portfolio_id, base_currency="USD")
         portfolio.portfolio_type = "DISCRETIONARY"
         portfolio.objective = "Growth"
@@ -446,8 +418,7 @@ async def test_get_portfolio_summary_reads_portfolio_and_default_date_concurrent
         return portfolio
 
     async def get_latest_business_date() -> date:
-        date_started.set()
-        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        call_order.append("date")
         return date(2026, 3, 27)
 
     repo.get_portfolio_by_id.side_effect = get_portfolio_by_id
@@ -458,14 +429,12 @@ async def test_get_portfolio_summary_reads_portfolio_and_default_date_concurrent
         return_value=repo,
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
-        response = await asyncio.wait_for(
-            service.get_portfolio_summary(PortfolioSummaryQueryRequest(portfolio_id="P1")),
-            timeout=1,
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(portfolio_id="P1")
         )
 
     assert response.resolved_as_of_date == date(2026, 3, 27)
-    assert portfolio_started.is_set()
-    assert date_started.is_set()
+    assert call_order == ["portfolio", "date"]
 
 
 async def test_get_portfolio_summary_explicit_date_skips_default_date_lookup() -> None:
@@ -712,7 +681,7 @@ async def test_resolve_allocation_rows_reuses_reporting_values_for_lookthrough()
 
 
 @pytest.mark.asyncio
-async def test_resolve_allocation_rows_reads_conversions_and_components_concurrently() -> None:
+async def test_resolve_allocation_rows_reads_conversions_and_components_sequentially() -> None:
     repo = AsyncMock()
     rows = [
         ReportingSnapshotRow(
@@ -726,18 +695,7 @@ async def test_resolve_allocation_rows_reads_conversions_and_components_concurre
             instrument=_instrument("SEC2", asset_class="EQUITY", country_of_risk="US"),
         ),
     ]
-    first_conversion_started = asyncio.Event()
-    second_conversion_started = asyncio.Event()
-    components_started = asyncio.Event()
-    all_started = [
-        first_conversion_started,
-        second_conversion_started,
-        components_started,
-    ]
-    started_by_amount = {
-        Decimal("100"): first_conversion_started,
-        Decimal("50"): second_conversion_started,
-    }
+    call_order: list[str] = []
 
     async def convert_amount(
         *,
@@ -746,11 +704,7 @@ async def test_resolve_allocation_rows_reads_conversions_and_components_concurre
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        started_by_amount[amount].set()
-        await asyncio.wait_for(
-            asyncio.gather(*(event.wait() for event in all_started)),
-            timeout=1,
-        )
+        call_order.append(f"convert:{amount}")
         assert from_currency == "USD"
         assert to_currency == "SGD"
         assert as_of_date == date(2026, 3, 27)
@@ -761,11 +715,7 @@ async def test_resolve_allocation_rows_reads_conversions_and_components_concurre
         parent_security_ids: list[str],
         as_of_date: date,
     ) -> list[InstrumentLookthroughComponentRow]:
-        components_started.set()
-        await asyncio.wait_for(
-            asyncio.gather(*(event.wait() for event in all_started)),
-            timeout=1,
-        )
+        call_order.append("components")
         assert parent_security_ids == ["FUND1", "SEC2"]
         assert as_of_date == date(2026, 3, 27)
         return []
@@ -787,7 +737,7 @@ async def test_resolve_allocation_rows_reads_conversions_and_components_concurre
 
     assert [row[1].security_id for row in allocation_rows] == [" FUND1 ", "SEC2"]
     assert lookthrough.applied_mode == "direct_only"
-    assert all(event.is_set() for event in all_started)
+    assert call_order == ["convert:100", "convert:50", "components"]
 
 
 @pytest.mark.asyncio
@@ -888,22 +838,19 @@ async def test_reporting_service_resolve_scope_requires_matching_portfolios() ->
 
 
 @pytest.mark.asyncio
-async def test_reporting_service_resolve_scope_reads_default_date_and_portfolios_concurrently() -> (
+async def test_reporting_service_resolve_scope_reads_default_date_and_portfolios_sequentially() -> (
     None
 ):
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
-    date_started = asyncio.Event()
-    portfolios_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def get_latest_business_date() -> date:
-        date_started.set()
-        await asyncio.wait_for(portfolios_started.wait(), timeout=1)
+        call_order.append("date")
         return date(2026, 3, 27)
 
     async def list_portfolios(**_: object) -> list[object]:
-        await asyncio.wait_for(date_started.wait(), timeout=1)
-        portfolios_started.set()
+        call_order.append("portfolios")
         return [portfolio]
 
     repo.get_latest_business_date.side_effect = get_latest_business_date
@@ -921,8 +868,7 @@ async def test_reporting_service_resolve_scope_reads_default_date_and_portfolios
 
     assert portfolios == [portfolio]
     assert resolved_as_of_date == date(2026, 3, 27)
-    assert date_started.is_set()
-    assert portfolios_started.is_set()
+    assert call_order == ["date", "portfolios"]
 
 
 @pytest.mark.asyncio

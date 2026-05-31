@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
@@ -35,17 +34,12 @@ class CashflowProjectionService:
         if horizon_days < 1 or horizon_days > MAX_HORIZON_DAYS:
             raise ValueError(f"horizon_days must be between 1 and {MAX_HORIZON_DAYS}.")
 
-        portfolio_currency_read = self.repo.get_portfolio_currency(portfolio_id)
-        if as_of_date is None:
-            portfolio_currency, default_as_of_date = await asyncio.gather(
-                portfolio_currency_read,
-                self.repo.get_latest_business_date(),
-            )
-        else:
-            portfolio_currency = await portfolio_currency_read
-            default_as_of_date = as_of_date
+        portfolio_currency = await self.repo.get_portfolio_currency(portfolio_id)
         if portfolio_currency is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        default_as_of_date = (
+            await self.repo.get_latest_business_date() if as_of_date is None else as_of_date
+        )
 
         effective_as_of_date = default_as_of_date or date.today()
 

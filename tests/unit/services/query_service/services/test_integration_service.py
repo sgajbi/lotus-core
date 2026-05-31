@@ -4189,14 +4189,12 @@ async def test_market_data_coverage_deduplicates_repository_lookup_scope() -> No
 
 
 @pytest.mark.asyncio
-async def test_market_data_coverage_reads_prices_and_fx_rates_concurrently() -> None:
+async def test_market_data_coverage_reads_prices_and_fx_rates_sequentially() -> None:
     service = make_service()
-    price_started = asyncio.Event()
-    fx_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def list_latest_market_prices(**_kwargs):
-        price_started.set()
-        await asyncio.wait_for(fx_started.wait(), timeout=1)
+        call_order.append("prices")
         return [
             SimpleNamespace(
                 security_id="EQ_US_AAPL",
@@ -4207,8 +4205,7 @@ async def test_market_data_coverage_reads_prices_and_fx_rates_concurrently() -> 
         ]
 
     async def list_latest_fx_rates(**_kwargs):
-        fx_started.set()
-        await asyncio.wait_for(price_started.wait(), timeout=1)
+        call_order.append("fx")
         return [
             SimpleNamespace(
                 from_currency="USD",
@@ -4223,21 +4220,17 @@ async def test_market_data_coverage_reads_prices_and_fx_rates_concurrently() -> 
         list_latest_fx_rates=AsyncMock(side_effect=list_latest_fx_rates),
     )
 
-    response = await asyncio.wait_for(
-        service.get_market_data_coverage(
-            SimpleNamespace(
-                as_of_date=date(2026, 4, 10),
-                instrument_ids=["EQ_US_AAPL"],
-                currency_pairs=[SimpleNamespace(from_currency="USD", to_currency="SGD")],
-                valuation_currency=None,
-                max_staleness_days=5,
-            )
-        ),
-        timeout=1,
+    response = await service.get_market_data_coverage(
+        SimpleNamespace(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL"],
+            currency_pairs=[SimpleNamespace(from_currency="USD", to_currency="SGD")],
+            valuation_currency=None,
+            max_staleness_days=5,
+        )
     )
 
-    assert price_started.is_set()
-    assert fx_started.is_set()
+    assert call_order == ["prices", "fx"]
     assert response.supportability.state == "READY"
     assert response.supportability.resolved_price_count == 1
     assert response.supportability.resolved_fx_count == 1

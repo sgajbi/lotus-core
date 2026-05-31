@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -87,21 +86,18 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert len(response.points) == 11
 
 
-async def test_projection_reads_currency_and_default_date_concurrently(
+async def test_projection_reads_currency_and_default_date_sequentially(
     mock_repo: AsyncMock,
 ) -> None:
-    currency_started = asyncio.Event()
-    date_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def get_portfolio_currency(portfolio_id: str) -> str:
-        currency_started.set()
-        await asyncio.wait_for(date_started.wait(), timeout=1)
+        call_order.append("currency")
         assert portfolio_id == "P1"
         return "USD"
 
     async def get_latest_business_date() -> date:
-        date_started.set()
-        await asyncio.wait_for(currency_started.wait(), timeout=1)
+        call_order.append("date")
         return date(2026, 3, 1)
 
     mock_repo.get_portfolio_currency.side_effect = get_portfolio_currency
@@ -112,14 +108,10 @@ async def test_projection_reads_currency_and_default_date_concurrently(
         return_value=mock_repo,
     ):
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
-        response = await asyncio.wait_for(
-            service.get_cashflow_projection(portfolio_id="P1", horizon_days=1),
-            timeout=1,
-        )
+        response = await service.get_cashflow_projection(portfolio_id="P1", horizon_days=1)
 
     assert response.range_start_date == date(2026, 3, 1)
-    assert currency_started.is_set()
-    assert date_started.is_set()
+    assert call_order == ["currency", "date"]
 
 
 async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
@@ -257,19 +249,17 @@ async def test_projection_adds_same_day_booked_and_projected_movements(
     assert response.projected_settlement_total_cashflow == Decimal("-150.10")
 
 
-async def test_projection_runs_booked_and_projected_reads_concurrently(
+async def test_projection_runs_booked_and_projected_reads_sequentially(
     mock_repo: AsyncMock,
 ) -> None:
-    booked_started = asyncio.Event()
-    projected_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def _booked_evidence(
         portfolio_id: str,
         start_date: date,
         end_date: date,
     ) -> CashflowSeriesEvidence:
-        booked_started.set()
-        await projected_started.wait()
+        call_order.append("booked")
         return CashflowSeriesEvidence(
             rows=[(start_date, Decimal("10"))],
             latest_evidence_timestamp=datetime(2026, 3, 1, 9, tzinfo=UTC),
@@ -280,8 +270,7 @@ async def test_projection_runs_booked_and_projected_reads_concurrently(
         start_date: date,
         end_date: date,
     ) -> CashflowSeriesEvidence:
-        await booked_started.wait()
-        projected_started.set()
+        call_order.append("projected")
         return CashflowSeriesEvidence(
             rows=[(start_date, Decimal("-2"))],
             latest_evidence_timestamp=datetime(2026, 3, 1, 10, tzinfo=UTC),
@@ -297,18 +286,16 @@ async def test_projection_runs_booked_and_projected_reads_concurrently(
         return_value=mock_repo,
     ):
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
-        response = await asyncio.wait_for(
-            service.get_cashflow_projection(
-                portfolio_id="P1",
-                horizon_days=1,
-                as_of_date=date(2026, 3, 1),
-                include_projected=True,
-            ),
-            timeout=1,
+        response = await service.get_cashflow_projection(
+            portfolio_id="P1",
+            horizon_days=1,
+            as_of_date=date(2026, 3, 1),
+            include_projected=True,
         )
 
     assert response.total_net_cashflow == Decimal("8")
     assert response.latest_evidence_timestamp == datetime(2026, 3, 1, 10, tzinfo=UTC)
+    assert call_order == ["booked", "projected"]
 
 
 async def test_projection_sum_by_date_treats_blank_and_null_amounts_as_zero() -> None:

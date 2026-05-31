@@ -1,7 +1,5 @@
 # services/query-service/app/services/transaction_service.py
-import asyncio
 import logging
-from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -82,17 +80,12 @@ class TransactionService:
         logger.info(f"Fetching transactions for portfolio '{portfolio_id}'.")
 
         needs_default_as_of_date = as_of_date is None and not include_projected
-        portfolio_exists_read = self.repo.portfolio_exists(portfolio_id)
-        if needs_default_as_of_date:
-            portfolio_exists, default_as_of_date = await asyncio.gather(
-                portfolio_exists_read,
-                self.repo.get_latest_business_date(),
-            )
-        else:
-            portfolio_exists = await portfolio_exists_read
-            default_as_of_date = as_of_date
+        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
         if not portfolio_exists:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        default_as_of_date = (
+            await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
+        )
 
         effective_as_of_date = default_as_of_date
         if effective_as_of_date is None and needs_default_as_of_date:
@@ -121,7 +114,7 @@ class TransactionService:
             db_results = []
             latest_evidence_timestamp = None
         else:
-            page_read = self.repo.get_transactions(
+            db_results = await self.repo.get_transactions(
                 skip=skip,
                 limit=limit,
                 sort_by=sort_by,
@@ -129,12 +122,10 @@ class TransactionService:
                 **ledger_filters,
             )
             if skip > 0 or limit < total_count:
-                db_results, latest_evidence_timestamp = await asyncio.gather(
-                    page_read,
-                    self.repo.get_latest_evidence_timestamp(**ledger_filters),
+                latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
+                    **ledger_filters
                 )
             else:
-                db_results = await page_read
                 if len(db_results) == total_count:
                     latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(
                         db_results
@@ -146,24 +137,18 @@ class TransactionService:
         resolved_reporting_currency = reporting_currency
 
         transactions = []
-        reporting_currency_updates: list[Awaitable[None]] = []
         for transaction in db_results:
             record = TransactionRecord.model_validate(transaction)
             record.costs = [cost for cost in transaction.costs or []]
             if transaction.cashflow:
                 record.cashflow = transaction.cashflow
             if resolved_reporting_currency and effective_as_of_date is not None:
-                reporting_currency_updates.append(
-                    self._apply_reporting_currency_fields(
-                        record=record,
-                        reporting_currency=resolved_reporting_currency,
-                        as_of_date=effective_as_of_date,
-                    )
+                await self._apply_reporting_currency_fields(
+                    record=record,
+                    reporting_currency=resolved_reporting_currency,
+                    as_of_date=effective_as_of_date,
                 )
             transactions.append(record)
-
-        if reporting_currency_updates:
-            await asyncio.gather(*reporting_currency_updates)
 
         return PaginatedTransactionResponse(
             portfolio_id=portfolio_id,
@@ -194,17 +179,12 @@ class TransactionService:
     ) -> PortfolioRealizedTaxSummaryResponse:
         logger.info("Fetching realized tax summary for portfolio '%s'.", portfolio_id)
 
-        base_currency_read = self.repo.get_portfolio_base_currency(portfolio_id)
-        if as_of_date is None:
-            base_currency, default_as_of_date = await asyncio.gather(
-                base_currency_read,
-                self.repo.get_latest_business_date(),
-            )
-        else:
-            base_currency = await base_currency_read
-            default_as_of_date = as_of_date
+        base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
         if base_currency is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        default_as_of_date = (
+            await self.repo.get_latest_business_date() if as_of_date is None else as_of_date
+        )
         normalized_base_currency = normalize_currency_code(str(base_currency))
         resolved_reporting_currency = (
             normalize_currency_code(reporting_currency) if reporting_currency is not None else None
@@ -217,28 +197,25 @@ class TransactionService:
             "end_date": end_date,
             "as_of_date": effective_as_of_date,
         }
-        source_transaction_count, tax_transactions = await asyncio.gather(
-            self.repo.get_transactions_count(**ledger_filters),
-            self.repo.list_realized_tax_evidence_transactions(
-                **ledger_filters,
-            ),
+        source_transaction_count = await self.repo.get_transactions_count(**ledger_filters)
+        tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
+            **ledger_filters,
         )
         latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(tax_transactions)
 
         currency_totals = self._realized_tax_currency_totals(tax_transactions)
         reporting_currency_total = None
         if resolved_reporting_currency is not None:
-            converted_currency_totals = await asyncio.gather(
-                *(
-                    self._convert_amount(
+            converted_currency_totals = []
+            for total in currency_totals:
+                converted_currency_totals.append(
+                    await self._convert_amount(
                         amount=total.total_tax_amount,
                         from_currency=total.currency,
                         to_currency=resolved_reporting_currency,
                         as_of_date=effective_as_of_date,
                     )
-                    for total in currency_totals
                 )
-            )
             reporting_currency_total = sum(converted_currency_totals, Decimal("0"))
 
         return PortfolioRealizedTaxSummaryResponse(
@@ -335,36 +312,19 @@ class TransactionService:
             ),
             ("net_interest_amount", "net_interest_amount_reporting_currency", "book"),
         )
-        conversion_requests: list[tuple[str, Awaitable[Decimal]]] = []
         for source_field, target_field, currency_basis in money_fields:
             amount = getattr(record, source_field)
             if amount is None:
                 continue
-            conversion_requests.append(
-                (
-                    target_field,
-                    self._convert_amount(
-                        amount=amount,
-                        from_currency=self._source_currency_for_field(
-                            record=record,
-                            currency_basis=currency_basis,
-                        ),
-                        to_currency=reporting_currency,
-                        as_of_date=as_of_date,
-                    ),
-                )
+            converted_value = await self._convert_amount(
+                amount=amount,
+                from_currency=self._source_currency_for_field(
+                    record=record,
+                    currency_basis=currency_basis,
+                ),
+                to_currency=reporting_currency,
+                as_of_date=as_of_date,
             )
-        if not conversion_requests:
-            return
-
-        converted_values = await asyncio.gather(
-            *(conversion for _, conversion in conversion_requests)
-        )
-        for (target_field, _), converted_value in zip(
-            conversion_requests,
-            converted_values,
-            strict=True,
-        ):
             setattr(record, target_field, converted_value)
 
     @staticmethod

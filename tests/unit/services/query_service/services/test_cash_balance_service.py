@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -217,7 +216,7 @@ async def test_get_cash_balances_queries_fallback_account_ids_only_for_unmatched
     )
 
 
-async def test_cash_balance_records_build_account_conversions_concurrently() -> None:
+async def test_cash_balance_records_build_account_conversions_sequentially() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
     repo.list_cash_account_masters.return_value = [
@@ -241,12 +240,7 @@ async def test_cash_balance_records_build_account_conversions_concurrently() -> 
             instrument=_instrument("CASH_EUR", currency="EUR", asset_class="CASH"),
         ),
     ]
-    usd_started = asyncio.Event()
-    eur_started = asyncio.Event()
-    started_by_amount = {
-        Decimal("250"): usd_started,
-        Decimal("125"): eur_started,
-    }
+    call_order: list[Decimal] = []
 
     async def convert_amount(
         *,
@@ -255,11 +249,7 @@ async def test_cash_balance_records_build_account_conversions_concurrently() -> 
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        started_by_amount[amount].set()
-        await asyncio.wait_for(
-            asyncio.gather(usd_started.wait(), eur_started.wait()),
-            timeout=1,
-        )
+        call_order.append(amount)
         assert from_currency == "USD"
         assert to_currency == "SGD"
         assert as_of_date == date(2026, 3, 27)
@@ -282,8 +272,7 @@ async def test_cash_balance_records_build_account_conversions_concurrently() -> 
         Decimal("150.0"),
         Decimal("300.0"),
     ]
-    assert usd_started.is_set()
-    assert eur_started.is_set()
+    assert call_order == [Decimal("250"), Decimal("125")]
 
 
 async def test_get_cash_balances_normalizes_cash_security_ids_for_master_join() -> None:
@@ -328,22 +317,19 @@ async def test_get_cash_balances_normalizes_cash_security_ids_for_master_join() 
     repo.get_latest_cash_account_ids.assert_not_awaited()
 
 
-async def test_get_cash_balances_reads_portfolio_and_default_date_concurrently() -> None:
+async def test_get_cash_balances_reads_portfolio_and_default_date_sequentially() -> None:
     repo = AsyncMock()
-    portfolio_started = asyncio.Event()
-    date_started = asyncio.Event()
+    call_order: list[str] = []
     repo.list_latest_snapshot_rows.return_value = []
     repo.list_cash_account_masters.return_value = []
 
     async def get_portfolio_by_id(portfolio_id: str):
-        portfolio_started.set()
-        await asyncio.wait_for(date_started.wait(), timeout=1)
+        call_order.append("portfolio")
         assert portfolio_id == "P1"
         return _portfolio("P1", base_currency="USD")
 
     async def get_latest_business_date() -> date:
-        date_started.set()
-        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        call_order.append("date")
         return date(2026, 3, 27)
 
     repo.get_portfolio_by_id.side_effect = get_portfolio_by_id
@@ -354,14 +340,10 @@ async def test_get_cash_balances_reads_portfolio_and_default_date_concurrently()
         return_value=repo,
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
-        response = await asyncio.wait_for(
-            service.get_cash_balances(portfolio_id="P1"),
-            timeout=1,
-        )
+        response = await service.get_cash_balances(portfolio_id="P1")
 
     assert response.resolved_as_of_date == date(2026, 3, 27)
-    assert portfolio_started.is_set()
-    assert date_started.is_set()
+    assert call_order == ["portfolio", "date"]
 
 
 async def test_get_cash_balances_explicit_date_skips_default_date_lookup() -> None:

@@ -1675,20 +1675,17 @@ async def test_get_portfolio_reference_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_latest_available_performance_date_reads_horizons_concurrently() -> None:
+async def test_latest_available_performance_date_reads_horizons_sequentially() -> None:
     service = make_service()
-    portfolio_started = asyncio.Event()
-    position_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def get_latest_portfolio_timeseries_date(portfolio_id: str) -> date:
-        portfolio_started.set()
-        await asyncio.wait_for(position_started.wait(), timeout=1)
+        call_order.append("portfolio")
         assert portfolio_id == "P1"
         return date(2025, 12, 30)
 
     async def get_latest_position_timeseries_date(portfolio_id: str) -> date:
-        position_started.set()
-        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        call_order.append("position")
         assert portfolio_id == "P1"
         return date(2025, 12, 31)
 
@@ -1701,17 +1698,13 @@ async def test_latest_available_performance_date_reads_horizons_concurrently() -
         ),
     )
 
-    latest_date = await asyncio.wait_for(
-        service._latest_available_performance_date(
-            portfolio_id="P1",
-            as_of_date=date(2025, 12, 31),
-        ),
-        timeout=1,
+    latest_date = await service._latest_available_performance_date(
+        portfolio_id="P1",
+        as_of_date=date(2025, 12, 31),
     )
 
     assert latest_date == date(2025, 12, 30)
-    assert portfolio_started.is_set()
-    assert position_started.is_set()
+    assert call_order == ["portfolio", "position"]
 
 
 @pytest.mark.asyncio

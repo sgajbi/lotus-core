@@ -1945,15 +1945,13 @@ class IntegrationService:
         )
         fx_pairs = [(pair.from_currency, pair.to_currency) for pair in request.currency_pairs]
         unique_fx_pairs = list(dict.fromkeys(fx_pairs))
-        price_rows, fx_rows = await asyncio.gather(
-            self._reference_repository.list_latest_market_prices(
-                security_ids=unique_instrument_ids,
-                as_of_date=request.as_of_date,
-            ),
-            self._reference_repository.list_latest_fx_rates(
-                currency_pairs=unique_fx_pairs,
-                as_of_date=request.as_of_date,
-            ),
+        price_rows = await self._reference_repository.list_latest_market_prices(
+            security_ids=unique_instrument_ids,
+            as_of_date=request.as_of_date,
+        )
+        fx_rows = await self._reference_repository.list_latest_fx_rates(
+            currency_pairs=unique_fx_pairs,
+            as_of_date=request.as_of_date,
         )
 
         price_by_instrument = {normalize_security_id(row.security_id): row for row in price_rows}

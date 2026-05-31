@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -57,34 +56,30 @@ class PortfolioLiquidityLadderService:
         if horizon_days < 0 or horizon_days > MAX_HORIZON_DAYS:
             raise ValueError(f"horizon_days must be between 0 and {MAX_HORIZON_DAYS}.")
 
-        portfolio_read = self.reporting_repo.get_portfolio_by_id(portfolio_id)
-        if as_of_date is None:
-            portfolio, resolved_as_of_date = await asyncio.gather(
-                portfolio_read,
-                self.reporting_repo.get_latest_business_date(),
-            )
-        else:
-            portfolio = await portfolio_read
-            resolved_as_of_date = as_of_date
+        portfolio = await self.reporting_repo.get_portfolio_by_id(portfolio_id)
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        resolved_as_of_date = (
+            await self.reporting_repo.get_latest_business_date()
+            if as_of_date is None
+            else as_of_date
+        )
 
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for liquidity ladder queries.")
 
         range_end_date = resolved_as_of_date + timedelta(days=horizon_days)
-        snapshot_rows_read = self.reporting_repo.list_latest_snapshot_rows(
+        rows = await self.reporting_repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        cashflow_evidence_read = read_cashflow_evidence_window(
+        cashflow_evidence = await read_cashflow_evidence_window(
             repo=self.cashflow_repo,
             portfolio_id=portfolio.portfolio_id,
             start_date=resolved_as_of_date,
             end_date=range_end_date,
             include_projected=include_projected,
         )
-        rows, cashflow_evidence = await asyncio.gather(snapshot_rows_read, cashflow_evidence_read)
 
         cash_rows, non_cash_rows = self._partition_cash_rows(rows)
         opening_cash_balance = self._sum_market_value(cash_rows)

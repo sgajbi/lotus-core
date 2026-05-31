@@ -1,5 +1,4 @@
 # tests/unit/services/query_service/services/test_position_service.py
-import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -156,21 +155,18 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.correlation_id is None
 
 
-async def test_get_latest_positions_reads_snapshot_and_history_concurrently(
+async def test_get_latest_positions_reads_snapshot_and_history_sequentially(
     mock_position_repo: AsyncMock,
 ):
-    snapshot_started = asyncio.Event()
-    history_started = asyncio.Event()
+    call_order: list[str] = []
     snapshot_rows = mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value
 
     async def _snapshot_rows(portfolio_id: str, as_of_date: date):
-        snapshot_started.set()
-        await history_started.wait()
+        call_order.append("snapshot")
         return snapshot_rows
 
     async def _history_rows(portfolio_id: str, as_of_date: date):
-        await snapshot_started.wait()
-        history_started.set()
+        call_order.append("history")
         return []
 
     mock_position_repo.get_latest_positions_by_portfolio_as_of_date.side_effect = _snapshot_rows
@@ -183,31 +179,27 @@ async def test_get_latest_positions_reads_snapshot_and_history_concurrently(
         return_value=mock_position_repo,
     ):
         service = PositionService(AsyncMock())
-        response = await asyncio.wait_for(
-            service.get_portfolio_positions(
-                portfolio_id="P1",
-                as_of_date=date(2025, 1, 1),
-            ),
-            timeout=1,
+        response = await service.get_portfolio_positions(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
         )
 
     assert len(response.positions) == 1
     assert response.positions[0].security_id == "S1"
+    assert call_order == ["snapshot", "history"]
 
 
-async def test_get_latest_positions_reads_support_evidence_concurrently(
+async def test_get_latest_positions_reads_support_evidence_sequentially(
     mock_position_repo: AsyncMock,
 ) -> None:
-    held_since_started = asyncio.Event()
-    price_dates_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def get_held_since_dates(
         *,
         portfolio_id: str,
         security_epoch_pairs: list[tuple[str, int]],
     ) -> dict[tuple[str, int], date]:
-        held_since_started.set()
-        await asyncio.wait_for(price_dates_started.wait(), timeout=1)
+        call_order.append("held_since")
         assert portfolio_id == "P1"
         assert security_epoch_pairs == [("S1", 1)]
         return {("S1", 1): date(2024, 12, 31)}
@@ -217,8 +209,7 @@ async def test_get_latest_positions_reads_support_evidence_concurrently(
         security_ids: list[str],
         as_of_date: date,
     ) -> dict[str, date]:
-        price_dates_started.set()
-        await asyncio.wait_for(held_since_started.wait(), timeout=1)
+        call_order.append("price_dates")
         assert security_ids == ["S1"]
         assert as_of_date == date(2025, 1, 1)
         return {"S1": date(2025, 1, 1)}
@@ -231,34 +222,27 @@ async def test_get_latest_positions_reads_support_evidence_concurrently(
         return_value=mock_position_repo,
     ):
         service = PositionService(AsyncMock())
-        response = await asyncio.wait_for(
-            service.get_portfolio_positions(
-                portfolio_id="P1",
-                as_of_date=date(2025, 1, 1),
-            ),
-            timeout=1,
+        response = await service.get_portfolio_positions(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
         )
 
     assert response.positions[0].held_since_date == date(2024, 12, 31)
-    assert held_since_started.is_set()
-    assert price_dates_started.is_set()
+    assert call_order == ["held_since", "price_dates"]
 
 
-async def test_get_latest_positions_reads_portfolio_exists_and_default_date_concurrently(
+async def test_get_latest_positions_reads_portfolio_exists_and_default_date_sequentially(
     mock_position_repo: AsyncMock,
 ) -> None:
-    portfolio_started = asyncio.Event()
-    date_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def portfolio_exists(portfolio_id: str) -> bool:
-        portfolio_started.set()
-        await asyncio.wait_for(date_started.wait(), timeout=1)
+        call_order.append("portfolio")
         assert portfolio_id == "P1"
         return True
 
     async def get_latest_business_date() -> date:
-        date_started.set()
-        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        call_order.append("date")
         return date(2025, 1, 1)
 
     mock_position_repo.portfolio_exists.side_effect = portfolio_exists
@@ -269,14 +253,10 @@ async def test_get_latest_positions_reads_portfolio_exists_and_default_date_conc
         return_value=mock_position_repo,
     ):
         service = PositionService(AsyncMock())
-        response = await asyncio.wait_for(
-            service.get_portfolio_positions(portfolio_id="P1"),
-            timeout=1,
-        )
+        response = await service.get_portfolio_positions(portfolio_id="P1")
 
     assert response.as_of_date == date(2025, 1, 1)
-    assert portfolio_started.is_set()
-    assert date_started.is_set()
+    assert call_order == ["portfolio", "date"]
 
 
 async def test_get_latest_positions_explicit_date_skips_default_date_lookup(

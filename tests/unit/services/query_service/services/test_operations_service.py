@@ -1,4 +1,3 @@
-import asyncio
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -75,66 +74,52 @@ def service(mock_ops_repo: AsyncMock) -> OperationsService:
         return OperationsService(AsyncMock(spec=AsyncSession))
 
 
-async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_concurrently(
+async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_sequentially(
     service: OperationsService,
     mock_ops_repo: AsyncMock,
 ) -> None:
-    portfolio_started = asyncio.Event()
-    date_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def portfolio_exists(portfolio_id: str) -> bool:
-        portfolio_started.set()
-        await asyncio.wait_for(date_started.wait(), timeout=1)
+        call_order.append("portfolio")
         assert portfolio_id == "P1"
         return True
 
     async def get_latest_business_date(*, as_of: datetime) -> date:
-        date_started.set()
-        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        call_order.append("date")
         assert as_of == FIXED_GENERATED_AT
         return date(2026, 4, 18)
 
     mock_ops_repo.portfolio_exists.side_effect = portfolio_exists
     mock_ops_repo.get_latest_business_date.side_effect = get_latest_business_date
 
-    latest_business_date = await asyncio.wait_for(
-        service._resolve_portfolio_latest_business_date(
-            "P1",
-            generated_at_utc=FIXED_GENERATED_AT,
-        ),
-        timeout=1,
+    latest_business_date = await service._resolve_portfolio_latest_business_date(
+        "P1",
+        generated_at_utc=FIXED_GENERATED_AT,
     )
 
     assert latest_business_date == date(2026, 4, 18)
-    assert portfolio_started.is_set()
-    assert date_started.is_set()
+    assert call_order == ["portfolio", "date"]
 
 
-async def test_read_count_and_page_runs_count_and_page_reads_concurrently(
+async def test_read_count_and_page_runs_count_and_page_reads_sequentially(
     service: OperationsService,
 ) -> None:
-    count_started = asyncio.Event()
-    page_started = asyncio.Event()
+    call_order: list[str] = []
 
     async def count_read() -> int:
-        count_started.set()
-        await asyncio.wait_for(page_started.wait(), timeout=1)
+        call_order.append("count")
         return 2
 
     async def page_read() -> list[str]:
-        page_started.set()
-        await asyncio.wait_for(count_started.wait(), timeout=1)
+        call_order.append("page")
         return ["A", "B"]
 
-    total, rows = await asyncio.wait_for(
-        service._read_count_and_page(count_read(), page_read()),
-        timeout=1,
-    )
+    total, rows = await service._read_count_and_page(count_read(), page_read())
 
     assert total == 2
     assert rows == ["A", "B"]
-    assert count_started.is_set()
-    assert page_started.is_set()
+    assert call_order == ["count", "page"]
 
 
 def _load_run_summary(**overrides) -> LoadRunProgressSummary:
@@ -404,11 +389,10 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     assert control_call.kwargs["as_of"] == response.generated_at_utc
 
 
-async def test_support_overview_reads_reconciliation_and_booked_evidence_concurrently(
+async def test_support_overview_reads_reconciliation_and_booked_evidence_sequentially(
     service: OperationsService, mock_ops_repo: AsyncMock
 ) -> None:
-    reconciliation_started = asyncio.Event()
-    booked_started = asyncio.Event()
+    call_order: list[str] = []
 
     mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
     mock_ops_repo.get_current_portfolio_epoch.return_value = 2
@@ -481,8 +465,7 @@ async def test_support_overview_reads_reconciliation_and_booked_evidence_concurr
     )
 
     async def get_latest_reconciliation_run_for_portfolio_day(**_kwargs):
-        reconciliation_started.set()
-        await asyncio.wait_for(booked_started.wait(), timeout=1)
+        call_order.append("reconciliation")
         return type(
             "ReconciliationRunStub",
             (),
@@ -498,8 +481,7 @@ async def test_support_overview_reads_reconciliation_and_booked_evidence_concurr
         )()
 
     async def get_latest_transaction_date_as_of(*_args, **_kwargs):
-        booked_started.set()
-        await asyncio.wait_for(reconciliation_started.wait(), timeout=1)
+        call_order.append("booked_transaction")
         return date(2025, 8, 30)
 
     mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.side_effect = (
@@ -507,10 +489,9 @@ async def test_support_overview_reads_reconciliation_and_booked_evidence_concurr
     )
     mock_ops_repo.get_latest_transaction_date_as_of.side_effect = get_latest_transaction_date_as_of
 
-    response = await asyncio.wait_for(service.get_support_overview("P1"), timeout=1)
+    response = await service.get_support_overview("P1")
 
-    assert reconciliation_started.is_set()
-    assert booked_started.is_set()
+    assert call_order == ["reconciliation", "booked_transaction"]
     assert response.controls_latest_reconciliation_run_id == "recon_1234567890abcdef"
     assert response.latest_booked_transaction_date == date(2025, 8, 30)
     assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)

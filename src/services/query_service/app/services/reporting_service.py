@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -184,17 +183,14 @@ class ReportingService:
     async def get_portfolio_summary(
         self, request: PortfolioSummaryQueryRequest
     ) -> PortfolioSummaryResponse:
-        portfolio_read = self.repo.get_portfolio_by_id(request.portfolio_id)
-        if request.as_of_date is None:
-            portfolio, resolved_as_of_date = await asyncio.gather(
-                portfolio_read,
-                self.repo.get_latest_business_date(),
-            )
-        else:
-            portfolio = await portfolio_read
-            resolved_as_of_date = request.as_of_date
+        portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
         if portfolio is None:
             raise LookupError(f"Portfolio with id {request.portfolio_id} not found")
+        resolved_as_of_date = (
+            await self.repo.get_latest_business_date()
+            if request.as_of_date is None
+            else request.as_of_date
+        )
 
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for portfolio summary queries.")
@@ -208,18 +204,16 @@ class ReportingService:
             as_of_date=resolved_as_of_date,
         )
         cash_rows = [row for row in rows if self._cash_balance_resolver.is_cash_row(row)]
-        cash_account_records, row_reporting_values = await asyncio.gather(
-            self._cash_balance_resolver.build_cash_account_balance_records(
-                portfolio=portfolio,
-                cash_rows=cash_rows,
-                resolved_as_of_date=resolved_as_of_date,
-                reporting_currency=reporting_currency,
-            ),
-            self._snapshot_reporting_values(
-                rows=rows,
-                as_of_date=resolved_as_of_date,
-                reporting_currency=reporting_currency,
-            ),
+        cash_account_records = await self._cash_balance_resolver.build_cash_account_balance_records(
+            portfolio=portfolio,
+            cash_rows=cash_rows,
+            resolved_as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
+        row_reporting_values = await self._snapshot_reporting_values(
+            rows=rows,
+            as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
         )
 
         total_portfolio = ZERO
@@ -281,17 +275,16 @@ class ReportingService:
         reporting_currency: str,
     ) -> list[tuple[Any, Decimal, Decimal]]:
         row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
-        row_reporting_values = await asyncio.gather(
-            *(
-                self._convert_amount(
+        row_reporting_values = []
+        for row, native_value in row_native_values:
+            row_reporting_values.append(
+                await self._convert_amount(
                     amount=native_value,
                     from_currency=row.portfolio.base_currency,
                     to_currency=reporting_currency,
                     as_of_date=as_of_date,
                 )
-                for row, native_value in row_native_values
             )
-        )
         return [
             (row, native_value, reporting_value)
             for (row, native_value), reporting_value in zip(
@@ -317,16 +310,14 @@ class ReportingService:
                 parent_security_ids.append(parent_security_id)
             row_parent_security_ids.append(parent_security_id)
 
-        reporting_values, component_rows = await asyncio.gather(
-            self._snapshot_reporting_values(
-                rows=rows,
-                as_of_date=as_of_date,
-                reporting_currency=reporting_currency,
-            ),
-            self.repo.list_instrument_lookthrough_components(
-                parent_security_ids=list(dict.fromkeys(parent_security_ids)),
-                as_of_date=as_of_date,
-            ),
+        reporting_values = await self._snapshot_reporting_values(
+            rows=rows,
+            as_of_date=as_of_date,
+            reporting_currency=reporting_currency,
+        )
+        component_rows = await self.repo.list_instrument_lookthrough_components(
+            parent_security_ids=list(dict.fromkeys(parent_security_ids)),
+            as_of_date=as_of_date,
         )
 
         resolved_rows = [
@@ -439,22 +430,19 @@ class ReportingService:
         scope: ReportingScope,
         requested_as_of_date: date | None,
     ) -> tuple[list, date]:
-        portfolio_read = self.repo.list_portfolios(
+        if requested_as_of_date is None:
+            resolved_as_of_date = await self.repo.get_latest_business_date()
+        else:
+            resolved_as_of_date = requested_as_of_date
+
+        if resolved_as_of_date is None:
+            raise ValueError("No business date is available for reporting queries.")
+
+        portfolios = await self.repo.list_portfolios(
             portfolio_id=scope.portfolio_id,
             portfolio_ids=scope.portfolio_ids or None,
             booking_center_code=scope.booking_center_code,
         )
-        if requested_as_of_date is None:
-            resolved_as_of_date, portfolios = await asyncio.gather(
-                self.repo.get_latest_business_date(),
-                portfolio_read,
-            )
-        else:
-            resolved_as_of_date = requested_as_of_date
-            portfolios = await portfolio_read
-
-        if resolved_as_of_date is None:
-            raise ValueError("No business date is available for reporting queries.")
 
         if not portfolios:
             raise ValueError("No portfolios matched the requested reporting scope.")

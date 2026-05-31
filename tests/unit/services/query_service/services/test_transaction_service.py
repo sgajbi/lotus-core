@@ -1,5 +1,4 @@
 # tests/unit/services/query_service/services/test_transaction_service.py
-import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -372,21 +371,18 @@ async def test_get_transactions_include_projected_skips_business_date_default(
         )
 
 
-async def test_get_transactions_reads_portfolio_exists_and_default_date_concurrently() -> None:
+async def test_get_transactions_reads_portfolio_exists_and_default_date_sequentially() -> None:
     repo = AsyncMock(spec=TransactionRepository)
-    portfolio_started = asyncio.Event()
-    date_started = asyncio.Event()
+    call_order: list[str] = []
     repo.get_transactions_count.return_value = 0
 
     async def portfolio_exists(portfolio_id: str) -> bool:
-        portfolio_started.set()
-        await asyncio.wait_for(date_started.wait(), timeout=1)
+        call_order.append("portfolio")
         assert portfolio_id == "P1"
         return True
 
     async def get_latest_business_date() -> date:
-        date_started.set()
-        await asyncio.wait_for(portfolio_started.wait(), timeout=1)
+        call_order.append("date")
         return date(2025, 1, 15)
 
     repo.portfolio_exists.side_effect = portfolio_exists
@@ -397,14 +393,10 @@ async def test_get_transactions_reads_portfolio_exists_and_default_date_concurre
         return_value=repo,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        response = await asyncio.wait_for(
-            service.get_transactions(portfolio_id="P1", skip=0, limit=10),
-            timeout=1,
-        )
+        response = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
 
     assert response.as_of_date == date(2025, 1, 15)
-    assert portfolio_started.is_set()
-    assert date_started.is_set()
+    assert call_order == ["portfolio", "date"]
     repo.get_transactions.assert_not_awaited()
     repo.get_latest_evidence_timestamp.assert_not_awaited()
 
@@ -429,23 +421,20 @@ async def test_get_transactions_explicit_date_skips_default_date_lookup(
     mock_transaction_repo.get_transactions_count.assert_awaited_once()
 
 
-async def test_get_transactions_partial_page_reads_page_and_evidence_concurrently(
+async def test_get_transactions_partial_page_reads_page_and_evidence_sequentially(
     mock_transaction_repo: AsyncMock,
 ) -> None:
-    page_started = asyncio.Event()
-    timestamp_started = asyncio.Event()
+    call_order: list[str] = []
     page_rows = mock_transaction_repo.get_transactions.return_value[:1]
     latest_evidence_timestamp = datetime(2025, 1, 20, 9, 30, tzinfo=UTC)
     mock_transaction_repo.get_transactions_count.return_value = 2
 
     async def get_transactions(**_: object) -> list[Transaction]:
-        page_started.set()
-        await timestamp_started.wait()
+        call_order.append("page")
         return page_rows
 
     async def get_latest_evidence_timestamp(**_: object) -> datetime:
-        await page_started.wait()
-        timestamp_started.set()
+        call_order.append("evidence")
         return latest_evidence_timestamp
 
     mock_transaction_repo.get_transactions.side_effect = get_transactions
@@ -456,14 +445,12 @@ async def test_get_transactions_partial_page_reads_page_and_evidence_concurrentl
         return_value=mock_transaction_repo,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        response = await asyncio.wait_for(
-            service.get_transactions(portfolio_id="P1", skip=0, limit=1),
-            timeout=1,
-        )
+        response = await service.get_transactions(portfolio_id="P1", skip=0, limit=1)
 
     assert response.total == 2
     assert response.transactions[0].transaction_id == "T1"
     assert response.latest_evidence_timestamp == latest_evidence_timestamp
+    assert call_order == ["page", "evidence"]
     mock_transaction_repo.get_transactions.assert_awaited_once()
     mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once()
 
@@ -502,15 +489,10 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert mock_transaction_repo.get_latest_fx_rate.await_count == 2
 
 
-async def test_get_transactions_enriches_page_records_concurrently(
+async def test_get_transactions_enriches_page_records_sequentially(
     mock_transaction_repo: AsyncMock,
 ) -> None:
-    first_started = asyncio.Event()
-    second_started = asyncio.Event()
-    started_by_transaction_id = {
-        "T1": first_started,
-        "T2": second_started,
-    }
+    call_order: list[str] = []
 
     async def apply_reporting_currency_fields(
         *,
@@ -518,11 +500,7 @@ async def test_get_transactions_enriches_page_records_concurrently(
         reporting_currency: str,
         as_of_date: date,
     ) -> None:
-        started_by_transaction_id[record.transaction_id].set()
-        await asyncio.wait_for(
-            asyncio.gather(first_started.wait(), second_started.wait()),
-            timeout=1,
-        )
+        call_order.append(record.transaction_id)
         assert reporting_currency == "SGD"
         assert as_of_date == date(2025, 1, 15)
 
@@ -544,11 +522,10 @@ async def test_get_transactions_enriches_page_records_concurrently(
 
     assert [transaction.transaction_id for transaction in response_dto.transactions] == ["T1", "T2"]
     assert service._apply_reporting_currency_fields.await_count == 2
-    assert first_started.is_set()
-    assert second_started.is_set()
+    assert call_order == ["T1", "T2"]
 
 
-async def test_apply_reporting_currency_fields_converts_money_fields_concurrently() -> None:
+async def test_apply_reporting_currency_fields_converts_money_fields_sequentially() -> None:
     service = TransactionService(AsyncMock(spec=AsyncSession))
     record = TransactionRecord(
         transaction_id="T1",
@@ -564,14 +541,7 @@ async def test_apply_reporting_currency_fields_converts_money_fields_concurrentl
         trade_currency="EUR",
         currency="USD",
     )
-    gross_started = asyncio.Event()
-    gross_cost_started = asyncio.Event()
-    trade_fee_started = asyncio.Event()
-    all_started = [gross_started, gross_cost_started, trade_fee_started]
-    started_by_amount = {
-        Decimal("1000"): [gross_started, gross_cost_started],
-        Decimal("12.5"): [trade_fee_started],
-    }
+    call_order: list[Decimal] = []
 
     async def convert_amount(
         *,
@@ -580,11 +550,7 @@ async def test_apply_reporting_currency_fields_converts_money_fields_concurrentl
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        started_by_amount[amount].pop(0).set()
-        await asyncio.wait_for(
-            asyncio.gather(*(event.wait() for event in all_started)),
-            timeout=1,
-        )
+        call_order.append(amount)
         assert to_currency == "SGD"
         assert as_of_date == date(2025, 1, 15)
         return amount * (Decimal("2") if from_currency == "USD" else Decimal("3"))
@@ -600,7 +566,7 @@ async def test_apply_reporting_currency_fields_converts_money_fields_concurrentl
     assert record.gross_transaction_amount_reporting_currency == Decimal("2000")
     assert record.gross_cost_reporting_currency == Decimal("2000")
     assert record.trade_fee_reporting_currency == Decimal("37.5")
-    assert all(event.is_set() for event in all_started)
+    assert call_order == [Decimal("1000"), Decimal("1000"), Decimal("12.5")]
 
 
 async def test_get_transactions_raises_when_reporting_currency_rate_missing(
@@ -695,21 +661,18 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
     assert summary.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
 
 
-async def test_get_realized_tax_summary_reads_count_and_tax_evidence_concurrently() -> None:
-    count_started = asyncio.Event()
-    list_started = asyncio.Event()
+async def test_get_realized_tax_summary_reads_count_and_tax_evidence_sequentially() -> None:
+    call_order: list[str] = []
     repo = AsyncMock(spec=TransactionRepository)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
 
     async def get_transactions_count(**_: object) -> int:
-        count_started.set()
-        await list_started.wait()
+        call_order.append("count")
         return 2
 
     async def list_realized_tax_evidence_transactions(**_: object) -> list[Transaction]:
-        await count_started.wait()
-        list_started.set()
+        call_order.append("tax_evidence")
         return []
 
     repo.get_transactions_count.side_effect = get_transactions_count
@@ -722,13 +685,11 @@ async def test_get_realized_tax_summary_reads_count_and_tax_evidence_concurrentl
         return_value=repo,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        summary = await asyncio.wait_for(
-            service.get_realized_tax_summary(portfolio_id="P1"),
-            timeout=1,
-        )
+        summary = await service.get_realized_tax_summary(portfolio_id="P1")
 
     assert summary.source_transaction_count == 2
     assert summary.tax_evidence_transaction_count == 0
+    assert call_order == ["count", "tax_evidence"]
     repo.get_transactions_count.assert_awaited_once_with(
         portfolio_id="P1",
         start_date=None,
@@ -743,22 +704,19 @@ async def test_get_realized_tax_summary_reads_count_and_tax_evidence_concurrentl
     )
 
 
-async def test_get_realized_tax_summary_reads_base_currency_and_default_date_concurrently() -> None:
+async def test_get_realized_tax_summary_reads_base_currency_and_default_date_sequentially() -> None:
     repo = AsyncMock(spec=TransactionRepository)
-    currency_started = asyncio.Event()
-    date_started = asyncio.Event()
+    call_order: list[str] = []
     repo.get_transactions_count.return_value = 0
     repo.list_realized_tax_evidence_transactions.return_value = []
 
     async def get_portfolio_base_currency(portfolio_id: str) -> str:
-        currency_started.set()
-        await asyncio.wait_for(date_started.wait(), timeout=1)
+        call_order.append("currency")
         assert portfolio_id == "P1"
         return "USD"
 
     async def get_latest_business_date() -> date:
-        date_started.set()
-        await asyncio.wait_for(currency_started.wait(), timeout=1)
+        call_order.append("date")
         return date(2025, 1, 15)
 
     repo.get_portfolio_base_currency.side_effect = get_portfolio_base_currency
@@ -769,15 +727,11 @@ async def test_get_realized_tax_summary_reads_base_currency_and_default_date_con
         return_value=repo,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        summary = await asyncio.wait_for(
-            service.get_realized_tax_summary(portfolio_id="P1"),
-            timeout=1,
-        )
+        summary = await service.get_realized_tax_summary(portfolio_id="P1")
 
     assert summary.base_currency == "USD"
     assert summary.as_of_date == date(2025, 1, 15)
-    assert currency_started.is_set()
-    assert date_started.is_set()
+    assert call_order == ["currency", "date"]
 
 
 async def test_get_realized_tax_summary_explicit_date_skips_default_date_lookup(
@@ -797,7 +751,7 @@ async def test_get_realized_tax_summary_explicit_date_skips_default_date_lookup(
     mock_transaction_repo.get_latest_business_date.assert_not_awaited()
 
 
-async def test_get_realized_tax_summary_converts_currency_totals_concurrently() -> None:
+async def test_get_realized_tax_summary_converts_currency_totals_sequentially() -> None:
     repo = AsyncMock(spec=TransactionRepository)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
@@ -826,12 +780,7 @@ async def test_get_realized_tax_summary_converts_currency_totals_concurrently() 
             withholding_tax_amount=Decimal("5"),
         ),
     ]
-    eur_conversion_started = asyncio.Event()
-    usd_conversion_started = asyncio.Event()
-    started_by_currency = {
-        "EUR": eur_conversion_started,
-        "USD": usd_conversion_started,
-    }
+    call_order: list[str] = []
 
     async def convert_amount(
         *,
@@ -840,11 +789,7 @@ async def test_get_realized_tax_summary_converts_currency_totals_concurrently() 
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        started_by_currency[from_currency].set()
-        await asyncio.wait_for(
-            asyncio.gather(eur_conversion_started.wait(), usd_conversion_started.wait()),
-            timeout=1,
-        )
+        call_order.append(from_currency)
         assert to_currency == "SGD"
         assert as_of_date == date(2025, 1, 15)
         return amount
@@ -863,8 +808,7 @@ async def test_get_realized_tax_summary_converts_currency_totals_concurrently() 
 
     assert summary.reporting_currency_total_tax_amount == Decimal("12")
     assert service._convert_amount.await_count == 2
-    assert eur_conversion_started.is_set()
-    assert usd_conversion_started.is_set()
+    assert call_order == ["EUR", "USD"]
 
 
 async def test_get_realized_tax_summary_normalizes_currency_buckets(

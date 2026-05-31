@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
@@ -176,14 +175,10 @@ class CashBalanceResolver:
             )
             emitted_cash_account_ids.add(fallback_cash_account_id)
 
-        account_records = list(
-            await asyncio.gather(
-                *(
-                    self._build_cash_account_balance_record(**record_input)
-                    for record_input in record_inputs
-                )
-            )
-        )
+        account_records = [
+            await self._build_cash_account_balance_record(**record_input)
+            for record_input in record_inputs
+        ]
 
         account_records.sort(key=lambda row: (row.account_currency, row.cash_account_id))
         return account_records
@@ -260,17 +255,12 @@ class CashBalanceService:
         as_of_date: date | None = None,
         reporting_currency: str | None = None,
     ) -> CashBalancesResponse:
-        portfolio_read = self.repo.get_portfolio_by_id(portfolio_id)
-        if as_of_date is None:
-            portfolio, resolved_as_of_date = await asyncio.gather(
-                portfolio_read,
-                self.repo.get_latest_business_date(),
-            )
-        else:
-            portfolio = await portfolio_read
-            resolved_as_of_date = as_of_date
+        portfolio = await self.repo.get_portfolio_by_id(portfolio_id)
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        resolved_as_of_date = (
+            await self.repo.get_latest_business_date() if as_of_date is None else as_of_date
+        )
 
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for cash balance queries.")

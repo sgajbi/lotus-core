@@ -1,4 +1,3 @@
-import asyncio
 from collections.abc import Awaitable
 from datetime import date, datetime, timezone
 from typing import TypeVar
@@ -347,20 +346,24 @@ class OperationsService:
         *,
         generated_at_utc: datetime,
     ) -> date | None:
-        portfolio_exists, latest_business_date = await asyncio.gather(
-            self.repo.portfolio_exists(portfolio_id),
-            self.repo.get_latest_business_date(as_of=generated_at_utc),
-        )
+        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
         if not portfolio_exists:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
-        return latest_business_date
+        return await self.repo.get_latest_business_date(as_of=generated_at_utc)
 
     async def _read_count_and_page(
         self,
         count_read: Awaitable[int],
         page_read: Awaitable[list[_PagedRowT]],
     ) -> tuple[int, list[_PagedRowT]]:
-        total, rows = await asyncio.gather(count_read, page_read)
+        try:
+            total = await count_read
+        except Exception:
+            close = getattr(page_read, "close", None)
+            if callable(close):
+                close()
+            raise
+        rows = await page_read
         return total, rows
 
     async def _read_latest_reconciliation_evidence(
@@ -397,20 +400,17 @@ class OperationsService:
         if latest_business_date is None:
             return None, None
 
-        (
-            latest_booked_transaction_date,
-            latest_booked_position_snapshot_date,
-        ) = await asyncio.gather(
-            self.repo.get_latest_transaction_date_as_of(
+        latest_booked_transaction_date = await self.repo.get_latest_transaction_date_as_of(
+            portfolio_id,
+            latest_business_date,
+            snapshot_as_of=generated_at_utc,
+        )
+        latest_booked_position_snapshot_date = (
+            await self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
                 portfolio_id,
                 latest_business_date,
                 snapshot_as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
-                portfolio_id,
-                latest_business_date,
-                snapshot_as_of=generated_at_utc,
-            ),
+            )
         )
         return latest_booked_transaction_date, latest_booked_position_snapshot_date
 
@@ -445,78 +445,71 @@ class OperationsService:
             portfolio_id,
             generated_at_utc=generated_at_utc,
         )
-        (
-            current_epoch,
-            reprocessing_health,
-            valuation_job_health,
-            aggregation_job_health,
-            analytics_export_job_health,
-            latest_transaction_date,
-            latest_position_snapshot_date_unbounded,
-            position_snapshot_history_mismatch_count,
-            latest_control_stage,
-        ) = await asyncio.gather(
-            self.repo.get_current_portfolio_epoch(portfolio_id, as_of=generated_at_utc),
-            self.repo.get_reprocessing_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_valuation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_aggregation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_analytics_export_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_transaction_date(portfolio_id, as_of=generated_at_utc),
-            self.repo.get_latest_snapshot_date_for_current_epoch(
+        current_epoch = await self.repo.get_current_portfolio_epoch(
+            portfolio_id,
+            as_of=generated_at_utc,
+        )
+        reprocessing_health = await self.repo.get_reprocessing_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        valuation_job_health = await self.repo.get_valuation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        aggregation_job_health = await self.repo.get_aggregation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        analytics_export_job_health = await self.repo.get_analytics_export_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        latest_transaction_date = await self.repo.get_latest_transaction_date(
+            portfolio_id,
+            as_of=generated_at_utc,
+        )
+        latest_position_snapshot_date_unbounded = (
+            await self.repo.get_latest_snapshot_date_for_current_epoch(
                 portfolio_id,
                 as_of=generated_at_utc,
-            ),
-            self.repo.get_position_snapshot_history_mismatch_count(
+            )
+        )
+        position_snapshot_history_mismatch_count = (
+            await self.repo.get_position_snapshot_history_mismatch_count(
                 portfolio_id,
                 as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_financial_reconciliation_control_stage(
-                portfolio_id,
-                as_of=generated_at_utc,
-            ),
+            )
+        )
+        latest_control_stage = await self.repo.get_latest_financial_reconciliation_control_stage(
+            portfolio_id,
+            as_of=generated_at_utc,
         )
         (
-            (
-                latest_reconciliation_run,
-                latest_reconciliation_finding_summary,
-            ),
-            (
-                latest_booked_transaction_date,
-                latest_booked_position_snapshot_date,
-            ),
-        ) = await asyncio.gather(
-            self._read_latest_reconciliation_evidence(
-                portfolio_id=portfolio_id,
-                latest_control_stage=latest_control_stage,
-            ),
-            self._read_latest_booked_dates(
-                portfolio_id=portfolio_id,
-                latest_business_date=latest_business_date,
-                generated_at_utc=generated_at_utc,
-            ),
+            latest_reconciliation_run,
+            latest_reconciliation_finding_summary,
+        ) = await self._read_latest_reconciliation_evidence(
+            portfolio_id=portfolio_id,
+            latest_control_stage=latest_control_stage,
+        )
+        (
+            latest_booked_transaction_date,
+            latest_booked_position_snapshot_date,
+        ) = await self._read_latest_booked_dates(
+            portfolio_id=portfolio_id,
+            latest_business_date=latest_business_date,
+            generated_at_utc=generated_at_utc,
         )
 
         controls_status = latest_control_stage.status if latest_control_stage else None
@@ -587,26 +580,22 @@ class OperationsService:
                 if as_of_date is None
                 else resolved_as_of_date
             )
-            (
-                latest_booked_transaction_date,
-                latest_booked_position_snapshot_date,
-                missing_fx_summary,
-            ) = await asyncio.gather(
-                self.repo.get_latest_transaction_date_as_of(
+            latest_booked_transaction_date = await self.repo.get_latest_transaction_date_as_of(
+                portfolio_id,
+                resolved_as_of_date,
+                snapshot_as_of=generated_at_utc,
+            )
+            latest_booked_position_snapshot_date = (
+                await self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
                     portfolio_id,
                     resolved_as_of_date,
                     snapshot_as_of=generated_at_utc,
-                ),
-                self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
-                    portfolio_id,
-                    resolved_as_of_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
-                self.repo.get_missing_historical_fx_dependency_summary(
-                    portfolio_id,
-                    resolved_as_of_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
+                )
+            )
+            missing_fx_summary = await self.repo.get_missing_historical_fx_dependency_summary(
+                portfolio_id,
+                resolved_as_of_date,
+                snapshot_as_of=generated_at_utc,
             )
             snapshot_coverage = await self.repo.get_snapshot_valuation_coverage_summary(
                 portfolio_id,
@@ -646,31 +635,25 @@ class OperationsService:
             portfolio_id,
             generated_at_utc=generated_at_utc,
         )
-        (
-            reprocessing_health,
-            valuation_job_health,
-            aggregation_job_health,
-        ) = await asyncio.gather(
-            self.repo.get_reprocessing_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_valuation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_aggregation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
+        reprocessing_health = await self.repo.get_reprocessing_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        valuation_job_health = await self.repo.get_valuation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        aggregation_job_health = await self.repo.get_aggregation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
         )
 
         return build_calculator_slo_response(
@@ -697,29 +680,23 @@ class OperationsService:
                 f"'{portfolio_id}' and security '{security_id}'"
             )
 
-        (
-            latest_history_date,
-            latest_snapshot_date,
-            latest_valuation_job,
-        ) = await asyncio.gather(
-            self.repo.get_latest_position_history_date(
-                portfolio_id,
-                security_id,
-                position_state.epoch,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_daily_snapshot_date(
-                portfolio_id,
-                security_id,
-                position_state.epoch,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_valuation_job(
-                portfolio_id,
-                security_id,
-                position_state.epoch,
-                as_of=generated_at_utc,
-            ),
+        latest_history_date = await self.repo.get_latest_position_history_date(
+            portfolio_id,
+            security_id,
+            position_state.epoch,
+            as_of=generated_at_utc,
+        )
+        latest_snapshot_date = await self.repo.get_latest_daily_snapshot_date(
+            portfolio_id,
+            security_id,
+            position_state.epoch,
+            as_of=generated_at_utc,
+        )
+        latest_valuation_job = await self.repo.get_latest_valuation_job(
+            portfolio_id,
+            security_id,
+            position_state.epoch,
+            as_of=generated_at_utc,
         )
 
         latest_valuation_job_date = (

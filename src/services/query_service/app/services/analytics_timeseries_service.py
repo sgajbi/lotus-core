@@ -1049,10 +1049,8 @@ class AnalyticsTimeseriesService:
         as_of_date: date,
         observed_dates: list[date] | None = None,
     ) -> date | None:
-        latest_portfolio_date, latest_position_date = await asyncio.gather(
-            self.repo.get_latest_portfolio_timeseries_date(portfolio_id),
-            self.repo.get_latest_position_timeseries_date(portfolio_id),
-        )
+        latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
+        latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
         if observed_dates:
             observed_latest = max(observed_dates)
             latest_position_date = (

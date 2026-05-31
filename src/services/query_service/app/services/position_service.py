@@ -1,5 +1,4 @@
 # src/services/query_service/app/services/position_service.py
-import asyncio
 import logging
 from datetime import date, datetime
 from decimal import Decimal
@@ -86,36 +85,28 @@ class PositionService:
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
         needs_default_as_of_date = as_of_date is None and not include_projected
-        portfolio_exists_read = self.repo.portfolio_exists(portfolio_id)
-        if needs_default_as_of_date:
-            portfolio_exists, default_as_of_date = await asyncio.gather(
-                portfolio_exists_read,
-                self.repo.get_latest_business_date(),
-            )
-        else:
-            portfolio_exists = await portfolio_exists_read
-            default_as_of_date = as_of_date
+        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
         if not portfolio_exists:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        default_as_of_date = (
+            await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
+        )
 
         effective_as_of_date = default_as_of_date
         if effective_as_of_date is None and needs_default_as_of_date:
             effective_as_of_date = date.today()
 
         if effective_as_of_date is not None:
-            snapshot_results, history_results = await asyncio.gather(
-                self.repo.get_latest_positions_by_portfolio_as_of_date(
-                    portfolio_id, effective_as_of_date
-                ),
-                self.repo.get_latest_position_history_by_portfolio_as_of_date(
-                    portfolio_id, effective_as_of_date
-                ),
+            snapshot_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(
+                portfolio_id, effective_as_of_date
+            )
+            history_results = await self.repo.get_latest_position_history_by_portfolio_as_of_date(
+                portfolio_id,
+                effective_as_of_date,
             )
         else:
-            snapshot_results, history_results = await asyncio.gather(
-                self.repo.get_latest_positions_by_portfolio(portfolio_id),
-                self.repo.get_latest_position_history_by_portfolio(portfolio_id),
-            )
+            snapshot_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
+            history_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
 
         snapshot_results_by_security = {
             normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)
@@ -252,17 +243,15 @@ class PositionService:
         )
 
         if held_since_requests:
-            held_since_map, latest_market_price_dates = await asyncio.gather(
-                self.repo.get_held_since_dates(
-                    portfolio_id=portfolio_id,
-                    security_epoch_pairs=[
-                        (security_id, epoch) for _, security_id, epoch, _ in held_since_requests
-                    ],
-                ),
-                self.repo.get_latest_market_price_dates(
-                    security_ids=market_price_security_ids,
-                    as_of_date=response_as_of_date,
-                ),
+            held_since_map = await self.repo.get_held_since_dates(
+                portfolio_id=portfolio_id,
+                security_epoch_pairs=[
+                    (security_id, epoch) for _, security_id, epoch, _ in held_since_requests
+                ],
+            )
+            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
+                security_ids=market_price_security_ids,
+                as_of_date=response_as_of_date,
             )
             for idx, security_id, epoch, default_date in held_since_requests:
                 positions[idx].held_since_date = held_since_map.get(
