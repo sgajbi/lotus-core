@@ -1,7 +1,7 @@
 # services/query-service/app/services/transaction_service.py
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -178,9 +178,7 @@ class TransactionService:
         tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
             **ledger_filters,
         )
-        latest_evidence_timestamp = await self.repo.get_latest_realized_tax_evidence_timestamp(
-            **ledger_filters
-        )
+        latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(tax_transactions)
 
         currency_totals = self._realized_tax_currency_totals(tax_transactions)
         reporting_currency_total = None
@@ -248,6 +246,17 @@ class TransactionService:
             )
             for currency, bucket in sorted(totals.items())
         ]
+
+    @staticmethod
+    def _latest_transaction_evidence_timestamp(transactions: list[object]) -> datetime | None:
+        return max(
+            (
+                updated_at
+                for transaction in transactions
+                if (updated_at := getattr(transaction, "updated_at", None)) is not None
+            ),
+            default=None,
+        )
 
     async def _apply_reporting_currency_fields(
         self,

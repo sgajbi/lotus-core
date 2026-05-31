@@ -377,33 +377,6 @@ async def test_list_realized_tax_evidence_transactions_filters_explicit_tax_evid
     assert "transactions.transaction_id ASC" in compiled_query
 
 
-async def test_latest_realized_tax_evidence_timestamp_uses_tax_evidence_scope(
-    repository: TransactionRepository, mock_db_session: AsyncMock
-) -> None:
-    latest_timestamp = datetime(2026, 4, 30, 9, 15, tzinfo=UTC)
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = latest_timestamp
-    mock_db_session.execute = AsyncMock(return_value=mock_result)
-
-    latest = await repository.get_latest_realized_tax_evidence_timestamp(
-        portfolio_id="P1",
-        start_date=date(2026, 4, 1),
-        end_date=date(2026, 4, 30),
-        as_of_date=date(2026, 5, 3),
-    )
-
-    assert latest == latest_timestamp
-    executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "max(transactions.updated_at)" in compiled_query.lower()
-    assert "transactions.portfolio_id = 'P1'" in compiled_query
-    assert "transactions.withholding_tax_amount IS NOT NULL" in compiled_query
-    assert "transactions.other_interest_deductions_amount IS NOT NULL" in compiled_query
-    assert "transactions.transaction_date >= '2026-04-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-05-01 00:00:00'" in compiled_query
-    assert "transactions.transaction_date < '2026-05-04 00:00:00'" in compiled_query
-
-
 async def test_get_transactions_count_applies_instrument_filter(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):

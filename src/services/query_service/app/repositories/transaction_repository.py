@@ -383,20 +383,3 @@ class TransactionRepository:
         )
         results = await self.db.execute(stmt)
         return list(results.scalars().all())
-
-    async def get_latest_realized_tax_evidence_timestamp(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
-    ) -> Optional[datetime]:
-        stmt = self._apply_filters(
-            select(func.max(Transaction.updated_at)).where(self._realized_tax_evidence_predicate()),
-            portfolio_id=portfolio_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=as_of_date,
-        )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
