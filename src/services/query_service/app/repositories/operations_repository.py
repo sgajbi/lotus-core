@@ -1357,28 +1357,17 @@ class OperationsRepository:
         latest_history = latest_history.group_by(
             PositionHistory.portfolio_id, history_security_id, PositionHistory.epoch
         ).subquery()
-        latest_snapshot = (
-            select(
-                DailyPositionSnapshot.portfolio_id,
-                snapshot_security_id.label("security_id"),
-                DailyPositionSnapshot.epoch,
-                func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
-            )
-            .join(
-                PositionState,
-                and_(
-                    DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                    snapshot_security_id == state_security_id,
-                    DailyPositionSnapshot.epoch == PositionState.epoch,
-                ),
-            )
-            .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+        latest_snapshot = select(
+            DailyPositionSnapshot.portfolio_id,
+            snapshot_security_id.label("security_id"),
+            DailyPositionSnapshot.epoch,
+            func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
+        ).select_from(DailyPositionSnapshot)
+        latest_snapshot = self._apply_current_epoch_snapshot_scope(
+            latest_snapshot,
+            portfolio_id=portfolio_id,
+            snapshot_as_of=as_of,
         )
-        if as_of is not None:
-            latest_snapshot = latest_snapshot.where(
-                DailyPositionSnapshot.created_at <= as_of,
-                PositionState.updated_at <= as_of,
-            )
         latest_snapshot = latest_snapshot.group_by(
             DailyPositionSnapshot.portfolio_id,
             snapshot_security_id,
