@@ -1512,13 +1512,12 @@ class OperationsRepository:
         normalized_security_id = normalize_security_id(security_id)
         if not normalized_security_id:
             return None
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = select(PositionState).where(
-            PositionState.portfolio_id == portfolio_id,
-            state_security_id == normalized_security_id,
+        stmt = self._apply_reprocessing_key_scope(
+            select(PositionState),
+            portfolio_id=portfolio_id,
+            normalized_security_id=normalized_security_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def get_latest_position_history_date(
