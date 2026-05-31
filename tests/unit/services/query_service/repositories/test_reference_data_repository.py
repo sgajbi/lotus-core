@@ -1094,20 +1094,12 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
         source_timestamp=None,
         series_id="front_office",
     )
-    stale_vendor_row = SimpleNamespace(
-        index_id="IDX_A",
-        benchmark_id="B1",
-        series_date=date(2026, 1, 1),
-        quality_status="stale",
-        source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
-        series_id="stale_vendor",
-    )
     db.execute.side_effect = [
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
     ]
 
     repo = ReferenceDataRepository(db)
@@ -1135,6 +1127,29 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
     ]
     assert all(len(rows) == 1 for rows in result_sets)
     assert all(rows[0].series_id == "front_office" for rows in result_sets)
+
+    compiled_statements = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in db.execute.await_args_list
+    ]
+    assert "row_number() OVER (PARTITION BY index_price_series.index_id" in (compiled_statements[0])
+    assert (
+        "row_number() OVER (PARTITION BY index_return_series.index_id" in (compiled_statements[1])
+    )
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_return_series.benchmark_id"
+        in (compiled_statements[2])
+    )
+    assert "row_number() OVER (PARTITION BY index_price_series.index_id" in (compiled_statements[3])
+    assert (
+        "row_number() OVER (PARTITION BY index_return_series.index_id" in (compiled_statements[4])
+    )
+    for compiled in compiled_statements:
+        assert "upper(trim(" in compiled
+        assert " = 'ACCEPTED'" in compiled
+        assert "source_timestamp DESC NULLS LAST" in compiled
+        assert "series_id DESC" in compiled
+        assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio

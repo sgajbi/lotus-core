@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, TypeVar
+from typing import Any
 
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
@@ -30,7 +30,6 @@ from portfolio_common.database_models import (
     SustainabilityPreferenceProfile,
 )
 from portfolio_common.market_reference_quality import (
-    normalize_quality_status,
     quality_status_summary_key,
 )
 from sqlalchemy import and_, case, func, or_, select, tuple_
@@ -38,8 +37,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
-
-T = TypeVar("T")
 
 
 def _effective_filter(
@@ -85,31 +82,35 @@ def _latest_effective_rows(rows: list[Any], *key_fields: str) -> list[Any]:
     )
 
 
-def _canonicalize_series_rows(rows: list[T], *key_fields: str) -> list[T]:
-    if not rows:
-        return []
-
-    def sort_key(row: T) -> tuple[Any, ...]:
-        quality_status = normalize_quality_status(getattr(row, "quality_status", None))
-        source_timestamp = getattr(row, "source_timestamp", None)
-        return (
-            *(getattr(row, field) for field in key_fields),
-            1 if quality_status == "ACCEPTED" else 0,
-            source_timestamp.isoformat() if source_timestamp else "",
-            getattr(row, "series_id", "") or "",
-            getattr(row, "source_vendor", "") or "",
-            getattr(row, "source_record_id", "") or "",
-            getattr(row, "id", 0) or 0,
-        )
-
-    selected_by_key: dict[tuple[Any, ...], T] = {}
-    for row in sorted(rows, key=sort_key):
-        selected_by_key[tuple(getattr(row, field) for field in key_fields)] = row
-    return [selected_by_key[key] for key in sorted(selected_by_key)]
-
-
 def _normalize_reference_status(status: str) -> str:
     return status.strip().lower()
+
+
+def _canonical_series_ranked_subquery(model: Any, *partition_columns: Any, predicates: Any):
+    accepted_quality_rank = case(
+        (func.upper(func.trim(model.quality_status)) == "ACCEPTED", 1),
+        else_=0,
+    )
+    return (
+        select(
+            model.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=partition_columns,
+                order_by=(
+                    accepted_quality_rank.desc(),
+                    model.source_timestamp.desc().nullslast(),
+                    model.series_id.desc(),
+                    model.source_vendor.desc().nullslast(),
+                    model.source_record_id.desc().nullslast(),
+                    model.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
 
 
 class ReferenceDataRepository:
@@ -845,21 +846,25 @@ class ReferenceDataRepository:
     ) -> list[IndexPriceSeries]:
         if not index_ids:
             return []
+        predicates = (
+            IndexPriceSeries.index_id.in_(index_ids),
+            IndexPriceSeries.series_date >= start_date,
+            IndexPriceSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexPriceSeries,
+            IndexPriceSeries.index_id,
+            IndexPriceSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexPriceSeries)
-            .where(
-                IndexPriceSeries.index_id.in_(index_ids),
-                IndexPriceSeries.series_date >= start_date,
-                IndexPriceSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexPriceSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexPriceSeries.index_id.asc(), IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_index_return_points(
         self,
@@ -869,21 +874,25 @@ class ReferenceDataRepository:
     ) -> list[IndexReturnSeries]:
         if not index_ids:
             return []
+        predicates = (
+            IndexReturnSeries.index_id.in_(index_ids),
+            IndexReturnSeries.series_date >= start_date,
+            IndexReturnSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexReturnSeries,
+            IndexReturnSeries.index_id,
+            IndexReturnSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexReturnSeries)
-            .where(
-                IndexReturnSeries.index_id.in_(index_ids),
-                IndexReturnSeries.series_date >= start_date,
-                IndexReturnSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexReturnSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexReturnSeries.index_id.asc(), IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_benchmark_return_points(
         self,
@@ -891,59 +900,71 @@ class ReferenceDataRepository:
         start_date: date,
         end_date: date,
     ) -> list[BenchmarkReturnSeries]:
+        predicates = (
+            BenchmarkReturnSeries.benchmark_id == benchmark_id,
+            BenchmarkReturnSeries.series_date >= start_date,
+            BenchmarkReturnSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            BenchmarkReturnSeries,
+            BenchmarkReturnSeries.benchmark_id,
+            BenchmarkReturnSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(BenchmarkReturnSeries)
-            .where(
-                BenchmarkReturnSeries.benchmark_id == benchmark_id,
-                BenchmarkReturnSeries.series_date >= start_date,
-                BenchmarkReturnSeries.series_date <= end_date,
-            )
+            .join(ranked, BenchmarkReturnSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(BenchmarkReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "benchmark_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_index_price_series(
         self, index_id: str, start_date: date, end_date: date
     ) -> list[IndexPriceSeries]:
+        predicates = (
+            IndexPriceSeries.index_id == index_id,
+            IndexPriceSeries.series_date >= start_date,
+            IndexPriceSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexPriceSeries,
+            IndexPriceSeries.index_id,
+            IndexPriceSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexPriceSeries)
-            .where(
-                IndexPriceSeries.index_id == index_id,
-                IndexPriceSeries.series_date >= start_date,
-                IndexPriceSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexPriceSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_index_return_series(
         self, index_id: str, start_date: date, end_date: date
     ) -> list[IndexReturnSeries]:
+        predicates = (
+            IndexReturnSeries.index_id == index_id,
+            IndexReturnSeries.series_date >= start_date,
+            IndexReturnSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexReturnSeries,
+            IndexReturnSeries.index_id,
+            IndexReturnSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexReturnSeries)
-            .where(
-                IndexReturnSeries.index_id == index_id,
-                IndexReturnSeries.series_date >= start_date,
-                IndexReturnSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexReturnSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_risk_free_series(
         self,
@@ -951,33 +972,15 @@ class ReferenceDataRepository:
         start_date: date,
         end_date: date,
     ) -> list[RiskFreeSeries]:
-        accepted_quality_rank = case(
-            (func.upper(func.trim(RiskFreeSeries.quality_status)) == "ACCEPTED", 1),
-            else_=0,
+        predicates = (
+            RiskFreeSeries.series_currency == normalize_currency_code(currency),
+            RiskFreeSeries.series_date >= start_date,
+            RiskFreeSeries.series_date <= end_date,
         )
-        ranked = (
-            select(
-                RiskFreeSeries.id.label("id"),
-                func.row_number()
-                .over(
-                    partition_by=RiskFreeSeries.series_date,
-                    order_by=(
-                        accepted_quality_rank.desc(),
-                        RiskFreeSeries.source_timestamp.desc().nullslast(),
-                        RiskFreeSeries.series_id.desc(),
-                        RiskFreeSeries.source_vendor.desc().nullslast(),
-                        RiskFreeSeries.source_record_id.desc().nullslast(),
-                        RiskFreeSeries.id.desc(),
-                    ),
-                )
-                .label("rn"),
-            )
-            .where(
-                RiskFreeSeries.series_currency == normalize_currency_code(currency),
-                RiskFreeSeries.series_date >= start_date,
-                RiskFreeSeries.series_date <= end_date,
-            )
-            .subquery()
+        ranked = _canonical_series_ranked_subquery(
+            RiskFreeSeries,
+            RiskFreeSeries.series_date,
+            predicates=predicates,
         )
         stmt = (
             select(RiskFreeSeries)
