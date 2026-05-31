@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.repositories.cashflow_repository import CashflowRepository
+from src.services.query_service.app.repositories.cashflow_repository import (
+    CashflowRepository,
+    CashflowSeriesEvidence,
+)
 from src.services.query_service.app.services.cashflow_projection_service import (
     CashflowProjectionService,
 )
@@ -29,10 +32,17 @@ def mock_repo() -> AsyncMock:
         }
         return [(d, amount) for d, amount in universe.items() if start_date <= d <= end_date]
 
-    repo.get_portfolio_cashflow_series.side_effect = _series
-    repo.get_projected_settlement_cashflow_series.return_value = []
-    repo.get_latest_cashflow_evidence_timestamp.return_value = datetime(
-        2026, 3, 3, 12, 30, tzinfo=UTC
+    async def _series_with_evidence(
+        portfolio_id: str, start_date: date, end_date: date
+    ) -> CashflowSeriesEvidence:
+        return CashflowSeriesEvidence(
+            rows=await _series(portfolio_id, start_date, end_date),
+            latest_evidence_timestamp=datetime(2026, 3, 3, 12, 30, tzinfo=UTC),
+        )
+
+    repo.get_portfolio_cashflow_series_with_evidence.side_effect = _series_with_evidence
+    repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
     )
     return repo
 
@@ -45,16 +55,17 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
         response = await service.get_cashflow_projection(portfolio_id="P1", horizon_days=10)
 
-        mock_repo.get_portfolio_cashflow_series.assert_awaited_once_with(
+        mock_repo.get_portfolio_cashflow_series_with_evidence.assert_awaited_once_with(
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 11),
         )
-        mock_repo.get_projected_settlement_cashflow_series.assert_awaited_once_with(
+        mock_repo.get_projected_settlement_cashflow_series_with_evidence.assert_awaited_once_with(
             portfolio_id="P1",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 11),
         )
+        mock_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
         assert response.total_net_cashflow == Decimal("-750")
         assert response.booked_total_net_cashflow == Decimal("-750")
         assert response.projected_settlement_total_cashflow == Decimal("0")
@@ -88,18 +99,13 @@ async def test_projection_booked_only_caps_to_as_of_date(mock_repo: AsyncMock):
             include_projected=False,
         )
 
-        mock_repo.get_portfolio_cashflow_series.assert_awaited_once_with(
+        mock_repo.get_portfolio_cashflow_series_with_evidence.assert_awaited_once_with(
             portfolio_id="P1",
             start_date=date(2026, 3, 2),
             end_date=date(2026, 3, 2),
         )
-        mock_repo.get_projected_settlement_cashflow_series.assert_not_awaited()
-        mock_repo.get_latest_cashflow_evidence_timestamp.assert_awaited_once_with(
-            portfolio_id="P1",
-            start_date=date(2026, 3, 2),
-            end_date=date(2026, 3, 2),
-            include_projected=False,
-        )
+        mock_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
+        mock_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
         assert response.include_projected is False
         assert response.range_end_date == date(2026, 3, 2)
         assert len(response.points) == 1
@@ -120,9 +126,12 @@ async def test_projection_raises_when_portfolio_missing(mock_repo: AsyncMock):
 
 
 async def test_projection_includes_future_settlement_dated_external_flows(mock_repo: AsyncMock):
-    mock_repo.get_projected_settlement_cashflow_series.return_value = [
-        (date(2026, 3, 4), Decimal("-18000"))
-    ]
+    mock_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(
+            rows=[(date(2026, 3, 4), Decimal("-18000"))],
+            latest_evidence_timestamp=datetime(2026, 3, 4, 9, tzinfo=UTC),
+        )
+    )
 
     with patch(
         "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
@@ -153,11 +162,17 @@ async def test_projection_includes_future_settlement_dated_external_flows(mock_r
 async def test_projection_adds_same_day_booked_and_projected_movements(
     mock_repo: AsyncMock,
 ) -> None:
-    mock_repo.get_portfolio_cashflow_series.side_effect = None
-    mock_repo.get_portfolio_cashflow_series.return_value = [(date(2026, 3, 2), Decimal("400.25"))]
-    mock_repo.get_projected_settlement_cashflow_series.return_value = [
-        (date(2026, 3, 2), Decimal("-150.10"))
-    ]
+    mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = None
+    mock_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(date(2026, 3, 2), Decimal("400.25"))],
+        latest_evidence_timestamp=datetime(2026, 3, 2, 9, tzinfo=UTC),
+    )
+    mock_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(
+            rows=[(date(2026, 3, 2), Decimal("-150.10"))],
+            latest_evidence_timestamp=datetime(2026, 3, 2, 10, tzinfo=UTC),
+        )
+    )
 
     with patch(
         "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",

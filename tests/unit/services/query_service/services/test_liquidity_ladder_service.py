@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.repositories.cashflow_repository import CashflowSeriesEvidence
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
 from src.services.query_service.app.services.liquidity_ladder_service import (
     MAX_HORIZON_DAYS,
@@ -73,16 +74,21 @@ async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() ->
             instrument=_instrument("BOND1", liquidity_tier=" t2 "),
         ),
     ]
-    cashflow_repo.get_portfolio_cashflow_series.return_value = [
-        (date(2026, 3, 27), Decimal("-25000")),
-        (date(2026, 3, 30), Decimal("5000")),
-    ]
-    cashflow_repo.get_projected_settlement_cashflow_series.return_value = [
-        (date(2026, 3, 28), Decimal("-90000")),
-        (date(2026, 4, 4), Decimal("-25000")),
-    ]
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = datetime(
-        2026, 3, 27, 10, 15, tzinfo=UTC
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[
+            (date(2026, 3, 27), Decimal("-25000")),
+            (date(2026, 3, 30), Decimal("5000")),
+        ],
+        latest_evidence_timestamp=datetime(2026, 3, 27, 9, 45, tzinfo=UTC),
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(
+            rows=[
+                (date(2026, 3, 28), Decimal("-90000")),
+                (date(2026, 4, 4), Decimal("-25000")),
+            ],
+            latest_evidence_timestamp=datetime(2026, 3, 27, 10, 15, tzinfo=UTC),
+        )
     )
 
     with (
@@ -122,6 +128,7 @@ async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() ->
     )
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 10, 15, tzinfo=UTC)
+    cashflow_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
     assert response.source_batch_fingerprint == (
         "liquidity_ladder:P1:2026-03-27:2026-04-04:include_projected=true"
     )
@@ -140,10 +147,10 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
             instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
         )
     ]
-    cashflow_repo.get_portfolio_cashflow_series.return_value = [
-        (date(2026, 3, 27), Decimal("-100"))
-    ]
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(date(2026, 3, 27), Decimal("-100"))],
+        latest_evidence_timestamp=None,
+    )
 
     with (
         patch(
@@ -162,7 +169,8 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
             include_projected=False,
         )
 
-    cashflow_repo.get_projected_settlement_cashflow_series.assert_not_awaited()
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
+    cashflow_repo.get_latest_cashflow_evidence_timestamp.assert_not_awaited()
     assert response.include_projected is False
     assert response.totals.projected_cash_available_end_portfolio_currency == Decimal("900")
 
@@ -217,9 +225,12 @@ async def test_liquidity_ladder_returns_unknown_quality_for_empty_source_rows() 
     reporting_repo.get_portfolio_by_id.return_value = portfolio
     reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
     reporting_repo.list_latest_snapshot_rows.return_value = []
-    cashflow_repo.get_portfolio_cashflow_series.return_value = []
-    cashflow_repo.get_projected_settlement_cashflow_series.return_value = []
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[], latest_evidence_timestamp=None
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
 
     with (
         patch(
@@ -259,9 +270,12 @@ async def test_liquidity_ladder_classifies_unavailable_tier_and_missing_market_v
             instrument=_instrument("ALT1", liquidity_tier=None),
         )
     ]
-    cashflow_repo.get_portfolio_cashflow_series.return_value = []
-    cashflow_repo.get_projected_settlement_cashflow_series.return_value = []
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[], latest_evidence_timestamp=None
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
 
     with (
         patch(

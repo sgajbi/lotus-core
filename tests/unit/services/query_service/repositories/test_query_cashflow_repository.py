@@ -22,7 +22,7 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
 ):
     repository = CashflowRepository(mock_db_session)
 
-    await repository.get_projected_settlement_cashflow_series(
+    await repository.get_projected_settlement_cashflow_series_with_evidence(
         portfolio_id="P1",
         start_date=__import__("datetime").date(2026, 4, 18),
         end_date=__import__("datetime").date(2026, 4, 28),
@@ -36,6 +36,7 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
     assert "transactions.settlement_date < '2026-04-29 00:00:00'" in compiled_query
     assert "transactions.transaction_date < '2026-04-18 00:00:00'" in compiled_query
     assert "transactions.transaction_type = 'BUY'" not in compiled_query
+    assert "max(transactions.updated_at)" in compiled_query.lower()
 
 
 async def test_latest_cashflows_subquery_prefers_highest_epoch_per_transaction() -> None:
@@ -99,24 +100,31 @@ async def test_cashflow_repository_latest_business_date_uses_default_calendar(
 async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfolio_flows(
     mock_db_session: AsyncMock,
 ) -> None:
+    first_timestamp = datetime(2026, 4, 18, 9, 15, tzinfo=UTC)
+    second_timestamp = datetime(2026, 4, 19, 10, 45, tzinfo=UTC)
     mock_db_session.execute.return_value = MagicMock(
-        all=lambda: [(date(2026, 4, 18), 10), (date(2026, 4, 19), -2)]
+        all=lambda: [
+            (date(2026, 4, 18), 10, first_timestamp),
+            (date(2026, 4, 19), -2, second_timestamp),
+        ]
     )
     repository = CashflowRepository(mock_db_session)
 
-    rows = await repository.get_portfolio_cashflow_series(
+    evidence = await repository.get_portfolio_cashflow_series_with_evidence(
         portfolio_id="P1",
         start_date=date(2026, 4, 18),
         end_date=date(2026, 4, 28),
     )
 
-    assert rows == [(date(2026, 4, 18), 10), (date(2026, 4, 19), -2)]
+    assert evidence.rows == [(date(2026, 4, 18), 10), (date(2026, 4, 19), -2)]
+    assert evidence.latest_evidence_timestamp == second_timestamp
     stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "anon_1.portfolio_id = 'P1'" in compiled_query
     assert "anon_1.cashflow_date BETWEEN '2026-04-18' AND '2026-04-28'" in compiled_query
     assert "anon_1.is_portfolio_flow" in compiled_query
     assert "sum(anon_1.amount)" in compiled_query.lower()
+    assert "max(anon_1.updated_at)" in compiled_query.lower()
 
 
 async def test_latest_cashflow_evidence_timestamp_uses_booked_and_projected_sources(

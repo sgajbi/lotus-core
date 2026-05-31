@@ -72,25 +72,34 @@ class PortfolioLiquidityLadderService:
         tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
 
         range_end_date = resolved_as_of_date + timedelta(days=horizon_days)
-        booked_series = await self.cashflow_repo.get_portfolio_cashflow_series(
+        booked_evidence = await self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
             portfolio_id=portfolio.portfolio_id,
             start_date=resolved_as_of_date,
             end_date=range_end_date,
         )
-        projected_series = (
-            await self.cashflow_repo.get_projected_settlement_cashflow_series(
-                portfolio_id=portfolio.portfolio_id,
-                start_date=resolved_as_of_date,
-                end_date=range_end_date,
+        booked_series = booked_evidence.rows
+        projected_series = []
+        latest_projected_evidence = None
+        if include_projected:
+            projected_evidence = (
+                await self.cashflow_repo.get_projected_settlement_cashflow_series_with_evidence(
+                    portfolio_id=portfolio.portfolio_id,
+                    start_date=resolved_as_of_date,
+                    end_date=range_end_date,
+                )
             )
-            if include_projected
-            else []
-        )
-        latest_cashflow_evidence = await self.cashflow_repo.get_latest_cashflow_evidence_timestamp(
-            portfolio_id=portfolio.portfolio_id,
-            start_date=resolved_as_of_date,
-            end_date=range_end_date,
-            include_projected=include_projected,
+            projected_series = projected_evidence.rows
+            latest_projected_evidence = projected_evidence.latest_evidence_timestamp
+        latest_cashflow_evidence = max(
+            (
+                timestamp
+                for timestamp in (
+                    booked_evidence.latest_evidence_timestamp,
+                    latest_projected_evidence,
+                )
+                if timestamp
+            ),
+            default=None,
         )
 
         buckets = self._build_ladder_buckets(

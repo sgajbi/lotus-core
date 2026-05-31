@@ -39,23 +39,34 @@ class CashflowProjectionService:
         range_end_date = effective_as_of_date + timedelta(days=horizon_days)
         query_end_date = range_end_date if include_projected else effective_as_of_date
 
-        rows = await self.repo.get_portfolio_cashflow_series(
+        booked_evidence = await self.repo.get_portfolio_cashflow_series_with_evidence(
             portfolio_id=portfolio_id,
             start_date=range_start_date,
             end_date=query_end_date,
         )
+        rows = booked_evidence.rows
         projected_rows = []
+        latest_projected_evidence = None
         if include_projected:
-            projected_rows = await self.repo.get_projected_settlement_cashflow_series(
-                portfolio_id=portfolio_id,
-                start_date=range_start_date,
-                end_date=query_end_date,
+            projected_evidence = (
+                await self.repo.get_projected_settlement_cashflow_series_with_evidence(
+                    portfolio_id=portfolio_id,
+                    start_date=range_start_date,
+                    end_date=query_end_date,
+                )
             )
-        latest_evidence_timestamp = await self.repo.get_latest_cashflow_evidence_timestamp(
-            portfolio_id=portfolio_id,
-            start_date=range_start_date,
-            end_date=query_end_date,
-            include_projected=include_projected,
+            projected_rows = projected_evidence.rows
+            latest_projected_evidence = projected_evidence.latest_evidence_timestamp
+        latest_evidence_timestamp = max(
+            (
+                timestamp
+                for timestamp in (
+                    booked_evidence.latest_evidence_timestamp,
+                    latest_projected_evidence,
+                )
+                if timestamp
+            ),
+            default=None,
         )
 
         booked_by_date = self._sum_by_date(rows)

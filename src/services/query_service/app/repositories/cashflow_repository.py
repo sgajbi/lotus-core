@@ -1,5 +1,6 @@
 # src/services/query_service/app/repositories/cashflow_repository.py
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Tuple
@@ -20,6 +21,12 @@ from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CashflowSeriesEvidence:
+    rows: list[tuple[date, Decimal]]
+    latest_evidence_timestamp: datetime | None
 
 
 class CashflowRepository:
@@ -72,11 +79,23 @@ class CashflowRepository:
         self, portfolio_id: str, start_date: date, end_date: date
     ) -> List[Tuple[date, Decimal]]:
         """Returns daily aggregated portfolio cashflows for projection windows."""
+        evidence = await self.get_portfolio_cashflow_series_with_evidence(
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return evidence.rows
+
+    async def get_portfolio_cashflow_series_with_evidence(
+        self, portfolio_id: str, start_date: date, end_date: date
+    ) -> CashflowSeriesEvidence:
+        """Return booked daily cashflows and latest evidence timestamp in one read."""
         latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(
                 latest_cashflows.c.cashflow_date,
                 func.sum(latest_cashflows.c.amount).label("net_amount"),
+                func.max(latest_cashflows.c.updated_at).label("latest_evidence_timestamp"),
             )
             .where(
                 latest_cashflows.c.portfolio_id == portfolio_id,
@@ -86,7 +105,14 @@ class CashflowRepository:
             .group_by(latest_cashflows.c.cashflow_date)
             .order_by(latest_cashflows.c.cashflow_date.asc())
         )
-        return (await self.db.execute(stmt)).all()
+        rows = (await self.db.execute(stmt)).all()
+        return CashflowSeriesEvidence(
+            rows=[(flow_date, net_amount) for flow_date, net_amount, _timestamp in rows],
+            latest_evidence_timestamp=max(
+                (timestamp for _flow_date, _net_amount, timestamp in rows if timestamp),
+                default=None,
+            ),
+        )
 
     @async_timed(repository="CashflowRepository", method="get_projected_settlement_cashflow_series")
     async def get_projected_settlement_cashflow_series(
@@ -96,6 +122,20 @@ class CashflowRepository:
         end_date: date,
     ) -> List[Tuple[date, Decimal]]:
         """Projects future external settlement movements not yet present in booked cashflows."""
+        evidence = await self.get_projected_settlement_cashflow_series_with_evidence(
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return evidence.rows
+
+    async def get_projected_settlement_cashflow_series_with_evidence(
+        self,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        """Return projected settlement cashflows and latest evidence timestamp in one read."""
         settlement_date = func.date(Transaction.settlement_date)
         signed_amount = case(
             (
@@ -112,6 +152,7 @@ class CashflowRepository:
             select(
                 settlement_date.label("cashflow_date"),
                 func.sum(signed_amount).label("net_amount"),
+                func.max(Transaction.updated_at).label("latest_evidence_timestamp"),
             )
             .where(
                 Transaction.portfolio_id == portfolio_id,
@@ -124,7 +165,14 @@ class CashflowRepository:
             .group_by(settlement_date)
             .order_by(settlement_date.asc())
         )
-        return (await self.db.execute(stmt)).all()
+        rows = (await self.db.execute(stmt)).all()
+        return CashflowSeriesEvidence(
+            rows=[(flow_date, net_amount) for flow_date, net_amount, _timestamp in rows],
+            latest_evidence_timestamp=max(
+                (timestamp for _flow_date, _net_amount, timestamp in rows if timestamp),
+                default=None,
+            ),
+        )
 
     @async_timed(
         repository="CashflowRepository",
