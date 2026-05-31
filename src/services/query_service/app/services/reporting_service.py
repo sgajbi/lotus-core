@@ -301,27 +301,19 @@ class ReportingService:
         as_of_date: date,
         reporting_currency: str,
     ) -> tuple[list[tuple[object | None, object, Decimal]], AllocationLookThroughInfo]:
-        resolved_rows: list[tuple[Any, str, Decimal]] = []
         parent_security_ids: list[str] = []
-        row_inputs: list[tuple[Any, str, Decimal]] = []
+        row_parent_security_ids: list[str] = []
         for row in rows:
             parent_security_id = normalize_security_id(row.snapshot.security_id)
             if parent_security_id:
                 parent_security_ids.append(parent_security_id)
-            native_value = decimal_or_zero(row.snapshot.market_value)
-            row_inputs.append((row, parent_security_id, native_value))
+            row_parent_security_ids.append(parent_security_id)
 
         reporting_values, component_rows = await asyncio.gather(
-            asyncio.gather(
-                *(
-                    self._convert_amount(
-                        amount=native_value,
-                        from_currency=row.portfolio.base_currency,
-                        to_currency=reporting_currency,
-                        as_of_date=as_of_date,
-                    )
-                    for row, _parent_security_id, native_value in row_inputs
-                )
+            self._snapshot_reporting_values(
+                rows=rows,
+                as_of_date=as_of_date,
+                reporting_currency=reporting_currency,
             ),
             self.repo.list_instrument_lookthrough_components(
                 parent_security_ids=list(dict.fromkeys(parent_security_ids)),
@@ -329,12 +321,14 @@ class ReportingService:
             ),
         )
 
-        for (row, parent_security_id, _native_value), reporting_value in zip(
-            row_inputs,
-            reporting_values,
-            strict=True,
-        ):
-            resolved_rows.append((row, parent_security_id, reporting_value))
+        resolved_rows = [
+            (row, parent_security_id, reporting_value)
+            for (row, _native_value, reporting_value), parent_security_id in zip(
+                reporting_values,
+                row_parent_security_ids,
+                strict=True,
+            )
+        ]
 
         direct_rows = [
             (row.instrument, row.snapshot, reporting_value)
