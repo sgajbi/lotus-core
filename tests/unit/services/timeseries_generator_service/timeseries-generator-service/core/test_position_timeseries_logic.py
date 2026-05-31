@@ -145,6 +145,30 @@ def test_logic_normalizes_string_and_blank_amounts():
     assert new_record.fees == Decimal("0")
 
 
+def test_logic_normalizes_cashflow_timing_for_bod_bucket(current_snapshot, previous_day_snapshot):
+    cashflows = [
+        SimpleNamespace(
+            amount="1000",
+            timing=" bod ",
+            classification="CASHFLOW_IN",
+            is_position_flow=True,
+            is_portfolio_flow=True,
+        )
+    ]
+
+    new_record = PositionTimeseriesLogic.calculate_daily_record(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_day_snapshot,
+        cashflows=cashflows,
+        epoch=7,
+    )
+
+    assert new_record.bod_cashflow_position == Decimal("1000")
+    assert new_record.eod_cashflow_position == Decimal("0")
+    assert new_record.bod_cashflow_portfolio == Decimal("1000")
+    assert new_record.eod_cashflow_portfolio == Decimal("0")
+
+
 def test_logic_normalizes_product_leg_position_flow_signs_for_attribution(
     current_snapshot, previous_day_snapshot
 ):

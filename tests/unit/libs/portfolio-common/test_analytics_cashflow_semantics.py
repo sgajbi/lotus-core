@@ -3,6 +3,7 @@ from decimal import Decimal
 import pytest
 from portfolio_common.analytics_cashflow_semantics import (
     classify_analytics_cash_flow,
+    normalize_cashflow_timing,
     normalize_position_flow_amount,
 )
 
@@ -20,6 +21,19 @@ from portfolio_common.analytics_cashflow_semantics import (
 )
 def test_normalize_position_flow_amount(classification: str, amount: Decimal, expected: Decimal):
     assert normalize_position_flow_amount(amount=amount, classification=classification) == expected
+
+
+@pytest.mark.parametrize(
+    ("timing", "expected"),
+    [
+        ("BOD", "BOD"),
+        (" bod ", "BOD"),
+        ("EOD", "EOD"),
+        (None, ""),
+    ],
+)
+def test_normalize_cashflow_timing(timing: str | None, expected: str):
+    assert normalize_cashflow_timing(timing) == expected
 
 
 @pytest.mark.parametrize(

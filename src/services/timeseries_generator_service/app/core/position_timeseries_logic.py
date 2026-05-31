@@ -1,7 +1,10 @@
 from decimal import Decimal
 from typing import List
 
-from portfolio_common.analytics_cashflow_semantics import normalize_position_flow_amount
+from portfolio_common.analytics_cashflow_semantics import (
+    normalize_cashflow_timing,
+    normalize_position_flow_amount,
+)
 from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
@@ -52,18 +55,19 @@ class PositionTimeseriesLogic:
 
         for cf in cashflows:
             cashflow_amount = _decimal_or_zero(cf.amount)
+            cashflow_timing = normalize_cashflow_timing(cf.timing)
             if cf.is_position_flow:
                 normalized_position_amount = normalize_position_flow_amount(
                     amount=cashflow_amount,
                     classification=str(cf.classification),
                 )
-                if cf.timing == "BOD":
+                if cashflow_timing == "BOD":
                     bod_cf_pos += normalized_position_amount
                 else:  # EOD
                     eod_cf_pos += normalized_position_amount
 
             if cf.is_portfolio_flow:
-                if cf.timing == "BOD":
+                if cashflow_timing == "BOD":
                     bod_cf_port += cashflow_amount
                 else:  # EOD
                     eod_cf_port += cashflow_amount
