@@ -3,11 +3,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from .decimal_amounts import decimal_or_none
+
 
 def as_decimal(value: Any) -> Decimal:
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))
+    normalized_value = decimal_or_none(value)
+    if normalized_value is None:
+        raise ValueError("numeric value is required")
+    return normalized_value
 
 
 def control_code(value: Any, *, default: str = "") -> str:

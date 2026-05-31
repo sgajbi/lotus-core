@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from src.services.query_service.app.services.integration_value_normalization import (
     as_decimal,
     control_code,
@@ -16,6 +18,12 @@ def test_as_decimal_preserves_decimal_instances() -> None:
 def test_as_decimal_converts_stringable_values() -> None:
     assert as_decimal("0.1250") == Decimal("0.1250")
     assert as_decimal(5) == Decimal("5")
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_as_decimal_rejects_missing_required_values(value) -> None:
+    with pytest.raises(ValueError, match="numeric value is required"):
+        as_decimal(value)
 
 
 def test_control_code_normalizes_and_defaults_blank_values() -> None:
