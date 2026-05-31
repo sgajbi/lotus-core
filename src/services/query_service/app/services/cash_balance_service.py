@@ -260,11 +260,18 @@ class CashBalanceService:
         as_of_date: date | None = None,
         reporting_currency: str | None = None,
     ) -> CashBalancesResponse:
-        portfolio = await self.repo.get_portfolio_by_id(portfolio_id)
+        portfolio_read = self.repo.get_portfolio_by_id(portfolio_id)
+        if as_of_date is None:
+            portfolio, resolved_as_of_date = await asyncio.gather(
+                portfolio_read,
+                self.repo.get_latest_business_date(),
+            )
+        else:
+            portfolio = await portfolio_read
+            resolved_as_of_date = as_of_date
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
 
-        resolved_as_of_date = as_of_date or await self.repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for cash balance queries.")
         effective_reporting_currency = reporting_currency or portfolio.base_currency
