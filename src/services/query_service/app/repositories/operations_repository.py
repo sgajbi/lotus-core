@@ -362,6 +362,48 @@ class OperationsRepository:
             else_=9,
         )
 
+    @staticmethod
+    def _support_job_health_aggregate(base_subq, open_date_column, stale_threshold, failed_since):
+        open_statuses = ("PENDING", "PROCESSING")
+        return (
+            select(
+                func.count().filter(base_subq.c.status.in_(open_statuses)).label("pending_jobs"),
+                func.count().filter(base_subq.c.status == "PROCESSING").label("processing_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "PROCESSING",
+                    base_subq.c.updated_at < stale_threshold,
+                )
+                .label("stale_processing_jobs"),
+                func.count().filter(base_subq.c.status == "FAILED").label("failed_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "FAILED",
+                    base_subq.c.updated_at >= failed_since,
+                )
+                .label("failed_jobs_last_hours"),
+                func.min(open_date_column)
+                .filter(base_subq.c.status.in_(open_statuses))
+                .label("oldest_open_job_date"),
+            )
+            .select_from(base_subq)
+            .subquery()
+        )
+
+    @staticmethod
+    def _oldest_open_support_job(base_subq, open_date_column, *extra_columns):
+        return (
+            select(base_subq.c.id, *extra_columns, base_subq.c.correlation_id)
+            .where(base_subq.c.status.in_(("PENDING", "PROCESSING")))
+            .order_by(
+                open_date_column.asc(),
+                base_subq.c.updated_at.asc(),
+                base_subq.c.id.asc(),
+            )
+            .limit(1)
+            .subquery()
+        )
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -833,46 +875,16 @@ class OperationsRepository:
         if as_of is not None:
             base_stmt = base_stmt.where(PortfolioValuationJob.updated_at <= as_of)
         base_subq = base_stmt.subquery()
-        aggregate_subq = (
-            select(
-                func.count()
-                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
-                .label("pending_jobs"),
-                func.count().filter(base_subq.c.status == "PROCESSING").label("processing_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "PROCESSING",
-                    base_subq.c.updated_at < stale_threshold,
-                )
-                .label("stale_processing_jobs"),
-                func.count().filter(base_subq.c.status == "FAILED").label("failed_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "FAILED",
-                    base_subq.c.updated_at >= failed_since,
-                )
-                .label("failed_jobs_last_hours"),
-                func.min(base_subq.c.valuation_date)
-                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
-                .label("oldest_open_job_date"),
-            )
-            .select_from(base_subq)
-            .subquery()
+        aggregate_subq = self._support_job_health_aggregate(
+            base_subq,
+            base_subq.c.valuation_date,
+            stale_threshold,
+            failed_since,
         )
-        oldest_job_subq = (
-            select(
-                base_subq.c.id,
-                base_subq.c.security_id,
-                base_subq.c.correlation_id,
-            )
-            .where(base_subq.c.status.in_(("PENDING", "PROCESSING")))
-            .order_by(
-                base_subq.c.valuation_date.asc(),
-                base_subq.c.updated_at.asc(),
-                base_subq.c.id.asc(),
-            )
-            .limit(1)
-            .subquery()
+        oldest_job_subq = self._oldest_open_support_job(
+            base_subq,
+            base_subq.c.valuation_date,
+            base_subq.c.security_id,
         )
         row = (
             await self.db.execute(
@@ -923,45 +935,15 @@ class OperationsRepository:
         if as_of is not None:
             base_stmt = base_stmt.where(PortfolioAggregationJob.updated_at <= as_of)
         base_subq = base_stmt.subquery()
-        aggregate_subq = (
-            select(
-                func.count()
-                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
-                .label("pending_jobs"),
-                func.count().filter(base_subq.c.status == "PROCESSING").label("processing_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "PROCESSING",
-                    base_subq.c.updated_at < stale_threshold,
-                )
-                .label("stale_processing_jobs"),
-                func.count().filter(base_subq.c.status == "FAILED").label("failed_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "FAILED",
-                    base_subq.c.updated_at >= failed_since,
-                )
-                .label("failed_jobs_last_hours"),
-                func.min(base_subq.c.aggregation_date)
-                .filter(base_subq.c.status.in_(("PENDING", "PROCESSING")))
-                .label("oldest_open_job_date"),
-            )
-            .select_from(base_subq)
-            .subquery()
+        aggregate_subq = self._support_job_health_aggregate(
+            base_subq,
+            base_subq.c.aggregation_date,
+            stale_threshold,
+            failed_since,
         )
-        oldest_job_subq = (
-            select(
-                base_subq.c.id,
-                base_subq.c.correlation_id,
-            )
-            .where(base_subq.c.status.in_(("PENDING", "PROCESSING")))
-            .order_by(
-                base_subq.c.aggregation_date.asc(),
-                base_subq.c.updated_at.asc(),
-                base_subq.c.id.asc(),
-            )
-            .limit(1)
-            .subquery()
+        oldest_job_subq = self._oldest_open_support_job(
+            base_subq,
+            base_subq.c.aggregation_date,
         )
         row = (
             await self.db.execute(
