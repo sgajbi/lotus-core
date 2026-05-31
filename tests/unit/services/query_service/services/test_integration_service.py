@@ -4364,3 +4364,52 @@ async def test_benchmark_market_series_honors_requested_series_fields() -> None:
     assert point.benchmark_return == Decimal("0.02")
     assert point.component_weight == Decimal("0.60")
     assert point.fx_rate is None
+    service._reference_repository.list_index_price_points.assert_not_awaited()
+    service._reference_repository.list_index_return_points.assert_not_awaited()
+    service._reference_repository.list_benchmark_return_points.assert_awaited_once()
+    service._reference_repository.get_fx_rates.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_uses_fx_dates_when_only_fx_rate_requested() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    composition_weight=Decimal("0.60"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
+            ]
+        ),
+        list_index_price_points=AsyncMock(return_value=[]),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(return_value=[]),
+        get_fx_rates=AsyncMock(return_value={date(2026, 1, 1): Decimal("1.10")}),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)),
+            frequency="daily",
+            target_currency="EUR",
+            series_fields=["fx_rate"],
+            page=SimpleNamespace(page_size=10, page_token=None),
+        ),
+    )
+
+    point = response.component_series[0].points[0]
+    assert point.series_date == date(2026, 1, 1)
+    assert point.fx_rate == Decimal("1.10")
+    assert point.index_price is None
+    assert point.index_return is None
+    assert point.benchmark_return is None
+    assert point.component_weight is None
+    service._reference_repository.list_index_price_points.assert_not_awaited()
+    service._reference_repository.list_index_return_points.assert_not_awaited()
+    service._reference_repository.list_benchmark_return_points.assert_not_awaited()

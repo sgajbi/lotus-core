@@ -2468,20 +2468,32 @@ class IntegrationService:
             )
             index_ids = sorted({component.index_id for component in components})
 
-        index_prices = await self._reference_repository.list_index_price_points(
-            index_ids=index_ids,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
+        index_prices = (
+            await self._reference_repository.list_index_price_points(
+                index_ids=index_ids,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            )
+            if "index_price" in requested_fields
+            else []
         )
-        index_returns = await self._reference_repository.list_index_return_points(
-            index_ids=index_ids,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
+        index_returns = (
+            await self._reference_repository.list_index_return_points(
+                index_ids=index_ids,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            )
+            if "index_return" in requested_fields
+            else []
         )
-        benchmark_returns = await self._reference_repository.list_benchmark_return_points(
-            benchmark_id=benchmark_id,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
+        benchmark_returns = (
+            await self._reference_repository.list_benchmark_return_points(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+            )
+            if "benchmark_return" in requested_fields
+            else []
         )
 
         fx_rates: dict[date, Decimal] = {}
@@ -2522,6 +2534,7 @@ class IntegrationService:
 
         all_dates = sorted(
             {row.series_date for row in index_prices + index_returns + benchmark_returns}
+            | set(fx_rates.keys())
         )
         component_series_all = []
         for index_id in sorted(index_ids):
