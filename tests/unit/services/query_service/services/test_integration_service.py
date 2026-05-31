@@ -4189,6 +4189,61 @@ async def test_market_data_coverage_deduplicates_repository_lookup_scope() -> No
 
 
 @pytest.mark.asyncio
+async def test_market_data_coverage_reads_prices_and_fx_rates_concurrently() -> None:
+    service = make_service()
+    price_started = asyncio.Event()
+    fx_started = asyncio.Event()
+
+    async def list_latest_market_prices(**_kwargs):
+        price_started.set()
+        await asyncio.wait_for(fx_started.wait(), timeout=1)
+        return [
+            SimpleNamespace(
+                security_id="EQ_US_AAPL",
+                price_date=date(2026, 4, 10),
+                price=Decimal("187.1200000000"),
+                currency="USD",
+            )
+        ]
+
+    async def list_latest_fx_rates(**_kwargs):
+        fx_started.set()
+        await asyncio.wait_for(price_started.wait(), timeout=1)
+        return [
+            SimpleNamespace(
+                from_currency="USD",
+                to_currency="SGD",
+                rate_date=date(2026, 4, 10),
+                rate=Decimal("1.3521000000"),
+            )
+        ]
+
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(side_effect=list_latest_market_prices),
+        list_latest_fx_rates=AsyncMock(side_effect=list_latest_fx_rates),
+    )
+
+    response = await asyncio.wait_for(
+        service.get_market_data_coverage(
+            SimpleNamespace(
+                as_of_date=date(2026, 4, 10),
+                instrument_ids=["EQ_US_AAPL"],
+                currency_pairs=[SimpleNamespace(from_currency="USD", to_currency="SGD")],
+                valuation_currency=None,
+                max_staleness_days=5,
+            )
+        ),
+        timeout=1,
+    )
+
+    assert price_started.is_set()
+    assert fx_started.is_set()
+    assert response.supportability.state == "READY"
+    assert response.supportability.resolved_price_count == 1
+    assert response.supportability.resolved_fx_count == 1
+
+
+@pytest.mark.asyncio
 async def test_market_data_coverage_normalizes_returned_price_security_id() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
