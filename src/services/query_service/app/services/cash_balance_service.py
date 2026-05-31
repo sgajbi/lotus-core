@@ -13,6 +13,7 @@ from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
 from .control_code_normalization import normalize_control_code
+from .fx_conversion import CachedFxRateConverter
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
@@ -227,7 +228,7 @@ class CashBalanceResolver:
 class CashBalanceService:
     def __init__(self, db: AsyncSession):
         self.repo = ReportingRepository(db)
-        self._fx_cache: dict[tuple[str, str, date], Decimal] = {}
+        self._fx_converter = CachedFxRateConverter(self.repo)
         self._resolver = CashBalanceResolver(repo=self.repo, convert_amount=self._convert_amount)
 
     async def get_cash_balances(
@@ -266,12 +267,12 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        if normalized_from_currency == normalized_to_currency:
-            return amount
-        rate = await self._get_fx_rate(normalized_from_currency, normalized_to_currency, as_of_date)
-        return amount * rate
+        return await self._fx_converter.convert_amount(
+            amount=amount,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            as_of_date=as_of_date,
+        )
 
     async def _get_fx_rate(
         self,
@@ -279,21 +280,4 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
-        if cache_key in self._fx_cache:
-            return self._fx_cache[cache_key]
-        rate = await self.repo.get_latest_fx_rate(
-            from_currency=normalized_from_currency,
-            to_currency=normalized_to_currency,
-            as_of_date=as_of_date,
-        )
-        if rate is None:
-            raise ValueError(
-                "FX rate not found for "
-                f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
-            )
-        resolved_rate = Decimal(str(rate))
-        self._fx_cache[cache_key] = resolved_rate
-        return resolved_rate
+        return await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date)
