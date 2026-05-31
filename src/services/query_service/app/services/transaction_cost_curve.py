@@ -57,10 +57,23 @@ def build_transaction_cost_curve_point(
     key: tuple[str, str, str],
     rows: list[Any],
 ) -> TransactionCostCurvePoint | None:
-    security_id, transaction_type, currency = key
     observations = [
         observation for row in rows if (observation := _cost_observation(row)) is not None
     ]
+    return _build_transaction_cost_curve_point_from_observations(
+        portfolio_id=portfolio_id,
+        key=key,
+        observations=observations,
+    )
+
+
+def _build_transaction_cost_curve_point_from_observations(
+    *,
+    portfolio_id: str,
+    key: tuple[str, str, str],
+    observations: list[_CostObservation],
+) -> TransactionCostCurvePoint | None:
+    security_id, transaction_type, currency = key
     if not observations:
         return None
 
@@ -110,21 +123,22 @@ def build_transaction_cost_curve_points(
     transactions: list[Any],
     min_observation_count: int,
 ) -> list[TransactionCostCurvePoint]:
-    grouped: dict[tuple[str, str, str], list[Any]] = {}
+    grouped: dict[tuple[str, str, str], list[_CostObservation]] = {}
     for transaction in transactions:
-        if _cost_observation(transaction) is None:
+        observation = _cost_observation(transaction)
+        if observation is None:
             continue
-        grouped.setdefault(transaction_cost_curve_key(transaction), []).append(transaction)
+        grouped.setdefault(transaction_cost_curve_key(transaction), []).append(observation)
 
     points: list[TransactionCostCurvePoint] = []
     for key in sorted(grouped):
-        rows = grouped[key]
-        if len(rows) < min_observation_count:
+        observations = grouped[key]
+        if len(observations) < min_observation_count:
             continue
-        point = build_transaction_cost_curve_point(
+        point = _build_transaction_cost_curve_point_from_observations(
             portfolio_id=portfolio_id,
             key=key,
-            rows=rows,
+            observations=observations,
         )
         if point is not None:
             points.append(point)

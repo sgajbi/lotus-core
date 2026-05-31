@@ -11,6 +11,16 @@ from src.services.query_service.app.services.transaction_cost_curve import (
 )
 
 
+class _StringCountedValue:
+    def __init__(self, raw: str) -> None:
+        self.raw = raw
+        self.stringify_count = 0
+
+    def __str__(self) -> str:
+        self.stringify_count += 1
+        return self.raw
+
+
 def _transaction(
     *,
     transaction_id: str,
@@ -87,6 +97,26 @@ def test_transaction_cost_curve_points_group_and_filter_evidence() -> None:
     assert point.last_observed_date.isoformat() == "2026-05-03"
     assert point.sample_transaction_ids == ["TXN-AAPL-001", "TXN-AAPL-002"]
     assert point.source_lineage["source_table"] == "transactions,transaction_costs"
+
+
+def test_transaction_cost_curve_points_reuse_observations_in_bulk_path() -> None:
+    gross_amount = _StringCountedValue("100000.0000")
+    transaction = _transaction(
+        transaction_id="TXN-AAPL-001",
+        gross_transaction_amount="1.0000",
+        trade_fee="20.0000",
+    )
+    transaction.gross_transaction_amount = gross_amount
+
+    points = build_transaction_cost_curve_points(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transactions=[transaction],
+        min_observation_count=1,
+    )
+
+    assert len(points) == 1
+    assert points[0].total_notional == Decimal("100000.0000")
+    assert gross_amount.stringify_count == 1
 
 
 def test_transaction_cost_curve_point_ignores_unusable_direct_rows() -> None:
