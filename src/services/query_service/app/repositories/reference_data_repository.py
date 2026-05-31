@@ -139,6 +139,31 @@ def _ranked_portfolio_mandate_binding_ids(*predicates: Any):
     )
 
 
+def _ranked_model_portfolio_target_ids(*predicates: Any):
+    return (
+        select(
+            ModelPortfolioTarget.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    ModelPortfolioTarget.model_portfolio_id,
+                    ModelPortfolioTarget.model_portfolio_version,
+                    ModelPortfolioTarget.instrument_id,
+                ),
+                order_by=(
+                    ModelPortfolioTarget.effective_from.desc(),
+                    ModelPortfolioTarget.updated_at.desc(),
+                    ModelPortfolioTarget.created_at.desc(),
+                    ModelPortfolioTarget.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
+
+
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -198,32 +223,27 @@ class ReferenceDataRepository:
         *,
         include_inactive_targets: bool = False,
     ) -> list[ModelPortfolioTarget]:
+        predicates = [
+            ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
+            ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
+            _effective_filter(
+                ModelPortfolioTarget.effective_from,
+                ModelPortfolioTarget.effective_to,
+                as_of_date,
+            ),
+        ]
+        if not include_inactive_targets:
+            predicates.append(ModelPortfolioTarget.target_status == "active")
+
+        ranked = _ranked_model_portfolio_target_ids(*predicates)
         stmt = (
             select(ModelPortfolioTarget)
-            .where(
-                ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
-                ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
-                _effective_filter(
-                    ModelPortfolioTarget.effective_from,
-                    ModelPortfolioTarget.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ModelPortfolioTarget.instrument_id.asc(),
-                ModelPortfolioTarget.effective_from.desc(),
-            )
+            .join(ranked, ModelPortfolioTarget.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(ModelPortfolioTarget.instrument_id.asc())
         )
-        if not include_inactive_targets:
-            stmt = stmt.where(ModelPortfolioTarget.target_status == "active")
         result = await self._db.execute(stmt)
-        rows = list(result.scalars().all())
-        return _latest_effective_rows(
-            rows,
-            "model_portfolio_id",
-            "model_portfolio_version",
-            "instrument_id",
-        )
+        return list(result.scalars().all())
 
     async def list_model_portfolio_affected_mandates(
         self,

@@ -751,13 +751,6 @@ async def test_list_model_portfolio_targets_returns_latest_active_targets_by_def
                 model_portfolio_id="MODEL_SG_BALANCED_DPM",
                 model_portfolio_version="2026.03",
                 instrument_id="EQ_US_AAPL",
-                effective_from=date(2026, 3, 25),
-                target_weight=Decimal("0.55"),
-            ),
-            SimpleNamespace(
-                model_portfolio_id="MODEL_SG_BALANCED_DPM",
-                model_portfolio_version="2026.03",
-                instrument_id="EQ_US_AAPL",
                 effective_from=date(2026, 4, 1),
                 target_weight=Decimal("0.60"),
             ),
@@ -785,6 +778,12 @@ async def test_list_model_portfolio_targets_returns_latest_active_targets_by_def
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "model_portfolio_targets.target_status = 'active'" in compiled
     assert "lower(trim(model_portfolio_targets.target_status))" not in compiled
+    assert (
+        "row_number() OVER (PARTITION BY model_portfolio_targets.model_portfolio_id, "
+        "model_portfolio_targets.model_portfolio_version, "
+        "model_portfolio_targets.instrument_id"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
