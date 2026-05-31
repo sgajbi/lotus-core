@@ -295,6 +295,7 @@ class ReportingRepository:
             for value in parent_security_ids
             if (security_id := normalize_security_id(value))
         ]
+        normalized_parent_security_ids = list(dict.fromkeys(normalized_parent_security_ids))
         if not normalized_parent_security_ids:
             return []
 

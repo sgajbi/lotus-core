@@ -280,7 +280,7 @@ async def test_reporting_repository_lookthrough_query_uses_effective_window() ->
     repo = ReportingRepository(db)
 
     await repo.list_instrument_lookthrough_components(
-        parent_security_ids=[" FUND1 ", "FUND2", " "],
+        parent_security_ids=[" FUND1 ", "FUND2", "FUND1", " "],
         as_of_date=date(2026, 3, 27),
     )
 
@@ -290,6 +290,7 @@ async def test_reporting_repository_lookthrough_query_uses_effective_window() ->
         "trim(instrument_lookthrough_components.parent_security_id) IN ('FUND1', 'FUND2')"
         in compiled
     )
+    assert "('FUND1', 'FUND2', 'FUND1')" not in compiled
     assert (
         "trim(instruments.security_id) = "
         "trim(instrument_lookthrough_components.component_security_id)" in compiled

@@ -295,7 +295,7 @@ class ReportingService:
         ]
 
         component_rows = await self.repo.list_instrument_lookthrough_components(
-            parent_security_ids=parent_security_ids,
+            parent_security_ids=list(dict.fromkeys(parent_security_ids)),
             as_of_date=as_of_date,
         )
         components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)

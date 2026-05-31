@@ -364,7 +364,12 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
             portfolio=portfolio,
             snapshot=_snapshot(" FUND1 ", market_value="100"),
             instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
-        )
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("FUND1", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        ),
     ]
     repo.list_instrument_lookthrough_components.return_value = [
         InstrumentLookthroughComponentRow(
@@ -389,14 +394,14 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
         )
 
     assert response.look_through.applied_mode == "prefer_look_through"
-    assert response.look_through.decomposed_position_count == 1
+    assert response.look_through.decomposed_position_count == 2
     asset_class_view = next(view for view in response.views if view.dimension == "asset_class")
     buckets = [
         (bucket.dimension_value, bucket.market_value_reporting_currency)
         for bucket in asset_class_view.buckets
     ]
     assert buckets == [
-        ("EQUITY", Decimal("100")),
+        ("EQUITY", Decimal("200")),
     ]
     repo.list_instrument_lookthrough_components.assert_awaited_once_with(
         parent_security_ids=["FUND1"],
