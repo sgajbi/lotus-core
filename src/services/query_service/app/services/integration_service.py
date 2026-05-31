@@ -27,7 +27,6 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     CioModelChangeAffectedCohortSupportability,
-    CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
     ClassificationTaxonomyResponse,
     ClientIncomeNeedsScheduleRequest,
@@ -47,7 +46,6 @@ from ..dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
     DiscretionaryMandateBindingSupportability,
-    DpmPortfolioUniverseCandidate,
     DpmPortfolioUniverseCandidateRequest,
     DpmPortfolioUniverseCandidateResponse,
     DpmPortfolioUniverseCandidateSelectionBasis,
@@ -97,11 +95,9 @@ from ..dtos.reference_integration_dto import (
     ModelPortfolioSupportability,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
-    ModelPortfolioTargetRow,
     PlannedWithdrawalScheduleRequest,
     PlannedWithdrawalScheduleResponse,
     PlannedWithdrawalScheduleSupportability,
-    PortfolioManagerBookMember,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
     PortfolioManagerBookMembershipSupportability,
@@ -141,13 +137,17 @@ from .reference_data_helpers import (
 )
 from .reference_data_mappers import (
     benchmark_definition_response,
+    cio_model_change_affected_mandate,
     client_income_needs_schedule_entry,
     client_restriction_profile_entry,
     client_tax_profile_entry,
     client_tax_rule_set_entry,
+    dpm_portfolio_universe_candidate,
     index_definition_response,
     liquidity_reserve_requirement_entry,
+    model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
+    portfolio_manager_book_member,
     sustainability_preference_profile_entry,
 )
 from .request_fingerprint import request_fingerprint, series_request_fingerprint
@@ -330,22 +330,7 @@ class IntegrationService:
             as_of_date=request.as_of_date,
             include_inactive_targets=request.include_inactive_targets,
         )
-        target_rows = [
-            ModelPortfolioTargetRow(
-                instrument_id=row.instrument_id,
-                target_weight=self._as_decimal(row.target_weight),
-                min_weight=(
-                    self._as_decimal(row.min_weight) if row.min_weight is not None else None
-                ),
-                max_weight=(
-                    self._as_decimal(row.max_weight) if row.max_weight is not None else None
-                ),
-                target_status=row.target_status,
-                quality_status=row.quality_status,
-                source_record_id=row.source_record_id,
-            )
-            for row in targets
-        ]
+        target_rows = [model_portfolio_target_row(row) for row in targets]
         total_weight = sum((row.target_weight for row in target_rows), Decimal("0"))
         supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "MODEL_TARGETS_READY"
@@ -411,20 +396,7 @@ class IntegrationService:
             portfolio_types=portfolio_types,
             include_inactive=request.include_inactive,
         )
-        members = [
-            PortfolioManagerBookMember(
-                portfolio_id=row.portfolio_id,
-                client_id=row.client_id,
-                booking_center_code=row.booking_center_code,
-                portfolio_type=row.portfolio_type,
-                status=row.status,
-                open_date=row.open_date,
-                close_date=row.close_date,
-                base_currency=row.base_currency,
-                source_record_id=f"portfolio:{row.portfolio_id}",
-            )
-            for row in rows
-        ]
+        members = [portfolio_manager_book_member(row) for row in rows]
         filters_applied = ["portfolio_manager_id", "as_of_date"]
         if request.booking_center_code:
             filters_applied.append("booking_center_code")
@@ -494,24 +466,7 @@ class IntegrationService:
             booking_center_code=request.booking_center_code,
             include_inactive_mandates=request.include_inactive_mandates,
         )
-        affected_mandates = [
-            CioModelChangeAffectedMandate(
-                portfolio_id=row.portfolio_id,
-                mandate_id=row.mandate_id,
-                client_id=row.client_id,
-                booking_center_code=row.booking_center_code,
-                jurisdiction_code=row.jurisdiction_code,
-                discretionary_authority_status=row.discretionary_authority_status,
-                model_portfolio_id=row.model_portfolio_id,
-                policy_pack_id=row.policy_pack_id,
-                risk_profile=row.risk_profile,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                binding_version=int(row.binding_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
+        affected_mandates = [cio_model_change_affected_mandate(row) for row in rows]
         filters_applied = ["model_portfolio_id", "as_of_date"]
         if request.booking_center_code:
             filters_applied.append("booking_center_code")
@@ -623,26 +578,7 @@ class IntegrationService:
         )
         has_more = len(rows) > request.page.page_size
         page_rows = rows[: request.page.page_size]
-        candidates = [
-            DpmPortfolioUniverseCandidate(
-                portfolio_id=row.portfolio_id,
-                mandate_id=row.mandate_id,
-                client_id=row.client_id,
-                booking_center_code=row.booking_center_code,
-                jurisdiction_code=row.jurisdiction_code,
-                discretionary_authority_status=row.discretionary_authority_status,
-                model_portfolio_id=row.model_portfolio_id,
-                policy_pack_id=row.policy_pack_id,
-                mandate_objective=row.mandate_objective,
-                risk_profile=row.risk_profile,
-                investment_horizon=row.investment_horizon,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                binding_version=int(row.binding_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in page_rows
-        ]
+        candidates = [dpm_portfolio_universe_candidate(row) for row in page_rows]
 
         next_page_token: str | None = None
         if has_more and candidates:

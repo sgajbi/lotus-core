@@ -6,13 +6,17 @@ from typing import Any
 from ..dtos.reference_integration_dto import (
     BenchmarkComponentResponse,
     BenchmarkDefinitionResponse,
+    CioModelChangeAffectedMandate,
     ClientIncomeNeedsScheduleEntry,
     ClientRestrictionProfileEntry,
     ClientTaxProfileEntry,
     ClientTaxRuleSetEntry,
+    DpmPortfolioUniverseCandidate,
     IndexDefinitionResponse,
     LiquidityReserveRequirementEntry,
+    ModelPortfolioTargetRow,
     PlannedWithdrawalScheduleEntry,
+    PortfolioManagerBookMember,
     SustainabilityPreferenceProfileEntry,
 )
 
@@ -82,6 +86,70 @@ def index_definition_response(row: Any) -> IndexDefinitionResponse:
         quality_status=row.quality_status,
         source_timestamp=row.source_timestamp,
         source_vendor=row.source_vendor,
+        source_record_id=row.source_record_id,
+    )
+
+
+def model_portfolio_target_row(row: Any) -> ModelPortfolioTargetRow:
+    return ModelPortfolioTargetRow(
+        instrument_id=row.instrument_id,
+        target_weight=_as_decimal(row.target_weight),
+        min_weight=_as_decimal(row.min_weight) if row.min_weight is not None else None,
+        max_weight=_as_decimal(row.max_weight) if row.max_weight is not None else None,
+        target_status=row.target_status,
+        quality_status=row.quality_status,
+        source_record_id=row.source_record_id,
+    )
+
+
+def portfolio_manager_book_member(row: Any) -> PortfolioManagerBookMember:
+    return PortfolioManagerBookMember(
+        portfolio_id=row.portfolio_id,
+        client_id=row.client_id,
+        booking_center_code=row.booking_center_code,
+        portfolio_type=row.portfolio_type,
+        status=row.status,
+        open_date=row.open_date,
+        close_date=row.close_date,
+        base_currency=row.base_currency,
+        source_record_id=f"portfolio:{row.portfolio_id}",
+    )
+
+
+def cio_model_change_affected_mandate(row: Any) -> CioModelChangeAffectedMandate:
+    return CioModelChangeAffectedMandate(
+        portfolio_id=row.portfolio_id,
+        mandate_id=row.mandate_id,
+        client_id=row.client_id,
+        booking_center_code=row.booking_center_code,
+        jurisdiction_code=row.jurisdiction_code,
+        discretionary_authority_status=row.discretionary_authority_status,
+        model_portfolio_id=row.model_portfolio_id,
+        policy_pack_id=row.policy_pack_id,
+        risk_profile=row.risk_profile,
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        binding_version=int(row.binding_version),
+        source_record_id=row.source_record_id,
+    )
+
+
+def dpm_portfolio_universe_candidate(row: Any) -> DpmPortfolioUniverseCandidate:
+    return DpmPortfolioUniverseCandidate(
+        portfolio_id=row.portfolio_id,
+        mandate_id=row.mandate_id,
+        client_id=row.client_id,
+        booking_center_code=row.booking_center_code,
+        jurisdiction_code=row.jurisdiction_code,
+        discretionary_authority_status=row.discretionary_authority_status,
+        model_portfolio_id=row.model_portfolio_id,
+        policy_pack_id=row.policy_pack_id,
+        mandate_objective=row.mandate_objective,
+        risk_profile=row.risk_profile,
+        investment_horizon=row.investment_horizon,
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        binding_version=int(row.binding_version),
         source_record_id=row.source_record_id,
     )
 
