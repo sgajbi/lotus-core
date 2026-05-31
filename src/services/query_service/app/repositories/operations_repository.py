@@ -108,11 +108,16 @@ class OperationsRepository:
         return superseding_exists.correlate(PortfolioValuationJob).exists()
 
     @staticmethod
-    def _latest_valuation_job_scalar(selected_column, position_state_security_id, as_of):
+    def _latest_valuation_job_lateral(position_state_security_id, as_of):
         valuation_job_security_id = OperationsRepository._security_id_expr(
             PortfolioValuationJob.security_id
         )
-        latest_valuation_job = select(selected_column).where(
+        latest_valuation_job = select(
+            PortfolioValuationJob.valuation_date.label("latest_valuation_job_date"),
+            PortfolioValuationJob.id.label("latest_valuation_job_id"),
+            PortfolioValuationJob.status.label("latest_valuation_job_status"),
+            PortfolioValuationJob.correlation_id.label("latest_valuation_job_correlation_id"),
+        ).where(
             PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
             valuation_job_security_id == position_state_security_id,
             PortfolioValuationJob.epoch == PositionState.epoch,
@@ -129,7 +134,7 @@ class OperationsRepository:
             )
             .limit(1)
             .correlate(PositionState)
-            .scalar_subquery()
+            .lateral()
         )
 
     @staticmethod
@@ -1698,25 +1703,15 @@ class OperationsRepository:
         latest_daily_snapshot_date = latest_daily_snapshot_date.correlate(
             PositionState
         ).scalar_subquery()
-        latest_valuation_job_date = self._latest_valuation_job_scalar(
-            PortfolioValuationJob.valuation_date,
+        latest_valuation_job = self._latest_valuation_job_lateral(
             position_state_security_id,
             as_of,
         )
-        latest_valuation_job_id = self._latest_valuation_job_scalar(
-            PortfolioValuationJob.id,
-            position_state_security_id,
-            as_of,
-        )
-        latest_valuation_job_status = self._latest_valuation_job_scalar(
-            PortfolioValuationJob.status,
-            position_state_security_id,
-            as_of,
-        )
-        latest_valuation_job_correlation_id = self._latest_valuation_job_scalar(
-            PortfolioValuationJob.correlation_id,
-            position_state_security_id,
-            as_of,
+        latest_valuation_job_date = latest_valuation_job.c.latest_valuation_job_date
+        latest_valuation_job_id = latest_valuation_job.c.latest_valuation_job_id
+        latest_valuation_job_status = latest_valuation_job.c.latest_valuation_job_status
+        latest_valuation_job_correlation_id = (
+            latest_valuation_job.c.latest_valuation_job_correlation_id
         )
         has_artifact_gap = case(
             (latest_position_history_date.is_(None), False),
@@ -1751,17 +1746,21 @@ class OperationsRepository:
             (has_artifact_gap.is_(True), 2),
             else_=9,
         )
-        stmt = select(
-            position_state_security_id.label("security_id"),
-            PositionState.epoch,
-            PositionState.watermark_date,
-            PositionState.status.label("reprocessing_status"),
-            latest_position_history_date.label("latest_position_history_date"),
-            latest_daily_snapshot_date.label("latest_daily_snapshot_date"),
-            latest_valuation_job_date.label("latest_valuation_job_date"),
-            latest_valuation_job_id.label("latest_valuation_job_id"),
-            latest_valuation_job_status.label("latest_valuation_job_status"),
-            latest_valuation_job_correlation_id.label("latest_valuation_job_correlation_id"),
+        stmt = (
+            select(
+                position_state_security_id.label("security_id"),
+                PositionState.epoch,
+                PositionState.watermark_date,
+                PositionState.status.label("reprocessing_status"),
+                latest_position_history_date.label("latest_position_history_date"),
+                latest_daily_snapshot_date.label("latest_daily_snapshot_date"),
+                latest_valuation_job_date.label("latest_valuation_job_date"),
+                latest_valuation_job_id.label("latest_valuation_job_id"),
+                latest_valuation_job_status.label("latest_valuation_job_status"),
+                latest_valuation_job_correlation_id.label("latest_valuation_job_correlation_id"),
+            )
+            .select_from(PositionState)
+            .outerjoin(latest_valuation_job, true())
         )
         stmt = self._apply_reprocessing_key_scope(
             stmt,

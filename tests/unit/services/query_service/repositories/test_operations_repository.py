@@ -1021,6 +1021,8 @@ async def test_get_lineage_keys_query(repository: OperationsRepository, mock_db_
     assert "latest_daily_snapshot_date" in compiled
     assert "latest_valuation_job_date" in compiled
     assert "latest_valuation_job_status" in compiled
+    assert "left outer join lateral" in compiled.lower()
+    assert compiled.lower().count("from portfolio_valuation_jobs") == 1
 
 
 async def test_get_valuation_jobs_count_with_status(
