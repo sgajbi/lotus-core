@@ -10,6 +10,7 @@ from src.services.query_service.app.repositories.cashflow_repository import (
     CashflowSeriesEvidence,
 )
 from src.services.query_service.app.services.cashflow_projection_service import (
+    MAX_HORIZON_DAYS,
     CashflowProjectionService,
 )
 
@@ -123,6 +124,27 @@ async def test_projection_raises_when_portfolio_missing(mock_repo: AsyncMock):
         service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
             await service.get_cashflow_projection(portfolio_id="P404")
+
+
+async def test_projection_rejects_unbounded_horizon_before_database_access(
+    mock_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+
+        with pytest.raises(
+            ValueError,
+            match=f"horizon_days must be between 1 and {MAX_HORIZON_DAYS}.",
+        ):
+            await service.get_cashflow_projection(
+                portfolio_id="P1",
+                horizon_days=MAX_HORIZON_DAYS + 1,
+            )
+
+    mock_repo.get_portfolio_currency.assert_not_awaited()
 
 
 async def test_projection_includes_future_settlement_dated_external_flows(mock_repo: AsyncMock):

@@ -13,6 +13,9 @@ from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_HORIZON_DAYS = 10
+MAX_HORIZON_DAYS = 366
+
 
 class CashflowProjectionService:
     """Builds booked/projection cashflow windows for portfolio operations."""
@@ -23,10 +26,13 @@ class CashflowProjectionService:
     async def get_cashflow_projection(
         self,
         portfolio_id: str,
-        horizon_days: int = 10,
+        horizon_days: int = DEFAULT_HORIZON_DAYS,
         as_of_date: Optional[date] = None,
         include_projected: bool = True,
     ) -> CashflowProjectionResponse:
+        if horizon_days < 1 or horizon_days > MAX_HORIZON_DAYS:
+            raise ValueError(f"horizon_days must be between 1 and {MAX_HORIZON_DAYS}.")
+
         portfolio_currency = await self.repo.get_portfolio_currency(portfolio_id)
         if portfolio_currency is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")

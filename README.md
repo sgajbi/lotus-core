@@ -86,8 +86,8 @@ Boundary rules that matter:
    field-aware source-currency selection, without promoting portfolio-level FX attribution.
 8. `PortfolioCashflowProjection:v1` emits daily booked, projected-settlement, net, cumulative, and
    component-total cashflow evidence in portfolio base currency so downstream outcome consumers can
-   preserve operational cash-movement components without deriving liquidity ladders, income-needs
-   advice, or OMS execution forecasts.
+   preserve operational cash-movement components across a bounded one-year operational horizon
+   without deriving liquidity ladders, income-needs advice, or OMS execution forecasts.
 9. `PortfolioCashMovementSummary:v1` emits source-owned cash movement totals over latest cashflow
    rows by classification, timing, currency, and flow scope without claiming cashflow forecasting,
    funding recommendations, treasury instructions, liquidity advice, execution quality, tax

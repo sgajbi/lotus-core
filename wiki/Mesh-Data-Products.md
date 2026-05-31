@@ -121,8 +121,9 @@ quality, or OMS acknowledgement.
 `PortfolioCashflowProjection:v1` is the governed source for daily booked cashflow, projected
 settlement cashflow, net cashflow points, cumulative cashflow over the returned window,
 booked/projected/net totals, portfolio currency, include-projected posture, evidence timestamp, and
-deterministic source fingerprint. It is not a client income plan, liquidity ladder, funding
-recommendation, market-impact estimate, or OMS execution forecast.
+deterministic source fingerprint. The returned daily window is bounded to one operational year
+because the product emits one point per calendar day. It is not a client income plan, liquidity
+ladder, funding recommendation, market-impact estimate, or OMS execution forecast.
 
 Its current implementation-backed methodology is deterministic: booked mode uses latest
 portfolio-flow cashflow rows through `as_of_date`; projected mode extends the returned date window
