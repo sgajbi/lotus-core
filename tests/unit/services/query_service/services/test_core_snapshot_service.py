@@ -354,6 +354,32 @@ async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_
     assert rows["SEC_PADDED"]["position_record"].security_id == "SEC_PADDED"
 
 
+async def test_resolve_baseline_positions_preserves_blank_optional_values(mock_dependencies):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        (
+            _snapshot_row("SEC_BLANK", "3", " ", ""),
+            _instrument("SEC_BLANK"),
+            SimpleNamespace(status="CURRENT", epoch=7),
+        )
+    ]
+    service = CoreSnapshotService(AsyncMock())
+
+    rows, _source = await service._resolve_baseline_positions(
+        portfolio_id="PORT_001",
+        as_of_date=date(2026, 2, 27),
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    record = rows["SEC_BLANK"]["position_record"]
+    assert record.quantity == Decimal("3")
+    assert record.market_value_base is None
+    assert record.market_value_local is None
+    assert record.weight == Decimal("0")
+
+
 async def test_core_snapshot_rejects_projected_sections_in_baseline_mode(mock_dependencies):
     service = CoreSnapshotService(AsyncMock())
     request = CoreSnapshotRequest(
@@ -889,6 +915,13 @@ async def test_static_helpers_cover_zero_total_and_delta_paths():
     projected_total = CoreSnapshotService._total_market_value_projected(items)
     assert baseline_total == Decimal("0")
     assert projected_total == Decimal("0")
+
+    optional_items = {
+        "SEC_BLANK": {"market_value_base": " "},
+        "SEC_TEXT": {"market_value_base": "2.25"},
+    }
+    assert CoreSnapshotService._total_market_value_baseline(optional_items) == Decimal("2.25")
+    assert CoreSnapshotService._total_market_value_projected(optional_items) == Decimal("2.25")
 
     delta_rows = CoreSnapshotService._build_delta_section(
         baseline_positions=items,

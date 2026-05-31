@@ -39,6 +39,7 @@ from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
 from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .position_flow_effects import transaction_quantity_effect_decimal
 
 CASH_ASSET_CLASS = "CASH"
@@ -363,28 +364,18 @@ class CoreSnapshotService:
 
         baseline: dict[str, dict[str, Any]] = {}
         for row, instrument, _state in rows:
-            quantity = Decimal(str(row.quantity))
+            quantity = decimal_or_zero(row.quantity)
             if not include_zero and quantity == Decimal(0):
                 continue
             if not include_cash and instrument and _is_cash_asset_class(instrument.asset_class):
                 continue
 
             if use_snapshot:
-                market_value_base_raw = (
-                    Decimal(str(row.market_value)) if row.market_value is not None else None
-                )
-                market_value_local = (
-                    Decimal(str(row.market_value_local))
-                    if row.market_value_local is not None
-                    else None
-                )
+                market_value_base_raw = decimal_or_none(row.market_value)
+                market_value_local = decimal_or_none(row.market_value_local)
             else:
-                market_value_base_raw = (
-                    Decimal(str(row.cost_basis)) if row.cost_basis is not None else None
-                )
-                market_value_local = (
-                    Decimal(str(row.cost_basis_local)) if row.cost_basis_local is not None else None
-                )
+                market_value_base_raw = decimal_or_none(row.cost_basis)
+                market_value_local = decimal_or_none(row.cost_basis_local)
 
             market_value_base = (
                 market_value_base_raw * reporting_fx if market_value_base_raw is not None else None
@@ -578,7 +569,7 @@ class CoreSnapshotService:
             quantity=getattr(change, "quantity", None),
             amount=getattr(change, "amount", None),
         )
-        return Decimal(str(effect))
+        return effect
 
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
@@ -636,16 +627,16 @@ class CoreSnapshotService:
     def _total_market_value_baseline(items: dict[str, dict[str, Any]]) -> Decimal:
         total = Decimal(0)
         for item in items.values():
-            market_value = item.get("market_value_base")
+            market_value = decimal_or_none(item.get("market_value_base"))
             if market_value is not None:
-                total += Decimal(str(market_value))
+                total += market_value
         return total
 
     @staticmethod
     def _total_market_value_projected(items: dict[str, dict[str, Any]]) -> Decimal:
         total = Decimal(0)
         for item in items.values():
-            total += Decimal(str(item.get("market_value_base") or Decimal(0)))
+            total += decimal_or_zero(item.get("market_value_base"))
         return total
 
     @staticmethod
