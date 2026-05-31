@@ -205,6 +205,31 @@ class OperationsRepository:
         return superseding_exists.correlate(PortfolioValuationJob).exists()
 
     @staticmethod
+    def _latest_valuation_job_scalar(selected_column, position_state_security_id, as_of):
+        valuation_job_security_id = OperationsRepository._security_id_expr(
+            PortfolioValuationJob.security_id
+        )
+        latest_valuation_job = select(selected_column).where(
+            PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
+            valuation_job_security_id == position_state_security_id,
+            PortfolioValuationJob.epoch == PositionState.epoch,
+        )
+        if as_of is not None:
+            latest_valuation_job = latest_valuation_job.where(
+                PortfolioValuationJob.created_at <= as_of,
+                PortfolioValuationJob.updated_at <= as_of,
+            )
+        return (
+            latest_valuation_job.order_by(
+                PortfolioValuationJob.valuation_date.desc(),
+                PortfolioValuationJob.id.desc(),
+            )
+            .limit(1)
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
+
+    @staticmethod
     def _reprocessing_job_portfolio_scope_exists(
         portfolio_id: str,
         security_id_expr,
@@ -1470,7 +1495,6 @@ class OperationsRepository:
         position_state_security_id = self._security_id_expr(PositionState.security_id)
         position_history_security_id = self._security_id_expr(PositionHistory.security_id)
         snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
         latest_position_history_date = select(func.max(PositionHistory.position_date)).where(
             PositionHistory.portfolio_id == PositionState.portfolio_id,
             position_history_security_id == position_state_security_id,
@@ -1495,81 +1519,25 @@ class OperationsRepository:
         latest_daily_snapshot_date = latest_daily_snapshot_date.correlate(
             PositionState
         ).scalar_subquery()
-        latest_valuation_job_date = select(PortfolioValuationJob.valuation_date).where(
-            PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            valuation_job_security_id == position_state_security_id,
-            PortfolioValuationJob.epoch == PositionState.epoch,
+        latest_valuation_job_date = self._latest_valuation_job_scalar(
+            PortfolioValuationJob.valuation_date,
+            position_state_security_id,
+            as_of,
         )
-        if as_of is not None:
-            latest_valuation_job_date = latest_valuation_job_date.where(
-                PortfolioValuationJob.created_at <= as_of,
-                PortfolioValuationJob.updated_at <= as_of,
-            )
-        latest_valuation_job_date = (
-            latest_valuation_job_date.order_by(
-                PortfolioValuationJob.valuation_date.desc(),
-                PortfolioValuationJob.id.desc(),
-            )
-            .limit(1)
-            .correlate(PositionState)
-            .scalar_subquery()
+        latest_valuation_job_id = self._latest_valuation_job_scalar(
+            PortfolioValuationJob.id,
+            position_state_security_id,
+            as_of,
         )
-        latest_valuation_job_id = select(PortfolioValuationJob.id).where(
-            PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            valuation_job_security_id == position_state_security_id,
-            PortfolioValuationJob.epoch == PositionState.epoch,
+        latest_valuation_job_status = self._latest_valuation_job_scalar(
+            PortfolioValuationJob.status,
+            position_state_security_id,
+            as_of,
         )
-        if as_of is not None:
-            latest_valuation_job_id = latest_valuation_job_id.where(
-                PortfolioValuationJob.created_at <= as_of,
-                PortfolioValuationJob.updated_at <= as_of,
-            )
-        latest_valuation_job_id = (
-            latest_valuation_job_id.order_by(
-                PortfolioValuationJob.valuation_date.desc(),
-                PortfolioValuationJob.id.desc(),
-            )
-            .limit(1)
-            .correlate(PositionState)
-            .scalar_subquery()
-        )
-        latest_valuation_job_status = select(PortfolioValuationJob.status).where(
-            PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            valuation_job_security_id == position_state_security_id,
-            PortfolioValuationJob.epoch == PositionState.epoch,
-        )
-        if as_of is not None:
-            latest_valuation_job_status = latest_valuation_job_status.where(
-                PortfolioValuationJob.created_at <= as_of,
-                PortfolioValuationJob.updated_at <= as_of,
-            )
-        latest_valuation_job_status = (
-            latest_valuation_job_status.order_by(
-                PortfolioValuationJob.valuation_date.desc(),
-                PortfolioValuationJob.id.desc(),
-            )
-            .limit(1)
-            .correlate(PositionState)
-            .scalar_subquery()
-        )
-        latest_valuation_job_correlation_id = select(PortfolioValuationJob.correlation_id).where(
-            PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            valuation_job_security_id == position_state_security_id,
-            PortfolioValuationJob.epoch == PositionState.epoch,
-        )
-        if as_of is not None:
-            latest_valuation_job_correlation_id = latest_valuation_job_correlation_id.where(
-                PortfolioValuationJob.created_at <= as_of,
-                PortfolioValuationJob.updated_at <= as_of,
-            )
-        latest_valuation_job_correlation_id = (
-            latest_valuation_job_correlation_id.order_by(
-                PortfolioValuationJob.valuation_date.desc(),
-                PortfolioValuationJob.id.desc(),
-            )
-            .limit(1)
-            .correlate(PositionState)
-            .scalar_subquery()
+        latest_valuation_job_correlation_id = self._latest_valuation_job_scalar(
+            PortfolioValuationJob.correlation_id,
+            position_state_security_id,
+            as_of,
         )
         has_artifact_gap = case(
             (latest_position_history_date.is_(None), False),
