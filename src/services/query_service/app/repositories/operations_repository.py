@@ -333,6 +333,29 @@ class OperationsRepository:
             else_=9,
         )
 
+    def _apply_analytics_export_job_scope(
+        self,
+        stmt,
+        *,
+        portfolio_id: str,
+        status: Optional[str] = None,
+        job_id: Optional[str] = None,
+        request_fingerprint: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = stmt.where(AnalyticsExportJob.portfolio_id == portfolio_id)
+        if as_of is not None:
+            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
+        if status:
+            stmt = stmt.where(
+                self._analytics_export_status_filter(AnalyticsExportJob.status, status)
+            )
+        if job_id:
+            stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
+        if request_fingerprint:
+            stmt = stmt.where(AnalyticsExportJob.request_fingerprint == request_fingerprint)
+        return stmt
+
     @staticmethod
     def _reconciliation_run_priority(status_column):
         governed_status = status_column
@@ -1916,21 +1939,14 @@ class OperationsRepository:
         request_fingerprint: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(AnalyticsExportJob)
-            .where(AnalyticsExportJob.portfolio_id == portfolio_id)
+        stmt = self._apply_analytics_export_job_scope(
+            select(func.count()).select_from(AnalyticsExportJob),
+            portfolio_id=portfolio_id,
+            status=status,
+            job_id=job_id,
+            request_fingerprint=request_fingerprint,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(
-                self._analytics_export_status_filter(AnalyticsExportJob.status, status)
-            )
-        if job_id:
-            stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
-        if request_fingerprint:
-            stmt = stmt.where(AnalyticsExportJob.request_fingerprint == request_fingerprint)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_analytics_export_jobs(
@@ -1947,17 +1963,14 @@ class OperationsRepository:
     ) -> list[AnalyticsExportJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = select(AnalyticsExportJob).where(AnalyticsExportJob.portfolio_id == portfolio_id)
-        if as_of is not None:
-            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(
-                self._analytics_export_status_filter(AnalyticsExportJob.status, status)
-            )
-        if job_id:
-            stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
-        if request_fingerprint:
-            stmt = stmt.where(AnalyticsExportJob.request_fingerprint == request_fingerprint)
+        stmt = self._apply_analytics_export_job_scope(
+            select(AnalyticsExportJob),
+            portfolio_id=portfolio_id,
+            status=status,
+            job_id=job_id,
+            request_fingerprint=request_fingerprint,
+            as_of=as_of,
+        )
         stmt = (
             stmt.order_by(
                 self._analytics_export_job_priority(
