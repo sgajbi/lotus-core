@@ -18,6 +18,7 @@ from ..dtos.reference_integration_dto import (
     ModelPortfolioTargetRow,
     PlannedWithdrawalScheduleEntry,
     PortfolioManagerBookMember,
+    PortfolioTaxLotRecord,
     SustainabilityPreferenceProfileEntry,
 )
 from ..repositories.identifier_normalization import normalize_security_id
@@ -210,6 +211,30 @@ def instrument_eligibility_record(row: Any) -> InstrumentEligibilityRecord:
         effective_to=row.effective_to,
         quality_status=_control_code(row.quality_status, default="UNKNOWN"),
         source_record_id=row.source_record_id,
+    )
+
+
+def portfolio_tax_lot_record(row: Any, *, local_currency: str | None) -> PortfolioTaxLotRecord:
+    open_quantity = _as_decimal(row.open_quantity)
+    return PortfolioTaxLotRecord(
+        portfolio_id=row.portfolio_id,
+        security_id=normalize_security_id(row.security_id),
+        instrument_id=normalize_security_id(row.instrument_id),
+        lot_id=row.lot_id,
+        open_quantity=open_quantity,
+        original_quantity=_as_decimal(row.original_quantity),
+        acquisition_date=row.acquisition_date,
+        cost_basis_base=_as_decimal(row.lot_cost_base),
+        cost_basis_local=_as_decimal(row.lot_cost_local),
+        local_currency=local_currency,
+        tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
+        source_transaction_id=row.source_transaction_id,
+        source_lineage={
+            "source_system": row.source_system or "position_lot_state",
+            "source_transaction_id": row.source_transaction_id,
+            "calculation_policy_id": row.calculation_policy_id or "UNKNOWN",
+            "calculation_policy_version": row.calculation_policy_version or "UNKNOWN",
+        },
     )
 
 

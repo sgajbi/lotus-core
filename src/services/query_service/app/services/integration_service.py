@@ -100,7 +100,6 @@ from ..dtos.reference_integration_dto import (
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
     PortfolioManagerBookMembershipSupportability,
-    PortfolioTaxLotRecord,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
@@ -149,6 +148,7 @@ from .reference_data_mappers import (
     model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
+    portfolio_tax_lot_record,
     sustainability_preference_profile_entry,
 )
 from .request_fingerprint import request_fingerprint, series_request_fingerprint
@@ -1834,31 +1834,10 @@ class IntegrationService:
         has_more = len(rows) > request.page.page_size
         page_rows = rows[: request.page.page_size]
 
-        lots: list[PortfolioTaxLotRecord] = []
-        for lot, local_currency in page_rows:
-            open_quantity = self._as_decimal(lot.open_quantity)
-            lots.append(
-                PortfolioTaxLotRecord(
-                    portfolio_id=lot.portfolio_id,
-                    security_id=normalize_security_id(lot.security_id),
-                    instrument_id=normalize_security_id(lot.instrument_id),
-                    lot_id=lot.lot_id,
-                    open_quantity=open_quantity,
-                    original_quantity=self._as_decimal(lot.original_quantity),
-                    acquisition_date=lot.acquisition_date,
-                    cost_basis_base=self._as_decimal(lot.lot_cost_base),
-                    cost_basis_local=self._as_decimal(lot.lot_cost_local),
-                    local_currency=local_currency,
-                    tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
-                    source_transaction_id=lot.source_transaction_id,
-                    source_lineage={
-                        "source_system": lot.source_system or "position_lot_state",
-                        "source_transaction_id": lot.source_transaction_id,
-                        "calculation_policy_id": lot.calculation_policy_id or "UNKNOWN",
-                        "calculation_policy_version": lot.calculation_policy_version or "UNKNOWN",
-                    },
-                )
-            )
+        lots = [
+            portfolio_tax_lot_record(lot, local_currency=local_currency)
+            for lot, local_currency in page_rows
+        ]
 
         next_page_token: str | None = None
         if has_more and lots:

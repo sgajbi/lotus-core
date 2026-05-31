@@ -17,6 +17,7 @@ from src.services.query_service.app.services.reference_data_mappers import (
     model_portfolio_target_row,
     planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
+    portfolio_tax_lot_record,
     sustainability_preference_profile_entry,
 )
 
@@ -197,6 +198,41 @@ def test_instrument_eligibility_records_map_found_and_missing_rows() -> None:
     assert missing.found is False
     assert missing.restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
     assert missing.quality_status == "MISSING"
+
+
+def test_portfolio_tax_lot_record_maps_lot_state_row() -> None:
+    lot = portfolio_tax_lot_record(
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            security_id=" eq_us_aapl ",
+            instrument_id=" EQ_US_AAPL ",
+            lot_id="LOT-TXN-BUY-AAPL-001",
+            open_quantity="100.0000000000",
+            original_quantity="150.0000000000",
+            acquisition_date=date(2026, 3, 25),
+            lot_cost_base="15005.5000000000",
+            lot_cost_local="15005.5000000000",
+            source_transaction_id="TXN-BUY-AAPL-001",
+            source_system=None,
+            calculation_policy_id="BUY_DEFAULT_POLICY",
+            calculation_policy_version=None,
+        ),
+        local_currency="USD",
+    )
+
+    assert lot.security_id == "eq_us_aapl"
+    assert lot.instrument_id == "EQ_US_AAPL"
+    assert lot.open_quantity == Decimal("100.0000000000")
+    assert lot.original_quantity == Decimal("150.0000000000")
+    assert lot.cost_basis_base == Decimal("15005.5000000000")
+    assert lot.tax_lot_status == "OPEN"
+    assert lot.local_currency == "USD"
+    assert lot.source_lineage == {
+        "source_system": "position_lot_state",
+        "source_transaction_id": "TXN-BUY-AAPL-001",
+        "calculation_policy_id": "BUY_DEFAULT_POLICY",
+        "calculation_policy_version": "UNKNOWN",
+    }
 
 
 def test_client_tax_entries_map_source_data_rows() -> None:
