@@ -524,35 +524,46 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_profiles: bool = False,
     ) -> list[ClientTaxProfile]:
-        stmt = (
-            select(ClientTaxProfile)
-            .where(
-                ClientTaxProfile.portfolio_id == portfolio_id,
-                ClientTaxProfile.client_id == client_id,
-                _effective_filter(
-                    ClientTaxProfile.effective_from,
-                    ClientTaxProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientTaxProfile.tax_profile_id.asc(),
-                ClientTaxProfile.effective_from.desc(),
-                ClientTaxProfile.observed_at.desc().nulls_last(),
-                ClientTaxProfile.profile_version.desc(),
-                ClientTaxProfile.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientTaxProfile.portfolio_id == portfolio_id,
+            ClientTaxProfile.client_id == client_id,
+            _effective_filter(
+                ClientTaxProfile.effective_from,
+                ClientTaxProfile.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
-                    ClientTaxProfile.mandate_id.is_(None), ClientTaxProfile.mandate_id == mandate_id
+                    ClientTaxProfile.mandate_id.is_(None),
+                    ClientTaxProfile.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_profiles:
-            stmt = stmt.where(ClientTaxProfile.profile_status == "active")
+            predicates.append(ClientTaxProfile.profile_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientTaxProfile,
+            ClientTaxProfile.tax_profile_id,
+            predicates=predicates,
+            order_by=(
+                ClientTaxProfile.effective_from.desc(),
+                ClientTaxProfile.observed_at.desc().nullslast(),
+                ClientTaxProfile.profile_version.desc(),
+                ClientTaxProfile.updated_at.desc(),
+                ClientTaxProfile.created_at.desc(),
+                ClientTaxProfile.id.desc(),
+            ),
+        )
+        stmt = (
+            select(ClientTaxProfile)
+            .join(ranked, ClientTaxProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(ClientTaxProfile.tax_profile_id.asc())
+        )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(list(result.scalars().all()), "tax_profile_id")
+        return list(result.scalars().all())
 
     async def list_client_tax_rule_sets(
         self,
@@ -563,43 +574,52 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_rules: bool = False,
     ) -> list[ClientTaxRuleSet]:
-        stmt = (
-            select(ClientTaxRuleSet)
-            .where(
-                ClientTaxRuleSet.portfolio_id == portfolio_id,
-                ClientTaxRuleSet.client_id == client_id,
-                _effective_filter(
-                    ClientTaxRuleSet.effective_from,
-                    ClientTaxRuleSet.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientTaxRuleSet.rule_set_id.asc(),
-                ClientTaxRuleSet.jurisdiction_code.asc(),
-                ClientTaxRuleSet.rule_code.asc(),
-                ClientTaxRuleSet.effective_from.desc(),
-                ClientTaxRuleSet.observed_at.desc().nulls_last(),
-                ClientTaxRuleSet.rule_version.desc(),
-                ClientTaxRuleSet.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientTaxRuleSet.portfolio_id == portfolio_id,
+            ClientTaxRuleSet.client_id == client_id,
+            _effective_filter(
+                ClientTaxRuleSet.effective_from,
+                ClientTaxRuleSet.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     ClientTaxRuleSet.mandate_id.is_(None),
                     ClientTaxRuleSet.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_rules:
-            stmt = stmt.where(ClientTaxRuleSet.rule_status == "active")
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "rule_set_id",
-            "jurisdiction_code",
-            "rule_code",
+            predicates.append(ClientTaxRuleSet.rule_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientTaxRuleSet,
+            ClientTaxRuleSet.rule_set_id,
+            ClientTaxRuleSet.jurisdiction_code,
+            ClientTaxRuleSet.rule_code,
+            predicates=predicates,
+            order_by=(
+                ClientTaxRuleSet.effective_from.desc(),
+                ClientTaxRuleSet.observed_at.desc().nullslast(),
+                ClientTaxRuleSet.rule_version.desc(),
+                ClientTaxRuleSet.updated_at.desc(),
+                ClientTaxRuleSet.created_at.desc(),
+                ClientTaxRuleSet.id.desc(),
+            ),
         )
+        stmt = (
+            select(ClientTaxRuleSet)
+            .join(ranked, ClientTaxRuleSet.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                ClientTaxRuleSet.rule_set_id.asc(),
+                ClientTaxRuleSet.jurisdiction_code.asc(),
+                ClientTaxRuleSet.rule_code.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_client_income_needs_schedules(
         self,
@@ -610,35 +630,45 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_schedules: bool = False,
     ) -> list[ClientIncomeNeedsSchedule]:
-        stmt = (
-            select(ClientIncomeNeedsSchedule)
-            .where(
-                ClientIncomeNeedsSchedule.portfolio_id == portfolio_id,
-                ClientIncomeNeedsSchedule.client_id == client_id,
-                _effective_filter(
-                    ClientIncomeNeedsSchedule.start_date,
-                    ClientIncomeNeedsSchedule.end_date,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientIncomeNeedsSchedule.schedule_id.asc(),
-                ClientIncomeNeedsSchedule.start_date.desc(),
-                ClientIncomeNeedsSchedule.observed_at.desc().nulls_last(),
-                ClientIncomeNeedsSchedule.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientIncomeNeedsSchedule.portfolio_id == portfolio_id,
+            ClientIncomeNeedsSchedule.client_id == client_id,
+            _effective_filter(
+                ClientIncomeNeedsSchedule.start_date,
+                ClientIncomeNeedsSchedule.end_date,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     ClientIncomeNeedsSchedule.mandate_id.is_(None),
                     ClientIncomeNeedsSchedule.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_schedules:
-            stmt = stmt.where(ClientIncomeNeedsSchedule.need_status == "active")
+            predicates.append(ClientIncomeNeedsSchedule.need_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientIncomeNeedsSchedule,
+            ClientIncomeNeedsSchedule.schedule_id,
+            predicates=predicates,
+            order_by=(
+                ClientIncomeNeedsSchedule.start_date.desc(),
+                ClientIncomeNeedsSchedule.observed_at.desc().nullslast(),
+                ClientIncomeNeedsSchedule.updated_at.desc(),
+                ClientIncomeNeedsSchedule.created_at.desc(),
+                ClientIncomeNeedsSchedule.id.desc(),
+            ),
+        )
+        stmt = (
+            select(ClientIncomeNeedsSchedule)
+            .join(ranked, ClientIncomeNeedsSchedule.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(ClientIncomeNeedsSchedule.schedule_id.asc())
+        )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(list(result.scalars().all()), "schedule_id")
+        return list(result.scalars().all())
 
     async def list_liquidity_reserve_requirements(
         self,
@@ -649,39 +679,46 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_requirements: bool = False,
     ) -> list[LiquidityReserveRequirement]:
-        stmt = (
-            select(LiquidityReserveRequirement)
-            .where(
-                LiquidityReserveRequirement.portfolio_id == portfolio_id,
-                LiquidityReserveRequirement.client_id == client_id,
-                _effective_filter(
-                    LiquidityReserveRequirement.effective_from,
-                    LiquidityReserveRequirement.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                LiquidityReserveRequirement.reserve_requirement_id.asc(),
-                LiquidityReserveRequirement.effective_from.desc(),
-                LiquidityReserveRequirement.observed_at.desc().nulls_last(),
-                LiquidityReserveRequirement.requirement_version.desc(),
-                LiquidityReserveRequirement.updated_at.desc(),
-            )
-        )
+        predicates = [
+            LiquidityReserveRequirement.portfolio_id == portfolio_id,
+            LiquidityReserveRequirement.client_id == client_id,
+            _effective_filter(
+                LiquidityReserveRequirement.effective_from,
+                LiquidityReserveRequirement.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     LiquidityReserveRequirement.mandate_id.is_(None),
                     LiquidityReserveRequirement.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_requirements:
-            stmt = stmt.where(LiquidityReserveRequirement.reserve_status == "active")
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "reserve_requirement_id",
+            predicates.append(LiquidityReserveRequirement.reserve_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            LiquidityReserveRequirement,
+            LiquidityReserveRequirement.reserve_requirement_id,
+            predicates=predicates,
+            order_by=(
+                LiquidityReserveRequirement.effective_from.desc(),
+                LiquidityReserveRequirement.observed_at.desc().nullslast(),
+                LiquidityReserveRequirement.requirement_version.desc(),
+                LiquidityReserveRequirement.updated_at.desc(),
+                LiquidityReserveRequirement.created_at.desc(),
+                LiquidityReserveRequirement.id.desc(),
+            ),
         )
+        stmt = (
+            select(LiquidityReserveRequirement)
+            .join(ranked, LiquidityReserveRequirement.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(LiquidityReserveRequirement.reserve_requirement_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_planned_withdrawal_schedules(
         self,
@@ -694,36 +731,45 @@ class ReferenceDataRepository:
         include_inactive_withdrawals: bool = False,
     ) -> list[PlannedWithdrawalSchedule]:
         window_end = as_of_date + timedelta(days=horizon_days)
-        stmt = (
-            select(PlannedWithdrawalSchedule)
-            .where(
-                PlannedWithdrawalSchedule.portfolio_id == portfolio_id,
-                PlannedWithdrawalSchedule.client_id == client_id,
-                PlannedWithdrawalSchedule.scheduled_date >= as_of_date,
-                PlannedWithdrawalSchedule.scheduled_date <= window_end,
-            )
-            .order_by(
-                PlannedWithdrawalSchedule.scheduled_date.asc(),
-                PlannedWithdrawalSchedule.withdrawal_schedule_id.asc(),
-                PlannedWithdrawalSchedule.observed_at.desc().nulls_last(),
-                PlannedWithdrawalSchedule.updated_at.desc(),
-            )
-        )
+        predicates = [
+            PlannedWithdrawalSchedule.portfolio_id == portfolio_id,
+            PlannedWithdrawalSchedule.client_id == client_id,
+            PlannedWithdrawalSchedule.scheduled_date >= as_of_date,
+            PlannedWithdrawalSchedule.scheduled_date <= window_end,
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     PlannedWithdrawalSchedule.mandate_id.is_(None),
                     PlannedWithdrawalSchedule.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_withdrawals:
-            stmt = stmt.where(PlannedWithdrawalSchedule.withdrawal_status == "active")
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "withdrawal_schedule_id",
-            "scheduled_date",
+            predicates.append(PlannedWithdrawalSchedule.withdrawal_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            PlannedWithdrawalSchedule,
+            PlannedWithdrawalSchedule.withdrawal_schedule_id,
+            PlannedWithdrawalSchedule.scheduled_date,
+            predicates=predicates,
+            order_by=(
+                PlannedWithdrawalSchedule.observed_at.desc().nullslast(),
+                PlannedWithdrawalSchedule.updated_at.desc(),
+                PlannedWithdrawalSchedule.created_at.desc(),
+                PlannedWithdrawalSchedule.id.desc(),
+            ),
         )
+        stmt = (
+            select(PlannedWithdrawalSchedule)
+            .join(ranked, PlannedWithdrawalSchedule.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                PlannedWithdrawalSchedule.scheduled_date.asc(),
+                PlannedWithdrawalSchedule.withdrawal_schedule_id.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_instrument_eligibility_profiles(
         self,

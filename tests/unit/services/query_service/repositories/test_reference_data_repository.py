@@ -415,7 +415,6 @@ async def test_reference_data_repository_lists_latest_client_tax_profiles() -> N
     db.execute.return_value = _FakeExecuteResult(
         [
             SimpleNamespace(tax_profile_id="TAX_PROFILE_SG_001", profile_version=2),
-            SimpleNamespace(tax_profile_id="TAX_PROFILE_SG_001", profile_version=1),
             SimpleNamespace(tax_profile_id="TAX_PROFILE_US_001", profile_version=1),
         ]
     )
@@ -434,6 +433,9 @@ async def test_reference_data_repository_lists_latest_client_tax_profiles() -> N
     ]
     assert rows[0].profile_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER (PARTITION BY client_tax_profiles.tax_profile_id" in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -444,20 +446,14 @@ async def test_reference_data_repository_lists_latest_client_tax_rule_sets() -> 
             SimpleNamespace(
                 rule_set_id="TAX_RULES_SG_2026",
                 jurisdiction_code="SG",
-                rule_code="US_DIVIDEND_WITHHOLDING",
-                rule_version=2,
-            ),
-            SimpleNamespace(
-                rule_set_id="TAX_RULES_SG_2026",
-                jurisdiction_code="SG",
-                rule_code="US_DIVIDEND_WITHHOLDING",
-                rule_version=1,
-            ),
-            SimpleNamespace(
-                rule_set_id="TAX_RULES_SG_2026",
-                jurisdiction_code="SG",
                 rule_code="SG_REPORTING",
                 rule_version=1,
+            ),
+            SimpleNamespace(
+                rule_set_id="TAX_RULES_SG_2026",
+                jurisdiction_code="SG",
+                rule_code="US_DIVIDEND_WITHHOLDING",
+                rule_version=2,
             ),
         ]
     )
@@ -473,6 +469,12 @@ async def test_reference_data_repository_lists_latest_client_tax_rule_sets() -> 
     assert [row.rule_code for row in rows] == ["SG_REPORTING", "US_DIVIDEND_WITHHOLDING"]
     assert rows[1].rule_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY client_tax_rule_sets.rule_set_id, "
+        "client_tax_rule_sets.jurisdiction_code, client_tax_rule_sets.rule_code"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -481,16 +483,12 @@ async def test_reference_data_repository_lists_latest_income_needs_schedules() -
     db.execute.return_value = _FakeExecuteResult(
         [
             SimpleNamespace(
-                schedule_id="INCOME_NEED_MONTHLY_001",
-                updated_at=datetime(2026, 5, 3, 9),
-            ),
-            SimpleNamespace(
-                schedule_id="INCOME_NEED_MONTHLY_001",
-                updated_at=datetime(2026, 5, 1, 9),
-            ),
-            SimpleNamespace(
                 schedule_id="INCOME_NEED_ANNUAL_001",
                 updated_at=datetime(2026, 5, 2, 9),
+            ),
+            SimpleNamespace(
+                schedule_id="INCOME_NEED_MONTHLY_001",
+                updated_at=datetime(2026, 5, 3, 9),
             ),
         ]
     )
@@ -509,6 +507,9 @@ async def test_reference_data_repository_lists_latest_income_needs_schedules() -
     ]
     assert rows[1].updated_at == datetime(2026, 5, 3, 9)
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER (PARTITION BY client_income_needs_schedules.schedule_id" in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -516,11 +517,6 @@ async def test_reference_data_repository_lists_latest_liquidity_reserve_requirem
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
-            SimpleNamespace(
-                reserve_requirement_id="RESERVE_MIN_CASH_001",
-                effective_from=date(2026, 4, 1),
-                requirement_version=1,
-            ),
             SimpleNamespace(
                 reserve_requirement_id="RESERVE_MIN_CASH_001",
                 effective_from=date(2026, 5, 1),
@@ -548,6 +544,11 @@ async def test_reference_data_repository_lists_latest_liquidity_reserve_requirem
     ]
     assert rows[0].requirement_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY liquidity_reserve_requirements.reserve_requirement_id"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -559,11 +560,6 @@ async def test_reference_data_repository_lists_latest_planned_withdrawals() -> N
                 withdrawal_schedule_id="WITHDRAWAL_Q3_001",
                 scheduled_date=date(2026, 7, 15),
                 updated_at=datetime(2026, 5, 3, 9),
-            ),
-            SimpleNamespace(
-                withdrawal_schedule_id="WITHDRAWAL_Q3_001",
-                scheduled_date=date(2026, 7, 15),
-                updated_at=datetime(2026, 5, 1, 9),
             ),
             SimpleNamespace(
                 withdrawal_schedule_id="WITHDRAWAL_Q4_001",
@@ -588,6 +584,13 @@ async def test_reference_data_repository_lists_latest_planned_withdrawals() -> N
     ]
     assert rows[0].updated_at == datetime(2026, 5, 3, 9)
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY "
+        "planned_withdrawal_schedules.withdrawal_schedule_id, "
+        "planned_withdrawal_schedules.scheduled_date"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
