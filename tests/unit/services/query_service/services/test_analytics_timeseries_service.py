@@ -108,6 +108,7 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
         ),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
         list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 31)]),
@@ -208,6 +209,7 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
         ),
         get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 2): Decimal("1.5")}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
         get_position_snapshot_epoch=AsyncMock(return_value=1),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
         list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 2)]),
@@ -273,6 +275,7 @@ async def test_get_portfolio_timeseries_cash_only_staged_external_flows_are_not_
         ),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 3, 20)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 3, 20)),
         get_position_snapshot_epoch=AsyncMock(return_value=0),
         list_business_dates=AsyncMock(
             return_value=[date(2026, 3, day) for day in (16, 17, 18, 19, 20)]
@@ -1109,6 +1112,7 @@ async def test_get_portfolio_timeseries_position_path_defaults_snapshot_epoch_an
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
     )
 
     response = await service.get_portfolio_timeseries(
@@ -1162,6 +1166,7 @@ async def test_get_portfolio_timeseries_normalizes_sparse_numeric_rows() -> None
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(return_value={}),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 1)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 1, 1)),
     )
 
     response = await service.get_portfolio_timeseries(
@@ -1537,6 +1542,7 @@ async def test_get_portfolio_reference_success() -> None:
             )
         ),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
     )
     response = await service.get_portfolio_reference(
         portfolio_id="P1",
@@ -1572,6 +1578,7 @@ async def test_get_portfolio_reference_bounds_performance_end_date_by_as_of_date
             )
         ),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 12, 31)),
     )
     response = await service.get_portfolio_reference(
         portfolio_id="P1",
@@ -1652,6 +1659,7 @@ async def test_get_portfolio_reference_marks_missing_performance_horizon_partial
             )
         ),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=None),
+        get_latest_position_timeseries_date=AsyncMock(return_value=None),
     )
     response = await service.get_portfolio_reference(
         portfolio_id="P1",

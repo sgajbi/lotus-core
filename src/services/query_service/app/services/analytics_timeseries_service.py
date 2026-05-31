@@ -1031,9 +1031,7 @@ class AnalyticsTimeseriesService:
         observed_dates: list[date] | None = None,
     ) -> date | None:
         latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
-        latest_position_date = None
-        if hasattr(self.repo, "get_latest_position_timeseries_date"):
-            latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
+        latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
         if observed_dates:
             observed_latest = max(observed_dates)
             latest_position_date = (
