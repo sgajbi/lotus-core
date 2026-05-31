@@ -233,15 +233,25 @@ class ReportingService:
         unvalued_position_count = 0
         snapshot_date = resolved_as_of_date
 
-        for row in rows:
-            snapshot_date = max(snapshot_date, row.snapshot.date)
-            portfolio_value = decimal_or_zero(row.snapshot.market_value)
-            reporting_value = await self._convert_amount(
-                amount=portfolio_value,
-                from_currency=portfolio_currency,
-                to_currency=reporting_currency,
-                as_of_date=resolved_as_of_date,
+        row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
+        row_reporting_values = await asyncio.gather(
+            *(
+                self._convert_amount(
+                    amount=portfolio_value,
+                    from_currency=portfolio_currency,
+                    to_currency=reporting_currency,
+                    as_of_date=resolved_as_of_date,
+                )
+                for _row, portfolio_value in row_native_values
             )
+        )
+
+        for (row, portfolio_value), reporting_value in zip(
+            row_native_values,
+            row_reporting_values,
+            strict=True,
+        ):
+            snapshot_date = max(snapshot_date, row.snapshot.date)
             total_portfolio += portfolio_value
             total_reporting += reporting_value
             if normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
