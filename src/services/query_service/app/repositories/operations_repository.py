@@ -1680,20 +1680,13 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = (
-            select(func.count())
-            .select_from(PositionState)
-            .where(PositionState.portfolio_id == portfolio_id)
+        stmt = self._apply_reprocessing_key_scope(
+            select(func.count()).select_from(PositionState),
+            portfolio_id=portfolio_id,
+            status=reprocessing_status,
+            normalized_security_id=normalized_security_id,
+            as_of=as_of,
         )
-        if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
-        if reprocessing_status:
-            stmt = stmt.where(
-                self._reprocessing_status_filter(PositionState.status, reprocessing_status)
-            )
-        if normalized_security_id:
-            stmt = stmt.where(state_security_id == normalized_security_id)
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_lineage_keys(
@@ -1801,15 +1794,14 @@ class OperationsRepository:
             latest_valuation_job_id.label("latest_valuation_job_id"),
             latest_valuation_job_status.label("latest_valuation_job_status"),
             latest_valuation_job_correlation_id.label("latest_valuation_job_correlation_id"),
-        ).where(PositionState.portfolio_id == portfolio_id)
-        if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
-        if reprocessing_status:
-            stmt = stmt.where(
-                self._reprocessing_status_filter(PositionState.status, reprocessing_status)
-            )
-        if normalized_security_id:
-            stmt = stmt.where(position_state_security_id == normalized_security_id)
+        )
+        stmt = self._apply_reprocessing_key_scope(
+            stmt,
+            portfolio_id=portfolio_id,
+            status=reprocessing_status,
+            normalized_security_id=normalized_security_id,
+            as_of=as_of,
+        )
         stmt = (
             stmt.order_by(
                 lineage_priority.asc(),
