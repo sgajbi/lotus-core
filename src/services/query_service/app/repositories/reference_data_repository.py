@@ -108,10 +108,6 @@ def _canonicalize_series_rows(rows: list[T], *key_fields: str) -> list[T]:
     return [selected_by_key[key] for key in sorted(selected_by_key)]
 
 
-def _reference_status_expr(status_column: Any):
-    return func.lower(func.trim(status_column))
-
-
 def _normalize_reference_status(status: str) -> str:
     return status.strip().lower()
 
