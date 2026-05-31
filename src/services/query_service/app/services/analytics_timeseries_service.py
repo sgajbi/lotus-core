@@ -697,7 +697,10 @@ class AnalyticsTimeseriesService:
             as_of_date=request.as_of_date,
             observed_dates=observed_dates,
         )
-        missing_dates = sorted(set(expected_business_dates) - set(observed_dates))
+        observed_date_set = set(observed_dates)
+        missing_dates_count = sum(
+            1 for expected_date in expected_business_dates if expected_date not in observed_date_set
+        )
         stale_points_count = sum(
             count for status_name, count in quality_distribution.items() if status_name != "final"
         )
@@ -732,7 +735,7 @@ class AnalyticsTimeseriesService:
             ),
             diagnostics=PortfolioQualityDiagnostics(
                 quality_status_distribution=quality_distribution,
-                missing_dates_count=len(missing_dates),
+                missing_dates_count=missing_dates_count,
                 stale_points_count=stale_points_count,
                 expected_business_dates_count=len(expected_business_dates),
                 returned_observation_dates_count=len(observed_dates),
