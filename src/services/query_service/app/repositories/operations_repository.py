@@ -136,6 +136,13 @@ class LoadRunProgressSummary:
     valuation_to_position_timeseries_latency_max_seconds: Optional[float]
 
 
+@dataclass(frozen=True)
+class ResetWatermarkReprocessingJobScope:
+    security_id_expr: object
+    impacted_date_expr: object
+    portfolio_scope_exists: object
+
+
 class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -274,6 +281,24 @@ class OperationsRepository:
             .select_from(latest_history)
             .where(latest_history.c.rn == 1, latest_history.c.quantity > 0)
             .exists()
+        )
+
+    @staticmethod
+    def _reset_watermark_reprocessing_job_scope(
+        portfolio_id: str,
+    ) -> ResetWatermarkReprocessingJobScope:
+        security_id_expr = func.trim(ReprocessingJob.payload["security_id"].as_string())
+        impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
+        impacted_date_cast = cast(impacted_date_expr, Date)
+        portfolio_scope_exists = OperationsRepository._reprocessing_job_portfolio_scope_exists(
+            portfolio_id=portfolio_id,
+            security_id_expr=security_id_expr,
+            impacted_date_expr=impacted_date_cast,
+        )
+        return ResetWatermarkReprocessingJobScope(
+            security_id_expr=security_id_expr,
+            impacted_date_expr=impacted_date_expr,
+            portfolio_scope_exists=portfolio_scope_exists,
         )
 
     @staticmethod
@@ -2209,22 +2234,13 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        security_id_expr = func.trim(ReprocessingJob.payload["security_id"].as_string())
-        impacted_date_expr = cast(
-            ReprocessingJob.payload["earliest_impacted_date"].as_string(),
-            Date,
-        )
-        portfolio_scope_exists = self._reprocessing_job_portfolio_scope_exists(
-            portfolio_id=portfolio_id,
-            security_id_expr=security_id_expr,
-            impacted_date_expr=impacted_date_expr,
-        )
+        reset_scope = self._reset_watermark_reprocessing_job_scope(portfolio_id)
         stmt = (
             select(func.count())
             .select_from(ReprocessingJob)
             .where(
                 ReprocessingJob.job_type == "RESET_WATERMARKS",
-                portfolio_scope_exists,
+                reset_scope.portfolio_scope_exists,
             )
         )
         if as_of is not None:
@@ -2232,7 +2248,7 @@ class OperationsRepository:
         if status:
             stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
         if normalized_security_id:
-            stmt = stmt.where(security_id_expr == normalized_security_id)
+            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
         if job_id is not None:
             stmt = stmt.where(ReprocessingJob.id == job_id)
         if correlation_id:
@@ -2257,22 +2273,15 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        security_id_expr = func.trim(ReprocessingJob.payload["security_id"].as_string())
-        impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
-        impacted_date_cast = cast(impacted_date_expr, Date)
+        reset_scope = self._reset_watermark_reprocessing_job_scope(portfolio_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        portfolio_scope_exists = self._reprocessing_job_portfolio_scope_exists(
-            portfolio_id=portfolio_id,
-            security_id_expr=security_id_expr,
-            impacted_date_expr=impacted_date_cast,
-        )
         stmt = select(
             ReprocessingJob.id,
             ReprocessingJob.job_type,
-            impacted_date_expr.label("business_date"),
+            reset_scope.impacted_date_expr.label("business_date"),
             ReprocessingJob.status,
-            security_id_expr.label("security_id"),
+            reset_scope.security_id_expr.label("security_id"),
             ReprocessingJob.attempt_count,
             ReprocessingJob.correlation_id,
             ReprocessingJob.created_at,
@@ -2280,14 +2289,14 @@ class OperationsRepository:
             ReprocessingJob.failure_reason,
         ).where(
             ReprocessingJob.job_type == "RESET_WATERMARKS",
-            portfolio_scope_exists,
+            reset_scope.portfolio_scope_exists,
         )
         if as_of is not None:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
         if normalized_security_id:
-            stmt = stmt.where(security_id_expr == normalized_security_id)
+            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
         if job_id is not None:
             stmt = stmt.where(ReprocessingJob.id == job_id)
         if correlation_id:
@@ -2299,7 +2308,7 @@ class OperationsRepository:
                     ReprocessingJob.updated_at,
                     stale_threshold,
                 ).asc(),
-                impacted_date_expr.asc(),
+                reset_scope.impacted_date_expr.asc(),
                 ReprocessingJob.created_at.asc(),
                 ReprocessingJob.id.asc(),
             )
