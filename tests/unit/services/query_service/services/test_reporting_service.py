@@ -253,9 +253,7 @@ async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio()
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_portfolio_summary(
-                PortfolioSummaryQueryRequest(portfolio_id="P404")
-            )
+            await service.get_portfolio_summary(PortfolioSummaryQueryRequest(portfolio_id="P404"))
 
 
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:
@@ -547,18 +545,3 @@ async def test_reporting_service_get_fx_rate_uses_cache_and_raises_for_missing_r
         )
         with pytest.raises(ValueError, match="FX rate not found"):
             await service._get_fx_rate(" chf ", " usd ", date(2026, 3, 27))
-
-
-@pytest.mark.asyncio
-async def test_reporting_service_latest_snapshot_evidence_timestamp_prefers_latest_available_update(
-) -> None:
-    older = datetime(2026, 3, 27, 9, 0)
-    newer = datetime(2026, 3, 27, 10, 0)
-    rows = [
-        SimpleNamespace(snapshot=SimpleNamespace(created_at=older, updated_at=None)),
-        SimpleNamespace(snapshot=SimpleNamespace(created_at=older, updated_at=newer)),
-        SimpleNamespace(snapshot=None),
-    ]
-
-    assert ReportingService._latest_snapshot_evidence_timestamp(rows) == newer
-    assert ReportingService._latest_snapshot_evidence_timestamp([]) is None

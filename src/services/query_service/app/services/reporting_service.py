@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -452,16 +452,3 @@ class ReportingService:
         rate = Decimal(str(rate))
         self._fx_cache[cache_key] = rate
         return rate
-
-    @staticmethod
-    def _latest_snapshot_evidence_timestamp(rows: list[Any]) -> datetime | None:
-        timestamps: list[datetime] = []
-        for row in rows:
-            snapshot = getattr(row, "snapshot", None)
-            for candidate in (
-                getattr(snapshot, "updated_at", None),
-                getattr(snapshot, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None

@@ -20,6 +20,7 @@ from ..repositories.cashflow_repository import CashflowRepository
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
 from .control_code_normalization import normalize_control_code
+from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
@@ -104,7 +105,7 @@ class PortfolioLiquidityLadderService:
             buckets=buckets,
             tier_exposures=tier_exposures,
         )
-        latest_snapshot_evidence = self._latest_snapshot_evidence_timestamp(rows)
+        latest_snapshot_evidence = latest_snapshot_evidence_timestamp(rows)
 
         return PortfolioLiquidityLadderResponse(
             portfolio_id=portfolio.portfolio_id,
@@ -233,18 +234,6 @@ class PortfolioLiquidityLadderService:
             and normalize_control_code(getattr(row.instrument, "asset_class", None), default="")
             == CASH_ASSET_CLASS
         )
-
-    @staticmethod
-    def _latest_snapshot_evidence_timestamp(rows: list[ReportingSnapshotRow]):
-        timestamps = []
-        for row in rows:
-            for candidate in (
-                getattr(row.snapshot, "updated_at", None),
-                getattr(row.snapshot, "created_at", None),
-            ):
-                if candidate is not None:
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None
 
     @staticmethod
     def _data_quality_status(

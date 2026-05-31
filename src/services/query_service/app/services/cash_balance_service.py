@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
 
@@ -13,6 +13,7 @@ from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
 from .control_code_normalization import normalize_control_code
+from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
@@ -68,7 +69,7 @@ class CashBalanceResolver:
                     cash_rows=cash_rows,
                     account_records=account_records,
                 ),
-                latest_evidence_timestamp=self.latest_snapshot_evidence_timestamp(cash_rows),
+                latest_evidence_timestamp=latest_snapshot_evidence_timestamp(cash_rows),
             ),
         )
 
@@ -211,19 +212,6 @@ class CashBalanceResolver:
             row.instrument is not None
             and normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
         )
-
-    @staticmethod
-    def latest_snapshot_evidence_timestamp(rows: list[Any]) -> datetime | None:
-        timestamps: list[datetime] = []
-        for row in rows:
-            snapshot = getattr(row, "snapshot", None)
-            for candidate in (
-                getattr(snapshot, "updated_at", None),
-                getattr(snapshot, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None
 
     @staticmethod
     def data_quality_status(
