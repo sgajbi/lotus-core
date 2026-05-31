@@ -208,11 +208,18 @@ class ReportingService:
             as_of_date=resolved_as_of_date,
         )
         cash_rows = [row for row in rows if self._cash_balance_resolver.is_cash_row(row)]
-        cash_account_records = await self._cash_balance_resolver.build_cash_account_balance_records(
-            portfolio=portfolio,
-            cash_rows=cash_rows,
-            resolved_as_of_date=resolved_as_of_date,
-            reporting_currency=reporting_currency,
+        cash_account_records, row_reporting_values = await asyncio.gather(
+            self._cash_balance_resolver.build_cash_account_balance_records(
+                portfolio=portfolio,
+                cash_rows=cash_rows,
+                resolved_as_of_date=resolved_as_of_date,
+                reporting_currency=reporting_currency,
+            ),
+            self._snapshot_reporting_values(
+                rows=rows,
+                as_of_date=resolved_as_of_date,
+                reporting_currency=reporting_currency,
+            ),
         )
 
         total_portfolio = ZERO
@@ -228,12 +235,6 @@ class ReportingService:
         valued_position_count = 0
         unvalued_position_count = 0
         snapshot_date = resolved_as_of_date
-
-        row_reporting_values = await self._snapshot_reporting_values(
-            rows=rows,
-            as_of_date=resolved_as_of_date,
-            reporting_currency=reporting_currency,
-        )
 
         for row, portfolio_value, reporting_value in row_reporting_values:
             snapshot_date = max(snapshot_date, row.snapshot.date)

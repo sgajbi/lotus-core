@@ -364,6 +364,69 @@ async def test_get_portfolio_summary_converts_snapshot_rows_concurrently() -> No
     assert all(event.is_set() for event in (first_started, second_started))
 
 
+async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_concurrently() -> (
+    None
+):
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio.portfolio_type = "DISCRETIONARY"
+    portfolio.objective = "Growth"
+    portfolio.risk_exposure = "BALANCED"
+    portfolio.status = "ACTIVE"
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="800"),
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+        )
+    ]
+    cash_started = asyncio.Event()
+    reporting_started = asyncio.Event()
+
+    async def build_cash_account_balance_records(**_kwargs):
+        cash_started.set()
+        await asyncio.wait_for(reporting_started.wait(), timeout=1)
+        return []
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        reporting_started.set()
+        await asyncio.wait_for(cash_started.wait(), timeout=1)
+        assert amount == Decimal("800")
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return Decimal("1200.0")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._cash_balance_resolver.build_cash_account_balance_records = AsyncMock(
+            side_effect=build_cash_account_balance_records
+        )
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+        response = await asyncio.wait_for(
+            service.get_portfolio_summary(
+                PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+            ),
+            timeout=1,
+        )
+
+    assert response.totals.total_market_value_reporting_currency == Decimal("1200.0")
+    assert response.snapshot_metadata.cash_account_count == 0
+    assert cash_started.is_set()
+    assert reporting_started.is_set()
+
+
 async def test_get_portfolio_summary_reads_portfolio_and_default_date_concurrently() -> None:
     repo = AsyncMock()
     portfolio_started = asyncio.Event()
