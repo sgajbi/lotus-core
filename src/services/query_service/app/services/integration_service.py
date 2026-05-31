@@ -33,7 +33,6 @@ from ..dtos.reference_integration_dto import (
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
     ClientIncomeNeedsScheduleSupportability,
-    ClientRestrictionProfileEntry,
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
     ClientRestrictionProfileSupportability,
@@ -116,7 +115,6 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
     SeriesPoint,
-    SustainabilityPreferenceProfileEntry,
     SustainabilityPreferenceProfileRequest,
     SustainabilityPreferenceProfileResponse,
     SustainabilityPreferenceProfileSupportability,
@@ -144,11 +142,13 @@ from .reference_data_helpers import (
 from .reference_data_mappers import (
     benchmark_definition_response,
     client_income_needs_schedule_entry,
+    client_restriction_profile_entry,
     client_tax_profile_entry,
     client_tax_rule_set_entry,
     index_definition_response,
     liquidity_reserve_requirement_entry,
     planned_withdrawal_schedule_entry,
+    sustainability_preference_profile_entry,
 )
 from .request_fingerprint import request_fingerprint, series_request_fingerprint
 
@@ -836,25 +836,7 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_restrictions=request.include_inactive_restrictions,
         )
-        entries = [
-            ClientRestrictionProfileEntry(
-                restriction_scope=row.restriction_scope,
-                restriction_code=row.restriction_code,
-                restriction_status=row.restriction_status,
-                restriction_source=row.restriction_source,
-                applies_to_buy=bool(row.applies_to_buy),
-                applies_to_sell=bool(row.applies_to_sell),
-                instrument_ids=self._string_list(row.instrument_ids),
-                asset_classes=self._string_list(row.asset_classes),
-                issuer_ids=self._string_list(row.issuer_ids),
-                country_codes=self._string_list(row.country_codes),
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                restriction_version=int(row.restriction_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
+        entries = [client_restriction_profile_entry(row) for row in rows]
         supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "CLIENT_RESTRICTION_PROFILE_READY"
         missing_data_families: list[str] = []
@@ -928,32 +910,7 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_preferences=request.include_inactive_preferences,
         )
-        entries = [
-            SustainabilityPreferenceProfileEntry(
-                preference_framework=row.preference_framework,
-                preference_code=row.preference_code,
-                preference_status=row.preference_status,
-                preference_source=row.preference_source,
-                minimum_allocation=(
-                    self._as_decimal(row.minimum_allocation)
-                    if row.minimum_allocation is not None
-                    else None
-                ),
-                maximum_allocation=(
-                    self._as_decimal(row.maximum_allocation)
-                    if row.maximum_allocation is not None
-                    else None
-                ),
-                applies_to_asset_classes=self._string_list(row.applies_to_asset_classes),
-                exclusion_codes=self._string_list(row.exclusion_codes),
-                positive_tilt_codes=self._string_list(row.positive_tilt_codes),
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                preference_version=int(row.preference_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
+        entries = [sustainability_preference_profile_entry(row) for row in rows]
         supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_READY"
         missing_data_families: list[str] = []

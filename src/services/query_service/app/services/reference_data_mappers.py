@@ -7,11 +7,13 @@ from ..dtos.reference_integration_dto import (
     BenchmarkComponentResponse,
     BenchmarkDefinitionResponse,
     ClientIncomeNeedsScheduleEntry,
+    ClientRestrictionProfileEntry,
     ClientTaxProfileEntry,
     ClientTaxRuleSetEntry,
     IndexDefinitionResponse,
     LiquidityReserveRequirementEntry,
     PlannedWithdrawalScheduleEntry,
+    SustainabilityPreferenceProfileEntry,
 )
 
 
@@ -145,6 +147,25 @@ def client_income_needs_schedule_entry(row: Any) -> ClientIncomeNeedsScheduleEnt
     )
 
 
+def client_restriction_profile_entry(row: Any) -> ClientRestrictionProfileEntry:
+    return ClientRestrictionProfileEntry(
+        restriction_scope=row.restriction_scope,
+        restriction_code=row.restriction_code,
+        restriction_status=row.restriction_status,
+        restriction_source=row.restriction_source,
+        applies_to_buy=bool(row.applies_to_buy),
+        applies_to_sell=bool(row.applies_to_sell),
+        instrument_ids=_string_list(row.instrument_ids),
+        asset_classes=_string_list(row.asset_classes),
+        issuer_ids=_string_list(row.issuer_ids),
+        country_codes=_string_list(row.country_codes),
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        restriction_version=int(row.restriction_version),
+        source_record_id=row.source_record_id,
+    )
+
+
 def liquidity_reserve_requirement_entry(row: Any) -> LiquidityReserveRequirementEntry:
     return LiquidityReserveRequirementEntry(
         reserve_requirement_id=row.reserve_requirement_id,
@@ -158,6 +179,28 @@ def liquidity_reserve_requirement_entry(row: Any) -> LiquidityReserveRequirement
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         requirement_version=int(row.requirement_version),
+        source_record_id=row.source_record_id,
+    )
+
+
+def sustainability_preference_profile_entry(row: Any) -> SustainabilityPreferenceProfileEntry:
+    return SustainabilityPreferenceProfileEntry(
+        preference_framework=row.preference_framework,
+        preference_code=row.preference_code,
+        preference_status=row.preference_status,
+        preference_source=row.preference_source,
+        minimum_allocation=(
+            _as_decimal(row.minimum_allocation) if row.minimum_allocation is not None else None
+        ),
+        maximum_allocation=(
+            _as_decimal(row.maximum_allocation) if row.maximum_allocation is not None else None
+        ),
+        applies_to_asset_classes=_string_list(row.applies_to_asset_classes),
+        exclusion_codes=_string_list(row.exclusion_codes),
+        positive_tilt_codes=_string_list(row.positive_tilt_codes),
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        preference_version=int(row.preference_version),
         source_record_id=row.source_record_id,
     )
 

@@ -5,11 +5,13 @@ from types import SimpleNamespace
 from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_definition_response,
     client_income_needs_schedule_entry,
+    client_restriction_profile_entry,
     client_tax_profile_entry,
     client_tax_rule_set_entry,
     index_definition_response,
     liquidity_reserve_requirement_entry,
     planned_withdrawal_schedule_entry,
+    sustainability_preference_profile_entry,
 )
 
 
@@ -182,3 +184,50 @@ def test_client_liquidity_entries_map_source_data_rows() -> None:
     assert reserve.requirement_version == 4
     assert withdrawal.amount == Decimal("25000.0000")
     assert withdrawal.purpose_code == "education"
+
+
+def test_client_governance_entries_map_source_data_rows() -> None:
+    restriction = client_restriction_profile_entry(
+        SimpleNamespace(
+            restriction_scope="issuer",
+            restriction_code="NO_PRIVATE_CREDIT_BUY",
+            restriction_status="active",
+            restriction_source="investment_policy_statement",
+            applies_to_buy=True,
+            applies_to_sell=False,
+            instrument_ids=["BOND_PRIVATE_CREDIT_001", ""],
+            asset_classes=["private_credit"],
+            issuer_ids=["ISSUER_001"],
+            country_codes=["US"],
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            restriction_version="5",
+            source_record_id="restriction-1",
+        )
+    )
+    preference = sustainability_preference_profile_entry(
+        SimpleNamespace(
+            preference_framework="LOTUS_SUSTAINABILITY_V1",
+            preference_code="MIN_SUSTAINABLE_ALLOCATION",
+            preference_status="active",
+            preference_source="client_suitability",
+            minimum_allocation="0.2000000000",
+            maximum_allocation=None,
+            applies_to_asset_classes=["equity", ""],
+            exclusion_codes=["THERMAL_COAL"],
+            positive_tilt_codes=["GREEN_REVENUE"],
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            preference_version="3",
+            source_record_id="preference-1",
+        )
+    )
+
+    assert restriction.applies_to_buy is True
+    assert restriction.applies_to_sell is False
+    assert restriction.instrument_ids == ["BOND_PRIVATE_CREDIT_001"]
+    assert restriction.restriction_version == 5
+    assert preference.minimum_allocation == Decimal("0.2000000000")
+    assert preference.maximum_allocation is None
+    assert preference.applies_to_asset_classes == ["equity"]
+    assert preference.preference_version == 3
