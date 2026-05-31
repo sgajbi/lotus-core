@@ -80,7 +80,6 @@ from ..dtos.reference_integration_dto import (
     ExternalOrderExecutionAcknowledgementResponse,
     ExternalOrderExecutionAcknowledgementSupportability,
     IndexCatalogResponse,
-    IndexDefinitionResponse,
     IndexPriceSeriesPoint,
     IndexPriceSeriesResponse,
     IndexReturnSeriesPoint,
@@ -147,6 +146,7 @@ from .reference_data_helpers import (
     market_reference_data_quality_status,
     resolve_component_window_rows,
 )
+from .reference_data_mappers import benchmark_definition_response, index_definition_response
 from .request_fingerprint import request_fingerprint, series_request_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -2787,35 +2787,7 @@ class IntegrationService:
             benchmark_id,
             as_of_date,
         )
-        return BenchmarkDefinitionResponse(
-            benchmark_id=row.benchmark_id,
-            benchmark_name=row.benchmark_name,
-            benchmark_type=row.benchmark_type,
-            benchmark_currency=row.benchmark_currency,
-            return_convention=row.return_convention,
-            benchmark_status=row.benchmark_status,
-            benchmark_family=row.benchmark_family,
-            benchmark_provider=row.benchmark_provider,
-            rebalance_frequency=row.rebalance_frequency,
-            classification_set_id=row.classification_set_id,
-            classification_labels=dict(row.classification_labels or {}),
-            effective_from=row.effective_from,
-            effective_to=row.effective_to,
-            quality_status=row.quality_status,
-            source_timestamp=row.source_timestamp,
-            source_vendor=row.source_vendor,
-            source_record_id=row.source_record_id,
-            components=[
-                {
-                    "index_id": component.index_id,
-                    "composition_weight": self._as_decimal(component.composition_weight),
-                    "composition_effective_from": component.composition_effective_from,
-                    "composition_effective_to": component.composition_effective_to,
-                    "rebalance_event_id": component.rebalance_event_id,
-                }
-                for component in components
-            ],
-        )
+        return benchmark_definition_response(row, components=components)
 
     async def get_benchmark_composition_window(
         self,
@@ -2908,37 +2880,7 @@ class IntegrationService:
         records: list[BenchmarkDefinitionResponse] = []
         for row in rows:
             components = components_by_benchmark.get(row.benchmark_id, [])
-            records.append(
-                BenchmarkDefinitionResponse(
-                    benchmark_id=row.benchmark_id,
-                    benchmark_name=row.benchmark_name,
-                    benchmark_type=row.benchmark_type,
-                    benchmark_currency=row.benchmark_currency,
-                    return_convention=row.return_convention,
-                    benchmark_status=row.benchmark_status,
-                    benchmark_family=row.benchmark_family,
-                    benchmark_provider=row.benchmark_provider,
-                    rebalance_frequency=row.rebalance_frequency,
-                    classification_set_id=row.classification_set_id,
-                    classification_labels=dict(row.classification_labels or {}),
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=row.quality_status,
-                    source_timestamp=row.source_timestamp,
-                    source_vendor=row.source_vendor,
-                    source_record_id=row.source_record_id,
-                    components=[
-                        {
-                            "index_id": component.index_id,
-                            "composition_weight": self._as_decimal(component.composition_weight),
-                            "composition_effective_from": component.composition_effective_from,
-                            "composition_effective_to": component.composition_effective_to,
-                            "rebalance_event_id": component.rebalance_event_id,
-                        }
-                        for component in components
-                    ],
-                )
-            )
+            records.append(benchmark_definition_response(row, components=components))
         return BenchmarkCatalogResponse(as_of_date=as_of_date, records=records)
 
     async def list_index_catalog(
@@ -2958,26 +2900,7 @@ class IntegrationService:
         )
         return IndexCatalogResponse(
             as_of_date=as_of_date,
-            records=[
-                IndexDefinitionResponse(
-                    index_id=row.index_id,
-                    index_name=row.index_name,
-                    index_currency=row.index_currency,
-                    index_type=row.index_type,
-                    index_status=row.index_status,
-                    index_provider=row.index_provider,
-                    index_market=row.index_market,
-                    classification_set_id=row.classification_set_id,
-                    classification_labels=dict(row.classification_labels or {}),
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=row.quality_status,
-                    source_timestamp=row.source_timestamp,
-                    source_vendor=row.source_vendor,
-                    source_record_id=row.source_record_id,
-                )
-                for row in rows
-            ],
+            records=[index_definition_response(row) for row in rows],
         )
 
     async def get_benchmark_market_series(
