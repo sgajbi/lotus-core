@@ -1013,6 +1013,48 @@ async def test_get_portfolio_timeseries_fallback_path_defaults_snapshot_epoch_an
 
 
 @pytest.mark.asyncio
+async def test_get_portfolio_timeseries_normalizes_sparse_numeric_rows() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_business_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
+        list_portfolio_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=" ",
+                    eod_market_value=None,
+                    epoch=0,
+                )
+            ]
+        ),
+        list_portfolio_observation_dates=AsyncMock(return_value=[date(2025, 1, 1)]),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 1)),
+    )
+
+    response = await service.get_portfolio_timeseries(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsTimeseriesRequest(
+            as_of_date="2025-01-01",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-01"),
+            reporting_currency="USD",
+        ),
+    )
+
+    observation = response.observations[0]
+    assert observation.beginning_market_value == Decimal("0")
+    assert observation.ending_market_value == Decimal("0")
+
+
+@pytest.mark.asyncio
 async def test_get_position_timeseries_paging_token_generation() -> None:
     service = make_service()
     service.repo = SimpleNamespace(
@@ -1094,6 +1136,57 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
     assert response.tenant_id is None
     assert response.snapshot_id is None
     assert response.policy_version is None
+
+
+@pytest.mark.asyncio
+async def test_get_position_timeseries_normalizes_sparse_numeric_rows() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                close_date=None,
+            )
+        ),
+        list_position_timeseries_rows=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_A",
+                    valuation_date=date(2025, 1, 1),
+                    bod_market_value=" ",
+                    eod_market_value=" 11.25 ",
+                    bod_cashflow_position=None,
+                    eod_cashflow_position=None,
+                    bod_cashflow_portfolio=None,
+                    eod_cashflow_portfolio=None,
+                    fees=None,
+                    quantity=" ",
+                    epoch=0,
+                    asset_class="Equity",
+                    sector="Technology",
+                    country="US",
+                    position_currency="USD",
+                )
+            ]
+        ),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        get_fx_rates_map=AsyncMock(return_value={}),
+    )
+
+    response = await service.get_position_timeseries(
+        portfolio_id="P1",
+        request=PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-01-01",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-01"),
+        ),
+    )
+
+    row = response.rows[0]
+    assert row.beginning_market_value_position_currency == Decimal("0")
+    assert row.ending_market_value_position_currency == Decimal("11.25")
+    assert row.quantity == Decimal("0")
 
 
 @pytest.mark.asyncio

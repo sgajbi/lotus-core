@@ -55,6 +55,7 @@ from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRe
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..settings import load_query_service_settings
+from .decimal_amounts import decimal_or_zero
 
 
 class AnalyticsInputError(RuntimeError):
@@ -249,7 +250,7 @@ class AnalyticsTimeseriesService:
             flows_by_date[row.valuation_date].append(
                 self._build_cash_flow_observation(
                     row,
-                    amount=Decimal(row.amount) * conversion_rate,
+                    amount=decimal_or_zero(row.amount) * conversion_rate,
                 )
             )
         return flows_by_date
@@ -260,7 +261,7 @@ class AnalyticsTimeseriesService:
     ) -> dict[tuple[str, date], list[CashFlowObservation]]:
         flows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = defaultdict(list)
         for row in cashflow_rows:
-            amount = Decimal(row.amount)
+            amount = decimal_or_zero(row.amount)
             if bool(row.is_position_flow):
                 amount = normalize_position_flow_amount(
                     amount=amount,
@@ -293,9 +294,9 @@ class AnalyticsTimeseriesService:
         cash_flows: list[CashFlowObservation],
         has_portfolio_external_flow: bool,
     ) -> Decimal:
-        stored_beginning = Decimal(row.bod_market_value)
-        ending = Decimal(row.eod_market_value)
-        bod_position_flow = Decimal(getattr(row, "bod_cashflow_position", 0) or 0)
+        stored_beginning = decimal_or_zero(row.bod_market_value)
+        ending = decimal_or_zero(row.eod_market_value)
+        bod_position_flow = decimal_or_zero(getattr(row, "bod_cashflow_position", 0))
 
         if (
             previous_eod_market_value is not None
@@ -417,7 +418,7 @@ class AnalyticsTimeseriesService:
         observations: list[PortfolioTimeseriesObservation] = []
         quality_distribution: dict[str, int] = {}
         previous_eod_by_security = {
-            normalize_security_id(row.security_id): Decimal(row.eod_market_value)
+            normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
             for row in sorted(
                 position_rows,
                 key=lambda item: (
@@ -475,9 +476,11 @@ class AnalyticsTimeseriesService:
                     beginning_market_value_position * position_to_portfolio_rate * conversion_rate
                 )
                 ending_market_value += (
-                    Decimal(row.eod_market_value) * position_to_portfolio_rate * conversion_rate
+                    decimal_or_zero(row.eod_market_value)
+                    * position_to_portfolio_rate
+                    * conversion_rate
                 )
-                current_eod_by_security[normalize_security_id(row.security_id)] = Decimal(
+                current_eod_by_security[normalize_security_id(row.security_id)] = decimal_or_zero(
                     row.eod_market_value
                 )
                 if int(row.epoch) > 0:
@@ -635,8 +638,9 @@ class AnalyticsTimeseriesService:
                 observations.append(
                     PortfolioTimeseriesObservation(
                         valuation_date=valuation_date,
-                        beginning_market_value=Decimal(row.bod_market_value) * conversion_rate,
-                        ending_market_value=Decimal(row.eod_market_value) * conversion_rate,
+                        beginning_market_value=decimal_or_zero(row.bod_market_value)
+                        * conversion_rate,
+                        ending_market_value=decimal_or_zero(row.eod_market_value) * conversion_rate,
                         valuation_status=quality,
                         cash_flows=portfolio_cashflows_by_date.get(valuation_date, []),
                         cash_flow_currency=reporting_currency,
@@ -854,7 +858,7 @@ class AnalyticsTimeseriesService:
                 snapshot_epoch=snapshot_epoch,
             )
             previous_eod_by_security = {
-                normalize_security_id(row.security_id): Decimal(row.eod_market_value)
+                normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
                 for row in previous_rows
                 if row.valuation_date == first_page_date - timedelta(days=1)
             }
@@ -913,7 +917,7 @@ class AnalyticsTimeseriesService:
                     portfolio_cashflows_by_date.get(row.valuation_date, [])
                 ),
             )
-            ending_market_value_position = Decimal(row.eod_market_value)
+            ending_market_value_position = decimal_or_zero(row.eod_market_value)
             beginning_market_value_portfolio = (
                 beginning_market_value_position * position_to_portfolio_rate
             )
@@ -946,7 +950,7 @@ class AnalyticsTimeseriesService:
                         ending_market_value_portfolio * portfolio_to_reporting_rate
                     ),
                     valuation_status=quality,
-                    quantity=Decimal(row.quantity),
+                    quantity=decimal_or_zero(row.quantity),
                     cash_flows=cash_flows,
                 )
             )
