@@ -2082,9 +2082,12 @@ class OperationsRepository:
             FinancialReconciliationFinding.finding_type.label("finding_type"),
             self._security_id_expr(FinancialReconciliationFinding.security_id).label("security_id"),
             FinancialReconciliationFinding.transaction_id.label("transaction_id"),
-        ).where(FinancialReconciliationFinding.run_id == run_id)
-        if as_of is not None:
-            base_stmt = base_stmt.where(FinancialReconciliationFinding.created_at <= as_of)
+        )
+        base_stmt = self._apply_reconciliation_finding_scope(
+            base_stmt,
+            run_id=run_id,
+            as_of=as_of,
+        )
         base_subq = base_stmt.subquery()
         aggregate_subq = (
             select(
