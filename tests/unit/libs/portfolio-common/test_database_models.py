@@ -462,6 +462,12 @@ def test_normalized_calculation_lookup_indexes_are_declared():
                 "cashflows.cashflow_date",
                 "cashflows.epoch DESC",
             ],
+            "ix_cashflows_port_txn_epoch_id": [
+                "cashflows.portfolio_id",
+                "cashflows.transaction_id",
+                "cashflows.epoch DESC",
+                "cashflows.id DESC",
+            ],
         },
         PositionLotState: {
             "ix_position_lot_norm_port_sec": [

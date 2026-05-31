@@ -102,6 +102,9 @@ Lineage support reads that resolve latest position-history, daily-snapshot, or v
 evidence per position state should use portfolio, normalized-security, epoch, and descending
 business-date/id indexes aligned to one-row latest lookups rather than relying on broader
 status-oriented queue or list indexes.
+Cashflow read-plane queries that resolve the latest restatement per transaction should scope the
+windowed rank by portfolio and use a portfolio/transaction/descending-epoch index before applying
+date, classification, or flow-type filters to the latest row.
 
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.

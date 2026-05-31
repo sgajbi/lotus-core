@@ -1592,6 +1592,13 @@ class Cashflow(Base):
             cashflow_date,
             epoch.desc(),
         ),
+        Index(
+            "ix_cashflows_port_txn_epoch_id",
+            "portfolio_id",
+            "transaction_id",
+            epoch.desc(),
+            id.desc(),
+        ),
     )
 
 

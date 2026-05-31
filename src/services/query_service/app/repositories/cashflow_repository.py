@@ -31,7 +31,7 @@ class CashflowRepository:
         self.db = db
 
     @staticmethod
-    def _latest_cashflows_subquery():
+    def _latest_cashflows_subquery(*, portfolio_id: str | None = None):
         ranked_cashflows = select(
             Cashflow.id.label("id"),
             func.row_number()
@@ -40,7 +40,10 @@ class CashflowRepository:
                 order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
             )
             .label("rn"),
-        ).subquery()
+        )
+        if portfolio_id is not None:
+            ranked_cashflows = ranked_cashflows.where(Cashflow.portfolio_id == portfolio_id)
+        ranked_cashflows = ranked_cashflows.subquery()
         return (
             select(Cashflow)
             .join(ranked_cashflows, ranked_cashflows.c.id == Cashflow.id)
@@ -69,7 +72,7 @@ class CashflowRepository:
         self, portfolio_id: str, start_date: date, end_date: date
     ) -> List[Tuple[date, Decimal]]:
         """Returns daily aggregated portfolio cashflows for projection windows."""
-        latest_cashflows = self._latest_cashflows_subquery()
+        latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(
                 latest_cashflows.c.cashflow_date,
@@ -137,7 +140,7 @@ class CashflowRepository:
     ) -> datetime | None:
         """Return the latest source timestamp across booked and projected cashflow evidence."""
 
-        latest_cashflows = self._latest_cashflows_subquery()
+        latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         booked_stmt = select(func.max(latest_cashflows.c.updated_at)).where(
             latest_cashflows.c.portfolio_id == portfolio_id,
             latest_cashflows.c.cashflow_date.between(start_date, end_date),
@@ -167,7 +170,7 @@ class CashflowRepository:
         self, portfolio_id: str, start_date: date, end_date: date
     ) -> list[tuple[str, str, str, bool, bool, int, Decimal, datetime | None]]:
         """Aggregate latest cashflow rows by source-owned cash movement classification."""
-        latest_cashflows = self._latest_cashflows_subquery()
+        latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(
                 latest_cashflows.c.classification,
@@ -208,7 +211,7 @@ class CashflowRepository:
         Fetches only the external investor cashflows for a portfolio within a date range.
         These are used for MWR (IRR) calculations.
         """
-        latest_cashflows = self._latest_cashflows_subquery()
+        latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(latest_cashflows.c.cashflow_date, latest_cashflows.c.amount)
             .where(

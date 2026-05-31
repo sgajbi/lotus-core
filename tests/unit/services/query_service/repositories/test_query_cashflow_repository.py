@@ -39,13 +39,14 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
 
 
 async def test_latest_cashflows_subquery_prefers_highest_epoch_per_transaction() -> None:
-    subquery = CashflowRepository._latest_cashflows_subquery()
+    subquery = CashflowRepository._latest_cashflows_subquery(portfolio_id="P1")
 
     compiled_query = str(select(subquery).compile(compile_kwargs={"literal_binds": True}))
 
     assert "row_number() over" in compiled_query.lower()
     assert "partition by cashflows.transaction_id" in compiled_query.lower()
     assert "order by cashflows.epoch desc, cashflows.id desc" in compiled_query.lower()
+    assert "cashflows.portfolio_id = 'P1'" in compiled_query
     assert "anon_2.rn = 1" in compiled_query.lower()
 
 
