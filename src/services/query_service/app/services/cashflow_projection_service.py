@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.cashflow_repository import CashflowRepository
+from .cashflow_evidence_window import read_cashflow_evidence_window
 from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
@@ -46,44 +46,16 @@ class CashflowProjectionService:
         range_end_date = effective_as_of_date + timedelta(days=horizon_days)
         query_end_date = range_end_date if include_projected else effective_as_of_date
 
-        if include_projected:
-            booked_evidence, projected_evidence = await asyncio.gather(
-                self.repo.get_portfolio_cashflow_series_with_evidence(
-                    portfolio_id=portfolio_id,
-                    start_date=range_start_date,
-                    end_date=query_end_date,
-                ),
-                self.repo.get_projected_settlement_cashflow_series_with_evidence(
-                    portfolio_id=portfolio_id,
-                    start_date=range_start_date,
-                    end_date=query_end_date,
-                ),
-            )
-            projected_rows = projected_evidence.rows
-            latest_projected_evidence = projected_evidence.latest_evidence_timestamp
-        else:
-            booked_evidence = await self.repo.get_portfolio_cashflow_series_with_evidence(
-                portfolio_id=portfolio_id,
-                start_date=range_start_date,
-                end_date=query_end_date,
-            )
-            projected_rows = []
-            latest_projected_evidence = None
-        rows = booked_evidence.rows
-        latest_evidence_timestamp = max(
-            (
-                timestamp
-                for timestamp in (
-                    booked_evidence.latest_evidence_timestamp,
-                    latest_projected_evidence,
-                )
-                if timestamp
-            ),
-            default=None,
+        cashflow_evidence = await read_cashflow_evidence_window(
+            repo=self.repo,
+            portfolio_id=portfolio_id,
+            start_date=range_start_date,
+            end_date=query_end_date,
+            include_projected=include_projected,
         )
 
-        booked_by_date = self._sum_by_date(rows)
-        projected_by_date = self._sum_by_date(projected_rows)
+        booked_by_date = self._sum_by_date(cashflow_evidence.booked_rows)
+        projected_by_date = self._sum_by_date(cashflow_evidence.projected_rows)
         booked_total = Decimal("0")
         projected_total = Decimal("0")
         running = Decimal("0")
@@ -126,7 +98,7 @@ class CashflowProjectionService:
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date,
                 data_quality_status=COMPLETE,
-                latest_evidence_timestamp=latest_evidence_timestamp,
+                latest_evidence_timestamp=cashflow_evidence.latest_evidence_timestamp,
                 source_batch_fingerprint=(
                     "cashflow_projection:"
                     f"{portfolio_id}:{effective_as_of_date}:{query_end_date}:"

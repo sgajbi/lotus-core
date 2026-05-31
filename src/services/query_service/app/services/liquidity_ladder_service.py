@@ -19,6 +19,7 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..repositories.cashflow_repository import CashflowRepository
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
+from .cashflow_evidence_window import read_cashflow_evidence_window
 from .control_code_normalization import normalize_control_code
 from .decimal_amounts import decimal_or_zero
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
@@ -69,51 +70,25 @@ class PortfolioLiquidityLadderService:
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        booked_evidence_read = self.cashflow_repo.get_portfolio_cashflow_series_with_evidence(
+        cashflow_evidence_read = read_cashflow_evidence_window(
+            repo=self.cashflow_repo,
             portfolio_id=portfolio.portfolio_id,
             start_date=resolved_as_of_date,
             end_date=range_end_date,
+            include_projected=include_projected,
         )
-        if include_projected:
-            rows, booked_evidence, projected_evidence = await asyncio.gather(
-                snapshot_rows_read,
-                booked_evidence_read,
-                self.cashflow_repo.get_projected_settlement_cashflow_series_with_evidence(
-                    portfolio_id=portfolio.portfolio_id,
-                    start_date=resolved_as_of_date,
-                    end_date=range_end_date,
-                ),
-            )
-            projected_series = projected_evidence.rows
-            latest_projected_evidence = projected_evidence.latest_evidence_timestamp
-        else:
-            rows, booked_evidence = await asyncio.gather(snapshot_rows_read, booked_evidence_read)
-            projected_series = []
-            latest_projected_evidence = None
-        booked_series = booked_evidence.rows
+        rows, cashflow_evidence = await asyncio.gather(snapshot_rows_read, cashflow_evidence_read)
 
         cash_rows, non_cash_rows = self._partition_cash_rows(rows)
         opening_cash_balance = self._sum_market_value(cash_rows)
         tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
 
-        latest_cashflow_evidence = max(
-            (
-                timestamp
-                for timestamp in (
-                    booked_evidence.latest_evidence_timestamp,
-                    latest_projected_evidence,
-                )
-                if timestamp
-            ),
-            default=None,
-        )
-
         buckets = self._build_ladder_buckets(
             as_of_date=resolved_as_of_date,
             horizon_days=horizon_days,
             opening_cash_balance=opening_cash_balance,
-            booked_series=dict(booked_series),
-            projected_series=dict(projected_series),
+            booked_series=dict(cashflow_evidence.booked_rows),
+            projected_series=dict(cashflow_evidence.projected_rows),
         )
         totals = self._build_totals(
             opening_cash_balance=opening_cash_balance,
@@ -136,7 +111,14 @@ class PortfolioLiquidityLadderService:
                 as_of_date=resolved_as_of_date,
                 data_quality_status=self._data_quality_status(rows=rows, buckets=buckets),
                 latest_evidence_timestamp=max(
-                    (item for item in (latest_snapshot_evidence, latest_cashflow_evidence) if item),
+                    (
+                        item
+                        for item in (
+                            latest_snapshot_evidence,
+                            cashflow_evidence.latest_evidence_timestamp,
+                        )
+                        if item
+                    ),
                     default=None,
                 ),
                 source_batch_fingerprint=(
