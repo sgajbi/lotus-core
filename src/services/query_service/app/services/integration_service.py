@@ -87,6 +87,7 @@ from .benchmark_coverage import build_benchmark_coverage_response
 from .benchmark_market_series import (
     benchmark_market_series_currency,
     benchmark_market_series_evidence_plan,
+    benchmark_market_series_evidence_read_factories,
     benchmark_market_series_fx_context,
     benchmark_market_series_index_page,
     benchmark_market_series_page_token,
@@ -985,39 +986,13 @@ class IntegrationService:
         )
         market_results = await benchmark_market_series_read_evidence(
             evidence_plan=evidence_plan,
-            read_factories={
-                "components": lambda: (
-                    self._reference_repository.list_benchmark_components_overlapping_window(
-                        benchmark_id=benchmark_id,
-                        start_date=request.window.start_date,
-                        end_date=request.window.end_date,
-                        index_ids=index_page.index_ids,
-                    )
-                ),
-                "index_prices": lambda: self._reference_repository.list_index_price_points(
-                    index_ids=index_page.index_ids,
-                    start_date=request.window.start_date,
-                    end_date=request.window.end_date,
-                ),
-                "index_returns": lambda: self._reference_repository.list_index_return_points(
-                    index_ids=index_page.index_ids,
-                    start_date=request.window.start_date,
-                    end_date=request.window.end_date,
-                ),
-                "benchmark_returns": lambda: (
-                    self._reference_repository.list_benchmark_return_points(
-                        benchmark_id=benchmark_id,
-                        start_date=request.window.start_date,
-                        end_date=request.window.end_date,
-                    )
-                ),
-                "fx_rates": lambda: self._reference_repository.get_fx_rates(
-                    from_currency=benchmark_currency,
-                    to_currency=request.target_currency,
-                    start_date=request.window.start_date,
-                    end_date=request.window.end_date,
-                ),
-            },
+            read_factories=benchmark_market_series_evidence_read_factories(
+                repository=self._reference_repository,
+                benchmark_id=benchmark_id,
+                request=request,
+                benchmark_currency=benchmark_currency,
+                index_ids=index_page.index_ids,
+            ),
         )
         next_page_token = benchmark_market_series_page_token(
             request_scope=request_scope,

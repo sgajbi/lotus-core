@@ -9,6 +9,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.benchmark_market_series import (
     benchmark_market_series_currency,
     benchmark_market_series_evidence_plan,
+    benchmark_market_series_evidence_read_factories,
     benchmark_market_series_evidence_read_names,
     benchmark_market_series_fx_context,
     benchmark_market_series_index_page,
@@ -173,6 +174,106 @@ def test_benchmark_market_series_read_evidence_collects_only_planned_families() 
         "components": "components-rows",
         "index_prices": "index_prices-rows",
     }
+
+
+def test_benchmark_market_series_evidence_read_factories_bind_repository_scope() -> None:
+    async def run_case() -> tuple[dict[str, object], list[tuple[str, dict[str, object]]]]:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class Repository:
+            async def list_benchmark_components_overlapping_window(
+                self,
+                **kwargs: object,
+            ) -> list[str]:
+                calls.append(("components", kwargs))
+                return ["component-row"]
+
+            async def list_index_price_points(self, **kwargs: object) -> list[str]:
+                calls.append(("index_prices", kwargs))
+                return ["price-row"]
+
+            async def list_index_return_points(self, **kwargs: object) -> list[str]:
+                calls.append(("index_returns", kwargs))
+                return ["return-row"]
+
+            async def list_benchmark_return_points(self, **kwargs: object) -> list[str]:
+                calls.append(("benchmark_returns", kwargs))
+                return ["benchmark-return-row"]
+
+            async def get_fx_rates(self, **kwargs: object) -> dict[date, Decimal]:
+                calls.append(("fx_rates", kwargs))
+                return {date(2026, 1, 1): Decimal("1.1000")}
+
+        request = BenchmarkMarketSeriesRequest(
+            as_of_date=date(2026, 1, 2),
+            window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+            frequency="daily",
+            target_currency="USD",
+            series_fields=["index_price", "index_return", "benchmark_return", "fx_rate"],
+        )
+        factories = benchmark_market_series_evidence_read_factories(
+            repository=Repository(),
+            benchmark_id="BMK_GLOBAL_BALANCED",
+            request=request,
+            benchmark_currency="EUR",
+            index_ids=["IDX_A", "IDX_B"],
+        )
+        results = {read_name: await read_factory() for read_name, read_factory in factories.items()}
+        return results, calls
+
+    results, calls = asyncio.run(run_case())
+
+    assert results == {
+        "components": ["component-row"],
+        "index_prices": ["price-row"],
+        "index_returns": ["return-row"],
+        "benchmark_returns": ["benchmark-return-row"],
+        "fx_rates": {date(2026, 1, 1): Decimal("1.1000")},
+    }
+    assert calls == [
+        (
+            "components",
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED",
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+                "index_ids": ["IDX_A", "IDX_B"],
+            },
+        ),
+        (
+            "index_prices",
+            {
+                "index_ids": ["IDX_A", "IDX_B"],
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+        (
+            "index_returns",
+            {
+                "index_ids": ["IDX_A", "IDX_B"],
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+        (
+            "benchmark_returns",
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED",
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+        (
+            "fx_rates",
+            {
+                "from_currency": "EUR",
+                "to_currency": "USD",
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+    ]
 
 
 def test_benchmark_market_series_request_scope_binds_paging_to_request() -> None:

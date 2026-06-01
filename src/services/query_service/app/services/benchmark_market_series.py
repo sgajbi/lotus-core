@@ -206,6 +206,45 @@ def benchmark_market_series_evidence_read_names(
     return read_names
 
 
+def benchmark_market_series_evidence_read_factories(
+    *,
+    repository: Any,
+    benchmark_id: str,
+    request: BenchmarkMarketSeriesRequest,
+    benchmark_currency: str,
+    index_ids: list[str],
+) -> Mapping[str, Callable[[], Awaitable[Any]]]:
+    return {
+        "components": lambda: repository.list_benchmark_components_overlapping_window(
+            benchmark_id=benchmark_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+            index_ids=index_ids,
+        ),
+        "index_prices": lambda: repository.list_index_price_points(
+            index_ids=index_ids,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        ),
+        "index_returns": lambda: repository.list_index_return_points(
+            index_ids=index_ids,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        ),
+        "benchmark_returns": lambda: repository.list_benchmark_return_points(
+            benchmark_id=benchmark_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        ),
+        "fx_rates": lambda: repository.get_fx_rates(
+            from_currency=benchmark_currency,
+            to_currency=request.target_currency,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+        ),
+    }
+
+
 async def benchmark_market_series_read_evidence(
     *,
     evidence_plan: BenchmarkMarketSeriesEvidencePlan,
