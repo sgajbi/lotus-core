@@ -21,6 +21,8 @@ from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
 
+HeldSinceRequest = tuple[int, str, int, date]
+
 
 def merge_snapshot_and_history_position_rows(
     *,
@@ -121,6 +123,59 @@ def assign_position_weights(positions: list[Position]) -> None:
     else:
         for position in positions:
             position.weight = Decimal(0)
+
+
+def position_held_since_requests(
+    *,
+    db_results: list[tuple[Any, Any, Any]],
+    positions: list[Position],
+) -> list[HeldSinceRequest]:
+    held_since_requests: list[HeldSinceRequest] = []
+    for idx, ((position_row, _instrument, pos_state), position) in enumerate(
+        zip(db_results, positions)
+    ):
+        epoch = getattr(pos_state, "epoch", None)
+        if epoch is None:
+            position.held_since_date = position.position_date
+            continue
+        held_since_requests.append(
+            (
+                idx,
+                normalize_security_id(position_row.security_id),
+                int(epoch),
+                position.position_date,
+            )
+        )
+    return held_since_requests
+
+
+def apply_held_since_dates(
+    *,
+    positions: list[Position],
+    held_since_requests: list[HeldSinceRequest],
+    held_since_map: dict[tuple[str, int], date],
+) -> None:
+    for idx, security_id, epoch, default_date in held_since_requests:
+        positions[idx].held_since_date = held_since_map.get((security_id, epoch), default_date)
+
+
+def position_requires_market_price_freshness(position: Position) -> bool:
+    return (
+        (position.asset_class or "").strip().upper() != "CASH"
+        and position.valuation is not None
+        and position.valuation.market_price is not None
+    )
+
+
+def market_price_freshness_security_ids(positions: list[Position]) -> list[str]:
+    return sorted(
+        {
+            security_id
+            for position in positions
+            if position_requires_market_price_freshness(position)
+            if (security_id := normalize_security_id(position.security_id))
+        }
+    )
 
 
 class PositionService:
@@ -257,34 +312,15 @@ class PositionService:
 
         assign_position_weights(positions)
 
-        held_since_requests: list[tuple[int, str, int, date]] = []
-        for idx, ((position_row, _instrument, pos_state), position) in enumerate(
-            zip(db_results, positions)
-        ):
-            epoch = getattr(pos_state, "epoch", None)
-            if epoch is None:
-                position.held_since_date = position.position_date
-                continue
-            held_since_requests.append(
-                (
-                    idx,
-                    normalize_security_id(position_row.security_id),
-                    int(epoch),
-                    position.position_date,
-                )
-            )
+        held_since_requests = position_held_since_requests(
+            db_results=db_results,
+            positions=positions,
+        )
 
         response_as_of_date = effective_as_of_date or max(
             (position.position_date for position in positions), default=date.today()
         )
-        market_price_security_ids = sorted(
-            {
-                security_id
-                for position in positions
-                if self._requires_market_price_freshness(position)
-                if (security_id := normalize_security_id(position.security_id))
-            }
-        )
+        market_price_security_ids = market_price_freshness_security_ids(positions)
 
         if held_since_requests:
             held_since_map = await self.repo.get_held_since_dates(
@@ -297,10 +333,11 @@ class PositionService:
                 security_ids=market_price_security_ids,
                 as_of_date=response_as_of_date,
             )
-            for idx, security_id, epoch, default_date in held_since_requests:
-                positions[idx].held_since_date = held_since_map.get(
-                    (security_id, epoch), default_date
-                )
+            apply_held_since_dates(
+                positions=positions,
+                held_since_requests=held_since_requests,
+                held_since_map=held_since_map,
+            )
         else:
             latest_market_price_dates = await self.repo.get_latest_market_price_dates(
                 security_ids=market_price_security_ids,
@@ -342,7 +379,7 @@ class PositionService:
             (
                 latest_market_price_dates.get(normalize_security_id(position.security_id))
                 != response_as_of_date
-                if PositionService._requires_market_price_freshness(position)
+                if position_requires_market_price_freshness(position)
                 else False
             )
             for position in positions
@@ -351,14 +388,6 @@ class PositionService:
         if history_supplements:
             return PARTIAL
         return COMPLETE
-
-    @staticmethod
-    def _requires_market_price_freshness(position: Position) -> bool:
-        return (
-            (position.asset_class or "").strip().upper() != "CASH"
-            and position.valuation is not None
-            and position.valuation.market_price is not None
-        )
 
     @staticmethod
     def _latest_holdings_evidence_timestamp(
