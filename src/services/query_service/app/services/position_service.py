@@ -199,6 +199,18 @@ def market_price_freshness_security_ids(positions: list[Position]) -> list[str]:
     )
 
 
+def holdings_response_as_of_date(
+    *,
+    effective_as_of_date: date | None,
+    positions: list[Position],
+    today: date | None = None,
+) -> date:
+    if effective_as_of_date is not None:
+        return effective_as_of_date
+    fallback_today = today or date.today()
+    return max((position.position_date for position in positions), default=fallback_today)
+
+
 class PositionService:
     """
     Handles the business logic for querying position data.
@@ -336,8 +348,9 @@ class PositionService:
             positions=positions,
         )
 
-        response_as_of_date = effective_as_of_date or max(
-            (position.position_date for position in positions), default=date.today()
+        response_as_of_date = holdings_response_as_of_date(
+            effective_as_of_date=effective_as_of_date,
+            positions=positions,
         )
         market_price_security_ids = market_price_freshness_security_ids(positions)
 

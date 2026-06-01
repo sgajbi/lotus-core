@@ -19,6 +19,7 @@ from src.services.query_service.app.services.position_service import (
     apply_held_since_dates,
     assign_position_weights,
     fallback_valuation_security_ids,
+    holdings_response_as_of_date,
     market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
     position_held_since_requests,
@@ -114,6 +115,57 @@ async def test_should_fetch_fallback_valuation_map_for_history_or_history_only_s
         )
         is True
     )
+
+
+async def test_holdings_response_as_of_date_prefers_effective_as_of_date() -> None:
+    positions = [
+        Position(
+            security_id="SEC_A",
+            quantity=Decimal("1"),
+            cost_basis=Decimal("100"),
+            position_date=date(2025, 1, 3),
+            instrument_name="Later",
+        )
+    ]
+
+    assert holdings_response_as_of_date(
+        effective_as_of_date=date(2025, 1, 1),
+        positions=positions,
+        today=date(2025, 1, 9),
+    ) == date(2025, 1, 1)
+
+
+async def test_holdings_response_as_of_date_uses_latest_position_date() -> None:
+    positions = [
+        Position(
+            security_id="SEC_A",
+            quantity=Decimal("1"),
+            cost_basis=Decimal("100"),
+            position_date=date(2025, 1, 2),
+            instrument_name="First",
+        ),
+        Position(
+            security_id="SEC_B",
+            quantity=Decimal("1"),
+            cost_basis=Decimal("200"),
+            position_date=date(2025, 1, 4),
+            instrument_name="Second",
+        ),
+    ]
+
+    assert holdings_response_as_of_date(
+        effective_as_of_date=None,
+        positions=positions,
+        today=date(2025, 1, 9),
+    ) == date(2025, 1, 4)
+
+
+async def test_holdings_response_as_of_date_uses_today_when_positions_empty() -> None:
+    assert holdings_response_as_of_date(
+        effective_as_of_date=None,
+        positions=[],
+        today=date(2025, 1, 9),
+    ) == date(2025, 1, 9)
 
 
 async def test_position_valuation_data_maps_snapshot_row_values() -> None:
