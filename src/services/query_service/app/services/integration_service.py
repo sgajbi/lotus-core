@@ -112,7 +112,7 @@ from .external_hedge_policy import build_external_hedge_policy_response
 from .external_order_execution_acknowledgement import (
     build_external_order_execution_acknowledgement_response,
 )
-from .index_catalog import build_index_catalog_response
+from .index_catalog import resolve_index_catalog_response
 from .index_price_series import build_index_price_series_response
 from .index_return_series import build_index_return_series_response
 from .instrument_eligibility import build_instrument_eligibility_bulk_response
@@ -556,16 +556,13 @@ class IntegrationService:
         index_type: str | None,
         index_status: str | None,
     ) -> IndexCatalogResponse:
-        rows = await self._reference_repository.list_index_definitions(
+        return await resolve_index_catalog_response(
+            repository=self._reference_repository,
             as_of_date=as_of_date,
             index_ids=index_ids,
             index_currency=index_currency,
             index_type=index_type,
             index_status=index_status,
-        )
-        return build_index_catalog_response(
-            as_of_date=as_of_date,
-            rows=rows,
         )
 
     async def get_benchmark_market_series(
