@@ -114,7 +114,7 @@ from .external_order_execution_acknowledgement import (
 )
 from .index_catalog import resolve_index_catalog_response
 from .index_price_series import resolve_index_price_series_response
-from .index_return_series import build_index_return_series_response
+from .index_return_series import resolve_index_return_series_response
 from .instrument_eligibility import resolve_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
 from .liquidity_reserve_requirement import (
@@ -529,15 +529,10 @@ class IntegrationService:
     async def get_index_return_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexReturnSeriesResponse:
-        rows = await self._reference_repository.list_index_return_series(
-            index_id=index_id,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        return build_index_return_series_response(
+        return await resolve_index_return_series_response(
+            repository=self._reference_repository,
             index_id=index_id,
             request=request,
-            rows=rows,
         )
 
     async def get_benchmark_return_series(

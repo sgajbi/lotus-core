@@ -16,6 +16,24 @@ from .request_fingerprint import series_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
+async def resolve_index_return_series_response(
+    *,
+    repository: Any,
+    index_id: str,
+    request: IndexSeriesRequest,
+) -> IndexReturnSeriesResponse:
+    rows = await repository.list_index_return_series(
+        index_id=index_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+    )
+    return build_index_return_series_response(
+        index_id=index_id,
+        request=request,
+        rows=rows,
+    )
+
+
 def build_index_return_series_response(
     *,
     index_id: str,
