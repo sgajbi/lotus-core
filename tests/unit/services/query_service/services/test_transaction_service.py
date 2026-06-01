@@ -287,6 +287,28 @@ async def test_get_transactions_raises_when_portfolio_missing(mock_transaction_r
             await service.get_transactions(portfolio_id="P404", skip=0, limit=10)
 
 
+async def test_get_transactions_uses_shared_portfolio_validation(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=mock_transaction_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.ensure_portfolio_exists",
+            new_callable=AsyncMock,
+        ) as ensure_portfolio_exists,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    ensure_portfolio_exists.assert_awaited_once_with(
+        repository=mock_transaction_repo,
+        portfolio_id="P1",
+    )
+
+
 async def test_get_transactions_include_projected_skips_business_date_default(
     mock_transaction_repo: AsyncMock,
 ):

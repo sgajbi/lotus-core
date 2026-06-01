@@ -15,6 +15,7 @@ from ..dtos.transaction_dto import (
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
+from .portfolio_validation import ensure_portfolio_exists
 from .transaction_metadata import (
     latest_transaction_evidence_timestamp,
     ledger_data_quality_status,
@@ -63,9 +64,7 @@ class TransactionService:
         logger.info(f"Fetching transactions for portfolio '{portfolio_id}'.")
 
         needs_default_as_of_date = as_of_date is None and not include_projected
-        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
-        if not portfolio_exists:
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         default_as_of_date = (
             await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
         )
