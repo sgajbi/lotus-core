@@ -52,6 +52,16 @@ class BenchmarkMarketSeriesEvidencePlan:
     include_fx_rates: bool
 
 
+def benchmark_market_series_currency(
+    *,
+    definition: Any | None,
+    target_currency: str | None,
+) -> str:
+    if definition is not None:
+        return definition.benchmark_currency
+    return target_currency or "UNKNOWN"
+
+
 def benchmark_market_series_request_scope(
     *,
     benchmark_id: str,
@@ -96,6 +106,23 @@ def benchmark_market_series_next_page_token_payload(
         "scope_fingerprint": request_scope.request_fingerprint,
         "last_index_id": index_ids[-1],
     }
+
+
+def benchmark_market_series_page_token(
+    *,
+    request_scope: BenchmarkMarketSeriesRequestScope,
+    has_more: bool,
+    index_ids: list[str],
+    encode_page_token: Callable[[dict[str, str]], str],
+) -> str | None:
+    payload = benchmark_market_series_next_page_token_payload(
+        request_scope=request_scope,
+        has_more=has_more,
+        index_ids=index_ids,
+    )
+    if payload is None:
+        return None
+    return encode_page_token(payload)
 
 
 def benchmark_market_series_fx_context(

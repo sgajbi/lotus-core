@@ -85,9 +85,10 @@ from .benchmark_composition import (
 )
 from .benchmark_coverage import build_benchmark_coverage_response
 from .benchmark_market_series import (
+    benchmark_market_series_currency,
     benchmark_market_series_evidence_plan,
     benchmark_market_series_fx_context,
-    benchmark_market_series_next_page_token_payload,
+    benchmark_market_series_page_token,
     benchmark_market_series_read_evidence,
     benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
@@ -948,8 +949,9 @@ class IntegrationService:
         definition = await self._reference_repository.get_benchmark_definition(
             benchmark_id, request.as_of_date
         )
-        benchmark_currency = (
-            definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
+        benchmark_currency = benchmark_market_series_currency(
+            definition=definition,
+            target_currency=request.target_currency,
         )
         page = getattr(request, "page", None)
         page_token = getattr(page, "page_token", None)
@@ -1014,14 +1016,12 @@ class IntegrationService:
                 ),
             },
         )
-        next_page_token: str | None = None
-        next_page_token_payload = benchmark_market_series_next_page_token_payload(
+        next_page_token = benchmark_market_series_page_token(
             request_scope=request_scope,
             has_more=has_more,
             index_ids=index_ids,
+            encode_page_token=self._encode_page_token,
         )
-        if next_page_token_payload is not None:
-            next_page_token = self._encode_page_token(next_page_token_payload)
 
         return build_benchmark_market_series_response(
             benchmark_id=benchmark_id,

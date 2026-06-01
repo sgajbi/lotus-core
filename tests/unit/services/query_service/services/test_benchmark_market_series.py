@@ -7,15 +7,32 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
 )
 from src.services.query_service.app.services.benchmark_market_series import (
+    benchmark_market_series_currency,
     benchmark_market_series_evidence_plan,
     benchmark_market_series_evidence_read_names,
     benchmark_market_series_fx_context,
     benchmark_market_series_next_page_token_payload,
     benchmark_market_series_normalization_status,
+    benchmark_market_series_page_token,
     benchmark_market_series_read_evidence,
     benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
 )
+
+
+def test_benchmark_market_series_currency_prefers_benchmark_definition() -> None:
+    assert (
+        benchmark_market_series_currency(
+            definition=SimpleNamespace(benchmark_currency="EUR"),
+            target_currency="USD",
+        )
+        == "EUR"
+    )
+
+
+def test_benchmark_market_series_currency_falls_back_to_target_or_unknown() -> None:
+    assert benchmark_market_series_currency(definition=None, target_currency="USD") == "USD"
+    assert benchmark_market_series_currency(definition=None, target_currency=None) == "UNKNOWN"
 
 
 def test_benchmark_market_series_fx_context_tracks_identity_and_missing_fx_request() -> None:
@@ -227,6 +244,70 @@ def test_benchmark_market_series_next_page_token_payload_preserves_scope() -> No
             request_scope=scope,
             has_more=False,
             index_ids=["IDX_A"],
+        )
+        is None
+    )
+
+
+def test_benchmark_market_series_page_token_encodes_non_empty_payload() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={},
+    )
+    encoded_payloads: list[dict[str, str]] = []
+
+    def encode(payload: dict[str, str]) -> str:
+        encoded_payloads.append(payload)
+        return "encoded-token"
+
+    assert (
+        benchmark_market_series_page_token(
+            request_scope=scope,
+            has_more=True,
+            index_ids=["IDX_A", "IDX_B"],
+            encode_page_token=encode,
+        )
+        == "encoded-token"
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": scope.request_fingerprint,
+            "last_index_id": "IDX_B",
+        }
+    ]
+
+
+def test_benchmark_market_series_page_token_suppresses_empty_payload() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={},
+    )
+
+    def encode(_: dict[str, str]) -> str:
+        raise AssertionError("Unexpected token encoding for terminal page")
+
+    assert (
+        benchmark_market_series_page_token(
+            request_scope=scope,
+            has_more=False,
+            index_ids=["IDX_A"],
+            encode_page_token=encode,
         )
         is None
     )
