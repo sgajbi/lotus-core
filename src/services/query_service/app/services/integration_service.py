@@ -1,6 +1,6 @@
 import logging
 from datetime import UTC, date, datetime
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,7 +67,6 @@ from ..dtos.reference_integration_dto import (
     ModelPortfolioTargetResponse,
     PlannedWithdrawalScheduleRequest,
     PlannedWithdrawalScheduleResponse,
-    PlannedWithdrawalScheduleSupportability,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
     PortfolioTaxLotWindowRequest,
@@ -123,6 +122,7 @@ from .market_data_coverage import (
 from .market_reference_coverage import market_reference_coverage_response
 from .model_portfolio_targets import build_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
+from .planned_withdrawal_schedule import build_planned_withdrawal_schedule_response
 from .portfolio_manager_book_membership import (
     build_portfolio_manager_book_membership_response,
     portfolio_manager_book_membership_portfolio_types,
@@ -142,7 +142,6 @@ from .reference_data_mappers import (
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
-    planned_withdrawal_schedule_entry,
     risk_free_series_point,
 )
 from .request_fingerprint import (
@@ -531,61 +530,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_withdrawals=request.include_inactive_withdrawals,
         )
-        entries = [planned_withdrawal_schedule_entry(row) for row in rows]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "PLANNED_WITHDRAWAL_SCHEDULE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "PLANNED_WITHDRAWAL_SCHEDULE_EMPTY"
-            missing_data_families.append("planned_withdrawal_schedule")
-
-        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
-        return PlannedWithdrawalScheduleResponse(
+        return build_planned_withdrawal_schedule_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            horizon_days=request.horizon_days,
-            withdrawals=entries,
-            supportability=PlannedWithdrawalScheduleSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                withdrawal_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "planned_withdrawal_schedules,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_planned_withdrawal_schedule_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=build_request_fingerprint(
-                    {
-                        "product": "PlannedWithdrawalSchedule",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "horizon_days": request.horizon_days,
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "planned_withdrawal_schedule:"
-                    + build_request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                            "horizon_days": request.horizon_days,
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_external_hedge_execution_readiness(
