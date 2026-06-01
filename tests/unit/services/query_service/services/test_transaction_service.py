@@ -493,23 +493,20 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert mock_transaction_repo.get_latest_fx_rate.await_count == 2
 
 
-async def test_get_transactions_enriches_page_records_sequentially(
+async def test_get_transactions_delegates_page_record_mapping(
     mock_transaction_repo: AsyncMock,
 ) -> None:
-    call_order: list[str] = []
-
-    async def apply_reporting_currency_fields(
-        *,
-        record: TransactionRecord,
-        reporting_currency: str,
-        as_of_date: date,
-        convert_amount: object,
-    ) -> None:
-        call_order.append(record.transaction_id)
-        assert reporting_currency == "SGD"
-        assert as_of_date == date(2025, 1, 15)
+    async def transaction_records_from_rows(**kwargs: object) -> list[TransactionRecord]:
+        assert kwargs["rows"] == mock_transaction_repo.get_transactions.return_value
+        assert kwargs["reporting_currency"] == "SGD"
+        assert kwargs["as_of_date"] == date(2025, 1, 15)
+        convert_amount = kwargs["convert_amount"]
         assert getattr(convert_amount, "__self__", None) is service
         assert getattr(convert_amount, "__func__", None) is TransactionService._convert_amount
+        return [
+            TransactionRecord.model_validate(row)
+            for row in mock_transaction_repo.get_transactions.return_value
+        ]
 
     with (
         patch(
@@ -517,12 +514,12 @@ async def test_get_transactions_enriches_page_records_sequentially(
             return_value=mock_transaction_repo,
         ),
         patch(
-            "src.services.query_service.app.services.transaction_service.apply_transaction_reporting_currency_fields",
+            "src.services.query_service.app.services.transaction_service.transaction_records_from_rows",
             new_callable=AsyncMock,
-        ) as apply_transaction_reporting_currency_fields,
+        ) as record_mapper,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        apply_transaction_reporting_currency_fields.side_effect = apply_reporting_currency_fields
+        record_mapper.side_effect = transaction_records_from_rows
 
         response_dto = await service.get_transactions(
             portfolio_id="P1",
@@ -532,8 +529,7 @@ async def test_get_transactions_enriches_page_records_sequentially(
         )
 
     assert [transaction.transaction_id for transaction in response_dto.transactions] == ["T1", "T2"]
-    assert apply_transaction_reporting_currency_fields.await_count == 2
-    assert call_order == ["T1", "T2"]
+    record_mapper.assert_awaited_once()
 
 
 async def test_get_transactions_raises_when_reporting_currency_rate_missing(

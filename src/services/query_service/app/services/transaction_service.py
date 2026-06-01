@@ -10,7 +10,6 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..dtos.transaction_dto import (
     PaginatedTransactionResponse,
     PortfolioRealizedTaxSummaryResponse,
-    TransactionRecord,
 )
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
@@ -27,7 +26,7 @@ from .transaction_realized_tax import (
     realized_tax_currency_totals,
     realized_tax_reporting_currency_total,
 )
-from .transaction_reporting_currency import apply_transaction_reporting_currency_fields
+from .transaction_records import transaction_records_from_rows
 
 logger = logging.getLogger(__name__)
 
@@ -104,20 +103,12 @@ class TransactionService:
         )
         resolved_reporting_currency = reporting_currency
 
-        transactions = []
-        for transaction in ledger_page.rows:
-            record = TransactionRecord.model_validate(transaction)
-            record.costs = [cost for cost in transaction.costs or []]
-            if transaction.cashflow:
-                record.cashflow = transaction.cashflow
-            if resolved_reporting_currency and effective_as_of_date is not None:
-                await apply_transaction_reporting_currency_fields(
-                    record=record,
-                    reporting_currency=resolved_reporting_currency,
-                    as_of_date=effective_as_of_date,
-                    convert_amount=self._convert_amount,
-                )
-            transactions.append(record)
+        transactions = await transaction_records_from_rows(
+            rows=ledger_page.rows,
+            reporting_currency=resolved_reporting_currency,
+            as_of_date=effective_as_of_date,
+            convert_amount=self._convert_amount,
+        )
 
         return PaginatedTransactionResponse(
             portfolio_id=portfolio_id,
