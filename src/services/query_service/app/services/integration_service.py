@@ -117,15 +117,12 @@ from .dpm_source_readiness import (
     dpm_model_targets_request,
     dpm_source_eligibility_family,
     dpm_source_evaluated_instrument_ids,
-    dpm_source_identity_from_mandate,
-    dpm_source_initial_identity,
+    dpm_source_mandate_resolution,
     dpm_source_market_data_family,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
     dpm_source_tax_lots_family,
     dpm_tax_lot_window_request,
-    mandate_source_family_readiness,
-    unavailable_mandate_binding_family,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
@@ -766,7 +763,6 @@ class IntegrationService:
         request: DpmSourceReadinessRequest,
     ) -> DpmSourceReadinessResponse:
         families: list[DpmSourceFamilyReadiness] = []
-        resolved_identity = dpm_source_initial_identity(request)
 
         mandate_response = await dpm_source_read_or_none(
             lambda: self.resolve_discretionary_mandate_binding(
@@ -774,14 +770,12 @@ class IntegrationService:
                 dpm_mandate_binding_request(request),
             )
         )
-        if mandate_response is None:
-            families.append(unavailable_mandate_binding_family())
-        else:
-            resolved_identity = dpm_source_identity_from_mandate(
-                request=request,
-                mandate_response=mandate_response,
-            )
-            families.append(mandate_source_family_readiness(mandate_response))
+        mandate_resolution = dpm_source_mandate_resolution(
+            request=request,
+            mandate_response=mandate_response,
+        )
+        resolved_identity = mandate_resolution.identity
+        families.append(mandate_resolution.family)
 
         model_response: ModelPortfolioTargetResponse | None = None
         if resolved_identity.model_portfolio_id is not None:

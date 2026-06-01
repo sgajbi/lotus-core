@@ -34,6 +34,12 @@ class DpmSourceModelTargetsResolution:
     family: DpmSourceFamilyReadiness
 
 
+@dataclass(frozen=True)
+class DpmSourceMandateResolution:
+    identity: DpmSourceReadinessIdentity
+    family: DpmSourceFamilyReadiness
+
+
 async def dpm_source_read_or_none(
     read_source: Callable[[], Awaitable[TSourceResponse]],
 ) -> TSourceResponse | None:
@@ -232,6 +238,25 @@ def dpm_source_identity_from_mandate(
     return DpmSourceReadinessIdentity(
         mandate_id=mandate_response.mandate_id,
         model_portfolio_id=request.model_portfolio_id or mandate_response.model_portfolio_id,
+    )
+
+
+def dpm_source_mandate_resolution(
+    *,
+    request: DpmSourceReadinessRequest,
+    mandate_response: Any | None,
+) -> DpmSourceMandateResolution:
+    if mandate_response is None:
+        return DpmSourceMandateResolution(
+            identity=dpm_source_initial_identity(request),
+            family=unavailable_mandate_binding_family(),
+        )
+    return DpmSourceMandateResolution(
+        identity=dpm_source_identity_from_mandate(
+            request=request,
+            mandate_response=mandate_response,
+        ),
+        family=mandate_source_family_readiness(mandate_response),
     )
 
 

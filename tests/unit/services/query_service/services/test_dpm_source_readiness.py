@@ -16,6 +16,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_family_readiness,
     dpm_source_identity_from_mandate,
     dpm_source_initial_identity,
+    dpm_source_mandate_resolution,
     dpm_source_market_data_family,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
@@ -292,6 +293,49 @@ def test_dpm_source_identity_from_mandate_falls_back_to_mandate_model() -> None:
 
     assert identity.mandate_id == "MANDATE_RESOLVED"
     assert identity.model_portfolio_id == "MODEL_FROM_MANDATE"
+
+
+def test_dpm_source_mandate_resolution_marks_unavailable_binding() -> None:
+    request = DpmSourceReadinessRequest(
+        as_of_date=date(2026, 4, 10),
+        mandate_id="MANDATE_CALLER",
+        model_portfolio_id="MODEL_CALLER",
+    )
+
+    resolution = dpm_source_mandate_resolution(
+        request=request,
+        mandate_response=None,
+    )
+
+    assert resolution.identity.mandate_id == "MANDATE_CALLER"
+    assert resolution.identity.model_portfolio_id == "MODEL_CALLER"
+    assert resolution.family.family == "mandate"
+    assert resolution.family.reason == "MANDATE_BINDING_UNAVAILABLE"
+    assert resolution.family.missing_items == ["mandate_binding"]
+
+
+def test_dpm_source_mandate_resolution_preserves_source_supportability() -> None:
+    request = DpmSourceReadinessRequest(as_of_date=date(2026, 4, 10))
+
+    resolution = dpm_source_mandate_resolution(
+        request=request,
+        mandate_response=SimpleNamespace(
+            mandate_id="MANDATE_RESOLVED",
+            model_portfolio_id="MODEL_FROM_MANDATE",
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_BINDING_READY",
+                missing_data_families=[],
+            ),
+        ),
+    )
+
+    assert resolution.identity.mandate_id == "MANDATE_RESOLVED"
+    assert resolution.identity.model_portfolio_id == "MODEL_FROM_MANDATE"
+    assert resolution.family.family == "mandate"
+    assert resolution.family.state == "READY"
+    assert resolution.family.reason == "MANDATE_BINDING_READY"
+    assert resolution.family.evidence_count == 1
 
 
 def test_dpm_source_model_targets_resolution_requires_model_identity() -> None:
