@@ -102,7 +102,7 @@ from .dpm_source_readiness import (
 )
 from .external_currency_exposure import resolve_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
-    build_external_eligible_hedge_instrument_response,
+    resolve_external_eligible_hedge_instrument_response,
 )
 from .external_fx_forward_curve import build_external_fx_forward_curve_response
 from .external_hedge_execution_readiness import (
@@ -365,17 +365,9 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalEligibleHedgeInstrumentRequest,
     ) -> ExternalEligibleHedgeInstrumentResponse | None:
-        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+        return await resolve_external_eligible_hedge_instrument_response(
+            repository=self._reference_repository,
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=request.mandate_id,
-        )
-        if binding is None:
-            return None
-
-        return build_external_eligible_hedge_instrument_response(
-            portfolio_id=portfolio_id,
-            binding=binding,
             request=request,
         )
 
