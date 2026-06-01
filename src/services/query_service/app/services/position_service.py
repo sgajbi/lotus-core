@@ -12,9 +12,7 @@ from ..dtos.position_dto import (
 from ..repositories.position_repository import PositionRepository
 from .portfolio_validation import ensure_portfolio_exists
 from .position_history_reads import position_history_response
-from .position_holdings_reads import (
-    effective_holdings_read_as_of_date,
-)
+from .position_holdings_reads import effective_holdings_read_as_of_date
 from .position_holdings_response import portfolio_holdings_response
 
 logger = logging.getLogger(__name__)
@@ -26,7 +24,6 @@ class PositionService:
     """
 
     def __init__(self, db: AsyncSession):
-        self.db = db
         self.repo = PositionRepository(db)
 
     async def get_position_history(

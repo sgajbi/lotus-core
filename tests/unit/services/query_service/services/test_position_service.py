@@ -79,6 +79,22 @@ def mock_position_repo() -> AsyncMock:
     return repo
 
 
+async def test_position_service_initializes_repository_without_retained_session(
+    mock_position_repo: AsyncMock,
+) -> None:
+    db_session = AsyncMock()
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ) as repository_cls:
+        service = PositionService(db_session)
+
+    repository_cls.assert_called_once_with(db_session)
+    assert service.repo is mock_position_repo
+    assert not hasattr(service, "db")
+
+
 async def test_get_position_history(mock_position_repo: AsyncMock):
     """Tests the position history service method."""
     # ARRANGE
