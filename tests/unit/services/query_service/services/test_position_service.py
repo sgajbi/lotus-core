@@ -17,6 +17,7 @@ from src.services.query_service.app.repositories.position_repository import Posi
 from src.services.query_service.app.services.position_service import (
     PositionService,
     merge_snapshot_and_history_position_rows,
+    position_valuation_data,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -48,6 +49,65 @@ async def test_merge_snapshot_and_history_position_rows_preserves_snapshot_autho
     ]
     assert history_supplements == [(history_only_row, history_instrument, history_state)]
     assert snapshot_security_ids == {"SEC_A"}
+
+
+async def test_position_valuation_data_maps_snapshot_row_values() -> None:
+    position_row = DailyPositionSnapshot(
+        market_price=Decimal("10.25"),
+        market_value=Decimal("1025"),
+        unrealized_gain_loss=Decimal("25"),
+        market_value_local=Decimal("1025"),
+        unrealized_gain_loss_local=Decimal("25"),
+    )
+
+    valuation = position_valuation_data(
+        position_row=position_row,
+        is_snapshot_row=True,
+        fallback_valuation=None,
+    )
+
+    assert valuation.market_price == Decimal("10.25")
+    assert valuation.market_value == Decimal("1025")
+    assert valuation.unrealized_gain_loss == Decimal("25")
+
+
+async def test_position_valuation_data_uses_latest_snapshot_fallback() -> None:
+    position_row = PositionHistory(cost_basis=Decimal("900"), cost_basis_local=Decimal("900"))
+
+    valuation = position_valuation_data(
+        position_row=position_row,
+        is_snapshot_row=False,
+        fallback_valuation={
+            "market_price": Decimal("101.5"),
+            "market_value": Decimal("5582.5"),
+            "unrealized_gain_loss": Decimal("82.5"),
+            "market_value_local": Decimal("5582.5"),
+            "unrealized_gain_loss_local": Decimal("82.5"),
+        },
+    )
+
+    assert valuation.market_price == Decimal("101.5")
+    assert valuation.market_value == Decimal("5582.5")
+    assert valuation.unrealized_gain_loss == Decimal("82.5")
+
+
+async def test_position_valuation_data_preserves_cost_basis_when_backfill_missing() -> None:
+    position_row = PositionHistory(
+        cost_basis=Decimal("123.45"),
+        cost_basis_local=Decimal("120.00"),
+    )
+
+    valuation = position_valuation_data(
+        position_row=position_row,
+        is_snapshot_row=False,
+        fallback_valuation=None,
+    )
+
+    assert valuation.market_price is None
+    assert valuation.market_value == Decimal("123.45")
+    assert valuation.unrealized_gain_loss == Decimal("0")
+    assert valuation.market_value_local == Decimal("120.00")
+    assert valuation.unrealized_gain_loss_local == Decimal("0")
 
 
 @pytest.fixture

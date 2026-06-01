@@ -41,6 +41,38 @@ def merge_snapshot_and_history_position_rows(
     return merged_results, history_supplements, set(snapshot_results_by_security.keys())
 
 
+def position_valuation_data(
+    *,
+    position_row: Any,
+    is_snapshot_row: bool,
+    fallback_valuation: dict[str, Any] | None,
+) -> ValuationData:
+    if is_snapshot_row:
+        return ValuationData(
+            market_price=position_row.market_price,
+            market_value=position_row.market_value,
+            unrealized_gain_loss=position_row.unrealized_gain_loss,
+            market_value_local=position_row.market_value_local,
+            unrealized_gain_loss_local=position_row.unrealized_gain_loss_local,
+        )
+    if fallback_valuation is not None:
+        return ValuationData(
+            market_price=fallback_valuation.get("market_price"),
+            market_value=fallback_valuation.get("market_value"),
+            unrealized_gain_loss=fallback_valuation.get("unrealized_gain_loss"),
+            market_value_local=fallback_valuation.get("market_value_local"),
+            unrealized_gain_loss_local=fallback_valuation.get("unrealized_gain_loss_local"),
+        )
+    # Maintain valuation continuity while snapshot backfill catches up.
+    return ValuationData(
+        market_price=None,
+        market_value=position_row.cost_basis,
+        unrealized_gain_loss=0,
+        market_value_local=position_row.cost_basis_local,
+        unrealized_gain_loss_local=0,
+    )
+
+
 class PositionService:
     """
     Handles the business logic for querying position data.
@@ -159,36 +191,11 @@ class PositionService:
         for position_row, instrument, pos_state in db_results:
             security_id = normalize_security_id(position_row.security_id)
             is_snapshot_row = security_id in snapshot_security_ids
-            valuation_dto = None
-            if is_snapshot_row:
-                valuation_dto = ValuationData(
-                    market_price=position_row.market_price,
-                    market_value=position_row.market_value,
-                    unrealized_gain_loss=position_row.unrealized_gain_loss,
-                    market_value_local=position_row.market_value_local,
-                    unrealized_gain_loss_local=position_row.unrealized_gain_loss_local,
-                )
-            else:
-                fallback_valuation = fallback_valuation_map.get(security_id)
-                if fallback_valuation is not None:
-                    valuation_dto = ValuationData(
-                        market_price=fallback_valuation.get("market_price"),
-                        market_value=fallback_valuation.get("market_value"),
-                        unrealized_gain_loss=fallback_valuation.get("unrealized_gain_loss"),
-                        market_value_local=fallback_valuation.get("market_value_local"),
-                        unrealized_gain_loss_local=fallback_valuation.get(
-                            "unrealized_gain_loss_local"
-                        ),
-                    )
-                else:
-                    # Maintain valuation continuity while snapshot backfill catches up.
-                    valuation_dto = ValuationData(
-                        market_price=None,
-                        market_value=position_row.cost_basis,
-                        unrealized_gain_loss=0,
-                        market_value_local=position_row.cost_basis_local,
-                        unrealized_gain_loss_local=0,
-                    )
+            valuation_dto = position_valuation_data(
+                position_row=position_row,
+                is_snapshot_row=is_snapshot_row,
+                fallback_valuation=fallback_valuation_map.get(security_id),
+            )
             position_dto = Position(
                 security_id=security_id,
                 quantity=position_row.quantity,
