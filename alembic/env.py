@@ -33,15 +33,10 @@ config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
 
-# Import the Base and all models that inherit from it so that
-# the metadata is populated correctly for autogenerate and upgrade.
-from portfolio_common.database_models import (
-    Base, Transaction, TransactionCost, Instrument, MarketPrice, FxRate,
-    PositionHistory, OutboxEvent, ProcessedEvent, DailyPositionSnapshot,
-    Cashflow, Portfolio, PortfolioAggregationJob, PortfolioTimeseries, PositionTimeseries,
-    InstrumentReprocessingState, ReprocessingJob
-)
-target_metadata = Base.metadata
+# Import the models module so SQLAlchemy model classes register with Base.metadata for Alembic.
+from portfolio_common import database_models
+
+target_metadata = database_models.Base.metadata
 
 
 def get_db_url():

@@ -1,8 +1,7 @@
 # services/ingestion_service/tests/integration/test_transaction_router.py
 import pytest
 from httpx import AsyncClient
-from unittest.mock import MagicMock, call
-from datetime import datetime
+from unittest.mock import MagicMock
 
 from portfolio_common.config import KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC
 

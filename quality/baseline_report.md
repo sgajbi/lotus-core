@@ -53,3 +53,7 @@ After the initial baseline, CR-847 removed the local generated
 blockers. `python -m pytest --collect-only -q` now reaches 3,575 collected tests and then stops at
 the repository's governed mixed-runtime guard because db-direct integration tests and live-worker
 E2E tests must run in separate invocations.
+
+CR-848 removed the unused-symbol lint subset. `python -m ruff check . --select F401,F841
+--statistics` is now clean, and full Ruff findings are down to 323: 250 `E501`, 72 `I001`, and 1
+`E402`.
