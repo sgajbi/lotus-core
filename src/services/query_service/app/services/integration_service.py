@@ -45,7 +45,6 @@ from ..dtos.reference_integration_dto import (
     ExternalFXForwardCurveSupportability,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgeExecutionReadinessResponse,
-    ExternalHedgeExecutionReadinessSupportability,
     ExternalHedgePolicyRequest,
     ExternalHedgePolicyResponse,
     ExternalHedgePolicySupportability,
@@ -109,6 +108,9 @@ from .dpm_source_readiness import (
     build_dpm_source_readiness_response,
     dpm_source_family_readiness,
     unavailable_dpm_source_family,
+)
+from .external_hedge_execution_readiness import (
+    build_external_hedge_execution_readiness_response,
 )
 from .instrument_eligibility import build_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
@@ -550,72 +552,10 @@ class IntegrationService:
         if binding is None:
             return None
 
-        missing_data_families = [
-            "external_currency_exposure",
-            "external_hedge_policy",
-            "external_fx_forward_curve",
-            "external_eligible_hedge_instrument",
-            "external_hedge_execution_readiness",
-        ]
-        blocked_capabilities = [
-            "hedge_advice",
-            "forward_pricing",
-            "counterparty_selection",
-            "best_execution",
-            "oms_acknowledgement",
-            "fills",
-            "settlement",
-            "autonomous_treasury_action",
-        ]
-
-        return ExternalHedgeExecutionReadinessResponse(
+        return build_external_hedge_execution_readiness_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            reporting_currency=request.reporting_currency,
-            exposure_currencies=request.exposure_currencies,
-            readiness_checks=[],
-            supportability=ExternalHedgeExecutionReadinessSupportability(
-                missing_data_families=missing_data_families,
-                blocked_capabilities=blocked_capabilities,
-            ),
-            lineage={
-                "source_system": "external-bank-treasury",
-                "source_table": "not_ingested",
-                "contract_version": "rfc_039_external_hedge_execution_readiness_v1",
-                "integration_status": "not_ingested",
-                "runtime_posture": "fail_closed",
-                "non_claims": ",".join(blocked_capabilities),
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status="MISSING",
-                latest_evidence_timestamp=None,
-                source_batch_fingerprint=build_request_fingerprint(
-                    {
-                        "product": "ExternalHedgeExecutionReadiness",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "reporting_currency": request.reporting_currency,
-                        "exposure_currencies": sorted(request.exposure_currencies),
-                        "integration_status": "not_ingested",
-                    }
-                ),
-                snapshot_id=(
-                    "external_hedge_execution_readiness:"
-                    + build_request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                            "integration_status": "not_ingested",
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
         )
 
     async def get_external_currency_exposure(
