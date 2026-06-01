@@ -180,41 +180,6 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.correlation_id is None
 
 
-async def test_ledger_data_quality_status_classifies_complete_partial_and_empty_windows() -> None:
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=2,
-            returned_count=2,
-            skip=0,
-        )
-        == COMPLETE
-    )
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=25,
-            returned_count=10,
-            skip=0,
-        )
-        == PARTIAL
-    )
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=25,
-            returned_count=10,
-            skip=10,
-        )
-        == PARTIAL
-    )
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=0,
-            returned_count=0,
-            skip=0,
-        )
-        == UNKNOWN
-    )
-
-
 async def test_get_transactions_classifies_complete_window(
     mock_transaction_repo: AsyncMock,
 ) -> None:

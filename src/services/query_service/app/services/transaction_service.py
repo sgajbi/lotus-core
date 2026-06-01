@@ -1,11 +1,10 @@
 # services/query-service/app/services/transaction_service.py
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Any, Optional, cast
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
@@ -18,6 +17,10 @@ from ..dtos.transaction_dto import (
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
+from .transaction_metadata import (
+    latest_transaction_evidence_timestamp,
+    ledger_data_quality_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +41,6 @@ class TransactionService:
         self.db = db
         self.repo = TransactionRepository(db)
         self._fx_converter = CachedFxRateConverter(self.repo)
-
-    @staticmethod
-    def _ledger_data_quality_status(
-        *,
-        total_count: int,
-        returned_count: int,
-        skip: int,
-    ) -> str:
-        if total_count <= 0:
-            return cast(str, UNKNOWN)
-        if skip > 0 or returned_count < total_count:
-            return cast(str, PARTIAL)
-        return cast(str, COMPLETE)
 
     async def get_transactions(
         self,
@@ -127,9 +117,7 @@ class TransactionService:
                 )
             else:
                 if len(db_results) == total_count:
-                    latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(
-                        db_results
-                    )
+                    latest_evidence_timestamp = latest_transaction_evidence_timestamp(db_results)
                 else:
                     latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
                         **ledger_filters
@@ -159,7 +147,7 @@ class TransactionService:
             transactions=transactions,
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date or end_date or date.today(),
-                data_quality_status=self._ledger_data_quality_status(
+                data_quality_status=ledger_data_quality_status(
                     total_count=total_count,
                     returned_count=len(transactions),
                     skip=skip,
@@ -201,7 +189,7 @@ class TransactionService:
         tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
             **ledger_filters,
         )
-        latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(tax_transactions)
+        latest_evidence_timestamp = latest_transaction_evidence_timestamp(tax_transactions)
 
         currency_totals = self._realized_tax_currency_totals(tax_transactions)
         reporting_currency_total = None
@@ -237,7 +225,7 @@ class TransactionService:
             ],
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date,
-                data_quality_status=self._ledger_data_quality_status(
+                data_quality_status=ledger_data_quality_status(
                     total_count=source_transaction_count,
                     returned_count=source_transaction_count,
                     skip=0,
@@ -272,17 +260,6 @@ class TransactionService:
             )
             for currency, bucket in sorted(totals.items())
         ]
-
-    @staticmethod
-    def _latest_transaction_evidence_timestamp(transactions: list[object]) -> datetime | None:
-        return max(
-            (
-                updated_at
-                for transaction in transactions
-                if (updated_at := getattr(transaction, "updated_at", None)) is not None
-            ),
-            default=None,
-        )
 
     async def _apply_reporting_currency_fields(
         self,
