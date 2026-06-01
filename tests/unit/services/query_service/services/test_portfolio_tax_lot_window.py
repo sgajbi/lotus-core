@@ -8,6 +8,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
     portfolio_tax_lot_after_sort_key,
+    portfolio_tax_lot_next_page_token_payload,
+    portfolio_tax_lot_window_request_scope,
 )
 
 
@@ -42,6 +44,70 @@ def test_portfolio_tax_lot_after_sort_key_requires_complete_cursor() -> None:
     assert portfolio_tax_lot_after_sort_key(
         {"last_acquisition_date": "2026-03-25", "last_lot_id": "LOT-A"}
     ) == (date(2026, 3, 25), "LOT-A")
+
+
+def test_portfolio_tax_lot_window_request_scope_binds_filters_and_cursor() -> None:
+    request = PortfolioTaxLotWindowRequest(
+        as_of_date=date(2026, 4, 10),
+        security_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+        include_closed_lots=True,
+        lot_status_filter="OPEN",
+        tenant_id="TENANT_SG",
+    )
+
+    scope = portfolio_tax_lot_window_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={
+            "last_acquisition_date": "2026-03-25",
+            "last_lot_id": "LOT-AAPL-001",
+        },
+    )
+
+    assert scope.request_fingerprint
+    assert scope.after_sort_key == (date(2026, 3, 25), "LOT-AAPL-001")
+
+
+def test_portfolio_tax_lot_window_request_scope_rejects_token_scope_mismatch() -> None:
+    request = PortfolioTaxLotWindowRequest(as_of_date=date(2026, 4, 10))
+
+    try:
+        portfolio_tax_lot_window_request_scope(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=request,
+            cursor={"scope_fingerprint": "wrong-scope"},
+        )
+    except ValueError as exc:
+        assert "tax-lot page token does not match request scope" in str(exc)
+    else:
+        raise AssertionError("Expected portfolio tax-lot page token scope mismatch")
+
+
+def test_portfolio_tax_lot_next_page_token_payload_uses_last_page_lot() -> None:
+    request = PortfolioTaxLotWindowRequest(as_of_date=date(2026, 4, 10))
+    scope = portfolio_tax_lot_window_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={},
+    )
+
+    assert portfolio_tax_lot_next_page_token_payload(
+        request_scope=scope,
+        has_more=True,
+        page_rows=[(_tax_lot_row(lot_id="LOT-A"), "USD"), (_tax_lot_row(lot_id="LOT-B"), "USD")],
+    ) == {
+        "scope_fingerprint": scope.request_fingerprint,
+        "last_acquisition_date": "2026-03-25",
+        "last_lot_id": "LOT-B",
+    }
+    assert (
+        portfolio_tax_lot_next_page_token_payload(
+            request_scope=scope,
+            has_more=False,
+            page_rows=[(_tax_lot_row(), "USD")],
+        )
+        is None
+    )
 
 
 def test_build_portfolio_tax_lot_window_response_marks_partial_page_degraded() -> None:

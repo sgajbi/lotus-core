@@ -147,7 +147,8 @@ from .portfolio_manager_book_membership import (
 )
 from .portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
-    portfolio_tax_lot_after_sort_key,
+    portfolio_tax_lot_next_page_token_payload,
+    portfolio_tax_lot_window_request_scope,
 )
 from .reference_data_mappers import benchmark_definition_response
 from .request_fingerprint import (
@@ -641,20 +642,11 @@ class IntegrationService:
         if not await self._buy_state_repository.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-        request_scope_fingerprint = build_request_fingerprint(
-            {
-                "portfolio_id": portfolio_id,
-                "as_of_date": request.as_of_date.isoformat(),
-                "security_ids": sorted(request.security_ids or []),
-                "lot_status_filter": request.lot_status_filter,
-                "include_closed_lots": request.include_closed_lots,
-                "tenant_id": request.tenant_id,
-            }
+        request_scope = portfolio_tax_lot_window_request_scope(
+            portfolio_id=portfolio_id,
+            request=request,
+            cursor=self._decode_page_token(request.page.page_token),
         )
-        cursor = self._decode_page_token(request.page.page_token)
-        token_scope = cursor.get("scope_fingerprint")
-        if token_scope and token_scope != request_scope_fingerprint:
-            raise ValueError("Portfolio tax-lot page token does not match request scope.")
 
         rows = await self._buy_state_repository.list_portfolio_tax_lots(
             portfolio_id=portfolio_id,
@@ -662,27 +654,25 @@ class IntegrationService:
             security_ids=request.security_ids,
             include_closed_lots=request.include_closed_lots,
             lot_status_filter=request.lot_status_filter,
-            after_sort_key=portfolio_tax_lot_after_sort_key(cursor),
+            after_sort_key=request_scope.after_sort_key,
             limit=request.page.page_size + 1,
         )
         has_more = len(rows) > request.page.page_size
         page_rows = rows[: request.page.page_size]
 
         next_page_token: str | None = None
-        if has_more and page_rows:
-            last_lot = page_rows[-1][0]
-            next_page_token = self._encode_page_token(
-                {
-                    "scope_fingerprint": request_scope_fingerprint,
-                    "last_acquisition_date": last_lot.acquisition_date.isoformat(),
-                    "last_lot_id": last_lot.lot_id,
-                }
-            )
+        next_page_token_payload = portfolio_tax_lot_next_page_token_payload(
+            request_scope=request_scope,
+            has_more=has_more,
+            page_rows=page_rows,
+        )
+        if next_page_token_payload is not None:
+            next_page_token = self._encode_page_token(next_page_token_payload)
 
         return build_portfolio_tax_lot_window_response(
             portfolio_id=portfolio_id,
             request=request,
-            request_scope_fingerprint=request_scope_fingerprint,
+            request_scope_fingerprint=request_scope.request_fingerprint,
             page_rows=page_rows,
             has_more=has_more,
             next_page_token=next_page_token,
