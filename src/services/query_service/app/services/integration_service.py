@@ -78,6 +78,7 @@ from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .benchmark_assignment import build_benchmark_assignment_response
+from .benchmark_catalog import build_benchmark_catalog_response
 from .benchmark_composition import (
     benchmark_composition_definition_context,
     build_benchmark_composition_window_response,
@@ -1041,11 +1042,11 @@ class IntegrationService:
                 as_of_date=as_of_date,
             )
         )
-        records: list[BenchmarkDefinitionResponse] = []
-        for row in rows:
-            components = components_by_benchmark.get(row.benchmark_id, [])
-            records.append(benchmark_definition_response(row, components=components))
-        return BenchmarkCatalogResponse(as_of_date=as_of_date, records=records)
+        return build_benchmark_catalog_response(
+            as_of_date=as_of_date,
+            rows=rows,
+            components_by_benchmark=components_by_benchmark,
+        )
 
     async def list_index_catalog(
         self,
