@@ -14,9 +14,40 @@ from portfolio_common.database_models import (
 from src.services.query_service.app.dtos.position_dto import Position
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.repositories.position_repository import PositionRepository
-from src.services.query_service.app.services.position_service import PositionService
+from src.services.query_service.app.services.position_service import (
+    PositionService,
+    merge_snapshot_and_history_position_rows,
+)
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_merge_snapshot_and_history_position_rows_preserves_snapshot_authority() -> None:
+    snapshot_row = PositionHistory(security_id=" SEC_A ", position_date=date(2025, 1, 1))
+    duplicate_history_row = PositionHistory(security_id="SEC_A", position_date=date(2025, 1, 2))
+    history_only_row = PositionHistory(security_id=" sec_b ", position_date=date(2025, 1, 2))
+    snapshot_instrument = Instrument(name="Snapshot Instrument")
+    duplicate_instrument = Instrument(name="Duplicate History Instrument")
+    history_instrument = Instrument(name="History Instrument")
+    snapshot_state = PositionState(status="CURRENT")
+    duplicate_state = PositionState(status="CURRENT")
+    history_state = PositionState(status="CURRENT")
+
+    merged, history_supplements, snapshot_security_ids = merge_snapshot_and_history_position_rows(
+        snapshot_results=[(snapshot_row, snapshot_instrument, snapshot_state)],
+        history_results=[
+            (duplicate_history_row, duplicate_instrument, duplicate_state),
+            (history_only_row, history_instrument, history_state),
+        ],
+    )
+
+    assert [row.security_id for row, _instrument, _state in merged] == [" SEC_A ", " sec_b "]
+    assert [instrument.name for _row, instrument, _state in merged] == [
+        "Snapshot Instrument",
+        "History Instrument",
+    ]
+    assert history_supplements == [(history_only_row, history_instrument, history_state)]
+    assert snapshot_security_ids == {"SEC_A"}
 
 
 @pytest.fixture

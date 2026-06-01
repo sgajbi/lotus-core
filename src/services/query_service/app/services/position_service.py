@@ -22,6 +22,25 @@ from .decimal_amounts import decimal_or_zero
 logger = logging.getLogger(__name__)
 
 
+def merge_snapshot_and_history_position_rows(
+    *,
+    snapshot_results: list[tuple[Any, Any, Any]],
+    history_results: list[tuple[Any, Any, Any]],
+) -> tuple[list[tuple[Any, Any, Any]], list[tuple[Any, Any, Any]], set[str]]:
+    snapshot_results_by_security = {
+        normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)
+        for position_row, instrument, pos_state in snapshot_results
+    }
+    merged_results = list(snapshot_results_by_security.values())
+    history_supplements = [
+        (position_row, instrument, pos_state)
+        for position_row, instrument, pos_state in history_results
+        if normalize_security_id(position_row.security_id) not in snapshot_results_by_security
+    ]
+    merged_results.extend(history_supplements)
+    return merged_results, history_supplements, set(snapshot_results_by_security.keys())
+
+
 class PositionService:
     """
     Handles the business logic for querying position data.
@@ -108,19 +127,12 @@ class PositionService:
             snapshot_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
             history_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
 
-        snapshot_results_by_security = {
-            normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)
-            for position_row, instrument, pos_state in snapshot_results
-        }
-        db_results = list(snapshot_results_by_security.values())
-        history_supplements = [
-            (position_row, instrument, pos_state)
-            for position_row, instrument, pos_state in history_results
-            if normalize_security_id(position_row.security_id) not in snapshot_results_by_security
-        ]
-        db_results.extend(history_supplements)
-
-        snapshot_security_ids = set(snapshot_results_by_security.keys())
+        db_results, history_supplements, snapshot_security_ids = (
+            merge_snapshot_and_history_position_rows(
+                snapshot_results=snapshot_results,
+                history_results=history_results,
+            )
+        )
         fallback_valuation_map: dict[str, dict[str, float | None]] = {}
         if history_supplements or (db_results and not snapshot_security_ids):
             fallback_security_ids = sorted(
