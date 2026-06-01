@@ -10,6 +10,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_mandate_binding_request,
     dpm_market_data_coverage_request,
     dpm_model_targets_request,
+    dpm_source_eligibility_family,
     dpm_source_evaluated_instrument_ids,
     dpm_source_family_readiness,
     dpm_source_identity_from_mandate,
@@ -316,6 +317,48 @@ def test_dpm_source_model_targets_resolution_extracts_target_universe() -> None:
     assert resolution.family.state == "READY"
     assert resolution.family.reason == "MODEL_TARGETS_READY"
     assert resolution.family.evidence_count == 2
+
+
+def test_dpm_source_eligibility_family_marks_empty_universe() -> None:
+    family = dpm_source_eligibility_family(
+        evaluated_instrument_ids=[],
+        eligibility_response=None,
+    )
+
+    assert family.family == "eligibility"
+    assert family.reason == "DPM_INSTRUMENT_UNIVERSE_EMPTY"
+    assert family.missing_items == ["instrument_ids"]
+
+
+def test_dpm_source_eligibility_family_marks_unavailable_evidence() -> None:
+    family = dpm_source_eligibility_family(
+        evaluated_instrument_ids=[f"SEC_{index:02d}" for index in range(12)],
+        eligibility_response=None,
+    )
+
+    assert family.family == "eligibility"
+    assert family.reason == "INSTRUMENT_ELIGIBILITY_UNAVAILABLE"
+    assert family.missing_items == [f"SEC_{index:02d}" for index in range(10)]
+
+
+def test_dpm_source_eligibility_family_preserves_source_supportability() -> None:
+    family = dpm_source_eligibility_family(
+        evaluated_instrument_ids=["EQ_US_AAPL"],
+        eligibility_response=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="INCOMPLETE",
+                reason="ELIGIBILITY_MISSING",
+                missing_security_ids=["EQ_US_MSFT"],
+                resolved_count=1,
+            )
+        ),
+    )
+
+    assert family.family == "eligibility"
+    assert family.state == "INCOMPLETE"
+    assert family.reason == "ELIGIBILITY_MISSING"
+    assert family.missing_items == ["EQ_US_MSFT"]
+    assert family.evidence_count == 1
 
 
 def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:

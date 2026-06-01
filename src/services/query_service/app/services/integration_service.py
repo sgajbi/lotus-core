@@ -112,17 +112,15 @@ from .dpm_source_readiness import (
     dpm_mandate_binding_request,
     dpm_market_data_coverage_request,
     dpm_model_targets_request,
+    dpm_source_eligibility_family,
     dpm_source_evaluated_instrument_ids,
     dpm_source_identity_from_mandate,
     dpm_source_initial_identity,
     dpm_source_model_targets_resolution,
     dpm_tax_lot_window_request,
-    eligibility_source_family_readiness,
-    empty_instrument_universe_family,
     mandate_source_family_readiness,
     market_data_source_family_readiness,
     tax_lots_source_family_readiness,
-    unavailable_eligibility_family,
     unavailable_mandate_binding_family,
     unavailable_market_data_family,
     unavailable_tax_lots_family,
@@ -805,6 +803,7 @@ class IntegrationService:
             request_instrument_ids=request.instrument_ids,
             target_instrument_ids=target_instrument_ids,
         )
+        eligibility: InstrumentEligibilityBulkResponse | None = None
         if evaluated_instrument_ids:
             try:
                 eligibility = await self.resolve_instrument_eligibility_bulk(
@@ -813,11 +812,14 @@ class IntegrationService:
                         instrument_ids=evaluated_instrument_ids,
                     )
                 )
-                families.append(eligibility_source_family_readiness(eligibility))
             except (LookupError, ValueError):
-                families.append(unavailable_eligibility_family(evaluated_instrument_ids))
-        else:
-            families.append(empty_instrument_universe_family())
+                eligibility = None
+        families.append(
+            dpm_source_eligibility_family(
+                evaluated_instrument_ids=evaluated_instrument_ids,
+                eligibility_response=eligibility,
+            )
+        )
 
         try:
             tax_lots = await self.get_portfolio_tax_lot_window(

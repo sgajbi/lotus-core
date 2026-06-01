@@ -245,6 +245,18 @@ def dpm_source_model_targets_resolution(
     )
 
 
+def dpm_source_eligibility_family(
+    *,
+    evaluated_instrument_ids: list[str],
+    eligibility_response: Any | None,
+) -> DpmSourceFamilyReadiness:
+    if not evaluated_instrument_ids:
+        return empty_instrument_universe_family()
+    if eligibility_response is None:
+        return unavailable_eligibility_family(evaluated_instrument_ids)
+    return eligibility_source_family_readiness(eligibility_response)
+
+
 def dpm_mandate_binding_request(
     request: DpmSourceReadinessRequest,
 ) -> DiscretionaryMandateBindingRequest:
