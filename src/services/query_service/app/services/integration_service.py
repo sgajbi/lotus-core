@@ -124,7 +124,7 @@ from .market_data_coverage import (
     build_market_data_coverage_response,
     market_data_coverage_read_scope,
 )
-from .model_portfolio_targets import build_model_portfolio_target_response
+from .model_portfolio_targets import resolve_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
 from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_response
 from .portfolio_manager_book_membership import (
@@ -191,23 +191,10 @@ class IntegrationService:
         model_portfolio_id: str,
         request: ModelPortfolioTargetRequest,
     ) -> ModelPortfolioTargetResponse | None:
-        definition = await self._reference_repository.resolve_model_portfolio_definition(
+        return await resolve_model_portfolio_target_response(
+            repository=self._reference_repository,
             model_portfolio_id=model_portfolio_id,
-            as_of_date=request.as_of_date,
-        )
-        if definition is None:
-            return None
-
-        targets = await self._reference_repository.list_model_portfolio_targets(
-            model_portfolio_id=model_portfolio_id,
-            model_portfolio_version=definition.model_portfolio_version,
-            as_of_date=request.as_of_date,
-            include_inactive_targets=request.include_inactive_targets,
-        )
-        return build_model_portfolio_target_response(
-            definition=definition,
             request=request,
-            target_rows=targets,
         )
 
     async def resolve_portfolio_manager_book_membership(
