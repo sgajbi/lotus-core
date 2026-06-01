@@ -1,6 +1,5 @@
 # services/query-service/app/services/transaction_service.py
 import logging
-from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any, Optional, cast
@@ -11,7 +10,6 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..dtos.transaction_dto import (
     PaginatedTransactionResponse,
     PortfolioRealizedTaxSummaryResponse,
-    RealizedTaxCurrencyTotal,
     TransactionRecord,
 )
 from ..repositories.currency_codes import normalize_currency_code
@@ -21,15 +19,9 @@ from .transaction_metadata import (
     latest_transaction_evidence_timestamp,
     ledger_data_quality_status,
 )
+from .transaction_realized_tax import realized_tax_currency_totals
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class _RealizedTaxAccumulator:
-    transaction_count: int = 0
-    withholding_tax_amount: Decimal = Decimal("0")
-    other_tax_deductions_amount: Decimal = Decimal("0")
 
 
 class TransactionService:
@@ -191,7 +183,7 @@ class TransactionService:
         )
         latest_evidence_timestamp = latest_transaction_evidence_timestamp(tax_transactions)
 
-        currency_totals = self._realized_tax_currency_totals(tax_transactions)
+        currency_totals = realized_tax_currency_totals(tax_transactions)
         reporting_currency_total = None
         if resolved_reporting_currency is not None:
             converted_currency_totals = []
@@ -233,33 +225,6 @@ class TransactionService:
                 latest_evidence_timestamp=latest_evidence_timestamp,
             ),
         )
-
-    @staticmethod
-    def _realized_tax_currency_totals(
-        transactions: list[object],
-    ) -> list[RealizedTaxCurrencyTotal]:
-        totals: dict[str, _RealizedTaxAccumulator] = {}
-        for transaction in transactions:
-            currency = normalize_currency_code(str(getattr(transaction, "currency")))
-            bucket = totals.setdefault(currency, _RealizedTaxAccumulator())
-            withholding_tax = getattr(transaction, "withholding_tax_amount") or Decimal("0")
-            other_deductions = getattr(transaction, "other_interest_deductions_amount") or Decimal(
-                "0"
-            )
-            bucket.transaction_count += 1
-            bucket.withholding_tax_amount += withholding_tax
-            bucket.other_tax_deductions_amount += other_deductions
-
-        return [
-            RealizedTaxCurrencyTotal(
-                currency=currency,
-                transaction_count=bucket.transaction_count,
-                withholding_tax_amount=bucket.withholding_tax_amount,
-                other_tax_deductions_amount=bucket.other_tax_deductions_amount,
-                total_tax_amount=bucket.withholding_tax_amount + bucket.other_tax_deductions_amount,
-            )
-            for currency, bucket in sorted(totals.items())
-        ]
 
     async def _apply_reporting_currency_fields(
         self,
