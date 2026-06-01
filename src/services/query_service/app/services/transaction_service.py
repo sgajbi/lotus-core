@@ -6,7 +6,6 @@ from typing import Optional, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
@@ -17,7 +16,6 @@ from .transaction_dates import (
     transaction_ledger_effective_as_of_date,
 )
 from .transaction_metadata import (
-    ledger_data_quality_status,
     realized_tax_summary_filters,
     transaction_ledger_filters,
 )
@@ -27,7 +25,10 @@ from .transaction_realized_tax import (
     realized_tax_currency_totals,
     realized_tax_reporting_currency_total,
 )
-from .transaction_records import transaction_records_from_rows
+from .transaction_records import (
+    paginated_transaction_ledger_response,
+    transaction_records_from_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,22 +109,16 @@ class TransactionService:
             convert_amount=self._convert_amount,
         )
 
-        return PaginatedTransactionResponse(
+        return paginated_transaction_ledger_response(
             portfolio_id=portfolio_id,
             reporting_currency=resolved_reporting_currency,
-            total=ledger_page.total_count,
+            total_count=ledger_page.total_count,
             skip=skip,
             limit=limit,
             transactions=transactions,
-            **source_data_product_runtime_metadata(
-                as_of_date=effective_as_of_date or end_date or date.today(),
-                data_quality_status=ledger_data_quality_status(
-                    total_count=ledger_page.total_count,
-                    returned_count=len(transactions),
-                    skip=skip,
-                ),
-                latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
-            ),
+            effective_as_of_date=effective_as_of_date,
+            end_date=end_date,
+            latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
         )
 
     async def get_realized_tax_summary(

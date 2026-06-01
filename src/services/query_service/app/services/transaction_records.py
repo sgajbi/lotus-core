@@ -1,9 +1,11 @@
 from collections.abc import Awaitable, Callable
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from ..dtos.transaction_dto import TransactionRecord
+from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..dtos.transaction_dto import PaginatedTransactionResponse, TransactionRecord
+from .transaction_metadata import ledger_data_quality_status
 from .transaction_reporting_currency import apply_transaction_reporting_currency_fields
 
 ConvertAmount = Callable[
@@ -39,3 +41,35 @@ def transaction_record_from_row(row: Any) -> TransactionRecord:
     if row.cashflow:
         record.cashflow = row.cashflow
     return record
+
+
+def paginated_transaction_ledger_response(
+    *,
+    portfolio_id: str,
+    reporting_currency: str | None,
+    total_count: int,
+    skip: int,
+    limit: int,
+    transactions: list[TransactionRecord],
+    effective_as_of_date: date | None,
+    end_date: date | None,
+    latest_evidence_timestamp: datetime | None,
+    today: Callable[[], date] = date.today,
+) -> PaginatedTransactionResponse:
+    return PaginatedTransactionResponse(
+        portfolio_id=portfolio_id,
+        reporting_currency=reporting_currency,
+        total=total_count,
+        skip=skip,
+        limit=limit,
+        transactions=transactions,
+        **source_data_product_runtime_metadata(
+            as_of_date=effective_as_of_date or end_date or today(),
+            data_quality_status=ledger_data_quality_status(
+                total_count=total_count,
+                returned_count=len(transactions),
+                skip=skip,
+            ),
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        ),
+    )

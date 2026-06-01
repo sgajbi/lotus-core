@@ -1,12 +1,14 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from portfolio_common.database_models import Cashflow, Transaction, TransactionCost
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.services.transaction_records import (
+    paginated_transaction_ledger_response,
     transaction_record_from_row,
     transaction_records_from_rows,
 )
@@ -140,3 +142,94 @@ async def test_transaction_records_from_rows_skips_reporting_currency_without_co
 
     assert [record.transaction_id for record in records] == ["T1"]
     apply_transaction_reporting_currency_fields.assert_not_awaited()
+
+
+def _transaction_record(transaction_id: str) -> TransactionRecord:
+    return TransactionRecord(
+        transaction_id=transaction_id,
+        transaction_date=datetime(2025, 1, 10),
+        transaction_type="BUY",
+        instrument_id="I1",
+        security_id="S1",
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        currency="USD",
+    )
+
+
+async def test_paginated_transaction_ledger_response_marks_complete_window() -> None:
+    latest_evidence_timestamp = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+
+    response = paginated_transaction_ledger_response(
+        portfolio_id="P1",
+        reporting_currency="SGD",
+        total_count=2,
+        skip=0,
+        limit=10,
+        transactions=[_transaction_record("T1"), _transaction_record("T2")],
+        effective_as_of_date=date(2025, 1, 15),
+        end_date=date(2025, 1, 31),
+        latest_evidence_timestamp=latest_evidence_timestamp,
+    )
+
+    assert response.product_name == "TransactionLedgerWindow"
+    assert response.product_version == "v1"
+    assert response.portfolio_id == "P1"
+    assert response.reporting_currency == "SGD"
+    assert response.total == 2
+    assert response.skip == 0
+    assert response.limit == 10
+    assert [transaction.transaction_id for transaction in response.transactions] == ["T1", "T2"]
+    assert response.as_of_date == date(2025, 1, 15)
+    assert response.data_quality_status == COMPLETE
+    assert response.latest_evidence_timestamp == latest_evidence_timestamp
+
+
+async def test_paginated_transaction_ledger_response_marks_partial_window() -> None:
+    response = paginated_transaction_ledger_response(
+        portfolio_id="P1",
+        reporting_currency=None,
+        total_count=25,
+        skip=10,
+        limit=10,
+        transactions=[_transaction_record("T11")],
+        effective_as_of_date=date(2025, 1, 15),
+        end_date=None,
+        latest_evidence_timestamp=None,
+    )
+
+    assert response.data_quality_status == PARTIAL
+    assert response.as_of_date == date(2025, 1, 15)
+
+
+async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fallback() -> None:
+    end_date_response = paginated_transaction_ledger_response(
+        portfolio_id="P1",
+        reporting_currency=None,
+        total_count=0,
+        skip=0,
+        limit=10,
+        transactions=[],
+        effective_as_of_date=None,
+        end_date=date(2025, 1, 31),
+        latest_evidence_timestamp=None,
+        today=lambda: date(2025, 2, 1),
+    )
+    today_response = paginated_transaction_ledger_response(
+        portfolio_id="P1",
+        reporting_currency=None,
+        total_count=0,
+        skip=0,
+        limit=10,
+        transactions=[],
+        effective_as_of_date=None,
+        end_date=None,
+        latest_evidence_timestamp=None,
+        today=lambda: date(2025, 2, 1),
+    )
+
+    assert end_date_response.as_of_date == date(2025, 1, 31)
+    assert today_response.as_of_date == date(2025, 2, 1)
+    assert end_date_response.data_quality_status == UNKNOWN
+    assert today_response.data_quality_status == UNKNOWN
