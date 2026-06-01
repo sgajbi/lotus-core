@@ -15,6 +15,7 @@ from .position_history import portfolio_position_history_response_data
 from .position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
+    effective_holdings_as_of_date,
     fallback_valuation_security_ids,
     held_since_security_epoch_pairs,
     holdings_data_quality_status,
@@ -26,6 +27,7 @@ from .position_holdings import (
     portfolio_positions_response_data,
     position_held_since_requests,
     should_fetch_fallback_valuation_map,
+    should_use_default_holdings_as_of_date,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,17 +84,21 @@ class PositionService:
         """
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
-        needs_default_as_of_date = as_of_date is None and not include_projected
+        needs_default_as_of_date = should_use_default_holdings_as_of_date(
+            requested_as_of_date=as_of_date,
+            include_projected=include_projected,
+        )
         portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
         if not portfolio_exists:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         default_as_of_date = (
             await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
         )
-
-        effective_as_of_date = default_as_of_date
-        if effective_as_of_date is None and needs_default_as_of_date:
-            effective_as_of_date = date.today()
+        effective_as_of_date = effective_holdings_as_of_date(
+            requested_as_of_date=as_of_date,
+            latest_business_date=default_as_of_date,
+            include_projected=include_projected,
+        )
 
         if effective_as_of_date is not None:
             snapshot_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(

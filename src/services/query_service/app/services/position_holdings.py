@@ -13,6 +13,29 @@ from .decimal_amounts import decimal_or_zero
 HeldSinceRequest = tuple[int, str, int, date]
 
 
+def should_use_default_holdings_as_of_date(
+    *,
+    requested_as_of_date: date | None,
+    include_projected: bool,
+) -> bool:
+    return requested_as_of_date is None and not include_projected
+
+
+def effective_holdings_as_of_date(
+    *,
+    requested_as_of_date: date | None,
+    latest_business_date: date | None,
+    include_projected: bool,
+    today: date | None = None,
+) -> date | None:
+    if not should_use_default_holdings_as_of_date(
+        requested_as_of_date=requested_as_of_date,
+        include_projected=include_projected,
+    ):
+        return requested_as_of_date
+    return latest_business_date or today or date.today()
+
+
 def should_fetch_fallback_valuation_map(
     *,
     db_results: list[tuple[Any, Any, Any]],
