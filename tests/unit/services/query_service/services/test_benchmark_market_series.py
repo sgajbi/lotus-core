@@ -11,6 +11,7 @@ from src.services.query_service.app.services.benchmark_market_series import (
     benchmark_market_series_evidence_plan,
     benchmark_market_series_evidence_read_names,
     benchmark_market_series_fx_context,
+    benchmark_market_series_index_page,
     benchmark_market_series_next_page_token_payload,
     benchmark_market_series_normalization_status,
     benchmark_market_series_page_token,
@@ -247,6 +248,26 @@ def test_benchmark_market_series_next_page_token_payload_preserves_scope() -> No
         )
         is None
     )
+
+
+def test_benchmark_market_series_index_page_caps_candidate_ids() -> None:
+    page = benchmark_market_series_index_page(
+        candidate_index_ids=["IDX_A", "IDX_B", "IDX_C"],
+        page_size=2,
+    )
+
+    assert page.index_ids == ["IDX_A", "IDX_B"]
+    assert page.has_more
+
+
+def test_benchmark_market_series_index_page_marks_terminal_page() -> None:
+    page = benchmark_market_series_index_page(
+        candidate_index_ids=["IDX_A", "IDX_B"],
+        page_size=2,
+    )
+
+    assert page.index_ids == ["IDX_A", "IDX_B"]
+    assert not page.has_more
 
 
 def test_benchmark_market_series_page_token_encodes_non_empty_payload() -> None:

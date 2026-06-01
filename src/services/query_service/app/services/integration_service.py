@@ -88,6 +88,7 @@ from .benchmark_market_series import (
     benchmark_market_series_currency,
     benchmark_market_series_evidence_plan,
     benchmark_market_series_fx_context,
+    benchmark_market_series_index_page,
     benchmark_market_series_page_token,
     benchmark_market_series_read_evidence,
     benchmark_market_series_request_scope,
@@ -969,8 +970,10 @@ class IntegrationService:
                 limit=request_scope.page_size + 1,
             )
         )
-        has_more = len(candidate_index_ids) > request_scope.page_size
-        index_ids = candidate_index_ids[: request_scope.page_size]
+        index_page = benchmark_market_series_index_page(
+            candidate_index_ids=candidate_index_ids,
+            page_size=request_scope.page_size,
+        )
         fx_context = benchmark_market_series_fx_context(
             benchmark_currency=benchmark_currency,
             target_currency=request.target_currency,
@@ -988,16 +991,16 @@ class IntegrationService:
                         benchmark_id=benchmark_id,
                         start_date=request.window.start_date,
                         end_date=request.window.end_date,
-                        index_ids=index_ids,
+                        index_ids=index_page.index_ids,
                     )
                 ),
                 "index_prices": lambda: self._reference_repository.list_index_price_points(
-                    index_ids=index_ids,
+                    index_ids=index_page.index_ids,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
                 ),
                 "index_returns": lambda: self._reference_repository.list_index_return_points(
-                    index_ids=index_ids,
+                    index_ids=index_page.index_ids,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
                 ),
@@ -1018,8 +1021,8 @@ class IntegrationService:
         )
         next_page_token = benchmark_market_series_page_token(
             request_scope=request_scope,
-            has_more=has_more,
-            index_ids=index_ids,
+            has_more=index_page.has_more,
+            index_ids=index_page.index_ids,
             encode_page_token=self._encode_page_token,
         )
 
@@ -1029,9 +1032,9 @@ class IntegrationService:
             benchmark_currency=benchmark_currency,
             request_scope_fingerprint=request_scope.request_fingerprint,
             page_size=request_scope.page_size,
-            has_more=has_more,
+            has_more=index_page.has_more,
             next_page_token=next_page_token,
-            index_ids=index_ids,
+            index_ids=index_page.index_ids,
             component_rows=market_results["components"],
             index_prices=market_results.get("index_prices", []),
             index_returns=market_results.get("index_returns", []),

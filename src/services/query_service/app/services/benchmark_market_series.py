@@ -52,6 +52,12 @@ class BenchmarkMarketSeriesEvidencePlan:
     include_fx_rates: bool
 
 
+@dataclass(frozen=True)
+class BenchmarkMarketSeriesIndexPage:
+    index_ids: list[str]
+    has_more: bool
+
+
 def benchmark_market_series_currency(
     *,
     definition: Any | None,
@@ -106,6 +112,17 @@ def benchmark_market_series_next_page_token_payload(
         "scope_fingerprint": request_scope.request_fingerprint,
         "last_index_id": index_ids[-1],
     }
+
+
+def benchmark_market_series_index_page(
+    *,
+    candidate_index_ids: list[str],
+    page_size: int,
+) -> BenchmarkMarketSeriesIndexPage:
+    return BenchmarkMarketSeriesIndexPage(
+        index_ids=candidate_index_ids[:page_size],
+        has_more=len(candidate_index_ids) > page_size,
+    )
 
 
 def benchmark_market_series_page_token(
