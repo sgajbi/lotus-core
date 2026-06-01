@@ -1,0 +1,62 @@
+name: Quality Baseline Report
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  report-only:
+    name: Quality Baseline / Report Only
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install repository and report tools
+        run: |
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          python -m pip install ruff pytest pytest-cov coverage radon xenon vulture deptry bandit pip-audit import-linter interrogate mypy
+      - name: Ruff baseline
+        continue-on-error: true
+        run: python -m ruff check . --statistics
+      - name: Test collection baseline
+        continue-on-error: true
+        run: python -m pytest --collect-only -q
+      - name: Complexity baseline
+        continue-on-error: true
+        run: python -m radon cc src -s -a
+      - name: Maintainability baseline
+        continue-on-error: true
+        run: python -m radon mi src -s
+      - name: Dead-code baseline
+        continue-on-error: true
+        run: python -m vulture src tests --min-confidence 80
+      - name: Dependency baseline
+        continue-on-error: true
+        run: python -m deptry .
+      - name: Security baseline
+        continue-on-error: true
+        run: python -m bandit -r src -c pyproject.toml
+      - name: Dependency audit baseline
+        continue-on-error: true
+        run: python -m pip_audit
+      - name: Import boundary baseline
+        continue-on-error: true
+        run: lint-imports
+      - name: Docstring baseline
+        continue-on-error: true
+        run: interrogate src

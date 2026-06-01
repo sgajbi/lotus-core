@@ -61,3 +61,38 @@ select = ["E", "F", "I"]
 quote-style = "double"
 indent-style = "space"
 
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+    "src/services/query_service/build/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_configs = true
+no_implicit_optional = true
+exclude = [
+    "src/services/query_service/build/",
+]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+ignore-module = true
+ignore-nested-functions = true
+fail-under = 0
+exclude = ["src/services/query_service/build", "tests"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "src/services/query_service/build"]
+
+[tool.deptry]
+exclude = ["src/services/query_service/build"]
+
