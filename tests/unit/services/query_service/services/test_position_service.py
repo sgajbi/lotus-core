@@ -17,6 +17,7 @@ from src.services.query_service.app.repositories.position_repository import Posi
 from src.services.query_service.app.services.position_service import (
     PositionService,
     merge_snapshot_and_history_position_rows,
+    position_response_data,
     position_valuation_data,
 )
 
@@ -108,6 +109,71 @@ async def test_position_valuation_data_preserves_cost_basis_when_backfill_missin
     assert valuation.unrealized_gain_loss == Decimal("0")
     assert valuation.market_value_local == Decimal("120.00")
     assert valuation.unrealized_gain_loss_local == Decimal("0")
+
+
+async def test_position_response_data_maps_snapshot_instrument_fields() -> None:
+    valuation = ValuationData(market_value=Decimal("1025"))
+    position = position_response_data(
+        position_row=DailyPositionSnapshot(
+            security_id=" SEC_A ",
+            quantity=Decimal("100"),
+            cost_basis=Decimal("1000"),
+            cost_basis_local=Decimal("995"),
+            date=date(2025, 1, 2),
+        ),
+        instrument=Instrument(
+            name="Apple Inc.",
+            isin="US0378331005",
+            currency="USD",
+            asset_class="Equity",
+            product_type="Equity",
+            sector="Technology",
+            country_of_risk="US",
+            rating="AA+",
+            liquidity_tier="L1",
+        ),
+        pos_state=PositionState(status="CURRENT"),
+        is_snapshot_row=True,
+        valuation=valuation,
+    )
+
+    assert position.security_id == "SEC_A"
+    assert position.position_date == date(2025, 1, 2)
+    assert position.instrument_name == "Apple Inc."
+    assert position.asset_class == "Equity"
+    assert position.isin == "US0378331005"
+    assert position.currency == "USD"
+    assert position.sector == "Technology"
+    assert position.country_of_risk == "US"
+    assert position.product_type == "Equity"
+    assert position.rating == "AA+"
+    assert position.liquidity_tier == "L1"
+    assert position.valuation is valuation
+    assert position.reprocessing_status == "CURRENT"
+
+
+async def test_position_response_data_maps_history_date_and_missing_instrument() -> None:
+    position = position_response_data(
+        position_row=PositionHistory(
+            security_id=" HIST_A ",
+            quantity=Decimal("3"),
+            cost_basis=Decimal("300"),
+            cost_basis_local=Decimal("297"),
+            position_date=date(2025, 1, 3),
+        ),
+        instrument=None,
+        pos_state=None,
+        is_snapshot_row=False,
+        valuation=ValuationData(market_value=Decimal("300")),
+    )
+
+    assert position.security_id == "HIST_A"
+    assert position.position_date == date(2025, 1, 3)
+    assert position.instrument_name == "N/A"
+    assert position.asset_class is None
+    assert position.isin is None
+    assert position.currency is None
+    assert position.reprocessing_status is None
 
 
 @pytest.fixture

@@ -73,6 +73,34 @@ def position_valuation_data(
     )
 
 
+def position_response_data(
+    *,
+    position_row: Any,
+    instrument: Any,
+    pos_state: Any,
+    is_snapshot_row: bool,
+    valuation: ValuationData,
+) -> Position:
+    return Position(
+        security_id=normalize_security_id(position_row.security_id),
+        quantity=position_row.quantity,
+        cost_basis=position_row.cost_basis,
+        cost_basis_local=position_row.cost_basis_local,
+        instrument_name=instrument.name if instrument else "N/A",
+        position_date=position_row.date if is_snapshot_row else position_row.position_date,
+        asset_class=instrument.asset_class if instrument else None,
+        isin=instrument.isin if instrument else None,
+        currency=instrument.currency if instrument else None,
+        sector=instrument.sector if instrument else None,
+        country_of_risk=instrument.country_of_risk if instrument else None,
+        product_type=instrument.product_type if instrument else None,
+        rating=instrument.rating if instrument else None,
+        liquidity_tier=instrument.liquidity_tier if instrument else None,
+        valuation=valuation,
+        reprocessing_status=pos_state.status if pos_state else None,
+    )
+
+
 class PositionService:
     """
     Handles the business logic for querying position data.
@@ -196,25 +224,12 @@ class PositionService:
                 is_snapshot_row=is_snapshot_row,
                 fallback_valuation=fallback_valuation_map.get(security_id),
             )
-            position_dto = Position(
-                security_id=security_id,
-                quantity=position_row.quantity,
-                cost_basis=position_row.cost_basis,
-                cost_basis_local=position_row.cost_basis_local,
-                instrument_name=instrument.name if instrument else "N/A",
-                position_date=(
-                    position_row.date if is_snapshot_row else position_row.position_date
-                ),
-                asset_class=instrument.asset_class if instrument else None,
-                isin=instrument.isin if instrument else None,
-                currency=instrument.currency if instrument else None,
-                sector=instrument.sector if instrument else None,
-                country_of_risk=instrument.country_of_risk if instrument else None,
-                product_type=instrument.product_type if instrument else None,
-                rating=instrument.rating if instrument else None,
-                liquidity_tier=instrument.liquidity_tier if instrument else None,
+            position_dto = position_response_data(
+                position_row=position_row,
+                instrument=instrument,
+                pos_state=pos_state,
+                is_snapshot_row=is_snapshot_row,
                 valuation=valuation_dto,
-                reprocessing_status=pos_state.status if pos_state else None,
             )
             positions.append(position_dto)
 
