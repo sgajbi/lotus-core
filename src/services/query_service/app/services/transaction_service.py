@@ -12,6 +12,10 @@ from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
 from .portfolio_validation import ensure_portfolio_exists
+from .transaction_dates import (
+    realized_tax_effective_as_of_date,
+    transaction_ledger_effective_as_of_date,
+)
 from .transaction_metadata import (
     ledger_data_quality_status,
     realized_tax_summary_filters,
@@ -64,15 +68,12 @@ class TransactionService:
         """
         logger.info(f"Fetching transactions for portfolio '{portfolio_id}'.")
 
-        needs_default_as_of_date = as_of_date is None and not include_projected
         await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
-        default_as_of_date = (
-            await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
+        effective_as_of_date = await transaction_ledger_effective_as_of_date(
+            repository=self.repo,
+            as_of_date=as_of_date,
+            include_projected=include_projected,
         )
-
-        effective_as_of_date = default_as_of_date
-        if effective_as_of_date is None and needs_default_as_of_date:
-            effective_as_of_date = date.today()
 
         ledger_filters = transaction_ledger_filters(
             portfolio_id=portfolio_id,
@@ -139,15 +140,15 @@ class TransactionService:
         base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
         if base_currency is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
-        default_as_of_date = (
-            await self.repo.get_latest_business_date() if as_of_date is None else as_of_date
+        effective_as_of_date = await realized_tax_effective_as_of_date(
+            repository=self.repo,
+            as_of_date=as_of_date,
         )
         normalized_base_currency = normalize_currency_code(str(base_currency))
         resolved_reporting_currency = (
             normalize_currency_code(reporting_currency) if reporting_currency is not None else None
         )
 
-        effective_as_of_date = default_as_of_date or date.today()
         ledger_filters = realized_tax_summary_filters(
             portfolio_id=portfolio_id,
             start_date=start_date,
