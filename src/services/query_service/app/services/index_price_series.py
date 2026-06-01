@@ -15,6 +15,24 @@ from .reference_data_mappers import index_price_series_point
 from .source_data_runtime import source_product_runtime_metadata
 
 
+async def resolve_index_price_series_response(
+    *,
+    repository: Any,
+    index_id: str,
+    request: IndexSeriesRequest,
+) -> IndexPriceSeriesResponse:
+    rows = await repository.list_index_price_series(
+        index_id=index_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+    )
+    return build_index_price_series_response(
+        index_id=index_id,
+        request=request,
+        rows=rows,
+    )
+
+
 def build_index_price_series_response(
     *,
     index_id: str,
