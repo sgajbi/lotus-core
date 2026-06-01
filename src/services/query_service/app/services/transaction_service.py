@@ -19,6 +19,8 @@ from .portfolio_validation import ensure_portfolio_exists
 from .transaction_metadata import (
     latest_transaction_evidence_timestamp,
     ledger_data_quality_status,
+    realized_tax_summary_filters,
+    transaction_ledger_filters,
 )
 from .transaction_realized_tax import (
     realized_tax_currency_totals,
@@ -75,21 +77,21 @@ class TransactionService:
         if effective_as_of_date is None and needs_default_as_of_date:
             effective_as_of_date = date.today()
 
-        ledger_filters = {
-            "portfolio_id": portfolio_id,
-            "instrument_id": instrument_id,
-            "security_id": security_id,
-            "transaction_type": transaction_type,
-            "component_type": component_type,
-            "linked_transaction_group_id": linked_transaction_group_id,
-            "fx_contract_id": fx_contract_id,
-            "swap_event_id": swap_event_id,
-            "near_leg_group_id": near_leg_group_id,
-            "far_leg_group_id": far_leg_group_id,
-            "start_date": start_date,
-            "end_date": end_date,
-            "as_of_date": effective_as_of_date,
-        }
+        ledger_filters = transaction_ledger_filters(
+            portfolio_id=portfolio_id,
+            instrument_id=instrument_id,
+            security_id=security_id,
+            transaction_type=transaction_type,
+            component_type=component_type,
+            linked_transaction_group_id=linked_transaction_group_id,
+            fx_contract_id=fx_contract_id,
+            swap_event_id=swap_event_id,
+            near_leg_group_id=near_leg_group_id,
+            far_leg_group_id=far_leg_group_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=effective_as_of_date,
+        )
 
         total_count = await self.repo.get_transactions_count(**ledger_filters)
 
@@ -174,12 +176,12 @@ class TransactionService:
         )
 
         effective_as_of_date = default_as_of_date or date.today()
-        ledger_filters = {
-            "portfolio_id": portfolio_id,
-            "start_date": start_date,
-            "end_date": end_date,
-            "as_of_date": effective_as_of_date,
-        }
+        ledger_filters = realized_tax_summary_filters(
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=effective_as_of_date,
+        )
         source_transaction_count = await self.repo.get_transactions_count(**ledger_filters)
         tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
             **ledger_filters,
