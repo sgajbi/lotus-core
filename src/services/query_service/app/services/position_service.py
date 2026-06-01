@@ -1,15 +1,13 @@
 # src/services/query_service/app/services/position_service.py
 import logging
-from datetime import date, datetime
-from typing import Any, Optional
+from datetime import date
+from typing import Optional
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.position_dto import (
     PortfolioPositionHistoryResponse,
     PortfolioPositionsResponse,
-    Position,
 )
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
@@ -18,12 +16,13 @@ from .position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
     fallback_valuation_security_ids,
+    holdings_data_quality_status,
     holdings_response_as_of_date,
+    latest_holdings_evidence_timestamp,
     market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
     portfolio_positions_response_data,
     position_held_since_requests,
-    position_requires_market_price_freshness,
     position_response_data,
     position_valuation_data,
     should_fetch_fallback_valuation_map,
@@ -189,58 +188,11 @@ class PositionService:
             portfolio_id=portfolio_id,
             positions=positions,
             response_as_of_date=response_as_of_date,
-            data_quality_status=self._holdings_data_quality_status(
+            data_quality_status=holdings_data_quality_status(
                 positions=positions,
                 history_supplements=history_supplements,
                 response_as_of_date=response_as_of_date,
                 latest_market_price_dates=latest_market_price_dates,
             ),
-            latest_evidence_timestamp=self._latest_holdings_evidence_timestamp(db_results),
+            latest_evidence_timestamp=latest_holdings_evidence_timestamp(db_results),
         )
-
-    @staticmethod
-    def _holdings_data_quality_status(
-        *,
-        positions: list[Position],
-        history_supplements: list[tuple[Any, Any, Any]],
-        response_as_of_date: date,
-        latest_market_price_dates: dict[str, date],
-    ) -> str:
-        if not positions:
-            return UNKNOWN
-        normalized_statuses = [
-            (position.reprocessing_status or "").strip().upper() for position in positions
-        ]
-        if any(not status for status in normalized_statuses):
-            return UNKNOWN
-        if any(status != "CURRENT" for status in normalized_statuses):
-            return STALE
-        if any(
-            (
-                latest_market_price_dates.get(normalize_security_id(position.security_id))
-                != response_as_of_date
-                if position_requires_market_price_freshness(position)
-                else False
-            )
-            for position in positions
-        ):
-            return STALE
-        if history_supplements:
-            return PARTIAL
-        return COMPLETE
-
-    @staticmethod
-    def _latest_holdings_evidence_timestamp(
-        db_results: list[tuple[Any, Any, Any]],
-    ) -> datetime | None:
-        timestamps: list[datetime] = []
-        for position_row, _instrument, pos_state in db_results:
-            for candidate in (
-                getattr(position_row, "updated_at", None),
-                getattr(position_row, "created_at", None),
-                getattr(pos_state, "updated_at", None),
-                getattr(pos_state, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None

@@ -22,7 +22,9 @@ from src.services.query_service.app.services.position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
     fallback_valuation_security_ids,
+    holdings_data_quality_status,
     holdings_response_as_of_date,
+    latest_holdings_evidence_timestamp,
     market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
     portfolio_positions_response_data,
@@ -517,6 +519,65 @@ async def test_market_price_freshness_security_ids_filters_cash_and_unpriced_row
     assert market_price_freshness_security_ids([cash, equity, unpriced_bond]) == ["EQ_A"]
 
 
+async def test_holdings_data_quality_status_does_not_infer_missing_state() -> None:
+    assert (
+        holdings_data_quality_status(
+            positions=[
+                Position(
+                    security_id="S1",
+                    quantity=Decimal("1"),
+                    cost_basis=Decimal("10"),
+                    position_date=date(2025, 1, 1),
+                    instrument_name="Missing state",
+                    reprocessing_status=None,
+                )
+            ],
+            history_supplements=[],
+            response_as_of_date=date(2025, 1, 1),
+            latest_market_price_dates={},
+        )
+        == "UNKNOWN"
+    )
+
+
+async def test_holdings_data_quality_status_marks_history_supplement_partial() -> None:
+    position = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="History supplement",
+        reprocessing_status="CURRENT",
+    )
+
+    assert (
+        holdings_data_quality_status(
+            positions=[position],
+            history_supplements=[(PositionHistory(security_id="SEC_A"), None, None)],
+            response_as_of_date=date(2025, 1, 1),
+            latest_market_price_dates={},
+        )
+        == "PARTIAL"
+    )
+
+
+async def test_latest_holdings_evidence_timestamp_uses_latest_row_or_state_timestamp() -> None:
+    position_row = DailyPositionSnapshot(
+        security_id="SEC_A",
+        date=date(2025, 1, 1),
+        created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
+    )
+    state = PositionState(
+        created_at=datetime(2025, 1, 1, 8, 30, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
+    )
+
+    assert latest_holdings_evidence_timestamp([(position_row, None, state)]) == datetime(
+        2025, 1, 1, 10, 5, tzinfo=UTC
+    )
+
+
 async def test_position_history_record_data_maps_history_fields() -> None:
     history = PositionHistory(
         transaction_id="T-HIST",
@@ -913,27 +974,6 @@ async def test_get_portfolio_positions_raises_when_portfolio_missing(mock_positi
 
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_portfolio_positions("P404")
-
-
-async def test_holdings_data_quality_status_does_not_infer_missing_state():
-    assert (
-        PositionService._holdings_data_quality_status(
-            positions=[
-                Position(
-                    security_id="S1",
-                    quantity=Decimal("1"),
-                    cost_basis=Decimal("10"),
-                    position_date=date(2025, 1, 1),
-                    instrument_name="Missing state",
-                    reprocessing_status=None,
-                )
-            ],
-            history_supplements=[],
-            response_as_of_date=date(2025, 1, 1),
-            latest_market_price_dates={},
-        )
-        == "UNKNOWN"
-    )
 
 
 async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cost_basis(

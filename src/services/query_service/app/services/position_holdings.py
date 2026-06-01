@@ -2,6 +2,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
+
 from ..dtos.position_dto import PortfolioPositionsResponse, Position
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.valuation_dto import ValuationData
@@ -184,6 +186,53 @@ def market_price_freshness_security_ids(positions: list[Position]) -> list[str]:
             if (security_id := normalize_security_id(position.security_id))
         }
     )
+
+
+def holdings_data_quality_status(
+    *,
+    positions: list[Position],
+    history_supplements: list[tuple[Any, Any, Any]],
+    response_as_of_date: date,
+    latest_market_price_dates: dict[str, date],
+) -> str:
+    if not positions:
+        return UNKNOWN
+    normalized_statuses = [
+        (position.reprocessing_status or "").strip().upper() for position in positions
+    ]
+    if any(not status for status in normalized_statuses):
+        return UNKNOWN
+    if any(status != "CURRENT" for status in normalized_statuses):
+        return STALE
+    if any(
+        (
+            latest_market_price_dates.get(normalize_security_id(position.security_id))
+            != response_as_of_date
+            if position_requires_market_price_freshness(position)
+            else False
+        )
+        for position in positions
+    ):
+        return STALE
+    if history_supplements:
+        return PARTIAL
+    return COMPLETE
+
+
+def latest_holdings_evidence_timestamp(
+    db_results: list[tuple[Any, Any, Any]],
+) -> datetime | None:
+    timestamps: list[datetime] = []
+    for position_row, _instrument, pos_state in db_results:
+        for candidate in (
+            getattr(position_row, "updated_at", None),
+            getattr(position_row, "created_at", None),
+            getattr(pos_state, "updated_at", None),
+            getattr(pos_state, "created_at", None),
+        ):
+            if isinstance(candidate, datetime):
+                timestamps.append(candidate)
+    return max(timestamps) if timestamps else None
 
 
 def holdings_response_as_of_date(
