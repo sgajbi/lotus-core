@@ -22,6 +22,7 @@ from src.services.query_service.app.services.position_service import (
     holdings_response_as_of_date,
     market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
+    portfolio_positions_response_data,
     position_held_since_requests,
     position_requires_market_price_freshness,
     position_response_data,
@@ -166,6 +167,37 @@ async def test_holdings_response_as_of_date_uses_today_when_positions_empty() ->
         positions=[],
         today=date(2025, 1, 9),
     ) == date(2025, 1, 9)
+
+
+async def test_portfolio_positions_response_data_adds_runtime_metadata() -> None:
+    evidence_timestamp = datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
+    position = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Instrument",
+    )
+
+    response = portfolio_positions_response_data(
+        portfolio_id="P1",
+        positions=[position],
+        response_as_of_date=date(2025, 1, 1),
+        data_quality_status="COMPLETE",
+        latest_evidence_timestamp=evidence_timestamp,
+    )
+
+    assert response.portfolio_id == "P1"
+    assert response.positions == [position]
+    assert response.product_name == "HoldingsAsOf"
+    assert response.product_version == "v1"
+    assert response.as_of_date == date(2025, 1, 1)
+    assert response.data_quality_status == "COMPLETE"
+    assert response.latest_evidence_timestamp == evidence_timestamp
+    assert response.restatement_version == "current"
+    assert response.reconciliation_status == "UNKNOWN"
+    assert response.correlation_id is None
+    assert response.generated_at.tzinfo is not None
 
 
 async def test_position_valuation_data_maps_snapshot_row_values() -> None:

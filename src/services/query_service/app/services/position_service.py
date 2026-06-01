@@ -211,6 +211,25 @@ def holdings_response_as_of_date(
     return max((position.position_date for position in positions), default=fallback_today)
 
 
+def portfolio_positions_response_data(
+    *,
+    portfolio_id: str,
+    positions: list[Position],
+    response_as_of_date: date,
+    data_quality_status: str,
+    latest_evidence_timestamp: datetime | None,
+) -> PortfolioPositionsResponse:
+    return PortfolioPositionsResponse(
+        portfolio_id=portfolio_id,
+        positions=positions,
+        **source_data_product_runtime_metadata(
+            as_of_date=response_as_of_date,
+            data_quality_status=data_quality_status,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        ),
+    )
+
+
 class PositionService:
     """
     Handles the business logic for querying position data.
@@ -375,19 +394,17 @@ class PositionService:
                 security_ids=market_price_security_ids,
                 as_of_date=response_as_of_date,
             )
-        return PortfolioPositionsResponse(
+        return portfolio_positions_response_data(
             portfolio_id=portfolio_id,
             positions=positions,
-            **source_data_product_runtime_metadata(
-                as_of_date=response_as_of_date,
-                data_quality_status=self._holdings_data_quality_status(
-                    positions=positions,
-                    history_supplements=history_supplements,
-                    response_as_of_date=response_as_of_date,
-                    latest_market_price_dates=latest_market_price_dates,
-                ),
-                latest_evidence_timestamp=self._latest_holdings_evidence_timestamp(db_results),
+            response_as_of_date=response_as_of_date,
+            data_quality_status=self._holdings_data_quality_status(
+                positions=positions,
+                history_supplements=history_supplements,
+                response_as_of_date=response_as_of_date,
+                latest_market_price_dates=latest_market_price_dates,
             ),
+            latest_evidence_timestamp=self._latest_holdings_evidence_timestamp(db_results),
         )
 
     @staticmethod
