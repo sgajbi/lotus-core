@@ -6,6 +6,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
 )
 from src.services.query_service.app.services.benchmark_market_series import (
+    benchmark_market_series_evidence_plan,
     benchmark_market_series_fx_context,
     benchmark_market_series_next_page_token_payload,
     benchmark_market_series_normalization_status,
@@ -57,6 +58,42 @@ def test_benchmark_market_series_normalization_status_reflects_fx_evidence() -> 
         )
         == "native_component_series_with_benchmark_to_target_fx_context"
     )
+
+
+def test_benchmark_market_series_evidence_plan_tracks_requested_market_families() -> None:
+    fx_context = benchmark_market_series_fx_context(
+        benchmark_currency="EUR",
+        target_currency="USD",
+        requested_fields={"index_price", "benchmark_return", "fx_rate"},
+    )
+
+    plan = benchmark_market_series_evidence_plan(
+        requested_fields={"index_price", "benchmark_return", "fx_rate"},
+        fx_context=fx_context,
+    )
+
+    assert plan.include_index_prices
+    assert not plan.include_index_returns
+    assert plan.include_benchmark_returns
+    assert plan.include_fx_rates
+
+
+def test_benchmark_market_series_evidence_plan_suppresses_identity_fx_read() -> None:
+    fx_context = benchmark_market_series_fx_context(
+        benchmark_currency="USD",
+        target_currency="USD",
+        requested_fields={"index_return", "fx_rate"},
+    )
+
+    plan = benchmark_market_series_evidence_plan(
+        requested_fields={"index_return", "fx_rate"},
+        fx_context=fx_context,
+    )
+
+    assert not plan.include_index_prices
+    assert plan.include_index_returns
+    assert not plan.include_benchmark_returns
+    assert not plan.include_fx_rates
 
 
 def test_benchmark_market_series_request_scope_binds_paging_to_request() -> None:

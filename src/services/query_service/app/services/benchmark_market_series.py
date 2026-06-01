@@ -43,6 +43,14 @@ class BenchmarkMarketSeriesRequestScope:
     cursor_index_id: str | None
 
 
+@dataclass(frozen=True)
+class BenchmarkMarketSeriesEvidencePlan:
+    include_index_prices: bool
+    include_index_returns: bool
+    include_benchmark_returns: bool
+    include_fx_rates: bool
+
+
 def benchmark_market_series_request_scope(
     *,
     benchmark_id: str,
@@ -122,6 +130,19 @@ def benchmark_market_series_fx_context(
         target_currency=target_currency,
         should_read_fx_rates=False,
         initial_normalization_status=normalization_status,
+    )
+
+
+def benchmark_market_series_evidence_plan(
+    *,
+    requested_fields: set[str],
+    fx_context: BenchmarkMarketSeriesFxContext,
+) -> BenchmarkMarketSeriesEvidencePlan:
+    return BenchmarkMarketSeriesEvidencePlan(
+        include_index_prices="index_price" in requested_fields,
+        include_index_returns="index_return" in requested_fields,
+        include_benchmark_returns="benchmark_return" in requested_fields,
+        include_fx_rates=fx_context.should_read_fx_rates,
     )
 
 

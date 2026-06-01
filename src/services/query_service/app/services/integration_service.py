@@ -85,6 +85,7 @@ from .benchmark_composition import (
 )
 from .benchmark_coverage import build_benchmark_coverage_response
 from .benchmark_market_series import (
+    benchmark_market_series_evidence_plan,
     benchmark_market_series_fx_context,
     benchmark_market_series_next_page_token_payload,
     benchmark_market_series_request_scope,
@@ -972,6 +973,10 @@ class IntegrationService:
             target_currency=request.target_currency,
             requested_fields=request_scope.requested_fields,
         )
+        evidence_plan = benchmark_market_series_evidence_plan(
+            requested_fields=request_scope.requested_fields,
+            fx_context=fx_context,
+        )
         market_read_names = ["components"]
         market_reads: list[Any] = [
             self._reference_repository.list_benchmark_components_overlapping_window(
@@ -981,7 +986,7 @@ class IntegrationService:
                 index_ids=index_ids,
             )
         ]
-        if "index_price" in request_scope.requested_fields:
+        if evidence_plan.include_index_prices:
             market_read_names.append("index_prices")
             market_reads.append(
                 self._reference_repository.list_index_price_points(
@@ -990,7 +995,7 @@ class IntegrationService:
                     end_date=request.window.end_date,
                 )
             )
-        if "index_return" in request_scope.requested_fields:
+        if evidence_plan.include_index_returns:
             market_read_names.append("index_returns")
             market_reads.append(
                 self._reference_repository.list_index_return_points(
@@ -999,7 +1004,7 @@ class IntegrationService:
                     end_date=request.window.end_date,
                 )
             )
-        if "benchmark_return" in request_scope.requested_fields:
+        if evidence_plan.include_benchmark_returns:
             market_read_names.append("benchmark_returns")
             market_reads.append(
                 self._reference_repository.list_benchmark_return_points(
@@ -1009,7 +1014,7 @@ class IntegrationService:
                 )
             )
 
-        if fx_context.should_read_fx_rates:
+        if evidence_plan.include_fx_rates:
             market_read_names.append("fx_rates")
             market_reads.append(
                 self._reference_repository.get_fx_rates(
