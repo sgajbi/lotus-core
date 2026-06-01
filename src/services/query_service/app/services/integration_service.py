@@ -86,7 +86,7 @@ from .benchmark_market_series import (
     resolve_benchmark_market_series_response,
 )
 from .benchmark_return_series import build_benchmark_return_series_response
-from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
+from .cio_model_change_cohort import resolve_cio_model_change_affected_cohort_response
 from .classification_taxonomy import build_classification_taxonomy_response
 from .client_income_needs_schedule import resolve_client_income_needs_schedule_response
 from .client_restriction_profile import resolve_client_restriction_profile_response
@@ -222,23 +222,10 @@ class IntegrationService:
         model_portfolio_id: str,
         request: CioModelChangeAffectedCohortRequest,
     ) -> CioModelChangeAffectedCohortResponse | None:
-        definition = await self._reference_repository.resolve_model_portfolio_definition(
+        return await resolve_cio_model_change_affected_cohort_response(
+            repository=self._reference_repository,
             model_portfolio_id=model_portfolio_id,
-            as_of_date=request.as_of_date,
-        )
-        if definition is None:
-            return None
-
-        rows = await self._reference_repository.list_model_portfolio_affected_mandates(
-            model_portfolio_id=model_portfolio_id,
-            as_of_date=request.as_of_date,
-            booking_center_code=request.booking_center_code,
-            include_inactive_mandates=request.include_inactive_mandates,
-        )
-        return build_cio_model_change_affected_cohort_response(
-            definition=definition,
             request=request,
-            mandate_rows=rows,
         )
 
     async def resolve_dpm_portfolio_universe_candidates(
