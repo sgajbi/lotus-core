@@ -24,6 +24,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_read_or_none,
     dpm_source_readiness_supportability,
     dpm_source_tax_lots_family,
+    dpm_source_tax_lots_read_or_none,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
     empty_instrument_universe_family,
@@ -517,6 +518,51 @@ def test_dpm_source_eligibility_family_preserves_source_supportability() -> None
     assert family.reason == "ELIGIBILITY_MISSING"
     assert family.missing_items == ["EQ_US_MSFT"]
     assert family.evidence_count == 1
+
+
+def test_dpm_source_tax_lots_read_or_none_reads_portfolio_scope() -> None:
+    async def read_tax_lots(portfolio_id: str, instrument_ids: list[str]) -> str:
+        return f"{portfolio_id}:{','.join(instrument_ids)}"
+
+    assert (
+        asyncio.run(
+            dpm_source_tax_lots_read_or_none(
+                portfolio_id="PB_SG_GLOBAL_BAL_001",
+                evaluated_instrument_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+                read_tax_lots=read_tax_lots,
+            )
+        )
+        == "PB_SG_GLOBAL_BAL_001:EQ_US_AAPL,EQ_US_MSFT"
+    )
+
+
+def test_dpm_source_tax_lots_read_or_none_preserves_empty_full_portfolio_scope() -> None:
+    async def read_tax_lots(portfolio_id: str, instrument_ids: list[str]) -> tuple[str, list[str]]:
+        return portfolio_id, instrument_ids
+
+    assert asyncio.run(
+        dpm_source_tax_lots_read_or_none(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            evaluated_instrument_ids=[],
+            read_tax_lots=read_tax_lots,
+        )
+    ) == ("PB_SG_GLOBAL_BAL_001", [])
+
+
+def test_dpm_source_tax_lots_read_or_none_suppresses_unavailable_source() -> None:
+    async def read_tax_lots(_: str, __: list[str]) -> str:
+        raise LookupError("tax lots unavailable")
+
+    assert (
+        asyncio.run(
+            dpm_source_tax_lots_read_or_none(
+                portfolio_id="PB_SG_GLOBAL_BAL_001",
+                evaluated_instrument_ids=["EQ_US_AAPL"],
+                read_tax_lots=read_tax_lots,
+            )
+        )
+        is None
+    )
 
 
 def test_dpm_source_tax_lots_family_marks_unavailable_evidence() -> None:

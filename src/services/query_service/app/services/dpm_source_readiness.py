@@ -69,6 +69,17 @@ async def dpm_source_eligibility_read_or_none(
     return await dpm_source_read_or_none(lambda: read_eligibility(evaluated_instrument_ids))
 
 
+async def dpm_source_tax_lots_read_or_none(
+    *,
+    portfolio_id: str,
+    evaluated_instrument_ids: list[str],
+    read_tax_lots: Callable[[str, list[str]], Awaitable[TSourceResponse]],
+) -> TSourceResponse | None:
+    return await dpm_source_read_or_none(
+        lambda: read_tax_lots(portfolio_id, evaluated_instrument_ids)
+    )
+
+
 def dpm_source_family_readiness(
     *,
     family: DpmSourceFamilyName,

@@ -124,6 +124,7 @@ from .dpm_source_readiness import (
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
     dpm_source_tax_lots_family,
+    dpm_source_tax_lots_read_or_none,
     dpm_tax_lot_window_request,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
@@ -813,15 +814,18 @@ class IntegrationService:
             )
         )
 
-        tax_lots: PortfolioTaxLotWindowResponse | None = None
-        tax_lots = await dpm_source_read_or_none(
-            lambda: self.get_portfolio_tax_lot_window(
-                portfolio_id=portfolio_id,
-                request=dpm_tax_lot_window_request(
-                    request=request,
-                    evaluated_instrument_ids=evaluated_instrument_ids,
-                ),
-            )
+        tax_lots = await dpm_source_tax_lots_read_or_none(
+            portfolio_id=portfolio_id,
+            evaluated_instrument_ids=evaluated_instrument_ids,
+            read_tax_lots=lambda scoped_portfolio_id, instrument_ids: (
+                self.get_portfolio_tax_lot_window(
+                    portfolio_id=scoped_portfolio_id,
+                    request=dpm_tax_lot_window_request(
+                        request=request,
+                        evaluated_instrument_ids=instrument_ids,
+                    ),
+                )
+            ),
         )
         families.append(
             dpm_source_tax_lots_family(
