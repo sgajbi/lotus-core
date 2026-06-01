@@ -19,6 +19,18 @@ from .reference_data_mappers import (
 from .source_data_runtime import source_product_runtime_metadata
 
 
+async def resolve_instrument_eligibility_bulk_response(
+    *,
+    repository: Any,
+    request: InstrumentEligibilityBulkRequest,
+) -> InstrumentEligibilityBulkResponse:
+    rows = await repository.list_instrument_eligibility_profiles(
+        security_ids=request.security_ids,
+        as_of_date=request.as_of_date,
+    )
+    return build_instrument_eligibility_bulk_response(request=request, rows=rows)
+
+
 def build_instrument_eligibility_bulk_response(
     *,
     request: InstrumentEligibilityBulkRequest,

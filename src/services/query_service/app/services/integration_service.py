@@ -115,7 +115,7 @@ from .external_order_execution_acknowledgement import (
 from .index_catalog import resolve_index_catalog_response
 from .index_price_series import build_index_price_series_response
 from .index_return_series import build_index_return_series_response
-from .instrument_eligibility import build_instrument_eligibility_bulk_response
+from .instrument_eligibility import resolve_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
 from .liquidity_reserve_requirement import (
     resolve_liquidity_reserve_requirement_response,
@@ -381,11 +381,10 @@ class IntegrationService:
         self,
         request: InstrumentEligibilityBulkRequest,
     ) -> InstrumentEligibilityBulkResponse:
-        rows = await self._reference_repository.list_instrument_eligibility_profiles(
-            security_ids=request.security_ids,
-            as_of_date=request.as_of_date,
+        return await resolve_instrument_eligibility_bulk_response(
+            repository=self._reference_repository,
+            request=request,
         )
-        return build_instrument_eligibility_bulk_response(request=request, rows=rows)
 
     async def get_portfolio_tax_lot_window(
         self,
