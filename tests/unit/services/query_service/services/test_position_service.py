@@ -14,8 +14,7 @@ from portfolio_common.database_models import (
 from src.services.query_service.app.dtos.position_dto import Position
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.repositories.position_repository import PositionRepository
-from src.services.query_service.app.services.position_service import (
-    PositionService,
+from src.services.query_service.app.services.position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
     fallback_valuation_security_ids,
@@ -30,6 +29,7 @@ from src.services.query_service.app.services.position_service import (
     position_weight_base_value,
     should_fetch_fallback_valuation_map,
 )
+from src.services.query_service.app.services.position_service import PositionService
 
 pytestmark = pytest.mark.asyncio
 
