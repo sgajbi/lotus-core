@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from ..dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
@@ -18,6 +19,7 @@ from ..dtos.reference_integration_dto import (
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 DpmSourceFamilyName = Literal["mandate", "model_targets", "eligibility", "tax_lots", "market_data"]
+TSourceResponse = TypeVar("TSourceResponse")
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,15 @@ class DpmSourceReadinessIdentity:
 class DpmSourceModelTargetsResolution:
     target_instrument_ids: list[str]
     family: DpmSourceFamilyReadiness
+
+
+async def dpm_source_read_or_none(
+    read_source: Callable[[], Awaitable[TSourceResponse]],
+) -> TSourceResponse | None:
+    try:
+        return await read_source()
+    except (LookupError, ValueError):
+        return None
 
 
 def dpm_source_family_readiness(

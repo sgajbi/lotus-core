@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from types import SimpleNamespace
 
@@ -17,6 +18,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_initial_identity,
     dpm_source_market_data_family,
     dpm_source_model_targets_resolution,
+    dpm_source_read_or_none,
     dpm_source_readiness_supportability,
     dpm_source_tax_lots_family,
     dpm_tax_lot_window_request,
@@ -51,6 +53,24 @@ def test_unavailable_dpm_source_family_sets_governed_defaults() -> None:
     assert family.missing_items == ["model_portfolio_id"]
     assert family.stale_items == []
     assert family.evidence_count == 0
+
+
+def test_dpm_source_read_or_none_returns_source_response() -> None:
+    async def read_source() -> str:
+        return "source-response"
+
+    assert asyncio.run(dpm_source_read_or_none(read_source)) == "source-response"
+
+
+def test_dpm_source_read_or_none_suppresses_fail_closed_exceptions() -> None:
+    async def raise_lookup_error() -> str:
+        raise LookupError("missing source")
+
+    async def raise_value_error() -> str:
+        raise ValueError("invalid source")
+
+    assert asyncio.run(dpm_source_read_or_none(raise_lookup_error)) is None
+    assert asyncio.run(dpm_source_read_or_none(raise_value_error)) is None
 
 
 def test_dpm_source_unavailable_family_builders_lock_reason_codes() -> None:

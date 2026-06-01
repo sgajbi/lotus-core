@@ -118,6 +118,7 @@ from .dpm_source_readiness import (
     dpm_source_initial_identity,
     dpm_source_market_data_family,
     dpm_source_model_targets_resolution,
+    dpm_source_read_or_none,
     dpm_source_tax_lots_family,
     dpm_tax_lot_window_request,
     mandate_source_family_readiness,
@@ -764,14 +765,12 @@ class IntegrationService:
         families: list[DpmSourceFamilyReadiness] = []
         resolved_identity = dpm_source_initial_identity(request)
 
-        mandate_response: DiscretionaryMandateBindingResponse | None = None
-        try:
-            mandate_response = await self.resolve_discretionary_mandate_binding(
+        mandate_response = await dpm_source_read_or_none(
+            lambda: self.resolve_discretionary_mandate_binding(
                 portfolio_id,
                 dpm_mandate_binding_request(request),
             )
-        except (LookupError, ValueError):
-            mandate_response = None
+        )
         if mandate_response is None:
             families.append(unavailable_mandate_binding_family())
         else:
@@ -783,13 +782,12 @@ class IntegrationService:
 
         model_response: ModelPortfolioTargetResponse | None = None
         if resolved_identity.model_portfolio_id is not None:
-            try:
-                model_response = await self.resolve_model_portfolio_targets(
+            model_response = await dpm_source_read_or_none(
+                lambda: self.resolve_model_portfolio_targets(
                     resolved_identity.model_portfolio_id,
                     dpm_model_targets_request(request),
                 )
-            except (LookupError, ValueError):
-                model_response = None
+            )
         model_targets = dpm_source_model_targets_resolution(
             model_portfolio_id=resolved_identity.model_portfolio_id,
             model_response=model_response,
@@ -803,15 +801,14 @@ class IntegrationService:
         )
         eligibility: InstrumentEligibilityBulkResponse | None = None
         if evaluated_instrument_ids:
-            try:
-                eligibility = await self.resolve_instrument_eligibility_bulk(
+            eligibility = await dpm_source_read_or_none(
+                lambda: self.resolve_instrument_eligibility_bulk(
                     dpm_eligibility_request(
                         request=request,
                         instrument_ids=evaluated_instrument_ids,
                     )
                 )
-            except (LookupError, ValueError):
-                eligibility = None
+            )
         families.append(
             dpm_source_eligibility_family(
                 evaluated_instrument_ids=evaluated_instrument_ids,
@@ -820,16 +817,15 @@ class IntegrationService:
         )
 
         tax_lots: PortfolioTaxLotWindowResponse | None = None
-        try:
-            tax_lots = await self.get_portfolio_tax_lot_window(
+        tax_lots = await dpm_source_read_or_none(
+            lambda: self.get_portfolio_tax_lot_window(
                 portfolio_id=portfolio_id,
                 request=dpm_tax_lot_window_request(
                     request=request,
                     evaluated_instrument_ids=evaluated_instrument_ids,
                 ),
             )
-        except (LookupError, ValueError):
-            tax_lots = None
+        )
         families.append(
             dpm_source_tax_lots_family(
                 portfolio_id=portfolio_id,
@@ -838,15 +834,14 @@ class IntegrationService:
         )
 
         market_data: MarketDataCoverageWindowResponse | None = None
-        try:
-            market_data = await self.get_market_data_coverage(
+        market_data = await dpm_source_read_or_none(
+            lambda: self.get_market_data_coverage(
                 dpm_market_data_coverage_request(
                     request=request,
                     evaluated_instrument_ids=evaluated_instrument_ids,
                 )
             )
-        except (LookupError, ValueError):
-            market_data = None
+        )
         families.append(dpm_source_market_data_family(market_data))
 
         return build_dpm_source_readiness_response(
