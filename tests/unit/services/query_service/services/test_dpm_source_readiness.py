@@ -23,6 +23,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_model_targets_read_or_none,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
+    dpm_source_readiness_assembly,
     dpm_source_readiness_supportability,
     dpm_source_tax_lots_family,
     dpm_source_tax_lots_read_or_none,
@@ -672,6 +673,89 @@ def test_dpm_source_market_data_family_preserves_source_supportability() -> None
     assert family.missing_items == ["EQ_US_AAPL", "USD/SGD"]
     assert family.stale_items == ["EQ_US_MSFT", "EUR/USD"]
     assert family.evidence_count == 5
+
+
+def test_dpm_source_readiness_assembly_orders_families_and_scope() -> None:
+    request = DpmSourceReadinessRequest(
+        as_of_date=date(2026, 4, 10),
+        instrument_ids=["EQ_US_AAPL"],
+    )
+    mandate_resolution = dpm_source_mandate_resolution(
+        request=request,
+        mandate_response=SimpleNamespace(
+            mandate_id="MANDATE_RESOLVED",
+            model_portfolio_id="MODEL_BALANCED",
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_READY",
+                missing_data_families=[],
+            ),
+        ),
+    )
+    model_targets = dpm_source_model_targets_resolution(
+        model_portfolio_id="MODEL_BALANCED",
+        model_response=SimpleNamespace(
+            targets=[SimpleNamespace(instrument_id="EQ_US_MSFT")],
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MODEL_TARGETS_READY",
+                target_count=1,
+            ),
+        ),
+    )
+
+    assembly = dpm_source_readiness_assembly(
+        request=request,
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        mandate_resolution=mandate_resolution,
+        model_targets=model_targets,
+        eligibility_response=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="ELIGIBILITY_READY",
+                missing_security_ids=[],
+                resolved_count=2,
+            )
+        ),
+        tax_lot_response=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="TAX_LOTS_READY",
+                missing_security_ids=[],
+                returned_lot_count=2,
+            )
+        ),
+        market_data_response=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MARKET_DATA_READY",
+                missing_instrument_ids=[],
+                missing_currency_pairs=[],
+                stale_instrument_ids=[],
+                stale_currency_pairs=[],
+                resolved_price_count=2,
+                resolved_fx_count=1,
+            )
+        ),
+    )
+
+    assert assembly.resolved_identity.mandate_id == "MANDATE_RESOLVED"
+    assert assembly.resolved_identity.model_portfolio_id == "MODEL_BALANCED"
+    assert assembly.evaluated_instrument_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert [family.family for family in assembly.families] == [
+        "mandate",
+        "model_targets",
+        "eligibility",
+        "tax_lots",
+        "market_data",
+    ]
+    assert [family.state for family in assembly.families] == [
+        "READY",
+        "READY",
+        "READY",
+        "READY",
+        "READY",
+    ]
 
 
 def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:

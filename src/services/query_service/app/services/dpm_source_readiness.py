@@ -40,6 +40,13 @@ class DpmSourceMandateResolution:
     family: DpmSourceFamilyReadiness
 
 
+@dataclass(frozen=True)
+class DpmSourceReadinessAssembly:
+    resolved_identity: DpmSourceReadinessIdentity
+    evaluated_instrument_ids: list[str]
+    families: list[DpmSourceFamilyReadiness]
+
+
 async def dpm_source_read_or_none(
     read_source: Callable[[], Awaitable[TSourceResponse]],
 ) -> TSourceResponse | None:
@@ -348,6 +355,39 @@ def dpm_source_market_data_family(
     if market_data_response is None:
         return unavailable_market_data_family()
     return market_data_source_family_readiness(market_data_response)
+
+
+def dpm_source_readiness_assembly(
+    *,
+    request: DpmSourceReadinessRequest,
+    portfolio_id: str,
+    mandate_resolution: DpmSourceMandateResolution,
+    model_targets: DpmSourceModelTargetsResolution,
+    eligibility_response: Any | None,
+    tax_lot_response: Any | None,
+    market_data_response: Any | None,
+) -> DpmSourceReadinessAssembly:
+    evaluated_instrument_ids = dpm_source_evaluated_instrument_ids(
+        request_instrument_ids=request.instrument_ids,
+        target_instrument_ids=model_targets.target_instrument_ids,
+    )
+    return DpmSourceReadinessAssembly(
+        resolved_identity=mandate_resolution.identity,
+        evaluated_instrument_ids=evaluated_instrument_ids,
+        families=[
+            mandate_resolution.family,
+            model_targets.family,
+            dpm_source_eligibility_family(
+                evaluated_instrument_ids=evaluated_instrument_ids,
+                eligibility_response=eligibility_response,
+            ),
+            dpm_source_tax_lots_family(
+                portfolio_id=portfolio_id,
+                tax_lot_response=tax_lot_response,
+            ),
+            dpm_source_market_data_family(market_data_response),
+        ],
+    )
 
 
 def dpm_mandate_binding_request(

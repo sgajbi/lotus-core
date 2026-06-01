@@ -31,7 +31,6 @@ from ..dtos.reference_integration_dto import (
     DiscretionaryMandateBindingResponse,
     DpmPortfolioUniverseCandidateRequest,
     DpmPortfolioUniverseCandidateResponse,
-    DpmSourceFamilyReadiness,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
     ExternalCurrencyExposureRequest,
@@ -115,16 +114,14 @@ from .dpm_source_readiness import (
     dpm_mandate_binding_request,
     dpm_market_data_coverage_request,
     dpm_model_targets_request,
-    dpm_source_eligibility_family,
     dpm_source_eligibility_read_or_none,
     dpm_source_evaluated_instrument_ids,
     dpm_source_mandate_resolution,
-    dpm_source_market_data_family,
     dpm_source_market_data_read_or_none,
     dpm_source_model_targets_read_or_none,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
-    dpm_source_tax_lots_family,
+    dpm_source_readiness_assembly,
     dpm_source_tax_lots_read_or_none,
     dpm_tax_lot_window_request,
 )
@@ -766,8 +763,6 @@ class IntegrationService:
         portfolio_id: str,
         request: DpmSourceReadinessRequest,
     ) -> DpmSourceReadinessResponse:
-        families: list[DpmSourceFamilyReadiness] = []
-
         mandate_response = await dpm_source_read_or_none(
             lambda: self.resolve_discretionary_mandate_binding(
                 portfolio_id,
@@ -779,7 +774,6 @@ class IntegrationService:
             mandate_response=mandate_response,
         )
         resolved_identity = mandate_resolution.identity
-        families.append(mandate_resolution.family)
 
         model_response = await dpm_source_model_targets_read_or_none(
             model_portfolio_id=resolved_identity.model_portfolio_id,
@@ -792,12 +786,9 @@ class IntegrationService:
             model_portfolio_id=resolved_identity.model_portfolio_id,
             model_response=model_response,
         )
-        target_instrument_ids = model_targets.target_instrument_ids
-        families.append(model_targets.family)
-
         evaluated_instrument_ids = dpm_source_evaluated_instrument_ids(
             request_instrument_ids=request.instrument_ids,
-            target_instrument_ids=target_instrument_ids,
+            target_instrument_ids=model_targets.target_instrument_ids,
         )
         eligibility = await dpm_source_eligibility_read_or_none(
             evaluated_instrument_ids=evaluated_instrument_ids,
@@ -807,12 +798,6 @@ class IntegrationService:
                     instrument_ids=instrument_ids,
                 )
             ),
-        )
-        families.append(
-            dpm_source_eligibility_family(
-                evaluated_instrument_ids=evaluated_instrument_ids,
-                eligibility_response=eligibility,
-            )
         )
 
         tax_lots = await dpm_source_tax_lots_read_or_none(
@@ -828,12 +813,6 @@ class IntegrationService:
                 )
             ),
         )
-        families.append(
-            dpm_source_tax_lots_family(
-                portfolio_id=portfolio_id,
-                tax_lot_response=tax_lots,
-            )
-        )
 
         market_data = await dpm_source_market_data_read_or_none(
             evaluated_instrument_ids=evaluated_instrument_ids,
@@ -844,15 +823,23 @@ class IntegrationService:
                 )
             ),
         )
-        families.append(dpm_source_market_data_family(market_data))
+        readiness_assembly = dpm_source_readiness_assembly(
+            request=request,
+            portfolio_id=portfolio_id,
+            mandate_resolution=mandate_resolution,
+            model_targets=model_targets,
+            eligibility_response=eligibility,
+            tax_lot_response=tax_lots,
+            market_data_response=market_data,
+        )
 
         return build_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
             request=request,
-            resolved_mandate_id=resolved_identity.mandate_id,
-            resolved_model_portfolio_id=resolved_identity.model_portfolio_id,
-            evaluated_instrument_ids=evaluated_instrument_ids,
-            families=families,
+            resolved_mandate_id=readiness_assembly.resolved_identity.mandate_id,
+            resolved_model_portfolio_id=(readiness_assembly.resolved_identity.model_portfolio_id),
+            evaluated_instrument_ids=readiness_assembly.evaluated_instrument_ids,
+            families=readiness_assembly.families,
         )
 
     async def get_benchmark_definition(
