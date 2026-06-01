@@ -391,7 +391,10 @@ async def test_openapi_describes_index_definition_shared_schema(async_test_clien
         "Index definition records to ingest or upsert."
     )
     assert record_schema["properties"]["index_id"]["description"] == ("Canonical index identifier.")
-    assert record_schema["properties"]["index_currency"]["description"] == "Index currency."
+    assert record_schema["properties"]["index_currency"]["description"] == (
+        "Canonical three-letter index currency used for benchmark construction, "
+        "performance comparison, and reporting alignment."
+    )
     assert record_schema["properties"]["classification_labels"]["description"] == (
         "Canonical classification labels for attribution."
     )
