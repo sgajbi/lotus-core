@@ -77,7 +77,7 @@ from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .benchmark_assignment import build_benchmark_assignment_response
-from .benchmark_catalog import build_benchmark_catalog_response
+from .benchmark_catalog import resolve_benchmark_catalog_response
 from .benchmark_composition import (
     resolve_benchmark_composition_window_response,
 )
@@ -573,22 +573,12 @@ class IntegrationService:
         benchmark_currency: str | None,
         benchmark_status: str | None,
     ) -> BenchmarkCatalogResponse:
-        rows = await self._reference_repository.list_benchmark_definitions(
+        return await resolve_benchmark_catalog_response(
+            repository=self._reference_repository,
             as_of_date=as_of_date,
             benchmark_type=benchmark_type,
             benchmark_currency=benchmark_currency,
             benchmark_status=benchmark_status,
-        )
-        components_by_benchmark = (
-            await self._reference_repository.list_benchmark_components_for_benchmarks(
-                benchmark_ids=[row.benchmark_id for row in rows],
-                as_of_date=as_of_date,
-            )
-        )
-        return build_benchmark_catalog_response(
-            as_of_date=as_of_date,
-            rows=rows,
-            components_by_benchmark=components_by_benchmark,
         )
 
     async def list_index_catalog(
