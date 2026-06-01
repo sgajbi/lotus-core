@@ -7,10 +7,7 @@ from typing import Optional, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
-from ..dtos.transaction_dto import (
-    PaginatedTransactionResponse,
-    PortfolioRealizedTaxSummaryResponse,
-)
+from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
@@ -22,6 +19,7 @@ from .transaction_metadata import (
 )
 from .transaction_reads import read_realized_tax_evidence, read_transaction_ledger_page
 from .transaction_realized_tax import (
+    portfolio_realized_tax_summary_response,
     realized_tax_currency_totals,
     realized_tax_reporting_currency_total,
 )
@@ -169,32 +167,17 @@ class TransactionService:
             convert_amount=self._convert_amount,
         )
 
-        return PortfolioRealizedTaxSummaryResponse(
+        return portfolio_realized_tax_summary_response(
             portfolio_id=portfolio_id,
             base_currency=normalized_base_currency,
             reporting_currency=resolved_reporting_currency,
             start_date=start_date,
             end_date=end_date,
+            as_of_date=effective_as_of_date,
             source_transaction_count=realized_tax_evidence.source_transaction_count,
-            tax_evidence_transaction_count=sum(
-                total.transaction_count for total in currency_totals
-            ),
             currency_totals=currency_totals,
             reporting_currency_total_tax_amount=reporting_currency_total,
-            reason_codes=[
-                "PORTFOLIO_REALIZED_TAX_SUMMARY_READY"
-                if currency_totals
-                else "PORTFOLIO_REALIZED_TAX_EVIDENCE_EMPTY"
-            ],
-            **source_data_product_runtime_metadata(
-                as_of_date=effective_as_of_date,
-                data_quality_status=ledger_data_quality_status(
-                    total_count=realized_tax_evidence.source_transaction_count,
-                    returned_count=realized_tax_evidence.source_transaction_count,
-                    skip=0,
-                ),
-                latest_evidence_timestamp=realized_tax_evidence.latest_evidence_timestamp,
-            ),
+            latest_evidence_timestamp=realized_tax_evidence.latest_evidence_timestamp,
         )
 
     async def _convert_amount(

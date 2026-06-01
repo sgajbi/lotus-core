@@ -1,11 +1,13 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 
 from src.services.query_service.app.dtos.transaction_dto import RealizedTaxCurrencyTotal
 from src.services.query_service.app.services.transaction_realized_tax import (
+    portfolio_realized_tax_summary_response,
     realized_tax_currency_totals,
     realized_tax_reporting_currency_total,
 )
@@ -103,3 +105,71 @@ async def test_realized_tax_reporting_currency_total_skips_without_reporting_cur
         )
         is None
     )
+
+
+def test_portfolio_realized_tax_summary_response_marks_ready_with_runtime_metadata() -> None:
+    latest_evidence_timestamp = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+
+    response = portfolio_realized_tax_summary_response(
+        portfolio_id="P1",
+        base_currency="USD",
+        reporting_currency="SGD",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        as_of_date=date(2025, 1, 15),
+        source_transaction_count=3,
+        currency_totals=[
+            RealizedTaxCurrencyTotal(
+                currency="EUR",
+                transaction_count=1,
+                withholding_tax_amount=Decimal("7"),
+                other_tax_deductions_amount=Decimal("0"),
+                total_tax_amount=Decimal("7"),
+            ),
+            RealizedTaxCurrencyTotal(
+                currency="USD",
+                transaction_count=2,
+                withholding_tax_amount=Decimal("12"),
+                other_tax_deductions_amount=Decimal("8"),
+                total_tax_amount=Decimal("20"),
+            ),
+        ],
+        reporting_currency_total_tax_amount=Decimal("27"),
+        latest_evidence_timestamp=latest_evidence_timestamp,
+    )
+
+    assert response.product_name == "PortfolioRealizedTaxSummary"
+    assert response.product_version == "v1"
+    assert response.portfolio_id == "P1"
+    assert response.base_currency == "USD"
+    assert response.reporting_currency == "SGD"
+    assert response.source_transaction_count == 3
+    assert response.tax_evidence_transaction_count == 3
+    assert response.reporting_currency_total_tax_amount == Decimal("27")
+    assert response.reason_codes == ["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"]
+    assert response.as_of_date == date(2025, 1, 15)
+    assert response.data_quality_status == COMPLETE
+    assert response.latest_evidence_timestamp == latest_evidence_timestamp
+
+
+def test_portfolio_realized_tax_summary_response_marks_empty_evidence_unknown() -> None:
+    response = portfolio_realized_tax_summary_response(
+        portfolio_id="P1",
+        base_currency="USD",
+        reporting_currency=None,
+        start_date=None,
+        end_date=None,
+        as_of_date=date(2025, 1, 15),
+        source_transaction_count=0,
+        currency_totals=[],
+        reporting_currency_total_tax_amount=None,
+        latest_evidence_timestamp=None,
+    )
+
+    assert response.source_transaction_count == 0
+    assert response.tax_evidence_transaction_count == 0
+    assert response.currency_totals == []
+    assert response.reporting_currency_total_tax_amount is None
+    assert response.reason_codes == ["PORTFOLIO_REALIZED_TAX_EVIDENCE_EMPTY"]
+    assert response.data_quality_status == UNKNOWN
+    assert response.latest_evidence_timestamp is None
