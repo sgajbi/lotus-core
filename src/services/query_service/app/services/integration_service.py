@@ -503,18 +503,21 @@ class IntegrationService:
         return await resolve_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
             request=request,
-            readers=DpmSourceReadinessReaders(
-                read_mandate_binding=self.resolve_discretionary_mandate_binding,
-                read_model_targets=self.resolve_model_portfolio_targets,
-                read_eligibility=self.resolve_instrument_eligibility_bulk,
-                read_tax_lots=lambda scoped_portfolio_id, scoped_request: (
-                    self.get_portfolio_tax_lot_window(
-                        portfolio_id=scoped_portfolio_id,
-                        request=scoped_request,
-                    )
-                ),
-                read_market_data=self.get_market_data_coverage,
+            readers=self._dpm_source_readiness_readers(),
+        )
+
+    def _dpm_source_readiness_readers(self) -> DpmSourceReadinessReaders:
+        return DpmSourceReadinessReaders(
+            read_mandate_binding=self.resolve_discretionary_mandate_binding,
+            read_model_targets=self.resolve_model_portfolio_targets,
+            read_eligibility=self.resolve_instrument_eligibility_bulk,
+            read_tax_lots=lambda scoped_portfolio_id, scoped_request: (
+                self.get_portfolio_tax_lot_window(
+                    portfolio_id=scoped_portfolio_id,
+                    request=scoped_request,
+                )
             ),
+            read_market_data=self.get_market_data_coverage,
         )
 
     async def get_benchmark_definition(
