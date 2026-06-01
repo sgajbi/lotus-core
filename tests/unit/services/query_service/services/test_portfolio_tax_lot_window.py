@@ -9,6 +9,7 @@ from src.services.query_service.app.services.portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
     portfolio_tax_lot_after_sort_key,
     portfolio_tax_lot_next_page_token_payload,
+    portfolio_tax_lot_page_token,
     portfolio_tax_lot_window_request_scope,
 )
 
@@ -105,6 +106,62 @@ def test_portfolio_tax_lot_next_page_token_payload_uses_last_page_lot() -> None:
             request_scope=scope,
             has_more=False,
             page_rows=[(_tax_lot_row(), "USD")],
+        )
+        is None
+    )
+
+
+def test_portfolio_tax_lot_page_token_encodes_payload() -> None:
+    request = PortfolioTaxLotWindowRequest(as_of_date=date(2026, 4, 10))
+    scope = portfolio_tax_lot_window_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={},
+    )
+    encoded_payloads: list[dict[str, str]] = []
+
+    def encode(payload: dict[str, str]) -> str:
+        encoded_payloads.append(payload)
+        return "encoded-token"
+
+    assert (
+        portfolio_tax_lot_page_token(
+            request_scope=scope,
+            has_more=True,
+            page_rows=[
+                (_tax_lot_row(lot_id="LOT-A"), "USD"),
+                (_tax_lot_row(lot_id="LOT-B"), "USD"),
+            ],
+            encode_page_token=encode,
+        )
+        == "encoded-token"
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": scope.request_fingerprint,
+            "last_acquisition_date": "2026-03-25",
+            "last_lot_id": "LOT-B",
+        }
+    ]
+
+
+def test_portfolio_tax_lot_page_token_suppresses_terminal_page() -> None:
+    request = PortfolioTaxLotWindowRequest(as_of_date=date(2026, 4, 10))
+    scope = portfolio_tax_lot_window_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={},
+    )
+
+    def encode(_: dict[str, str]) -> str:
+        raise AssertionError("Unexpected token encoding for terminal tax-lot page")
+
+    assert (
+        portfolio_tax_lot_page_token(
+            request_scope=scope,
+            has_more=False,
+            page_rows=[(_tax_lot_row(), "USD")],
+            encode_page_token=encode,
         )
         is None
     )

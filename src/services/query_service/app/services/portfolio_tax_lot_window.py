@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Mapping
@@ -72,6 +73,23 @@ def portfolio_tax_lot_next_page_token_payload(
         "last_acquisition_date": last_lot.acquisition_date.isoformat(),
         "last_lot_id": last_lot.lot_id,
     }
+
+
+def portfolio_tax_lot_page_token(
+    *,
+    request_scope: PortfolioTaxLotWindowRequestScope,
+    has_more: bool,
+    page_rows: list[tuple[Any, str | None]],
+    encode_page_token: Callable[[dict[str, str]], str],
+) -> str | None:
+    payload = portfolio_tax_lot_next_page_token_payload(
+        request_scope=request_scope,
+        has_more=has_more,
+        page_rows=page_rows,
+    )
+    if payload is None:
+        return None
+    return encode_page_token(payload)
 
 
 def build_portfolio_tax_lot_window_response(

@@ -158,7 +158,7 @@ from .portfolio_manager_book_membership import (
 )
 from .portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
-    portfolio_tax_lot_next_page_token_payload,
+    portfolio_tax_lot_page_token,
     portfolio_tax_lot_window_request_scope,
 )
 from .reference_data_mappers import benchmark_definition_response
@@ -670,14 +670,12 @@ class IntegrationService:
         has_more = len(rows) > request.page.page_size
         page_rows = rows[: request.page.page_size]
 
-        next_page_token: str | None = None
-        next_page_token_payload = portfolio_tax_lot_next_page_token_payload(
+        next_page_token = portfolio_tax_lot_page_token(
             request_scope=request_scope,
             has_more=has_more,
             page_rows=page_rows,
+            encode_page_token=self._encode_page_token,
         )
-        if next_page_token_payload is not None:
-            next_page_token = self._encode_page_token(next_page_token_payload)
 
         return build_portfolio_tax_lot_window_response(
             portfolio_id=portfolio_id,
