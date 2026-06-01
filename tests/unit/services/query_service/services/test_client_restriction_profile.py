@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -6,6 +7,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.client_restriction_profile import (
     build_client_restriction_profile_response,
+    resolve_client_restriction_profile_response,
 )
 
 
@@ -76,6 +78,83 @@ def test_build_client_restriction_profile_response_marks_ready() -> None:
         "source_table": "client_restriction_profiles,portfolio_mandate_bindings",
         "contract_version": "rfc_040_client_restriction_profile_v1",
     }
+
+
+def test_resolve_client_restriction_profile_response_orchestrates_repository_reads() -> None:
+    async def run_case() -> tuple[object, list[tuple[str, dict[str, object]]]]:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class Repository:
+            async def resolve_discretionary_mandate_binding(
+                self, **kwargs: object
+            ) -> SimpleNamespace:
+                calls.append(("binding", kwargs))
+                return _binding()
+
+            async def list_client_restriction_profiles(
+                self, **kwargs: object
+            ) -> list[SimpleNamespace]:
+                calls.append(("restrictions", kwargs))
+                return [_restriction_row()]
+
+        response = await resolve_client_restriction_profile_response(
+            repository=Repository(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=_request(),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is not None
+    assert response.client_id == "CIF_SG_000184"
+    assert response.supportability.state == "READY"
+    assert calls == [
+        (
+            "binding",
+            {
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "as_of_date": date(2026, 5, 3),
+                "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            },
+        ),
+        (
+            "restrictions",
+            {
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "client_id": "CIF_SG_000184",
+                "as_of_date": date(2026, 5, 3),
+                "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+                "include_inactive_restrictions": False,
+            },
+        ),
+    ]
+
+
+def test_resolve_client_restriction_profile_response_skips_rows_without_binding() -> None:
+    async def run_case() -> tuple[object | None, list[str]]:
+        calls: list[str] = []
+
+        class Repository:
+            async def resolve_discretionary_mandate_binding(self, **_: object) -> None:
+                calls.append("binding")
+                return None
+
+            async def list_client_restriction_profiles(self, **_: object) -> list[object]:
+                calls.append("restrictions")
+                raise AssertionError("Unexpected restriction read without mandate binding")
+
+        response = await resolve_client_restriction_profile_response(
+            repository=Repository(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=_request(),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is None
+    assert calls == ["binding"]
 
 
 def test_build_client_restriction_profile_response_marks_empty_missing() -> None:
