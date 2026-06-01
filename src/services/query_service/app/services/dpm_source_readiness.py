@@ -257,6 +257,16 @@ def dpm_source_eligibility_family(
     return eligibility_source_family_readiness(eligibility_response)
 
 
+def dpm_source_tax_lots_family(
+    *,
+    portfolio_id: str,
+    tax_lot_response: Any | None,
+) -> DpmSourceFamilyReadiness:
+    if tax_lot_response is None:
+        return unavailable_tax_lots_family(portfolio_id)
+    return tax_lots_source_family_readiness(tax_lot_response)
+
+
 def dpm_mandate_binding_request(
     request: DpmSourceReadinessRequest,
 ) -> DiscretionaryMandateBindingRequest:

@@ -17,6 +17,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_initial_identity,
     dpm_source_model_targets_resolution,
     dpm_source_readiness_supportability,
+    dpm_source_tax_lots_family,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
     empty_instrument_universe_family,
@@ -359,6 +360,37 @@ def test_dpm_source_eligibility_family_preserves_source_supportability() -> None
     assert family.reason == "ELIGIBILITY_MISSING"
     assert family.missing_items == ["EQ_US_MSFT"]
     assert family.evidence_count == 1
+
+
+def test_dpm_source_tax_lots_family_marks_unavailable_evidence() -> None:
+    family = dpm_source_tax_lots_family(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tax_lot_response=None,
+    )
+
+    assert family.family == "tax_lots"
+    assert family.reason == "PORTFOLIO_TAX_LOTS_UNAVAILABLE"
+    assert family.missing_items == ["PB_SG_GLOBAL_BAL_001"]
+
+
+def test_dpm_source_tax_lots_family_preserves_source_supportability() -> None:
+    family = dpm_source_tax_lots_family(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        tax_lot_response=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="DEGRADED",
+                reason="TAX_LOTS_STALE",
+                missing_security_ids=["EQ_US_AAPL"],
+                returned_lot_count=4,
+            )
+        ),
+    )
+
+    assert family.family == "tax_lots"
+    assert family.state == "DEGRADED"
+    assert family.reason == "TAX_LOTS_STALE"
+    assert family.missing_items == ["EQ_US_AAPL"]
+    assert family.evidence_count == 4
 
 
 def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:

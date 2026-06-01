@@ -117,13 +117,12 @@ from .dpm_source_readiness import (
     dpm_source_identity_from_mandate,
     dpm_source_initial_identity,
     dpm_source_model_targets_resolution,
+    dpm_source_tax_lots_family,
     dpm_tax_lot_window_request,
     mandate_source_family_readiness,
     market_data_source_family_readiness,
-    tax_lots_source_family_readiness,
     unavailable_mandate_binding_family,
     unavailable_market_data_family,
-    unavailable_tax_lots_family,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
@@ -821,6 +820,7 @@ class IntegrationService:
             )
         )
 
+        tax_lots: PortfolioTaxLotWindowResponse | None = None
         try:
             tax_lots = await self.get_portfolio_tax_lot_window(
                 portfolio_id=portfolio_id,
@@ -829,9 +829,14 @@ class IntegrationService:
                     evaluated_instrument_ids=evaluated_instrument_ids,
                 ),
             )
-            families.append(tax_lots_source_family_readiness(tax_lots))
         except (LookupError, ValueError):
-            families.append(unavailable_tax_lots_family(portfolio_id))
+            tax_lots = None
+        families.append(
+            dpm_source_tax_lots_family(
+                portfolio_id=portfolio_id,
+                tax_lot_response=tax_lots,
+            )
+        )
 
         try:
             market_data = await self.get_market_data_coverage(
