@@ -110,7 +110,7 @@ from .external_hedge_execution_readiness import (
 )
 from .external_hedge_policy import build_external_hedge_policy_response
 from .external_order_execution_acknowledgement import (
-    build_external_order_execution_acknowledgement_response,
+    resolve_external_order_execution_acknowledgement_response,
 )
 from .index_catalog import resolve_index_catalog_response
 from .index_price_series import build_index_price_series_response
@@ -343,17 +343,9 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalOrderExecutionAcknowledgementRequest,
     ) -> ExternalOrderExecutionAcknowledgementResponse | None:
-        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+        return await resolve_external_order_execution_acknowledgement_response(
+            repository=self._reference_repository,
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=request.mandate_id,
-        )
-        if binding is None:
-            return None
-
-        return build_external_order_execution_acknowledgement_response(
-            portfolio_id=portfolio_id,
-            binding=binding,
             request=request,
         )
 
