@@ -80,7 +80,6 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesResponse,
     SustainabilityPreferenceProfileRequest,
     SustainabilityPreferenceProfileResponse,
-    SustainabilityPreferenceProfileSupportability,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
 )
@@ -147,7 +146,6 @@ from .reference_data_mappers import (
     liquidity_reserve_requirement_entry,
     planned_withdrawal_schedule_entry,
     risk_free_series_point,
-    sustainability_preference_profile_entry,
 )
 from .request_fingerprint import (
     request_fingerprint as build_request_fingerprint,
@@ -158,6 +156,9 @@ from .request_fingerprint import (
 from .source_data_runtime import (
     source_product_runtime_metadata,
     source_product_runtime_metadata_without_as_of_date,
+)
+from .sustainability_preference_profile import (
+    build_sustainability_preference_profile_response,
 )
 from .transaction_cost_curve import (
     build_transaction_cost_curve_page,
@@ -396,58 +397,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_preferences=request.include_inactive_preferences,
         )
-        entries = [sustainability_preference_profile_entry(row) for row in rows]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_EMPTY"
-            missing_data_families.append("sustainability_preferences")
-
-        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
-        return SustainabilityPreferenceProfileResponse(
+        return build_sustainability_preference_profile_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            preferences=entries,
-            supportability=SustainabilityPreferenceProfileSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                preference_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "sustainability_preference_profiles,portfolio_mandate_bindings",
-                "contract_version": "rfc_040_sustainability_preference_profile_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=build_request_fingerprint(
-                    {
-                        "product": "SustainabilityPreferenceProfile",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "sustainability_preference_profile:"
-                    + build_request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_client_tax_profile(
