@@ -16,7 +16,6 @@ from .position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
     effective_holdings_as_of_date,
-    fallback_valuation_security_ids,
     held_since_security_epoch_pairs,
     holdings_data_quality_status,
     holdings_response_as_of_date,
@@ -26,8 +25,11 @@ from .position_holdings import (
     portfolio_position_rows_data,
     portfolio_positions_response_data,
     position_held_since_requests,
-    should_fetch_fallback_valuation_map,
     should_use_default_holdings_as_of_date,
+)
+from .position_holdings_reads import (
+    fallback_holdings_valuation_map,
+    holdings_position_source_rows,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,17 +102,11 @@ class PositionService:
             include_projected=include_projected,
         )
 
-        if effective_as_of_date is not None:
-            snapshot_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(
-                portfolio_id, effective_as_of_date
-            )
-            history_results = await self.repo.get_latest_position_history_by_portfolio_as_of_date(
-                portfolio_id,
-                effective_as_of_date,
-            )
-        else:
-            snapshot_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
-            history_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
+        snapshot_results, history_results = await holdings_position_source_rows(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            effective_as_of_date=effective_as_of_date,
+        )
 
         db_results, history_supplements, snapshot_security_ids = (
             merge_snapshot_and_history_position_rows(
@@ -118,25 +114,14 @@ class PositionService:
                 history_results=history_results,
             )
         )
-        fallback_valuation_map: dict[str, dict[str, float | None]] = {}
-        if should_fetch_fallback_valuation_map(
+        fallback_valuation_map = await fallback_holdings_valuation_map(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            effective_as_of_date=effective_as_of_date,
             db_results=db_results,
             history_supplements=history_supplements,
             snapshot_security_ids=snapshot_security_ids,
-        ):
-            fallback_security_ids = fallback_valuation_security_ids(history_supplements)
-            fallback_valuation_map = (
-                await self.repo.get_latest_snapshot_valuation_map_as_of_date(
-                    portfolio_id,
-                    effective_as_of_date,
-                    security_ids=fallback_security_ids or None,
-                )
-                if effective_as_of_date is not None
-                else await self.repo.get_latest_snapshot_valuation_map(
-                    portfolio_id,
-                    security_ids=fallback_security_ids or None,
-                )
-            )
+        )
 
         positions = portfolio_position_rows_data(
             db_results=db_results,
