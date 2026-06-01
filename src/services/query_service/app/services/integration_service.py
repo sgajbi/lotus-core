@@ -61,7 +61,6 @@ from ..dtos.reference_integration_dto import (
     IntegrationWindow,
     LiquidityReserveRequirementRequest,
     LiquidityReserveRequirementResponse,
-    LiquidityReserveRequirementSupportability,
     MarketDataCoverageRequest,
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
@@ -114,6 +113,9 @@ from .dpm_source_readiness import (
 )
 from .instrument_eligibility import build_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
+from .liquidity_reserve_requirement import (
+    build_liquidity_reserve_requirement_response,
+)
 from .market_data_coverage import (
     build_market_data_coverage_response,
     market_data_coverage_read_scope,
@@ -140,7 +142,6 @@ from .reference_data_mappers import (
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
-    liquidity_reserve_requirement_entry,
     planned_withdrawal_schedule_entry,
     risk_free_series_point,
 )
@@ -502,58 +503,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_requirements=request.include_inactive_requirements,
         )
-        entries = [liquidity_reserve_requirement_entry(row) for row in rows]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "LIQUIDITY_RESERVE_REQUIREMENT_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "LIQUIDITY_RESERVE_REQUIREMENT_EMPTY"
-            missing_data_families.append("liquidity_reserve_requirement")
-
-        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
-        return LiquidityReserveRequirementResponse(
+        return build_liquidity_reserve_requirement_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            requirements=entries,
-            supportability=LiquidityReserveRequirementSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requirement_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "liquidity_reserve_requirements,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_liquidity_reserve_requirement_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=build_request_fingerprint(
-                    {
-                        "product": "LiquidityReserveRequirement",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "liquidity_reserve_requirement:"
-                    + build_request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_planned_withdrawal_schedule(
