@@ -13,14 +13,11 @@ from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
 from .position_history import portfolio_position_history_response_data
 from .position_holdings import (
-    apply_held_since_dates,
     assign_position_weights,
     effective_holdings_as_of_date,
-    held_since_security_epoch_pairs,
     holdings_data_quality_status,
     holdings_response_as_of_date,
     latest_holdings_evidence_timestamp,
-    market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
     portfolio_position_rows_data,
     portfolio_positions_response_data,
@@ -30,6 +27,7 @@ from .position_holdings import (
 from .position_holdings_reads import (
     fallback_holdings_valuation_map,
     holdings_position_source_rows,
+    holdings_support_evidence,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,21 +137,12 @@ class PositionService:
             effective_as_of_date=effective_as_of_date,
             positions=positions,
         )
-        market_price_security_ids = market_price_freshness_security_ids(positions)
-
-        if held_since_requests:
-            held_since_map = await self.repo.get_held_since_dates(
-                portfolio_id=portfolio_id,
-                security_epoch_pairs=held_since_security_epoch_pairs(held_since_requests),
-            )
-            apply_held_since_dates(
-                positions=positions,
-                held_since_requests=held_since_requests,
-                held_since_map=held_since_map,
-            )
-        latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-            security_ids=market_price_security_ids,
-            as_of_date=response_as_of_date,
+        latest_market_price_dates = await holdings_support_evidence(
+            repository=self.repo,
+            portfolio_id=portfolio_id,
+            positions=positions,
+            held_since_requests=held_since_requests,
+            response_as_of_date=response_as_of_date,
         )
         return portfolio_positions_response_data(
             portfolio_id=portfolio_id,

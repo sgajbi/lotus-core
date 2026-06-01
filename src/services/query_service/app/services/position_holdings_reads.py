@@ -2,7 +2,11 @@ from datetime import date
 from typing import Any
 
 from .position_holdings import (
+    HeldSinceRequest,
+    apply_held_since_dates,
     fallback_valuation_security_ids,
+    held_since_security_epoch_pairs,
+    market_price_freshness_security_ids,
     should_fetch_fallback_valuation_map,
 )
 
@@ -57,4 +61,29 @@ async def fallback_holdings_valuation_map(
     return await repository.get_latest_snapshot_valuation_map(
         portfolio_id,
         security_ids=fallback_security_ids or None,
+    )
+
+
+async def holdings_support_evidence(
+    *,
+    repository: Any,
+    portfolio_id: str,
+    positions: list[Any],
+    held_since_requests: list[HeldSinceRequest],
+    response_as_of_date: date,
+) -> dict[str, date]:
+    if held_since_requests:
+        held_since_map = await repository.get_held_since_dates(
+            portfolio_id=portfolio_id,
+            security_epoch_pairs=held_since_security_epoch_pairs(held_since_requests),
+        )
+        apply_held_since_dates(
+            positions=positions,
+            held_since_requests=held_since_requests,
+            held_since_map=held_since_map,
+        )
+
+    return await repository.get_latest_market_price_dates(
+        security_ids=market_price_freshness_security_ids(positions),
+        as_of_date=response_as_of_date,
     )
