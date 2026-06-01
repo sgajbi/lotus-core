@@ -91,7 +91,7 @@ from .classification_taxonomy import build_classification_taxonomy_response
 from .client_income_needs_schedule import build_client_income_needs_schedule_response
 from .client_restriction_profile import resolve_client_restriction_profile_response
 from .client_tax_profile import build_client_tax_profile_response
-from .client_tax_rule_set import build_client_tax_rule_set_response
+from .client_tax_rule_set import resolve_client_tax_rule_set_response
 from .discretionary_mandate_binding import build_discretionary_mandate_binding_response
 from .dpm_portfolio_universe import (
     resolve_dpm_portfolio_universe_candidate_response,
@@ -338,26 +338,10 @@ class IntegrationService:
         portfolio_id: str,
         request: ClientTaxRuleSetRequest,
     ) -> ClientTaxRuleSetResponse | None:
-        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+        return await resolve_client_tax_rule_set_response(
+            repository=self._reference_repository,
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=request.mandate_id,
-        )
-        if binding is None:
-            return None
-
-        rows = await self._reference_repository.list_client_tax_rule_sets(
-            portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            as_of_date=request.as_of_date,
-            mandate_id=binding.mandate_id,
-            include_inactive_rules=request.include_inactive_rules,
-        )
-        return build_client_tax_rule_set_response(
-            portfolio_id=portfolio_id,
-            binding=binding,
             request=request,
-            rows=rows,
         )
 
     async def get_client_income_needs_schedule(
