@@ -11,6 +11,7 @@ from ..dtos.position_dto import (
 )
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
+from .portfolio_validation import ensure_portfolio_exists
 from .position_history import portfolio_position_history_response_data
 from .position_holdings import (
     assign_position_weights,
@@ -55,8 +56,7 @@ class PositionService:
             f"Fetching position history for security '{security_id}' in portfolio '{portfolio_id}'."
         )
 
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
 
         security_id = normalize_security_id(security_id)
         db_results = await self.repo.get_position_history_by_security(
@@ -83,9 +83,7 @@ class PositionService:
         """
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
-        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
-        if not portfolio_exists:
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         effective_as_of_date = await effective_holdings_read_as_of_date(
             repository=self.repo,
             requested_as_of_date=as_of_date,
