@@ -113,6 +113,8 @@ from .dpm_source_readiness import (
     dpm_market_data_coverage_request,
     dpm_model_targets_request,
     dpm_source_evaluated_instrument_ids,
+    dpm_source_identity_from_mandate,
+    dpm_source_initial_identity,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
     empty_instrument_universe_family,
@@ -766,8 +768,7 @@ class IntegrationService:
         request: DpmSourceReadinessRequest,
     ) -> DpmSourceReadinessResponse:
         families: list[DpmSourceFamilyReadiness] = []
-        resolved_mandate_id: str | None = request.mandate_id
-        resolved_model_portfolio_id: str | None = request.model_portfolio_id
+        resolved_identity = dpm_source_initial_identity(request)
 
         mandate_response: DiscretionaryMandateBindingResponse | None = None
         try:
@@ -780,25 +781,27 @@ class IntegrationService:
         if mandate_response is None:
             families.append(unavailable_mandate_binding_family())
         else:
-            resolved_mandate_id = mandate_response.mandate_id
-            resolved_model_portfolio_id = (
-                resolved_model_portfolio_id or mandate_response.model_portfolio_id
+            resolved_identity = dpm_source_identity_from_mandate(
+                request=request,
+                mandate_response=mandate_response,
             )
             families.append(mandate_source_family_readiness(mandate_response))
 
         target_instrument_ids: list[str] = []
-        if resolved_model_portfolio_id is None:
+        if resolved_identity.model_portfolio_id is None:
             families.append(unavailable_model_portfolio_id_family())
         else:
             try:
                 model_response = await self.resolve_model_portfolio_targets(
-                    resolved_model_portfolio_id,
+                    resolved_identity.model_portfolio_id,
                     dpm_model_targets_request(request),
                 )
             except (LookupError, ValueError):
                 model_response = None
             if model_response is None:
-                families.append(unavailable_model_targets_family(resolved_model_portfolio_id))
+                families.append(
+                    unavailable_model_targets_family(resolved_identity.model_portfolio_id)
+                )
             else:
                 target_instrument_ids = [target.instrument_id for target in model_response.targets]
                 families.append(model_targets_source_family_readiness(model_response))
@@ -847,8 +850,8 @@ class IntegrationService:
         return build_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
             request=request,
-            resolved_mandate_id=resolved_mandate_id,
-            resolved_model_portfolio_id=resolved_model_portfolio_id,
+            resolved_mandate_id=resolved_identity.mandate_id,
+            resolved_model_portfolio_id=resolved_identity.model_portfolio_id,
             evaluated_instrument_ids=evaluated_instrument_ids,
             families=families,
         )

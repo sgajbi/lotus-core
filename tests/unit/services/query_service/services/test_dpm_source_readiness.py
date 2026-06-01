@@ -12,6 +12,8 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_model_targets_request,
     dpm_source_evaluated_instrument_ids,
     dpm_source_family_readiness,
+    dpm_source_identity_from_mandate,
+    dpm_source_initial_identity,
     dpm_source_readiness_supportability,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
@@ -220,6 +222,52 @@ def test_dpm_source_evaluated_instrument_ids_deduplicates_and_sorts_scope() -> N
         request_instrument_ids=["SEC_Z", "SEC_A"],
         target_instrument_ids=["SEC_A", "SEC_B"],
     ) == ["SEC_A", "SEC_B", "SEC_Z"]
+
+
+def test_dpm_source_initial_identity_preserves_caller_scope() -> None:
+    request = DpmSourceReadinessRequest(
+        as_of_date=date(2026, 4, 10),
+        mandate_id="MANDATE_CALLER",
+        model_portfolio_id="MODEL_CALLER",
+    )
+
+    identity = dpm_source_initial_identity(request)
+
+    assert identity.mandate_id == "MANDATE_CALLER"
+    assert identity.model_portfolio_id == "MODEL_CALLER"
+
+
+def test_dpm_source_identity_from_mandate_preserves_explicit_model_override() -> None:
+    request = DpmSourceReadinessRequest(
+        as_of_date=date(2026, 4, 10),
+        model_portfolio_id="MODEL_CALLER",
+    )
+
+    identity = dpm_source_identity_from_mandate(
+        request=request,
+        mandate_response=SimpleNamespace(
+            mandate_id="MANDATE_RESOLVED",
+            model_portfolio_id="MODEL_FROM_MANDATE",
+        ),
+    )
+
+    assert identity.mandate_id == "MANDATE_RESOLVED"
+    assert identity.model_portfolio_id == "MODEL_CALLER"
+
+
+def test_dpm_source_identity_from_mandate_falls_back_to_mandate_model() -> None:
+    request = DpmSourceReadinessRequest(as_of_date=date(2026, 4, 10))
+
+    identity = dpm_source_identity_from_mandate(
+        request=request,
+        mandate_response=SimpleNamespace(
+            mandate_id="MANDATE_RESOLVED",
+            model_portfolio_id="MODEL_FROM_MANDATE",
+        ),
+    )
+
+    assert identity.mandate_id == "MANDATE_RESOLVED"
+    assert identity.model_portfolio_id == "MODEL_FROM_MANDATE"
 
 
 def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:

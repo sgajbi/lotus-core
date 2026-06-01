@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..dtos.reference_integration_dto import (
@@ -17,6 +18,12 @@ from ..dtos.reference_integration_dto import (
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 DpmSourceFamilyName = Literal["mandate", "model_targets", "eligibility", "tax_lots", "market_data"]
+
+
+@dataclass(frozen=True)
+class DpmSourceReadinessIdentity:
+    mandate_id: str | None
+    model_portfolio_id: str | None
 
 
 def dpm_source_family_readiness(
@@ -189,6 +196,26 @@ def dpm_source_evaluated_instrument_ids(
     target_instrument_ids: list[str],
 ) -> list[str]:
     return sorted({*request_instrument_ids, *target_instrument_ids})
+
+
+def dpm_source_initial_identity(
+    request: DpmSourceReadinessRequest,
+) -> DpmSourceReadinessIdentity:
+    return DpmSourceReadinessIdentity(
+        mandate_id=request.mandate_id,
+        model_portfolio_id=request.model_portfolio_id,
+    )
+
+
+def dpm_source_identity_from_mandate(
+    *,
+    request: DpmSourceReadinessRequest,
+    mandate_response: Any,
+) -> DpmSourceReadinessIdentity:
+    return DpmSourceReadinessIdentity(
+        mandate_id=mandate_response.mandate_id,
+        model_portfolio_id=request.model_portfolio_id or mandate_response.model_portfolio_id,
+    )
 
 
 def dpm_mandate_binding_request(
