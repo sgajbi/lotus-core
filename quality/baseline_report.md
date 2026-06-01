@@ -41,6 +41,15 @@ bank-buyable readiness.
 ## Next Ratchet
 
 1. Make report-only CI publish the same baseline checks on pull requests.
-2. Fix pytest collection errors.
-3. Decide whether generated build copies remain in quality scope or are removed/excluded.
+2. Run pytest collection as runtime-separated lanes now that import/plugin collection blockers are
+   removed.
+3. Keep generated build copies out of the active source checkout and quality scope.
 4. Convert baseline reports into regression-only gates once stable artifacts exist.
+
+## Follow-up Measurement
+
+After the initial baseline, CR-847 removed the local generated
+`src/services/query_service/build` tree and fixed the pytest 9 plugin/import-mode collection
+blockers. `python -m pytest --collect-only -q` now reaches 3,575 collected tests and then stops at
+the repository's governed mixed-runtime guard because db-direct integration tests and live-worker
+E2E tests must run in separate invocations.

@@ -6,7 +6,7 @@ Status: Initial scorecard baseline on 2026-06-02.
 | --- | --- | --- |
 | Python code size | 1,040 files / 213,290 lines under `src` and `tests` | Reduce generated/duplicated quality surface and split large modules |
 | Ruff findings | 344 | Zero new findings, then ratchet existing findings down |
-| Test collection | 3,500 collected, 3 collection errors | Clean full collection |
+| Test collection | 3,575 collected; import/plugin blockers fixed; full all-suite collection stops at governed mixed-runtime guard | Run runtime-separated collection lanes cleanly |
 | Coverage | Not measured in initial baseline due collection errors | Add line and branch coverage artifacts after collection is clean |
 | Complexity | Average `A (3.01)` with several D/E hotspots | No new D/E hotspots; refactor existing hotspots by domain priority |
 | Maintainability | Most files A/B; selected C hotspot in OpenAPI enrichment | No new C/D maintainability files |
@@ -15,4 +15,4 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Security | Not measured locally; bandit command missing | Add bandit and pip-audit report-only CI |
 | Architecture boundaries | Existing make gate plus import-linter scaffold | Convert report-only contract into regression gate |
 | OpenAPI governance | Existing make gate plus spectral scaffold | Publish spectral/OpenAPI reports |
-| Documentation | New top-level governance docs scaffolded | Keep docs implementation-backed and current |
+| Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |

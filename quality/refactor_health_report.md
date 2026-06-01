@@ -1,6 +1,6 @@
 # lotus-core Refactor Health Report
 
-Status: Initial health scaffold on 2026-06-02.
+Status: Active health report on 2026-06-02.
 
 ## Current Direction
 
@@ -16,7 +16,7 @@ tested modules.
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
 | Report-only quality CI | Started | `.github/workflows/quality-baseline.yml` |
-| Full test collection | Not clean | 3 collection errors in `pytest --collect-only -q` |
+| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
 | Lint baseline | Known debt | 344 ruff findings |
 | Architecture gates | Existing plus new scaffold | Existing `make architecture-guard`; new `.importlinter` scaffold |
 | OpenAPI governance | Existing plus new scaffold | Existing `make openapi-gate`; new `.spectral.yaml` scaffold |
@@ -27,3 +27,12 @@ tested modules.
 many domain-specific contracts, but the updated goal requires measurable quality evidence,
 progressive CI gates, complete API/documentation posture, security posture, and full-suite test
 health before that claim is defensible.
+
+## Progress Since Baseline
+
+1. Moved e2e support plugin registration to the repository-root pytest configuration boundary so
+   pytest 9 no longer rejects `tests/e2e/conftest.py` as a non-top-level plugin declaration.
+2. Enabled pytest `importlib` import mode to prevent duplicate unit/integration test basenames from
+   colliding during collection.
+3. Removed the local generated `src/services/query_service/build` tree from the active source
+   checkout; it remains ignored by Git and excluded from coverage/tool scopes.

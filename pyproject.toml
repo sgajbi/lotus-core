@@ -36,7 +36,7 @@ pythonpath = [
     "src/services/timeseries_generator_service",
     "src/services/pipeline_orchestrator_service",
 ]
-addopts = "--strict-markers"
+addopts = "--strict-markers --import-mode=importlib"
 minversion = "6.0"
 markers = [
     "asyncio: mark a test as being an asyncio test",
