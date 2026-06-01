@@ -13,6 +13,23 @@ from .request_fingerprint import request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
+async def resolve_classification_taxonomy_response(
+    *,
+    repository: Any,
+    as_of_date: date,
+    taxonomy_scope: str | None,
+) -> ClassificationTaxonomyResponse:
+    rows = await repository.list_taxonomy(
+        as_of_date=as_of_date,
+        taxonomy_scope=taxonomy_scope,
+    )
+    return build_classification_taxonomy_response(
+        as_of_date=as_of_date,
+        taxonomy_scope=taxonomy_scope,
+        rows=rows,
+    )
+
+
 def build_classification_taxonomy_response(
     *,
     as_of_date: date,

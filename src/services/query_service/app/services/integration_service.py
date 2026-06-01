@@ -87,7 +87,7 @@ from .benchmark_market_series import (
 )
 from .benchmark_return_series import build_benchmark_return_series_response
 from .cio_model_change_cohort import resolve_cio_model_change_affected_cohort_response
-from .classification_taxonomy import build_classification_taxonomy_response
+from .classification_taxonomy import resolve_classification_taxonomy_response
 from .client_income_needs_schedule import resolve_client_income_needs_schedule_response
 from .client_restriction_profile import resolve_client_restriction_profile_response
 from .client_tax_profile import resolve_client_tax_profile_response
@@ -604,12 +604,8 @@ class IntegrationService:
         as_of_date: date,
         taxonomy_scope: str | None = None,
     ) -> ClassificationTaxonomyResponse:
-        rows = await self._reference_repository.list_taxonomy(
+        return await resolve_classification_taxonomy_response(
+            repository=self._reference_repository,
             as_of_date=as_of_date,
             taxonomy_scope=taxonomy_scope,
-        )
-        return build_classification_taxonomy_response(
-            as_of_date=as_of_date,
-            taxonomy_scope=taxonomy_scope,
-            rows=rows,
         )
