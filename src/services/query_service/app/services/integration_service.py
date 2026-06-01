@@ -92,7 +92,7 @@ from .client_income_needs_schedule import resolve_client_income_needs_schedule_r
 from .client_restriction_profile import resolve_client_restriction_profile_response
 from .client_tax_profile import resolve_client_tax_profile_response
 from .client_tax_rule_set import resolve_client_tax_rule_set_response
-from .discretionary_mandate_binding import build_discretionary_mandate_binding_response
+from .discretionary_mandate_binding import resolve_discretionary_mandate_binding_response
 from .dpm_portfolio_universe import (
     resolve_dpm_portfolio_universe_candidate_response,
 )
@@ -233,17 +233,9 @@ class IntegrationService:
         portfolio_id: str,
         request: DiscretionaryMandateBindingRequest,
     ) -> DiscretionaryMandateBindingResponse | None:
-        row = await self._reference_repository.resolve_discretionary_mandate_binding(
+        return await resolve_discretionary_mandate_binding_response(
+            repository=self._reference_repository,
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=request.mandate_id,
-            booking_center_code=request.booking_center_code,
-        )
-        if row is None:
-            return None
-
-        return build_discretionary_mandate_binding_response(
-            row=row,
             request=request,
         )
 

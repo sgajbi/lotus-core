@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.discretionary_mandate_binding import (
     build_discretionary_mandate_binding_response,
+    resolve_discretionary_mandate_binding_response,
 )
 
 
@@ -81,6 +83,80 @@ def test_build_discretionary_mandate_binding_response_marks_ready() -> None:
         "source_record_id": "mandate_001_v1",
         "contract_version": "rfc_087_v1",
     }
+
+
+def test_resolve_discretionary_mandate_binding_response_orchestrates_repository_read() -> None:
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def resolve_discretionary_mandate_binding(
+                self,
+                **kwargs: object,
+            ) -> SimpleNamespace:
+                calls.append(kwargs)
+                return _binding_row()
+
+        response = await resolve_discretionary_mandate_binding_response(
+            repository=Repository(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=DiscretionaryMandateBindingRequest(
+                as_of_date=date(2026, 4, 10),
+                mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+                booking_center_code="Singapore",
+                include_policy_pack=True,
+            ),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is not None
+    assert response.product_name == "DiscretionaryMandateBinding"
+    assert response.supportability.state == "READY"
+    assert calls == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": date(2026, 4, 10),
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+            "booking_center_code": "Singapore",
+        }
+    ]
+
+
+def test_resolve_discretionary_mandate_binding_response_returns_none_when_missing() -> None:
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def resolve_discretionary_mandate_binding(
+                self,
+                **kwargs: object,
+            ) -> None:
+                calls.append(kwargs)
+                return None
+
+        response = await resolve_discretionary_mandate_binding_response(
+            repository=Repository(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=DiscretionaryMandateBindingRequest(
+                as_of_date=date(2026, 4, 10),
+                include_policy_pack=True,
+            ),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is None
+    assert calls == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": date(2026, 4, 10),
+            "mandate_id": None,
+            "booking_center_code": None,
+        }
+    ]
 
 
 def test_build_discretionary_mandate_binding_response_hides_policy_pack_when_excluded() -> None:
