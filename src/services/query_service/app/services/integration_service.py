@@ -100,7 +100,7 @@ from .dpm_source_readiness import (
     DpmSourceReadinessReaders,
     resolve_dpm_source_readiness_response,
 )
-from .external_currency_exposure import build_external_currency_exposure_response
+from .external_currency_exposure import resolve_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
     build_external_eligible_hedge_instrument_response,
 )
@@ -332,17 +332,9 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalCurrencyExposureRequest,
     ) -> ExternalCurrencyExposureResponse | None:
-        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+        return await resolve_external_currency_exposure_response(
+            repository=self._reference_repository,
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=request.mandate_id,
-        )
-        if binding is None:
-            return None
-
-        return build_external_currency_exposure_response(
-            portfolio_id=portfolio_id,
-            binding=binding,
             request=request,
         )
 
