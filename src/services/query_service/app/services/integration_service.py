@@ -88,6 +88,7 @@ from .benchmark_market_series import (
 )
 from .benchmark_return_series import build_benchmark_return_series_response
 from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
+from .classification_taxonomy import build_classification_taxonomy_response
 from .client_income_needs_schedule import build_client_income_needs_schedule_response
 from .client_restriction_profile import build_client_restriction_profile_response
 from .client_tax_profile import build_client_tax_profile_response
@@ -139,22 +140,14 @@ from .portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
     portfolio_tax_lot_after_sort_key,
 )
-from .reference_data_helpers import (
-    latest_reference_evidence_timestamp,
-    market_reference_data_quality_status,
-)
 from .reference_data_mappers import (
     benchmark_definition_response,
-    classification_taxonomy_entry,
     index_definition_response,
 )
 from .request_fingerprint import (
     request_fingerprint as build_request_fingerprint,
 )
 from .risk_free_series import build_risk_free_series_response
-from .source_data_runtime import (
-    source_product_runtime_metadata_without_as_of_date,
-)
 from .sustainability_preference_profile import (
     build_sustainability_preference_profile_response,
 )
@@ -1317,27 +1310,12 @@ class IntegrationService:
         as_of_date: date,
         taxonomy_scope: str | None = None,
     ) -> ClassificationTaxonomyResponse:
-        request_fingerprint = build_request_fingerprint(
-            {
-                "taxonomy_key": "classification_taxonomy",
-                "as_of_date": as_of_date.isoformat(),
-                "taxonomy_scope": taxonomy_scope,
-            }
-        )
         rows = await self._reference_repository.list_taxonomy(
             as_of_date=as_of_date,
             taxonomy_scope=taxonomy_scope,
         )
-        return ClassificationTaxonomyResponse(
+        return build_classification_taxonomy_response(
             as_of_date=as_of_date,
-            records=[classification_taxonomy_entry(row) for row in rows],
-            request_fingerprint=request_fingerprint,
-            **source_product_runtime_metadata_without_as_of_date(
-                as_of_date,
-                data_quality_status=market_reference_data_quality_status(
-                    rows,
-                    required_count=len(rows),
-                ),
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
-            ),
+            taxonomy_scope=taxonomy_scope,
+            rows=rows,
         )
