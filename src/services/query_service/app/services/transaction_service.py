@@ -32,7 +32,6 @@ class TransactionService:
     """
 
     def __init__(self, db: AsyncSession):
-        self.db = db
         self.repo = TransactionRepository(db)
         self._fx_converter = CachedFxRateConverter(self.repo)
 

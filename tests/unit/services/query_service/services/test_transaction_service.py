@@ -82,6 +82,23 @@ def mock_transaction_repo() -> AsyncMock:
     return repo
 
 
+async def test_transaction_service_initializes_dependencies_without_retained_session(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    db_session = AsyncMock(spec=AsyncSession)
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ) as repository_cls:
+        service = TransactionService(db_session)
+
+    repository_cls.assert_called_once_with(db_session)
+    assert service.repo is mock_transaction_repo
+    assert isinstance(service._fx_converter, CachedFxRateConverter)
+    assert not hasattr(service, "db")
+
+
 async def test_get_transactions(mock_transaction_repo: AsyncMock):
     """
     GIVEN filters and pagination
