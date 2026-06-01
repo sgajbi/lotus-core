@@ -52,7 +52,6 @@ from ..dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
-    IntegrationWindow,
     LiquidityReserveRequirementRequest,
     LiquidityReserveRequirementResponse,
     MarketDataCoverageRequest,
@@ -87,6 +86,7 @@ from .benchmark_market_series import (
     benchmark_market_series_fx_context,
     build_benchmark_market_series_response,
 )
+from .benchmark_return_series import build_benchmark_return_series_response
 from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
 from .client_income_needs_schedule import build_client_income_needs_schedule_response
 from .client_restriction_profile import build_client_restriction_profile_response
@@ -145,15 +145,11 @@ from .reference_data_helpers import (
 )
 from .reference_data_mappers import (
     benchmark_definition_response,
-    benchmark_return_series_point,
     classification_taxonomy_entry,
     index_definition_response,
 )
 from .request_fingerprint import (
     request_fingerprint as build_request_fingerprint,
-)
-from .request_fingerprint import (
-    series_request_fingerprint,
 )
 from .risk_free_series import build_risk_free_series_response
 from .source_data_runtime import (
@@ -1235,32 +1231,15 @@ class IntegrationService:
     async def get_benchmark_return_series(
         self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
     ) -> BenchmarkReturnSeriesResponse:
-        request_fingerprint = series_request_fingerprint(
-            series_key="benchmark_return_series",
-            identifier_key="benchmark_id",
-            identifier_value=benchmark_id,
-            request=request,
-        )
         rows = await self._reference_repository.list_benchmark_return_points(
             benchmark_id=benchmark_id,
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
-        return BenchmarkReturnSeriesResponse(
+        return build_benchmark_return_series_response(
             benchmark_id=benchmark_id,
-            as_of_date=request.as_of_date,
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            frequency=request.frequency,
-            request_fingerprint=request_fingerprint,
-            points=[benchmark_return_series_point(row) for row in rows],
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.benchmark_return_series",
-            },
+            request=request,
+            rows=rows,
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
