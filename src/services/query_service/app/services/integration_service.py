@@ -133,7 +133,7 @@ from .portfolio_tax_lot_window import (
     resolve_portfolio_tax_lot_window_response,
 )
 from .reference_data_mappers import benchmark_definition_response
-from .risk_free_coverage import build_risk_free_coverage_response
+from .risk_free_coverage import resolve_risk_free_coverage_response
 from .risk_free_series import build_risk_free_series_response
 from .sustainability_preference_profile import (
     resolve_sustainability_preference_profile_response,
@@ -637,15 +637,9 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
-        normalized_currency = normalize_currency_code(currency)
-        coverage = await self._reference_repository.get_risk_free_coverage(
-            currency=normalized_currency,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        return build_risk_free_coverage_response(
-            currency=normalized_currency,
-            coverage=coverage,
+        return await resolve_risk_free_coverage_response(
+            repository=self._reference_repository,
+            currency=currency,
             start_date=start_date,
             end_date=end_date,
         )

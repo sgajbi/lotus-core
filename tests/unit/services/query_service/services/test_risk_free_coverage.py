@@ -1,7 +1,9 @@
+import asyncio
 from datetime import UTC, date, datetime
 
 from src.services.query_service.app.services.risk_free_coverage import (
     build_risk_free_coverage_response,
+    resolve_risk_free_coverage_response,
 )
 
 
@@ -31,6 +33,43 @@ def test_build_risk_free_coverage_response_fingerprints_currency_scope() -> None
     assert response.quality_status_distribution == {"accepted": 2}
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 1, 2, 8, 0, tzinfo=UTC)
+
+
+def test_resolve_risk_free_coverage_response_orchestrates_normalized_repository_read() -> None:
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def get_risk_free_coverage(self, **kwargs: object) -> dict[str, object]:
+                calls.append(kwargs)
+                return {
+                    "total_points": 1,
+                    "observed_dates": [date(2026, 1, 1)],
+                    "observed_start_date": date(2026, 1, 1),
+                    "observed_end_date": date(2026, 1, 1),
+                    "quality_status_counts": {"accepted": 1},
+                }
+
+        response = await resolve_risk_free_coverage_response(
+            repository=Repository(),
+            currency=" usd ",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 1),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response.product_name == "DataQualityCoverageReport"
+    assert response.data_quality_status == "COMPLETE"
+    assert response.request_fingerprint
+    assert calls == [
+        {
+            "currency": "USD",
+            "start_date": date(2026, 1, 1),
+            "end_date": date(2026, 1, 1),
+        }
+    ]
 
 
 def test_build_risk_free_coverage_response_fingerprint_changes_by_currency() -> None:
