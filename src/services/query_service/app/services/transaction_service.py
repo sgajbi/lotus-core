@@ -2,7 +2,7 @@
 import logging
 from datetime import date
 from decimal import Decimal
-from typing import Any, Optional, cast
+from typing import Optional, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,7 @@ from .transaction_metadata import (
     realized_tax_summary_filters,
     transaction_ledger_filters,
 )
+from .transaction_reads import read_transaction_ledger_page
 from .transaction_realized_tax import (
     realized_tax_currency_totals,
     realized_tax_reporting_currency_total,
@@ -93,35 +94,18 @@ class TransactionService:
             as_of_date=effective_as_of_date,
         )
 
-        total_count = await self.repo.get_transactions_count(**ledger_filters)
-
-        db_results: list[Any]
-        if total_count == 0:
-            db_results = []
-            latest_evidence_timestamp = None
-        else:
-            db_results = await self.repo.get_transactions(
-                skip=skip,
-                limit=limit,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                **ledger_filters,
-            )
-            if skip > 0 or limit < total_count:
-                latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
-                    **ledger_filters
-                )
-            else:
-                if len(db_results) == total_count:
-                    latest_evidence_timestamp = latest_transaction_evidence_timestamp(db_results)
-                else:
-                    latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
-                        **ledger_filters
-                    )
+        ledger_page = await read_transaction_ledger_page(
+            repository=self.repo,
+            ledger_filters=ledger_filters,
+            skip=skip,
+            limit=limit,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
         resolved_reporting_currency = reporting_currency
 
         transactions = []
-        for transaction in db_results:
+        for transaction in ledger_page.rows:
             record = TransactionRecord.model_validate(transaction)
             record.costs = [cost for cost in transaction.costs or []]
             if transaction.cashflow:
@@ -138,18 +122,18 @@ class TransactionService:
         return PaginatedTransactionResponse(
             portfolio_id=portfolio_id,
             reporting_currency=resolved_reporting_currency,
-            total=total_count,
+            total=ledger_page.total_count,
             skip=skip,
             limit=limit,
             transactions=transactions,
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date or end_date or date.today(),
                 data_quality_status=ledger_data_quality_status(
-                    total_count=total_count,
+                    total_count=ledger_page.total_count,
                     returned_count=len(transactions),
                     skip=skip,
                 ),
-                latest_evidence_timestamp=latest_evidence_timestamp,
+                latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
             ),
         )
 
