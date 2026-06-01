@@ -15,11 +15,18 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_readiness_supportability,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
+    empty_instrument_universe_family,
     mandate_source_family_readiness,
     market_data_source_family_readiness,
     model_targets_source_family_readiness,
     tax_lots_source_family_readiness,
     unavailable_dpm_source_family,
+    unavailable_eligibility_family,
+    unavailable_mandate_binding_family,
+    unavailable_market_data_family,
+    unavailable_model_portfolio_id_family,
+    unavailable_model_targets_family,
+    unavailable_tax_lots_family,
 )
 
 
@@ -38,6 +45,36 @@ def test_unavailable_dpm_source_family_sets_governed_defaults() -> None:
     assert family.missing_items == ["model_portfolio_id"]
     assert family.stale_items == []
     assert family.evidence_count == 0
+
+
+def test_dpm_source_unavailable_family_builders_lock_reason_codes() -> None:
+    mandate = unavailable_mandate_binding_family()
+    missing_model_id = unavailable_model_portfolio_id_family()
+    model_targets = unavailable_model_targets_family("MODEL_BALANCED")
+    eligibility = unavailable_eligibility_family([f"SEC_{index:02d}" for index in range(12)])
+    empty_universe = empty_instrument_universe_family()
+    tax_lots = unavailable_tax_lots_family("PB_SG_GLOBAL_BAL_001")
+    market_data = unavailable_market_data_family()
+
+    assert mandate.family == "mandate"
+    assert mandate.reason == "MANDATE_BINDING_UNAVAILABLE"
+    assert mandate.missing_items == ["mandate_binding"]
+    assert missing_model_id.family == "model_targets"
+    assert missing_model_id.reason == "MODEL_PORTFOLIO_ID_UNAVAILABLE"
+    assert missing_model_id.missing_items == ["model_portfolio_id"]
+    assert model_targets.reason == "MODEL_TARGETS_UNAVAILABLE"
+    assert model_targets.missing_items == ["MODEL_BALANCED"]
+    assert eligibility.family == "eligibility"
+    assert eligibility.reason == "INSTRUMENT_ELIGIBILITY_UNAVAILABLE"
+    assert eligibility.missing_items == [f"SEC_{index:02d}" for index in range(10)]
+    assert empty_universe.reason == "DPM_INSTRUMENT_UNIVERSE_EMPTY"
+    assert empty_universe.missing_items == ["instrument_ids"]
+    assert tax_lots.family == "tax_lots"
+    assert tax_lots.reason == "PORTFOLIO_TAX_LOTS_UNAVAILABLE"
+    assert tax_lots.missing_items == ["PB_SG_GLOBAL_BAL_001"]
+    assert market_data.family == "market_data"
+    assert market_data.reason == "MARKET_DATA_COVERAGE_UNAVAILABLE"
+    assert market_data.missing_items == ["market_data_coverage"]
 
 
 def test_dpm_source_readiness_supportability_prioritizes_worst_family_state() -> None:

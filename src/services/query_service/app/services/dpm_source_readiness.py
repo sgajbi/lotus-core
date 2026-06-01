@@ -56,6 +56,69 @@ def unavailable_dpm_source_family(
     )
 
 
+def unavailable_mandate_binding_family() -> DpmSourceFamilyReadiness:
+    return unavailable_dpm_source_family(
+        family="mandate",
+        product_name="DiscretionaryMandateBinding",
+        reason="MANDATE_BINDING_UNAVAILABLE",
+        missing_items=["mandate_binding"],
+    )
+
+
+def unavailable_model_portfolio_id_family() -> DpmSourceFamilyReadiness:
+    return unavailable_dpm_source_family(
+        family="model_targets",
+        product_name="DpmModelPortfolioTarget",
+        reason="MODEL_PORTFOLIO_ID_UNAVAILABLE",
+        missing_items=["model_portfolio_id"],
+    )
+
+
+def unavailable_model_targets_family(model_portfolio_id: str) -> DpmSourceFamilyReadiness:
+    return unavailable_dpm_source_family(
+        family="model_targets",
+        product_name="DpmModelPortfolioTarget",
+        reason="MODEL_TARGETS_UNAVAILABLE",
+        missing_items=[model_portfolio_id],
+    )
+
+
+def unavailable_eligibility_family(instrument_ids: list[str]) -> DpmSourceFamilyReadiness:
+    return unavailable_dpm_source_family(
+        family="eligibility",
+        product_name="InstrumentEligibilityProfile",
+        reason="INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
+        missing_items=instrument_ids[:10],
+    )
+
+
+def empty_instrument_universe_family() -> DpmSourceFamilyReadiness:
+    return unavailable_dpm_source_family(
+        family="eligibility",
+        product_name="InstrumentEligibilityProfile",
+        reason="DPM_INSTRUMENT_UNIVERSE_EMPTY",
+        missing_items=["instrument_ids"],
+    )
+
+
+def unavailable_tax_lots_family(portfolio_id: str) -> DpmSourceFamilyReadiness:
+    return unavailable_dpm_source_family(
+        family="tax_lots",
+        product_name="PortfolioTaxLotWindow",
+        reason="PORTFOLIO_TAX_LOTS_UNAVAILABLE",
+        missing_items=[portfolio_id],
+    )
+
+
+def unavailable_market_data_family() -> DpmSourceFamilyReadiness:
+    return unavailable_dpm_source_family(
+        family="market_data",
+        product_name="MarketDataCoverageWindow",
+        reason="MARKET_DATA_COVERAGE_UNAVAILABLE",
+        missing_items=["market_data_coverage"],
+    )
+
+
 def mandate_source_family_readiness(mandate_response: Any) -> DpmSourceFamilyReadiness:
     return dpm_source_family_readiness(
         family="mandate",

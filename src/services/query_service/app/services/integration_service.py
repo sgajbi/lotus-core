@@ -113,11 +113,17 @@ from .dpm_source_readiness import (
     dpm_source_evaluated_instrument_ids,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
+    empty_instrument_universe_family,
     mandate_source_family_readiness,
     market_data_source_family_readiness,
     model_targets_source_family_readiness,
     tax_lots_source_family_readiness,
-    unavailable_dpm_source_family,
+    unavailable_eligibility_family,
+    unavailable_mandate_binding_family,
+    unavailable_market_data_family,
+    unavailable_model_portfolio_id_family,
+    unavailable_model_targets_family,
+    unavailable_tax_lots_family,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
@@ -770,14 +776,7 @@ class IntegrationService:
         except (LookupError, ValueError):
             mandate_response = None
         if mandate_response is None:
-            families.append(
-                unavailable_dpm_source_family(
-                    family="mandate",
-                    product_name="DiscretionaryMandateBinding",
-                    reason="MANDATE_BINDING_UNAVAILABLE",
-                    missing_items=["mandate_binding"],
-                )
-            )
+            families.append(unavailable_mandate_binding_family())
         else:
             resolved_mandate_id = mandate_response.mandate_id
             resolved_model_portfolio_id = (
@@ -787,14 +786,7 @@ class IntegrationService:
 
         target_instrument_ids: list[str] = []
         if resolved_model_portfolio_id is None:
-            families.append(
-                unavailable_dpm_source_family(
-                    family="model_targets",
-                    product_name="DpmModelPortfolioTarget",
-                    reason="MODEL_PORTFOLIO_ID_UNAVAILABLE",
-                    missing_items=["model_portfolio_id"],
-                )
-            )
+            families.append(unavailable_model_portfolio_id_family())
         else:
             try:
                 model_response = await self.resolve_model_portfolio_targets(
@@ -804,14 +796,7 @@ class IntegrationService:
             except (LookupError, ValueError):
                 model_response = None
             if model_response is None:
-                families.append(
-                    unavailable_dpm_source_family(
-                        family="model_targets",
-                        product_name="DpmModelPortfolioTarget",
-                        reason="MODEL_TARGETS_UNAVAILABLE",
-                        missing_items=[resolved_model_portfolio_id],
-                    )
-                )
+                families.append(unavailable_model_targets_family(resolved_model_portfolio_id))
             else:
                 target_instrument_ids = [target.instrument_id for target in model_response.targets]
                 families.append(model_targets_source_family_readiness(model_response))
@@ -830,23 +815,9 @@ class IntegrationService:
                 )
                 families.append(eligibility_source_family_readiness(eligibility))
             except (LookupError, ValueError):
-                families.append(
-                    unavailable_dpm_source_family(
-                        family="eligibility",
-                        product_name="InstrumentEligibilityProfile",
-                        reason="INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
-                        missing_items=evaluated_instrument_ids[:10],
-                    )
-                )
+                families.append(unavailable_eligibility_family(evaluated_instrument_ids))
         else:
-            families.append(
-                unavailable_dpm_source_family(
-                    family="eligibility",
-                    product_name="InstrumentEligibilityProfile",
-                    reason="DPM_INSTRUMENT_UNIVERSE_EMPTY",
-                    missing_items=["instrument_ids"],
-                )
-            )
+            families.append(empty_instrument_universe_family())
 
         try:
             tax_lots = await self.get_portfolio_tax_lot_window(
@@ -858,14 +829,7 @@ class IntegrationService:
             )
             families.append(tax_lots_source_family_readiness(tax_lots))
         except (LookupError, ValueError):
-            families.append(
-                unavailable_dpm_source_family(
-                    family="tax_lots",
-                    product_name="PortfolioTaxLotWindow",
-                    reason="PORTFOLIO_TAX_LOTS_UNAVAILABLE",
-                    missing_items=[portfolio_id],
-                )
-            )
+            families.append(unavailable_tax_lots_family(portfolio_id))
 
         try:
             market_data = await self.get_market_data_coverage(
@@ -876,14 +840,7 @@ class IntegrationService:
             )
             families.append(market_data_source_family_readiness(market_data))
         except (LookupError, ValueError):
-            families.append(
-                unavailable_dpm_source_family(
-                    family="market_data",
-                    product_name="MarketDataCoverageWindow",
-                    reason="MARKET_DATA_COVERAGE_UNAVAILABLE",
-                    missing_items=["market_data_coverage"],
-                )
-            )
+            families.append(unavailable_market_data_family())
 
         return build_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
