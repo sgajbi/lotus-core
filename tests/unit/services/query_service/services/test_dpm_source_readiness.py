@@ -6,9 +6,14 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.dpm_source_readiness import (
     build_dpm_source_readiness_response,
+    dpm_eligibility_request,
+    dpm_mandate_binding_request,
+    dpm_market_data_coverage_request,
+    dpm_model_targets_request,
     dpm_source_evaluated_instrument_ids,
     dpm_source_family_readiness,
     dpm_source_readiness_supportability,
+    dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
     mandate_source_family_readiness,
     market_data_source_family_readiness,
@@ -178,6 +183,69 @@ def test_dpm_source_evaluated_instrument_ids_deduplicates_and_sorts_scope() -> N
         request_instrument_ids=["SEC_Z", "SEC_A"],
         target_instrument_ids=["SEC_A", "SEC_B"],
     ) == ["SEC_A", "SEC_B", "SEC_Z"]
+
+
+def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:
+    request = DpmSourceReadinessRequest(
+        as_of_date=date(2026, 4, 10),
+        instrument_ids=["EQ_US_AAPL"],
+        mandate_id="MANDATE_001",
+        model_portfolio_id="MODEL_BALANCED",
+        currency_pairs=[{"from_currency": "USD", "to_currency": "SGD"}],
+        valuation_currency="SGD",
+        max_staleness_days=3,
+        tenant_id="TENANT_SG",
+    )
+
+    mandate_request = dpm_mandate_binding_request(request)
+    model_request = dpm_model_targets_request(request)
+    eligibility_request = dpm_eligibility_request(
+        request=request,
+        instrument_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+    )
+    tax_lot_request = dpm_tax_lot_window_request(
+        request=request,
+        evaluated_instrument_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+    )
+    market_data_request = dpm_market_data_coverage_request(
+        request=request,
+        evaluated_instrument_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+    )
+
+    assert mandate_request.as_of_date == date(2026, 4, 10)
+    assert mandate_request.tenant_id == "TENANT_SG"
+    assert mandate_request.mandate_id == "MANDATE_001"
+    assert mandate_request.include_policy_pack is True
+    assert model_request.as_of_date == date(2026, 4, 10)
+    assert model_request.include_inactive_targets is False
+    assert model_request.tenant_id == "TENANT_SG"
+    assert eligibility_request.security_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert eligibility_request.include_restricted_rationale is False
+    assert eligibility_request.tenant_id == "TENANT_SG"
+    assert tax_lot_request.security_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert tax_lot_request.tenant_id == "TENANT_SG"
+    assert market_data_request.instrument_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert len(market_data_request.currency_pairs) == 1
+    assert market_data_request.currency_pairs[0].from_currency == "USD"
+    assert market_data_request.currency_pairs[0].to_currency == "SGD"
+    assert market_data_request.valuation_currency == "SGD"
+    assert market_data_request.max_staleness_days == 3
+    assert market_data_request.tenant_id == "TENANT_SG"
+
+
+def test_dpm_tax_lot_request_uses_full_portfolio_scope_when_universe_empty() -> None:
+    request = DpmSourceReadinessRequest(
+        as_of_date=date(2026, 4, 10),
+        tenant_id="TENANT_SG",
+    )
+
+    tax_lot_request = dpm_tax_lot_window_request(
+        request=request,
+        evaluated_instrument_ids=[],
+    )
+
+    assert tax_lot_request.security_ids is None
+    assert tax_lot_request.tenant_id == "TENANT_SG"
 
 
 def test_build_dpm_source_readiness_response_sets_runtime_metadata_and_lineage() -> None:

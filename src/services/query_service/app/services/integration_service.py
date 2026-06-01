@@ -106,7 +106,12 @@ from .dpm_portfolio_universe import (
 )
 from .dpm_source_readiness import (
     build_dpm_source_readiness_response,
+    dpm_eligibility_request,
+    dpm_mandate_binding_request,
+    dpm_market_data_coverage_request,
+    dpm_model_targets_request,
     dpm_source_evaluated_instrument_ids,
+    dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
     mandate_source_family_readiness,
     market_data_source_family_readiness,
@@ -760,12 +765,7 @@ class IntegrationService:
         try:
             mandate_response = await self.resolve_discretionary_mandate_binding(
                 portfolio_id,
-                DiscretionaryMandateBindingRequest(
-                    as_of_date=request.as_of_date,
-                    tenant_id=request.tenant_id,
-                    mandate_id=request.mandate_id,
-                    include_policy_pack=True,
-                ),
+                dpm_mandate_binding_request(request),
             )
         except (LookupError, ValueError):
             mandate_response = None
@@ -799,11 +799,7 @@ class IntegrationService:
             try:
                 model_response = await self.resolve_model_portfolio_targets(
                     resolved_model_portfolio_id,
-                    ModelPortfolioTargetRequest(
-                        as_of_date=request.as_of_date,
-                        include_inactive_targets=False,
-                        tenant_id=request.tenant_id,
-                    ),
+                    dpm_model_targets_request(request),
                 )
             except (LookupError, ValueError):
                 model_response = None
@@ -827,11 +823,9 @@ class IntegrationService:
         if evaluated_instrument_ids:
             try:
                 eligibility = await self.resolve_instrument_eligibility_bulk(
-                    InstrumentEligibilityBulkRequest(
-                        as_of_date=request.as_of_date,
-                        security_ids=evaluated_instrument_ids,
-                        tenant_id=request.tenant_id,
-                        include_restricted_rationale=False,
+                    dpm_eligibility_request(
+                        request=request,
+                        instrument_ids=evaluated_instrument_ids,
                     )
                 )
                 families.append(eligibility_source_family_readiness(eligibility))
@@ -857,10 +851,9 @@ class IntegrationService:
         try:
             tax_lots = await self.get_portfolio_tax_lot_window(
                 portfolio_id=portfolio_id,
-                request=PortfolioTaxLotWindowRequest(
-                    as_of_date=request.as_of_date,
-                    security_ids=evaluated_instrument_ids or None,
-                    tenant_id=request.tenant_id,
+                request=dpm_tax_lot_window_request(
+                    request=request,
+                    evaluated_instrument_ids=evaluated_instrument_ids,
                 ),
             )
             families.append(tax_lots_source_family_readiness(tax_lots))
@@ -876,13 +869,9 @@ class IntegrationService:
 
         try:
             market_data = await self.get_market_data_coverage(
-                MarketDataCoverageRequest(
-                    as_of_date=request.as_of_date,
-                    instrument_ids=evaluated_instrument_ids,
-                    currency_pairs=request.currency_pairs,
-                    valuation_currency=request.valuation_currency,
-                    max_staleness_days=request.max_staleness_days,
-                    tenant_id=request.tenant_id,
+                dpm_market_data_coverage_request(
+                    request=request,
+                    evaluated_instrument_ids=evaluated_instrument_ids,
                 )
             )
             families.append(market_data_source_family_readiness(market_data))

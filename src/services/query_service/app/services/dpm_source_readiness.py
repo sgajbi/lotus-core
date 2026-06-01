@@ -3,11 +3,16 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ..dtos.reference_integration_dto import (
+    DiscretionaryMandateBindingRequest,
     DpmSourceFamilyReadiness,
     DpmSourceFamilyState,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
     DpmSourceReadinessSupportability,
+    InstrumentEligibilityBulkRequest,
+    MarketDataCoverageRequest,
+    ModelPortfolioTargetRequest,
+    PortfolioTaxLotWindowRequest,
 )
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
@@ -121,6 +126,67 @@ def dpm_source_evaluated_instrument_ids(
     target_instrument_ids: list[str],
 ) -> list[str]:
     return sorted({*request_instrument_ids, *target_instrument_ids})
+
+
+def dpm_mandate_binding_request(
+    request: DpmSourceReadinessRequest,
+) -> DiscretionaryMandateBindingRequest:
+    return DiscretionaryMandateBindingRequest(
+        as_of_date=request.as_of_date,
+        tenant_id=request.tenant_id,
+        mandate_id=request.mandate_id,
+        include_policy_pack=True,
+    )
+
+
+def dpm_model_targets_request(
+    request: DpmSourceReadinessRequest,
+) -> ModelPortfolioTargetRequest:
+    return ModelPortfolioTargetRequest(
+        as_of_date=request.as_of_date,
+        include_inactive_targets=False,
+        tenant_id=request.tenant_id,
+    )
+
+
+def dpm_eligibility_request(
+    *,
+    request: DpmSourceReadinessRequest,
+    instrument_ids: list[str],
+) -> InstrumentEligibilityBulkRequest:
+    return InstrumentEligibilityBulkRequest(
+        as_of_date=request.as_of_date,
+        security_ids=instrument_ids,
+        tenant_id=request.tenant_id,
+        include_restricted_rationale=False,
+    )
+
+
+def dpm_tax_lot_window_request(
+    *,
+    request: DpmSourceReadinessRequest,
+    evaluated_instrument_ids: list[str],
+) -> PortfolioTaxLotWindowRequest:
+    return PortfolioTaxLotWindowRequest(
+        as_of_date=request.as_of_date,
+        security_ids=evaluated_instrument_ids or None,
+        tenant_id=request.tenant_id,
+    )
+
+
+def dpm_market_data_coverage_request(
+    *,
+    request: DpmSourceReadinessRequest,
+    evaluated_instrument_ids: list[str],
+) -> MarketDataCoverageRequest:
+    return MarketDataCoverageRequest(
+        as_of_date=request.as_of_date,
+        instrument_ids=evaluated_instrument_ids,
+        currency_pairs=request.currency_pairs,
+        valuation_currency=request.valuation_currency,
+        max_staleness_days=request.max_staleness_days,
+        tenant_id=request.tenant_id,
+    )
 
 
 def dpm_source_readiness_supportability(
