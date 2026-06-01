@@ -138,7 +138,7 @@ from .reference_data_mappers import benchmark_definition_response
 from .risk_free_coverage import build_risk_free_coverage_response
 from .risk_free_series import build_risk_free_series_response
 from .sustainability_preference_profile import (
-    build_sustainability_preference_profile_response,
+    resolve_sustainability_preference_profile_response,
 )
 from .transaction_cost_curve import (
     resolve_transaction_cost_curve_response,
@@ -300,26 +300,10 @@ class IntegrationService:
         portfolio_id: str,
         request: SustainabilityPreferenceProfileRequest,
     ) -> SustainabilityPreferenceProfileResponse | None:
-        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+        return await resolve_sustainability_preference_profile_response(
+            repository=self._reference_repository,
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=request.mandate_id,
-        )
-        if binding is None:
-            return None
-
-        rows = await self._reference_repository.list_sustainability_preference_profiles(
-            portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            as_of_date=request.as_of_date,
-            mandate_id=binding.mandate_id,
-            include_inactive_preferences=request.include_inactive_preferences,
-        )
-        return build_sustainability_preference_profile_response(
-            portfolio_id=portfolio_id,
-            binding=binding,
             request=request,
-            rows=rows,
         )
 
     async def get_client_tax_profile(
