@@ -9,10 +9,9 @@ from ..dtos.position_dto import (
     PortfolioPositionHistoryResponse,
     PortfolioPositionsResponse,
 )
-from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
 from .portfolio_validation import ensure_portfolio_exists
-from .position_history import portfolio_position_history_response_data
+from .position_history_reads import position_history_response
 from .position_holdings import (
     assign_position_weights,
     holdings_data_quality_status,
@@ -58,18 +57,12 @@ class PositionService:
 
         await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
 
-        security_id = normalize_security_id(security_id)
-        db_results = await self.repo.get_position_history_by_security(
+        return await position_history_response(
+            repository=self.repo,
             portfolio_id=portfolio_id,
             security_id=security_id,
             start_date=start_date,
             end_date=end_date,
-        )
-
-        return portfolio_position_history_response_data(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            db_results=db_results,
         )
 
     async def get_portfolio_positions(
