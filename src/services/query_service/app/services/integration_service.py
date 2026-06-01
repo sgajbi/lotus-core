@@ -118,7 +118,7 @@ from .index_return_series import build_index_return_series_response
 from .instrument_eligibility import build_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
 from .liquidity_reserve_requirement import (
-    build_liquidity_reserve_requirement_response,
+    resolve_liquidity_reserve_requirement_response,
 )
 from .market_data_coverage import (
     build_market_data_coverage_response,
@@ -424,26 +424,10 @@ class IntegrationService:
         portfolio_id: str,
         request: LiquidityReserveRequirementRequest,
     ) -> LiquidityReserveRequirementResponse | None:
-        binding = await self._reference_repository.resolve_discretionary_mandate_binding(
+        return await resolve_liquidity_reserve_requirement_response(
+            repository=self._reference_repository,
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=request.mandate_id,
-        )
-        if binding is None:
-            return None
-
-        rows = await self._reference_repository.list_liquidity_reserve_requirements(
-            portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            as_of_date=request.as_of_date,
-            mandate_id=binding.mandate_id,
-            include_inactive_requirements=request.include_inactive_requirements,
-        )
-        return build_liquidity_reserve_requirement_response(
-            portfolio_id=portfolio_id,
-            binding=binding,
             request=request,
-            rows=rows,
         )
 
     async def get_planned_withdrawal_schedule(
