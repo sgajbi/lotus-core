@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
 from src.services.query_service.app.services.fx_conversion import CachedFxRateConverter
+from src.services.query_service.app.services.transaction_reads import RealizedTaxEvidenceRead
 from src.services.query_service.app.services.transaction_service import TransactionService
 
 pytestmark = pytest.mark.asyncio
@@ -624,46 +625,39 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
     assert summary.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
 
 
-async def test_get_realized_tax_summary_reads_count_and_tax_evidence_sequentially() -> None:
-    call_order: list[str] = []
+async def test_get_realized_tax_summary_delegates_tax_evidence_read() -> None:
     repo = AsyncMock(spec=TransactionRepository)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
 
-    async def get_transactions_count(**_: object) -> int:
-        call_order.append("count")
-        return 2
-
-    async def list_realized_tax_evidence_transactions(**_: object) -> list[Transaction]:
-        call_order.append("tax_evidence")
-        return []
-
-    repo.get_transactions_count.side_effect = get_transactions_count
-    repo.list_realized_tax_evidence_transactions.side_effect = (
-        list_realized_tax_evidence_transactions
-    )
-
-    with patch(
-        "src.services.query_service.app.services.transaction_service.TransactionRepository",
-        return_value=repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.read_realized_tax_evidence",
+            new_callable=AsyncMock,
+            return_value=RealizedTaxEvidenceRead(
+                source_transaction_count=2,
+                tax_transactions=[],
+                latest_evidence_timestamp=None,
+            ),
+        ) as read_realized_tax_evidence,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
         summary = await service.get_realized_tax_summary(portfolio_id="P1")
 
     assert summary.source_transaction_count == 2
     assert summary.tax_evidence_transaction_count == 0
-    assert call_order == ["count", "tax_evidence"]
-    repo.get_transactions_count.assert_awaited_once_with(
-        portfolio_id="P1",
-        start_date=None,
-        end_date=None,
-        as_of_date=date(2025, 1, 15),
-    )
-    repo.list_realized_tax_evidence_transactions.assert_awaited_once_with(
-        portfolio_id="P1",
-        start_date=None,
-        end_date=None,
-        as_of_date=date(2025, 1, 15),
+    read_realized_tax_evidence.assert_awaited_once_with(
+        repository=repo,
+        ledger_filters={
+            "portfolio_id": "P1",
+            "start_date": None,
+            "end_date": None,
+            "as_of_date": date(2025, 1, 15),
+        },
     )
 
 

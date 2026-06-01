@@ -16,12 +16,11 @@ from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
 from .portfolio_validation import ensure_portfolio_exists
 from .transaction_metadata import (
-    latest_transaction_evidence_timestamp,
     ledger_data_quality_status,
     realized_tax_summary_filters,
     transaction_ledger_filters,
 )
-from .transaction_reads import read_transaction_ledger_page
+from .transaction_reads import read_realized_tax_evidence, read_transaction_ledger_page
 from .transaction_realized_tax import (
     realized_tax_currency_totals,
     realized_tax_reporting_currency_total,
@@ -157,13 +156,12 @@ class TransactionService:
             end_date=end_date,
             as_of_date=effective_as_of_date,
         )
-        source_transaction_count = await self.repo.get_transactions_count(**ledger_filters)
-        tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
-            **ledger_filters,
+        realized_tax_evidence = await read_realized_tax_evidence(
+            repository=self.repo,
+            ledger_filters=ledger_filters,
         )
-        latest_evidence_timestamp = latest_transaction_evidence_timestamp(tax_transactions)
 
-        currency_totals = realized_tax_currency_totals(tax_transactions)
+        currency_totals = realized_tax_currency_totals(realized_tax_evidence.tax_transactions)
         reporting_currency_total = await realized_tax_reporting_currency_total(
             currency_totals=currency_totals,
             reporting_currency=resolved_reporting_currency,
@@ -177,7 +175,7 @@ class TransactionService:
             reporting_currency=resolved_reporting_currency,
             start_date=start_date,
             end_date=end_date,
-            source_transaction_count=source_transaction_count,
+            source_transaction_count=realized_tax_evidence.source_transaction_count,
             tax_evidence_transaction_count=sum(
                 total.transaction_count for total in currency_totals
             ),
@@ -191,11 +189,11 @@ class TransactionService:
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date,
                 data_quality_status=ledger_data_quality_status(
-                    total_count=source_transaction_count,
-                    returned_count=source_transaction_count,
+                    total_count=realized_tax_evidence.source_transaction_count,
+                    returned_count=realized_tax_evidence.source_transaction_count,
                     skip=0,
                 ),
-                latest_evidence_timestamp=latest_evidence_timestamp,
+                latest_evidence_timestamp=realized_tax_evidence.latest_evidence_timestamp,
             ),
         )
 
