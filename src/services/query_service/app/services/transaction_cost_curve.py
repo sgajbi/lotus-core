@@ -14,6 +14,7 @@ from ..dtos.reference_integration_dto import (
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
 from .reference_data_helpers import latest_reference_evidence_timestamp
+from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
@@ -29,6 +30,60 @@ class TransactionCostCurvePage:
     points: list[TransactionCostCurvePoint]
     all_curve_keys: list[tuple[str, str, str]]
     has_more: bool
+
+
+@dataclass(frozen=True)
+class TransactionCostCurveRequestScope:
+    request_fingerprint: str
+    after_key: tuple[str, str, str] | tuple[()]
+
+
+def transaction_cost_curve_request_scope(
+    *,
+    portfolio_id: str,
+    request: TransactionCostCurveRequest,
+    cursor: dict[str, Any],
+) -> TransactionCostCurveRequestScope:
+    request_fingerprint = build_request_fingerprint(
+        {
+            "portfolio_id": portfolio_id,
+            "as_of_date": request.as_of_date.isoformat(),
+            "window": {
+                "start_date": request.window.start_date.isoformat(),
+                "end_date": request.window.end_date.isoformat(),
+            },
+            "security_ids": sorted(request.security_ids or []),
+            "transaction_types": sorted(request.transaction_types or []),
+            "min_observation_count": request.min_observation_count,
+            "tenant_id": request.tenant_id,
+        }
+    )
+    token_scope = cursor.get("scope_fingerprint")
+    if token_scope and token_scope != request_fingerprint:
+        raise ValueError("Transaction cost curve page token does not match request scope.")
+
+    return TransactionCostCurveRequestScope(
+        request_fingerprint=request_fingerprint,
+        after_key=tuple(cursor.get("last_curve_key") or ()),
+    )
+
+
+def transaction_cost_curve_next_page_token_payload(
+    *,
+    request_scope: TransactionCostCurveRequestScope,
+    curve_page: TransactionCostCurvePage,
+) -> dict[str, Any] | None:
+    if not curve_page.has_more or not curve_page.points:
+        return None
+    last_point = curve_page.points[-1]
+    return {
+        "scope_fingerprint": request_scope.request_fingerprint,
+        "last_curve_key": [
+            last_point.security_id,
+            last_point.transaction_type,
+            last_point.currency,
+        ],
+    }
 
 
 def transaction_fee_amount(transaction: Any) -> Decimal:

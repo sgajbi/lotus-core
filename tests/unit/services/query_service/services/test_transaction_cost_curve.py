@@ -12,6 +12,8 @@ from src.services.query_service.app.services.transaction_cost_curve import (
     build_transaction_cost_curve_response,
     has_observed_transaction_cost_evidence,
     transaction_cost_curve_key,
+    transaction_cost_curve_next_page_token_payload,
+    transaction_cost_curve_request_scope,
     transaction_fee_amount,
 )
 
@@ -168,6 +170,87 @@ def test_transaction_cost_curve_page_builds_only_requested_slice() -> None:
 
     assert [point.security_id for point in next_page.points] == ["EQ_US_MSFT"]
     assert next_page.has_more is True
+
+
+def test_transaction_cost_curve_request_scope_binds_filters_and_cursor() -> None:
+    request = TransactionCostCurveRequest(
+        as_of_date=date(2026, 4, 10),
+        window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+        security_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+        transaction_types=["BUY", "SELL"],
+        min_observation_count=2,
+        tenant_id="TENANT_SG",
+    )
+
+    scope = transaction_cost_curve_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={"last_curve_key": ["EQ_US_AAPL", "BUY", "USD"]},
+    )
+
+    assert scope.request_fingerprint
+    assert scope.after_key == ("EQ_US_AAPL", "BUY", "USD")
+
+
+def test_transaction_cost_curve_request_scope_rejects_token_scope_mismatch() -> None:
+    request = TransactionCostCurveRequest(
+        as_of_date=date(2026, 4, 10),
+        window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+    )
+
+    try:
+        transaction_cost_curve_request_scope(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=request,
+            cursor={"scope_fingerprint": "wrong-scope"},
+        )
+    except ValueError as exc:
+        assert "cost curve page token does not match request scope" in str(exc)
+    else:
+        raise AssertionError("Expected transaction cost curve page token scope mismatch")
+
+
+def test_transaction_cost_curve_next_page_token_payload_uses_last_curve_point() -> None:
+    request = TransactionCostCurveRequest(
+        as_of_date=date(2026, 4, 10),
+        window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+    )
+    scope = transaction_cost_curve_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={},
+    )
+    curve_page = build_transaction_cost_curve_page(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transactions=[
+            _transaction(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL"),
+            _transaction(transaction_id="TXN-MSFT-001", security_id="EQ_US_MSFT"),
+        ],
+        min_observation_count=1,
+        page_size=1,
+    )
+
+    assert transaction_cost_curve_next_page_token_payload(
+        request_scope=scope,
+        curve_page=curve_page,
+    ) == {
+        "scope_fingerprint": scope.request_fingerprint,
+        "last_curve_key": ["EQ_US_AAPL", "BUY", "USD"],
+    }
+
+    final_page = build_transaction_cost_curve_page(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transactions=[_transaction(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL")],
+        min_observation_count=1,
+        page_size=10,
+    )
+    assert (
+        transaction_cost_curve_next_page_token_payload(
+            request_scope=scope,
+            curve_page=final_page,
+        )
+        is None
+    )
 
 
 def test_transaction_cost_curve_response_reports_page_scoped_supportability() -> None:

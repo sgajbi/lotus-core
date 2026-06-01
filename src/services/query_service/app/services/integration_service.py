@@ -151,9 +151,6 @@ from .portfolio_tax_lot_window import (
     portfolio_tax_lot_window_request_scope,
 )
 from .reference_data_mappers import benchmark_definition_response
-from .request_fingerprint import (
-    request_fingerprint as build_request_fingerprint,
-)
 from .risk_free_coverage import build_risk_free_coverage_response
 from .risk_free_series import build_risk_free_series_response
 from .sustainability_preference_profile import (
@@ -162,6 +159,8 @@ from .sustainability_preference_profile import (
 from .transaction_cost_curve import (
     build_transaction_cost_curve_page,
     build_transaction_cost_curve_response,
+    transaction_cost_curve_next_page_token_payload,
+    transaction_cost_curve_request_scope,
 )
 
 logger = logging.getLogger(__name__)
@@ -687,25 +686,11 @@ class IntegrationService:
         if not await self._transaction_repository.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-        request_scope_fingerprint = build_request_fingerprint(
-            {
-                "portfolio_id": portfolio_id,
-                "as_of_date": request.as_of_date.isoformat(),
-                "window": {
-                    "start_date": request.window.start_date.isoformat(),
-                    "end_date": request.window.end_date.isoformat(),
-                },
-                "security_ids": sorted(request.security_ids or []),
-                "transaction_types": sorted(request.transaction_types or []),
-                "min_observation_count": request.min_observation_count,
-                "tenant_id": request.tenant_id,
-            }
+        request_scope = transaction_cost_curve_request_scope(
+            portfolio_id=portfolio_id,
+            request=request,
+            cursor=self._decode_page_token(request.page.page_token),
         )
-        cursor = self._decode_page_token(request.page.page_token)
-        token_scope = cursor.get("scope_fingerprint")
-        if token_scope and token_scope != request_scope_fingerprint:
-            raise ValueError("Transaction cost curve page token does not match request scope.")
-        after_key = tuple(cursor.get("last_curve_key") or ())
 
         transactions = await self._transaction_repository.list_transaction_cost_evidence(
             portfolio_id=portfolio_id,
@@ -720,28 +705,22 @@ class IntegrationService:
             portfolio_id=portfolio_id,
             transactions=transactions,
             min_observation_count=request.min_observation_count,
-            after_key=after_key,
+            after_key=request_scope.after_key,
             page_size=request.page.page_size,
         )
 
         next_page_token: str | None = None
-        if curve_page.has_more and curve_page.points:
-            last_point = curve_page.points[-1]
-            next_page_token = self._encode_page_token(
-                {
-                    "scope_fingerprint": request_scope_fingerprint,
-                    "last_curve_key": [
-                        last_point.security_id,
-                        last_point.transaction_type,
-                        last_point.currency,
-                    ],
-                }
-            )
+        next_page_token_payload = transaction_cost_curve_next_page_token_payload(
+            request_scope=request_scope,
+            curve_page=curve_page,
+        )
+        if next_page_token_payload is not None:
+            next_page_token = self._encode_page_token(next_page_token_payload)
 
         return build_transaction_cost_curve_response(
             portfolio_id=portfolio_id,
             request=request,
-            request_scope_fingerprint=request_scope_fingerprint,
+            request_scope_fingerprint=request_scope.request_fingerprint,
             curve_page=curve_page,
             transactions=transactions,
             next_page_token=next_page_token,
