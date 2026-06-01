@@ -464,19 +464,26 @@ async def test_get_transactions_enriches_page_records_sequentially(
         record: TransactionRecord,
         reporting_currency: str,
         as_of_date: date,
+        convert_amount: object,
     ) -> None:
         call_order.append(record.transaction_id)
         assert reporting_currency == "SGD"
         assert as_of_date == date(2025, 1, 15)
+        assert getattr(convert_amount, "__self__", None) is service
+        assert getattr(convert_amount, "__func__", None) is TransactionService._convert_amount
 
-    with patch(
-        "src.services.query_service.app.services.transaction_service.TransactionRepository",
-        return_value=mock_transaction_repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=mock_transaction_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.apply_transaction_reporting_currency_fields",
+            new_callable=AsyncMock,
+        ) as apply_transaction_reporting_currency_fields,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        service._apply_reporting_currency_fields = AsyncMock(  # type: ignore[method-assign]
-            side_effect=apply_reporting_currency_fields
-        )
+        apply_transaction_reporting_currency_fields.side_effect = apply_reporting_currency_fields
 
         response_dto = await service.get_transactions(
             portfolio_id="P1",
@@ -486,52 +493,8 @@ async def test_get_transactions_enriches_page_records_sequentially(
         )
 
     assert [transaction.transaction_id for transaction in response_dto.transactions] == ["T1", "T2"]
-    assert service._apply_reporting_currency_fields.await_count == 2
+    assert apply_transaction_reporting_currency_fields.await_count == 2
     assert call_order == ["T1", "T2"]
-
-
-async def test_apply_reporting_currency_fields_converts_money_fields_sequentially() -> None:
-    service = TransactionService(AsyncMock(spec=AsyncSession))
-    record = TransactionRecord(
-        transaction_id="T1",
-        transaction_date=datetime(2025, 1, 10, tzinfo=UTC),
-        transaction_type="BUY",
-        instrument_id="I1",
-        security_id="S1",
-        quantity=Decimal("10"),
-        price=Decimal("100"),
-        gross_transaction_amount=Decimal("1000"),
-        gross_cost=Decimal("1000"),
-        trade_fee=Decimal("12.5"),
-        trade_currency="EUR",
-        currency="USD",
-    )
-    call_order: list[Decimal] = []
-
-    async def convert_amount(
-        *,
-        amount: Decimal,
-        from_currency: str,
-        to_currency: str,
-        as_of_date: date,
-    ) -> Decimal:
-        call_order.append(amount)
-        assert to_currency == "SGD"
-        assert as_of_date == date(2025, 1, 15)
-        return amount * (Decimal("2") if from_currency == "USD" else Decimal("3"))
-
-    service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
-
-    await service._apply_reporting_currency_fields(
-        record=record,
-        reporting_currency="SGD",
-        as_of_date=date(2025, 1, 15),
-    )
-
-    assert record.gross_transaction_amount_reporting_currency == Decimal("2000")
-    assert record.gross_cost_reporting_currency == Decimal("2000")
-    assert record.trade_fee_reporting_currency == Decimal("37.5")
-    assert call_order == [Decimal("1000"), Decimal("1000"), Decimal("12.5")]
 
 
 async def test_get_transactions_raises_when_reporting_currency_rate_missing(

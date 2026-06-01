@@ -20,6 +20,7 @@ from .transaction_metadata import (
     ledger_data_quality_status,
 )
 from .transaction_realized_tax import realized_tax_currency_totals
+from .transaction_reporting_currency import apply_transaction_reporting_currency_fields
 
 logger = logging.getLogger(__name__)
 
@@ -123,10 +124,11 @@ class TransactionService:
             if transaction.cashflow:
                 record.cashflow = transaction.cashflow
             if resolved_reporting_currency and effective_as_of_date is not None:
-                await self._apply_reporting_currency_fields(
+                await apply_transaction_reporting_currency_fields(
                     record=record,
                     reporting_currency=resolved_reporting_currency,
                     as_of_date=effective_as_of_date,
+                    convert_amount=self._convert_amount,
                 )
             transactions.append(record)
 
@@ -225,59 +227,6 @@ class TransactionService:
                 latest_evidence_timestamp=latest_evidence_timestamp,
             ),
         )
-
-    async def _apply_reporting_currency_fields(
-        self,
-        *,
-        record: TransactionRecord,
-        reporting_currency: str,
-        as_of_date: date,
-    ) -> None:
-        money_fields = (
-            ("gross_transaction_amount", "gross_transaction_amount_reporting_currency", "book"),
-            ("gross_cost", "gross_cost_reporting_currency", "book"),
-            ("trade_fee", "trade_fee_reporting_currency", "trade"),
-            ("net_cost", "net_cost_reporting_currency", "book"),
-            ("realized_gain_loss", "realized_gain_loss_reporting_currency", "book"),
-            (
-                "realized_capital_pnl_local",
-                "realized_capital_pnl_local_reporting_currency",
-                "trade",
-            ),
-            ("realized_fx_pnl_local", "realized_fx_pnl_local_reporting_currency", "trade"),
-            ("realized_total_pnl_local", "realized_total_pnl_local_reporting_currency", "trade"),
-            ("withholding_tax_amount", "withholding_tax_amount_reporting_currency", "book"),
-            (
-                "other_interest_deductions_amount",
-                "other_interest_deductions_amount_reporting_currency",
-                "book",
-            ),
-            ("net_interest_amount", "net_interest_amount_reporting_currency", "book"),
-        )
-        for source_field, target_field, currency_basis in money_fields:
-            amount = getattr(record, source_field)
-            if amount is None:
-                continue
-            converted_value = await self._convert_amount(
-                amount=amount,
-                from_currency=self._source_currency_for_field(
-                    record=record,
-                    currency_basis=currency_basis,
-                ),
-                to_currency=reporting_currency,
-                as_of_date=as_of_date,
-            )
-            setattr(record, target_field, converted_value)
-
-    @staticmethod
-    def _source_currency_for_field(
-        *,
-        record: TransactionRecord,
-        currency_basis: str,
-    ) -> str:
-        if currency_basis == "trade" and record.trade_currency:
-            return cast(str, record.trade_currency)
-        return cast(str, record.currency)
 
     async def _convert_amount(
         self,
