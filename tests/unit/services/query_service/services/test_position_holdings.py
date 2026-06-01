@@ -12,13 +12,20 @@ from portfolio_common.database_models import (
 from src.services.query_service.app.dtos.position_dto import Position
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.services.position_holdings import (
+    apply_held_since_dates,
     assign_position_weights,
     effective_holdings_as_of_date,
     fallback_valuation_security_ids,
+    held_since_security_epoch_pairs,
+    holdings_data_quality_status,
     holdings_response_as_of_date,
+    latest_holdings_evidence_timestamp,
+    market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
     portfolio_position_rows_data,
     portfolio_positions_response_data,
+    position_held_since_requests,
+    position_requires_market_price_freshness,
     position_response_data,
     position_valuation_data,
     position_weight_base_value,
@@ -517,3 +524,188 @@ async def test_weight_base_value_prefers_market_value_and_falls_back_to_cost_bas
 
     assert position_weight_base_value(valued_position) == Decimal("100")
     assert position_weight_base_value(unvalued_position) == Decimal("75")
+
+
+async def test_position_held_since_requests_sets_default_when_epoch_missing() -> None:
+    row = PositionHistory(security_id=" SEC_A ", position_date=date(2025, 1, 2))
+    position = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 2),
+        instrument_name="No epoch",
+    )
+
+    requests = position_held_since_requests(
+        db_results=[(row, None, PositionState(status="CURRENT", epoch=None))],
+        positions=[position],
+    )
+
+    assert requests == []
+    assert position.held_since_date == date(2025, 1, 2)
+
+
+async def test_position_held_since_requests_normalizes_epoch_requests() -> None:
+    first_row = PositionHistory(security_id=" SEC_A ", position_date=date(2025, 1, 2))
+    second_row = PositionHistory(security_id=" SEC_B ", position_date=date(2025, 1, 3))
+    first_position = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 2),
+        instrument_name="First",
+    )
+    second_position = Position(
+        security_id="SEC_B",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("200"),
+        position_date=date(2025, 1, 3),
+        instrument_name="Second",
+    )
+
+    requests = position_held_since_requests(
+        db_results=[
+            (first_row, None, PositionState(status="CURRENT", epoch=2)),
+            (second_row, None, PositionState(status="CURRENT", epoch=3)),
+        ],
+        positions=[first_position, second_position],
+    )
+
+    assert requests == [
+        (0, "SEC_A", 2, date(2025, 1, 2)),
+        (1, "SEC_B", 3, date(2025, 1, 3)),
+    ]
+    assert first_position.held_since_date is None
+    assert second_position.held_since_date is None
+
+
+async def test_held_since_security_epoch_pairs_drops_request_indexes_and_defaults() -> None:
+    assert held_since_security_epoch_pairs(
+        [
+            (1, "SEC_B", 3, date(2025, 1, 3)),
+            (0, "SEC_A", 2, date(2025, 1, 2)),
+        ]
+    ) == [("SEC_B", 3), ("SEC_A", 2)]
+
+
+async def test_apply_held_since_dates_uses_default_when_map_missing() -> None:
+    first = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 2),
+        instrument_name="First",
+    )
+    second = Position(
+        security_id="SEC_B",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("200"),
+        position_date=date(2025, 1, 3),
+        instrument_name="Second",
+    )
+
+    apply_held_since_dates(
+        positions=[first, second],
+        held_since_requests=[
+            (0, "SEC_A", 2, date(2025, 1, 2)),
+            (1, "SEC_B", 3, date(2025, 1, 3)),
+        ],
+        held_since_map={("SEC_A", 2): date(2024, 12, 31)},
+    )
+
+    assert first.held_since_date == date(2024, 12, 31)
+    assert second.held_since_date == date(2025, 1, 3)
+
+
+async def test_market_price_freshness_security_ids_filters_cash_and_unpriced_rows() -> None:
+    equity = Position(
+        security_id=" EQ_A ",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Equity",
+        asset_class="Equity",
+        valuation=ValuationData(market_price=Decimal("10")),
+    )
+    cash = Position(
+        security_id="CASH_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Cash",
+        asset_class="Cash",
+        valuation=ValuationData(market_price=Decimal("1")),
+    )
+    unpriced_bond = Position(
+        security_id="BOND_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Bond",
+        asset_class="Bond",
+        valuation=ValuationData(market_price=None),
+    )
+
+    assert position_requires_market_price_freshness(equity) is True
+    assert position_requires_market_price_freshness(cash) is False
+    assert position_requires_market_price_freshness(unpriced_bond) is False
+    assert market_price_freshness_security_ids([cash, equity, unpriced_bond]) == ["EQ_A"]
+
+
+async def test_holdings_data_quality_status_does_not_infer_missing_state() -> None:
+    assert (
+        holdings_data_quality_status(
+            positions=[
+                Position(
+                    security_id="S1",
+                    quantity=Decimal("1"),
+                    cost_basis=Decimal("10"),
+                    position_date=date(2025, 1, 1),
+                    instrument_name="Missing state",
+                    reprocessing_status=None,
+                )
+            ],
+            history_supplements=[],
+            response_as_of_date=date(2025, 1, 1),
+            latest_market_price_dates={},
+        )
+        == "UNKNOWN"
+    )
+
+
+async def test_holdings_data_quality_status_marks_history_supplement_partial() -> None:
+    position = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="History supplement",
+        reprocessing_status="CURRENT",
+    )
+
+    assert (
+        holdings_data_quality_status(
+            positions=[position],
+            history_supplements=[(PositionHistory(security_id="SEC_A"), None, None)],
+            response_as_of_date=date(2025, 1, 1),
+            latest_market_price_dates={},
+        )
+        == "PARTIAL"
+    )
+
+
+async def test_latest_holdings_evidence_timestamp_uses_latest_row_or_state_timestamp() -> None:
+    position_row = DailyPositionSnapshot(
+        security_id="SEC_A",
+        date=date(2025, 1, 1),
+        created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
+    )
+    state = PositionState(
+        created_at=datetime(2025, 1, 1, 8, 30, tzinfo=UTC),
+        updated_at=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
+    )
+
+    assert latest_holdings_evidence_timestamp([(position_row, None, state)]) == datetime(
+        2025, 1, 1, 10, 5, tzinfo=UTC
+    )
