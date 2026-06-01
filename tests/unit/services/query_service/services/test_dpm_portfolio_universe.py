@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -10,7 +11,9 @@ from src.services.query_service.app.services.dpm_portfolio_universe import (
     build_dpm_portfolio_universe_response,
     dpm_portfolio_universe_after_sort_key,
     dpm_portfolio_universe_next_page_token_payload,
+    dpm_portfolio_universe_page_token,
     dpm_portfolio_universe_read_scope,
+    resolve_dpm_portfolio_universe_candidate_response,
 )
 
 
@@ -145,6 +148,106 @@ def test_build_dpm_portfolio_universe_response_marks_partial_page_degraded() -> 
     assert response.supportability.page_truncated is True
     assert response.data_quality_status == "PARTIAL"
     assert response.page.next_page_token == "encoded-token"
+
+
+def test_dpm_portfolio_universe_page_token_encodes_payload() -> None:
+    encoded_payloads: list[dict[str, str]] = []
+
+    def encode(payload: dict[str, str]) -> str:
+        encoded_payloads.append(payload)
+        return "encoded-token"
+
+    assert (
+        dpm_portfolio_universe_page_token(
+            request_scope_fingerprint="scope-123",
+            page_rows=[_candidate_row()],
+            has_more=True,
+            encode_page_token=encode,
+        )
+        == "encoded-token"
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": "scope-123",
+            "last_portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "last_mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        }
+    ]
+
+
+def test_dpm_portfolio_universe_page_token_suppresses_terminal_page() -> None:
+    def encode(_: dict[str, str]) -> str:
+        raise AssertionError("Unexpected token encoding for terminal DPM universe page")
+
+    assert (
+        dpm_portfolio_universe_page_token(
+            request_scope_fingerprint="scope-123",
+            page_rows=[_candidate_row()],
+            has_more=False,
+            encode_page_token=encode,
+        )
+        is None
+    )
+
+
+def test_resolve_dpm_portfolio_universe_candidate_response_orchestrates_repository_read() -> None:
+    async def run_case() -> tuple[
+        object, list[tuple[str, dict[str, object]]], list[dict[str, str]]
+    ]:
+        calls: list[tuple[str, dict[str, object]]] = []
+        encoded_payloads: list[dict[str, str]] = []
+
+        class Repository:
+            async def list_dpm_portfolio_universe_candidates(
+                self, **kwargs: object
+            ) -> list[SimpleNamespace]:
+                calls.append(("candidate_page", kwargs))
+                return [
+                    _candidate_row(portfolio_id="PB_A", mandate_id="MANDATE_A"),
+                    _candidate_row(portfolio_id="PB_B", mandate_id="MANDATE_B"),
+                ]
+
+        def encode(payload: dict[str, str]) -> str:
+            encoded_payloads.append(payload)
+            return "encoded-token"
+
+        response = await resolve_dpm_portfolio_universe_candidate_response(
+            repository=Repository(),
+            request=_request(
+                booking_center_code="  Singapore  ",
+                model_portfolio_ids=["MODEL_B", "MODEL_A", "MODEL_A"],
+                page={"page_size": 1},
+            ),
+            decode_page_token=lambda _: {},
+            encode_page_token=encode,
+        )
+        return response, calls, encoded_payloads
+
+    response, calls, encoded_payloads = asyncio.run(run_case())
+
+    assert response.page.next_page_token == "encoded-token"
+    assert response.page.returned_component_count == 1
+    assert [candidate.portfolio_id for candidate in response.candidates] == ["PB_A"]
+    assert calls == [
+        (
+            "candidate_page",
+            {
+                "as_of_date": date(2026, 5, 3),
+                "booking_center_code": "Singapore",
+                "model_portfolio_ids": ["MODEL_A", "MODEL_B"],
+                "include_inactive_mandates": False,
+                "after_sort_key": None,
+                "limit": 2,
+            },
+        )
+    ]
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": response.page.request_scope_fingerprint,
+            "last_portfolio_id": "PB_A",
+            "last_mandate_id": "MANDATE_A",
+        }
+    ]
 
 
 def test_build_dpm_portfolio_universe_response_marks_empty_missing() -> None:

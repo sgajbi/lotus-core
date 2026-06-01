@@ -95,10 +95,7 @@ from .client_tax_profile import build_client_tax_profile_response
 from .client_tax_rule_set import build_client_tax_rule_set_response
 from .discretionary_mandate_binding import build_discretionary_mandate_binding_response
 from .dpm_portfolio_universe import (
-    build_dpm_portfolio_universe_response,
-    dpm_portfolio_universe_after_sort_key,
-    dpm_portfolio_universe_next_page_token_payload,
-    dpm_portfolio_universe_read_scope,
+    resolve_dpm_portfolio_universe_candidate_response,
 )
 from .dpm_source_readiness import (
     DpmSourceReadinessReaders,
@@ -262,39 +259,11 @@ class IntegrationService:
         self,
         request: DpmPortfolioUniverseCandidateRequest,
     ) -> DpmPortfolioUniverseCandidateResponse:
-        read_scope = dpm_portfolio_universe_read_scope(request)
-        cursor = self._decode_page_token(request.page.page_token)
-        after_sort_key = dpm_portfolio_universe_after_sort_key(
-            cursor=cursor,
-            request_scope_fingerprint=read_scope.request_scope_fingerprint,
-        )
-
-        rows = await self._reference_repository.list_dpm_portfolio_universe_candidates(
-            as_of_date=request.as_of_date,
-            booking_center_code=read_scope.booking_center_code,
-            model_portfolio_ids=read_scope.model_portfolio_ids,
-            include_inactive_mandates=request.include_inactive_mandates,
-            after_sort_key=after_sort_key,
-            limit=request.page.page_size + 1,
-        )
-        has_more = len(rows) > request.page.page_size
-        page_rows = rows[: request.page.page_size]
-
-        next_page_token: str | None = None
-        token_payload = dpm_portfolio_universe_next_page_token_payload(
-            request_scope_fingerprint=read_scope.request_scope_fingerprint,
-            page_rows=page_rows,
-            has_more=has_more,
-        )
-        if token_payload:
-            next_page_token = self._encode_page_token(token_payload)
-
-        return build_dpm_portfolio_universe_response(
+        return await resolve_dpm_portfolio_universe_candidate_response(
+            repository=self._reference_repository,
             request=request,
-            read_scope=read_scope,
-            page_rows=page_rows,
-            has_more=has_more,
-            next_page_token=next_page_token,
+            decode_page_token=self._decode_page_token,
+            encode_page_token=self._encode_page_token,
         )
 
     async def resolve_discretionary_mandate_binding(
