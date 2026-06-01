@@ -79,8 +79,7 @@ from ..settings import load_query_service_settings
 from .benchmark_assignment import build_benchmark_assignment_response
 from .benchmark_catalog import build_benchmark_catalog_response
 from .benchmark_composition import (
-    benchmark_composition_definition_context,
-    build_benchmark_composition_window_response,
+    resolve_benchmark_composition_window_response,
 )
 from .benchmark_coverage import build_benchmark_coverage_response
 from .benchmark_market_series import (
@@ -674,29 +673,10 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkCompositionWindowRequest,
     ) -> BenchmarkCompositionWindowResponse | None:
-        definition_rows = (
-            await self._reference_repository.list_benchmark_definitions_overlapping_window(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            )
-        )
-        definition_context = benchmark_composition_definition_context(definition_rows)
-        if definition_context is None:
-            return None
-
-        component_rows = (
-            await self._reference_repository.list_benchmark_components_overlapping_window(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            )
-        )
-        return build_benchmark_composition_window_response(
+        return await resolve_benchmark_composition_window_response(
+            repository=self._reference_repository,
             benchmark_id=benchmark_id,
             request=request,
-            definition_context=definition_context,
-            component_rows=component_rows,
         )
 
     async def list_benchmark_catalog(
