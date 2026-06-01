@@ -104,7 +104,12 @@ from .dpm_portfolio_universe import (
 )
 from .dpm_source_readiness import (
     build_dpm_source_readiness_response,
-    dpm_source_family_readiness,
+    dpm_source_evaluated_instrument_ids,
+    eligibility_source_family_readiness,
+    mandate_source_family_readiness,
+    market_data_source_family_readiness,
+    model_targets_source_family_readiness,
+    tax_lots_source_family_readiness,
     unavailable_dpm_source_family,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
@@ -807,16 +812,7 @@ class IntegrationService:
             resolved_model_portfolio_id = (
                 resolved_model_portfolio_id or mandate_response.model_portfolio_id
             )
-            families.append(
-                dpm_source_family_readiness(
-                    family="mandate",
-                    product_name="DiscretionaryMandateBinding",
-                    state=mandate_response.supportability.state,
-                    reason=mandate_response.supportability.reason,
-                    missing_items=mandate_response.supportability.missing_data_families,
-                    evidence_count=1,
-                )
-            )
+            families.append(mandate_source_family_readiness(mandate_response))
 
         target_instrument_ids: list[str] = []
         if resolved_model_portfolio_id is None:
@@ -851,17 +847,12 @@ class IntegrationService:
                 )
             else:
                 target_instrument_ids = [target.instrument_id for target in model_response.targets]
-                families.append(
-                    dpm_source_family_readiness(
-                        family="model_targets",
-                        product_name="DpmModelPortfolioTarget",
-                        state=model_response.supportability.state,
-                        reason=model_response.supportability.reason,
-                        evidence_count=model_response.supportability.target_count,
-                    )
-                )
+                families.append(model_targets_source_family_readiness(model_response))
 
-        evaluated_instrument_ids = sorted({*request.instrument_ids, *target_instrument_ids})
+        evaluated_instrument_ids = dpm_source_evaluated_instrument_ids(
+            request_instrument_ids=request.instrument_ids,
+            target_instrument_ids=target_instrument_ids,
+        )
         if evaluated_instrument_ids:
             try:
                 eligibility = await self.resolve_instrument_eligibility_bulk(
@@ -872,16 +863,7 @@ class IntegrationService:
                         include_restricted_rationale=False,
                     )
                 )
-                families.append(
-                    dpm_source_family_readiness(
-                        family="eligibility",
-                        product_name="InstrumentEligibilityProfile",
-                        state=eligibility.supportability.state,
-                        reason=eligibility.supportability.reason,
-                        missing_items=eligibility.supportability.missing_security_ids,
-                        evidence_count=eligibility.supportability.resolved_count,
-                    )
-                )
+                families.append(eligibility_source_family_readiness(eligibility))
             except (LookupError, ValueError):
                 families.append(
                     unavailable_dpm_source_family(
@@ -910,16 +892,7 @@ class IntegrationService:
                     tenant_id=request.tenant_id,
                 ),
             )
-            families.append(
-                dpm_source_family_readiness(
-                    family="tax_lots",
-                    product_name="PortfolioTaxLotWindow",
-                    state=tax_lots.supportability.state,
-                    reason=tax_lots.supportability.reason,
-                    missing_items=tax_lots.supportability.missing_security_ids,
-                    evidence_count=tax_lots.supportability.returned_lot_count,
-                )
-            )
+            families.append(tax_lots_source_family_readiness(tax_lots))
         except (LookupError, ValueError):
             families.append(
                 unavailable_dpm_source_family(
@@ -941,26 +914,7 @@ class IntegrationService:
                     tenant_id=request.tenant_id,
                 )
             )
-            families.append(
-                dpm_source_family_readiness(
-                    family="market_data",
-                    product_name="MarketDataCoverageWindow",
-                    state=market_data.supportability.state,
-                    reason=market_data.supportability.reason,
-                    missing_items=[
-                        *market_data.supportability.missing_instrument_ids,
-                        *market_data.supportability.missing_currency_pairs,
-                    ],
-                    stale_items=[
-                        *market_data.supportability.stale_instrument_ids,
-                        *market_data.supportability.stale_currency_pairs,
-                    ],
-                    evidence_count=(
-                        market_data.supportability.resolved_price_count
-                        + market_data.supportability.resolved_fx_count
-                    ),
-                )
-            )
+            families.append(market_data_source_family_readiness(market_data))
         except (LookupError, ValueError):
             families.append(
                 unavailable_dpm_source_family(

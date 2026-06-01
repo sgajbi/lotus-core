@@ -1,12 +1,19 @@
 from datetime import date
+from types import SimpleNamespace
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
     DpmSourceReadinessRequest,
 )
 from src.services.query_service.app.services.dpm_source_readiness import (
     build_dpm_source_readiness_response,
+    dpm_source_evaluated_instrument_ids,
     dpm_source_family_readiness,
     dpm_source_readiness_supportability,
+    eligibility_source_family_readiness,
+    mandate_source_family_readiness,
+    market_data_source_family_readiness,
+    model_targets_source_family_readiness,
+    tax_lots_source_family_readiness,
     unavailable_dpm_source_family,
 )
 
@@ -86,6 +93,91 @@ def test_dpm_source_readiness_supportability_returns_ready_when_all_families_rea
     assert supportability.state == "READY"
     assert supportability.reason == "DPM_SOURCE_READINESS_READY"
     assert supportability.ready_family_count == 2
+
+
+def test_dpm_source_family_mappers_preserve_source_supportability() -> None:
+    mandate = mandate_source_family_readiness(
+        SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_READY",
+                missing_data_families=["policy_pack"],
+            )
+        )
+    )
+    model_targets = model_targets_source_family_readiness(
+        SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="DEGRADED",
+                reason="MODEL_TARGETS_DEGRADED",
+                target_count=7,
+            )
+        )
+    )
+    eligibility = eligibility_source_family_readiness(
+        SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="INCOMPLETE",
+                reason="ELIGIBILITY_MISSING",
+                missing_security_ids=["SEC_MISSING"],
+                resolved_count=3,
+            )
+        )
+    )
+    tax_lots = tax_lots_source_family_readiness(
+        SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="TAX_LOTS_READY",
+                missing_security_ids=[],
+                returned_lot_count=11,
+            )
+        )
+    )
+
+    assert mandate.family == "mandate"
+    assert mandate.product_name == "DiscretionaryMandateBinding"
+    assert mandate.missing_items == ["policy_pack"]
+    assert mandate.evidence_count == 1
+    assert model_targets.family == "model_targets"
+    assert model_targets.evidence_count == 7
+    assert eligibility.family == "eligibility"
+    assert eligibility.missing_items == ["SEC_MISSING"]
+    assert eligibility.evidence_count == 3
+    assert tax_lots.family == "tax_lots"
+    assert tax_lots.evidence_count == 11
+
+
+def test_market_data_source_family_mapper_combines_missing_and_stale_scope() -> None:
+    family = market_data_source_family_readiness(
+        SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="DEGRADED",
+                reason="MARKET_DATA_STALE",
+                missing_instrument_ids=["SEC_MISSING"],
+                missing_currency_pairs=["USD/SGD"],
+                stale_instrument_ids=["SEC_STALE"],
+                stale_currency_pairs=["EUR/USD"],
+                resolved_price_count=5,
+                resolved_fx_count=2,
+            )
+        )
+    )
+
+    assert family.family == "market_data"
+    assert family.product_name == "MarketDataCoverageWindow"
+    assert family.state == "DEGRADED"
+    assert family.reason == "MARKET_DATA_STALE"
+    assert family.missing_items == ["SEC_MISSING", "USD/SGD"]
+    assert family.stale_items == ["SEC_STALE", "EUR/USD"]
+    assert family.evidence_count == 7
+
+
+def test_dpm_source_evaluated_instrument_ids_deduplicates_and_sorts_scope() -> None:
+    assert dpm_source_evaluated_instrument_ids(
+        request_instrument_ids=["SEC_Z", "SEC_A"],
+        target_instrument_ids=["SEC_A", "SEC_B"],
+    ) == ["SEC_A", "SEC_B", "SEC_Z"]
 
 
 def test_build_dpm_source_readiness_response_sets_runtime_metadata_and_lineage() -> None:

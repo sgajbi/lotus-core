@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from ..dtos.reference_integration_dto import (
     DpmSourceFamilyReadiness,
@@ -49,6 +49,78 @@ def unavailable_dpm_source_family(
         reason=reason,
         missing_items=missing_items,
     )
+
+
+def mandate_source_family_readiness(mandate_response: Any) -> DpmSourceFamilyReadiness:
+    return dpm_source_family_readiness(
+        family="mandate",
+        product_name="DiscretionaryMandateBinding",
+        state=mandate_response.supportability.state,
+        reason=mandate_response.supportability.reason,
+        missing_items=mandate_response.supportability.missing_data_families,
+        evidence_count=1,
+    )
+
+
+def model_targets_source_family_readiness(model_response: Any) -> DpmSourceFamilyReadiness:
+    return dpm_source_family_readiness(
+        family="model_targets",
+        product_name="DpmModelPortfolioTarget",
+        state=model_response.supportability.state,
+        reason=model_response.supportability.reason,
+        evidence_count=model_response.supportability.target_count,
+    )
+
+
+def eligibility_source_family_readiness(eligibility_response: Any) -> DpmSourceFamilyReadiness:
+    return dpm_source_family_readiness(
+        family="eligibility",
+        product_name="InstrumentEligibilityProfile",
+        state=eligibility_response.supportability.state,
+        reason=eligibility_response.supportability.reason,
+        missing_items=eligibility_response.supportability.missing_security_ids,
+        evidence_count=eligibility_response.supportability.resolved_count,
+    )
+
+
+def tax_lots_source_family_readiness(tax_lot_response: Any) -> DpmSourceFamilyReadiness:
+    return dpm_source_family_readiness(
+        family="tax_lots",
+        product_name="PortfolioTaxLotWindow",
+        state=tax_lot_response.supportability.state,
+        reason=tax_lot_response.supportability.reason,
+        missing_items=tax_lot_response.supportability.missing_security_ids,
+        evidence_count=tax_lot_response.supportability.returned_lot_count,
+    )
+
+
+def market_data_source_family_readiness(market_data_response: Any) -> DpmSourceFamilyReadiness:
+    return dpm_source_family_readiness(
+        family="market_data",
+        product_name="MarketDataCoverageWindow",
+        state=market_data_response.supportability.state,
+        reason=market_data_response.supportability.reason,
+        missing_items=[
+            *market_data_response.supportability.missing_instrument_ids,
+            *market_data_response.supportability.missing_currency_pairs,
+        ],
+        stale_items=[
+            *market_data_response.supportability.stale_instrument_ids,
+            *market_data_response.supportability.stale_currency_pairs,
+        ],
+        evidence_count=(
+            market_data_response.supportability.resolved_price_count
+            + market_data_response.supportability.resolved_fx_count
+        ),
+    )
+
+
+def dpm_source_evaluated_instrument_ids(
+    *,
+    request_instrument_ids: list[str],
+    target_instrument_ids: list[str],
+) -> list[str]:
+    return sorted({*request_instrument_ids, *target_instrument_ids})
 
 
 def dpm_source_readiness_supportability(
