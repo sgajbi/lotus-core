@@ -118,6 +118,7 @@ from .external_hedge_policy import build_external_hedge_policy_response
 from .external_order_execution_acknowledgement import (
     build_external_order_execution_acknowledgement_response,
 )
+from .index_catalog import build_index_catalog_response
 from .index_price_series import build_index_price_series_response
 from .index_return_series import build_index_return_series_response
 from .instrument_eligibility import build_instrument_eligibility_bulk_response
@@ -141,10 +142,7 @@ from .portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,
     portfolio_tax_lot_after_sort_key,
 )
-from .reference_data_mappers import (
-    benchmark_definition_response,
-    index_definition_response,
-)
+from .reference_data_mappers import benchmark_definition_response
 from .request_fingerprint import (
     request_fingerprint as build_request_fingerprint,
 )
@@ -1063,9 +1061,9 @@ class IntegrationService:
             index_type=index_type,
             index_status=index_status,
         )
-        return IndexCatalogResponse(
+        return build_index_catalog_response(
             as_of_date=as_of_date,
-            records=[index_definition_response(row) for row in rows],
+            rows=rows,
         )
 
     async def get_benchmark_market_series(
