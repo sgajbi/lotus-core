@@ -20,7 +20,6 @@ from ..dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
-    ClientIncomeNeedsScheduleSupportability,
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
     ClientTaxProfileRequest,
@@ -97,6 +96,7 @@ from .benchmark_market_series import (
     build_benchmark_market_series_response,
 )
 from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
+from .client_income_needs_schedule import build_client_income_needs_schedule_response
 from .client_restriction_profile import build_client_restriction_profile_response
 from .client_tax_profile import build_client_tax_profile_response
 from .client_tax_rule_set import build_client_tax_rule_set_response
@@ -137,7 +137,6 @@ from .reference_data_mappers import (
     benchmark_definition_response,
     benchmark_return_series_point,
     classification_taxonomy_entry,
-    client_income_needs_schedule_entry,
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
@@ -476,58 +475,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_schedules=request.include_inactive_schedules,
         )
-        entries = [client_income_needs_schedule_entry(row) for row in rows]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "CLIENT_INCOME_NEEDS_SCHEDULE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "CLIENT_INCOME_NEEDS_SCHEDULE_EMPTY"
-            missing_data_families.append("client_income_needs_schedule")
-
-        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
-        return ClientIncomeNeedsScheduleResponse(
+        return build_client_income_needs_schedule_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            schedules=entries,
-            supportability=ClientIncomeNeedsScheduleSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                schedule_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "client_income_needs_schedules,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_client_income_needs_schedule_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=build_request_fingerprint(
-                    {
-                        "product": "ClientIncomeNeedsSchedule",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "client_income_needs_schedule:"
-                    + build_request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_liquidity_reserve_requirement(
