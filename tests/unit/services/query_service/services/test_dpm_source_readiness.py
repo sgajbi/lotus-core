@@ -14,6 +14,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_family_readiness,
     dpm_source_identity_from_mandate,
     dpm_source_initial_identity,
+    dpm_source_model_targets_resolution,
     dpm_source_readiness_supportability,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
@@ -268,6 +269,53 @@ def test_dpm_source_identity_from_mandate_falls_back_to_mandate_model() -> None:
 
     assert identity.mandate_id == "MANDATE_RESOLVED"
     assert identity.model_portfolio_id == "MODEL_FROM_MANDATE"
+
+
+def test_dpm_source_model_targets_resolution_requires_model_identity() -> None:
+    resolution = dpm_source_model_targets_resolution(
+        model_portfolio_id=None,
+        model_response=None,
+    )
+
+    assert resolution.target_instrument_ids == []
+    assert resolution.family.family == "model_targets"
+    assert resolution.family.reason == "MODEL_PORTFOLIO_ID_UNAVAILABLE"
+    assert resolution.family.missing_items == ["model_portfolio_id"]
+
+
+def test_dpm_source_model_targets_resolution_marks_unavailable_targets() -> None:
+    resolution = dpm_source_model_targets_resolution(
+        model_portfolio_id="MODEL_BALANCED",
+        model_response=None,
+    )
+
+    assert resolution.target_instrument_ids == []
+    assert resolution.family.family == "model_targets"
+    assert resolution.family.reason == "MODEL_TARGETS_UNAVAILABLE"
+    assert resolution.family.missing_items == ["MODEL_BALANCED"]
+
+
+def test_dpm_source_model_targets_resolution_extracts_target_universe() -> None:
+    resolution = dpm_source_model_targets_resolution(
+        model_portfolio_id="MODEL_BALANCED",
+        model_response=SimpleNamespace(
+            targets=[
+                SimpleNamespace(instrument_id="EQ_US_AAPL"),
+                SimpleNamespace(instrument_id="EQ_US_MSFT"),
+            ],
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MODEL_TARGETS_READY",
+                target_count=2,
+            ),
+        ),
+    )
+
+    assert resolution.target_instrument_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert resolution.family.family == "model_targets"
+    assert resolution.family.state == "READY"
+    assert resolution.family.reason == "MODEL_TARGETS_READY"
+    assert resolution.family.evidence_count == 2
 
 
 def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:

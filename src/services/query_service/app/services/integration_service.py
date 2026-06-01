@@ -115,18 +115,16 @@ from .dpm_source_readiness import (
     dpm_source_evaluated_instrument_ids,
     dpm_source_identity_from_mandate,
     dpm_source_initial_identity,
+    dpm_source_model_targets_resolution,
     dpm_tax_lot_window_request,
     eligibility_source_family_readiness,
     empty_instrument_universe_family,
     mandate_source_family_readiness,
     market_data_source_family_readiness,
-    model_targets_source_family_readiness,
     tax_lots_source_family_readiness,
     unavailable_eligibility_family,
     unavailable_mandate_binding_family,
     unavailable_market_data_family,
-    unavailable_model_portfolio_id_family,
-    unavailable_model_targets_family,
     unavailable_tax_lots_family,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
@@ -787,10 +785,8 @@ class IntegrationService:
             )
             families.append(mandate_source_family_readiness(mandate_response))
 
-        target_instrument_ids: list[str] = []
-        if resolved_identity.model_portfolio_id is None:
-            families.append(unavailable_model_portfolio_id_family())
-        else:
+        model_response: ModelPortfolioTargetResponse | None = None
+        if resolved_identity.model_portfolio_id is not None:
             try:
                 model_response = await self.resolve_model_portfolio_targets(
                     resolved_identity.model_portfolio_id,
@@ -798,13 +794,12 @@ class IntegrationService:
                 )
             except (LookupError, ValueError):
                 model_response = None
-            if model_response is None:
-                families.append(
-                    unavailable_model_targets_family(resolved_identity.model_portfolio_id)
-                )
-            else:
-                target_instrument_ids = [target.instrument_id for target in model_response.targets]
-                families.append(model_targets_source_family_readiness(model_response))
+        model_targets = dpm_source_model_targets_resolution(
+            model_portfolio_id=resolved_identity.model_portfolio_id,
+            model_response=model_response,
+        )
+        target_instrument_ids = model_targets.target_instrument_ids
+        families.append(model_targets.family)
 
         evaluated_instrument_ids = dpm_source_evaluated_instrument_ids(
             request_instrument_ids=request.instrument_ids,

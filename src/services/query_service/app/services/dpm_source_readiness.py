@@ -26,6 +26,12 @@ class DpmSourceReadinessIdentity:
     model_portfolio_id: str | None
 
 
+@dataclass(frozen=True)
+class DpmSourceModelTargetsResolution:
+    target_instrument_ids: list[str]
+    family: DpmSourceFamilyReadiness
+
+
 def dpm_source_family_readiness(
     *,
     family: DpmSourceFamilyName,
@@ -215,6 +221,27 @@ def dpm_source_identity_from_mandate(
     return DpmSourceReadinessIdentity(
         mandate_id=mandate_response.mandate_id,
         model_portfolio_id=request.model_portfolio_id or mandate_response.model_portfolio_id,
+    )
+
+
+def dpm_source_model_targets_resolution(
+    *,
+    model_portfolio_id: str | None,
+    model_response: Any | None,
+) -> DpmSourceModelTargetsResolution:
+    if model_portfolio_id is None:
+        return DpmSourceModelTargetsResolution(
+            target_instrument_ids=[],
+            family=unavailable_model_portfolio_id_family(),
+        )
+    if model_response is None:
+        return DpmSourceModelTargetsResolution(
+            target_instrument_ids=[],
+            family=unavailable_model_targets_family(model_portfolio_id),
+        )
+    return DpmSourceModelTargetsResolution(
+        target_instrument_ids=[target.instrument_id for target in model_response.targets],
+        family=model_targets_source_family_readiness(model_response),
     )
 
 
