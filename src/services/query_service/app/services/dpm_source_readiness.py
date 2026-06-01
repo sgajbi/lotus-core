@@ -59,6 +59,16 @@ async def dpm_source_model_targets_read_or_none(
     return await dpm_source_read_or_none(lambda: read_model_targets(model_portfolio_id))
 
 
+async def dpm_source_eligibility_read_or_none(
+    *,
+    evaluated_instrument_ids: list[str],
+    read_eligibility: Callable[[list[str]], Awaitable[TSourceResponse]],
+) -> TSourceResponse | None:
+    if not evaluated_instrument_ids:
+        return None
+    return await dpm_source_read_or_none(lambda: read_eligibility(evaluated_instrument_ids))
+
+
 def dpm_source_family_readiness(
     *,
     family: DpmSourceFamilyName,

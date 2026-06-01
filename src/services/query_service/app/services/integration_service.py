@@ -116,6 +116,7 @@ from .dpm_source_readiness import (
     dpm_market_data_coverage_request,
     dpm_model_targets_request,
     dpm_source_eligibility_family,
+    dpm_source_eligibility_read_or_none,
     dpm_source_evaluated_instrument_ids,
     dpm_source_mandate_resolution,
     dpm_source_market_data_family,
@@ -796,16 +797,15 @@ class IntegrationService:
             request_instrument_ids=request.instrument_ids,
             target_instrument_ids=target_instrument_ids,
         )
-        eligibility: InstrumentEligibilityBulkResponse | None = None
-        if evaluated_instrument_ids:
-            eligibility = await dpm_source_read_or_none(
-                lambda: self.resolve_instrument_eligibility_bulk(
-                    dpm_eligibility_request(
-                        request=request,
-                        instrument_ids=evaluated_instrument_ids,
-                    )
+        eligibility = await dpm_source_eligibility_read_or_none(
+            evaluated_instrument_ids=evaluated_instrument_ids,
+            read_eligibility=lambda instrument_ids: self.resolve_instrument_eligibility_bulk(
+                dpm_eligibility_request(
+                    request=request,
+                    instrument_ids=instrument_ids,
                 )
-            )
+            ),
+        )
         families.append(
             dpm_source_eligibility_family(
                 evaluated_instrument_ids=evaluated_instrument_ids,

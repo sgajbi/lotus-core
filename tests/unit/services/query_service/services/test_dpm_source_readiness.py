@@ -12,6 +12,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_market_data_coverage_request,
     dpm_model_targets_request,
     dpm_source_eligibility_family,
+    dpm_source_eligibility_read_or_none,
     dpm_source_evaluated_instrument_ids,
     dpm_source_family_readiness,
     dpm_source_identity_from_mandate,
@@ -429,6 +430,51 @@ def test_dpm_source_model_targets_resolution_extracts_target_universe() -> None:
     assert resolution.family.state == "READY"
     assert resolution.family.reason == "MODEL_TARGETS_READY"
     assert resolution.family.evidence_count == 2
+
+
+def test_dpm_source_eligibility_read_or_none_skips_empty_universe() -> None:
+    async def read_eligibility(_: list[str]) -> str:
+        raise AssertionError("Unexpected eligibility read without evaluated instruments")
+
+    assert (
+        asyncio.run(
+            dpm_source_eligibility_read_or_none(
+                evaluated_instrument_ids=[],
+                read_eligibility=read_eligibility,
+            )
+        )
+        is None
+    )
+
+
+def test_dpm_source_eligibility_read_or_none_reads_evaluated_universe() -> None:
+    async def read_eligibility(instrument_ids: list[str]) -> str:
+        return ",".join(instrument_ids)
+
+    assert (
+        asyncio.run(
+            dpm_source_eligibility_read_or_none(
+                evaluated_instrument_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+                read_eligibility=read_eligibility,
+            )
+        )
+        == "EQ_US_AAPL,EQ_US_MSFT"
+    )
+
+
+def test_dpm_source_eligibility_read_or_none_suppresses_unavailable_source() -> None:
+    async def read_eligibility(_: list[str]) -> str:
+        raise ValueError("eligibility unavailable")
+
+    assert (
+        asyncio.run(
+            dpm_source_eligibility_read_or_none(
+                evaluated_instrument_ids=["EQ_US_AAPL"],
+                read_eligibility=read_eligibility,
+            )
+        )
+        is None
+    )
 
 
 def test_dpm_source_eligibility_family_marks_empty_universe() -> None:
