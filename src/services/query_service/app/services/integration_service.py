@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,7 +115,7 @@ from .index_catalog import resolve_index_catalog_response
 from .index_price_series import resolve_index_price_series_response
 from .index_return_series import resolve_index_return_series_response
 from .instrument_eligibility import resolve_instrument_eligibility_bulk_response
-from .integration_policy import build_effective_policy_response
+from .integration_policy import resolve_effective_policy_response
 from .liquidity_reserve_requirement import (
     resolve_liquidity_reserve_requirement_response,
 )
@@ -165,11 +165,10 @@ class IntegrationService:
         tenant_id: str,
         include_sections: list[str] | None,
     ) -> EffectiveIntegrationPolicyResponse:
-        return build_effective_policy_response(
+        return resolve_effective_policy_response(
             consumer_system=consumer_system,
             tenant_id=tenant_id,
             include_sections=include_sections,
-            generated_at=datetime.now(UTC),
         )
 
     async def resolve_benchmark_assignment(
