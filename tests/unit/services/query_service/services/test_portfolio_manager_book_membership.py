@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -7,6 +8,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.portfolio_manager_book_membership import (
     build_portfolio_manager_book_membership_response,
     portfolio_manager_book_membership_portfolio_types,
+    resolve_portfolio_manager_book_membership_response,
 )
 
 
@@ -82,6 +84,41 @@ def test_build_portfolio_manager_book_membership_response_marks_ready() -> None:
         "source_field": "advisor_id",
         "contract_version": "rfc_041_pm_book_membership_v1",
     }
+
+
+def test_resolve_portfolio_manager_book_membership_response_orchestrates_repository_read() -> None:
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def list_portfolio_manager_book_members(
+                self, **kwargs: object
+            ) -> list[SimpleNamespace]:
+                calls.append(kwargs)
+                return [_portfolio_row()]
+
+        response = await resolve_portfolio_manager_book_membership_response(
+            repository=Repository(),
+            portfolio_manager_id="PM_SG_DPM_001",
+            request=_membership_request(
+                portfolio_types=[" discretionary ", "", "advisory"],
+            ),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response.supportability.state == "READY"
+    assert response.members[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert calls == [
+        {
+            "portfolio_manager_id": "PM_SG_DPM_001",
+            "as_of_date": date(2026, 5, 3),
+            "booking_center_code": "Singapore",
+            "portfolio_types": ["DISCRETIONARY", "ADVISORY"],
+            "include_inactive": False,
+        }
+    ]
 
 
 def test_build_portfolio_manager_book_membership_response_marks_empty_book_missing() -> None:

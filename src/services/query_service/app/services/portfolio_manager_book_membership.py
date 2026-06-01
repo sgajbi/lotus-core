@@ -13,6 +13,28 @@ from .reference_data_mappers import portfolio_manager_book_member
 from .request_fingerprint import request_fingerprint
 
 
+async def resolve_portfolio_manager_book_membership_response(
+    *,
+    repository: Any,
+    portfolio_manager_id: str,
+    request: PortfolioManagerBookMembershipRequest,
+) -> PortfolioManagerBookMembershipResponse:
+    portfolio_types = portfolio_manager_book_membership_portfolio_types(request)
+    rows = await repository.list_portfolio_manager_book_members(
+        portfolio_manager_id=portfolio_manager_id,
+        as_of_date=request.as_of_date,
+        booking_center_code=request.booking_center_code,
+        portfolio_types=portfolio_types,
+        include_inactive=request.include_inactive,
+    )
+    return build_portfolio_manager_book_membership_response(
+        portfolio_manager_id=portfolio_manager_id,
+        request=request,
+        portfolio_types=portfolio_types,
+        rows=rows,
+    )
+
+
 def portfolio_manager_book_membership_portfolio_types(
     request: PortfolioManagerBookMembershipRequest,
 ) -> list[str]:

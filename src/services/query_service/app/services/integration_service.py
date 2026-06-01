@@ -128,8 +128,7 @@ from .model_portfolio_targets import resolve_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
 from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_response
 from .portfolio_manager_book_membership import (
-    build_portfolio_manager_book_membership_response,
-    portfolio_manager_book_membership_portfolio_types,
+    resolve_portfolio_manager_book_membership_response,
 )
 from .portfolio_tax_lot_window import (
     resolve_portfolio_tax_lot_window_response,
@@ -202,19 +201,10 @@ class IntegrationService:
         portfolio_manager_id: str,
         request: PortfolioManagerBookMembershipRequest,
     ) -> PortfolioManagerBookMembershipResponse:
-        portfolio_types = portfolio_manager_book_membership_portfolio_types(request)
-        rows = await self._portfolio_repository.list_portfolio_manager_book_members(
-            portfolio_manager_id=portfolio_manager_id,
-            as_of_date=request.as_of_date,
-            booking_center_code=request.booking_center_code,
-            portfolio_types=portfolio_types,
-            include_inactive=request.include_inactive,
-        )
-        return build_portfolio_manager_book_membership_response(
+        return await resolve_portfolio_manager_book_membership_response(
+            repository=self._portfolio_repository,
             portfolio_manager_id=portfolio_manager_id,
             request=request,
-            portfolio_types=portfolio_types,
-            rows=rows,
         )
 
     async def resolve_cio_model_change_affected_cohort(
