@@ -148,7 +148,6 @@ from .reference_data_mappers import (
     benchmark_return_series_point,
     classification_taxonomy_entry,
     index_definition_response,
-    risk_free_series_point,
 )
 from .request_fingerprint import (
     request_fingerprint as build_request_fingerprint,
@@ -156,6 +155,7 @@ from .request_fingerprint import (
 from .request_fingerprint import (
     series_request_fingerprint,
 )
+from .risk_free_series import build_risk_free_series_response
 from .source_data_runtime import (
     source_product_runtime_metadata_without_as_of_date,
 )
@@ -1265,42 +1265,15 @@ class IntegrationService:
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
         normalized_currency = normalize_currency_code(request.currency)
-        request_fingerprint = series_request_fingerprint(
-            series_key="risk_free_series",
-            identifier_key="currency",
-            identifier_value=normalized_currency,
-            request=request,
-            extras={"series_mode": request.series_mode},
-        )
         rows = await self._reference_repository.list_risk_free_series(
             currency=normalized_currency,
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
-        return RiskFreeSeriesResponse(
+        return build_risk_free_series_response(
             currency=normalized_currency,
-            as_of_date=request.as_of_date,
-            series_mode=request.series_mode,
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            frequency=request.frequency,
-            request_fingerprint=request_fingerprint,
-            points=[risk_free_series_point(row) for row in rows],
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.risk_free_series",
-            },
-            **source_product_runtime_metadata_without_as_of_date(
-                request.as_of_date,
-                data_quality_status=market_reference_data_quality_status(
-                    rows,
-                    required_count=len(rows),
-                ),
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
-            ),
+            request=request,
+            rows=rows,
         )
 
     async def get_benchmark_coverage(
