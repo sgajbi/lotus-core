@@ -20,7 +20,10 @@ from .transaction_metadata import (
     latest_transaction_evidence_timestamp,
     ledger_data_quality_status,
 )
-from .transaction_realized_tax import realized_tax_currency_totals
+from .transaction_realized_tax import (
+    realized_tax_currency_totals,
+    realized_tax_reporting_currency_total,
+)
 from .transaction_reporting_currency import apply_transaction_reporting_currency_fields
 
 logger = logging.getLogger(__name__)
@@ -184,19 +187,12 @@ class TransactionService:
         latest_evidence_timestamp = latest_transaction_evidence_timestamp(tax_transactions)
 
         currency_totals = realized_tax_currency_totals(tax_transactions)
-        reporting_currency_total = None
-        if resolved_reporting_currency is not None:
-            converted_currency_totals = []
-            for total in currency_totals:
-                converted_currency_totals.append(
-                    await self._convert_amount(
-                        amount=total.total_tax_amount,
-                        from_currency=total.currency,
-                        to_currency=resolved_reporting_currency,
-                        as_of_date=effective_as_of_date,
-                    )
-                )
-            reporting_currency_total = sum(converted_currency_totals, Decimal("0"))
+        reporting_currency_total = await realized_tax_reporting_currency_total(
+            currency_totals=currency_totals,
+            reporting_currency=resolved_reporting_currency,
+            as_of_date=effective_as_of_date,
+            convert_amount=self._convert_amount,
+        )
 
         return PortfolioRealizedTaxSummaryResponse(
             portfolio_id=portfolio_id,

@@ -718,7 +718,7 @@ async def test_get_realized_tax_summary_explicit_date_skips_default_date_lookup(
     mock_transaction_repo.get_latest_business_date.assert_not_awaited()
 
 
-async def test_get_realized_tax_summary_converts_currency_totals_sequentially() -> None:
+async def test_get_realized_tax_summary_uses_reporting_currency_total_helper() -> None:
     repo = AsyncMock(spec=TransactionRepository)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
@@ -747,26 +747,18 @@ async def test_get_realized_tax_summary_converts_currency_totals_sequentially() 
             withholding_tax_amount=Decimal("5"),
         ),
     ]
-    call_order: list[str] = []
-
-    async def convert_amount(
-        *,
-        amount: Decimal,
-        from_currency: str,
-        to_currency: str,
-        as_of_date: date,
-    ) -> Decimal:
-        call_order.append(from_currency)
-        assert to_currency == "SGD"
-        assert as_of_date == date(2025, 1, 15)
-        return amount
-
-    with patch(
-        "src.services.query_service.app.services.transaction_service.TransactionRepository",
-        return_value=repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.realized_tax_reporting_currency_total",
+            new_callable=AsyncMock,
+            return_value=Decimal("12"),
+        ) as reporting_currency_total,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
 
         summary = await service.get_realized_tax_summary(
             portfolio_id="P1",
@@ -774,8 +766,16 @@ async def test_get_realized_tax_summary_converts_currency_totals_sequentially() 
         )
 
     assert summary.reporting_currency_total_tax_amount == Decimal("12")
-    assert service._convert_amount.await_count == 2
-    assert call_order == ["EUR", "USD"]
+    reporting_currency_total.assert_awaited_once()
+    helper_kwargs = reporting_currency_total.await_args.kwargs
+    assert [total.currency for total in helper_kwargs["currency_totals"]] == ["EUR", "USD"]
+    assert helper_kwargs["reporting_currency"] == "SGD"
+    assert helper_kwargs["as_of_date"] == date(2025, 1, 15)
+    assert getattr(helper_kwargs["convert_amount"], "__self__", None) is service
+    assert (
+        getattr(helper_kwargs["convert_amount"], "__func__", None)
+        is TransactionService._convert_amount
+    )
 
 
 async def test_get_realized_tax_summary_normalizes_currency_buckets(

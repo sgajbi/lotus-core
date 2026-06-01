@@ -1,8 +1,12 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
 from ..dtos.transaction_dto import RealizedTaxCurrencyTotal
 from ..repositories.currency_codes import normalize_currency_code
+
+ConvertAmount = Callable[..., Awaitable[Decimal]]
 
 
 @dataclass
@@ -35,3 +39,26 @@ def realized_tax_currency_totals(
         )
         for currency, bucket in sorted(totals.items())
     ]
+
+
+async def realized_tax_reporting_currency_total(
+    *,
+    currency_totals: list[RealizedTaxCurrencyTotal],
+    reporting_currency: str | None,
+    as_of_date: date,
+    convert_amount: ConvertAmount,
+) -> Decimal | None:
+    if reporting_currency is None:
+        return None
+
+    converted_currency_totals = []
+    for total in currency_totals:
+        converted_currency_totals.append(
+            await convert_amount(
+                amount=total.total_tax_amount,
+                from_currency=total.currency,
+                to_currency=reporting_currency,
+                as_of_date=as_of_date,
+            )
+        )
+    return sum(converted_currency_totals, Decimal("0"))
