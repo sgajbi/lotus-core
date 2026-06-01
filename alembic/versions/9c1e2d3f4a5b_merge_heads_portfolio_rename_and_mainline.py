@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-
 # revision identifiers, used by Alembic.
 revision: str = "9c1e2d3f4a5b"
 down_revision: Union[str, Sequence[str], None] = ("f6a7b8c9d0e1", "3d6b7f9f2c1a")

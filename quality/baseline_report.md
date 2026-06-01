@@ -57,3 +57,6 @@ E2E tests must run in separate invocations.
 CR-848 removed the unused-symbol lint subset. `python -m ruff check . --select F401,F841
 --statistics` is now clean, and full Ruff findings are down to 323: 250 `E501`, 72 `I001`, and 1
 `E402`.
+
+CR-849 normalized Alembic import ordering. `python -m ruff check alembic --select I001` is now
+clean, and full Ruff findings are down to 283: 250 `E501`, 32 `I001`, and 1 `E402`.
