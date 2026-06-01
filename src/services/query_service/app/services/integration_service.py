@@ -78,6 +78,7 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
+from .benchmark_assignment import build_benchmark_assignment_response
 from .benchmark_composition import (
     benchmark_composition_definition_context,
     build_benchmark_composition_window_response,
@@ -207,24 +208,7 @@ class IntegrationService:
         )
         if row is None:
             return None
-        return BenchmarkAssignmentResponse(
-            portfolio_id=row.portfolio_id,
-            benchmark_id=row.benchmark_id,
-            as_of_date=as_of_date,
-            effective_from=row.effective_from,
-            effective_to=row.effective_to,
-            assignment_source=row.assignment_source,
-            assignment_status=row.assignment_status,
-            policy_pack_id=row.policy_pack_id,
-            source_system=row.source_system,
-            assignment_recorded_at=row.assignment_recorded_at,
-            assignment_version=int(row.assignment_version),
-            **source_product_runtime_metadata_without_as_of_date(
-                as_of_date,
-                data_quality_status="COMPLETE",
-                latest_evidence_timestamp=latest_reference_evidence_timestamp([row]),
-            ),
-        )
+        return build_benchmark_assignment_response(row=row, as_of_date=as_of_date)
 
     async def resolve_model_portfolio_targets(
         self,
