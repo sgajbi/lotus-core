@@ -116,6 +116,7 @@ from .external_hedge_policy import build_external_hedge_policy_response
 from .external_order_execution_acknowledgement import (
     build_external_order_execution_acknowledgement_response,
 )
+from .index_price_series import build_index_price_series_response
 from .instrument_eligibility import build_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
 from .liquidity_reserve_requirement import (
@@ -146,7 +147,6 @@ from .reference_data_mappers import (
     benchmark_return_series_point,
     classification_taxonomy_entry,
     index_definition_response,
-    index_price_series_point,
     index_return_series_point,
     risk_free_series_point,
 )
@@ -157,7 +157,6 @@ from .request_fingerprint import (
     series_request_fingerprint,
 )
 from .source_data_runtime import (
-    source_product_runtime_metadata,
     source_product_runtime_metadata_without_as_of_date,
 )
 from .sustainability_preference_profile import (
@@ -1213,27 +1212,10 @@ class IntegrationService:
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
-        return IndexPriceSeriesResponse(
+        return build_index_price_series_response(
             index_id=index_id,
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            frequency=request.frequency,
-            points=[index_price_series_point(row) for row in rows],
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.index_price_series",
-            },
-            **source_product_runtime_metadata(
-                getattr(request, "as_of_date", request.window.end_date),
-                data_quality_status=market_reference_data_quality_status(
-                    rows,
-                    required_count=len(rows),
-                ),
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
-            ),
+            request=request,
+            rows=rows,
         )
 
     async def get_index_return_series(
