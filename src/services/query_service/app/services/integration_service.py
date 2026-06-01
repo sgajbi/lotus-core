@@ -117,6 +117,7 @@ from .external_order_execution_acknowledgement import (
     build_external_order_execution_acknowledgement_response,
 )
 from .index_price_series import build_index_price_series_response
+from .index_return_series import build_index_return_series_response
 from .instrument_eligibility import build_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
 from .liquidity_reserve_requirement import (
@@ -147,7 +148,6 @@ from .reference_data_mappers import (
     benchmark_return_series_point,
     classification_taxonomy_entry,
     index_definition_response,
-    index_return_series_point,
     risk_free_series_point,
 )
 from .request_fingerprint import (
@@ -1221,40 +1221,15 @@ class IntegrationService:
     async def get_index_return_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexReturnSeriesResponse:
-        request_fingerprint = series_request_fingerprint(
-            series_key="index_return_series",
-            identifier_key="index_id",
-            identifier_value=index_id,
-            request=request,
-        )
         rows = await self._reference_repository.list_index_return_series(
             index_id=index_id,
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
-        return IndexReturnSeriesResponse(
+        return build_index_return_series_response(
             index_id=index_id,
-            as_of_date=request.as_of_date,
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            frequency=request.frequency,
-            request_fingerprint=request_fingerprint,
-            points=[index_return_series_point(row) for row in rows],
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.index_return_series",
-            },
-            **source_product_runtime_metadata_without_as_of_date(
-                request.as_of_date,
-                data_quality_status=market_reference_data_quality_status(
-                    rows,
-                    required_count=len(rows),
-                ),
-                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
-            ),
+            request=request,
+            rows=rows,
         )
 
     async def get_benchmark_return_series(
