@@ -7,7 +7,9 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.benchmark_market_series import (
     benchmark_market_series_fx_context,
+    benchmark_market_series_next_page_token_payload,
     benchmark_market_series_normalization_status,
+    benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
 )
 
@@ -54,6 +56,81 @@ def test_benchmark_market_series_normalization_status_reflects_fx_evidence() -> 
             {date(2026, 1, 1): Decimal("1.1000")},
         )
         == "native_component_series_with_benchmark_to_target_fx_context"
+    )
+
+
+def test_benchmark_market_series_request_scope_binds_paging_to_request() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency="USD",
+        series_fields=["index_return", "index_price"],
+        page={"page_size": 50},
+    )
+
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={"last_index_id": "IDX_A"},
+    )
+
+    assert scope.request_fingerprint
+    assert scope.requested_fields == {"index_price", "index_return"}
+    assert scope.page_size == 50
+    assert scope.cursor_index_id == "IDX_A"
+
+
+def test_benchmark_market_series_request_scope_rejects_token_scope_mismatch() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+
+    try:
+        benchmark_market_series_request_scope(
+            benchmark_id="BMK_GLOBAL_BALANCED",
+            request=request,
+            cursor={"scope_fingerprint": "wrong-scope"},
+        )
+    except ValueError as exc:
+        assert "page token does not match request scope" in str(exc)
+    else:
+        raise AssertionError("Expected benchmark market-series token scope mismatch")
+
+
+def test_benchmark_market_series_next_page_token_payload_preserves_scope() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={},
+    )
+
+    assert benchmark_market_series_next_page_token_payload(
+        request_scope=scope,
+        has_more=True,
+        index_ids=["IDX_A", "IDX_B"],
+    ) == {
+        "scope_fingerprint": scope.request_fingerprint,
+        "last_index_id": "IDX_B",
+    }
+    assert (
+        benchmark_market_series_next_page_token_payload(
+            request_scope=scope,
+            has_more=False,
+            index_ids=["IDX_A"],
+        )
+        is None
     )
 
 

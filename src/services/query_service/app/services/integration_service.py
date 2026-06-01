@@ -86,6 +86,8 @@ from .benchmark_composition import (
 from .benchmark_coverage import build_benchmark_coverage_response
 from .benchmark_market_series import (
     benchmark_market_series_fx_context,
+    benchmark_market_series_next_page_token_payload,
+    benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
 )
 from .benchmark_return_series import build_benchmark_return_series_response
@@ -1026,49 +1028,34 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
-        requested_fields = set(request.series_fields)
         definition = await self._reference_repository.get_benchmark_definition(
             benchmark_id, request.as_of_date
         )
         benchmark_currency = (
             definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
         )
-        request_scope_fingerprint = build_request_fingerprint(
-            {
-                "benchmark_id": benchmark_id,
-                "as_of_date": request.as_of_date.isoformat(),
-                "window": {
-                    "start_date": request.window.start_date.isoformat(),
-                    "end_date": request.window.end_date.isoformat(),
-                },
-                "frequency": request.frequency,
-                "target_currency": request.target_currency,
-                "series_fields": sorted(request.series_fields),
-            }
-        )
         page = getattr(request, "page", None)
-        page_size = getattr(page, "page_size", 250)
         page_token = getattr(page, "page_token", None)
-        cursor = self._decode_page_token(page_token)
-        token_scope = cursor.get("scope_fingerprint")
-        if token_scope and token_scope != request_scope_fingerprint:
-            raise ValueError("Benchmark market series page token does not match request scope.")
-        cursor_index_id = cursor.get("last_index_id")
+        request_scope = benchmark_market_series_request_scope(
+            benchmark_id=benchmark_id,
+            request=request,
+            cursor=self._decode_page_token(page_token),
+        )
         candidate_index_ids = (
             await self._reference_repository.list_benchmark_component_index_ids_overlapping_window(
                 benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
-                after_index_id=cursor_index_id,
-                limit=page_size + 1,
+                after_index_id=request_scope.cursor_index_id,
+                limit=request_scope.page_size + 1,
             )
         )
-        has_more = len(candidate_index_ids) > page_size
-        index_ids = candidate_index_ids[:page_size]
+        has_more = len(candidate_index_ids) > request_scope.page_size
+        index_ids = candidate_index_ids[: request_scope.page_size]
         fx_context = benchmark_market_series_fx_context(
             benchmark_currency=benchmark_currency,
             target_currency=request.target_currency,
-            requested_fields=requested_fields,
+            requested_fields=request_scope.requested_fields,
         )
         market_read_names = ["components"]
         market_reads: list[Any] = [
@@ -1079,7 +1066,7 @@ class IntegrationService:
                 index_ids=index_ids,
             )
         ]
-        if "index_price" in requested_fields:
+        if "index_price" in request_scope.requested_fields:
             market_read_names.append("index_prices")
             market_reads.append(
                 self._reference_repository.list_index_price_points(
@@ -1088,7 +1075,7 @@ class IntegrationService:
                     end_date=request.window.end_date,
                 )
             )
-        if "index_return" in requested_fields:
+        if "index_return" in request_scope.requested_fields:
             market_read_names.append("index_returns")
             market_reads.append(
                 self._reference_repository.list_index_return_points(
@@ -1097,7 +1084,7 @@ class IntegrationService:
                     end_date=request.window.end_date,
                 )
             )
-        if "benchmark_return" in requested_fields:
+        if "benchmark_return" in request_scope.requested_fields:
             market_read_names.append("benchmark_returns")
             market_reads.append(
                 self._reference_repository.list_benchmark_return_points(
@@ -1122,20 +1109,20 @@ class IntegrationService:
         for name, market_read in zip(market_read_names, market_reads, strict=True):
             market_results[name] = await market_read
         next_page_token: str | None = None
-        if has_more and index_ids:
-            next_page_token = self._encode_page_token(
-                {
-                    "scope_fingerprint": request_scope_fingerprint,
-                    "last_index_id": index_ids[-1],
-                }
-            )
+        next_page_token_payload = benchmark_market_series_next_page_token_payload(
+            request_scope=request_scope,
+            has_more=has_more,
+            index_ids=index_ids,
+        )
+        if next_page_token_payload is not None:
+            next_page_token = self._encode_page_token(next_page_token_payload)
 
         return build_benchmark_market_series_response(
             benchmark_id=benchmark_id,
             request=request,
             benchmark_currency=benchmark_currency,
-            request_scope_fingerprint=request_scope_fingerprint,
-            page_size=page_size,
+            request_scope_fingerprint=request_scope.request_fingerprint,
+            page_size=request_scope.page_size,
             has_more=has_more,
             next_page_token=next_page_token,
             index_ids=index_ids,

@@ -23,6 +23,7 @@ from .reference_data_mappers import (
     benchmark_component_series_response,
     benchmark_market_series_point,
 )
+from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
@@ -32,6 +33,60 @@ class BenchmarkMarketSeriesFxContext:
     target_currency: str | None
     should_read_fx_rates: bool
     initial_normalization_status: str
+
+
+@dataclass(frozen=True)
+class BenchmarkMarketSeriesRequestScope:
+    request_fingerprint: str
+    requested_fields: set[str]
+    page_size: int
+    cursor_index_id: str | None
+
+
+def benchmark_market_series_request_scope(
+    *,
+    benchmark_id: str,
+    request: BenchmarkMarketSeriesRequest,
+    cursor: dict[str, Any],
+) -> BenchmarkMarketSeriesRequestScope:
+    request_fingerprint = build_request_fingerprint(
+        {
+            "benchmark_id": benchmark_id,
+            "as_of_date": request.as_of_date.isoformat(),
+            "window": {
+                "start_date": request.window.start_date.isoformat(),
+                "end_date": request.window.end_date.isoformat(),
+            },
+            "frequency": request.frequency,
+            "target_currency": request.target_currency,
+            "series_fields": sorted(request.series_fields),
+        }
+    )
+    token_scope = cursor.get("scope_fingerprint")
+    if token_scope and token_scope != request_fingerprint:
+        raise ValueError("Benchmark market series page token does not match request scope.")
+
+    page = getattr(request, "page", None)
+    return BenchmarkMarketSeriesRequestScope(
+        request_fingerprint=request_fingerprint,
+        requested_fields=set(request.series_fields),
+        page_size=getattr(page, "page_size", 250),
+        cursor_index_id=cursor.get("last_index_id"),
+    )
+
+
+def benchmark_market_series_next_page_token_payload(
+    *,
+    request_scope: BenchmarkMarketSeriesRequestScope,
+    has_more: bool,
+    index_ids: list[str],
+) -> dict[str, str] | None:
+    if not has_more or not index_ids:
+        return None
+    return {
+        "scope_fingerprint": request_scope.request_fingerprint,
+        "last_index_id": index_ids[-1],
+    }
 
 
 def benchmark_market_series_fx_context(
