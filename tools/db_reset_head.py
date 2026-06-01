@@ -1,7 +1,8 @@
 import os
+import sys
+
 import psycopg2
 from dotenv import load_dotenv
-import sys
 
 # Load environment variables from .env file at the project root
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))

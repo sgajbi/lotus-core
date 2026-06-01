@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LEDGER_PATH = REPO_ROOT / "docs" / "standards" / "rfc-0083-implementation-ledger.json"
 LEDGER_SPEC_VERSION = "1.0.0"

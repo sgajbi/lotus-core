@@ -6,7 +6,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_DECLARATION_DIR = ROOT / "contracts" / "domain-data-products"
 PLATFORM_ROOT = ROOT.parent / "lotus-platform"

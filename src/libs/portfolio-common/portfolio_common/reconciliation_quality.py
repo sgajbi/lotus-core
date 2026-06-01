@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 COMPLETE = "COMPLETE"
 PARTIAL = "PARTIAL"
 STALE = "STALE"

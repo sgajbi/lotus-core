@@ -16,14 +16,14 @@ from portfolio_common.source_data_products import (
     OPERATIONAL_READ,
     QUERY_CONTROL_PLANE_SERVICE,
     QUERY_SERVICE,
-    SOURCE_DATA_PRODUCT_CATALOG,
     SNAPSHOT_AND_SIMULATION,
+    SOURCE_DATA_PRODUCT_CATALOG,
     SourceDataProductDefinition,
     products_for_consumer,
     validate_source_data_product_catalog,
 )
-from src.services.query_service.app.dtos.analytics_input_dto import CashFlowObservation
 
+from src.services.query_service.app.dtos.analytics_input_dto import CashFlowObservation
 
 LOTUS_PERFORMANCE = "lotus-performance"
 LOTUS_RISK = "lotus-risk"

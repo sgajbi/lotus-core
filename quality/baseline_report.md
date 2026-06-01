@@ -60,3 +60,6 @@ CR-848 removed the unused-symbol lint subset. `python -m ruff check . --select F
 
 CR-849 normalized Alembic import ordering. `python -m ruff check alembic --select I001` is now
 clean, and full Ruff findings are down to 283: 250 `E501`, 32 `I001`, and 1 `E402`.
+
+CR-850 normalized import ordering for governance scripts, tools, and shared supportability helpers.
+Full Ruff findings are down to 271: 250 `E501`, 20 `I001`, and 1 `E402`.
