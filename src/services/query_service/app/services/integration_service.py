@@ -81,7 +81,7 @@ from .benchmark_catalog import resolve_benchmark_catalog_response
 from .benchmark_composition import (
     resolve_benchmark_composition_window_response,
 )
-from .benchmark_coverage import build_benchmark_coverage_response
+from .benchmark_coverage import resolve_benchmark_coverage_response
 from .benchmark_market_series import (
     resolve_benchmark_market_series_response,
 )
@@ -579,14 +579,9 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
-        coverage = await self._reference_repository.get_benchmark_coverage(
+        return await resolve_benchmark_coverage_response(
+            repository=self._reference_repository,
             benchmark_id=benchmark_id,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        return build_benchmark_coverage_response(
-            benchmark_id=benchmark_id,
-            coverage=coverage,
             start_date=start_date,
             end_date=end_date,
         )

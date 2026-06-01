@@ -8,6 +8,26 @@ from .market_reference_coverage import market_reference_coverage_response
 from .request_fingerprint import request_fingerprint as build_request_fingerprint
 
 
+async def resolve_benchmark_coverage_response(
+    *,
+    repository: Any,
+    benchmark_id: str,
+    start_date: date,
+    end_date: date,
+) -> CoverageResponse:
+    coverage = await repository.get_benchmark_coverage(
+        benchmark_id=benchmark_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return build_benchmark_coverage_response(
+        benchmark_id=benchmark_id,
+        coverage=coverage,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
 def build_benchmark_coverage_response(
     *,
     benchmark_id: str,
