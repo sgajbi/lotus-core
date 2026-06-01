@@ -24,6 +24,27 @@ logger = logging.getLogger(__name__)
 HeldSinceRequest = tuple[int, str, int, date]
 
 
+def should_fetch_fallback_valuation_map(
+    *,
+    db_results: list[tuple[Any, Any, Any]],
+    history_supplements: list[tuple[Any, Any, Any]],
+    snapshot_security_ids: set[str],
+) -> bool:
+    return bool(history_supplements or (db_results and not snapshot_security_ids))
+
+
+def fallback_valuation_security_ids(
+    history_supplements: list[tuple[Any, Any, Any]],
+) -> list[str]:
+    return sorted(
+        {
+            security_id
+            for position_row, _instrument, _pos_state in history_supplements
+            if (security_id := normalize_security_id(position_row.security_id))
+        }
+    )
+
+
 def merge_snapshot_and_history_position_rows(
     *,
     snapshot_results: list[tuple[Any, Any, Any]],
@@ -271,14 +292,12 @@ class PositionService:
             )
         )
         fallback_valuation_map: dict[str, dict[str, float | None]] = {}
-        if history_supplements or (db_results and not snapshot_security_ids):
-            fallback_security_ids = sorted(
-                {
-                    security_id
-                    for position_row, _instrument, _pos_state in history_supplements
-                    if (security_id := normalize_security_id(position_row.security_id))
-                }
-            )
+        if should_fetch_fallback_valuation_map(
+            db_results=db_results,
+            history_supplements=history_supplements,
+            snapshot_security_ids=snapshot_security_ids,
+        ):
+            fallback_security_ids = fallback_valuation_security_ids(history_supplements)
             fallback_valuation_map = (
                 await self.repo.get_latest_snapshot_valuation_map_as_of_date(
                     portfolio_id,

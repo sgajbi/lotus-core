@@ -18,6 +18,7 @@ from src.services.query_service.app.services.position_service import (
     PositionService,
     apply_held_since_dates,
     assign_position_weights,
+    fallback_valuation_security_ids,
     market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
     position_held_since_requests,
@@ -25,6 +26,7 @@ from src.services.query_service.app.services.position_service import (
     position_response_data,
     position_valuation_data,
     position_weight_base_value,
+    should_fetch_fallback_valuation_map,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -56,6 +58,62 @@ async def test_merge_snapshot_and_history_position_rows_preserves_snapshot_autho
     ]
     assert history_supplements == [(history_only_row, history_instrument, history_state)]
     assert snapshot_security_ids == {"SEC_A"}
+
+
+async def test_fallback_valuation_security_ids_normalizes_history_supplements() -> None:
+    first_row = PositionHistory(security_id=" SEC_B ", position_date=date(2025, 1, 2))
+    duplicate_row = PositionHistory(security_id="SEC_B", position_date=date(2025, 1, 3))
+    blank_row = PositionHistory(security_id="   ", position_date=date(2025, 1, 4))
+    second_row = PositionHistory(security_id="SEC_A", position_date=date(2025, 1, 5))
+
+    security_ids = fallback_valuation_security_ids(
+        [
+            (first_row, None, None),
+            (duplicate_row, None, None),
+            (blank_row, None, None),
+            (second_row, None, None),
+        ]
+    )
+
+    assert security_ids == ["SEC_A", "SEC_B"]
+
+
+async def test_should_fetch_fallback_valuation_map_for_history_or_history_only_scope() -> None:
+    row = PositionHistory(security_id="SEC_A", position_date=date(2025, 1, 2))
+    db_results = [(row, None, None)]
+
+    assert (
+        should_fetch_fallback_valuation_map(
+            db_results=[],
+            history_supplements=[],
+            snapshot_security_ids=set(),
+        )
+        is False
+    )
+    assert (
+        should_fetch_fallback_valuation_map(
+            db_results=db_results,
+            history_supplements=[],
+            snapshot_security_ids={"SEC_A"},
+        )
+        is False
+    )
+    assert (
+        should_fetch_fallback_valuation_map(
+            db_results=db_results,
+            history_supplements=[],
+            snapshot_security_ids=set(),
+        )
+        is True
+    )
+    assert (
+        should_fetch_fallback_valuation_map(
+            db_results=db_results,
+            history_supplements=db_results,
+            snapshot_security_ids={"SEC_A"},
+        )
+        is True
+    )
 
 
 async def test_position_valuation_data_maps_snapshot_row_values() -> None:
