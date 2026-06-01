@@ -120,6 +120,7 @@ from .dpm_source_readiness import (
     dpm_source_evaluated_instrument_ids,
     dpm_source_mandate_resolution,
     dpm_source_market_data_family,
+    dpm_source_market_data_read_or_none,
     dpm_source_model_targets_read_or_none,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
@@ -834,14 +835,14 @@ class IntegrationService:
             )
         )
 
-        market_data: MarketDataCoverageWindowResponse | None = None
-        market_data = await dpm_source_read_or_none(
-            lambda: self.get_market_data_coverage(
+        market_data = await dpm_source_market_data_read_or_none(
+            evaluated_instrument_ids=evaluated_instrument_ids,
+            read_market_data=lambda instrument_ids: self.get_market_data_coverage(
                 dpm_market_data_coverage_request(
                     request=request,
-                    evaluated_instrument_ids=evaluated_instrument_ids,
+                    evaluated_instrument_ids=instrument_ids,
                 )
-            )
+            ),
         )
         families.append(dpm_source_market_data_family(market_data))
 

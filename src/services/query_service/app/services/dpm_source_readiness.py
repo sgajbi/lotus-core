@@ -80,6 +80,14 @@ async def dpm_source_tax_lots_read_or_none(
     )
 
 
+async def dpm_source_market_data_read_or_none(
+    *,
+    evaluated_instrument_ids: list[str],
+    read_market_data: Callable[[list[str]], Awaitable[TSourceResponse]],
+) -> TSourceResponse | None:
+    return await dpm_source_read_or_none(lambda: read_market_data(evaluated_instrument_ids))
+
+
 def dpm_source_family_readiness(
     *,
     family: DpmSourceFamilyName,

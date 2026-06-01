@@ -19,6 +19,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_initial_identity,
     dpm_source_mandate_resolution,
     dpm_source_market_data_family,
+    dpm_source_market_data_read_or_none,
     dpm_source_model_targets_read_or_none,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
@@ -594,6 +595,51 @@ def test_dpm_source_tax_lots_family_preserves_source_supportability() -> None:
     assert family.reason == "TAX_LOTS_STALE"
     assert family.missing_items == ["EQ_US_AAPL"]
     assert family.evidence_count == 4
+
+
+def test_dpm_source_market_data_read_or_none_reads_evaluated_universe() -> None:
+    async def read_market_data(instrument_ids: list[str]) -> str:
+        return ",".join(instrument_ids)
+
+    assert (
+        asyncio.run(
+            dpm_source_market_data_read_or_none(
+                evaluated_instrument_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+                read_market_data=read_market_data,
+            )
+        )
+        == "EQ_US_AAPL,EQ_US_MSFT"
+    )
+
+
+def test_dpm_source_market_data_read_or_none_preserves_empty_scope() -> None:
+    async def read_market_data(instrument_ids: list[str]) -> list[str]:
+        return instrument_ids
+
+    assert (
+        asyncio.run(
+            dpm_source_market_data_read_or_none(
+                evaluated_instrument_ids=[],
+                read_market_data=read_market_data,
+            )
+        )
+        == []
+    )
+
+
+def test_dpm_source_market_data_read_or_none_suppresses_unavailable_source() -> None:
+    async def read_market_data(_: list[str]) -> str:
+        raise ValueError("market data unavailable")
+
+    assert (
+        asyncio.run(
+            dpm_source_market_data_read_or_none(
+                evaluated_instrument_ids=["EQ_US_AAPL"],
+                read_market_data=read_market_data,
+            )
+        )
+        is None
+    )
 
 
 def test_dpm_source_market_data_family_marks_unavailable_evidence() -> None:
