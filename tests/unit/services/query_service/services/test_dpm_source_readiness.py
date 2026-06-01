@@ -6,6 +6,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DpmSourceReadinessRequest,
 )
 from src.services.query_service.app.services.dpm_source_readiness import (
+    DpmSourceReadinessReaders,
     build_dpm_source_readiness_response,
     dpm_eligibility_request,
     dpm_mandate_binding_request,
@@ -33,6 +34,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     mandate_source_family_readiness,
     market_data_source_family_readiness,
     model_targets_source_family_readiness,
+    resolve_dpm_source_readiness_response,
     tax_lots_source_family_readiness,
     unavailable_dpm_source_family,
     unavailable_eligibility_family,
@@ -756,6 +758,127 @@ def test_dpm_source_readiness_assembly_orders_families_and_scope() -> None:
         "READY",
         "READY",
     ]
+
+
+def test_resolve_dpm_source_readiness_response_orchestrates_source_reads() -> None:
+    async def run_case() -> tuple[object, list[tuple[str, object]]]:
+        calls: list[tuple[str, object]] = []
+
+        async def read_mandate_binding(
+            portfolio_id: str,
+            request: object,
+        ) -> SimpleNamespace:
+            calls.append(("mandate", (portfolio_id, request)))
+            return SimpleNamespace(
+                mandate_id="MANDATE_RESOLVED",
+                model_portfolio_id="MODEL_BALANCED",
+                supportability=SimpleNamespace(
+                    state="READY",
+                    reason="MANDATE_BINDING_READY",
+                    missing_data_families=[],
+                ),
+            )
+
+        async def read_model_targets(
+            model_portfolio_id: str,
+            request: object,
+        ) -> SimpleNamespace:
+            calls.append(("model_targets", (model_portfolio_id, request)))
+            return SimpleNamespace(
+                targets=[
+                    SimpleNamespace(instrument_id="EQ_US_AAPL"),
+                    SimpleNamespace(instrument_id="EQ_US_MSFT"),
+                ],
+                supportability=SimpleNamespace(
+                    state="READY",
+                    reason="MODEL_TARGETS_READY",
+                    target_count=2,
+                ),
+            )
+
+        async def read_eligibility(request: object) -> SimpleNamespace:
+            calls.append(("eligibility", request))
+            return SimpleNamespace(
+                supportability=SimpleNamespace(
+                    state="READY",
+                    reason="ELIGIBILITY_READY",
+                    missing_security_ids=[],
+                    resolved_count=2,
+                )
+            )
+
+        async def read_tax_lots(
+            portfolio_id: str,
+            request: object,
+        ) -> SimpleNamespace:
+            calls.append(("tax_lots", (portfolio_id, request)))
+            return SimpleNamespace(
+                supportability=SimpleNamespace(
+                    state="READY",
+                    reason="TAX_LOTS_READY",
+                    missing_security_ids=[],
+                    returned_lot_count=2,
+                )
+            )
+
+        async def read_market_data(request: object) -> SimpleNamespace:
+            calls.append(("market_data", request))
+            return SimpleNamespace(
+                supportability=SimpleNamespace(
+                    state="READY",
+                    reason="MARKET_DATA_READY",
+                    missing_instrument_ids=[],
+                    missing_currency_pairs=[],
+                    stale_instrument_ids=[],
+                    stale_currency_pairs=[],
+                    resolved_price_count=2,
+                    resolved_fx_count=1,
+                )
+            )
+
+        response = await resolve_dpm_source_readiness_response(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=DpmSourceReadinessRequest(
+                as_of_date=date(2026, 4, 10),
+                instrument_ids=["EQ_US_AAPL"],
+                tenant_id="TENANT_SG",
+            ),
+            readers=DpmSourceReadinessReaders(
+                read_mandate_binding=read_mandate_binding,
+                read_model_targets=read_model_targets,
+                read_eligibility=read_eligibility,
+                read_tax_lots=read_tax_lots,
+                read_market_data=read_market_data,
+            ),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response.mandate_id == "MANDATE_RESOLVED"
+    assert response.model_portfolio_id == "MODEL_BALANCED"
+    assert response.evaluated_instrument_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert response.supportability.state == "READY"
+    assert [family.family for family in response.families] == [
+        "mandate",
+        "model_targets",
+        "eligibility",
+        "tax_lots",
+        "market_data",
+    ]
+    assert [call[0] for call in calls] == [
+        "mandate",
+        "model_targets",
+        "eligibility",
+        "tax_lots",
+        "market_data",
+    ]
+    assert calls[0][1][0] == "PB_SG_GLOBAL_BAL_001"
+    assert calls[1][1][0] == "MODEL_BALANCED"
+    assert calls[2][1].security_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert calls[3][1][0] == "PB_SG_GLOBAL_BAL_001"
+    assert calls[3][1][1].security_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
+    assert calls[4][1].instrument_ids == ["EQ_US_AAPL", "EQ_US_MSFT"]
 
 
 def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:

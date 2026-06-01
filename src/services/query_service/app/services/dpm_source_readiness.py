@@ -47,6 +47,18 @@ class DpmSourceReadinessAssembly:
     families: list[DpmSourceFamilyReadiness]
 
 
+@dataclass(frozen=True)
+class DpmSourceReadinessReaders:
+    read_mandate_binding: Callable[
+        [str, DiscretionaryMandateBindingRequest],
+        Awaitable[Any],
+    ]
+    read_model_targets: Callable[[str, ModelPortfolioTargetRequest], Awaitable[Any]]
+    read_eligibility: Callable[[InstrumentEligibilityBulkRequest], Awaitable[Any]]
+    read_tax_lots: Callable[[str, PortfolioTaxLotWindowRequest], Awaitable[Any]]
+    read_market_data: Callable[[MarketDataCoverageRequest], Awaitable[Any]]
+
+
 async def dpm_source_read_or_none(
     read_source: Callable[[], Awaitable[TSourceResponse]],
 ) -> TSourceResponse | None:
@@ -355,6 +367,88 @@ def dpm_source_market_data_family(
     if market_data_response is None:
         return unavailable_market_data_family()
     return market_data_source_family_readiness(market_data_response)
+
+
+async def resolve_dpm_source_readiness_response(
+    *,
+    portfolio_id: str,
+    request: DpmSourceReadinessRequest,
+    readers: DpmSourceReadinessReaders,
+) -> DpmSourceReadinessResponse:
+    mandate_response = await dpm_source_read_or_none(
+        lambda: readers.read_mandate_binding(
+            portfolio_id,
+            dpm_mandate_binding_request(request),
+        )
+    )
+    mandate_resolution = dpm_source_mandate_resolution(
+        request=request,
+        mandate_response=mandate_response,
+    )
+    resolved_identity = mandate_resolution.identity
+
+    model_response = await dpm_source_model_targets_read_or_none(
+        model_portfolio_id=resolved_identity.model_portfolio_id,
+        read_model_targets=lambda model_portfolio_id: readers.read_model_targets(
+            model_portfolio_id,
+            dpm_model_targets_request(request),
+        ),
+    )
+    model_targets = dpm_source_model_targets_resolution(
+        model_portfolio_id=resolved_identity.model_portfolio_id,
+        model_response=model_response,
+    )
+    evaluated_instrument_ids = dpm_source_evaluated_instrument_ids(
+        request_instrument_ids=request.instrument_ids,
+        target_instrument_ids=model_targets.target_instrument_ids,
+    )
+    eligibility = await dpm_source_eligibility_read_or_none(
+        evaluated_instrument_ids=evaluated_instrument_ids,
+        read_eligibility=lambda instrument_ids: readers.read_eligibility(
+            dpm_eligibility_request(
+                request=request,
+                instrument_ids=instrument_ids,
+            )
+        ),
+    )
+    tax_lots = await dpm_source_tax_lots_read_or_none(
+        portfolio_id=portfolio_id,
+        evaluated_instrument_ids=evaluated_instrument_ids,
+        read_tax_lots=lambda scoped_portfolio_id, instrument_ids: readers.read_tax_lots(
+            scoped_portfolio_id,
+            dpm_tax_lot_window_request(
+                request=request,
+                evaluated_instrument_ids=instrument_ids,
+            ),
+        ),
+    )
+    market_data = await dpm_source_market_data_read_or_none(
+        evaluated_instrument_ids=evaluated_instrument_ids,
+        read_market_data=lambda instrument_ids: readers.read_market_data(
+            dpm_market_data_coverage_request(
+                request=request,
+                evaluated_instrument_ids=instrument_ids,
+            )
+        ),
+    )
+    readiness_assembly = dpm_source_readiness_assembly(
+        request=request,
+        portfolio_id=portfolio_id,
+        mandate_resolution=mandate_resolution,
+        model_targets=model_targets,
+        eligibility_response=eligibility,
+        tax_lot_response=tax_lots,
+        market_data_response=market_data,
+    )
+
+    return build_dpm_source_readiness_response(
+        portfolio_id=portfolio_id,
+        request=request,
+        resolved_mandate_id=readiness_assembly.resolved_identity.mandate_id,
+        resolved_model_portfolio_id=readiness_assembly.resolved_identity.model_portfolio_id,
+        evaluated_instrument_ids=readiness_assembly.evaluated_instrument_ids,
+        families=readiness_assembly.families,
+    )
 
 
 def dpm_source_readiness_assembly(

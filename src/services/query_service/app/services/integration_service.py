@@ -101,21 +101,8 @@ from .dpm_portfolio_universe import (
     dpm_portfolio_universe_read_scope,
 )
 from .dpm_source_readiness import (
-    build_dpm_source_readiness_response,
-    dpm_eligibility_request,
-    dpm_mandate_binding_request,
-    dpm_market_data_coverage_request,
-    dpm_model_targets_request,
-    dpm_source_eligibility_read_or_none,
-    dpm_source_evaluated_instrument_ids,
-    dpm_source_mandate_resolution,
-    dpm_source_market_data_read_or_none,
-    dpm_source_model_targets_read_or_none,
-    dpm_source_model_targets_resolution,
-    dpm_source_read_or_none,
-    dpm_source_readiness_assembly,
-    dpm_source_tax_lots_read_or_none,
-    dpm_tax_lot_window_request,
+    DpmSourceReadinessReaders,
+    resolve_dpm_source_readiness_response,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
@@ -751,83 +738,21 @@ class IntegrationService:
         portfolio_id: str,
         request: DpmSourceReadinessRequest,
     ) -> DpmSourceReadinessResponse:
-        mandate_response = await dpm_source_read_or_none(
-            lambda: self.resolve_discretionary_mandate_binding(
-                portfolio_id,
-                dpm_mandate_binding_request(request),
-            )
-        )
-        mandate_resolution = dpm_source_mandate_resolution(
-            request=request,
-            mandate_response=mandate_response,
-        )
-        resolved_identity = mandate_resolution.identity
-
-        model_response = await dpm_source_model_targets_read_or_none(
-            model_portfolio_id=resolved_identity.model_portfolio_id,
-            read_model_targets=lambda model_portfolio_id: self.resolve_model_portfolio_targets(
-                model_portfolio_id,
-                dpm_model_targets_request(request),
-            ),
-        )
-        model_targets = dpm_source_model_targets_resolution(
-            model_portfolio_id=resolved_identity.model_portfolio_id,
-            model_response=model_response,
-        )
-        evaluated_instrument_ids = dpm_source_evaluated_instrument_ids(
-            request_instrument_ids=request.instrument_ids,
-            target_instrument_ids=model_targets.target_instrument_ids,
-        )
-        eligibility = await dpm_source_eligibility_read_or_none(
-            evaluated_instrument_ids=evaluated_instrument_ids,
-            read_eligibility=lambda instrument_ids: self.resolve_instrument_eligibility_bulk(
-                dpm_eligibility_request(
-                    request=request,
-                    instrument_ids=instrument_ids,
-                )
-            ),
-        )
-
-        tax_lots = await dpm_source_tax_lots_read_or_none(
-            portfolio_id=portfolio_id,
-            evaluated_instrument_ids=evaluated_instrument_ids,
-            read_tax_lots=lambda scoped_portfolio_id, instrument_ids: (
-                self.get_portfolio_tax_lot_window(
-                    portfolio_id=scoped_portfolio_id,
-                    request=dpm_tax_lot_window_request(
-                        request=request,
-                        evaluated_instrument_ids=instrument_ids,
-                    ),
-                )
-            ),
-        )
-
-        market_data = await dpm_source_market_data_read_or_none(
-            evaluated_instrument_ids=evaluated_instrument_ids,
-            read_market_data=lambda instrument_ids: self.get_market_data_coverage(
-                dpm_market_data_coverage_request(
-                    request=request,
-                    evaluated_instrument_ids=instrument_ids,
-                )
-            ),
-        )
-        readiness_assembly = dpm_source_readiness_assembly(
-            request=request,
-            portfolio_id=portfolio_id,
-            mandate_resolution=mandate_resolution,
-            model_targets=model_targets,
-            eligibility_response=eligibility,
-            tax_lot_response=tax_lots,
-            market_data_response=market_data,
-        )
-
-        return build_dpm_source_readiness_response(
+        return await resolve_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
             request=request,
-            resolved_mandate_id=readiness_assembly.resolved_identity.mandate_id,
-            resolved_model_portfolio_id=(readiness_assembly.resolved_identity.model_portfolio_id),
-            evaluated_instrument_ids=readiness_assembly.evaluated_instrument_ids,
-            families=readiness_assembly.families,
+            readers=DpmSourceReadinessReaders(
+                read_mandate_binding=self.resolve_discretionary_mandate_binding,
+                read_model_targets=self.resolve_model_portfolio_targets,
+                read_eligibility=self.resolve_instrument_eligibility_bulk,
+                read_tax_lots=lambda scoped_portfolio_id, scoped_request: (
+                    self.get_portfolio_tax_lot_window(
+                        portfolio_id=scoped_portfolio_id,
+                        request=scoped_request,
+                    )
+                ),
+                read_market_data=self.get_market_data_coverage,
+            ),
         )
 
     async def get_benchmark_definition(
