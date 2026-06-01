@@ -147,10 +147,7 @@ from .sustainability_preference_profile import (
     build_sustainability_preference_profile_response,
 )
 from .transaction_cost_curve import (
-    build_transaction_cost_curve_page,
-    build_transaction_cost_curve_response,
-    transaction_cost_curve_page_token,
-    transaction_cost_curve_request_scope,
+    resolve_transaction_cost_curve_response,
 )
 
 logger = logging.getLogger(__name__)
@@ -671,45 +668,12 @@ class IntegrationService:
         portfolio_id: str,
         request: TransactionCostCurveRequest,
     ) -> TransactionCostCurveResponse:
-        if not await self._transaction_repository.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
-
-        request_scope = transaction_cost_curve_request_scope(
+        return await resolve_transaction_cost_curve_response(
+            repository=self._transaction_repository,
             portfolio_id=portfolio_id,
             request=request,
-            cursor=self._decode_page_token(request.page.page_token),
-        )
-
-        transactions = await self._transaction_repository.list_transaction_cost_evidence(
-            portfolio_id=portfolio_id,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-            as_of_date=request.as_of_date,
-            security_ids=request.security_ids,
-            transaction_types=request.transaction_types,
-        )
-
-        curve_page = build_transaction_cost_curve_page(
-            portfolio_id=portfolio_id,
-            transactions=transactions,
-            min_observation_count=request.min_observation_count,
-            after_key=request_scope.after_key,
-            page_size=request.page.page_size,
-        )
-
-        next_page_token = transaction_cost_curve_page_token(
-            request_scope=request_scope,
-            curve_page=curve_page,
+            decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
-        )
-
-        return build_transaction_cost_curve_response(
-            portfolio_id=portfolio_id,
-            request=request,
-            request_scope_fingerprint=request_scope.request_fingerprint,
-            curve_page=curve_page,
-            transactions=transactions,
-            next_page_token=next_page_token,
         )
 
     async def get_market_data_coverage(

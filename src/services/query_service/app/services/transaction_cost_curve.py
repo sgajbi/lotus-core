@@ -102,6 +102,53 @@ def transaction_cost_curve_page_token(
     return encode_page_token(payload)
 
 
+async def resolve_transaction_cost_curve_response(
+    *,
+    repository: Any,
+    portfolio_id: str,
+    request: TransactionCostCurveRequest,
+    decode_page_token: Callable[[str | None], dict[str, Any]],
+    encode_page_token: Callable[[dict[str, Any]], str],
+) -> TransactionCostCurveResponse:
+    if not await repository.portfolio_exists(portfolio_id):
+        raise LookupError(f"Portfolio with id {portfolio_id} not found")
+
+    request_scope = transaction_cost_curve_request_scope(
+        portfolio_id=portfolio_id,
+        request=request,
+        cursor=decode_page_token(request.page.page_token),
+    )
+    transactions = await repository.list_transaction_cost_evidence(
+        portfolio_id=portfolio_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+        as_of_date=request.as_of_date,
+        security_ids=request.security_ids,
+        transaction_types=request.transaction_types,
+    )
+    curve_page = build_transaction_cost_curve_page(
+        portfolio_id=portfolio_id,
+        transactions=transactions,
+        min_observation_count=request.min_observation_count,
+        after_key=request_scope.after_key,
+        page_size=request.page.page_size,
+    )
+    next_page_token = transaction_cost_curve_page_token(
+        request_scope=request_scope,
+        curve_page=curve_page,
+        encode_page_token=encode_page_token,
+    )
+
+    return build_transaction_cost_curve_response(
+        portfolio_id=portfolio_id,
+        request=request,
+        request_scope_fingerprint=request_scope.request_fingerprint,
+        curve_page=curve_page,
+        transactions=transactions,
+        next_page_token=next_page_token,
+    )
+
+
 def transaction_fee_amount(transaction: Any) -> Decimal:
     costs = list(getattr(transaction, "costs", None) or [])
     if costs:
