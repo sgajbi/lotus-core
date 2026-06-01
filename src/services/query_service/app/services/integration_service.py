@@ -71,7 +71,6 @@ from ..dtos.reference_integration_dto import (
     TransactionCostCurveResponse,
 )
 from ..repositories.buy_state_repository import BuyStateRepository
-from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
@@ -134,7 +133,7 @@ from .portfolio_tax_lot_window import (
 )
 from .reference_data_mappers import benchmark_definition_response
 from .risk_free_coverage import resolve_risk_free_coverage_response
-from .risk_free_series import build_risk_free_series_response
+from .risk_free_series import resolve_risk_free_series_response
 from .sustainability_preference_profile import (
     resolve_sustainability_preference_profile_response,
 )
@@ -545,16 +544,9 @@ class IntegrationService:
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
-        normalized_currency = normalize_currency_code(request.currency)
-        rows = await self._reference_repository.list_risk_free_series(
-            currency=normalized_currency,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        return build_risk_free_series_response(
-            currency=normalized_currency,
+        return await resolve_risk_free_series_response(
+            repository=self._reference_repository,
             request=request,
-            rows=rows,
         )
 
     async def get_benchmark_coverage(

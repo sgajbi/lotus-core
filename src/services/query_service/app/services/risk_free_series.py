@@ -7,6 +7,7 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
+from ..repositories.currency_codes import normalize_currency_code
 from .reference_data_helpers import (
     latest_reference_evidence_timestamp,
     market_reference_data_quality_status,
@@ -14,6 +15,24 @@ from .reference_data_helpers import (
 from .reference_data_mappers import risk_free_series_point
 from .request_fingerprint import series_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
+
+
+async def resolve_risk_free_series_response(
+    *,
+    repository: Any,
+    request: RiskFreeSeriesRequest,
+) -> RiskFreeSeriesResponse:
+    normalized_currency = normalize_currency_code(request.currency)
+    rows = await repository.list_risk_free_series(
+        currency=normalized_currency,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+    )
+    return build_risk_free_series_response(
+        currency=normalized_currency,
+        request=request,
+        rows=rows,
+    )
 
 
 def build_risk_free_series_response(
