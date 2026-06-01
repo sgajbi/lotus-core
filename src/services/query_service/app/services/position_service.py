@@ -10,10 +10,10 @@ from ..dtos.position_dto import (
     PortfolioPositionHistoryResponse,
     PortfolioPositionsResponse,
     Position,
-    PositionHistoryRecord,
 )
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
+from .position_history import portfolio_position_history_response_data
 from .position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
@@ -66,21 +66,10 @@ class PositionService:
             end_date=end_date,
         )
 
-        positions = []
-        for position_history_obj, reprocessing_status in db_results:
-            record = PositionHistoryRecord(
-                position_date=position_history_obj.position_date,
-                transaction_id=position_history_obj.transaction_id,
-                quantity=position_history_obj.quantity,
-                cost_basis=position_history_obj.cost_basis,
-                cost_basis_local=position_history_obj.cost_basis_local,
-                valuation=None,
-                reprocessing_status=reprocessing_status,
-            )
-            positions.append(record)
-
-        return PortfolioPositionHistoryResponse(
-            portfolio_id=portfolio_id, security_id=security_id, positions=positions
+        return portfolio_position_history_response_data(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            db_results=db_results,
         )
 
     async def get_portfolio_positions(
