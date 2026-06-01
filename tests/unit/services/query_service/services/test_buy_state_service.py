@@ -98,6 +98,28 @@ async def test_get_position_lots(mock_buy_state_repo: AsyncMock):
         )
 
 
+async def test_get_position_lots_uses_shared_portfolio_validation(
+    mock_buy_state_repo: AsyncMock,
+) -> None:
+    with (
+        patch(
+            "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
+            return_value=mock_buy_state_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.buy_state_service.ensure_portfolio_exists",
+            new_callable=AsyncMock,
+        ) as ensure_portfolio_exists,
+    ):
+        service = BuyStateService(AsyncMock())
+        await service.get_position_lots("PORT-1", " US0378331005 ")
+
+    ensure_portfolio_exists.assert_awaited_once_with(
+        repository=mock_buy_state_repo,
+        portfolio_id="PORT-1",
+    )
+
+
 async def test_get_buy_cash_linkage(mock_buy_state_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.buy_state_service.BuyStateRepository",

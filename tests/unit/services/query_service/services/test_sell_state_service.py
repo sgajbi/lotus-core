@@ -76,6 +76,28 @@ async def test_get_sell_disposals_maps_deterministic_fields(mock_sell_state_repo
     assert record.calculation_policy_id == "SELL_FIFO_POLICY"
 
 
+async def test_get_sell_disposals_uses_shared_portfolio_validation(
+    mock_sell_state_repo: AsyncMock,
+) -> None:
+    with (
+        patch(
+            "src.services.query_service.app.services.sell_state_service.SellStateRepository",
+            return_value=mock_sell_state_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.sell_state_service.ensure_portfolio_exists",
+            new_callable=AsyncMock,
+        ) as ensure_portfolio_exists,
+    ):
+        service = SellStateService(AsyncMock())
+        await service.get_sell_disposals("PORT-1", " US0378331005 ")
+
+    ensure_portfolio_exists.assert_awaited_once_with(
+        repository=mock_sell_state_repo,
+        portfolio_id="PORT-1",
+    )
+
+
 async def test_get_sell_cash_linkage_returns_sell_mapping(mock_sell_state_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.sell_state_service.SellStateRepository",

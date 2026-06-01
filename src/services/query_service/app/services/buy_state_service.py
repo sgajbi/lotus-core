@@ -9,17 +9,15 @@ from ..dtos.buy_state_dto import (
 )
 from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.identifier_normalization import normalize_security_id
+from .portfolio_validation import ensure_portfolio_exists
 
 
 class BuyStateService:
     def __init__(self, db: AsyncSession):
         self.repo = BuyStateRepository(db)
 
-    async def get_position_lots(
-        self, portfolio_id: str, security_id: str
-    ) -> PositionLotsResponse:
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+    async def get_position_lots(self, portfolio_id: str, security_id: str) -> PositionLotsResponse:
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         security_id = normalize_security_id(security_id)
         lots = await self.repo.get_position_lots(portfolio_id=portfolio_id, security_id=security_id)
         if not lots:
@@ -35,8 +33,7 @@ class BuyStateService:
     async def get_accrued_offsets(
         self, portfolio_id: str, security_id: str
     ) -> AccruedIncomeOffsetsResponse:
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         security_id = normalize_security_id(security_id)
         offsets = await self.repo.get_accrued_offsets(
             portfolio_id=portfolio_id,
@@ -55,8 +52,7 @@ class BuyStateService:
     async def get_buy_cash_linkage(
         self, portfolio_id: str, transaction_id: str
     ) -> BuyCashLinkageResponse:
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         row = await self.repo.get_buy_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )
