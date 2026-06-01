@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from src.services.query_service.app.services.portfolio_tax_lot_window import (
     portfolio_tax_lot_next_page_token_payload,
     portfolio_tax_lot_page_token,
     portfolio_tax_lot_window_request_scope,
+    resolve_portfolio_tax_lot_window_response,
 )
 
 
@@ -165,6 +167,99 @@ def test_portfolio_tax_lot_page_token_suppresses_terminal_page() -> None:
         )
         is None
     )
+
+
+def test_resolve_portfolio_tax_lot_window_response_orchestrates_repository_reads() -> None:
+    async def run_case() -> tuple[
+        object, list[tuple[str, dict[str, object]]], list[dict[str, str]]
+    ]:
+        calls: list[tuple[str, dict[str, object]]] = []
+        encoded_payloads: list[dict[str, str]] = []
+
+        class Repository:
+            async def portfolio_exists(self, portfolio_id: str) -> bool:
+                calls.append(("portfolio_exists", {"portfolio_id": portfolio_id}))
+                return True
+
+            async def list_portfolio_tax_lots(
+                self, **kwargs: object
+            ) -> list[tuple[SimpleNamespace, str]]:
+                calls.append(("tax_lots", kwargs))
+                return [
+                    (_tax_lot_row(lot_id="LOT-A"), "USD"),
+                    (_tax_lot_row(lot_id="LOT-B"), "USD"),
+                ]
+
+        def encode(payload: dict[str, str]) -> str:
+            encoded_payloads.append(payload)
+            return "encoded-token"
+
+        response = await resolve_portfolio_tax_lot_window_response(
+            repository=Repository(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PortfolioTaxLotWindowRequest(
+                as_of_date=date(2026, 4, 10),
+                security_ids=["EQ_US_AAPL"],
+                include_closed_lots=True,
+                lot_status_filter="OPEN",
+                page={"page_size": 1},
+            ),
+            decode_page_token=lambda _: {},
+            encode_page_token=encode,
+        )
+        return response, calls, encoded_payloads
+
+    response, calls, encoded_payloads = asyncio.run(run_case())
+
+    assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.page.next_page_token == "encoded-token"
+    assert response.page.returned_component_count == 1
+    assert response.lots[0].lot_id == "LOT-A"
+    assert [call[0] for call in calls] == ["portfolio_exists", "tax_lots"]
+    assert calls[1] == (
+        "tax_lots",
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": date(2026, 4, 10),
+            "security_ids": ["EQ_US_AAPL"],
+            "include_closed_lots": True,
+            "lot_status_filter": "OPEN",
+            "after_sort_key": None,
+            "limit": 2,
+        },
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": response.page.request_scope_fingerprint,
+            "last_acquisition_date": "2026-03-25",
+            "last_lot_id": "LOT-A",
+        }
+    ]
+
+
+def test_resolve_portfolio_tax_lot_window_response_requires_existing_portfolio() -> None:
+    async def run_case() -> None:
+        class Repository:
+            async def portfolio_exists(self, portfolio_id: str) -> bool:
+                return False
+
+            async def list_portfolio_tax_lots(self, **_: object) -> list[object]:
+                raise AssertionError("Unexpected tax-lot read for missing portfolio")
+
+        await resolve_portfolio_tax_lot_window_response(
+            repository=Repository(),
+            portfolio_id="PB_UNKNOWN",
+            request=PortfolioTaxLotWindowRequest(as_of_date=date(2026, 4, 10)),
+            decode_page_token=lambda _: {},
+            encode_page_token=lambda _: "token",
+        )
+
+    try:
+        asyncio.run(run_case())
+    except LookupError as exc:
+        assert "Portfolio with id PB_UNKNOWN not found" in str(exc)
+    else:
+        raise AssertionError("Expected missing portfolio lookup failure")
 
 
 def test_build_portfolio_tax_lot_window_response_marks_partial_page_degraded() -> None:

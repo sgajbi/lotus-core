@@ -92,6 +92,50 @@ def portfolio_tax_lot_page_token(
     return encode_page_token(payload)
 
 
+async def resolve_portfolio_tax_lot_window_response(
+    *,
+    repository: Any,
+    portfolio_id: str,
+    request: PortfolioTaxLotWindowRequest,
+    decode_page_token: Callable[[str | None], dict[str, Any]],
+    encode_page_token: Callable[[dict[str, str]], str],
+) -> PortfolioTaxLotWindowResponse:
+    if not await repository.portfolio_exists(portfolio_id):
+        raise LookupError(f"Portfolio with id {portfolio_id} not found")
+
+    request_scope = portfolio_tax_lot_window_request_scope(
+        portfolio_id=portfolio_id,
+        request=request,
+        cursor=decode_page_token(request.page.page_token),
+    )
+    rows = await repository.list_portfolio_tax_lots(
+        portfolio_id=portfolio_id,
+        as_of_date=request.as_of_date,
+        security_ids=request.security_ids,
+        include_closed_lots=request.include_closed_lots,
+        lot_status_filter=request.lot_status_filter,
+        after_sort_key=request_scope.after_sort_key,
+        limit=request.page.page_size + 1,
+    )
+    has_more = len(rows) > request.page.page_size
+    page_rows = rows[: request.page.page_size]
+    next_page_token = portfolio_tax_lot_page_token(
+        request_scope=request_scope,
+        has_more=has_more,
+        page_rows=page_rows,
+        encode_page_token=encode_page_token,
+    )
+
+    return build_portfolio_tax_lot_window_response(
+        portfolio_id=portfolio_id,
+        request=request,
+        request_scope_fingerprint=request_scope.request_fingerprint,
+        page_rows=page_rows,
+        has_more=has_more,
+        next_page_token=next_page_token,
+    )
+
+
 def build_portfolio_tax_lot_window_response(
     *,
     portfolio_id: str,

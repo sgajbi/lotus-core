@@ -136,9 +136,7 @@ from .portfolio_manager_book_membership import (
     portfolio_manager_book_membership_portfolio_types,
 )
 from .portfolio_tax_lot_window import (
-    build_portfolio_tax_lot_window_response,
-    portfolio_tax_lot_page_token,
-    portfolio_tax_lot_window_request_scope,
+    resolve_portfolio_tax_lot_window_response,
 )
 from .reference_data_mappers import benchmark_definition_response
 from .risk_free_coverage import build_risk_free_coverage_response
@@ -625,41 +623,12 @@ class IntegrationService:
         portfolio_id: str,
         request: PortfolioTaxLotWindowRequest,
     ) -> PortfolioTaxLotWindowResponse:
-        if not await self._buy_state_repository.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
-
-        request_scope = portfolio_tax_lot_window_request_scope(
+        return await resolve_portfolio_tax_lot_window_response(
+            repository=self._buy_state_repository,
             portfolio_id=portfolio_id,
             request=request,
-            cursor=self._decode_page_token(request.page.page_token),
-        )
-
-        rows = await self._buy_state_repository.list_portfolio_tax_lots(
-            portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            security_ids=request.security_ids,
-            include_closed_lots=request.include_closed_lots,
-            lot_status_filter=request.lot_status_filter,
-            after_sort_key=request_scope.after_sort_key,
-            limit=request.page.page_size + 1,
-        )
-        has_more = len(rows) > request.page.page_size
-        page_rows = rows[: request.page.page_size]
-
-        next_page_token = portfolio_tax_lot_page_token(
-            request_scope=request_scope,
-            has_more=has_more,
-            page_rows=page_rows,
+            decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
-        )
-
-        return build_portfolio_tax_lot_window_response(
-            portfolio_id=portfolio_id,
-            request=request,
-            request_scope_fingerprint=request_scope.request_fingerprint,
-            page_rows=page_rows,
-            has_more=has_more,
-            next_page_token=next_page_token,
         )
 
     async def get_transaction_cost_curve(
