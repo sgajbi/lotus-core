@@ -8,12 +8,53 @@ from portfolio_common.database_models import PositionHistory
 from src.services.query_service.app.dtos.position_dto import Position
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.services.position_holdings_reads import (
+    effective_holdings_read_as_of_date,
     fallback_holdings_valuation_map,
     holdings_position_source_rows,
     holdings_support_evidence,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_effective_holdings_read_as_of_date_reads_default_business_date() -> None:
+    repository = AsyncMock()
+    repository.get_latest_business_date.return_value = date(2025, 1, 1)
+
+    effective_as_of_date = await effective_holdings_read_as_of_date(
+        repository=repository,
+        requested_as_of_date=None,
+        include_projected=False,
+    )
+
+    assert effective_as_of_date == date(2025, 1, 1)
+    repository.get_latest_business_date.assert_awaited_once()
+
+
+async def test_effective_holdings_read_as_of_date_uses_explicit_date_without_lookup() -> None:
+    repository = AsyncMock()
+
+    effective_as_of_date = await effective_holdings_read_as_of_date(
+        repository=repository,
+        requested_as_of_date=date(2025, 1, 2),
+        include_projected=False,
+    )
+
+    assert effective_as_of_date == date(2025, 1, 2)
+    repository.get_latest_business_date.assert_not_awaited()
+
+
+async def test_effective_holdings_read_as_of_date_uses_unbounded_projected_scope() -> None:
+    repository = AsyncMock()
+
+    effective_as_of_date = await effective_holdings_read_as_of_date(
+        repository=repository,
+        requested_as_of_date=None,
+        include_projected=True,
+    )
+
+    assert effective_as_of_date is None
+    repository.get_latest_business_date.assert_not_awaited()
 
 
 async def test_holdings_position_source_rows_reads_effective_as_of_scope() -> None:

@@ -4,11 +4,34 @@ from typing import Any
 from .position_holdings import (
     HeldSinceRequest,
     apply_held_since_dates,
+    effective_holdings_as_of_date,
     fallback_valuation_security_ids,
     held_since_security_epoch_pairs,
     market_price_freshness_security_ids,
     should_fetch_fallback_valuation_map,
+    should_use_default_holdings_as_of_date,
 )
+
+
+async def effective_holdings_read_as_of_date(
+    *,
+    repository: Any,
+    requested_as_of_date: date | None,
+    include_projected: bool,
+) -> date | None:
+    latest_business_date = (
+        await repository.get_latest_business_date()
+        if should_use_default_holdings_as_of_date(
+            requested_as_of_date=requested_as_of_date,
+            include_projected=include_projected,
+        )
+        else requested_as_of_date
+    )
+    return effective_holdings_as_of_date(
+        requested_as_of_date=requested_as_of_date,
+        latest_business_date=latest_business_date,
+        include_projected=include_projected,
+    )
 
 
 async def holdings_position_source_rows(

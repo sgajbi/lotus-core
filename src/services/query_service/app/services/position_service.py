@@ -14,7 +14,6 @@ from ..repositories.position_repository import PositionRepository
 from .position_history import portfolio_position_history_response_data
 from .position_holdings import (
     assign_position_weights,
-    effective_holdings_as_of_date,
     holdings_data_quality_status,
     holdings_response_as_of_date,
     latest_holdings_evidence_timestamp,
@@ -22,9 +21,9 @@ from .position_holdings import (
     portfolio_position_rows_data,
     portfolio_positions_response_data,
     position_held_since_requests,
-    should_use_default_holdings_as_of_date,
 )
 from .position_holdings_reads import (
+    effective_holdings_read_as_of_date,
     fallback_holdings_valuation_map,
     holdings_position_source_rows,
     holdings_support_evidence,
@@ -84,19 +83,12 @@ class PositionService:
         """
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
-        needs_default_as_of_date = should_use_default_holdings_as_of_date(
-            requested_as_of_date=as_of_date,
-            include_projected=include_projected,
-        )
         portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
         if not portfolio_exists:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
-        default_as_of_date = (
-            await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
-        )
-        effective_as_of_date = effective_holdings_as_of_date(
+        effective_as_of_date = await effective_holdings_read_as_of_date(
+            repository=self.repo,
             requested_as_of_date=as_of_date,
-            latest_business_date=default_as_of_date,
             include_projected=include_projected,
         )
 
