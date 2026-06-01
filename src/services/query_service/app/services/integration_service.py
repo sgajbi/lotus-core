@@ -170,7 +170,7 @@ from .sustainability_preference_profile import (
 from .transaction_cost_curve import (
     build_transaction_cost_curve_page,
     build_transaction_cost_curve_response,
-    transaction_cost_curve_next_page_token_payload,
+    transaction_cost_curve_page_token,
     transaction_cost_curve_request_scope,
 )
 
@@ -720,13 +720,11 @@ class IntegrationService:
             page_size=request.page.page_size,
         )
 
-        next_page_token: str | None = None
-        next_page_token_payload = transaction_cost_curve_next_page_token_payload(
+        next_page_token = transaction_cost_curve_page_token(
             request_scope=request_scope,
             curve_page=curve_page,
+            encode_page_token=self._encode_page_token,
         )
-        if next_page_token_payload is not None:
-            next_page_token = self._encode_page_token(next_page_token_payload)
 
         return build_transaction_cost_curve_response(
             portfolio_id=portfolio_id,

@@ -13,6 +13,7 @@ from src.services.query_service.app.services.transaction_cost_curve import (
     has_observed_transaction_cost_evidence,
     transaction_cost_curve_key,
     transaction_cost_curve_next_page_token_payload,
+    transaction_cost_curve_page_token,
     transaction_cost_curve_request_scope,
     transaction_fee_amount,
 )
@@ -248,6 +249,77 @@ def test_transaction_cost_curve_next_page_token_payload_uses_last_curve_point() 
         transaction_cost_curve_next_page_token_payload(
             request_scope=scope,
             curve_page=final_page,
+        )
+        is None
+    )
+
+
+def test_transaction_cost_curve_page_token_encodes_payload() -> None:
+    request = TransactionCostCurveRequest(
+        as_of_date=date(2026, 4, 10),
+        window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+    )
+    scope = transaction_cost_curve_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={},
+    )
+    curve_page = build_transaction_cost_curve_page(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transactions=[
+            _transaction(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL"),
+            _transaction(transaction_id="TXN-MSFT-001", security_id="EQ_US_MSFT"),
+        ],
+        min_observation_count=1,
+        page_size=1,
+    )
+    encoded_payloads: list[dict[str, object]] = []
+
+    def encode(payload: dict[str, object]) -> str:
+        encoded_payloads.append(payload)
+        return "encoded-token"
+
+    assert (
+        transaction_cost_curve_page_token(
+            request_scope=scope,
+            curve_page=curve_page,
+            encode_page_token=encode,
+        )
+        == "encoded-token"
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": scope.request_fingerprint,
+            "last_curve_key": ["EQ_US_AAPL", "BUY", "USD"],
+        }
+    ]
+
+
+def test_transaction_cost_curve_page_token_suppresses_terminal_page() -> None:
+    request = TransactionCostCurveRequest(
+        as_of_date=date(2026, 4, 10),
+        window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+    )
+    scope = transaction_cost_curve_request_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={},
+    )
+    curve_page = build_transaction_cost_curve_page(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        transactions=[_transaction(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL")],
+        min_observation_count=1,
+        page_size=10,
+    )
+
+    def encode(_: dict[str, object]) -> str:
+        raise AssertionError("Unexpected token encoding for terminal page")
+
+    assert (
+        transaction_cost_curve_page_token(
+            request_scope=scope,
+            curve_page=curve_page,
+            encode_page_token=encode,
         )
         is None
     )

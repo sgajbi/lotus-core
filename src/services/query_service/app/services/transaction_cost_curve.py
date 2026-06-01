@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -84,6 +85,21 @@ def transaction_cost_curve_next_page_token_payload(
             last_point.currency,
         ],
     }
+
+
+def transaction_cost_curve_page_token(
+    *,
+    request_scope: TransactionCostCurveRequestScope,
+    curve_page: TransactionCostCurvePage,
+    encode_page_token: Callable[[dict[str, Any]], str],
+) -> str | None:
+    payload = transaction_cost_curve_next_page_token_payload(
+        request_scope=request_scope,
+        curve_page=curve_page,
+    )
+    if payload is None:
+        return None
+    return encode_page_token(payload)
 
 
 def transaction_fee_amount(transaction: Any) -> Decimal:
