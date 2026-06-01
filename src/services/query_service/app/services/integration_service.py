@@ -25,7 +25,6 @@ from ..dtos.reference_integration_dto import (
     ClientRestrictionProfileResponse,
     ClientTaxProfileRequest,
     ClientTaxProfileResponse,
-    ClientTaxProfileSupportability,
     ClientTaxRuleSetRequest,
     ClientTaxRuleSetResponse,
     ClientTaxRuleSetSupportability,
@@ -100,6 +99,7 @@ from .benchmark_market_series import (
 )
 from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
 from .client_restriction_profile import build_client_restriction_profile_response
+from .client_tax_profile import build_client_tax_profile_response
 from .discretionary_mandate_binding import build_discretionary_mandate_binding_response
 from .dpm_portfolio_universe import (
     build_dpm_portfolio_universe_response,
@@ -138,7 +138,6 @@ from .reference_data_mappers import (
     benchmark_return_series_point,
     classification_taxonomy_entry,
     client_income_needs_schedule_entry,
-    client_tax_profile_entry,
     client_tax_rule_set_entry,
     index_definition_response,
     index_price_series_point,
@@ -424,58 +423,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_profiles=request.include_inactive_profiles,
         )
-        entries = [client_tax_profile_entry(row) for row in rows]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "CLIENT_TAX_PROFILE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "CLIENT_TAX_PROFILE_EMPTY"
-            missing_data_families.append("client_tax_profile")
-
-        latest_evidence_timestamp = latest_reference_evidence_timestamp([binding], rows)
-        return ClientTaxProfileResponse(
+        return build_client_tax_profile_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            profiles=entries,
-            supportability=ClientTaxProfileSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                profile_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "client_tax_profiles,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_client_tax_profile_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=build_request_fingerprint(
-                    {
-                        "product": "ClientTaxProfile",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "client_tax_profile:"
-                    + build_request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_client_tax_rule_set(
