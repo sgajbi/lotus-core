@@ -49,6 +49,16 @@ async def dpm_source_read_or_none(
         return None
 
 
+async def dpm_source_model_targets_read_or_none(
+    *,
+    model_portfolio_id: str | None,
+    read_model_targets: Callable[[str], Awaitable[TSourceResponse]],
+) -> TSourceResponse | None:
+    if model_portfolio_id is None:
+        return None
+    return await dpm_source_read_or_none(lambda: read_model_targets(model_portfolio_id))
+
+
 def dpm_source_family_readiness(
     *,
     family: DpmSourceFamilyName,

@@ -119,6 +119,7 @@ from .dpm_source_readiness import (
     dpm_source_evaluated_instrument_ids,
     dpm_source_mandate_resolution,
     dpm_source_market_data_family,
+    dpm_source_model_targets_read_or_none,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
     dpm_source_tax_lots_family,
@@ -777,14 +778,13 @@ class IntegrationService:
         resolved_identity = mandate_resolution.identity
         families.append(mandate_resolution.family)
 
-        model_response: ModelPortfolioTargetResponse | None = None
-        if resolved_identity.model_portfolio_id is not None:
-            model_response = await dpm_source_read_or_none(
-                lambda: self.resolve_model_portfolio_targets(
-                    resolved_identity.model_portfolio_id,
-                    dpm_model_targets_request(request),
-                )
-            )
+        model_response = await dpm_source_model_targets_read_or_none(
+            model_portfolio_id=resolved_identity.model_portfolio_id,
+            read_model_targets=lambda model_portfolio_id: self.resolve_model_portfolio_targets(
+                model_portfolio_id,
+                dpm_model_targets_request(request),
+            ),
+        )
         model_targets = dpm_source_model_targets_resolution(
             model_portfolio_id=resolved_identity.model_portfolio_id,
             model_response=model_response,

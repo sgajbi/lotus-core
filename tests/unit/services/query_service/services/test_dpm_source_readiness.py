@@ -18,6 +18,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_initial_identity,
     dpm_source_mandate_resolution,
     dpm_source_market_data_family,
+    dpm_source_model_targets_read_or_none,
     dpm_source_model_targets_resolution,
     dpm_source_read_or_none,
     dpm_source_readiness_supportability,
@@ -336,6 +337,51 @@ def test_dpm_source_mandate_resolution_preserves_source_supportability() -> None
     assert resolution.family.state == "READY"
     assert resolution.family.reason == "MANDATE_BINDING_READY"
     assert resolution.family.evidence_count == 1
+
+
+def test_dpm_source_model_targets_read_or_none_skips_missing_identity() -> None:
+    async def read_model_targets(_: str) -> str:
+        raise AssertionError("Unexpected model-target read without model identity")
+
+    assert (
+        asyncio.run(
+            dpm_source_model_targets_read_or_none(
+                model_portfolio_id=None,
+                read_model_targets=read_model_targets,
+            )
+        )
+        is None
+    )
+
+
+def test_dpm_source_model_targets_read_or_none_reads_resolved_identity() -> None:
+    async def read_model_targets(model_portfolio_id: str) -> str:
+        return f"targets:{model_portfolio_id}"
+
+    assert (
+        asyncio.run(
+            dpm_source_model_targets_read_or_none(
+                model_portfolio_id="MODEL_BALANCED",
+                read_model_targets=read_model_targets,
+            )
+        )
+        == "targets:MODEL_BALANCED"
+    )
+
+
+def test_dpm_source_model_targets_read_or_none_suppresses_unavailable_source() -> None:
+    async def read_model_targets(_: str) -> str:
+        raise LookupError("model targets unavailable")
+
+    assert (
+        asyncio.run(
+            dpm_source_model_targets_read_or_none(
+                model_portfolio_id="MODEL_BALANCED",
+                read_model_targets=read_model_targets,
+            )
+        )
+        is None
+    )
 
 
 def test_dpm_source_model_targets_resolution_requires_model_identity() -> None:
