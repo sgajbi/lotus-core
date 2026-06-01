@@ -22,6 +22,7 @@ from src.services.query_service.app.services.position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
     fallback_valuation_security_ids,
+    held_since_security_epoch_pairs,
     holdings_data_quality_status,
     holdings_response_as_of_date,
     latest_holdings_evidence_timestamp,
@@ -506,6 +507,15 @@ async def test_position_held_since_requests_normalizes_epoch_requests() -> None:
     ]
     assert first_position.held_since_date is None
     assert second_position.held_since_date is None
+
+
+async def test_held_since_security_epoch_pairs_drops_request_indexes_and_defaults() -> None:
+    assert held_since_security_epoch_pairs(
+        [
+            (1, "SEC_B", 3, date(2025, 1, 3)),
+            (0, "SEC_A", 2, date(2025, 1, 2)),
+        ]
+    ) == [("SEC_B", 3), ("SEC_A", 2)]
 
 
 async def test_apply_held_since_dates_uses_default_when_map_missing() -> None:

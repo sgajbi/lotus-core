@@ -16,6 +16,7 @@ from .position_holdings import (
     apply_held_since_dates,
     assign_position_weights,
     fallback_valuation_security_ids,
+    held_since_security_epoch_pairs,
     holdings_data_quality_status,
     holdings_response_as_of_date,
     latest_holdings_evidence_timestamp,
@@ -152,24 +153,17 @@ class PositionService:
         if held_since_requests:
             held_since_map = await self.repo.get_held_since_dates(
                 portfolio_id=portfolio_id,
-                security_epoch_pairs=[
-                    (security_id, epoch) for _, security_id, epoch, _ in held_since_requests
-                ],
-            )
-            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-                security_ids=market_price_security_ids,
-                as_of_date=response_as_of_date,
+                security_epoch_pairs=held_since_security_epoch_pairs(held_since_requests),
             )
             apply_held_since_dates(
                 positions=positions,
                 held_since_requests=held_since_requests,
                 held_since_map=held_since_map,
             )
-        else:
-            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-                security_ids=market_price_security_ids,
-                as_of_date=response_as_of_date,
-            )
+        latest_market_price_dates = await self.repo.get_latest_market_price_dates(
+            security_ids=market_price_security_ids,
+            as_of_date=response_as_of_date,
+        )
         return portfolio_positions_response_data(
             portfolio_id=portfolio_id,
             positions=positions,

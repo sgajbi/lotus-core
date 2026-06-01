@@ -186,6 +186,12 @@ def position_held_since_requests(
     return held_since_requests
 
 
+def held_since_security_epoch_pairs(
+    held_since_requests: list[HeldSinceRequest],
+) -> list[tuple[str, int]]:
+    return [(security_id, epoch) for _idx, security_id, epoch, _default_date in held_since_requests]
+
+
 def apply_held_since_dates(
     *,
     positions: list[Position],
