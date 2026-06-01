@@ -267,6 +267,14 @@ def dpm_source_tax_lots_family(
     return tax_lots_source_family_readiness(tax_lot_response)
 
 
+def dpm_source_market_data_family(
+    market_data_response: Any | None,
+) -> DpmSourceFamilyReadiness:
+    if market_data_response is None:
+        return unavailable_market_data_family()
+    return market_data_source_family_readiness(market_data_response)
+
+
 def dpm_mandate_binding_request(
     request: DpmSourceReadinessRequest,
 ) -> DiscretionaryMandateBindingRequest:

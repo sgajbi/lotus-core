@@ -15,6 +15,7 @@ from src.services.query_service.app.services.dpm_source_readiness import (
     dpm_source_family_readiness,
     dpm_source_identity_from_mandate,
     dpm_source_initial_identity,
+    dpm_source_market_data_family,
     dpm_source_model_targets_resolution,
     dpm_source_readiness_supportability,
     dpm_source_tax_lots_family,
@@ -391,6 +392,38 @@ def test_dpm_source_tax_lots_family_preserves_source_supportability() -> None:
     assert family.reason == "TAX_LOTS_STALE"
     assert family.missing_items == ["EQ_US_AAPL"]
     assert family.evidence_count == 4
+
+
+def test_dpm_source_market_data_family_marks_unavailable_evidence() -> None:
+    family = dpm_source_market_data_family(None)
+
+    assert family.family == "market_data"
+    assert family.reason == "MARKET_DATA_COVERAGE_UNAVAILABLE"
+    assert family.missing_items == ["market_data_coverage"]
+
+
+def test_dpm_source_market_data_family_preserves_source_supportability() -> None:
+    family = dpm_source_market_data_family(
+        SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="DEGRADED",
+                reason="MARKET_DATA_STALE",
+                missing_instrument_ids=["EQ_US_AAPL"],
+                missing_currency_pairs=["USD/SGD"],
+                stale_instrument_ids=["EQ_US_MSFT"],
+                stale_currency_pairs=["EUR/USD"],
+                resolved_price_count=3,
+                resolved_fx_count=2,
+            )
+        )
+    )
+
+    assert family.family == "market_data"
+    assert family.state == "DEGRADED"
+    assert family.reason == "MARKET_DATA_STALE"
+    assert family.missing_items == ["EQ_US_AAPL", "USD/SGD"]
+    assert family.stale_items == ["EQ_US_MSFT", "EUR/USD"]
+    assert family.evidence_count == 5
 
 
 def test_dpm_source_readiness_request_builders_preserve_read_scope_policy() -> None:

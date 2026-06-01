@@ -116,13 +116,12 @@ from .dpm_source_readiness import (
     dpm_source_evaluated_instrument_ids,
     dpm_source_identity_from_mandate,
     dpm_source_initial_identity,
+    dpm_source_market_data_family,
     dpm_source_model_targets_resolution,
     dpm_source_tax_lots_family,
     dpm_tax_lot_window_request,
     mandate_source_family_readiness,
-    market_data_source_family_readiness,
     unavailable_mandate_binding_family,
-    unavailable_market_data_family,
 )
 from .external_currency_exposure import build_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
@@ -838,6 +837,7 @@ class IntegrationService:
             )
         )
 
+        market_data: MarketDataCoverageWindowResponse | None = None
         try:
             market_data = await self.get_market_data_coverage(
                 dpm_market_data_coverage_request(
@@ -845,9 +845,9 @@ class IntegrationService:
                     evaluated_instrument_ids=evaluated_instrument_ids,
                 )
             )
-            families.append(market_data_source_family_readiness(market_data))
         except (LookupError, ValueError):
-            families.append(unavailable_market_data_family())
+            market_data = None
+        families.append(dpm_source_market_data_family(market_data))
 
         return build_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
