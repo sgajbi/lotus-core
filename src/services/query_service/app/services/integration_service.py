@@ -83,6 +83,7 @@ from .benchmark_composition import (
     benchmark_composition_definition_context,
     build_benchmark_composition_window_response,
 )
+from .benchmark_coverage import build_benchmark_coverage_response
 from .benchmark_market_series import (
     benchmark_market_series_fx_context,
     build_benchmark_market_series_response,
@@ -1253,26 +1254,16 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
-        request_fingerprint = build_request_fingerprint(
-            {
-                "coverage_key": "benchmark_coverage",
-                "benchmark_id": benchmark_id,
-                "window": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat(),
-                },
-            }
-        )
         coverage = await self._reference_repository.get_benchmark_coverage(
             benchmark_id=benchmark_id,
             start_date=start_date,
             end_date=end_date,
         )
-        return market_reference_coverage_response(
+        return build_benchmark_coverage_response(
+            benchmark_id=benchmark_id,
             coverage=coverage,
             start_date=start_date,
             end_date=end_date,
-            request_fingerprint=request_fingerprint,
         )
 
     async def get_risk_free_coverage(
