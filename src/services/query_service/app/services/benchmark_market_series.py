@@ -256,6 +256,84 @@ async def benchmark_market_series_read_evidence(
     return market_results
 
 
+async def resolve_benchmark_market_series_response(
+    *,
+    repository: Any,
+    benchmark_id: str,
+    request: BenchmarkMarketSeriesRequest,
+    decode_page_token: Callable[[str | None], dict[str, Any]],
+    encode_page_token: Callable[[dict[str, str]], str],
+) -> BenchmarkMarketSeriesResponse:
+    definition = await repository.get_benchmark_definition(
+        benchmark_id,
+        request.as_of_date,
+    )
+    benchmark_currency = benchmark_market_series_currency(
+        definition=definition,
+        target_currency=request.target_currency,
+    )
+    page = getattr(request, "page", None)
+    page_token = getattr(page, "page_token", None)
+    request_scope = benchmark_market_series_request_scope(
+        benchmark_id=benchmark_id,
+        request=request,
+        cursor=decode_page_token(page_token),
+    )
+    candidate_index_ids = await repository.list_benchmark_component_index_ids_overlapping_window(
+        benchmark_id=benchmark_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+        after_index_id=request_scope.cursor_index_id,
+        limit=request_scope.page_size + 1,
+    )
+    index_page = benchmark_market_series_index_page(
+        candidate_index_ids=candidate_index_ids,
+        page_size=request_scope.page_size,
+    )
+    fx_context = benchmark_market_series_fx_context(
+        benchmark_currency=benchmark_currency,
+        target_currency=request.target_currency,
+        requested_fields=request_scope.requested_fields,
+    )
+    evidence_plan = benchmark_market_series_evidence_plan(
+        requested_fields=request_scope.requested_fields,
+        fx_context=fx_context,
+    )
+    market_results = await benchmark_market_series_read_evidence(
+        evidence_plan=evidence_plan,
+        read_factories=benchmark_market_series_evidence_read_factories(
+            repository=repository,
+            benchmark_id=benchmark_id,
+            request=request,
+            benchmark_currency=benchmark_currency,
+            index_ids=index_page.index_ids,
+        ),
+    )
+    next_page_token = benchmark_market_series_page_token(
+        request_scope=request_scope,
+        has_more=index_page.has_more,
+        index_ids=index_page.index_ids,
+        encode_page_token=encode_page_token,
+    )
+
+    return build_benchmark_market_series_response(
+        benchmark_id=benchmark_id,
+        request=request,
+        benchmark_currency=benchmark_currency,
+        request_scope_fingerprint=request_scope.request_fingerprint,
+        page_size=request_scope.page_size,
+        has_more=index_page.has_more,
+        next_page_token=next_page_token,
+        index_ids=index_page.index_ids,
+        component_rows=market_results["components"],
+        index_prices=market_results.get("index_prices", []),
+        index_returns=market_results.get("index_returns", []),
+        benchmark_returns=market_results.get("benchmark_returns", []),
+        fx_rates=market_results.get("fx_rates", {}),
+        fx_context=fx_context,
+    )
+
+
 def benchmark_market_series_normalization_status(
     fx_context: BenchmarkMarketSeriesFxContext,
     fx_rates: dict[date, Decimal],

@@ -84,15 +84,7 @@ from .benchmark_composition import (
 )
 from .benchmark_coverage import build_benchmark_coverage_response
 from .benchmark_market_series import (
-    benchmark_market_series_currency,
-    benchmark_market_series_evidence_plan,
-    benchmark_market_series_evidence_read_factories,
-    benchmark_market_series_fx_context,
-    benchmark_market_series_index_page,
-    benchmark_market_series_page_token,
-    benchmark_market_series_read_evidence,
-    benchmark_market_series_request_scope,
-    build_benchmark_market_series_response,
+    resolve_benchmark_market_series_response,
 )
 from .benchmark_return_series import build_benchmark_return_series_response
 from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
@@ -930,74 +922,12 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
-        definition = await self._reference_repository.get_benchmark_definition(
-            benchmark_id, request.as_of_date
-        )
-        benchmark_currency = benchmark_market_series_currency(
-            definition=definition,
-            target_currency=request.target_currency,
-        )
-        page = getattr(request, "page", None)
-        page_token = getattr(page, "page_token", None)
-        request_scope = benchmark_market_series_request_scope(
+        return await resolve_benchmark_market_series_response(
+            repository=self._reference_repository,
             benchmark_id=benchmark_id,
             request=request,
-            cursor=self._decode_page_token(page_token),
-        )
-        candidate_index_ids = (
-            await self._reference_repository.list_benchmark_component_index_ids_overlapping_window(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-                after_index_id=request_scope.cursor_index_id,
-                limit=request_scope.page_size + 1,
-            )
-        )
-        index_page = benchmark_market_series_index_page(
-            candidate_index_ids=candidate_index_ids,
-            page_size=request_scope.page_size,
-        )
-        fx_context = benchmark_market_series_fx_context(
-            benchmark_currency=benchmark_currency,
-            target_currency=request.target_currency,
-            requested_fields=request_scope.requested_fields,
-        )
-        evidence_plan = benchmark_market_series_evidence_plan(
-            requested_fields=request_scope.requested_fields,
-            fx_context=fx_context,
-        )
-        market_results = await benchmark_market_series_read_evidence(
-            evidence_plan=evidence_plan,
-            read_factories=benchmark_market_series_evidence_read_factories(
-                repository=self._reference_repository,
-                benchmark_id=benchmark_id,
-                request=request,
-                benchmark_currency=benchmark_currency,
-                index_ids=index_page.index_ids,
-            ),
-        )
-        next_page_token = benchmark_market_series_page_token(
-            request_scope=request_scope,
-            has_more=index_page.has_more,
-            index_ids=index_page.index_ids,
+            decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
-        )
-
-        return build_benchmark_market_series_response(
-            benchmark_id=benchmark_id,
-            request=request,
-            benchmark_currency=benchmark_currency,
-            request_scope_fingerprint=request_scope.request_fingerprint,
-            page_size=request_scope.page_size,
-            has_more=index_page.has_more,
-            next_page_token=next_page_token,
-            index_ids=index_page.index_ids,
-            component_rows=market_results["components"],
-            index_prices=market_results.get("index_prices", []),
-            index_returns=market_results.get("index_returns", []),
-            benchmark_returns=market_results.get("benchmark_returns", []),
-            fx_rates=market_results.get("fx_rates", {}),
-            fx_context=fx_context,
         )
 
     async def get_index_price_series(

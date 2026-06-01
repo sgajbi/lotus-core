@@ -19,6 +19,7 @@ from src.services.query_service.app.services.benchmark_market_series import (
     benchmark_market_series_read_evidence,
     benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
+    resolve_benchmark_market_series_response,
 )
 
 
@@ -273,6 +274,129 @@ def test_benchmark_market_series_evidence_read_factories_bind_repository_scope()
                 "end_date": date(2026, 1, 2),
             },
         ),
+    ]
+
+
+def test_resolve_benchmark_market_series_response_orchestrates_repository_reads() -> None:
+    async def run_case() -> tuple[
+        object, list[tuple[str, dict[str, object]]], list[dict[str, str]]
+    ]:
+        calls: list[tuple[str, dict[str, object]]] = []
+        encoded_payloads: list[dict[str, str]] = []
+
+        class Repository:
+            async def get_benchmark_definition(
+                self,
+                benchmark_id: str,
+                as_of_date: date,
+            ) -> SimpleNamespace:
+                calls.append(
+                    (
+                        "definition",
+                        {"benchmark_id": benchmark_id, "as_of_date": as_of_date},
+                    )
+                )
+                return SimpleNamespace(benchmark_currency="EUR")
+
+            async def list_benchmark_component_index_ids_overlapping_window(
+                self,
+                **kwargs: object,
+            ) -> list[str]:
+                calls.append(("component_index_ids", kwargs))
+                return ["IDX_A", "IDX_B", "IDX_C"]
+
+            async def list_benchmark_components_overlapping_window(
+                self,
+                **kwargs: object,
+            ) -> list[SimpleNamespace]:
+                calls.append(("components", kwargs))
+                return [
+                    SimpleNamespace(
+                        index_id="IDX_A",
+                        composition_weight=Decimal("0.6000000000"),
+                        composition_effective_from=date(2026, 1, 1),
+                        composition_effective_to=None,
+                        quality_status="accepted",
+                        source_timestamp=datetime(2026, 1, 2, 8, 0, 0),
+                    )
+                ]
+
+            async def list_index_price_points(self, **kwargs: object) -> list[SimpleNamespace]:
+                calls.append(("index_prices", kwargs))
+                return [
+                    SimpleNamespace(
+                        index_id="IDX_A",
+                        series_date=date(2026, 1, 1),
+                        index_price=Decimal("100.0000000000"),
+                        series_currency="EUR",
+                        quality_status="accepted",
+                        source_timestamp=datetime(2026, 1, 2, 9, 0, 0),
+                    )
+                ]
+
+            async def list_index_return_points(self, **kwargs: object) -> list[SimpleNamespace]:
+                calls.append(("index_returns", kwargs))
+                return []
+
+            async def list_benchmark_return_points(self, **kwargs: object) -> list[SimpleNamespace]:
+                calls.append(("benchmark_returns", kwargs))
+                return []
+
+            async def get_fx_rates(self, **kwargs: object) -> dict[date, Decimal]:
+                calls.append(("fx_rates", kwargs))
+                return {date(2026, 1, 1): Decimal("1.1000")}
+
+        def encode(payload: dict[str, str]) -> str:
+            encoded_payloads.append(payload)
+            return "encoded-token"
+
+        response = await resolve_benchmark_market_series_response(
+            repository=Repository(),
+            benchmark_id="BMK_GLOBAL_BALANCED",
+            request=BenchmarkMarketSeriesRequest(
+                as_of_date=date(2026, 1, 2),
+                window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+                frequency="daily",
+                target_currency="USD",
+                series_fields=["index_price", "fx_rate"],
+                page={"page_size": 2},
+            ),
+            decode_page_token=lambda _: {},
+            encode_page_token=encode,
+        )
+        return response, calls, encoded_payloads
+
+    response, calls, encoded_payloads = asyncio.run(run_case())
+
+    assert response.benchmark_currency == "EUR"
+    assert response.page.next_page_token == "encoded-token"
+    assert response.page.returned_component_count == 2
+    assert (
+        response.normalization_status
+        == "native_component_series_with_benchmark_to_target_fx_context"
+    )
+    assert [call[0] for call in calls] == [
+        "definition",
+        "component_index_ids",
+        "components",
+        "index_prices",
+        "fx_rates",
+    ]
+    assert calls[1] == (
+        "component_index_ids",
+        {
+            "benchmark_id": "BMK_GLOBAL_BALANCED",
+            "start_date": date(2026, 1, 1),
+            "end_date": date(2026, 1, 2),
+            "after_index_id": None,
+            "limit": 3,
+        },
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": response.request_fingerprint,
+            "last_index_id": "IDX_B",
+        }
     ]
 
 
