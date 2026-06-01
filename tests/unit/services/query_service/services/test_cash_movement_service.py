@@ -11,6 +11,16 @@ from src.services.query_service.app.services.cash_movement_service import CashMo
 pytestmark = pytest.mark.asyncio
 
 
+class _StringCountedAmount:
+    def __init__(self, raw: str) -> None:
+        self.raw = raw
+        self.stringify_count = 0
+
+    def __str__(self) -> str:
+        self.stringify_count += 1
+        return self.raw
+
+
 @pytest.fixture
 def mock_repo() -> AsyncMock:
     repo = AsyncMock(spec=CashflowRepository)
@@ -70,6 +80,37 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
     assert "not a forecast" in response.notes
 
 
+async def test_cash_movement_summary_converts_bucket_amount_once(mock_repo: AsyncMock) -> None:
+    counted_amount = _StringCountedAmount("-2500.00")
+    mock_repo.get_portfolio_cash_movement_summary.return_value = [
+        (
+            "TRADE_SETTLEMENT",
+            "SETTLED",
+            "USD",
+            True,
+            False,
+            1,
+            counted_amount,
+            datetime(2026, 3, 6, 9, 15, tzinfo=UTC),
+        )
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.cash_movement_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashMovementService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_movement_summary(
+            portfolio_id="P1",
+            start_date=date(2026, 3, 1),
+            end_date=date(2026, 3, 31),
+        )
+
+    assert response.buckets[0].total_amount == Decimal("-2500.00")
+    assert response.buckets[0].movement_direction == "OUTFLOW"
+    assert counted_amount.stringify_count == 1
+
+
 async def test_cash_movement_summary_marks_empty_window_missing(mock_repo: AsyncMock) -> None:
     mock_repo.get_portfolio_cash_movement_summary.return_value = []
 
@@ -103,6 +144,23 @@ async def test_cash_movement_summary_rejects_invalid_window(mock_repo: AsyncMock
                 end_date=date(2026, 3, 31),
             )
 
+    mock_repo.get_portfolio_cash_movement_summary.assert_not_awaited()
+
+
+async def test_cash_movement_summary_rejects_excessive_window(mock_repo: AsyncMock) -> None:
+    with patch(
+        "src.services.query_service.app.services.cash_movement_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashMovementService(AsyncMock(spec=AsyncSession))
+        with pytest.raises(ValueError, match="date window must be 366 days or less"):
+            await service.get_cash_movement_summary(
+                portfolio_id="P1",
+                start_date=date(2026, 1, 1),
+                end_date=date(2027, 1, 2),
+            )
+
+    mock_repo.get_portfolio_currency.assert_not_awaited()
     mock_repo.get_portfolio_cash_movement_summary.assert_not_awaited()
 
 

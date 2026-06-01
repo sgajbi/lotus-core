@@ -7,6 +7,16 @@ from src.services.query_service.app.services.position_flow_effects import (
 )
 
 
+class _StringCountedValue:
+    def __init__(self, value: str) -> None:
+        self.value = value
+        self.string_call_count = 0
+
+    def __str__(self) -> str:
+        self.string_call_count += 1
+        return self.value
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "quantity", "amount", "expected"),
     [
@@ -49,3 +59,24 @@ from src.services.query_service.app.services.position_flow_effects import (
 def test_transaction_quantity_effect_decimal(transaction_type, quantity, amount, expected):
     assert transaction_quantity_effect_decimal(transaction_type, quantity, amount) == expected
 
+
+def test_cash_position_effect_does_not_convert_unused_quantity() -> None:
+    quantity = _StringCountedValue("999")
+    amount = _StringCountedValue("7")
+
+    effect = transaction_quantity_effect_decimal("DEPOSIT", quantity, amount)
+
+    assert effect == Decimal("7")
+    assert quantity.string_call_count == 0
+    assert amount.string_call_count == 1
+
+
+def test_unknown_position_effect_does_not_convert_unused_values() -> None:
+    quantity = _StringCountedValue("999")
+    amount = _StringCountedValue("7")
+
+    effect = transaction_quantity_effect_decimal("UNKNOWN", quantity, amount)
+
+    assert effect == Decimal("0")
+    assert quantity.string_call_count == 0
+    assert amount.string_call_count == 0

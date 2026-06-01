@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
 
 from src.services.query_service.app.dtos.operations_dto import SupportOverviewResponse
-from src.services.query_service.app.repositories.operations_repository import (
+from src.services.query_service.app.repositories.operations_models import (
     MissingHistoricalFxDependencyRecord,
     MissingHistoricalFxDependencySummary,
     SnapshotValuationCoverageSummary,

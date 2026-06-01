@@ -17,6 +17,16 @@ from cost_engine.processing.disposition_engine import (
 )
 
 
+class _StringCountedAmount:
+    def __init__(self, value: str) -> None:
+        self.value = value
+        self.string_call_count = 0
+
+    def __str__(self) -> str:
+        self.string_call_count += 1
+        return self.value
+
+
 @pytest.fixture
 def mock_strategy() -> MagicMock:
     """Provides a mock of the CostBasisStrategy for testing the engine's delegation."""
@@ -101,6 +111,30 @@ def test_consume_sell_quantity_delegates_to_strategy(
         sample_transaction.instrument_id,
         sample_transaction.quantity,
     )
+    assert result == (Decimal("105"), Decimal("105"), Decimal("10"), None)
+
+
+def test_consume_sell_quantity_normalizes_quantity_once(
+    disposition_engine: DispositionEngine, mock_strategy: MagicMock, sample_transaction: Transaction
+):
+    quantity = _StringCountedAmount("10")
+    sample_transaction.transaction_type = TransactionType.SELL
+    sample_transaction.quantity = quantity
+    mock_strategy.consume_sell_quantity.return_value = (
+        Decimal("105"),
+        Decimal("105"),
+        Decimal("10"),
+        None,
+    )
+
+    result = disposition_engine.consume_sell_quantity(sample_transaction)
+
+    mock_strategy.consume_sell_quantity.assert_called_once_with(
+        sample_transaction.portfolio_id,
+        sample_transaction.instrument_id,
+        Decimal("10"),
+    )
+    assert quantity.string_call_count == 1
     assert result == (Decimal("105"), Decimal("105"), Decimal("10"), None)
 
 

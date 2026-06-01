@@ -128,6 +128,55 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
     assert response.portfolios[0].aum_portfolio_currency == Decimal("150")
 
 
+async def test_get_assets_under_management_converts_snapshot_rows_sequentially() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="100"),
+            instrument=_instrument("SEC1"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2"),
+        ),
+    ]
+    call_order: list[Decimal] = []
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        call_order.append(amount)
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return amount * Decimal("1.5")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+        response = await service.get_assets_under_management(
+            AssetsUnderManagementQueryRequest(
+                scope=ReportingScope(portfolio_ids=["P1"]),
+                reporting_currency="SGD",
+            )
+        )
+
+    assert response.totals.aum_reporting_currency == Decimal("225.0")
+    assert call_order == [Decimal("100"), Decimal("50")]
+
+
 async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversion() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
@@ -243,6 +292,179 @@ async def test_get_portfolio_summary_returns_historical_restated_totals() -> Non
     assert response.snapshot_metadata.unvalued_position_count == 1
 
 
+async def test_get_portfolio_summary_converts_snapshot_rows_sequentially() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio.portfolio_type = "DISCRETIONARY"
+    portfolio.objective = "Growth"
+    portfolio.risk_exposure = "BALANCED"
+    portfolio.status = "ACTIVE"
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {}
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="800"),
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC2", market_value="200"),
+            instrument=_instrument("SEC2", asset_class="BOND"),
+        ),
+    ]
+    call_order: list[Decimal] = []
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        call_order.append(amount)
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return amount * Decimal("1.5")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+        )
+
+    assert response.totals.total_market_value_reporting_currency == Decimal("1500.0")
+    assert response.snapshot_metadata.valued_position_count == 2
+    assert call_order == [Decimal("800"), Decimal("200")]
+
+
+async def test_get_portfolio_summary_reads_cash_accounts_and_reporting_values_sequentially() -> (
+    None
+):
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio.portfolio_type = "DISCRETIONARY"
+    portfolio.objective = "Growth"
+    portfolio.risk_exposure = "BALANCED"
+    portfolio.status = "ACTIVE"
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="800"),
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+        )
+    ]
+    call_order: list[str] = []
+
+    async def build_cash_account_balance_records(**_kwargs):
+        call_order.append("cash")
+        return []
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        call_order.append("reporting")
+        assert amount == Decimal("800")
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return Decimal("1200.0")
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._cash_balance_resolver.build_cash_account_balance_records = AsyncMock(
+            side_effect=build_cash_account_balance_records
+        )
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(portfolio_id="P1", reporting_currency="SGD")
+        )
+
+    assert response.totals.total_market_value_reporting_currency == Decimal("1200.0")
+    assert response.snapshot_metadata.cash_account_count == 0
+    assert call_order == ["cash", "reporting"]
+
+
+async def test_get_portfolio_summary_reads_portfolio_and_default_date_sequentially() -> None:
+    repo = AsyncMock()
+    call_order: list[str] = []
+    repo.list_latest_snapshot_rows.return_value = []
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {}
+
+    async def get_portfolio_by_id(portfolio_id: str):
+        call_order.append("portfolio")
+        portfolio = _portfolio(portfolio_id, base_currency="USD")
+        portfolio.portfolio_type = "DISCRETIONARY"
+        portfolio.objective = "Growth"
+        portfolio.risk_exposure = "BALANCED"
+        portfolio.status = "ACTIVE"
+        return portfolio
+
+    async def get_latest_business_date() -> date:
+        call_order.append("date")
+        return date(2026, 3, 27)
+
+    repo.get_portfolio_by_id.side_effect = get_portfolio_by_id
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(portfolio_id="P1")
+        )
+
+    assert response.resolved_as_of_date == date(2026, 3, 27)
+    assert call_order == ["portfolio", "date"]
+
+
+async def test_get_portfolio_summary_explicit_date_skips_default_date_lookup() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio.portfolio_type = "DISCRETIONARY"
+    portfolio.objective = "Growth"
+    portfolio.risk_exposure = "BALANCED"
+    portfolio.status = "ACTIVE"
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = []
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {}
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_portfolio_summary(
+            PortfolioSummaryQueryRequest(
+                portfolio_id="P1",
+                as_of_date=date(2026, 3, 26),
+            )
+        )
+
+    assert response.resolved_as_of_date == date(2026, 3, 26)
+    repo.get_latest_business_date.assert_not_awaited()
+
+
 async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio() -> None:
     repo = AsyncMock()
     repo.get_portfolio_by_id.return_value = None
@@ -253,9 +475,7 @@ async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio()
     ):
         service = ReportingService(AsyncMock(spec=AsyncSession))
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
-            await service.get_portfolio_summary(
-                PortfolioSummaryQueryRequest(portfolio_id="P404")
-            )
+            await service.get_portfolio_summary(PortfolioSummaryQueryRequest(portfolio_id="P404"))
 
 
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:
@@ -366,7 +586,12 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
             portfolio=portfolio,
             snapshot=_snapshot(" FUND1 ", market_value="100"),
             instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
-        )
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("FUND1", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        ),
     ]
     repo.list_instrument_lookthrough_components.return_value = [
         InstrumentLookthroughComponentRow(
@@ -391,19 +616,128 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
         )
 
     assert response.look_through.applied_mode == "prefer_look_through"
-    assert response.look_through.decomposed_position_count == 1
+    assert response.look_through.decomposed_position_count == 2
     asset_class_view = next(view for view in response.views if view.dimension == "asset_class")
     buckets = [
         (bucket.dimension_value, bucket.market_value_reporting_currency)
         for bucket in asset_class_view.buckets
     ]
     assert buckets == [
-        ("EQUITY", Decimal("100")),
+        ("EQUITY", Decimal("200")),
     ]
     repo.list_instrument_lookthrough_components.assert_awaited_once_with(
         parent_security_ids=["FUND1"],
         as_of_date=date(2026, 3, 27),
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_allocation_rows_reuses_reporting_values_for_lookthrough() -> None:
+    repo = AsyncMock()
+    rows = [
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot(" FUND1 ", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2", asset_class="EQUITY", country_of_risk="US"),
+        ),
+    ]
+    repo.list_instrument_lookthrough_components.return_value = [
+        InstrumentLookthroughComponentRow(
+            parent_security_id="FUND1",
+            component_security_id="ETF1",
+            component_weight=Decimal("1"),
+            component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+        )
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=lambda *, amount, **_: amount)
+        allocation_rows, lookthrough = await service._resolve_allocation_rows(
+            rows=rows,
+            requested_mode="prefer_look_through",
+            as_of_date=date(2026, 3, 27),
+            reporting_currency="SGD",
+        )
+
+    assert service._convert_amount.await_count == len(rows)
+    assert lookthrough.applied_mode == "prefer_look_through"
+    assert allocation_rows == [
+        (
+            repo.list_instrument_lookthrough_components.return_value[0].component_instrument,
+            SimpleNamespace(security_id="ETF1"),
+            Decimal("100"),
+        ),
+        (rows[1].instrument, rows[1].snapshot, Decimal("50")),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resolve_allocation_rows_reads_conversions_and_components_sequentially() -> None:
+    repo = AsyncMock()
+    rows = [
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot(" FUND1 ", market_value="100"),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=_portfolio("P1", base_currency="USD"),
+            snapshot=_snapshot("SEC2", market_value="50"),
+            instrument=_instrument("SEC2", asset_class="EQUITY", country_of_risk="US"),
+        ),
+    ]
+    call_order: list[str] = []
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        call_order.append(f"convert:{amount}")
+        assert from_currency == "USD"
+        assert to_currency == "SGD"
+        assert as_of_date == date(2026, 3, 27)
+        return amount
+
+    async def list_components(
+        *,
+        parent_security_ids: list[str],
+        as_of_date: date,
+    ) -> list[InstrumentLookthroughComponentRow]:
+        call_order.append("components")
+        assert parent_security_ids == ["FUND1", "SEC2"]
+        assert as_of_date == date(2026, 3, 27)
+        return []
+
+    repo.list_instrument_lookthrough_components.side_effect = list_components
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+        allocation_rows, lookthrough = await service._resolve_allocation_rows(
+            rows=rows,
+            requested_mode="direct_only",
+            as_of_date=date(2026, 3, 27),
+            reporting_currency="SGD",
+        )
+
+    assert [row[1].security_id for row in allocation_rows] == [" FUND1 ", "SEC2"]
+    assert lookthrough.applied_mode == "direct_only"
+    assert call_order == ["convert:100", "convert:50", "components"]
 
 
 @pytest.mark.asyncio
@@ -422,6 +756,25 @@ async def test_reporting_service_can_decompose_position_requires_complete_weight
                     parent_security_id="FUND1",
                     component_security_id="ETF2",
                     component_weight=Decimal("0.2"),
+                    component_instrument=_instrument("ETF2"),
+                ),
+            ]
+        )
+        is False
+    )
+    assert (
+        ReportingService._can_decompose_position(
+            [
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF1",
+                    component_weight=" ",
+                    component_instrument=_instrument("ETF1"),
+                ),
+                InstrumentLookthroughComponentRow(
+                    parent_security_id="FUND1",
+                    component_security_id="ETF2",
+                    component_weight=Decimal("1"),
                     component_instrument=_instrument("ETF2"),
                 ),
             ]
@@ -482,6 +835,40 @@ async def test_reporting_service_resolve_scope_requires_matching_portfolios() ->
                 ReportingScope(portfolio_id="P1"),
                 None,
             )
+
+
+@pytest.mark.asyncio
+async def test_reporting_service_resolve_scope_reads_default_date_and_portfolios_sequentially() -> (
+    None
+):
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    call_order: list[str] = []
+
+    async def get_latest_business_date() -> date:
+        call_order.append("date")
+        return date(2026, 3, 27)
+
+    async def list_portfolios(**_: object) -> list[object]:
+        call_order.append("portfolios")
+        return [portfolio]
+
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+    repo.list_portfolios.side_effect = list_portfolios
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        portfolios, resolved_as_of_date = await service._resolve_scope_portfolios_and_date(
+            ReportingScope(portfolio_id="P1"),
+            None,
+        )
+
+    assert portfolios == [portfolio]
+    assert resolved_as_of_date == date(2026, 3, 27)
+    assert call_order == ["date", "portfolios"]
 
 
 @pytest.mark.asyncio
@@ -547,18 +934,3 @@ async def test_reporting_service_get_fx_rate_uses_cache_and_raises_for_missing_r
         )
         with pytest.raises(ValueError, match="FX rate not found"):
             await service._get_fx_rate(" chf ", " usd ", date(2026, 3, 27))
-
-
-@pytest.mark.asyncio
-async def test_reporting_service_latest_snapshot_evidence_timestamp_prefers_latest_available_update(
-) -> None:
-    older = datetime(2026, 3, 27, 9, 0)
-    newer = datetime(2026, 3, 27, 10, 0)
-    rows = [
-        SimpleNamespace(snapshot=SimpleNamespace(created_at=older, updated_at=None)),
-        SimpleNamespace(snapshot=SimpleNamespace(created_at=older, updated_at=newer)),
-        SimpleNamespace(snapshot=None),
-    ]
-
-    assert ReportingService._latest_snapshot_evidence_timestamp(rows) == newer
-    assert ReportingService._latest_snapshot_evidence_timestamp([]) is None

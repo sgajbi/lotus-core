@@ -76,6 +76,29 @@ async def test_reference_data_repository_lists_latest_market_data_windows() -> N
 
 
 @pytest.mark.asyncio
+async def test_latest_market_data_queries_deduplicate_normalized_inputs() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.side_effect = [_FakeExecuteResult([]), _FakeExecuteResult([])]
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_latest_market_prices(
+        security_ids=[" EQ_US_AAPL ", "EQ_US_AAPL", " FI_US_TREASURY_10Y "],
+        as_of_date=date(2026, 4, 10),
+    )
+    await repo.list_latest_fx_rates(
+        currency_pairs=[(" usd ", " sgd "), ("USD", "SGD"), (" eur ", " usd ")],
+        as_of_date=date(2026, 4, 10),
+    )
+
+    price_stmt = db.execute.await_args_list[0].args[0]
+    price_params = price_stmt.compile().params
+    assert ["EQ_US_AAPL", "FI_US_TREASURY_10Y"] in price_params.values()
+    fx_stmt = db.execute.await_args_list[1].args[0]
+    fx_params = fx_stmt.compile().params
+    assert [("USD", "SGD"), ("EUR", "USD")] in fx_params.values()
+
+
+@pytest.mark.asyncio
 async def test_reference_data_repository_normalizes_market_reference_currency_filters() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [
@@ -110,8 +133,15 @@ async def test_reference_data_repository_normalizes_market_reference_currency_fi
     )
 
     assert "benchmark_definitions.benchmark_currency = 'USD'" in benchmark_sql
+    assert "row_number() OVER (PARTITION BY benchmark_definitions.benchmark_id" in benchmark_sql
+    assert "anon_1.rn = 1" in benchmark_sql
     assert "index_definitions.index_currency = 'SGD'" in index_sql
+    assert "row_number() OVER (PARTITION BY index_definitions.index_id" in index_sql
+    assert "anon_1.rn = 1" in index_sql
     assert "risk_free_series.series_currency = 'EUR'" in risk_free_sql
+    assert "row_number() OVER (PARTITION BY risk_free_series.series_date" in risk_free_sql
+    assert "upper(trim(risk_free_series.quality_status)) = 'ACCEPTED'" in risk_free_sql
+    assert "anon_1.rn = 1" in risk_free_sql
 
 
 @pytest.mark.asyncio
@@ -207,7 +237,14 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         _FakeExecuteResult(
             [SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted")]
         ),
-        _FakeExecuteResult([SimpleNamespace(rate_date=date(2026, 1, 1), rate=Decimal("1.1"))]),
+        _FakeExecuteResult(
+            [
+                SimpleNamespace(rate_date=date(2026, 1, 1), rate=Decimal("1.1")),
+                SimpleNamespace(rate_date=date(2026, 1, 2), rate=" "),
+                SimpleNamespace(rate_date=date(2026, 1, 3), rate=None),
+                SimpleNamespace(rate_date=date(2026, 1, 4), rate=" 1.4 "),
+            ]
+        ),
     ]
 
     repo = ReferenceDataRepository(db)
@@ -220,6 +257,14 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert await repo.list_benchmark_definitions(date(2026, 1, 1), "composite", "USD", "active")
     assert await repo.list_index_definitions(date(2026, 1, 1), None, "USD", "equity", "active")
     assert await repo.list_benchmark_components("B1", date(2026, 1, 1))
+    benchmark_component_sql = str(
+        db.execute.await_args_list[5].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
+        "benchmark_composition_series.index_id"
+    ) in benchmark_component_sql
+    assert "anon_1.rn = 1" in benchmark_component_sql
     assert await repo.list_benchmark_components_overlapping_window(
         "B1", date(2026, 1, 1), date(2026, 1, 2)
     )
@@ -237,6 +282,26 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         as_of_date=date(2026, 1, 1),
     )
     assert grouped_components["B1"][0].index_id == "IDX_1"
+    benchmark_components_stmt = db.execute.await_args_list[14].args[0]
+    benchmark_components_sql = str(
+        benchmark_components_stmt.compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "benchmark_composition_series.benchmark_id IN ('B1')" in benchmark_components_sql
+    assert "benchmark_composition_series.composition_effective_from <= '2026-01-01'" in (
+        benchmark_components_sql
+    )
+    assert "benchmark_composition_series.composition_effective_to IS NULL" in (
+        benchmark_components_sql
+    )
+    assert (
+        "ORDER BY benchmark_composition_series.benchmark_id ASC, "
+        "benchmark_composition_series.index_id ASC"
+    ) in benchmark_components_sql
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
+        "benchmark_composition_series.index_id"
+    ) in benchmark_components_sql
+    assert "anon_1.rn = 1" in benchmark_components_sql
 
     benchmark_coverage = await repo.get_benchmark_coverage(
         benchmark_id="B1",
@@ -259,10 +324,73 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         end_date=date(2026, 1, 2),
     )
     assert fx_rates[date(2026, 1, 1)] == Decimal("1.1")
+    assert date(2026, 1, 2) not in fx_rates
+    assert date(2026, 1, 3) not in fx_rates
+    assert fx_rates[date(2026, 1, 4)] == Decimal("1.4")
     fx_stmt = db.execute.await_args_list[19].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_pages_benchmark_component_index_ids() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult(["IDX2", "IDX3"])
+    repo = ReferenceDataRepository(db)
+
+    index_ids = await repo.list_benchmark_component_index_ids_overlapping_window(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        after_index_id="IDX1",
+        limit=3,
+    )
+
+    assert index_ids == ["IDX2", "IDX3"]
+    stmt = db.execute.await_args.args[0]
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SELECT DISTINCT benchmark_composition_series.index_id" in sql
+    assert "benchmark_composition_series.benchmark_id = 'B1'" in sql
+    assert "benchmark_composition_series.composition_effective_from <= '2026-01-31'" in sql
+    assert "benchmark_composition_series.composition_effective_to >= '2026-01-01'" in sql
+    assert "benchmark_composition_series.index_id > 'IDX1'" in sql
+    assert "ORDER BY benchmark_composition_series.index_id ASC" in sql
+    assert "LIMIT 3" in sql
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_filters_window_components_by_index_ids() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = ReferenceDataRepository(db)
+
+    await repo.list_benchmark_components_overlapping_window(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        index_ids=["IDX1", "IDX2"],
+    )
+
+    stmt = db.execute.await_args.args[0]
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "benchmark_composition_series.index_id IN ('IDX1', 'IDX2')" in sql
+
+
+@pytest.mark.asyncio
+async def test_reference_data_repository_skips_empty_component_index_filter() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = ReferenceDataRepository(db)
+
+    rows = await repo.list_benchmark_components_overlapping_window(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        index_ids=[],
+    )
+
+    assert rows == []
+    db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -321,11 +449,6 @@ async def test_reference_data_repository_lists_latest_client_restriction_profile
                 restriction_version=2,
             ),
             SimpleNamespace(
-                restriction_scope="asset_class",
-                restriction_code="NO_PRIVATE_CREDIT_BUY",
-                restriction_version=1,
-            ),
-            SimpleNamespace(
                 restriction_scope="country",
                 restriction_code="NO_SANCTIONED_MARKET_BUY",
                 restriction_version=1,
@@ -347,6 +470,12 @@ async def test_reference_data_repository_lists_latest_client_restriction_profile
     ]
     assert rows[0].restriction_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY client_restriction_profiles.restriction_scope, "
+        "client_restriction_profiles.restriction_code"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -358,11 +487,6 @@ async def test_reference_data_repository_lists_latest_sustainability_preferences
                 preference_framework="LOTUS_SUSTAINABILITY_V1",
                 preference_code="MIN_SUSTAINABLE_ALLOCATION",
                 preference_version=2,
-            ),
-            SimpleNamespace(
-                preference_framework="LOTUS_SUSTAINABILITY_V1",
-                preference_code="MIN_SUSTAINABLE_ALLOCATION",
-                preference_version=1,
             ),
             SimpleNamespace(
                 preference_framework="LOTUS_SUSTAINABILITY_V1",
@@ -386,6 +510,13 @@ async def test_reference_data_repository_lists_latest_sustainability_preferences
     ]
     assert rows[0].preference_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY "
+        "sustainability_preference_profiles.preference_framework, "
+        "sustainability_preference_profiles.preference_code"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -394,7 +525,6 @@ async def test_reference_data_repository_lists_latest_client_tax_profiles() -> N
     db.execute.return_value = _FakeExecuteResult(
         [
             SimpleNamespace(tax_profile_id="TAX_PROFILE_SG_001", profile_version=2),
-            SimpleNamespace(tax_profile_id="TAX_PROFILE_SG_001", profile_version=1),
             SimpleNamespace(tax_profile_id="TAX_PROFILE_US_001", profile_version=1),
         ]
     )
@@ -413,6 +543,9 @@ async def test_reference_data_repository_lists_latest_client_tax_profiles() -> N
     ]
     assert rows[0].profile_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER (PARTITION BY client_tax_profiles.tax_profile_id" in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -423,20 +556,14 @@ async def test_reference_data_repository_lists_latest_client_tax_rule_sets() -> 
             SimpleNamespace(
                 rule_set_id="TAX_RULES_SG_2026",
                 jurisdiction_code="SG",
-                rule_code="US_DIVIDEND_WITHHOLDING",
-                rule_version=2,
-            ),
-            SimpleNamespace(
-                rule_set_id="TAX_RULES_SG_2026",
-                jurisdiction_code="SG",
-                rule_code="US_DIVIDEND_WITHHOLDING",
-                rule_version=1,
-            ),
-            SimpleNamespace(
-                rule_set_id="TAX_RULES_SG_2026",
-                jurisdiction_code="SG",
                 rule_code="SG_REPORTING",
                 rule_version=1,
+            ),
+            SimpleNamespace(
+                rule_set_id="TAX_RULES_SG_2026",
+                jurisdiction_code="SG",
+                rule_code="US_DIVIDEND_WITHHOLDING",
+                rule_version=2,
             ),
         ]
     )
@@ -452,6 +579,12 @@ async def test_reference_data_repository_lists_latest_client_tax_rule_sets() -> 
     assert [row.rule_code for row in rows] == ["SG_REPORTING", "US_DIVIDEND_WITHHOLDING"]
     assert rows[1].rule_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY client_tax_rule_sets.rule_set_id, "
+        "client_tax_rule_sets.jurisdiction_code, client_tax_rule_sets.rule_code"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -460,16 +593,12 @@ async def test_reference_data_repository_lists_latest_income_needs_schedules() -
     db.execute.return_value = _FakeExecuteResult(
         [
             SimpleNamespace(
-                schedule_id="INCOME_NEED_MONTHLY_001",
-                updated_at=datetime(2026, 5, 3, 9),
-            ),
-            SimpleNamespace(
-                schedule_id="INCOME_NEED_MONTHLY_001",
-                updated_at=datetime(2026, 5, 1, 9),
-            ),
-            SimpleNamespace(
                 schedule_id="INCOME_NEED_ANNUAL_001",
                 updated_at=datetime(2026, 5, 2, 9),
+            ),
+            SimpleNamespace(
+                schedule_id="INCOME_NEED_MONTHLY_001",
+                updated_at=datetime(2026, 5, 3, 9),
             ),
         ]
     )
@@ -488,6 +617,9 @@ async def test_reference_data_repository_lists_latest_income_needs_schedules() -
     ]
     assert rows[1].updated_at == datetime(2026, 5, 3, 9)
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER (PARTITION BY client_income_needs_schedules.schedule_id" in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -495,11 +627,6 @@ async def test_reference_data_repository_lists_latest_liquidity_reserve_requirem
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
-            SimpleNamespace(
-                reserve_requirement_id="RESERVE_MIN_CASH_001",
-                effective_from=date(2026, 4, 1),
-                requirement_version=1,
-            ),
             SimpleNamespace(
                 reserve_requirement_id="RESERVE_MIN_CASH_001",
                 effective_from=date(2026, 5, 1),
@@ -527,6 +654,11 @@ async def test_reference_data_repository_lists_latest_liquidity_reserve_requirem
     ]
     assert rows[0].requirement_version == 2
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY liquidity_reserve_requirements.reserve_requirement_id"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -538,11 +670,6 @@ async def test_reference_data_repository_lists_latest_planned_withdrawals() -> N
                 withdrawal_schedule_id="WITHDRAWAL_Q3_001",
                 scheduled_date=date(2026, 7, 15),
                 updated_at=datetime(2026, 5, 3, 9),
-            ),
-            SimpleNamespace(
-                withdrawal_schedule_id="WITHDRAWAL_Q3_001",
-                scheduled_date=date(2026, 7, 15),
-                updated_at=datetime(2026, 5, 1, 9),
             ),
             SimpleNamespace(
                 withdrawal_schedule_id="WITHDRAWAL_Q4_001",
@@ -567,6 +694,13 @@ async def test_reference_data_repository_lists_latest_planned_withdrawals() -> N
     ]
     assert rows[0].updated_at == datetime(2026, 5, 3, 9)
     db.execute.assert_awaited_once()
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "row_number() OVER (PARTITION BY "
+        "planned_withdrawal_schedules.withdrawal_schedule_id, "
+        "planned_withdrawal_schedules.scheduled_date"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -574,11 +708,6 @@ async def test_list_instrument_eligibility_profiles_returns_latest_effective_row
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
-            SimpleNamespace(
-                security_id="AAPL",
-                effective_from=date(2026, 1, 1),
-                eligibility_status="RESTRICTED",
-            ),
             SimpleNamespace(
                 security_id="AAPL",
                 effective_from=date(2026, 4, 1),
@@ -603,12 +732,15 @@ async def test_list_instrument_eligibility_profiles_returns_latest_effective_row
         ("MSFT", "APPROVED"),
     ]
     eligibility_stmt = db.execute.await_args.args[0]
-    eligibility_sql = str(
-        eligibility_stmt.compile(compile_kwargs={"literal_binds": True})
-    ).lower()
+    eligibility_sql = str(eligibility_stmt.compile(compile_kwargs={"literal_binds": True})).lower()
     assert "trim(instrument_eligibility_profiles.security_id) in ('aapl', 'msft')" in (
         eligibility_sql
     )
+    assert (
+        "row_number() over (partition by trim(instrument_eligibility_profiles.security_id)"
+        in eligibility_sql
+    )
+    assert "anon_1.rn = 1" in eligibility_sql
 
 
 @pytest.mark.asyncio
@@ -617,11 +749,6 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
     db.execute.side_effect = [
         _FakeExecuteResult(
             [
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    effective_from=date(2025, 1, 1),
-                    classification_labels={"strategy": "old"},
-                ),
                 SimpleNamespace(
                     benchmark_id="B1",
                     effective_from=date(2025, 4, 1),
@@ -637,9 +764,12 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
         _FakeExecuteResult(
             [
                 SimpleNamespace(
-                    index_id="IDX_GLOBAL_EQUITY_TR",
+                    index_id="IDX_GLOBAL_BOND_TR",
                     effective_from=date(2025, 1, 6),
-                    classification_labels={"asset_class": "equity"},
+                    classification_labels={
+                        "asset_class": "fixed_income",
+                        "sector": "broad_market_fixed_income",
+                    },
                 ),
                 SimpleNamespace(
                     index_id="IDX_GLOBAL_EQUITY_TR",
@@ -649,24 +779,10 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
                         "sector": "broad_market_equity",
                     },
                 ),
-                SimpleNamespace(
-                    index_id="IDX_GLOBAL_BOND_TR",
-                    effective_from=date(2025, 1, 6),
-                    classification_labels={
-                        "asset_class": "fixed_income",
-                        "sector": "broad_market_fixed_income",
-                    },
-                ),
             ]
         ),
         _FakeExecuteResult(
             [
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    index_id="IDX_1",
-                    composition_effective_from=date(2025, 1, 1),
-                    composition_weight=Decimal("0.60"),
-                ),
                 SimpleNamespace(
                     benchmark_id="B1",
                     index_id="IDX_1",
@@ -703,6 +819,21 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
         ("IDX_1", Decimal("0.55")),
         ("IDX_2", Decimal("0.40")),
     ]
+    compiled_statements = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in db.execute.await_args_list
+    ]
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_definitions.benchmark_id"
+        in compiled_statements[0]
+    )
+    assert "row_number() OVER (PARTITION BY index_definitions.index_id" in compiled_statements[1]
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
+        "benchmark_composition_series.index_id"
+    ) in compiled_statements[2]
+    for compiled in compiled_statements:
+        assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -721,7 +852,8 @@ async def test_resolve_model_portfolio_definition_uses_approved_effective_model(
     assert row.model_portfolio_id == "MODEL_SG_BALANCED_DPM"
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "model_portfolio_definitions.model_portfolio_id = 'MODEL_SG_BALANCED_DPM'" in compiled
-    assert "lower(trim(model_portfolio_definitions.approval_status)) = 'approved'" in compiled
+    assert "model_portfolio_definitions.approval_status = 'approved'" in compiled
+    assert "lower(trim(model_portfolio_definitions.approval_status))" not in compiled
     assert "model_portfolio_definitions.effective_from <= '2026-03-31'" in compiled
 
 
@@ -730,13 +862,6 @@ async def test_list_model_portfolio_targets_returns_latest_active_targets_by_def
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
-            SimpleNamespace(
-                model_portfolio_id="MODEL_SG_BALANCED_DPM",
-                model_portfolio_version="2026.03",
-                instrument_id="EQ_US_AAPL",
-                effective_from=date(2026, 3, 25),
-                target_weight=Decimal("0.55"),
-            ),
             SimpleNamespace(
                 model_portfolio_id="MODEL_SG_BALANCED_DPM",
                 model_portfolio_version="2026.03",
@@ -766,7 +891,14 @@ async def test_list_model_portfolio_targets_returns_latest_active_targets_by_def
         ("FI_US_TREASURY_10Y", Decimal("0.40")),
     ]
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "lower(trim(model_portfolio_targets.target_status)) = 'active'" in compiled
+    assert "model_portfolio_targets.target_status = 'active'" in compiled
+    assert "lower(trim(model_portfolio_targets.target_status))" not in compiled
+    assert (
+        "row_number() OVER (PARTITION BY model_portfolio_targets.model_portfolio_id, "
+        "model_portfolio_targets.model_portfolio_version, "
+        "model_portfolio_targets.instrument_id"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -816,10 +948,13 @@ async def test_list_model_portfolio_affected_mandates_uses_source_filters() -> N
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
+    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
+    assert "lower(trim(portfolio_mandate_bindings.discretionary_authority_status))" not in compiled
     assert (
-        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) = 'active'"
-        in compiled
-    )
+        "row_number() OVER (PARTITION BY portfolio_mandate_bindings.portfolio_id, "
+        "portfolio_mandate_bindings.mandate_id"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -836,8 +971,7 @@ async def test_list_model_portfolio_affected_mandates_can_include_inactive_autho
 
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert (
-        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) ="
-        not in compiled
+        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) =" not in compiled
     )
 
 
@@ -846,13 +980,6 @@ async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cu
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
-            SimpleNamespace(
-                portfolio_id="PB_SG_GLOBAL_BAL_001",
-                mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-                effective_from=date(2026, 5, 1),
-                updated_at=None,
-                created_at=None,
-            ),
             SimpleNamespace(
                 portfolio_id="PB_SG_INCOME_002",
                 mandate_id="MANDATE_PB_SG_INCOME_002",
@@ -877,14 +1004,18 @@ async def test_list_dpm_portfolio_universe_candidates_uses_source_filters_and_cu
     assert "portfolio_mandate_bindings.mandate_type = 'discretionary'" in compiled
     assert "portfolio_mandate_bindings.effective_from <= '2026-05-03'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
-    assert (
-        "lower(trim(portfolio_mandate_bindings.discretionary_authority_status)) = 'active'"
-        in compiled
-    )
+    assert "portfolio_mandate_bindings.discretionary_authority_status = 'active'" in compiled
+    assert "lower(trim(portfolio_mandate_bindings.discretionary_authority_status))" not in compiled
     assert (
         "portfolio_mandate_bindings.model_portfolio_id IN ('MODEL_PB_SG_GLOBAL_BAL_DPM')"
         in compiled
     )
+    assert (
+        "(portfolio_mandate_bindings.portfolio_id, portfolio_mandate_bindings.mandate_id) > "
+        "('PB_SG_GLOBAL_BAL_001', 'MANDATE_PB_SG_GLOBAL_BAL_001')"
+    ) in compiled
+    assert "anon_1.rn = 1" in compiled
+    assert "LIMIT 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -937,27 +1068,30 @@ async def test_client_source_data_filters_use_normalized_active_statuses() -> No
         for call in db.execute.await_args_list
     ]
 
+    assert "client_restriction_profiles.restriction_status = 'active'" in compiled_statements[0]
     assert (
-        "lower(trim(client_restriction_profiles.restriction_status)) = 'active'"
-        in compiled_statements[0]
+        "lower(trim(client_restriction_profiles.restriction_status))" not in compiled_statements[0]
     )
     assert (
-        "lower(trim(sustainability_preference_profiles.preference_status)) = 'active'"
-        in compiled_statements[1]
-    )
-    assert "lower(trim(client_tax_profiles.profile_status)) = 'active'" in compiled_statements[2]
-    assert "lower(trim(client_tax_rule_sets.rule_status)) = 'active'" in compiled_statements[3]
-    assert (
-        "lower(trim(client_income_needs_schedules.need_status)) = 'active'"
-        in compiled_statements[4]
+        "sustainability_preference_profiles.preference_status = 'active'" in compiled_statements[1]
     )
     assert (
-        "lower(trim(liquidity_reserve_requirements.reserve_status)) = 'active'"
-        in compiled_statements[5]
+        "lower(trim(sustainability_preference_profiles.preference_status))"
+        not in compiled_statements[1]
     )
+    assert "client_tax_profiles.profile_status = 'active'" in compiled_statements[2]
+    assert "lower(trim(client_tax_profiles.profile_status))" not in compiled_statements[2]
+    assert "client_tax_rule_sets.rule_status = 'active'" in compiled_statements[3]
+    assert "lower(trim(client_tax_rule_sets.rule_status))" not in compiled_statements[3]
+    assert "client_income_needs_schedules.need_status = 'active'" in compiled_statements[4]
+    assert "lower(trim(client_income_needs_schedules.need_status))" not in compiled_statements[4]
+    assert "liquidity_reserve_requirements.reserve_status = 'active'" in compiled_statements[5]
     assert (
-        "lower(trim(planned_withdrawal_schedules.withdrawal_status)) = 'active'"
-        in compiled_statements[6]
+        "lower(trim(liquidity_reserve_requirements.reserve_status))" not in compiled_statements[5]
+    )
+    assert "planned_withdrawal_schedules.withdrawal_status = 'active'" in compiled_statements[6]
+    assert (
+        "lower(trim(planned_withdrawal_schedules.withdrawal_status))" not in compiled_statements[6]
     )
 
 
@@ -983,8 +1117,10 @@ async def test_benchmark_and_index_status_filters_are_normalized() -> None:
         db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
     )
 
-    assert "lower(trim(benchmark_definitions.benchmark_status)) = 'active'" in benchmark_sql
-    assert "lower(trim(index_definitions.index_status)) = 'active'" in index_sql
+    assert "benchmark_definitions.benchmark_status = 'active'" in benchmark_sql
+    assert "lower(trim(benchmark_definitions.benchmark_status))" not in benchmark_sql
+    assert "index_definitions.index_status = 'active'" in index_sql
+    assert "lower(trim(index_definitions.index_status))" not in index_sql
 
 
 @pytest.mark.asyncio
@@ -1027,30 +1163,56 @@ async def test_get_benchmark_coverage_marks_internal_gap_when_component_missing(
 
 
 @pytest.mark.asyncio
+async def test_get_benchmark_coverage_evaluates_only_active_component_candidate_dates() -> None:
+    repo = ReferenceDataRepository(AsyncMock(spec=AsyncSession))
+    repo.list_benchmark_components_overlapping_window = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                composition_effective_from=date(2026, 1, 10),
+                composition_effective_to=date(2026, 1, 12),
+            )
+        ]
+    )
+    repo.list_index_price_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 5),
+                quality_status="accepted",
+            ),
+            SimpleNamespace(
+                index_id="IDX_A",
+                series_date=date(2026, 1, 10),
+                quality_status="accepted",
+            ),
+        ]
+    )
+    repo.list_benchmark_return_points = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(series_date=date(2026, 1, 5), quality_status="accepted"),
+            SimpleNamespace(series_date=date(2026, 1, 10), quality_status="accepted"),
+        ]
+    )
+
+    coverage = await repo.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 31))
+
+    assert coverage["observed_dates"] == [date(2026, 1, 10)]
+    assert coverage["observed_start_date"] == date(2026, 1, 10)
+    assert coverage["observed_end_date"] == date(2026, 1, 10)
+
+
+@pytest.mark.asyncio
 async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
         [
             SimpleNamespace(
                 series_date=date(2026, 1, 1),
-                quality_status=" Accepted ",
+                quality_status="accepted",
                 source_timestamp=None,
                 risk_free_curve_id="USD_FRONT_OFFICE",
                 series_id="front_office",
-            ),
-            SimpleNamespace(
-                series_date=date(2026, 1, 1),
-                quality_status="stale",
-                source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
-                risk_free_curve_id="USD_STALE_VENDOR",
-                series_id="stale_vendor",
-            ),
-            SimpleNamespace(
-                series_date=date(2026, 1, 1),
-                quality_status="accepted",
-                source_timestamp=None,
-                risk_free_curve_id="USD_DEMO",
-                series_id="demo",
             ),
             SimpleNamespace(
                 series_date=date(2026, 1, 2),
@@ -1069,6 +1231,14 @@ async def test_list_risk_free_series_canonicalizes_duplicate_dates() -> None:
     assert [row.series_date for row in rows] == [date(2026, 1, 1), date(2026, 1, 2)]
     assert rows[0].series_id == "front_office"
     assert rows[1].series_id == "demo"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER (PARTITION BY risk_free_series.series_date" in compiled
+    assert "ORDER BY CASE WHEN (upper(trim(risk_free_series.quality_status)) = 'ACCEPTED')" in (
+        compiled
+    )
+    assert "risk_free_series.source_timestamp DESC NULLS LAST" in compiled
+    assert "risk_free_series.series_id DESC" in compiled
+    assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
@@ -1082,27 +1252,17 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
         source_timestamp=None,
         series_id="front_office",
     )
-    stale_vendor_row = SimpleNamespace(
-        index_id="IDX_A",
-        benchmark_id="B1",
-        series_date=date(2026, 1, 1),
-        quality_status="stale",
-        source_timestamp=datetime(2026, 1, 2, 10, 0, 0),
-        series_id="stale_vendor",
-    )
     db.execute.side_effect = [
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
-        _FakeExecuteResult([accepted_row, stale_vendor_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
+        _FakeExecuteResult([accepted_row]),
     ]
 
     repo = ReferenceDataRepository(db)
 
-    index_prices = await repo.list_index_price_points(
-        ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
-    )
+    index_prices = await repo.list_index_price_points(["IDX_A"], date(2026, 1, 1), date(2026, 1, 1))
     index_returns = await repo.list_index_return_points(
         ["IDX_A"], date(2026, 1, 1), date(2026, 1, 1)
     )
@@ -1125,6 +1285,29 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
     ]
     assert all(len(rows) == 1 for rows in result_sets)
     assert all(rows[0].series_id == "front_office" for rows in result_sets)
+
+    compiled_statements = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in db.execute.await_args_list
+    ]
+    assert "row_number() OVER (PARTITION BY index_price_series.index_id" in (compiled_statements[0])
+    assert (
+        "row_number() OVER (PARTITION BY index_return_series.index_id" in (compiled_statements[1])
+    )
+    assert (
+        "row_number() OVER (PARTITION BY benchmark_return_series.benchmark_id"
+        in (compiled_statements[2])
+    )
+    assert "row_number() OVER (PARTITION BY index_price_series.index_id" in (compiled_statements[3])
+    assert (
+        "row_number() OVER (PARTITION BY index_return_series.index_id" in (compiled_statements[4])
+    )
+    for compiled in compiled_statements:
+        assert "upper(trim(" in compiled
+        assert " = 'ACCEPTED'" in compiled
+        assert "source_timestamp DESC NULLS LAST" in compiled
+        assert "series_id DESC" in compiled
+        assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio

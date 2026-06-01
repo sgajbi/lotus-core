@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.repositories.cashflow_repository import CashflowSeriesEvidence
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
 from src.services.query_service.app.services.liquidity_ladder_service import (
     MAX_HORIZON_DAYS,
@@ -73,16 +74,21 @@ async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() ->
             instrument=_instrument("BOND1", liquidity_tier=" t2 "),
         ),
     ]
-    cashflow_repo.get_portfolio_cashflow_series.return_value = [
-        (date(2026, 3, 27), Decimal("-25000")),
-        (date(2026, 3, 30), Decimal("5000")),
-    ]
-    cashflow_repo.get_projected_settlement_cashflow_series.return_value = [
-        (date(2026, 3, 28), Decimal("-90000")),
-        (date(2026, 4, 4), Decimal("-25000")),
-    ]
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = datetime(
-        2026, 3, 27, 10, 15, tzinfo=UTC
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[
+            (date(2026, 3, 27), Decimal("-25000")),
+            (date(2026, 3, 30), Decimal("5000")),
+        ],
+        latest_evidence_timestamp=datetime(2026, 3, 27, 9, 45, tzinfo=UTC),
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(
+            rows=[
+                (date(2026, 3, 28), Decimal("-90000")),
+                (date(2026, 4, 4), Decimal("-25000")),
+            ],
+            latest_evidence_timestamp=datetime(2026, 3, 27, 10, 15, tzinfo=UTC),
+        )
     )
 
     with (
@@ -140,10 +146,10 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
             instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
         )
     ]
-    cashflow_repo.get_portfolio_cashflow_series.return_value = [
-        (date(2026, 3, 27), Decimal("-100"))
-    ]
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(date(2026, 3, 27), Decimal("-100"))],
+        latest_evidence_timestamp=None,
+    )
 
     with (
         patch(
@@ -162,9 +168,220 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
             include_projected=False,
         )
 
-    cashflow_repo.get_projected_settlement_cashflow_series.assert_not_awaited()
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.assert_not_awaited()
     assert response.include_projected is False
     assert response.totals.projected_cash_available_end_portfolio_currency == Decimal("900")
+
+
+async def test_liquidity_ladder_runs_booked_and_projected_reads_sequentially() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    portfolio = _portfolio("P1")
+    reporting_repo.get_portfolio_by_id.return_value = portfolio
+    reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    reporting_repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="1000"),
+            instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
+        )
+    ]
+    call_order: list[str] = []
+
+    async def _booked_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        call_order.append("booked")
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("-100"))],
+            latest_evidence_timestamp=datetime(2026, 3, 27, 9, tzinfo=UTC),
+        )
+
+    async def _projected_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        call_order.append("projected")
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("-50"))],
+            latest_evidence_timestamp=datetime(2026, 3, 27, 10, tzinfo=UTC),
+        )
+
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.side_effect = _booked_evidence
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.side_effect = (
+        _projected_evidence
+    )
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+
+    assert response.buckets[0].net_cashflow_portfolio_currency == Decimal("-150")
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 10, tzinfo=UTC)
+    assert call_order == ["booked", "projected"]
+
+
+async def test_liquidity_ladder_reads_snapshot_and_cashflow_evidence_sequentially() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    portfolio = _portfolio("P1")
+    reporting_repo.get_portfolio_by_id.return_value = portfolio
+    reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    call_order: list[str] = []
+
+    async def _snapshot_rows(
+        *,
+        portfolio_ids: list[str],
+        as_of_date: date,
+    ) -> list[ReportingSnapshotRow]:
+        call_order.append("snapshot")
+        assert portfolio_ids == ["P1"]
+        assert as_of_date == date(2026, 3, 27)
+        return [
+            ReportingSnapshotRow(
+                portfolio=portfolio,
+                snapshot=_snapshot("CASH_USD", market_value="1000"),
+                instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
+            )
+        ]
+
+    async def _booked_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        call_order.append("booked")
+        assert portfolio_id == "P1"
+        assert start_date == date(2026, 3, 27)
+        assert end_date == date(2026, 3, 27)
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("-100"))],
+            latest_evidence_timestamp=None,
+        )
+
+    async def _projected_evidence(
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> CashflowSeriesEvidence:
+        call_order.append("projected")
+        assert portfolio_id == "P1"
+        assert start_date == date(2026, 3, 27)
+        assert end_date == date(2026, 3, 27)
+        return CashflowSeriesEvidence(
+            rows=[(start_date, Decimal("-50"))],
+            latest_evidence_timestamp=None,
+        )
+
+    reporting_repo.list_latest_snapshot_rows.side_effect = _snapshot_rows
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.side_effect = _booked_evidence
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.side_effect = (
+        _projected_evidence
+    )
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+
+    assert response.buckets[0].net_cashflow_portfolio_currency == Decimal("-150")
+    assert call_order == ["snapshot", "booked", "projected"]
+
+
+async def test_liquidity_ladder_reads_portfolio_and_default_date_sequentially() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    call_order: list[str] = []
+    reporting_repo.list_latest_snapshot_rows.return_value = []
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[],
+        latest_evidence_timestamp=None,
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
+
+    async def get_portfolio_by_id(portfolio_id: str):
+        call_order.append("portfolio")
+        assert portfolio_id == "P1"
+        return _portfolio("P1")
+
+    async def get_latest_business_date() -> date:
+        call_order.append("date")
+        return date(2026, 3, 27)
+
+    reporting_repo.get_portfolio_by_id.side_effect = get_portfolio_by_id
+    reporting_repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await service.get_liquidity_ladder(portfolio_id="P1", horizon_days=0)
+
+    assert response.resolved_as_of_date == date(2026, 3, 27)
+    assert call_order == ["portfolio", "date"]
+
+
+async def test_liquidity_ladder_explicit_date_skips_default_date_lookup() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    reporting_repo.get_portfolio_by_id.return_value = _portfolio("P1")
+    reporting_repo.list_latest_snapshot_rows.return_value = []
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[],
+        latest_evidence_timestamp=None,
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
+        response = await service.get_liquidity_ladder(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 26),
+            horizon_days=0,
+        )
+
+    assert response.resolved_as_of_date == date(2026, 3, 26)
+    reporting_repo.get_latest_business_date.assert_not_awaited()
 
 
 async def test_liquidity_ladder_raises_when_portfolio_missing() -> None:
@@ -217,9 +434,12 @@ async def test_liquidity_ladder_returns_unknown_quality_for_empty_source_rows() 
     reporting_repo.get_portfolio_by_id.return_value = portfolio
     reporting_repo.get_latest_business_date.return_value = date(2026, 3, 27)
     reporting_repo.list_latest_snapshot_rows.return_value = []
-    cashflow_repo.get_portfolio_cashflow_series.return_value = []
-    cashflow_repo.get_projected_settlement_cashflow_series.return_value = []
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[], latest_evidence_timestamp=None
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
 
     with (
         patch(
@@ -259,9 +479,12 @@ async def test_liquidity_ladder_classifies_unavailable_tier_and_missing_market_v
             instrument=_instrument("ALT1", liquidity_tier=None),
         )
     ]
-    cashflow_repo.get_portfolio_cashflow_series.return_value = []
-    cashflow_repo.get_projected_settlement_cashflow_series.return_value = []
-    cashflow_repo.get_latest_cashflow_evidence_timestamp.return_value = None
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[], latest_evidence_timestamp=None
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
 
     with (
         patch(
@@ -279,3 +502,26 @@ async def test_liquidity_ladder_classifies_unavailable_tier_and_missing_market_v
     assert response.asset_liquidity_tiers[0].liquidity_tier == "UNCLASSIFIED"
     assert response.asset_liquidity_tiers[0].market_value_portfolio_currency == Decimal("0")
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 8, 0, tzinfo=UTC)
+
+
+async def test_liquidity_ladder_partitions_cash_rows_with_single_classification_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [object(), object(), object()]
+    calls: list[object] = []
+
+    def fake_is_cash_row(row: object) -> bool:
+        calls.append(row)
+        return row is rows[0]
+
+    monkeypatch.setattr(
+        PortfolioLiquidityLadderService,
+        "_is_cash_row",
+        staticmethod(fake_is_cash_row),
+    )
+
+    cash_rows, non_cash_rows = PortfolioLiquidityLadderService._partition_cash_rows(rows)
+
+    assert cash_rows == [rows[0]]
+    assert non_cash_rows == [rows[1], rows[2]]
+    assert calls == rows

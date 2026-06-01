@@ -1,6 +1,8 @@
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any
 
+from src.services.query_service.app.services.decimal_amounts import decimal_or_none
+
 ROUNDING_POLICY_VERSION = "1.1.0"
 ROUNDING_MODE = ROUND_HALF_EVEN
 PRICE_SCALE = Decimal("0.000001")
@@ -24,9 +26,12 @@ def to_decimal(value: Any) -> Decimal:
     if value is None:
         return Decimal("0")
     try:
-        return Decimal(str(value))
+        decimal_value = decimal_or_none(value)
     except (InvalidOperation, ValueError, TypeError) as exc:
         raise ValueError(f"Invalid numeric value: {value!r}") from exc
+    if decimal_value is None:
+        raise ValueError(f"Invalid numeric value: {value!r}")
+    return decimal_value
 
 
 def _decimal_scale(value: Decimal) -> int:

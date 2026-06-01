@@ -1,5 +1,6 @@
 # src/services/query_service/app/repositories/cashflow_repository.py
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Tuple
@@ -16,9 +17,16 @@ from portfolio_common.utils import async_timed
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CashflowSeriesEvidence:
+    rows: list[tuple[date, Decimal]]
+    latest_evidence_timestamp: datetime | None
 
 
 class CashflowRepository:
@@ -30,7 +38,7 @@ class CashflowRepository:
         self.db = db
 
     @staticmethod
-    def _latest_cashflows_subquery():
+    def _latest_cashflows_subquery(*, portfolio_id: str | None = None):
         ranked_cashflows = select(
             Cashflow.id.label("id"),
             func.row_number()
@@ -39,7 +47,10 @@ class CashflowRepository:
                 order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
             )
             .label("rn"),
-        ).subquery()
+        )
+        if portfolio_id is not None:
+            ranked_cashflows = ranked_cashflows.where(Cashflow.portfolio_id == portfolio_id)
+        ranked_cashflows = ranked_cashflows.subquery()
         return (
             select(Cashflow)
             .join(ranked_cashflows, ranked_cashflows.c.id == Cashflow.id)
@@ -63,16 +74,16 @@ class CashflowRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    @async_timed(repository="CashflowRepository", method="get_portfolio_cashflow_series")
-    async def get_portfolio_cashflow_series(
+    async def get_portfolio_cashflow_series_with_evidence(
         self, portfolio_id: str, start_date: date, end_date: date
-    ) -> List[Tuple[date, Decimal]]:
-        """Returns daily aggregated portfolio cashflows for projection windows."""
-        latest_cashflows = self._latest_cashflows_subquery()
+    ) -> CashflowSeriesEvidence:
+        """Return booked daily cashflows and latest evidence timestamp in one read."""
+        latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(
                 latest_cashflows.c.cashflow_date,
                 func.sum(latest_cashflows.c.amount).label("net_amount"),
+                func.max(latest_cashflows.c.updated_at).label("latest_evidence_timestamp"),
             )
             .where(
                 latest_cashflows.c.portfolio_id == portfolio_id,
@@ -82,16 +93,22 @@ class CashflowRepository:
             .group_by(latest_cashflows.c.cashflow_date)
             .order_by(latest_cashflows.c.cashflow_date.asc())
         )
-        return (await self.db.execute(stmt)).all()
+        rows = (await self.db.execute(stmt)).all()
+        return CashflowSeriesEvidence(
+            rows=[(flow_date, net_amount) for flow_date, net_amount, _timestamp in rows],
+            latest_evidence_timestamp=max(
+                (timestamp for _flow_date, _net_amount, timestamp in rows if timestamp),
+                default=None,
+            ),
+        )
 
-    @async_timed(repository="CashflowRepository", method="get_projected_settlement_cashflow_series")
-    async def get_projected_settlement_cashflow_series(
+    async def get_projected_settlement_cashflow_series_with_evidence(
         self,
         portfolio_id: str,
         start_date: date,
         end_date: date,
-    ) -> List[Tuple[date, Decimal]]:
-        """Projects future external settlement movements not yet present in booked cashflows."""
+    ) -> CashflowSeriesEvidence:
+        """Return projected settlement cashflows and latest evidence timestamp in one read."""
         settlement_date = func.date(Transaction.settlement_date)
         signed_amount = case(
             (
@@ -108,64 +125,34 @@ class CashflowRepository:
             select(
                 settlement_date.label("cashflow_date"),
                 func.sum(signed_amount).label("net_amount"),
+                func.max(Transaction.updated_at).label("latest_evidence_timestamp"),
             )
             .where(
                 Transaction.portfolio_id == portfolio_id,
                 Transaction.transaction_type.in_(("DEPOSIT", "WITHDRAWAL")),
                 Transaction.settlement_date.is_not(None),
-                settlement_date.between(start_date, end_date),
-                func.date(Transaction.transaction_date) < start_date,
+                Transaction.settlement_date >= start_of_day(start_date),
+                Transaction.settlement_date < start_of_next_day(end_date),
+                Transaction.transaction_date < start_of_day(start_date),
             )
             .group_by(settlement_date)
             .order_by(settlement_date.asc())
         )
-        return (await self.db.execute(stmt)).all()
-
-    @async_timed(
-        repository="CashflowRepository",
-        method="get_latest_cashflow_evidence_timestamp",
-    )
-    async def get_latest_cashflow_evidence_timestamp(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        include_projected: bool,
-    ) -> datetime | None:
-        """Return the latest source timestamp across booked and projected cashflow evidence."""
-
-        latest_cashflows = self._latest_cashflows_subquery()
-        booked_stmt = select(func.max(latest_cashflows.c.updated_at)).where(
-            latest_cashflows.c.portfolio_id == portfolio_id,
-            latest_cashflows.c.cashflow_date.between(start_date, end_date),
-            latest_cashflows.c.is_portfolio_flow,
+        rows = (await self.db.execute(stmt)).all()
+        return CashflowSeriesEvidence(
+            rows=[(flow_date, net_amount) for flow_date, net_amount, _timestamp in rows],
+            latest_evidence_timestamp=max(
+                (timestamp for _flow_date, _net_amount, timestamp in rows if timestamp),
+                default=None,
+            ),
         )
-        latest_booked = (await self.db.execute(booked_stmt)).scalar_one_or_none()
-
-        latest_projected = None
-        if include_projected:
-            settlement_date = func.date(Transaction.settlement_date)
-            projected_stmt = select(func.max(Transaction.updated_at)).where(
-                Transaction.portfolio_id == portfolio_id,
-                Transaction.transaction_type.in_(("DEPOSIT", "WITHDRAWAL")),
-                Transaction.settlement_date.is_not(None),
-                settlement_date.between(start_date, end_date),
-                func.date(Transaction.transaction_date) < start_date,
-            )
-            latest_projected = (await self.db.execute(projected_stmt)).scalar_one_or_none()
-
-        timestamps = [value for value in (latest_booked, latest_projected) if value is not None]
-        if not timestamps:
-            return None
-        return max(timestamps)
 
     @async_timed(repository="CashflowRepository", method="get_portfolio_cash_movement_summary")
     async def get_portfolio_cash_movement_summary(
         self, portfolio_id: str, start_date: date, end_date: date
     ) -> list[tuple[str, str, str, bool, bool, int, Decimal, datetime | None]]:
         """Aggregate latest cashflow rows by source-owned cash movement classification."""
-        latest_cashflows = self._latest_cashflows_subquery()
+        latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(
                 latest_cashflows.c.classification,
@@ -206,7 +193,7 @@ class CashflowRepository:
         Fetches only the external investor cashflows for a portfolio within a date range.
         These are used for MWR (IRR) calculations.
         """
-        latest_cashflows = self._latest_cashflows_subquery()
+        latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(latest_cashflows.c.cashflow_date, latest_cashflows.c.amount)
             .where(

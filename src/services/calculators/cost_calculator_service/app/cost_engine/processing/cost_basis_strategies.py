@@ -3,6 +3,8 @@ from collections import defaultdict, deque
 from decimal import Decimal
 from typing import Deque, Dict, Optional, Protocol, Tuple
 
+from portfolio_common.decimal_amounts import required_decimal
+
 from ..domain.models.transaction import Transaction
 from .cost_objects import CostLot
 
@@ -21,9 +23,9 @@ def _validated_buy_lot_inputs(transaction: Transaction) -> tuple[Decimal, Decima
             "net_cost_local calculated before adding as a lot."
         )
 
-    quantity = Decimal(str(transaction.quantity))
-    net_cost = Decimal(str(transaction.net_cost))
-    net_cost_local = Decimal(str(transaction.net_cost_local))
+    quantity = required_decimal(transaction.quantity, field_name="quantity")
+    net_cost = required_decimal(transaction.net_cost, field_name="net_cost")
+    net_cost_local = required_decimal(transaction.net_cost_local, field_name="net_cost_local")
 
     if quantity <= Decimal(0):
         if quantity == Decimal(0) and net_cost == Decimal(0) and net_cost_local == Decimal(0):

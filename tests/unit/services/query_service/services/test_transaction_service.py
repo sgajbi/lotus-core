@@ -8,7 +8,9 @@ from portfolio_common.database_models import Cashflow, Transaction
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
+from src.services.query_service.app.services.fx_conversion import CachedFxRateConverter
 from src.services.query_service.app.services.transaction_service import TransactionService
 
 pytestmark = pytest.mark.asyncio
@@ -39,6 +41,7 @@ def mock_transaction_repo() -> AsyncMock:
             trade_currency="EUR",
             currency="USD",
             cash_entry_mode="AUTO_GENERATE",
+            updated_at=datetime(2025, 1, 15, 9, 30, tzinfo=UTC),
         ),
         Transaction(
             transaction_id="T2",
@@ -56,6 +59,7 @@ def mock_transaction_repo() -> AsyncMock:
             withholding_tax_amount=Decimal("10"),
             other_interest_deductions_amount=Decimal("5"),
             net_interest_amount=Decimal("110"),
+            updated_at=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
         ),
     ]
     repo.get_transactions_count.return_value = 25
@@ -225,6 +229,8 @@ async def test_get_transactions_classifies_complete_window(
         response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
 
     assert response_dto.data_quality_status == COMPLETE
+    assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
 
 
 async def test_get_transactions_classifies_empty_window_as_unknown(
@@ -244,6 +250,8 @@ async def test_get_transactions_classifies_empty_window_as_unknown(
 
     assert response_dto.data_quality_status == UNKNOWN
     assert response_dto.latest_evidence_timestamp is None
+    mock_transaction_repo.get_transactions.assert_not_awaited()
+    mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):
@@ -363,6 +371,90 @@ async def test_get_transactions_include_projected_skips_business_date_default(
         )
 
 
+async def test_get_transactions_reads_portfolio_exists_and_default_date_sequentially() -> None:
+    repo = AsyncMock(spec=TransactionRepository)
+    call_order: list[str] = []
+    repo.get_transactions_count.return_value = 0
+
+    async def portfolio_exists(portfolio_id: str) -> bool:
+        call_order.append("portfolio")
+        assert portfolio_id == "P1"
+        return True
+
+    async def get_latest_business_date() -> date:
+        call_order.append("date")
+        return date(2025, 1, 15)
+
+    repo.portfolio_exists.side_effect = portfolio_exists
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    assert response.as_of_date == date(2025, 1, 15)
+    assert call_order == ["portfolio", "date"]
+    repo.get_transactions.assert_not_awaited()
+    repo.get_latest_evidence_timestamp.assert_not_awaited()
+
+
+async def test_get_transactions_explicit_date_skips_default_date_lookup(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_transactions(
+            portfolio_id="P1",
+            skip=0,
+            limit=10,
+            as_of_date=date(2025, 1, 14),
+        )
+
+    assert response.as_of_date == date(2025, 1, 14)
+    mock_transaction_repo.get_latest_business_date.assert_not_awaited()
+    mock_transaction_repo.get_transactions_count.assert_awaited_once()
+
+
+async def test_get_transactions_partial_page_reads_page_and_evidence_sequentially(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    call_order: list[str] = []
+    page_rows = mock_transaction_repo.get_transactions.return_value[:1]
+    latest_evidence_timestamp = datetime(2025, 1, 20, 9, 30, tzinfo=UTC)
+    mock_transaction_repo.get_transactions_count.return_value = 2
+
+    async def get_transactions(**_: object) -> list[Transaction]:
+        call_order.append("page")
+        return page_rows
+
+    async def get_latest_evidence_timestamp(**_: object) -> datetime:
+        call_order.append("evidence")
+        return latest_evidence_timestamp
+
+    mock_transaction_repo.get_transactions.side_effect = get_transactions
+    mock_transaction_repo.get_latest_evidence_timestamp.side_effect = get_latest_evidence_timestamp
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        response = await service.get_transactions(portfolio_id="P1", skip=0, limit=1)
+
+    assert response.total == 2
+    assert response.transactions[0].transaction_id == "T1"
+    assert response.latest_evidence_timestamp == latest_evidence_timestamp
+    assert call_order == ["page", "evidence"]
+    mock_transaction_repo.get_transactions.assert_awaited_once()
+    mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once()
+
+
 async def test_get_transactions_applies_reporting_currency_restated_fields(
     mock_transaction_repo: AsyncMock,
 ) -> None:
@@ -395,6 +487,86 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert income_transaction.other_interest_deductions_amount_reporting_currency == Decimal("6.80")
     assert income_transaction.net_interest_amount_reporting_currency == Decimal("149.60")
     assert mock_transaction_repo.get_latest_fx_rate.await_count == 2
+
+
+async def test_get_transactions_enriches_page_records_sequentially(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    call_order: list[str] = []
+
+    async def apply_reporting_currency_fields(
+        *,
+        record: TransactionRecord,
+        reporting_currency: str,
+        as_of_date: date,
+    ) -> None:
+        call_order.append(record.transaction_id)
+        assert reporting_currency == "SGD"
+        assert as_of_date == date(2025, 1, 15)
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        service._apply_reporting_currency_fields = AsyncMock(  # type: ignore[method-assign]
+            side_effect=apply_reporting_currency_fields
+        )
+
+        response_dto = await service.get_transactions(
+            portfolio_id="P1",
+            skip=0,
+            limit=10,
+            reporting_currency="SGD",
+        )
+
+    assert [transaction.transaction_id for transaction in response_dto.transactions] == ["T1", "T2"]
+    assert service._apply_reporting_currency_fields.await_count == 2
+    assert call_order == ["T1", "T2"]
+
+
+async def test_apply_reporting_currency_fields_converts_money_fields_sequentially() -> None:
+    service = TransactionService(AsyncMock(spec=AsyncSession))
+    record = TransactionRecord(
+        transaction_id="T1",
+        transaction_date=datetime(2025, 1, 10, tzinfo=UTC),
+        transaction_type="BUY",
+        instrument_id="I1",
+        security_id="S1",
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        gross_cost=Decimal("1000"),
+        trade_fee=Decimal("12.5"),
+        trade_currency="EUR",
+        currency="USD",
+    )
+    call_order: list[Decimal] = []
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        call_order.append(amount)
+        assert to_currency == "SGD"
+        assert as_of_date == date(2025, 1, 15)
+        return amount * (Decimal("2") if from_currency == "USD" else Decimal("3"))
+
+    service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+
+    await service._apply_reporting_currency_fields(
+        record=record,
+        reporting_currency="SGD",
+        as_of_date=date(2025, 1, 15),
+    )
+
+    assert record.gross_transaction_amount_reporting_currency == Decimal("2000")
+    assert record.gross_cost_reporting_currency == Decimal("2000")
+    assert record.trade_fee_reporting_currency == Decimal("37.5")
+    assert call_order == [Decimal("1000"), Decimal("1000"), Decimal("12.5")]
 
 
 async def test_get_transactions_raises_when_reporting_currency_rate_missing(
@@ -437,6 +609,7 @@ async def test_transaction_service_normalizes_fx_cache_and_identity_checks() -> 
         first_rate = await service._get_fx_rate(" eur ", " usd ", date(2025, 1, 15))
         second_rate = await service._get_fx_rate("EUR", "USD", date(2025, 1, 15))
 
+    assert isinstance(service._fx_converter, CachedFxRateConverter)
     assert same_currency == Decimal("10")
     assert first_rate == Decimal("1.50")
     assert second_rate == Decimal("1.50")
@@ -470,6 +643,7 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
         end_date=date(2025, 1, 31),
         as_of_date=date(2025, 1, 15),
     )
+    assert not hasattr(mock_transaction_repo, "get_latest_realized_tax_evidence_timestamp")
     assert summary.product_name == "PortfolioRealizedTaxSummary"
     assert summary.product_version == "v1"
     assert summary.portfolio_id == "P1"
@@ -485,6 +659,156 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
     assert summary.reason_codes == ["PORTFOLIO_REALIZED_TAX_SUMMARY_READY"]
     assert summary.data_quality_status == COMPLETE
     assert summary.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+
+
+async def test_get_realized_tax_summary_reads_count_and_tax_evidence_sequentially() -> None:
+    call_order: list[str] = []
+    repo = AsyncMock(spec=TransactionRepository)
+    repo.get_portfolio_base_currency.return_value = "USD"
+    repo.get_latest_business_date.return_value = date(2025, 1, 15)
+
+    async def get_transactions_count(**_: object) -> int:
+        call_order.append("count")
+        return 2
+
+    async def list_realized_tax_evidence_transactions(**_: object) -> list[Transaction]:
+        call_order.append("tax_evidence")
+        return []
+
+    repo.get_transactions_count.side_effect = get_transactions_count
+    repo.list_realized_tax_evidence_transactions.side_effect = (
+        list_realized_tax_evidence_transactions
+    )
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        summary = await service.get_realized_tax_summary(portfolio_id="P1")
+
+    assert summary.source_transaction_count == 2
+    assert summary.tax_evidence_transaction_count == 0
+    assert call_order == ["count", "tax_evidence"]
+    repo.get_transactions_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=None,
+        end_date=None,
+        as_of_date=date(2025, 1, 15),
+    )
+    repo.list_realized_tax_evidence_transactions.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=None,
+        end_date=None,
+        as_of_date=date(2025, 1, 15),
+    )
+
+
+async def test_get_realized_tax_summary_reads_base_currency_and_default_date_sequentially() -> None:
+    repo = AsyncMock(spec=TransactionRepository)
+    call_order: list[str] = []
+    repo.get_transactions_count.return_value = 0
+    repo.list_realized_tax_evidence_transactions.return_value = []
+
+    async def get_portfolio_base_currency(portfolio_id: str) -> str:
+        call_order.append("currency")
+        assert portfolio_id == "P1"
+        return "USD"
+
+    async def get_latest_business_date() -> date:
+        call_order.append("date")
+        return date(2025, 1, 15)
+
+    repo.get_portfolio_base_currency.side_effect = get_portfolio_base_currency
+    repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        summary = await service.get_realized_tax_summary(portfolio_id="P1")
+
+    assert summary.base_currency == "USD"
+    assert summary.as_of_date == date(2025, 1, 15)
+    assert call_order == ["currency", "date"]
+
+
+async def test_get_realized_tax_summary_explicit_date_skips_default_date_lookup(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        summary = await service.get_realized_tax_summary(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 14),
+        )
+
+    assert summary.as_of_date == date(2025, 1, 14)
+    mock_transaction_repo.get_latest_business_date.assert_not_awaited()
+
+
+async def test_get_realized_tax_summary_converts_currency_totals_sequentially() -> None:
+    repo = AsyncMock(spec=TransactionRepository)
+    repo.get_portfolio_base_currency.return_value = "USD"
+    repo.get_latest_business_date.return_value = date(2025, 1, 15)
+    repo.get_transactions_count.return_value = 2
+    repo.list_realized_tax_evidence_transactions.return_value = [
+        Transaction(
+            transaction_id="TAX-EUR",
+            transaction_date=datetime(2025, 1, 11),
+            transaction_type="DIVIDEND",
+            instrument_id="I1",
+            security_id="S1",
+            quantity=Decimal(0),
+            price=Decimal(0),
+            currency="EUR",
+            withholding_tax_amount=Decimal("7"),
+        ),
+        Transaction(
+            transaction_id="TAX-USD",
+            transaction_date=datetime(2025, 1, 12),
+            transaction_type="INTEREST",
+            instrument_id="I2",
+            security_id="S2",
+            quantity=Decimal(0),
+            price=Decimal(0),
+            currency="USD",
+            withholding_tax_amount=Decimal("5"),
+        ),
+    ]
+    call_order: list[str] = []
+
+    async def convert_amount(
+        *,
+        amount: Decimal,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Decimal:
+        call_order.append(from_currency)
+        assert to_currency == "SGD"
+        assert as_of_date == date(2025, 1, 15)
+        return amount
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
+
+        summary = await service.get_realized_tax_summary(
+            portfolio_id="P1",
+            reporting_currency="SGD",
+        )
+
+    assert summary.reporting_currency_total_tax_amount == Decimal("12")
+    assert service._convert_amount.await_count == 2
+    assert call_order == ["EUR", "USD"]
 
 
 async def test_get_realized_tax_summary_normalizes_currency_buckets(
@@ -503,6 +827,7 @@ async def test_get_realized_tax_summary_normalizes_currency_buckets(
             currency="USD",
             withholding_tax_amount=Decimal("10"),
             other_interest_deductions_amount=Decimal("5"),
+            updated_at=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
         ),
         Transaction(
             transaction_id="TAX2",
@@ -515,6 +840,7 @@ async def test_get_realized_tax_summary_normalizes_currency_buckets(
             currency=" usd ",
             withholding_tax_amount=Decimal("2"),
             other_interest_deductions_amount=Decimal("3"),
+            updated_at=datetime(2025, 1, 17, 10, 30, tzinfo=UTC),
         ),
     ]
 
@@ -538,6 +864,7 @@ async def test_get_realized_tax_summary_normalizes_currency_buckets(
     assert summary.currency_totals[0].other_tax_deductions_amount == Decimal("8")
     assert summary.currency_totals[0].total_tax_amount == Decimal("20")
     assert summary.reporting_currency_total_tax_amount == Decimal("27.20")
+    assert summary.latest_evidence_timestamp == datetime(2025, 1, 17, 10, 30, tzinfo=UTC)
     mock_transaction_repo.get_latest_fx_rate.assert_awaited_once_with(
         from_currency="USD",
         to_currency="SGD",
@@ -550,7 +877,6 @@ async def test_get_realized_tax_summary_reports_empty_evidence_without_fabricati
 ) -> None:
     mock_transaction_repo.get_transactions_count.return_value = 0
     mock_transaction_repo.list_realized_tax_evidence_transactions.return_value = []
-    mock_transaction_repo.get_latest_evidence_timestamp.return_value = None
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -564,6 +890,7 @@ async def test_get_realized_tax_summary_reports_empty_evidence_without_fabricati
     assert summary.reporting_currency_total_tax_amount is None
     assert summary.reason_codes == ["PORTFOLIO_REALIZED_TAX_EVIDENCE_EMPTY"]
     assert summary.data_quality_status == UNKNOWN
+    assert summary.latest_evidence_timestamp is None
 
 
 async def test_get_realized_tax_summary_uses_identity_fx_for_same_reporting_currency(

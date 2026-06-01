@@ -15,6 +15,7 @@ from .control_code_normalization import (
 )
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
 from .currency_codes import normalize_currency_code, normalize_optional_currency_code
+from .decimal_amounts import decimal_or_none
 from .transaction_fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
@@ -36,6 +37,13 @@ def _aware_event_datetime(value: datetime) -> datetime:
     if not isinstance(normalized, datetime):
         raise TypeError("Expected datetime value.")
     return normalized
+
+
+def _event_decimal_amount(value: object) -> Decimal:
+    amount = decimal_or_none(value)
+    if amount is None:
+        raise ValueError("Amount must be numeric.")
+    return amount
 
 
 class CoreEventModel(BaseModel):
@@ -344,7 +352,7 @@ class TransactionEvent(CoreEventModel):
     )
     @classmethod
     def _validate_nonnegative_transaction_amount(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and Decimal(str(value)) < 0:
+        if value is not None and _event_decimal_amount(value) < 0:
             raise ValueError("Amount must be greater than or equal to zero.")
         return value
 
@@ -357,7 +365,7 @@ class TransactionEvent(CoreEventModel):
     )
     @classmethod
     def _validate_positive_transaction_amount(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and Decimal(str(value)) <= 0:
+        if value is not None and _event_decimal_amount(value) <= 0:
             raise ValueError("Amount must be greater than zero.")
         return value
 

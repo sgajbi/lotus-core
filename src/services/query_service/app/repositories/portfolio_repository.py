@@ -4,7 +4,7 @@ from datetime import date
 from typing import List, Optional
 
 from portfolio_common.database_models import Portfolio
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -17,10 +17,6 @@ class PortfolioRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-
-    @staticmethod
-    def _portfolio_status_expr(status_column):
-        return func.upper(func.trim(status_column))
 
     async def get_portfolios(
         self,
@@ -80,7 +76,7 @@ class PortfolioRepository:
             stmt = stmt.where(
                 or_(Portfolio.close_date.is_(None), Portfolio.close_date >= as_of_date)
             )
-            stmt = stmt.where(self._portfolio_status_expr(Portfolio.status) == "ACTIVE")
+            stmt = stmt.where(Portfolio.status == "ACTIVE")
 
         result = await self.db.execute(stmt.order_by(Portfolio.portfolio_id.asc()))
         return list(result.scalars().all())

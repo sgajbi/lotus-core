@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -121,7 +121,10 @@ class ReconciliationRepository:
             stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
         if portfolio_id is not None:
             stmt = stmt.where(FinancialReconciliationRun.portfolio_id == portfolio_id)
-        stmt = stmt.order_by(FinancialReconciliationRun.started_at.desc()).limit(limit)
+        stmt = stmt.order_by(
+            FinancialReconciliationRun.started_at.desc(),
+            FinancialReconciliationRun.id.desc(),
+        ).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -151,7 +154,11 @@ class ReconciliationRepository:
         if portfolio_id is not None:
             stmt = stmt.where(Transaction.portfolio_id == portfolio_id)
         if business_date is not None:
-            stmt = stmt.where(func.date(Transaction.transaction_date) == business_date)
+            stmt = stmt.where(
+                Transaction.transaction_date >= datetime.combine(business_date, time.min),
+                Transaction.transaction_date
+                < datetime.combine(business_date + timedelta(days=1), time.min),
+            )
         result = await self.db.execute(stmt.order_by(Transaction.transaction_id.asc()))
         return result.all()
 
@@ -162,9 +169,11 @@ class ReconciliationRepository:
         business_date: date | None,
         epoch: int | None,
     ):
+        instrument_security_id = func.trim(Instrument.security_id)
+        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         stmt = (
             select(DailyPositionSnapshot, Instrument, Portfolio)
-            .join(Instrument, Instrument.security_id == DailyPositionSnapshot.security_id)
+            .join(Instrument, instrument_security_id == snapshot_security_id)
             .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
             .where(
                 DailyPositionSnapshot.market_price.is_not(None),
@@ -274,6 +283,8 @@ class ReconciliationRepository:
         business_date: date,
         epoch: int,
     ):
+        instrument_security_id = func.trim(Instrument.security_id)
+        position_timeseries_security_id = func.trim(PositionTimeseries.security_id)
         ranked_position_rows = (
             select(
                 PositionTimeseries.portfolio_id.label("portfolio_id"),
@@ -306,7 +317,7 @@ class ReconciliationRepository:
                     PositionTimeseries.epoch == ranked_position_rows.c.epoch,
                 ),
             )
-            .join(Instrument, Instrument.security_id == PositionTimeseries.security_id)
+            .join(Instrument, instrument_security_id == position_timeseries_security_id)
             .join(Portfolio, Portfolio.portfolio_id == PositionTimeseries.portfolio_id)
             .where(ranked_position_rows.c.rn == 1)
             .order_by(PositionTimeseries.security_id.asc())

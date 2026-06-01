@@ -52,8 +52,12 @@ class InstrumentService:
             security_id=security_id, product_type=product_type
         )
 
-        db_results = await self.repo.get_instruments(
-            skip=skip, limit=limit, security_id=security_id, product_type=product_type
+        db_results = (
+            await self.repo.get_instruments(
+                skip=skip, limit=limit, security_id=security_id, product_type=product_type
+            )
+            if total_count
+            else []
         )
 
         instruments = [self._to_instrument_record(row) for row in db_results]

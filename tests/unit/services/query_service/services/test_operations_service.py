@@ -7,7 +7,7 @@ from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLET
 from prometheus_client import REGISTRY, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.repositories.operations_repository import (
+from src.services.query_service.app.repositories.operations_models import (
     ExportJobHealthSummary,
     JobHealthSummary,
     LoadRunProgressSummary,
@@ -72,6 +72,54 @@ def service(mock_ops_repo: AsyncMock) -> OperationsService:
         return_value=mock_ops_repo,
     ):
         return OperationsService(AsyncMock(spec=AsyncSession))
+
+
+async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_sequentially(
+    service: OperationsService,
+    mock_ops_repo: AsyncMock,
+) -> None:
+    call_order: list[str] = []
+
+    async def portfolio_exists(portfolio_id: str) -> bool:
+        call_order.append("portfolio")
+        assert portfolio_id == "P1"
+        return True
+
+    async def get_latest_business_date(*, as_of: datetime) -> date:
+        call_order.append("date")
+        assert as_of == FIXED_GENERATED_AT
+        return date(2026, 4, 18)
+
+    mock_ops_repo.portfolio_exists.side_effect = portfolio_exists
+    mock_ops_repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    latest_business_date = await service._resolve_portfolio_latest_business_date(
+        "P1",
+        generated_at_utc=FIXED_GENERATED_AT,
+    )
+
+    assert latest_business_date == date(2026, 4, 18)
+    assert call_order == ["portfolio", "date"]
+
+
+async def test_read_count_and_page_runs_count_and_page_reads_sequentially(
+    service: OperationsService,
+) -> None:
+    call_order: list[str] = []
+
+    async def count_read() -> int:
+        call_order.append("count")
+        return 2
+
+    async def page_read() -> list[str]:
+        call_order.append("page")
+        return ["A", "B"]
+
+    total, rows = await service._read_count_and_page(count_read(), page_read())
+
+    assert total == 2
+    assert rows == ["A", "B"]
+    assert call_order == ["count", "page"]
 
 
 def _load_run_summary(**overrides) -> LoadRunProgressSummary:
@@ -339,6 +387,114 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
     control_call = mock_ops_repo.get_latest_financial_reconciliation_control_stage.await_args
     assert control_call.args == ("P1",)
     assert control_call.kwargs["as_of"] == response.generated_at_utc
+
+
+async def test_support_overview_reads_reconciliation_and_booked_evidence_sequentially(
+    service: OperationsService, mock_ops_repo: AsyncMock
+) -> None:
+    call_order: list[str] = []
+
+    mock_ops_repo.get_latest_business_date.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_current_portfolio_epoch.return_value = 2
+    mock_ops_repo.get_reprocessing_health_summary.return_value = ReprocessingHealthSummary(
+        active_keys=0,
+        stale_reprocessing_keys=0,
+        oldest_reprocessing_watermark_date=None,
+        oldest_reprocessing_security_id=None,
+        oldest_reprocessing_epoch=None,
+        oldest_reprocessing_updated_at=None,
+    )
+    mock_ops_repo.get_valuation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_aggregation_job_health_summary.return_value = JobHealthSummary(
+        pending_jobs=0,
+        processing_jobs=0,
+        stale_processing_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_date=None,
+        oldest_open_job_id=None,
+        oldest_open_job_correlation_id=None,
+        oldest_open_security_id=None,
+    )
+    mock_ops_repo.get_analytics_export_job_health_summary.return_value = ExportJobHealthSummary(
+        accepted_jobs=0,
+        running_jobs=0,
+        stale_running_jobs=0,
+        failed_jobs=0,
+        failed_jobs_last_hours=0,
+        oldest_open_job_created_at=None,
+        oldest_open_job_id=None,
+        oldest_open_request_fingerprint=None,
+    )
+    mock_ops_repo.get_latest_transaction_date.return_value = date(2025, 9, 2)
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
+    mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = type(
+        "ControlStageStub",
+        (),
+        {
+            "id": 701,
+            "business_date": date(2025, 8, 30),
+            "epoch": 2,
+            "status": "COMPLETED",
+            "failure_reason": None,
+            "last_source_event_type": "portfolio_day.reconciliation.completed",
+            "created_at": datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
+            "ready_emitted_at": datetime(2025, 8, 30, 10, 14, tzinfo=timezone.utc),
+            "updated_at": datetime(2025, 8, 30, 10, 15, tzinfo=timezone.utc),
+        },
+    )()
+    mock_ops_repo.get_latest_snapshot_date_for_current_epoch_as_of.return_value = date(2025, 8, 30)
+    mock_ops_repo.get_reconciliation_finding_summary.return_value = ReconciliationFindingSummary(
+        total_findings=0,
+        blocking_findings=0,
+        top_blocking_finding_id=None,
+        top_blocking_finding_type=None,
+        top_blocking_finding_security_id=None,
+        top_blocking_finding_transaction_id=None,
+    )
+
+    async def get_latest_reconciliation_run_for_portfolio_day(**_kwargs):
+        call_order.append("reconciliation")
+        return type(
+            "ReconciliationRunStub",
+            (),
+            {
+                "run_id": "recon_1234567890abcdef",
+                "reconciliation_type": "transaction_cashflow",
+                "status": "COMPLETED",
+                "correlation_id": "corr-recon-20250830-001",
+                "requested_by": "pipeline_orchestrator_service",
+                "dedupe_key": "recon:transaction_cashflow:P1:2025-08-30:2",
+                "failure_reason": None,
+            },
+        )()
+
+    async def get_latest_transaction_date_as_of(*_args, **_kwargs):
+        call_order.append("booked_transaction")
+        return date(2025, 8, 30)
+
+    mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.side_effect = (
+        get_latest_reconciliation_run_for_portfolio_day
+    )
+    mock_ops_repo.get_latest_transaction_date_as_of.side_effect = get_latest_transaction_date_as_of
+
+    response = await service.get_support_overview("P1")
+
+    assert call_order == ["reconciliation", "booked_transaction"]
+    assert response.controls_latest_reconciliation_run_id == "recon_1234567890abcdef"
+    assert response.latest_booked_transaction_date == date(2025, 8, 30)
+    assert response.latest_booked_position_snapshot_date == date(2025, 8, 30)
 
 
 async def test_load_run_builder_helper_branches_cover_ratio_division_and_elapsed_time() -> None:
@@ -1626,13 +1782,9 @@ async def test_support_job_retrying_only_for_active_retry_states():
 
 async def test_support_job_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
+    assert OperationsService._get_support_job_operational_state(" failed ", updated_at) == "FAILED"
     assert (
-        OperationsService._get_support_job_operational_state(" failed ", updated_at) == "FAILED"
-    )
-    assert (
-        OperationsService._get_support_job_operational_state(
-            " skipped_no_position ", updated_at
-        )
+        OperationsService._get_support_job_operational_state(" skipped_no_position ", updated_at)
         == "SKIPPED"
     )
     assert (
@@ -1664,8 +1816,7 @@ async def test_reconciliation_and_reprocessing_operational_state_branches():
     updated_at = datetime.now(timezone.utc)
 
     assert (
-        OperationsService._get_reconciliation_operational_state(" requires_replay ")
-        == "BLOCKING"
+        OperationsService._get_reconciliation_operational_state(" requires_replay ") == "BLOCKING"
     )
     assert OperationsService._get_reconciliation_operational_state(" running ") == "RUNNING"
     assert OperationsService._get_reconciliation_operational_state("COMPLETED") == "COMPLETED"

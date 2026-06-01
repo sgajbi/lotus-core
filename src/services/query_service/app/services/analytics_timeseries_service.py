@@ -55,6 +55,7 @@ from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRe
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..settings import load_query_service_settings
+from .decimal_amounts import decimal_or_zero
 
 
 class AnalyticsInputError(RuntimeError):
@@ -249,7 +250,7 @@ class AnalyticsTimeseriesService:
             flows_by_date[row.valuation_date].append(
                 self._build_cash_flow_observation(
                     row,
-                    amount=Decimal(row.amount) * conversion_rate,
+                    amount=decimal_or_zero(row.amount) * conversion_rate,
                 )
             )
         return flows_by_date
@@ -260,7 +261,7 @@ class AnalyticsTimeseriesService:
     ) -> dict[tuple[str, date], list[CashFlowObservation]]:
         flows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = defaultdict(list)
         for row in cashflow_rows:
-            amount = Decimal(row.amount)
+            amount = decimal_or_zero(row.amount)
             if bool(row.is_position_flow):
                 amount = normalize_position_flow_amount(
                     amount=amount,
@@ -293,9 +294,9 @@ class AnalyticsTimeseriesService:
         cash_flows: list[CashFlowObservation],
         has_portfolio_external_flow: bool,
     ) -> Decimal:
-        stored_beginning = Decimal(row.bod_market_value)
-        ending = Decimal(row.eod_market_value)
-        bod_position_flow = Decimal(getattr(row, "bod_cashflow_position", 0) or 0)
+        stored_beginning = decimal_or_zero(row.bod_market_value)
+        ending = decimal_or_zero(row.eod_market_value)
+        bod_position_flow = decimal_or_zero(getattr(row, "bod_cashflow_position", 0))
 
         if (
             previous_eod_market_value is not None
@@ -353,24 +354,37 @@ class AnalyticsTimeseriesService:
             position_ids=[],
             dimension_filters={},
         )
-        position_rows = await self.repo.list_position_timeseries_rows_unpaged(
+        observed_dates = await self.repo.list_position_observation_dates(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
             snapshot_epoch=snapshot_epoch,
         )
-        observed_dates = sorted({row.valuation_date for row in position_rows})
         paged_dates = [day for day in observed_dates if cursor_date is None or day > cursor_date]
         has_more = len(paged_dates) > page_size
         page_dates = paged_dates[:page_size]
         if not page_dates:
             return [], {}, observed_dates, snapshot_epoch, None
 
+        position_rows = await self.repo.list_position_timeseries_rows_unpaged(
+            portfolio_id=portfolio_id,
+            start_date=min(page_dates),
+            end_date=max(page_dates),
+            snapshot_epoch=snapshot_epoch,
+        )
+
         position_currencies = {
             str(row.position_currency)
             for row in position_rows
             if getattr(row, "position_currency", None)
         }
+        normalized_security_ids = sorted(
+            {
+                security_id
+                for row in position_rows
+                if (security_id := normalize_security_id(row.security_id))
+            }
+        )
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
             position_currencies=position_currencies,
             portfolio_currency=portfolio_currency,
@@ -383,10 +397,21 @@ class AnalyticsTimeseriesService:
             start_date=min(page_dates),
             end_date=max(page_dates),
         )
-
         portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
             portfolio_id=portfolio_id,
             valuation_dates=page_dates,
+            snapshot_epoch=snapshot_epoch,
+        )
+        position_cashflow_rows = await self.repo.list_position_cashflow_rows(
+            portfolio_id=portfolio_id,
+            security_ids=normalized_security_ids,
+            valuation_dates=page_dates,
+            snapshot_epoch=snapshot_epoch,
+        )
+        previous_rows = await self.repo.list_latest_position_timeseries_before(
+            portfolio_id=portfolio_id,
+            before_date=page_dates[0],
+            security_ids=normalized_security_ids,
             snapshot_epoch=snapshot_epoch,
         )
         portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
@@ -394,18 +419,6 @@ class AnalyticsTimeseriesService:
             reporting_currency=reporting_currency,
             portfolio_currency=portfolio_currency,
             fx_rates=portfolio_to_reporting_rates,
-        )
-        position_cashflow_rows = await self.repo.list_position_cashflow_rows(
-            portfolio_id=portfolio_id,
-            security_ids=sorted(
-                {
-                    security_id
-                    for row in position_rows
-                    if (security_id := normalize_security_id(row.security_id))
-                }
-            ),
-            valuation_dates=page_dates,
-            snapshot_epoch=snapshot_epoch,
         )
         position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
 
@@ -417,15 +430,8 @@ class AnalyticsTimeseriesService:
         observations: list[PortfolioTimeseriesObservation] = []
         quality_distribution: dict[str, int] = {}
         previous_eod_by_security = {
-            normalize_security_id(row.security_id): Decimal(row.eod_market_value)
-            for row in sorted(
-                position_rows,
-                key=lambda item: (
-                    item.valuation_date,
-                    normalize_security_id(item.security_id),
-                ),
-            )
-            if row.valuation_date < page_dates[0]
+            normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
+            for row in previous_rows
         }
         for valuation_date in page_dates:
             conversion_rate = Decimal("1")
@@ -475,9 +481,11 @@ class AnalyticsTimeseriesService:
                     beginning_market_value_position * position_to_portfolio_rate * conversion_rate
                 )
                 ending_market_value += (
-                    Decimal(row.eod_market_value) * position_to_portfolio_rate * conversion_rate
+                    decimal_or_zero(row.eod_market_value)
+                    * position_to_portfolio_rate
+                    * conversion_rate
                 )
-                current_eod_by_security[normalize_security_id(row.security_id)] = Decimal(
+                current_eod_by_security[normalize_security_id(row.security_id)] = decimal_or_zero(
                     row.eod_market_value
                 )
                 if int(row.epoch) > 0:
@@ -548,117 +556,31 @@ class AnalyticsTimeseriesService:
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
         )
-        observations: list[PortfolioTimeseriesObservation]
-        quality_distribution: dict[str, int]
-        observed_dates: list[date]
-        snapshot_epoch: int
-        next_page_token: str | None
-        if hasattr(self.repo, "list_position_timeseries_rows_unpaged"):
-            (
-                observations,
-                quality_distribution,
-                observed_dates,
-                snapshot_epoch,
-                next_page_token,
-            ) = await self._portfolio_observation_rows(
-                portfolio_id=portfolio_id,
-                portfolio_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
-                resolved_window=resolved_window,
-                page_size=request.page.page_size,
-                cursor_date=cursor_date,
-                request_scope_fingerprint=request_scope_fingerprint,
-            )
-        else:
-            snapshot_epoch = int(cursor["snapshot_epoch"]) if cursor.get("snapshot_epoch") else None
-            if snapshot_epoch is None:
-                if hasattr(self.repo, "get_portfolio_snapshot_epoch"):
-                    snapshot_epoch = await self.repo.get_portfolio_snapshot_epoch(
-                        portfolio_id=portfolio_id,
-                        start_date=resolved_window.start_date,
-                        end_date=resolved_window.end_date,
-                    )
-                else:
-                    snapshot_epoch = 0
-            rows = await self.repo.list_portfolio_timeseries_rows(
-                portfolio_id=portfolio_id,
-                start_date=resolved_window.start_date,
-                end_date=resolved_window.end_date,
-                page_size=request.page.page_size,
-                cursor_date=cursor_date,
-                snapshot_epoch=snapshot_epoch,
-            )
-            observed_dates = await self.repo.list_portfolio_observation_dates(
-                portfolio_id=portfolio_id,
-                start_date=resolved_window.start_date,
-                end_date=resolved_window.end_date,
-                snapshot_epoch=snapshot_epoch,
-            )
-            fx_rates = await self._get_conversion_rates(
-                portfolio_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
-                start_date=resolved_window.start_date,
-                end_date=resolved_window.end_date,
-            )
-            has_more = len(rows) > request.page.page_size
-            rows_page = rows[: request.page.page_size]
-            portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]] = {}
-            if rows_page and hasattr(self.repo, "list_portfolio_cashflow_rows"):
-                portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
-                    portfolio_id=portfolio_id,
-                    valuation_dates=sorted({row.valuation_date for row in rows_page}),
-                    snapshot_epoch=snapshot_epoch,
-                )
-                portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
-                    portfolio_cashflow_rows,
-                    reporting_currency=reporting_currency,
-                    portfolio_currency=portfolio_currency,
-                    fx_rates=fx_rates,
-                )
-
-            observations = []
-            quality_distribution = {}
-            for row in rows_page:
-                valuation_date = row.valuation_date
-                conversion_rate = Decimal("1")
-                if reporting_currency != portfolio_currency:
-                    if valuation_date not in fx_rates:
-                        raise AnalyticsInputError(
-                            "INSUFFICIENT_DATA",
-                            "Missing FX rate for "
-                            f"{portfolio_currency}/{reporting_currency} on {valuation_date}.",
-                        )
-                    conversion_rate = fx_rates[valuation_date]
-                quality = self._quality_status_from_epoch(int(row.epoch))
-                quality_distribution[quality] = quality_distribution.get(quality, 0) + 1
-
-                observations.append(
-                    PortfolioTimeseriesObservation(
-                        valuation_date=valuation_date,
-                        beginning_market_value=Decimal(row.bod_market_value) * conversion_rate,
-                        ending_market_value=Decimal(row.eod_market_value) * conversion_rate,
-                        valuation_status=quality,
-                        cash_flows=portfolio_cashflows_by_date.get(valuation_date, []),
-                        cash_flow_currency=reporting_currency,
-                    )
-                )
-
-            next_page_token = None
-            if has_more and rows_page:
-                next_page_token = self._encode_page_token(
-                    {
-                        "valuation_date": rows_page[-1].valuation_date.isoformat(),
-                        "snapshot_epoch": snapshot_epoch,
-                        "scope_fingerprint": request_scope_fingerprint,
-                    }
-                )
+        (
+            observations,
+            quality_distribution,
+            observed_dates,
+            snapshot_epoch,
+            next_page_token,
+        ) = await self._portfolio_observation_rows(
+            portfolio_id=portfolio_id,
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
+            resolved_window=resolved_window,
+            page_size=request.page.page_size,
+            cursor_date=cursor_date,
+            request_scope_fingerprint=request_scope_fingerprint,
+        )
 
         latest_date = await self._latest_available_performance_date(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             observed_dates=observed_dates,
         )
-        missing_dates = sorted(set(expected_business_dates) - set(observed_dates))
+        observed_date_set = set(observed_dates)
+        missing_dates_count = sum(
+            1 for expected_date in expected_business_dates if expected_date not in observed_date_set
+        )
         stale_points_count = sum(
             count for status_name, count in quality_distribution.items() if status_name != "final"
         )
@@ -693,7 +615,7 @@ class AnalyticsTimeseriesService:
             ),
             diagnostics=PortfolioQualityDiagnostics(
                 quality_status_distribution=quality_distribution,
-                missing_dates_count=len(missing_dates),
+                missing_dates_count=missing_dates_count,
                 stale_points_count=stale_points_count,
                 expected_business_dates_count=len(expected_business_dates),
                 returned_observation_dates_count=len(observed_dates),
@@ -751,13 +673,6 @@ class AnalyticsTimeseriesService:
                 "include_cash_flows": request.include_cash_flows,
             }
         )
-        fx_rates = await self._get_conversion_rates(
-            portfolio_currency=portfolio_currency,
-            reporting_currency=reporting_currency,
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
-        )
-
         cursor = self._decode_page_token(request.page.page_token)
         token_scope = cursor.get("scope_fingerprint")
         if token_scope is not None and token_scope != request_scope_fingerprint:
@@ -771,17 +686,14 @@ class AnalyticsTimeseriesService:
         }
         snapshot_epoch = int(cursor["snapshot_epoch"]) if cursor.get("snapshot_epoch") else None
         if snapshot_epoch is None:
-            if hasattr(self.repo, "get_position_snapshot_epoch"):
-                snapshot_epoch = await self.repo.get_position_snapshot_epoch(
-                    portfolio_id=portfolio_id,
-                    start_date=resolved_window.start_date,
-                    end_date=resolved_window.end_date,
-                    security_ids=request.filters.security_ids,
-                    position_ids=request.filters.position_ids,
-                    dimension_filters=dimension_filters,
-                )
-            else:
-                snapshot_epoch = 0
+            snapshot_epoch = await self.repo.get_position_snapshot_epoch(
+                portfolio_id=portfolio_id,
+                start_date=resolved_window.start_date,
+                end_date=resolved_window.end_date,
+                security_ids=request.filters.security_ids,
+                position_ids=request.filters.position_ids,
+                dimension_filters=dimension_filters,
+            )
         rows = await self.repo.list_position_timeseries_rows(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
@@ -794,70 +706,72 @@ class AnalyticsTimeseriesService:
             dimension_filters=dimension_filters,
             snapshot_epoch=snapshot_epoch,
         )
-        position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-            position_currencies={str(row.position_currency or "") for row in rows},
-            portfolio_currency=portfolio_currency,
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
-        )
-
         has_more = len(rows) > request.page.page_size
         rows_page = rows[: request.page.page_size]
+        page_dates = sorted({row.valuation_date for row in rows_page})
+        page_start_date = min(page_dates) if page_dates else resolved_window.start_date
+        page_end_date = max(page_dates) if page_dates else resolved_window.start_date
         position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = {}
-        if (
-            request.include_cash_flows
-            and rows_page
-            and hasattr(self.repo, "list_position_cashflow_rows")
-        ):
-            position_cashflow_rows = await self.repo.list_position_cashflow_rows(
-                portfolio_id=portfolio_id,
-                security_ids=sorted(
-                    {
-                        security_id
-                        for row in rows_page
-                        if (security_id := normalize_security_id(row.security_id))
-                    }
-                ),
-                valuation_dates=sorted({row.valuation_date for row in rows_page}),
-                snapshot_epoch=snapshot_epoch,
-            )
-            position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
         portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]] = {}
-        if rows_page and hasattr(self.repo, "list_portfolio_cashflow_rows"):
+        position_to_portfolio_rates: dict[str, dict[date, Decimal]] = {}
+        fx_rates: dict[date, Decimal] = {}
+        previous_eod_by_security: dict[str, Decimal] = {}
+        if rows_page:
+            first_page_date = min(row.valuation_date for row in rows_page)
+            normalized_security_ids = sorted(
+                {
+                    security_id
+                    for row in rows_page
+                    if (security_id := normalize_security_id(row.security_id))
+                }
+            )
             portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
                 portfolio_id=portfolio_id,
-                valuation_dates=sorted({row.valuation_date for row in rows_page}),
+                valuation_dates=page_dates,
                 snapshot_epoch=snapshot_epoch,
             )
+            position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
+                position_currencies={str(row.position_currency or "") for row in rows_page},
+                portfolio_currency=portfolio_currency,
+                start_date=page_start_date,
+                end_date=page_end_date,
+            )
+            fx_rates = await self._get_conversion_rates(
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+                start_date=page_start_date,
+                end_date=page_end_date,
+            )
+            previous_rows = await self.repo.list_latest_position_timeseries_before(
+                portfolio_id=portfolio_id,
+                before_date=first_page_date,
+                security_ids=normalized_security_ids,
+                snapshot_epoch=snapshot_epoch,
+            )
+            if request.include_cash_flows:
+                position_cashflow_rows = await self.repo.list_position_cashflow_rows(
+                    portfolio_id=portfolio_id,
+                    security_ids=normalized_security_ids,
+                    valuation_dates=page_dates,
+                    snapshot_epoch=snapshot_epoch,
+                )
+                position_cashflows_by_key = self._position_cash_flows_for_keys(
+                    position_cashflow_rows
+                )
             portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
                 portfolio_cashflow_rows,
                 reporting_currency=portfolio_currency,
                 portfolio_currency=portfolio_currency,
                 fx_rates={},
             )
-
-        quality_distribution: dict[str, int] = {}
-        response_rows: list[PositionTimeseriesRow] = []
-        previous_eod_by_security: dict[str, Decimal] = {}
-        if rows_page and hasattr(self.repo, "list_latest_position_timeseries_before"):
-            first_page_date = min(row.valuation_date for row in rows_page)
-            previous_rows = await self.repo.list_latest_position_timeseries_before(
-                portfolio_id=portfolio_id,
-                before_date=first_page_date,
-                security_ids=sorted(
-                    {
-                        security_id
-                        for row in rows_page
-                        if (security_id := normalize_security_id(row.security_id))
-                    }
-                ),
-                snapshot_epoch=snapshot_epoch,
-            )
             previous_eod_by_security = {
-                normalize_security_id(row.security_id): Decimal(row.eod_market_value)
+                normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
                 for row in previous_rows
                 if row.valuation_date == first_page_date - timedelta(days=1)
             }
+
+        quality_distribution: dict[str, int] = {}
+        response_rows: list[PositionTimeseriesRow] = []
         current_valuation_date: date | None = None
         current_eod_by_security: dict[str, Decimal] = {}
         for row in rows_page:
@@ -913,7 +827,7 @@ class AnalyticsTimeseriesService:
                     portfolio_cashflows_by_date.get(row.valuation_date, [])
                 ),
             )
-            ending_market_value_position = Decimal(row.eod_market_value)
+            ending_market_value_position = decimal_or_zero(row.eod_market_value)
             beginning_market_value_portfolio = (
                 beginning_market_value_position * position_to_portfolio_rate
             )
@@ -946,7 +860,7 @@ class AnalyticsTimeseriesService:
                         ending_market_value_portfolio * portfolio_to_reporting_rate
                     ),
                     valuation_status=quality,
-                    quantity=Decimal(row.quantity),
+                    quantity=decimal_or_zero(row.quantity),
                     cash_flows=cash_flows,
                 )
             )
@@ -1105,9 +1019,7 @@ class AnalyticsTimeseriesService:
         observed_dates: list[date] | None = None,
     ) -> date | None:
         latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
-        latest_position_date = None
-        if hasattr(self.repo, "get_latest_position_timeseries_date"):
-            latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
+        latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
         if observed_dates:
             observed_latest = max(observed_dates)
             latest_position_date = (

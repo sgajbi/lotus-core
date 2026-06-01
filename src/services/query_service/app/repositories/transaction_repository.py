@@ -5,9 +5,15 @@ from decimal import Decimal
 from typing import List, Optional
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
-from portfolio_common.database_models import BusinessDate, FxRate, Portfolio, Transaction
+from portfolio_common.database_models import (
+    BusinessDate,
+    FxRate,
+    Portfolio,
+    Transaction,
+    TransactionCost,
+)
 from portfolio_common.utils import async_timed
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -34,6 +40,12 @@ class TransactionRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _realized_tax_evidence_predicate():
+        return (Transaction.withholding_tax_amount.is_not(None)) | (
+            Transaction.other_interest_deductions_amount.is_not(None)
+        )
 
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
@@ -209,8 +221,9 @@ class TransactionRepository:
         normalized_sort_order = (sort_order or "desc").lower()
         sort_direction = asc if normalized_sort_order == "asc" else desc
         order_clause = sort_direction(getattr(Transaction, sort_field))
+        tie_breaker_clause = sort_direction(Transaction.id)
 
-        stmt = stmt.order_by(order_clause)
+        stmt = stmt.order_by(order_clause, tie_breaker_clause)
 
         results = await self.db.execute(stmt.offset(skip).limit(limit))
         transactions = results.scalars().unique().all()
@@ -279,6 +292,16 @@ class TransactionRepository:
                 Transaction.transaction_date >= start_of_day(start_date),
                 Transaction.transaction_date < start_of_next_day(end_date),
                 Transaction.transaction_date < start_of_next_day(as_of_date),
+                func.abs(Transaction.gross_transaction_amount) > 0,
+                or_(
+                    Transaction.trade_fee > 0,
+                    exists(
+                        select(1).where(
+                            TransactionCost.transaction_id == Transaction.transaction_id,
+                            TransactionCost.amount > 0,
+                        )
+                    ),
+                ),
             )
         )
         if security_ids:
@@ -348,10 +371,7 @@ class TransactionRepository:
         as_of_date: Optional[date] = None,
     ) -> List[Transaction]:
         stmt = self._apply_filters(
-            select(Transaction).where(
-                (Transaction.withholding_tax_amount.is_not(None))
-                | (Transaction.other_interest_deductions_amount.is_not(None))
-            ),
+            select(Transaction).where(self._realized_tax_evidence_predicate()),
             portfolio_id=portfolio_id,
             start_date=start_date,
             end_date=end_date,

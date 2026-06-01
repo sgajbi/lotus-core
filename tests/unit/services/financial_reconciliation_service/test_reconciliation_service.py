@@ -132,6 +132,40 @@ async def test_run_position_valuation_respects_bond_percent_of_par_pricing():
 
 
 @pytest.mark.asyncio
+async def test_run_position_valuation_normalizes_string_amounts():
+    run = SimpleNamespace(run_id="recon-string-amounts")
+    snapshot = SimpleNamespace(
+        portfolio_id="PORT-STR",
+        security_id="SEC-STR",
+        date=date(2026, 3, 8),
+        epoch=0,
+        quantity="10",
+        market_price="11",
+        market_value_local="110",
+        cost_basis="90",
+        cost_basis_local="90",
+        unrealized_gain_loss_local="20",
+    )
+    instrument = SimpleNamespace(currency="USD", product_type="EQUITY")
+    portfolio = SimpleNamespace(base_currency="USD")
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_position_valuation_rows.return_value = [(snapshot, instrument, portfolio)]
+
+    service = ReconciliationService(repository)
+    await service.run_position_valuation(
+        request=ReconciliationRunRequest(portfolio_id="PORT-STR", business_date=date(2026, 3, 8)),
+        correlation_id="corr-string-amounts",
+    )
+
+    assert repository.add_findings.await_args.args[0] == []
+    summary = repository.mark_run_completed.await_args.kwargs["summary"]
+    assert summary["examined_count"] == 1
+    assert summary["finding_count"] == 0
+    assert summary["passed"] is True
+
+
+@pytest.mark.asyncio
 async def test_run_position_valuation_records_invalid_market_price_without_derived_math():
     run = SimpleNamespace(run_id="recon-invalid-price")
     snapshot = SimpleNamespace(
@@ -318,22 +352,22 @@ async def test_run_timeseries_integrity_records_completeness_and_aggregate_misma
         portfolio_id="PORT-TS-2",
         date=date(2026, 3, 8),
         epoch=4,
-        bod_market_value=Decimal("200"),
-        bod_cashflow=Decimal("20"),
-        eod_cashflow=Decimal("15"),
-        eod_market_value=Decimal("230"),
-        fees=Decimal("3"),
+        bod_market_value="200",
+        bod_cashflow="20",
+        eod_cashflow="15",
+        eod_market_value="230",
+        fees="3",
     )
     authoritative_position_row = SimpleNamespace(
         portfolio_id="PORT-TS-2",
         security_id="SEC-TS-2",
         date=date(2026, 3, 8),
         epoch=4,
-        bod_market_value=Decimal("190"),
-        bod_cashflow_portfolio=Decimal("20"),
-        eod_cashflow_portfolio=Decimal("10"),
-        eod_market_value=Decimal("225"),
-        fees=Decimal("1"),
+        bod_market_value="190",
+        bod_cashflow_portfolio="20",
+        eod_cashflow_portfolio="10",
+        eod_market_value="225",
+        fees="1",
     )
     instrument = SimpleNamespace(currency="USD")
     owning_portfolio = SimpleNamespace(base_currency="USD")
@@ -406,6 +440,41 @@ async def test_authoritative_portfolio_metrics_skip_non_positive_fx_rates():
         "eod_market_value": Decimal("0"),
         "fees": Decimal("0"),
     }
+
+
+@pytest.mark.asyncio
+async def test_authoritative_portfolio_metrics_zero_default_sparse_amounts():
+    position_row = SimpleNamespace(
+        date=date(2026, 3, 8),
+        bod_market_value="100",
+        bod_cashflow_portfolio=" ",
+        eod_cashflow_portfolio=None,
+        eod_market_value="120.5",
+        fees="",
+    )
+    instrument = SimpleNamespace(currency="USD")
+    portfolio = SimpleNamespace(base_currency="USD")
+    repository = AsyncMock()
+    repository.fetch_authoritative_position_timeseries_rows.return_value = [
+        (position_row, instrument, portfolio)
+    ]
+
+    service = ReconciliationService(repository)
+    metrics, row_count = await service._aggregate_authoritative_portfolio_metrics(
+        portfolio_id="PORT-TS-SPARSE",
+        business_date=date(2026, 3, 8),
+        epoch=1,
+    )
+
+    assert row_count == 1
+    assert metrics == {
+        "bod_market_value": Decimal("100"),
+        "bod_cashflow": Decimal("0"),
+        "eod_cashflow": Decimal("0"),
+        "eod_market_value": Decimal("120.5"),
+        "fees": Decimal("0"),
+    }
+    repository.fetch_latest_fx_rate.assert_not_awaited()
 
 
 @pytest.mark.asyncio

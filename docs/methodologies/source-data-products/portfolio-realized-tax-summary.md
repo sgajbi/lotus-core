@@ -107,7 +107,8 @@ If a reporting currency is requested:
    evidence-row count.
 7. If `reporting_currency` is supplied, restate each currency total to the requested currency using
    the latest FX rate on or before `A`.
-8. Return source-data runtime metadata, evidence counts, grouped totals, optional reporting total,
+8. Set `latest_evidence_timestamp` from the loaded explicit tax-evidence rows.
+9. Return source-data runtime metadata, evidence counts, grouped totals, optional reporting total,
    and a reason code describing whether evidence existed.
 
 ## Validation and Failure Behavior
@@ -142,7 +143,7 @@ If a reporting currency is requested:
 | `currency_totals[]` | Per-currency withholding, other deduction, total tax amount, and evidence-row count. |
 | `reporting_currency_total_tax_amount` | Optional restated total across currency groups. |
 | `reason_codes[]` | `PORTFOLIO_REALIZED_TAX_SUMMARY_READY` or `PORTFOLIO_REALIZED_TAX_EVIDENCE_EMPTY`. |
-| `latest_evidence_timestamp` | Latest durable transaction `updated_at` timestamp for the filtered source window. |
+| `latest_evidence_timestamp` | Latest durable transaction `updated_at` timestamp from the filtered explicit tax-evidence rows. |
 
 ## Worked Example
 

@@ -17,6 +17,7 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..dtos.valuation_dto import ValuationData
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
+from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
 
@@ -83,19 +84,25 @@ class PositionService:
         """
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
-        if not await self.repo.portfolio_exists(portfolio_id):
+        needs_default_as_of_date = as_of_date is None and not include_projected
+        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
+        if not portfolio_exists:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        default_as_of_date = (
+            await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
+        )
 
-        effective_as_of_date = as_of_date
-        if effective_as_of_date is None and not include_projected:
-            effective_as_of_date = await self.repo.get_latest_business_date() or date.today()
+        effective_as_of_date = default_as_of_date
+        if effective_as_of_date is None and needs_default_as_of_date:
+            effective_as_of_date = date.today()
 
         if effective_as_of_date is not None:
             snapshot_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(
                 portfolio_id, effective_as_of_date
             )
             history_results = await self.repo.get_latest_position_history_by_portfolio_as_of_date(
-                portfolio_id, effective_as_of_date
+                portfolio_id,
+                effective_as_of_date,
             )
         else:
             snapshot_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
@@ -116,12 +123,24 @@ class PositionService:
         snapshot_security_ids = set(snapshot_results_by_security.keys())
         fallback_valuation_map: dict[str, dict[str, float | None]] = {}
         if history_supplements or (db_results and not snapshot_security_ids):
+            fallback_security_ids = sorted(
+                {
+                    security_id
+                    for position_row, _instrument, _pos_state in history_supplements
+                    if (security_id := normalize_security_id(position_row.security_id))
+                }
+            )
             fallback_valuation_map = (
                 await self.repo.get_latest_snapshot_valuation_map_as_of_date(
-                    portfolio_id, effective_as_of_date
+                    portfolio_id,
+                    effective_as_of_date,
+                    security_ids=fallback_security_ids or None,
                 )
                 if effective_as_of_date is not None
-                else await self.repo.get_latest_snapshot_valuation_map(portfolio_id)
+                else await self.repo.get_latest_snapshot_valuation_map(
+                    portfolio_id,
+                    security_ids=fallback_security_ids or None,
+                )
             )
 
         positions = []
@@ -183,11 +202,7 @@ class PositionService:
         total_market_value = Decimal(0)
         position_values: list[Decimal] = []
         for position in positions:
-            base_value = (
-                Decimal(str(position.valuation.market_value))
-                if position.valuation and position.valuation.market_value is not None
-                else Decimal(str(position.cost_basis))
-            )
+            base_value = self._weight_base_value(position)
             position_values.append(base_value)
             total_market_value += base_value
 
@@ -215,6 +230,18 @@ class PositionService:
                 )
             )
 
+        response_as_of_date = effective_as_of_date or max(
+            (position.position_date for position in positions), default=date.today()
+        )
+        market_price_security_ids = sorted(
+            {
+                security_id
+                for position in positions
+                if self._requires_market_price_freshness(position)
+                if (security_id := normalize_security_id(position.security_id))
+            }
+        )
+
         if held_since_requests:
             held_since_map = await self.repo.get_held_since_dates(
                 portfolio_id=portfolio_id,
@@ -222,25 +249,19 @@ class PositionService:
                     (security_id, epoch) for _, security_id, epoch, _ in held_since_requests
                 ],
             )
+            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
+                security_ids=market_price_security_ids,
+                as_of_date=response_as_of_date,
+            )
             for idx, security_id, epoch, default_date in held_since_requests:
                 positions[idx].held_since_date = held_since_map.get(
                     (security_id, epoch), default_date
                 )
-
-        response_as_of_date = effective_as_of_date or max(
-            (position.position_date for position in positions), default=date.today()
-        )
-        latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-            security_ids=sorted(
-                {
-                    normalize_security_id(position.security_id)
-                    for position in positions
-                    if self._requires_market_price_freshness(position)
-                    and normalize_security_id(position.security_id)
-                }
-            ),
-            as_of_date=response_as_of_date,
-        )
+        else:
+            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
+                security_ids=market_price_security_ids,
+                as_of_date=response_as_of_date,
+            )
         return PortfolioPositionsResponse(
             portfolio_id=portfolio_id,
             positions=positions,
@@ -294,6 +315,12 @@ class PositionService:
             and position.valuation is not None
             and position.valuation.market_price is not None
         )
+
+    @staticmethod
+    def _weight_base_value(position: Position) -> Decimal:
+        if position.valuation is not None and position.valuation.market_value is not None:
+            return decimal_or_zero(position.valuation.market_value)
+        return decimal_or_zero(position.cost_basis)
 
     @staticmethod
     def _latest_holdings_evidence_timestamp(

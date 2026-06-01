@@ -30,6 +30,15 @@ class PositionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _normalized_security_ids(security_ids: list[str]) -> list[str]:
+        normalized_security_ids = [
+            normalized
+            for security_id in security_ids
+            if (normalized := normalize_security_id(security_id))
+        ]
+        return sorted(set(normalized_security_ids))
+
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -235,8 +244,7 @@ class PositionRepository:
             .join(
                 latest_history_subq,
                 and_(
-                    DailyPositionSnapshot.portfolio_id
-                    == latest_history_subq.c.portfolio_id,
+                    DailyPositionSnapshot.portfolio_id == latest_history_subq.c.portfolio_id,
                     snapshot_security_id == latest_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
@@ -359,8 +367,7 @@ class PositionRepository:
             .join(
                 latest_history_subq,
                 and_(
-                    DailyPositionSnapshot.portfolio_id
-                    == latest_history_subq.c.portfolio_id,
+                    DailyPositionSnapshot.portfolio_id == latest_history_subq.c.portfolio_id,
                     snapshot_security_id == latest_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
@@ -521,13 +528,20 @@ class PositionRepository:
         return positions
 
     async def get_latest_snapshot_valuation_map(
-        self, portfolio_id: str
+        self, portfolio_id: str, security_ids: list[str] | None = None
     ) -> dict[str, dict[str, float | None]]:
         """
         Returns latest available valuation fields by security from daily snapshots,
         regardless of epoch. Used to enrich fallback position-history rows.
         """
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        predicates = [DailyPositionSnapshot.portfolio_id == portfolio_id]
+        if security_ids is not None:
+            normalized_security_ids = self._normalized_security_ids(security_ids)
+            if not normalized_security_ids:
+                return {}
+            predicates.append(snapshot_security_id.in_(normalized_security_ids))
+
         ranked_snapshot_subq = (
             select(
                 snapshot_security_id.label("security_id"),
@@ -545,7 +559,7 @@ class PositionRepository:
                 )
                 .label("rn"),
             )
-            .where(DailyPositionSnapshot.portfolio_id == portfolio_id)
+            .where(*predicates)
             .subquery()
         )
 
@@ -567,7 +581,10 @@ class PositionRepository:
         return valuation_map
 
     async def get_latest_snapshot_valuation_map_as_of_date(
-        self, portfolio_id: str, as_of_date: date
+        self,
+        portfolio_id: str,
+        as_of_date: date,
+        security_ids: list[str] | None = None,
     ) -> dict[str, dict[str, float | None]]:
         """
         Returns latest available valuation fields by security from daily snapshots
@@ -575,6 +592,16 @@ class PositionRepository:
         history-backed rows when snapshot materialization lags reprocessing.
         """
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        predicates = [
+            DailyPositionSnapshot.portfolio_id == portfolio_id,
+            DailyPositionSnapshot.date <= as_of_date,
+        ]
+        if security_ids is not None:
+            normalized_security_ids = self._normalized_security_ids(security_ids)
+            if not normalized_security_ids:
+                return {}
+            predicates.append(snapshot_security_id.in_(normalized_security_ids))
+
         ranked_snapshot_subq = (
             select(
                 snapshot_security_id.label("security_id"),
@@ -592,10 +619,7 @@ class PositionRepository:
                 )
                 .label("rn"),
             )
-            .where(
-                DailyPositionSnapshot.portfolio_id == portfolio_id,
-                DailyPositionSnapshot.date <= as_of_date,
-            )
+            .where(*predicates)
             .subquery()
         )
 
@@ -624,13 +648,7 @@ class PositionRepository:
         if not security_ids:
             return {}
 
-        normalized_security_ids = sorted(
-            {
-                normalized
-                for security_id in security_ids
-                if (normalized := normalize_security_id(security_id))
-            }
-        )
+        normalized_security_ids = self._normalized_security_ids(security_ids)
         if not normalized_security_ids:
             return {}
 

@@ -10,10 +10,10 @@ from ..dtos.operations_dto import (
     PortfolioSupportabilitySummary,
     SupportOverviewResponse,
 )
-from ..repositories.operations_repository import (
+from ..repositories.operations_models import (
     MissingHistoricalFxDependencySummary as RepositoryMissingHistoricalFxDependencySummary,
 )
-from ..repositories.operations_repository import (
+from ..repositories.operations_models import (
     SnapshotValuationCoverageSummary,
 )
 

@@ -6,7 +6,7 @@ from portfolio_common.timeseries_constants import (
 from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
 
 from ..dtos.operations_dto import LoadRunProgressResponse
-from ..repositories.operations_repository import LoadRunProgressSummary
+from ..repositories.operations_models import LoadRunProgressSummary
 from ..support_policy import DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES
 
 _VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
@@ -215,8 +215,7 @@ def build_load_run_progress_response(
             valuation_pending_dispatch_polls_lower_bound
         ),
         valuation_scheduler_pending_dispatch_time_lower_bound_seconds=(
-            valuation_pending_dispatch_polls_lower_bound
-            * VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
+            valuation_pending_dispatch_polls_lower_bound * VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
         ),
         valuation_to_position_timeseries_handoff_pressure_hint=(
             _get_valuation_to_timeseries_handoff_pressure_hint(summary)

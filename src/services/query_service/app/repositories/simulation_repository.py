@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from uuid import uuid4
 
+from portfolio_common.database_models import SimulationChange, SimulationSession
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.database_models import SimulationChange, SimulationSession
+from src.services.query_service.app.services.decimal_amounts import decimal_or_none
 
 
 class SimulationRepository:
@@ -58,11 +58,9 @@ class SimulationRepository:
                 portfolio_id=session.portfolio_id,
                 security_id=item["security_id"],
                 transaction_type=item["transaction_type"],
-                quantity=(
-                    Decimal(str(item["quantity"])) if item.get("quantity") is not None else None
-                ),
-                price=(Decimal(str(item["price"])) if item.get("price") is not None else None),
-                amount=(Decimal(str(item["amount"])) if item.get("amount") is not None else None),
+                quantity=decimal_or_none(item.get("quantity")),
+                price=decimal_or_none(item.get("price")),
+                amount=decimal_or_none(item.get("amount")),
                 currency=item.get("currency"),
                 effective_date=item.get("effective_date"),
                 change_metadata=item.get("metadata"),

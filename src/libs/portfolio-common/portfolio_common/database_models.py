@@ -59,6 +59,14 @@ class Portfolio(Base):
     __table_args__ = (
         Index("ix_portfolios_booking_center_code", "booking_center_code"),
         Index("ix_portfolios_norm_portfolio_id", func.trim(portfolio_id)),
+        Index(
+            "ix_portfolios_advisor_status_open_close_portfolio",
+            "advisor_id",
+            "status",
+            "open_date",
+            "close_date",
+            "portfolio_id",
+        ),
     )
 
 
@@ -139,6 +147,21 @@ class PositionHistory(Base):
             position_date.desc(),
             id.desc(),
         ),
+        Index(
+            "ix_pos_hist_port_norm_sec_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            position_date.desc(),
+            id.desc(),
+            "epoch",
+        ),
+        Index(
+            "ix_pos_hist_lineage_latest",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
+            position_date.desc(),
+        ),
     )
 
 
@@ -181,6 +204,29 @@ class DailyPositionSnapshot(Base):
             func.trim(security_id),
             date.desc(),
             epoch.desc(),
+        ),
+        Index(
+            "ix_daily_snap_port_norm_sec_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            date.desc(),
+            id.desc(),
+            "epoch",
+        ),
+        Index(
+            "ix_daily_snap_lineage_latest",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
+            date.desc(),
+        ),
+        Index(
+            "ix_daily_snap_port_date_status_norm_sec_epoch",
+            "portfolio_id",
+            "date",
+            "valuation_status",
+            func.trim(security_id),
+            "epoch",
         ),
     )
 
@@ -267,6 +313,15 @@ class Instrument(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    __table_args__ = (
+        Index("ix_instruments_norm_security_id", func.trim(security_id)),
+        Index(
+            "ix_instruments_norm_asset_cls_sec",
+            func.upper(func.trim(asset_class)),
+            func.trim(security_id),
+        ),
+    )
+
 
 class PortfolioBenchmarkAssignment(Base):
     __tablename__ = "portfolio_benchmark_assignments"
@@ -350,6 +405,18 @@ class PortfolioMandateBinding(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_mandate_binding_dpm_model_book_eff",
+            "model_portfolio_id",
+            "booking_center_code",
+            "effective_from",
+            "effective_to",
+            "portfolio_id",
+            "mandate_id",
+            postgresql_where=text(
+                "mandate_type = 'discretionary' AND discretionary_authority_status = 'active'"
+            ),
+        ),
     )
 
 
@@ -397,6 +464,19 @@ class ClientRestrictionProfile(Base):
             "client_id",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_client_restr_active_port_client_eff",
+            "portfolio_id",
+            "client_id",
+            "restriction_scope",
+            "restriction_code",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            restriction_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("restriction_status = 'active'"),
         ),
     )
 
@@ -446,6 +526,19 @@ class SustainabilityPreferenceProfile(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_sust_pref_active_port_client_eff",
+            "portfolio_id",
+            "client_id",
+            "preference_framework",
+            "preference_code",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            preference_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("preference_status = 'active'"),
+        ),
     )
 
 
@@ -493,6 +586,18 @@ class ClientTaxProfile(Base):
             "client_id",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_client_tax_profile_active_eff",
+            "portfolio_id",
+            "client_id",
+            "tax_profile_id",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            profile_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("profile_status = 'active'"),
         ),
     )
 
@@ -547,6 +652,20 @@ class ClientTaxRuleSet(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_client_tax_rule_active_eff",
+            "portfolio_id",
+            "client_id",
+            "rule_set_id",
+            "jurisdiction_code",
+            "rule_code",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            rule_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("rule_status = 'active'"),
+        ),
     )
 
 
@@ -590,6 +709,17 @@ class ClientIncomeNeedsSchedule(Base):
             "client_id",
             "start_date",
             "end_date",
+        ),
+        Index(
+            "ix_client_income_needs_active_eff",
+            "portfolio_id",
+            "client_id",
+            "schedule_id",
+            start_date.desc(),
+            "end_date",
+            observed_at.desc().nulls_last(),
+            updated_at.desc(),
+            postgresql_where=text("need_status = 'active'"),
         ),
     )
 
@@ -637,6 +767,18 @@ class LiquidityReserveRequirement(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_liquidity_reserve_active_eff",
+            "portfolio_id",
+            "client_id",
+            "reserve_requirement_id",
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            requirement_version.desc(),
+            updated_at.desc(),
+            postgresql_where=text("reserve_status = 'active'"),
+        ),
     )
 
 
@@ -677,6 +819,16 @@ class PlannedWithdrawalSchedule(Base):
             "portfolio_id",
             "client_id",
             "scheduled_date",
+        ),
+        Index(
+            "ix_planned_withdrawal_active_window",
+            "portfolio_id",
+            "client_id",
+            "scheduled_date",
+            "withdrawal_schedule_id",
+            observed_at.desc().nulls_last(),
+            updated_at.desc(),
+            postgresql_where=text("withdrawal_status = 'active'"),
         ),
     )
 
@@ -726,6 +878,15 @@ class InstrumentEligibilityProfile(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_instr_elig_norm_sec_eff",
+            func.trim(security_id),
+            effective_from.desc(),
+            "effective_to",
+            observed_at.desc().nulls_last(),
+            eligibility_version.desc(),
+            updated_at.desc(),
+        ),
     )
 
 
@@ -765,6 +926,15 @@ class ModelPortfolioDefinition(Base):
             "model_portfolio_id",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_model_port_def_approved_eff_order",
+            "model_portfolio_id",
+            effective_from.desc(),
+            "effective_to",
+            approved_at.desc(),
+            updated_at.desc(),
+            postgresql_where=text("approval_status = 'approved'"),
         ),
     )
 
@@ -806,6 +976,15 @@ class ModelPortfolioTarget(Base):
             "effective_from",
             "effective_to",
         ),
+        Index(
+            "ix_model_port_tgt_active_eff_order",
+            "model_portfolio_id",
+            "model_portfolio_version",
+            "instrument_id",
+            effective_from.desc(),
+            "effective_to",
+            postgresql_where=text("target_status = 'active'"),
+        ),
     )
 
 
@@ -841,6 +1020,13 @@ class BenchmarkDefinition(Base):
             "effective_from",
             name="_benchmark_definition_effective_uc",
         ),
+        Index(
+            "ix_benchmark_def_active_id_eff",
+            "benchmark_id",
+            effective_from.desc(),
+            "effective_to",
+            postgresql_where=text("benchmark_status = 'active'"),
+        ),
     )
 
 
@@ -870,6 +1056,13 @@ class IndexDefinition(Base):
 
     __table_args__ = (
         UniqueConstraint("index_id", "effective_from", name="_index_definition_effective_uc"),
+        Index(
+            "ix_index_def_active_id_eff",
+            "index_id",
+            effective_from.desc(),
+            "effective_to",
+            postgresql_where=text("index_status = 'active'"),
+        ),
     )
 
 
@@ -903,6 +1096,13 @@ class BenchmarkCompositionSeries(Base):
             "ix_benchmark_composition_series_benchmark_effective_window",
             "benchmark_id",
             "composition_effective_from",
+            "composition_effective_to",
+        ),
+        Index(
+            "ix_bench_comp_benchmark_index_eff",
+            "benchmark_id",
+            "index_id",
+            composition_effective_from.desc(),
             "composition_effective_to",
         ),
     )
@@ -1098,6 +1298,12 @@ class CashAccountMaster(Base):
             "opened_on",
             "closed_on",
         ),
+        Index(
+            "ix_cash_account_port_currency_id",
+            "portfolio_id",
+            "account_currency",
+            "cash_account_id",
+        ),
     )
 
 
@@ -1129,6 +1335,13 @@ class InstrumentLookthroughComponent(Base):
             "parent_security_id",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_lookthrough_norm_parent_eff_comp",
+            func.trim(parent_security_id),
+            effective_from.desc(),
+            "effective_to",
+            func.trim(component_security_id),
         ),
     )
 
@@ -1267,6 +1480,67 @@ class Transaction(Base):
             transaction_date,
             transaction_id,
         ),
+        Index(
+            "ix_txn_port_date_id",
+            "portfolio_id",
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_norm_sec_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_norm_sec_type_date_id",
+            "portfolio_id",
+            func.trim(security_id),
+            "transaction_type",
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_norm_cash_instr_date_id",
+            "portfolio_id",
+            func.trim(settlement_cash_instrument_id),
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_linked_group_date_id",
+            "portfolio_id",
+            "linked_transaction_group_id",
+            transaction_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_txn_port_settlement_date_id",
+            "portfolio_id",
+            settlement_date,
+            id,
+        ),
+        Index(
+            "ix_txn_projected_cash_external_port_settle_txn_date_id",
+            "portfolio_id",
+            "settlement_date",
+            "transaction_date",
+            "id",
+            postgresql_where=text(
+                "transaction_type IN ('DEPOSIT', 'WITHDRAWAL') AND settlement_date IS NOT NULL"
+            ),
+        ),
+        Index(
+            "ix_txn_realized_tax_evidence_port_currency_date_txn",
+            "portfolio_id",
+            "currency",
+            "transaction_date",
+            "transaction_id",
+            postgresql_where=text(
+                "withholding_tax_amount IS NOT NULL OR other_interest_deductions_amount IS NOT NULL"
+            ),
+        ),
     )
 
 
@@ -1284,6 +1558,15 @@ class TransactionCost(Base):
     )
 
     transaction = relationship("Transaction", back_populates="costs")
+
+    __table_args__ = (
+        Index("ix_transaction_costs_transaction_id", "transaction_id"),
+        Index(
+            "ix_txn_costs_positive_txn_id",
+            "transaction_id",
+            postgresql_where=text("amount > 0"),
+        ),
+    )
 
 
 class Cashflow(Base):
@@ -1332,6 +1615,20 @@ class Cashflow(Base):
             cashflow_date,
             epoch.desc(),
         ),
+        Index(
+            "ix_cashflows_port_norm_sec_date_epoch",
+            "portfolio_id",
+            func.trim(security_id),
+            cashflow_date,
+            epoch.desc(),
+        ),
+        Index(
+            "ix_cashflows_port_txn_epoch_id",
+            "portfolio_id",
+            "transaction_id",
+            epoch.desc(),
+            id.desc(),
+        ),
     )
 
 
@@ -1368,6 +1665,19 @@ class PositionLotState(Base):
             func.trim(portfolio_id),
             func.trim(security_id),
         ),
+        Index(
+            "ix_position_lot_port_norm_sec_acq_id",
+            "portfolio_id",
+            func.trim(security_id),
+            acquisition_date,
+            id,
+        ),
+        Index(
+            "ix_position_lot_port_acq_lot_id",
+            "portfolio_id",
+            acquisition_date,
+            lot_id,
+        ),
     )
 
 
@@ -1392,6 +1702,15 @@ class AccruedIncomeOffsetState(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_accrued_offset_port_norm_sec_id",
+            "portfolio_id",
+            func.trim(security_id),
+            id,
+        ),
     )
 
 
@@ -1420,6 +1739,20 @@ class PositionTimeseries(Base):
         Index(
             "ix_pos_ts_norm_port_sec_date_epoch",
             func.trim(portfolio_id),
+            func.trim(security_id),
+            date.desc(),
+            epoch.desc(),
+        ),
+        Index(
+            "ix_pos_ts_port_date_norm_sec_epoch",
+            "portfolio_id",
+            date,
+            func.trim(security_id),
+            epoch.desc(),
+        ),
+        Index(
+            "ix_pos_ts_port_norm_sec_date_epoch",
+            "portfolio_id",
             func.trim(security_id),
             date.desc(),
             epoch.desc(),
@@ -1532,6 +1865,13 @@ class PortfolioAggregationJob(Base):
             "updated_at",
         ),
         Index(
+            "ix_portfolio_aggregation_jobs_claim_order",
+            "status",
+            "portfolio_id",
+            "aggregation_date",
+            "id",
+        ),
+        Index(
             "ix_portfolio_aggregation_jobs_portfolio_status_updated",
             "portfolio_id",
             "status",
@@ -1544,6 +1884,15 @@ class PortfolioAggregationJob(Base):
             "aggregation_date",
             "updated_at",
             "id",
+        ),
+        Index(
+            "ix_agg_jobs_port_corr_date_updated_id",
+            "portfolio_id",
+            "correlation_id",
+            "aggregation_date",
+            "updated_at",
+            "id",
+            postgresql_where=correlation_id.is_not(None),
         ),
     )
 
@@ -1590,6 +1939,15 @@ class PortfolioValuationJob(Base):
             "updated_at",
         ),
         Index(
+            "ix_portfolio_valuation_jobs_claim_order_epoch",
+            "status",
+            "portfolio_id",
+            "security_id",
+            "valuation_date",
+            epoch.desc(),
+            "id",
+        ),
+        Index(
             "ix_portfolio_valuation_jobs_portfolio_status_updated",
             "portfolio_id",
             "status",
@@ -1610,6 +1968,23 @@ class PortfolioValuationJob(Base):
             "valuation_date",
             "epoch",
             "status",
+        ),
+        Index(
+            "ix_val_jobs_lineage_latest",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
+            valuation_date.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_val_jobs_port_corr_date_updated_id",
+            "portfolio_id",
+            "correlation_id",
+            "valuation_date",
+            "updated_at",
+            "id",
+            postgresql_where=correlation_id.is_not(None),
         ),
     )
 
@@ -1766,6 +2141,27 @@ class PositionState(Base):
             "watermark_date",
             "updated_at",
         ),
+        Index(
+            "ix_position_state_updated_watermark_key",
+            "updated_at",
+            "watermark_date",
+            "portfolio_id",
+            "security_id",
+        ),
+        Index(
+            "ix_position_state_status_updated_watermark_key",
+            "status",
+            "updated_at",
+            "watermark_date",
+            "portfolio_id",
+            "security_id",
+        ),
+        Index(
+            "ix_position_state_port_norm_sec_epoch",
+            "portfolio_id",
+            func.trim(security_id),
+            "epoch",
+        ),
     )
 
 
@@ -1845,6 +2241,22 @@ class ReprocessingJob(Base):
             "status",
             "updated_at",
         ),
+        Index(
+            "ix_reproc_resetwm_sec_status_created_id",
+            text("trim(payload->>'security_id')"),
+            "status",
+            "created_at",
+            "id",
+            postgresql_where=text("job_type = 'RESET_WATERMARKS'"),
+        ),
+        Index(
+            "ix_reproc_resetwm_corr_status_created_id",
+            "correlation_id",
+            "status",
+            "created_at",
+            "id",
+            postgresql_where=text("job_type = 'RESET_WATERMARKS'"),
+        ),
     )
 
 
@@ -1881,6 +2293,12 @@ class AnalyticsExportJob(Base):
             "ix_analytics_export_jobs_status_updated_at",
             "status",
             "updated_at",
+        ),
+        Index(
+            "ix_analytics_export_jobs_dataset_fingerprint_id",
+            "dataset_type",
+            "request_fingerprint",
+            id.desc(),
         ),
     )
 
@@ -1924,6 +2342,24 @@ class PipelineStageState(Base):
             "stage_name",
             "status",
         ),
+        Index(
+            "ix_pipeline_stage_state_port_status_date_stage_epoch_updated_id",
+            "portfolio_id",
+            "status",
+            business_date.desc(),
+            "stage_name",
+            epoch.desc(),
+            updated_at.desc(),
+            id.asc(),
+        ),
+        Index(
+            "ix_pipeline_stage_state_port_stage_date_epoch_id",
+            "portfolio_id",
+            "stage_name",
+            business_date.desc(),
+            epoch.desc(),
+            id.desc(),
+        ),
     )
 
 
@@ -1961,6 +2397,42 @@ class FinancialReconciliationRun(Base):
             "status",
             started_at.desc(),
         ),
+        Index(
+            "ix_financial_reconciliation_runs_port_status_started_id",
+            "portfolio_id",
+            "status",
+            started_at.desc(),
+            id.asc(),
+        ),
+        Index(
+            "ix_financial_reconciliation_runs_port_type_started_id",
+            "portfolio_id",
+            "reconciliation_type",
+            started_at.desc(),
+            id.desc(),
+        ),
+        Index(
+            "ix_fin_recon_runs_port_corr_started_id",
+            "portfolio_id",
+            "correlation_id",
+            started_at.desc(),
+            id.asc(),
+        ),
+        Index(
+            "ix_fin_recon_runs_port_req_by_started_id",
+            "portfolio_id",
+            "requested_by",
+            started_at.desc(),
+            id.asc(),
+        ),
+        Index(
+            "ix_fin_recon_runs_port_date_epoch_started_id",
+            "portfolio_id",
+            "business_date",
+            "epoch",
+            started_at.desc(),
+            id.desc(),
+        ),
     )
 
 
@@ -1994,10 +2466,18 @@ class FinancialReconciliationFinding(Base):
 
     __table_args__ = (
         Index(
-            "ix_financial_reconciliation_findings_run_type_severity",
+            "ix_financial_reconciliation_findings_run_severity_type_id",
             "run_id",
-            "finding_type",
             "severity",
+            "finding_type",
+            id.asc(),
+        ),
+        Index(
+            "ix_financial_reconciliation_findings_run_severity_created_id",
+            "run_id",
+            "severity",
+            created_at.desc(),
+            id.desc(),
         ),
     )
 

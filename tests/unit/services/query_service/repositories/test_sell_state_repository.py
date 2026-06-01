@@ -44,6 +44,7 @@ async def test_get_sell_disposals_filters_portfolio_security_and_sell_type(
     assert "transactions.portfolio_id = 'PORT-1'" in compiled
     assert "trim(transactions.security_id) = 'US0378331005'" in compiled
     assert "transactions.transaction_type = 'SELL'" in compiled
+    assert "ORDER BY transactions.transaction_date DESC, transactions.id DESC" in compiled
 
 
 async def test_get_sell_disposals_skips_blank_security_id(

@@ -19,6 +19,7 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..services.decimal_amounts import decimal_or_none
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
 
@@ -29,21 +30,23 @@ class AnalyticsTimeseriesRepository:
 
     @staticmethod
     def _normalized_security_ids(security_ids: list[str]) -> list[str]:
-        return [
+        normalized_security_ids = [
             normalized
             for security_id in security_ids
             if (normalized := normalize_security_id(security_id))
         ]
+        return list(dict.fromkeys(normalized_security_ids))
 
     @staticmethod
     def _security_ids_from_position_ids(portfolio_id: str, position_ids: list[str]) -> list[str]:
-        return [
+        normalized_security_ids = [
             normalized
             for position_id in position_ids
             if ":" in position_id
             and position_id.split(":", 1)[0] == portfolio_id
             and (normalized := normalize_security_id(position_id.split(":", 1)[1]))
         ]
+        return list(dict.fromkeys(normalized_security_ids))
 
     @staticmethod
     def _latest_cashflow_rows_stmt(*, predicates: list[object], include_security_id: bool):
@@ -123,87 +126,6 @@ class AnalyticsTimeseriesRepository:
         )
         result = await self.db.execute(stmt)
         return [row.date for row in result.all()]
-
-    async def list_portfolio_observation_dates(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        snapshot_epoch: int | None = None,
-    ) -> list[date]:
-        predicates = [
-            PortfolioTimeseries.portfolio_id == portfolio_id,
-            PortfolioTimeseries.date >= start_date,
-            PortfolioTimeseries.date <= end_date,
-        ]
-        if snapshot_epoch is not None:
-            predicates.append(PortfolioTimeseries.epoch <= snapshot_epoch)
-        ranked = (
-            select(
-                PortfolioTimeseries.date.label("valuation_date"),
-                func.row_number()
-                .over(
-                    partition_by=PortfolioTimeseries.date,
-                    order_by=(PortfolioTimeseries.epoch.desc(),),
-                )
-                .label("rn"),
-            )
-            .where(*predicates)
-            .subquery()
-        )
-        stmt = (
-            select(ranked.c.valuation_date)
-            .where(ranked.c.rn == 1)
-            .order_by(ranked.c.valuation_date.asc())
-        )
-        result = await self.db.execute(stmt)
-        return [row.valuation_date for row in result.all()]
-
-    async def list_portfolio_timeseries_rows(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        page_size: int,
-        cursor_date: date | None,
-        snapshot_epoch: int | None = None,
-    ) -> list[Any]:
-        predicates = [
-            PortfolioTimeseries.portfolio_id == portfolio_id,
-            PortfolioTimeseries.date >= start_date,
-            PortfolioTimeseries.date <= end_date,
-        ]
-        if snapshot_epoch is not None:
-            predicates.append(PortfolioTimeseries.epoch <= snapshot_epoch)
-        ranked = (
-            select(
-                PortfolioTimeseries.date.label("valuation_date"),
-                PortfolioTimeseries.bod_market_value.label("bod_market_value"),
-                PortfolioTimeseries.eod_market_value.label("eod_market_value"),
-                PortfolioTimeseries.bod_cashflow.label("bod_cashflow"),
-                PortfolioTimeseries.eod_cashflow.label("eod_cashflow"),
-                PortfolioTimeseries.fees.label("fees"),
-                PortfolioTimeseries.epoch.label("epoch"),
-                func.row_number()
-                .over(
-                    partition_by=PortfolioTimeseries.date,
-                    order_by=(PortfolioTimeseries.epoch.desc(),),
-                )
-                .label("rn"),
-            )
-            .where(*predicates)
-            .subquery()
-        )
-
-        stmt = select(ranked).where(ranked.c.rn == 1)
-        if cursor_date is not None:
-            stmt = stmt.where(ranked.c.valuation_date > cursor_date)
-        stmt = stmt.order_by(ranked.c.valuation_date.asc()).limit(page_size + 1)
-
-        result = await self.db.execute(stmt)
-        return result.all()
 
     async def list_position_timeseries_rows(
         self,
@@ -372,6 +294,57 @@ class AnalyticsTimeseriesRepository:
         result = await self.db.execute(stmt)
         return result.all()
 
+    async def list_position_observation_dates(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        snapshot_epoch: int | None = None,
+    ) -> list[date]:
+        predicates = [
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.date >= start_date,
+            PositionTimeseries.date <= end_date,
+        ]
+        if snapshot_epoch is not None:
+            predicates.append(PositionTimeseries.epoch <= snapshot_epoch)
+
+        latest_history_quantity = self._latest_current_position_history_quantity()
+        position_security_id = func.trim(PositionTimeseries.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        ranked = (
+            select(
+                PositionTimeseries.date.label("valuation_date"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionTimeseries.date, position_security_id),
+                    order_by=(PositionTimeseries.epoch.desc(),),
+                )
+                .label("rn"),
+            )
+            .select_from(PositionTimeseries)
+            .join(
+                PositionState,
+                and_(
+                    PositionTimeseries.portfolio_id == PositionState.portfolio_id,
+                    position_security_id == state_security_id,
+                    PositionTimeseries.epoch == PositionState.epoch,
+                ),
+            )
+            .where(*predicates, PositionTimeseries.quantity == latest_history_quantity)
+            .subquery()
+        )
+
+        stmt = (
+            select(ranked.c.valuation_date)
+            .where(ranked.c.rn == 1)
+            .distinct()
+            .order_by(ranked.c.valuation_date.asc())
+        )
+        result = await self.db.execute(stmt)
+        return [row.valuation_date for row in result.all()]
+
     async def list_latest_position_timeseries_before(
         self,
         *,
@@ -488,21 +461,6 @@ class AnalyticsTimeseriesRepository:
         result = await self.db.execute(stmt)
         return result.all()
 
-    async def get_portfolio_snapshot_epoch(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-    ) -> int:
-        stmt = select(func.max(PortfolioTimeseries.epoch)).where(
-            PortfolioTimeseries.portfolio_id == portfolio_id,
-            PortfolioTimeseries.date >= start_date,
-            PortfolioTimeseries.date <= end_date,
-        )
-        result = await self.db.execute(stmt)
-        return int(result.scalar_one_or_none() or 0)
-
     async def get_position_snapshot_epoch(
         self,
         *,
@@ -579,4 +537,9 @@ class AnalyticsTimeseriesRepository:
         )
         result = await self.db.execute(stmt)
         rows = result.all()
-        return {row.rate_date: Decimal(row.rate) for row in rows}
+        rates: dict[date, Decimal] = {}
+        for row in rows:
+            rate = decimal_or_none(row.rate)
+            if rate is not None:
+                rates[row.rate_date] = rate
+        return rates

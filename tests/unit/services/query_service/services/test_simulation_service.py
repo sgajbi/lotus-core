@@ -123,6 +123,45 @@ async def test_projected_positions_applies_change_delta(mock_dependencies):
     assert response.positions[0].delta_quantity == 10.0
 
 
+async def test_projected_positions_reads_baseline_and_changes_sequentially(mock_dependencies):
+    repo, position_repo, instrument_repo = mock_dependencies
+    call_order: list[str] = []
+
+    async def get_latest_positions_by_portfolio(portfolio_id: str):
+        assert portfolio_id == "P1"
+        call_order.append("baseline")
+        return [
+            (
+                SimpleNamespace(
+                    security_id="SEC_AAPL_US",
+                    quantity=100,
+                    cost_basis=1000,
+                    cost_basis_local=1000,
+                    date=datetime(2025, 9, 11).date(),
+                ),
+                SimpleNamespace(name="Apple", asset_class="Equity"),
+                SimpleNamespace(status="CURRENT"),
+            )
+        ]
+
+    async def get_changes(session_id: str):
+        assert session_id == "S1"
+        call_order.append("changes")
+        return []
+
+    position_repo.get_latest_positions_by_portfolio.side_effect = get_latest_positions_by_portfolio
+    repo.get_changes.side_effect = get_changes
+    instrument_repo.get_by_security_ids.return_value = []
+
+    service = SimulationService(AsyncMock())
+    response = await service.get_projected_positions("S1")
+
+    assert response.positions[0].security_id == "SEC_AAPL_US"
+    assert response.positions[0].proposed_quantity == Decimal("100")
+    assert call_order == ["baseline", "changes"]
+    position_repo.get_latest_position_history_by_portfolio.assert_not_awaited()
+
+
 async def test_delete_change_returns_updated_changes(mock_dependencies):
     repo, _, _ = mock_dependencies
     repo.delete_change.return_value = True
@@ -271,6 +310,35 @@ async def test_projected_positions_uses_snapshot_when_available(mock_dependencie
     assert response.positions[0].security_id == "SEC_MSFT_US"
 
 
+async def test_projected_positions_preserves_blank_optional_cost_values(
+    mock_dependencies,
+):
+    repo, position_repo, instrument_repo = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio.return_value = [
+        (
+            SimpleNamespace(
+                security_id="SEC_MSFT_US",
+                quantity="50",
+                cost_basis=" ",
+                cost_basis_local="",
+                date=datetime(2025, 9, 11).date(),
+            ),
+            SimpleNamespace(name="Microsoft", asset_class="Equity"),
+            SimpleNamespace(status="CURRENT"),
+        )
+    ]
+    position_repo.get_latest_position_history_by_portfolio.return_value = []
+    repo.get_changes.return_value = []
+    instrument_repo.get_by_security_ids.return_value = []
+
+    service = SimulationService(AsyncMock())
+    response = await service.get_projected_positions("S1")
+
+    assert response.positions[0].baseline_quantity == Decimal("50")
+    assert response.positions[0].cost_basis is None
+    assert response.positions[0].cost_basis_local is None
+
+
 async def test_projected_positions_adds_new_security_from_change(mock_dependencies):
     repo, position_repo, instrument_repo = mock_dependencies
     position_repo.get_latest_positions_by_portfolio.return_value = []
@@ -369,9 +437,7 @@ async def test_projected_positions_normalizes_security_ids_for_projection(
     assert response.positions[0].proposed_quantity == Decimal("110")
     assert response.positions[1].instrument_name == "New Security"
     assert response.positions[1].delta_quantity == Decimal("5")
-    instrument_repo.get_by_security_ids.assert_awaited_once_with(
-        ["SEC_AAPL_US", "SEC_NEW_US"]
-    )
+    instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC_AAPL_US", "SEC_NEW_US"])
 
 
 async def test_projected_positions_filters_non_positive_after_changes(mock_dependencies):
@@ -431,3 +497,26 @@ async def test_validate_session_active_raises_when_session_missing():
 async def test_change_quantity_effect_rules(transaction_type, quantity, amount, expected):
     change = SimpleNamespace(transaction_type=transaction_type, quantity=quantity, amount=amount)
     assert SimulationService._change_quantity_effect(change) == expected
+
+
+async def test_to_change_record_preserves_blank_optional_amount_fields() -> None:
+    row = SimpleNamespace(
+        change_id="C10",
+        session_id="S1",
+        portfolio_id="P1",
+        security_id="SEC_MSFT_US",
+        transaction_type="BUY",
+        quantity=" ",
+        price="",
+        amount=None,
+        currency="USD",
+        effective_date=datetime(2025, 9, 12).date(),
+        change_metadata={"source": "unit"},
+        created_at=datetime.now(timezone.utc),
+    )
+
+    record = SimulationService._to_change_record(row)
+
+    assert record.quantity is None
+    assert record.price is None
+    assert record.amount is None

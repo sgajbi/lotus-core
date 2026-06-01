@@ -155,6 +155,31 @@ def test_transaction_event_rejects_negative_core_amount() -> None:
         )
 
 
+def test_transaction_event_normalizes_string_amount_guards() -> None:
+    event = TransactionEvent(
+        transaction_id="EVENT_STRING_AMOUNTS_001",
+        portfolio_id="PORT_META_001",
+        instrument_id="FX_EUR_USD_001",
+        security_id="FX_EUR_USD_001",
+        transaction_date=datetime(2026, 3, 1, 10, 0),
+        transaction_type="FX_FORWARD",
+        quantity="0",
+        price="0",
+        gross_transaction_amount="0",
+        trade_currency="USD",
+        currency="USD",
+        transaction_fx_rate="1.10",
+        buy_amount="1000000",
+        sell_amount="1095000",
+        contract_rate="1.095",
+    )
+
+    assert event.quantity == Decimal("0")
+    assert event.transaction_fx_rate == Decimal("1.10")
+    assert event.buy_amount == Decimal("1000000")
+    assert event.contract_rate == Decimal("1.095")
+
+
 def test_transaction_event_rejects_negative_interest_deduction_amount() -> None:
     with pytest.raises(ValidationError, match="greater than or equal to zero"):
         TransactionEvent(

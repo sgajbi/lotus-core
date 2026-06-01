@@ -2,6 +2,8 @@ import logging
 from decimal import Decimal
 from typing import Optional, Tuple
 
+from portfolio_common.decimal_amounts import required_decimal
+
 from ..domain.models.transaction import Transaction
 from .cost_basis_strategies import CostBasisStrategy
 
@@ -30,7 +32,7 @@ class DispositionEngine:
     def consume_sell_quantity(
         self, transaction: Transaction
     ) -> Tuple[Decimal, Decimal, Optional[str]]:
-        sell_quantity = Decimal(str(transaction.quantity))
+        sell_quantity = required_decimal(transaction.quantity, field_name="quantity")
         return self._cost_basis_strategy.consume_sell_quantity(
             transaction.portfolio_id, transaction.instrument_id, sell_quantity
         )

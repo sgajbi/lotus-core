@@ -166,7 +166,9 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
     ]
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    valuation_map = await repository.get_latest_snapshot_valuation_map("P1")
+    valuation_map = await repository.get_latest_snapshot_valuation_map(
+        "P1", security_ids=[" SEC_A ", "SEC_A", "SEC_B"]
+    )
 
     assert valuation_map == {
         "SEC_A": {
@@ -181,6 +183,8 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "FROM (" in compiled_query
     assert "trim(daily_position_snapshots.security_id) AS security_id" in compiled_query
+    assert "trim(daily_position_snapshots.security_id) IN ('SEC_A', 'SEC_B')" in compiled_query
+    assert "('SEC_A', 'SEC_A'" not in compiled_query
     assert "PARTITION BY trim(daily_position_snapshots.security_id)" in compiled_query
 
 
@@ -209,7 +213,9 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     valuation_map = await repository.get_latest_snapshot_valuation_map_as_of_date(
-        "P1", date(2025, 1, 31)
+        "P1",
+        date(2025, 1, 31),
+        security_ids=[" SEC_A ", "SEC_A", "SEC_B"],
     )
 
     assert valuation_map == {
@@ -224,6 +230,8 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "daily_position_snapshots.date <= '2025-01-31'" in compiled_query
+    assert "trim(daily_position_snapshots.security_id) IN ('SEC_A', 'SEC_B')" in compiled_query
+    assert "('SEC_A', 'SEC_A'" not in compiled_query
     assert (
         "row_number() OVER (PARTITION BY trim(daily_position_snapshots.security_id)"
         in compiled_query

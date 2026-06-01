@@ -125,6 +125,16 @@ async def test_get_liquidity_ladder_maps_missing_portfolio_to_404(async_test_cli
     assert response.json()["detail"] == "Portfolio with id P404 not found"
 
 
+async def test_get_liquidity_ladder_maps_generic_not_found_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_liquidity_ladder.side_effect = ValueError("not found")
+
+    response = await client.get("/portfolios/P404/liquidity-ladder")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "not found"
+
+
 async def test_get_liquidity_ladder_maps_resolution_errors_to_400(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_liquidity_ladder.side_effect = ValueError(

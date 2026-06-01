@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
 )
 
 from src.services.query_service.app.dtos.position_dto import Position
+from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 from src.services.query_service.app.services.position_service import PositionService
 
@@ -154,6 +155,127 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.correlation_id is None
 
 
+async def test_get_latest_positions_reads_snapshot_and_history_sequentially(
+    mock_position_repo: AsyncMock,
+):
+    call_order: list[str] = []
+    snapshot_rows = mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value
+
+    async def _snapshot_rows(portfolio_id: str, as_of_date: date):
+        call_order.append("snapshot")
+        return snapshot_rows
+
+    async def _history_rows(portfolio_id: str, as_of_date: date):
+        call_order.append("history")
+        return []
+
+    mock_position_repo.get_latest_positions_by_portfolio_as_of_date.side_effect = _snapshot_rows
+    mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.side_effect = (
+        _history_rows
+    )
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
+        )
+
+    assert len(response.positions) == 1
+    assert response.positions[0].security_id == "S1"
+    assert call_order == ["snapshot", "history"]
+
+
+async def test_get_latest_positions_reads_support_evidence_sequentially(
+    mock_position_repo: AsyncMock,
+) -> None:
+    call_order: list[str] = []
+
+    async def get_held_since_dates(
+        *,
+        portfolio_id: str,
+        security_epoch_pairs: list[tuple[str, int]],
+    ) -> dict[tuple[str, int], date]:
+        call_order.append("held_since")
+        assert portfolio_id == "P1"
+        assert security_epoch_pairs == [("S1", 1)]
+        return {("S1", 1): date(2024, 12, 31)}
+
+    async def get_latest_market_price_dates(
+        *,
+        security_ids: list[str],
+        as_of_date: date,
+    ) -> dict[str, date]:
+        call_order.append("price_dates")
+        assert security_ids == ["S1"]
+        assert as_of_date == date(2025, 1, 1)
+        return {"S1": date(2025, 1, 1)}
+
+    mock_position_repo.get_held_since_dates.side_effect = get_held_since_dates
+    mock_position_repo.get_latest_market_price_dates.side_effect = get_latest_market_price_dates
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
+        )
+
+    assert response.positions[0].held_since_date == date(2024, 12, 31)
+    assert call_order == ["held_since", "price_dates"]
+
+
+async def test_get_latest_positions_reads_portfolio_exists_and_default_date_sequentially(
+    mock_position_repo: AsyncMock,
+) -> None:
+    call_order: list[str] = []
+
+    async def portfolio_exists(portfolio_id: str) -> bool:
+        call_order.append("portfolio")
+        assert portfolio_id == "P1"
+        return True
+
+    async def get_latest_business_date() -> date:
+        call_order.append("date")
+        return date(2025, 1, 1)
+
+    mock_position_repo.portfolio_exists.side_effect = portfolio_exists
+    mock_position_repo.get_latest_business_date.side_effect = get_latest_business_date
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions(portfolio_id="P1")
+
+    assert response.as_of_date == date(2025, 1, 1)
+    assert call_order == ["portfolio", "date"]
+
+
+async def test_get_latest_positions_explicit_date_skips_default_date_lookup(
+    mock_position_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+        response = await service.get_portfolio_positions(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 1),
+        )
+
+    assert response.as_of_date == date(2025, 1, 1)
+    mock_position_repo.get_latest_business_date.assert_not_awaited()
+
+
 async def test_get_latest_positions_falls_back_to_position_history(mock_position_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.position_service.PositionRepository",
@@ -204,7 +326,7 @@ async def test_get_latest_positions_falls_back_to_position_history(mock_position
             "P2", date(2025, 1, 1)
         )
         mock_position_repo.get_latest_snapshot_valuation_map_as_of_date.assert_awaited_once_with(
-            "P2", date(2025, 1, 1)
+            "P2", date(2025, 1, 1), security_ids=["S2"]
         )
         assert len(response.positions) == 1
         assert response.positions[0].security_id == "S2"
@@ -405,7 +527,7 @@ async def test_get_latest_positions_supplements_missing_snapshot_rows_from_histo
         assert history_position.reprocessing_status == "REPROCESSING"
         assert response.data_quality_status == "STALE"
         mock_position_repo.get_latest_snapshot_valuation_map_as_of_date.assert_awaited_once_with(
-            "P1", date(2025, 1, 1)
+            "P1", date(2025, 1, 1), security_ids=["HIST_ONLY"]
         )
 
 
@@ -561,6 +683,28 @@ async def test_get_latest_positions_weight_zero_when_all_values_zero(mock_positi
         assert len(response.positions) == 1
         assert response.positions[0].weight == Decimal(0)
         assert response.positions[0].held_since_date == date(2025, 1, 1)
+
+
+async def test_weight_base_value_prefers_market_value_and_falls_back_to_cost_basis() -> None:
+    valued_position = Position(
+        security_id="S1",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("75"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Valued",
+        valuation=ValuationData(market_value=Decimal("100")),
+    )
+    unvalued_position = Position(
+        security_id="S2",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("75"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Unvalued",
+        valuation=ValuationData(market_value=None),
+    )
+
+    assert PositionService._weight_base_value(valued_position) == Decimal("100")
+    assert PositionService._weight_base_value(unvalued_position) == Decimal("75")
 
 
 async def test_get_latest_positions_uses_default_held_since_when_map_missing(

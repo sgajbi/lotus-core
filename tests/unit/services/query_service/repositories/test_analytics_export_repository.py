@@ -61,3 +61,9 @@ async def test_analytics_export_repository_create_get_and_markers() -> None:
     db.execute.return_value = _FakeExecuteResult([SimpleNamespace(job_id="aexp_2")])
     got_fp = await repo.get_latest_by_fingerprint(request_fingerprint="fp", dataset_type="x")
     assert got_fp is not None
+
+    fingerprint_stmt = db.execute.await_args.args[0]
+    fingerprint_sql = str(fingerprint_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "analytics_export_jobs.request_fingerprint = 'fp'" in fingerprint_sql
+    assert "analytics_export_jobs.dataset_type = 'x'" in fingerprint_sql
+    assert "ORDER BY analytics_export_jobs.id DESC" in fingerprint_sql

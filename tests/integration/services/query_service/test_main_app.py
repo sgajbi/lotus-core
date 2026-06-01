@@ -682,7 +682,11 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     horizon_days = next(
         parameter for parameter in projection["parameters"] if parameter["name"] == "horizon_days"
     )
-    assert horizon_days["description"] == "Projection window in days from as_of_date."
+    assert horizon_days["description"] == (
+        "Projection window in calendar days from as_of_date. The route is bounded to one "
+        "operational year because it returns one daily point per calendar day."
+    )
+    assert horizon_days["schema"]["maximum"] == 366
 
     include_projected = next(
         parameter
@@ -696,6 +700,8 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
 
     not_found = projection["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-CF-001 not found"
+    bad_request = projection["responses"]["400"]["content"]["application/json"]["example"]
+    assert bad_request["detail"] == "horizon_days must be between 1 and 366."
     projection_response = schema["components"]["schemas"]["CashflowProjectionResponse"]
     assert projection_response["properties"]["portfolio_currency"]["description"] == (
         "ISO currency code for net_cashflow, projected_cumulative_cashflow, "
@@ -723,14 +729,16 @@ async def test_openapi_describes_cash_movement_summary_contract_examples(async_t
     start_date = next(
         parameter for parameter in summary["parameters"] if parameter["name"] == "start_date"
     )
-    assert start_date["description"] == "Inclusive cashflow-date window start."
+    assert "inclusive window cannot exceed 366 days" in start_date["description"]
     end_date = next(
         parameter for parameter in summary["parameters"] if parameter["name"] == "end_date"
     )
-    assert end_date["description"] == "Inclusive cashflow-date window end."
+    assert "inclusive window cannot exceed 366 days" in end_date["description"]
 
     invalid_window = summary["responses"]["400"]["content"]["application/json"]["example"]
-    assert invalid_window["detail"] == "start_date must be on or before end_date"
+    assert invalid_window["detail"] == (
+        "cash movement summary date window must be 366 days or less"
+    )
     not_found = summary["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-CASH-001 not found"
 

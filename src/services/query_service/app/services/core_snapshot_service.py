@@ -38,6 +38,8 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
+from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .position_flow_effects import transaction_quantity_effect_decimal
 
 CASH_ASSET_CLASS = "CASH"
@@ -59,13 +61,8 @@ class CoreSnapshotUnavailableSectionError(ValueError):
     pass
 
 
-def _normalize_control_code(value: Any, *, default: str = "") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
-
-
 def _is_cash_asset_class(value: Any) -> bool:
-    return _normalize_control_code(value) == CASH_ASSET_CLASS
+    return normalize_control_code(value) == CASH_ASSET_CLASS
 
 
 @dataclass
@@ -193,7 +190,7 @@ class CoreSnapshotService:
                 session_id=session.session_id,
                 as_of_date=request.as_of_date,
                 portfolio_base_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
+                portfolio_to_reporting_fx=reporting_fx,
                 baseline_positions=baseline_positions,
                 include_zero=request.options.include_zero_quantity_positions,
                 include_cash=request.options.include_cash_positions,
@@ -367,32 +364,18 @@ class CoreSnapshotService:
 
         baseline: dict[str, dict[str, Any]] = {}
         for row, instrument, _state in rows:
-            quantity = Decimal(str(row.quantity))
+            quantity = decimal_or_zero(row.quantity)
             if not include_zero and quantity == Decimal(0):
                 continue
-            if (
-                not include_cash
-                and instrument
-                and _is_cash_asset_class(instrument.asset_class)
-            ):
+            if not include_cash and instrument and _is_cash_asset_class(instrument.asset_class):
                 continue
 
             if use_snapshot:
-                market_value_base_raw = (
-                    Decimal(str(row.market_value)) if row.market_value is not None else None
-                )
-                market_value_local = (
-                    Decimal(str(row.market_value_local))
-                    if row.market_value_local is not None
-                    else None
-                )
+                market_value_base_raw = decimal_or_none(row.market_value)
+                market_value_local = decimal_or_none(row.market_value_local)
             else:
-                market_value_base_raw = (
-                    Decimal(str(row.cost_basis)) if row.cost_basis is not None else None
-                )
-                market_value_local = (
-                    Decimal(str(row.cost_basis_local)) if row.cost_basis_local is not None else None
-                )
+                market_value_base_raw = decimal_or_none(row.cost_basis)
+                market_value_local = decimal_or_none(row.cost_basis_local)
 
             market_value_base = (
                 market_value_base_raw * reporting_fx if market_value_base_raw is not None else None
@@ -466,7 +449,7 @@ class CoreSnapshotService:
         session_id: str,
         as_of_date,
         portfolio_base_currency: str,
-        reporting_currency: str,
+        portfolio_to_reporting_fx: Decimal,
         baseline_positions: dict[str, dict[str, Any]],
         include_zero: bool,
         include_cash: bool,
@@ -526,6 +509,7 @@ class CoreSnapshotService:
             delta = self._change_quantity_effect(change)
             entry["quantity"] = entry["quantity"] + delta
 
+        price_required: dict[str, tuple[dict[str, Any], Decimal]] = {}
         for security_id, entry in projected.items():
             if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
                 continue
@@ -546,30 +530,52 @@ class CoreSnapshotService:
                 entry["market_value_local"] = Decimal(0)
                 continue
 
-            prices = await self.price_repo.get_prices(
-                security_id=security_id,
-                end_date=as_of_date,
-            )
-            if not prices:
-                raise CoreSnapshotUnavailableSectionError(
+            price_required[security_id] = (entry, quantity)
+
+        if price_required:
+            price_rows_by_security = {}
+            for security_id in price_required:
+                price_rows_by_security[security_id] = await self.price_repo.get_prices(
+                    security_id=security_id,
+                    end_date=as_of_date,
+                )
+            priced_values: dict[str, tuple[Decimal, str]] = {}
+            market_currencies: set[str] = set()
+            for security_id, (entry, quantity) in price_required.items():
+                prices = price_rows_by_security[security_id]
+                if not prices:
+                    raise CoreSnapshotUnavailableSectionError(
+                        f"positions_projected unavailable: missing market price for {security_id}"
+                    )
+                latest_price = prices[-1]
+                missing_price_message = (
                     f"positions_projected unavailable: missing market price for {security_id}"
                 )
-            latest_price = prices[-1]
-            local_value = Decimal(str(latest_price.price)) * quantity
-            market_currency = latest_price.currency
-            fx_to_portfolio = await self._get_fx_rate_or_raise(
-                from_currency=market_currency,
-                to_currency=portfolio_base_currency,
-                as_of_date=as_of_date,
-            )
-            portfolio_value = local_value * fx_to_portfolio
-            fx_to_reporting = await self._get_fx_rate_or_raise(
-                from_currency=portfolio_base_currency,
-                to_currency=reporting_currency,
-                as_of_date=as_of_date,
-            )
-            entry["market_value_local"] = local_value
-            entry["market_value_base"] = portfolio_value * fx_to_reporting
+                local_value = (
+                    self._required_decimal(
+                        latest_price.price,
+                        message=missing_price_message,
+                    )
+                    * quantity
+                )
+                market_currency = normalize_currency_code(str(latest_price.currency))
+                priced_values[security_id] = (local_value, market_currency)
+                market_currencies.add(market_currency)
+
+            market_to_portfolio_fx = {}
+            for market_currency in sorted(market_currencies):
+                market_to_portfolio_fx[market_currency] = await self._get_fx_rate_or_raise(
+                    from_currency=market_currency,
+                    to_currency=portfolio_base_currency,
+                    as_of_date=as_of_date,
+                )
+
+            for security_id, (local_value, market_currency) in priced_values.items():
+                entry = projected[security_id]
+                fx_to_portfolio = market_to_portfolio_fx[market_currency]
+                portfolio_value = local_value * fx_to_portfolio
+                entry["market_value_local"] = local_value
+                entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
 
         filtered: dict[str, dict[str, Any]] = {}
         for key, value in projected.items():
@@ -588,7 +594,7 @@ class CoreSnapshotService:
             quantity=getattr(change, "quantity", None),
             amount=getattr(change, "amount", None),
         )
-        return Decimal(str(effect))
+        return effect
 
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
@@ -640,22 +646,33 @@ class CoreSnapshotService:
             raise CoreSnapshotUnavailableSectionError(
                 f"missing FX rate {pair} on or before {as_of_date.isoformat()}"
             )
-        return Decimal(str(rates[-1].rate))
+        pair = f"{normalized_from_currency}/{normalized_to_currency}"
+        return self._required_decimal(
+            rates[-1].rate,
+            message=f"missing FX rate {pair} on or before {as_of_date.isoformat()}",
+        )
+
+    @staticmethod
+    def _required_decimal(value: Any, *, message: str) -> Decimal:
+        resolved_value = decimal_or_none(value)
+        if resolved_value is None:
+            raise CoreSnapshotUnavailableSectionError(message)
+        return resolved_value
 
     @staticmethod
     def _total_market_value_baseline(items: dict[str, dict[str, Any]]) -> Decimal:
         total = Decimal(0)
         for item in items.values():
-            market_value = item.get("market_value_base")
+            market_value = decimal_or_none(item.get("market_value_base"))
             if market_value is not None:
-                total += Decimal(str(market_value))
+                total += market_value
         return total
 
     @staticmethod
     def _total_market_value_projected(items: dict[str, dict[str, Any]]) -> Decimal:
         total = Decimal(0)
         for item in items.values():
-            total += Decimal(str(item.get("market_value_base") or Decimal(0)))
+            total += decimal_or_zero(item.get("market_value_base"))
         return total
 
     @staticmethod

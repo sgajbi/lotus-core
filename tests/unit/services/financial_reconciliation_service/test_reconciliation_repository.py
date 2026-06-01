@@ -98,3 +98,130 @@ async def test_fetch_latest_fx_rate_normalizes_currency_codes_and_uses_functiona
     assert "fx_rates.rate_date <= '2026-05-28'" in compiled_query
     assert "order by fx_rates.rate_date desc" in compiled_query
     assert "limit 1" in compiled_query
+
+
+async def test_list_findings_uses_index_aligned_order(mock_db_session: AsyncMock):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    findings = await repository.list_findings("recon-123")
+
+    assert findings == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "financial_reconciliation_findings.run_id = 'recon-123'" in compiled_query
+    assert (
+        "ORDER BY financial_reconciliation_findings.severity ASC, "
+        "financial_reconciliation_findings.finding_type ASC, "
+        "financial_reconciliation_findings.id ASC"
+    ) in compiled_query
+
+
+async def test_list_runs_uses_index_aligned_deterministic_order(mock_db_session: AsyncMock):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    runs = await repository.list_runs(
+        reconciliation_type="position_valuation",
+        portfolio_id="P1",
+        limit=10,
+    )
+
+    assert runs == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "financial_reconciliation_runs.reconciliation_type = 'position_valuation'" in compiled_query
+    )
+    assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled_query
+    assert (
+        "ORDER BY financial_reconciliation_runs.started_at DESC, "
+        "financial_reconciliation_runs.id DESC"
+    ) in compiled_query
+    assert "LIMIT 10" in compiled_query
+
+
+async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date_range(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    rows = await repository.fetch_transaction_cashflow_rows(
+        portfolio_id="P1",
+        business_date=date(2026, 5, 28),
+    )
+
+    assert rows == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "transactions.portfolio_id = 'P1'" in compiled_query
+    assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2026-05-29 00:00:00'" in compiled_query
+    assert "date(transactions.transaction_date)" not in compiled_query.lower()
+
+
+async def test_fetch_position_valuation_rows_uses_normalized_instrument_join(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    rows = await repository.fetch_position_valuation_rows(
+        portfolio_id="P1",
+        business_date=date(2026, 5, 28),
+        epoch=4,
+    )
+
+    assert rows == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "JOIN instruments ON trim(instruments.security_id) = "
+        "trim(daily_position_snapshots.security_id)"
+    ) in compiled_query
+    assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled_query
+    assert "daily_position_snapshots.date = '2026-05-28'" in compiled_query
+    assert "daily_position_snapshots.epoch = 4" in compiled_query
+
+
+async def test_fetch_authoritative_position_timeseries_rows_uses_normalized_instrument_join(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    rows = await repository.fetch_authoritative_position_timeseries_rows(
+        portfolio_id="P1",
+        business_date=date(2026, 5, 28),
+        epoch=4,
+    )
+
+    assert rows == []
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert (
+        "JOIN instruments ON trim(instruments.security_id) = trim(position_timeseries.security_id)"
+        in compiled_query
+    )
+    assert "position_timeseries.portfolio_id = 'P1'" in compiled_query
+    assert "position_timeseries.date <= '2026-05-28'" in compiled_query
+    assert "position_timeseries.epoch <= 4" in compiled_query
+    assert "ORDER BY position_timeseries.security_id ASC" in compiled_query

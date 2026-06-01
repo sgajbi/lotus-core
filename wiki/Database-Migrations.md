@@ -80,6 +80,66 @@ make ci-local
 - the stack expects migrations to reach `head` before dependent services fully operate
 - migration drift in `lotus-core` can surface as query-service, control-plane, or worker failures
 
+## Index And Partition Operations
+
+High-volume Core fact tables must be optimized from observed query shapes first. Add model-declared
+and migrated indexes when API or calculator reads use stable predicates such as portfolio/date,
+portfolio/security/date, or normalized identifier lookups.
+
+Source-data evidence tables use the same rule. When downstream DPM evidence reads filter by
+governed lifecycle status, model portfolio, booking center, and effective-date windows, prefer a
+partial model-declared index over broad table scans, and keep predicates aligned to stored governed
+values rather than wrapping status columns at read time.
+The same posture applies to model source evidence: approved model-definition and active
+model-target reads should use partial indexes that match their lifecycle status, effective-window,
+and deterministic ordering contracts.
+Client source-data evidence follows the same rule: restriction, sustainability, tax, income,
+liquidity-reserve, and planned-withdrawal reads should use active-status partial indexes aligned to
+their portfolio/client, effective-window, scheduled-window, and source-identity ordering contracts.
+Instrument eligibility reads that intentionally trim caller and stored security identifiers should
+use a matching normalized-security effective-window index instead of relying on raw security indexes.
+Instrument master reads that scope cash-only support paths by normalized asset class should use a
+matching asset-class/security expression index, such as `upper(trim(asset_class)), trim(security_id)`.
+Market/reference definition reads should likewise avoid wrapping governed lifecycle statuses at
+read time and use active-status partial indexes aligned to identifier and effective-window ordering.
+Lineage support reads that resolve latest position-history, daily-snapshot, or valuation-job
+evidence per position state should use portfolio, normalized-security, epoch, and descending
+business-date/id indexes aligned to one-row latest lookups rather than relying on broader
+status-oriented queue or list indexes.
+Cashflow read-plane queries that resolve the latest restatement per transaction should scope the
+windowed rank by portfolio and use a portfolio/transaction/descending-epoch index before applying
+date, classification, or flow-type filters to the latest row.
+Analytics-input position time-series reads that resolve each security's latest row before a
+period-start date should use raw portfolio, normalized security, and descending date/epoch indexes
+aligned to the windowed `row_number()` ordering. This keeps prior-row return calculations bounded
+to the requested portfolio and security set instead of scanning date-led portfolio windows.
+Benchmark composition source-data reads that resolve latest effective rows per benchmark/index
+should use benchmark, index, descending effective-from, and effective-to indexes aligned to the
+composition deduplication key instead of relying only on broad benchmark/effective-window indexes.
+Operational reprocessing job support reads should keep reset-watermark indexes scoped to
+`job_type = 'RESET_WATERMARKS'` and aligned to the requested lookup dimension, including
+normalized security and correlation-id filters used by support list/count APIs.
+
+Partitioning is a physical storage migration, not a routine runtime optimization. Existing
+authoritative tables should not be silently converted to partitioned parents by maintenance scripts.
+Use `scripts/db_partition_advisor.py` to review current candidates and generate future monthly
+partition DDL:
+
+```bash
+python scripts/db_partition_advisor.py --as-of 2026-05-28 --horizon-months 3
+```
+
+With a PostgreSQL connection, inspect current partition posture:
+
+```bash
+python scripts/db_partition_advisor.py --inspect --database-url "$DATABASE_URL"
+```
+
+`--execute` creates future monthly partitions only for tables that are already PostgreSQL
+partitioned parents. Converting `transactions`, `position_history`, `daily_position_snapshots`,
+`cashflows`, `position_timeseries`, `portfolio_timeseries`, or `market_prices` into partitioned
+parents requires a separate governed Alembic migration and production rollout plan.
+
 ## Production posture
 
 1. prefer forward-only fixes over relying on downgrade in production

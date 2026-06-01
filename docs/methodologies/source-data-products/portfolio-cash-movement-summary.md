@@ -4,7 +4,7 @@
 
 `PortfolioCashMovementSummary:v1` is the `lotus-core` source-owned metric family for bounded
 portfolio cash movement evidence. It summarizes latest-version `cashflows` rows for one portfolio
-and one inclusive cashflow-date window.
+and one inclusive cashflow-date window of up to 366 days.
 
 The metric outputs bucket-level signed cash movement totals, source row counts, and movement
 direction by source-owned classification, timing, currency, and flow scope.
@@ -25,7 +25,7 @@ execution-quality assessment, or OMS acknowledgement.
 | --- | --- | --- | --- |
 | `portfolio_id` | Request path | Yes | Portfolio whose cashflow rows are summarized. |
 | `start_date` | Request query | Yes | Inclusive cashflow-date window start. |
-| `end_date` | Request query | Yes | Inclusive cashflow-date window end. |
+| `end_date` | Request query | Yes | Inclusive cashflow-date window end. The inclusive date window must be 366 days or less. |
 | `transaction_id` | `cashflows` | Yes | Transaction identity used for latest-row selection. |
 | `id` | `cashflows` | Yes | Tie-breaker for same-epoch cashflow restatements. |
 | `epoch` | `cashflows` | Yes | Cashflow restatement epoch. |

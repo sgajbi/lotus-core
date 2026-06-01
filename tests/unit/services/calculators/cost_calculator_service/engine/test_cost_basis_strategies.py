@@ -13,6 +13,16 @@ from cost_engine.processing.cost_basis_strategies import (
 # --- Tests for AverageCostBasisStrategy ---
 
 
+class _StringCountedAmount:
+    def __init__(self, value: str) -> None:
+        self.value = value
+        self.string_call_count = 0
+
+    def __str__(self) -> str:
+        self.string_call_count += 1
+        return self.value
+
+
 @pytest.fixture
 def avco_strategy():
     """Provides a clean instance of the AverageCostBasisStrategy."""
@@ -215,6 +225,38 @@ def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_cost_basis(strategy_
         strategy.add_buy_lot(buy_txn)
 
     assert strategy.get_available_quantity("P1", "DIRTY_STOCK") == Decimal("0")
+
+
+@pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])
+def test_cost_basis_strategy_normalizes_buy_lot_inputs_once(strategy_cls):
+    strategy = strategy_cls()
+    buy_txn = Transaction(
+        transaction_id="COUNTED_AMOUNT_BUY",
+        portfolio_id="P1",
+        instrument_id="COUNTED_STOCK",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost=Decimal("1000"),
+        net_cost_local=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    quantity = _StringCountedAmount("100")
+    net_cost = _StringCountedAmount("1000")
+    net_cost_local = _StringCountedAmount("1000")
+    buy_txn.quantity = quantity
+    buy_txn.net_cost = net_cost
+    buy_txn.net_cost_local = net_cost_local
+
+    strategy.add_buy_lot(buy_txn)
+
+    assert strategy.get_available_quantity("P1", "COUNTED_STOCK") == Decimal("100")
+    assert quantity.string_call_count == 1
+    assert net_cost.string_call_count == 1
+    assert net_cost_local.string_call_count == 1
 
 
 @pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])

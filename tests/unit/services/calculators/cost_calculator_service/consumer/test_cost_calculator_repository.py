@@ -95,6 +95,9 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     assert "trim(transactions.portfolio_id) = 'PORT_COST_01'" in compiled_query
     assert "trim(transactions.security_id) = 'SEC01'" in compiled_query
     assert "trim(transactions.transaction_id) != 'SELL01'" in compiled_query
+    assert "ORDER BY transactions.transaction_date ASC, transactions.transaction_id ASC" in (
+        compiled_query
+    )
 
 
 async def test_update_lot_open_quantities_trims_portfolio_and_security_ids_before_query():

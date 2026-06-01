@@ -1,8 +1,6 @@
 from decimal import Decimal
 
-
-def _as_decimal(value: object) -> Decimal:
-    return value if isinstance(value, Decimal) else Decimal(str(value))
+from portfolio_common.decimal_amounts import required_decimal
 
 
 def resolve_valuation_unit_price(
@@ -13,11 +11,11 @@ def resolve_valuation_unit_price(
     product_type: str | None,
 ) -> Decimal:
     """Resolve the unit price used by valuation and reconciliation calculations."""
-    valuation_price_local = _as_decimal(market_price)
+    valuation_price_local = required_decimal(market_price, field_name="market_price")
     normalized_product_type = (product_type or "").strip().upper()
-    quantity_amount = _as_decimal(quantity)
+    quantity_amount = required_decimal(quantity, field_name="quantity")
     if normalized_product_type == "BOND" and not quantity_amount.is_zero():
-        local_cost_basis = _as_decimal(cost_basis_local)
+        local_cost_basis = required_decimal(cost_basis_local, field_name="cost_basis_local")
         average_cost_local = abs(local_cost_basis / quantity_amount)
         absolute_price_local = abs(valuation_price_local)
         if (

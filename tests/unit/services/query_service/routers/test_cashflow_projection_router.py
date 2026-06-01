@@ -77,6 +77,26 @@ async def test_get_cashflow_projection_maps_value_error_to_404() -> None:
     assert "P404" in exc_info.value.detail
 
 
+@pytest.mark.asyncio
+async def test_get_cashflow_projection_maps_resolution_error_to_400() -> None:
+    service = MagicMock(spec=CashflowProjectionService)
+    service.get_cashflow_projection = AsyncMock(
+        side_effect=ValueError("horizon_days must be between 1 and 366.")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_cashflow_projection(
+            portfolio_id="P1",
+            horizon_days=367,
+            as_of_date=date(2026, 3, 1),
+            include_projected=False,
+            service=service,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "horizon_days" in exc_info.value.detail
+
+
 def test_get_cashflow_projection_service_factory() -> None:
     service = get_cashflow_projection_service(db=MagicMock())
     assert isinstance(service, CashflowProjectionService)

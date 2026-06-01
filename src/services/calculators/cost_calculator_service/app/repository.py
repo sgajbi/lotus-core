@@ -153,6 +153,11 @@ class CostCalculatorRepository:
             normalized_exclude_id = normalize_lookup_identifier(exclude_id)
             stmt = stmt.where(func.trim(DBTransaction.transaction_id) != normalized_exclude_id)
 
+        stmt = stmt.order_by(
+            DBTransaction.transaction_date.asc(),
+            DBTransaction.transaction_id.asc(),
+        )
+
         result = await self.db.execute(stmt)
         return result.scalars().all()
 

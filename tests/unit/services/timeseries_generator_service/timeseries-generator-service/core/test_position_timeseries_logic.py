@@ -1,6 +1,7 @@
 # tests/unit/services/timeseries-generator-service/core/test_position_timeseries_logic.py
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from portfolio_common.database_models import (
@@ -100,6 +101,72 @@ def test_logic_with_portfolio_and_position_flows(current_snapshot, previous_day_
     assert new_record.eod_cashflow_position == Decimal("-50")
     assert new_record.eod_cashflow_portfolio == Decimal("-50")
     assert new_record.fees == Decimal("50")
+
+
+def test_logic_normalizes_string_and_blank_amounts():
+    current_snapshot = SimpleNamespace(
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 7, 29),
+        quantity="100",
+        cost_basis_local="10000",
+        market_value_local="12000",
+    )
+    previous_snapshot = SimpleNamespace(market_value_local="11500")
+    cashflows = [
+        SimpleNamespace(
+            amount="1000",
+            timing="BOD",
+            classification="CASHFLOW_IN",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+        SimpleNamespace(
+            amount=" ",
+            timing="EOD",
+            classification="EXPENSE",
+            is_position_flow=True,
+            is_portfolio_flow=True,
+        ),
+    ]
+
+    new_record = PositionTimeseriesLogic.calculate_daily_record(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_snapshot,
+        cashflows=cashflows,
+        epoch=6,
+    )
+
+    assert new_record.bod_market_value == Decimal("11500")
+    assert new_record.eod_market_value == Decimal("12000")
+    assert new_record.cost == Decimal("100")
+    assert new_record.bod_cashflow_position == Decimal("1000")
+    assert new_record.eod_cashflow_portfolio == Decimal("0")
+    assert new_record.fees == Decimal("0")
+
+
+def test_logic_normalizes_cashflow_timing_for_bod_bucket(current_snapshot, previous_day_snapshot):
+    cashflows = [
+        SimpleNamespace(
+            amount="1000",
+            timing=" bod ",
+            classification="CASHFLOW_IN",
+            is_position_flow=True,
+            is_portfolio_flow=True,
+        )
+    ]
+
+    new_record = PositionTimeseriesLogic.calculate_daily_record(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_day_snapshot,
+        cashflows=cashflows,
+        epoch=7,
+    )
+
+    assert new_record.bod_cashflow_position == Decimal("1000")
+    assert new_record.eod_cashflow_position == Decimal("0")
+    assert new_record.bod_cashflow_portfolio == Decimal("1000")
+    assert new_record.eod_cashflow_portfolio == Decimal("0")
 
 
 def test_logic_normalizes_product_leg_position_flow_signs_for_attribution(

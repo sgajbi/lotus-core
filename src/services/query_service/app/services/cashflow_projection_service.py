@@ -9,8 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.cashflow_repository import CashflowRepository
+from .cashflow_evidence_window import read_cashflow_evidence_window
+from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_HORIZON_DAYS = 10
+MAX_HORIZON_DAYS = 366
 
 
 class CashflowProjectionService:
@@ -22,43 +27,36 @@ class CashflowProjectionService:
     async def get_cashflow_projection(
         self,
         portfolio_id: str,
-        horizon_days: int = 10,
+        horizon_days: int = DEFAULT_HORIZON_DAYS,
         as_of_date: Optional[date] = None,
         include_projected: bool = True,
     ) -> CashflowProjectionResponse:
+        if horizon_days < 1 or horizon_days > MAX_HORIZON_DAYS:
+            raise ValueError(f"horizon_days must be between 1 and {MAX_HORIZON_DAYS}.")
+
         portfolio_currency = await self.repo.get_portfolio_currency(portfolio_id)
         if portfolio_currency is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        default_as_of_date = (
+            await self.repo.get_latest_business_date() if as_of_date is None else as_of_date
+        )
 
-        effective_as_of_date = as_of_date
-        if effective_as_of_date is None:
-            effective_as_of_date = await self.repo.get_latest_business_date() or date.today()
+        effective_as_of_date = default_as_of_date or date.today()
 
         range_start_date = effective_as_of_date
         range_end_date = effective_as_of_date + timedelta(days=horizon_days)
         query_end_date = range_end_date if include_projected else effective_as_of_date
 
-        rows = await self.repo.get_portfolio_cashflow_series(
-            portfolio_id=portfolio_id,
-            start_date=range_start_date,
-            end_date=query_end_date,
-        )
-        projected_rows = []
-        if include_projected:
-            projected_rows = await self.repo.get_projected_settlement_cashflow_series(
-                portfolio_id=portfolio_id,
-                start_date=range_start_date,
-                end_date=query_end_date,
-            )
-        latest_evidence_timestamp = await self.repo.get_latest_cashflow_evidence_timestamp(
+        cashflow_evidence = await read_cashflow_evidence_window(
+            repo=self.repo,
             portfolio_id=portfolio_id,
             start_date=range_start_date,
             end_date=query_end_date,
             include_projected=include_projected,
         )
 
-        booked_by_date = self._sum_by_date(rows)
-        projected_by_date = self._sum_by_date(projected_rows)
+        booked_by_date = self._sum_by_date(cashflow_evidence.booked_rows)
+        projected_by_date = self._sum_by_date(cashflow_evidence.projected_rows)
         booked_total = Decimal("0")
         projected_total = Decimal("0")
         running = Decimal("0")
@@ -101,7 +99,7 @@ class CashflowProjectionService:
             **source_data_product_runtime_metadata(
                 as_of_date=effective_as_of_date,
                 data_quality_status=COMPLETE,
-                latest_evidence_timestamp=latest_evidence_timestamp,
+                latest_evidence_timestamp=cashflow_evidence.latest_evidence_timestamp,
                 source_batch_fingerprint=(
                     "cashflow_projection:"
                     f"{portfolio_id}:{effective_as_of_date}:{query_end_date}:"
@@ -114,5 +112,5 @@ class CashflowProjectionService:
     def _sum_by_date(rows: list[tuple[date, Decimal]]) -> dict[date, Decimal]:
         totals: dict[date, Decimal] = {}
         for flow_date, amount in rows:
-            totals[flow_date] = totals.get(flow_date, Decimal("0")) + Decimal(str(amount))
+            totals[flow_date] = totals.get(flow_date, Decimal("0")) + decimal_or_zero(amount)
         return totals

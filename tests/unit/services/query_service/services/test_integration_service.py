@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -41,6 +42,14 @@ from src.services.query_service.app.services.integration_policy import (
     resolve_policy_context,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+from src.services.query_service.app.services.market_reference_coverage import (
+    market_reference_coverage_response,
+)
+from src.services.query_service.app.services.reference_data_helpers import (
+    latest_reference_evidence_timestamp,
+    market_reference_data_quality_status,
+)
+from src.services.query_service.app.services.request_fingerprint import request_fingerprint
 
 
 def make_service() -> IntegrationService:
@@ -122,7 +131,7 @@ def instrument_eligibility_request(
 
 
 def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
-    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+    response = market_reference_coverage_response(
         coverage={
             "total_points": 6,
             "observed_start_date": date(2026, 1, 1),
@@ -139,6 +148,33 @@ def test_to_coverage_response_uses_exact_observed_dates_when_present() -> None:
     assert response.missing_dates_sample == [date(2026, 1, 2)]
     assert response.request_fingerprint == "fp-coverage-test"
     assert response.data_quality_status == PARTIAL
+
+
+def test_to_coverage_response_streams_missing_date_sample_for_broad_windows() -> None:
+    response = market_reference_coverage_response(
+        coverage={
+            "total_points": 2,
+            "observed_dates": [date(2026, 1, 1), date(2026, 1, 20)],
+            "quality_status_counts": {"accepted": 2},
+        },
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 20),
+        request_fingerprint="fp-coverage-test",
+    )
+
+    assert response.missing_dates_count == 18
+    assert response.missing_dates_sample == [
+        date(2026, 1, 2),
+        date(2026, 1, 3),
+        date(2026, 1, 4),
+        date(2026, 1, 5),
+        date(2026, 1, 6),
+        date(2026, 1, 7),
+        date(2026, 1, 8),
+        date(2026, 1, 9),
+        date(2026, 1, 10),
+        date(2026, 1, 11),
+    ]
 
 
 @pytest.mark.asyncio
@@ -501,7 +537,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_accepts_scoped_page_tok
         as_of_date=date(2026, 5, 3),
         tenant_id="default",
     )
-    scope = service._request_fingerprint(  # pylint: disable=protected-access
+    scope = request_fingerprint(
         {
             "product_name": "DpmPortfolioUniverseCandidate",
             "as_of_date": "2026-05-03",
@@ -1402,9 +1438,7 @@ async def test_external_eligible_hedge_instruments_fail_closed_until_treasury_in
     assert response.supportability.state == "UNAVAILABLE"
     assert response.supportability.reason == "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED"
     assert response.supportability.instrument_count == 0
-    assert response.supportability.missing_data_families == [
-        "external_eligible_hedge_instrument"
-    ]
+    assert response.supportability.missing_data_families == ["external_eligible_hedge_instrument"]
     assert "hedge_instrument_suitability" in response.supportability.blocked_capabilities
     assert "product_recommendation" in response.supportability.blocked_capabilities
     assert "best_execution" in response.supportability.blocked_capabilities
@@ -1519,7 +1553,7 @@ def test_to_coverage_response_classifies_data_quality_status(
     coverage: dict[str, object],
     expected_status: str,
 ) -> None:
-    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+    response = market_reference_coverage_response(
         coverage=coverage,
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 3),
@@ -1532,7 +1566,7 @@ def test_to_coverage_response_classifies_data_quality_status(
 def test_to_coverage_response_carries_latest_evidence_timestamp() -> None:
     latest_evidence_timestamp = datetime(2026, 1, 3, 14, 30, tzinfo=UTC)
 
-    response = IntegrationService._to_coverage_response(  # pylint: disable=protected-access
+    response = market_reference_coverage_response(
         coverage={
             "total_points": 3,
             "observed_dates": [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)],
@@ -1555,21 +1589,21 @@ def test_market_reference_data_quality_classifies_reference_rows() -> None:
     ]
 
     assert (
-        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+        market_reference_data_quality_status(
             rows,
             required_count=len(rows),
         )
         == PARTIAL
     )
     assert (
-        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+        market_reference_data_quality_status(
             [SimpleNamespace(quality_status="blocked")],
             required_count=1,
         )
         == BLOCKED
     )
     assert (
-        IntegrationService._market_reference_data_quality_status(  # pylint: disable=protected-access
+        market_reference_data_quality_status(
             [SimpleNamespace()],
             required_count=1,
         )
@@ -1582,7 +1616,7 @@ def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps()
     latest_updated_at = datetime(2026, 1, 3, 11, 0, tzinfo=UTC)
 
     assert (
-        IntegrationService._latest_reference_evidence_timestamp(  # pylint: disable=protected-access
+        latest_reference_evidence_timestamp(
             [
                 SimpleNamespace(source_timestamp=older_source_timestamp),
                 SimpleNamespace(updated_at=latest_updated_at),
@@ -1788,6 +1822,55 @@ async def test_resolve_discretionary_mandate_binding_returns_ready_binding() -> 
         mandate_id=None,
         booking_center_code=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_discretionary_mandate_binding_normalizes_sparse_rebalance_bands() -> None:
+    service = make_service()
+    service._reference_repository = AsyncMock()  # type: ignore[method-assign]
+    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (
+        SimpleNamespace(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            client_id="CIF_SG_000184",
+            mandate_type="discretionary",
+            discretionary_authority_status="active",
+            booking_center_code="Singapore",
+            jurisdiction_code="SG",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            policy_pack_id="POLICY_DPM_SG_BALANCED_V1",
+            mandate_objective="Balanced discretionary growth",
+            risk_profile="balanced",
+            investment_horizon="long_term",
+            review_cadence="quarterly",
+            last_review_date=date(2026, 3, 31),
+            next_review_due_date=date(2026, 6, 30),
+            leverage_allowed=False,
+            tax_awareness_allowed=True,
+            settlement_awareness_required=True,
+            rebalance_frequency="monthly",
+            rebalance_bands={
+                "default_band": " ",
+                "cash_reserve_weight": "",
+            },
+            effective_from=date(2026, 4, 1),
+            effective_to=None,
+            binding_version=1,
+            source_system="mandate_admin",
+            source_record_id="mandate_001_v1",
+            observed_at=None,
+            quality_status="accepted",
+        )
+    )
+
+    response = await service.resolve_discretionary_mandate_binding(
+        "PB_SG_GLOBAL_BAL_001",
+        request=mandate_binding_request(date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.rebalance_bands.default_band == Decimal("0")
+    assert response.rebalance_bands.cash_reserve_weight is None
 
 
 @pytest.mark.asyncio
@@ -2333,6 +2416,7 @@ async def test_reference_contract_methods() -> None:
                 )
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX1"]),
         list_benchmark_components_for_benchmarks=AsyncMock(
             return_value={
                 "B1": [
@@ -2717,6 +2801,7 @@ async def test_reference_contract_none_and_fx_branches(monkeypatch: pytest.Monke
         list_benchmark_definitions_overlapping_window=AsyncMock(return_value=[]),
         list_benchmark_components=AsyncMock(return_value=[]),
         list_benchmark_components_overlapping_window=AsyncMock(return_value=[]),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=[]),
         list_benchmark_components_for_benchmarks=AsyncMock(return_value={}),
         list_benchmark_definitions=AsyncMock(
             return_value=[
@@ -2863,7 +2948,7 @@ async def test_benchmark_composition_window_rejects_currency_changes_within_wind
 
 
 @pytest.mark.asyncio
-async def test_benchmark_catalog_collapses_superseded_effective_rows() -> None:
+async def test_benchmark_catalog_uses_repository_ranked_current_rows() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         list_benchmark_definitions=AsyncMock(
@@ -2887,37 +2972,11 @@ async def test_benchmark_catalog_collapses_superseded_effective_rows() -> None:
                     source_vendor="vendor",
                     source_record_id="src-new",
                 ),
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    benchmark_name="Benchmark Old",
-                    benchmark_type="composite",
-                    benchmark_currency="USD",
-                    return_convention="total_return_index",
-                    benchmark_status="active",
-                    benchmark_family="family",
-                    benchmark_provider="provider",
-                    rebalance_frequency="monthly",
-                    classification_set_id="set1",
-                    classification_labels={"asset_class": "multi_asset"},
-                    effective_from=date(2023, 3, 28),
-                    effective_to=None,
-                    quality_status="accepted",
-                    source_timestamp=None,
-                    source_vendor="vendor",
-                    source_record_id="src-old",
-                ),
             ]
         ),
         list_benchmark_components_for_benchmarks=AsyncMock(
             return_value={
                 "B1": [
-                    SimpleNamespace(
-                        index_id="IDX_BOND",
-                        composition_weight=Decimal("0.4"),
-                        composition_effective_from=date(2023, 3, 28),
-                        composition_effective_to=None,
-                        rebalance_event_id="old",
-                    ),
                     SimpleNamespace(
                         index_id="IDX_BOND",
                         composition_weight=Decimal("0.4"),
@@ -2946,6 +3005,12 @@ async def test_benchmark_catalog_collapses_superseded_effective_rows() -> None:
         "IDX_EQ",
     ]
     assert response.records[0].components[0].composition_effective_from == date(2025, 3, 27)
+    service._reference_repository.list_benchmark_definitions.assert_awaited_once_with(
+        as_of_date=date(2026, 3, 27),
+        benchmark_type=None,
+        benchmark_currency=None,
+        benchmark_status=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -3017,8 +3082,7 @@ async def test_benchmark_composition_window_resolves_superseded_component_rows()
 
     assert response is not None
     assert [
-        (segment.index_id, segment.composition_effective_from)
-        for segment in response.segments
+        (segment.index_id, segment.composition_effective_from) for segment in response.segments
     ] == [("IDX_BOND", date(2025, 3, 27)), ("IDX_EQ", date(2025, 3, 27))]
     assert response.data_quality_status == "COMPLETE"
 
@@ -3049,6 +3113,9 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
                     composition_effective_to=None,
                 ),
             ]
+        ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            side_effect=[["IDX1", "IDX2", "IDX3"], ["IDX3"]]
         ),
         list_index_price_points=AsyncMock(return_value=[]),
         list_index_return_points=AsyncMock(return_value=[]),
@@ -3088,6 +3155,221 @@ async def test_benchmark_market_series_supports_paging_tokens() -> None:
 
 
 @pytest.mark.asyncio
+async def test_benchmark_market_series_reads_page_scoped_component_evidence() -> None:
+    service = make_service()
+    component_rows = [
+        SimpleNamespace(
+            index_id="IDX1",
+            composition_weight=Decimal("0.5"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=None,
+            quality_status="accepted",
+        ),
+        SimpleNamespace(
+            index_id="IDX2",
+            composition_weight=Decimal("0.3"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=None,
+            quality_status="accepted",
+        ),
+    ]
+    second_page_component_rows = [
+        SimpleNamespace(
+            index_id="IDX3",
+            composition_weight=Decimal("0.2"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=None,
+            quality_status="accepted",
+        )
+    ]
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            side_effect=[["IDX1", "IDX2", "IDX3"], ["IDX3"]]
+        ),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            side_effect=[component_rows, second_page_component_rows]
+        ),
+        list_index_price_points=AsyncMock(return_value=[]),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(return_value=[]),
+        get_fx_rates=AsyncMock(return_value={}),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price"],
+            page=SimpleNamespace(page_size=2, page_token=None),
+        ),
+    )
+
+    assert [row.index_id for row in response.component_series] == ["IDX1", "IDX2"]
+    assert response.page.next_page_token is not None
+
+    second_page = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency=None,
+            series_fields=["index_price"],
+            page=SimpleNamespace(page_size=2, page_token=response.page.next_page_token),
+        ),
+    )
+
+    assert [row.index_id for row in second_page.component_series] == ["IDX3"]
+    assert second_page.page.next_page_token is None
+    service._reference_repository.list_benchmark_component_index_ids_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        after_index_id=None,
+        limit=3,
+    )
+    service._reference_repository.list_benchmark_component_index_ids_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        after_index_id="IDX2",
+        limit=3,
+    )
+    service._reference_repository.list_benchmark_components_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        index_ids=["IDX1", "IDX2"],
+    )
+    service._reference_repository.list_benchmark_components_overlapping_window.assert_any_await(
+        benchmark_id="B1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+        index_ids=["IDX3"],
+    )
+    service._reference_repository.list_index_price_points.assert_any_await(
+        index_ids=["IDX1", "IDX2"],
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+    )
+    service._reference_repository.list_index_price_points.assert_any_await(
+        index_ids=["IDX3"],
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 2),
+    )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_reads_evidence_inputs_sequentially() -> None:
+    service = make_service()
+    call_order: list[str] = []
+
+    def _sequential_side_effect(name: str, result: object) -> Callable[..., Awaitable[object]]:
+        async def _read(**kwargs: object) -> object:
+            call_order.append(name)
+            return result
+
+        return _read
+
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="EUR")),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX1"]),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            side_effect=_sequential_side_effect(
+                "components",
+                [
+                    SimpleNamespace(
+                        index_id="IDX1",
+                        composition_weight=Decimal("0.5"),
+                        composition_effective_from=date(2026, 1, 1),
+                        composition_effective_to=None,
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        list_index_price_points=AsyncMock(
+            side_effect=_sequential_side_effect(
+                "index_prices",
+                [
+                    SimpleNamespace(
+                        index_id="IDX1",
+                        series_date=date(2026, 1, 1),
+                        index_price=Decimal("100"),
+                        series_currency="EUR",
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        list_index_return_points=AsyncMock(
+            side_effect=_sequential_side_effect(
+                "index_returns",
+                [
+                    SimpleNamespace(
+                        index_id="IDX1",
+                        series_date=date(2026, 1, 1),
+                        index_return=Decimal("0.01"),
+                        series_currency="EUR",
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        list_benchmark_return_points=AsyncMock(
+            side_effect=_sequential_side_effect(
+                "benchmark_returns",
+                [
+                    SimpleNamespace(
+                        series_date=date(2026, 1, 1),
+                        benchmark_return=Decimal("0.008"),
+                        return_period="1d",
+                        return_convention="total_return_index",
+                        series_currency="EUR",
+                        quality_status="accepted",
+                    )
+                ],
+            )
+        ),
+        get_fx_rates=AsyncMock(
+            side_effect=_sequential_side_effect(
+                "fx_rates",
+                {date(2026, 1, 1): Decimal("1.1")},
+            )
+        ),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
+            frequency="daily",
+            target_currency="USD",
+            series_fields=["index_price", "index_return", "benchmark_return", "fx_rate"],
+            page=SimpleNamespace(page_size=1, page_token=None),
+        ),
+    )
+
+    assert response.component_series[0].points[0].fx_rate == Decimal("1.1")
+    assert (
+        response.normalization_status
+        == "native_component_series_with_benchmark_to_target_fx_context"
+    )
+    assert call_order == [
+        "components",
+        "index_prices",
+        "index_returns",
+        "benchmark_returns",
+        "fx_rates",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_benchmark_market_series_quality_summary_is_page_scoped() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
@@ -3107,6 +3389,9 @@ async def test_benchmark_market_series_quality_summary_is_page_scoped() -> None:
                     composition_effective_to=None,
                 ),
             ]
+        ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            return_value=["IDX1", "IDX2"]
         ),
         list_index_price_points=AsyncMock(
             return_value=[
@@ -3836,6 +4121,111 @@ async def test_market_data_coverage_normalizes_instrument_and_valuation_currency
 
 
 @pytest.mark.asyncio
+async def test_market_data_coverage_deduplicates_repository_lookup_scope() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="EQ_US_AAPL",
+                    price_date=date(2026, 4, 10),
+                    price=Decimal("187.1200000000"),
+                    currency="USD",
+                )
+            ]
+        ),
+        list_latest_fx_rates=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    from_currency="USD",
+                    to_currency="SGD",
+                    rate_date=date(2026, 4, 10),
+                    rate=Decimal("1.3521000000"),
+                )
+            ]
+        ),
+    )
+
+    response = await service.get_market_data_coverage(
+        SimpleNamespace(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=[" EQ_US_AAPL ", "EQ_US_AAPL"],
+            currency_pairs=[
+                SimpleNamespace(from_currency="USD", to_currency="SGD"),
+                SimpleNamespace(from_currency="USD", to_currency="SGD"),
+            ],
+            valuation_currency=None,
+            max_staleness_days=5,
+        )
+    )
+
+    assert [record.instrument_id for record in response.price_coverage] == [
+        "EQ_US_AAPL",
+        "EQ_US_AAPL",
+    ]
+    assert response.supportability.requested_price_count == 2
+    assert response.supportability.resolved_price_count == 2
+    assert response.supportability.requested_fx_count == 2
+    assert response.supportability.resolved_fx_count == 2
+    service._reference_repository.list_latest_market_prices.assert_awaited_once_with(
+        security_ids=["EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+    service._reference_repository.list_latest_fx_rates.assert_awaited_once_with(
+        currency_pairs=[("USD", "SGD")],
+        as_of_date=date(2026, 4, 10),
+    )
+
+
+@pytest.mark.asyncio
+async def test_market_data_coverage_reads_prices_and_fx_rates_sequentially() -> None:
+    service = make_service()
+    call_order: list[str] = []
+
+    async def list_latest_market_prices(**_kwargs):
+        call_order.append("prices")
+        return [
+            SimpleNamespace(
+                security_id="EQ_US_AAPL",
+                price_date=date(2026, 4, 10),
+                price=Decimal("187.1200000000"),
+                currency="USD",
+            )
+        ]
+
+    async def list_latest_fx_rates(**_kwargs):
+        call_order.append("fx")
+        return [
+            SimpleNamespace(
+                from_currency="USD",
+                to_currency="SGD",
+                rate_date=date(2026, 4, 10),
+                rate=Decimal("1.3521000000"),
+            )
+        ]
+
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        list_latest_market_prices=AsyncMock(side_effect=list_latest_market_prices),
+        list_latest_fx_rates=AsyncMock(side_effect=list_latest_fx_rates),
+    )
+
+    response = await service.get_market_data_coverage(
+        SimpleNamespace(
+            as_of_date=date(2026, 4, 10),
+            instrument_ids=["EQ_US_AAPL"],
+            currency_pairs=[SimpleNamespace(from_currency="USD", to_currency="SGD")],
+            valuation_currency=None,
+            max_staleness_days=5,
+        )
+    )
+
+    assert call_order == ["prices", "fx"]
+    assert response.supportability.state == "READY"
+    assert response.supportability.resolved_price_count == 1
+    assert response.supportability.resolved_fx_count == 1
+
+
+@pytest.mark.asyncio
 async def test_market_data_coverage_normalizes_returned_price_security_id() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
@@ -4077,6 +4467,9 @@ async def test_benchmark_market_series_honors_window_rebalances() -> None:
                 ),
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(
+            return_value=["IDX_A", "IDX_B", "IDX_C"]
+        ),
         list_index_price_points=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -4168,6 +4561,7 @@ async def test_benchmark_market_series_honors_requested_series_fields() -> None:
                 ),
             ]
         ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX_A"]),
         list_index_price_points=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -4221,3 +4615,53 @@ async def test_benchmark_market_series_honors_requested_series_fields() -> None:
     assert point.benchmark_return == Decimal("0.02")
     assert point.component_weight == Decimal("0.60")
     assert point.fx_rate is None
+    service._reference_repository.list_index_price_points.assert_not_awaited()
+    service._reference_repository.list_index_return_points.assert_not_awaited()
+    service._reference_repository.list_benchmark_return_points.assert_awaited_once()
+    service._reference_repository.get_fx_rates.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_benchmark_market_series_uses_fx_dates_when_only_fx_rate_requested() -> None:
+    service = make_service()
+    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
+        get_benchmark_definition=AsyncMock(return_value=SimpleNamespace(benchmark_currency="USD")),
+        list_benchmark_components_overlapping_window=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    index_id="IDX_A",
+                    composition_weight=Decimal("0.60"),
+                    composition_effective_from=date(2026, 1, 1),
+                    composition_effective_to=None,
+                ),
+            ]
+        ),
+        list_benchmark_component_index_ids_overlapping_window=AsyncMock(return_value=["IDX_A"]),
+        list_index_price_points=AsyncMock(return_value=[]),
+        list_index_return_points=AsyncMock(return_value=[]),
+        list_benchmark_return_points=AsyncMock(return_value=[]),
+        get_fx_rates=AsyncMock(return_value={date(2026, 1, 1): Decimal("1.10")}),
+    )
+
+    response = await service.get_benchmark_market_series(
+        benchmark_id="B1",
+        request=SimpleNamespace(
+            as_of_date=date(2026, 1, 1),
+            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)),
+            frequency="daily",
+            target_currency="EUR",
+            series_fields=["fx_rate"],
+            page=SimpleNamespace(page_size=10, page_token=None),
+        ),
+    )
+
+    point = response.component_series[0].points[0]
+    assert point.series_date == date(2026, 1, 1)
+    assert point.fx_rate == Decimal("1.10")
+    assert point.index_price is None
+    assert point.index_return is None
+    assert point.benchmark_return is None
+    assert point.component_weight is None
+    service._reference_repository.list_index_price_points.assert_not_awaited()
+    service._reference_repository.list_index_return_points.assert_not_awaited()
+    service._reference_repository.list_benchmark_return_points.assert_not_awaited()

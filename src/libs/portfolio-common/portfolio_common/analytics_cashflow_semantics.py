@@ -14,6 +14,10 @@ AnalyticsCashFlowType = Literal[
 AnalyticsFlowScope = Literal["external", "internal", "operational"]
 
 
+def normalize_cashflow_timing(timing: str | None) -> str:
+    return str(timing or "").strip().upper()
+
+
 def normalize_position_flow_amount(*, amount: Decimal, classification: str) -> Decimal:
     """
     Convert stored cash-movement direction into the position-view flow direction used by

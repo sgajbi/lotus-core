@@ -1,16 +1,7 @@
 import logging
-from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
-from typing import Any, Literal
+from datetime import UTC, date, datetime
+from typing import Any, cast
 
-from portfolio_common.market_reference_quality import (
-    BLOCKING_QUALITY_STATUSES,
-    PARTIAL_QUALITY_STATUSES,
-    STALE_QUALITY_STATUSES,
-    MarketReferenceCoverageSignal,
-    classify_market_reference_coverage,
-    quality_status_summary_key,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse
@@ -26,41 +17,23 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesResponse,
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
-    CioModelChangeAffectedCohortSupportability,
-    CioModelChangeAffectedMandate,
-    ClassificationTaxonomyEntry,
     ClassificationTaxonomyResponse,
-    ClientIncomeNeedsScheduleEntry,
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
-    ClientIncomeNeedsScheduleSupportability,
-    ClientRestrictionProfileEntry,
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
-    ClientRestrictionProfileSupportability,
-    ClientTaxProfileEntry,
     ClientTaxProfileRequest,
     ClientTaxProfileResponse,
-    ClientTaxProfileSupportability,
-    ClientTaxRuleSetEntry,
     ClientTaxRuleSetRequest,
     ClientTaxRuleSetResponse,
-    ClientTaxRuleSetSupportability,
-    ComponentSeriesResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
-    DiscretionaryMandateBindingSupportability,
-    DpmPortfolioUniverseCandidate,
     DpmPortfolioUniverseCandidateRequest,
     DpmPortfolioUniverseCandidateResponse,
-    DpmPortfolioUniverseCandidateSelectionBasis,
-    DpmPortfolioUniverseCandidateSupportability,
     DpmSourceFamilyReadiness,
-    DpmSourceFamilyState,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
-    DpmSourceReadinessSupportability,
     ExternalCurrencyExposureRequest,
     ExternalCurrencyExposureResponse,
     ExternalCurrencyExposureSupportability,
@@ -72,7 +45,6 @@ from ..dtos.reference_integration_dto import (
     ExternalFXForwardCurveSupportability,
     ExternalHedgeExecutionReadinessRequest,
     ExternalHedgeExecutionReadinessResponse,
-    ExternalHedgeExecutionReadinessSupportability,
     ExternalHedgePolicyRequest,
     ExternalHedgePolicyResponse,
     ExternalHedgePolicySupportability,
@@ -80,74 +52,117 @@ from ..dtos.reference_integration_dto import (
     ExternalOrderExecutionAcknowledgementResponse,
     ExternalOrderExecutionAcknowledgementSupportability,
     IndexCatalogResponse,
-    IndexDefinitionResponse,
-    IndexPriceSeriesPoint,
     IndexPriceSeriesResponse,
-    IndexReturnSeriesPoint,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
-    InstrumentEligibilityRecord,
-    InstrumentEligibilitySupportability,
     IntegrationWindow,
-    LiquidityReserveRequirementEntry,
     LiquidityReserveRequirementRequest,
     LiquidityReserveRequirementResponse,
-    LiquidityReserveRequirementSupportability,
     MarketDataCoverageRequest,
-    MarketDataCoverageSupportability,
     MarketDataCoverageWindowResponse,
-    MarketDataFxCoverageRecord,
-    MarketDataPriceCoverageRecord,
-    ModelPortfolioSupportability,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
-    ModelPortfolioTargetRow,
-    PlannedWithdrawalScheduleEntry,
     PlannedWithdrawalScheduleRequest,
     PlannedWithdrawalScheduleResponse,
-    PlannedWithdrawalScheduleSupportability,
-    PortfolioManagerBookMember,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
-    PortfolioManagerBookMembershipSupportability,
-    PortfolioTaxLotRecord,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
-    PortfolioTaxLotWindowSupportability,
-    RebalanceBandContext,
-    ReferencePageMetadata,
-    RiskFreeSeriesPoint,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
-    SeriesPoint,
-    SustainabilityPreferenceProfileEntry,
     SustainabilityPreferenceProfileRequest,
     SustainabilityPreferenceProfileResponse,
-    SustainabilityPreferenceProfileSupportability,
-    TransactionCostCurvePoint,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
-    TransactionCostCurveSupportability,
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.currency_codes import normalize_currency_code
-from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
+from .benchmark_composition import (
+    benchmark_composition_definition_context,
+    build_benchmark_composition_window_response,
+)
+from .benchmark_market_series import (
+    benchmark_market_series_fx_context,
+    build_benchmark_market_series_response,
+)
+from .cio_model_change_cohort import build_cio_model_change_affected_cohort_response
+from .client_income_needs_schedule import build_client_income_needs_schedule_response
+from .client_restriction_profile import build_client_restriction_profile_response
+from .client_tax_profile import build_client_tax_profile_response
+from .client_tax_rule_set import build_client_tax_rule_set_response
+from .discretionary_mandate_binding import build_discretionary_mandate_binding_response
+from .dpm_portfolio_universe import (
+    build_dpm_portfolio_universe_response,
+    dpm_portfolio_universe_after_sort_key,
+    dpm_portfolio_universe_next_page_token_payload,
+    dpm_portfolio_universe_read_scope,
+)
+from .dpm_source_readiness import (
+    build_dpm_source_readiness_response,
+    dpm_source_family_readiness,
+    unavailable_dpm_source_family,
+)
+from .external_hedge_execution_readiness import (
+    build_external_hedge_execution_readiness_response,
+)
+from .instrument_eligibility import build_instrument_eligibility_bulk_response
 from .integration_policy import build_effective_policy_response
+from .liquidity_reserve_requirement import (
+    build_liquidity_reserve_requirement_response,
+)
+from .market_data_coverage import (
+    build_market_data_coverage_response,
+    market_data_coverage_read_scope,
+)
+from .market_reference_coverage import market_reference_coverage_response
+from .model_portfolio_targets import build_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
+from .planned_withdrawal_schedule import build_planned_withdrawal_schedule_response
+from .portfolio_manager_book_membership import (
+    build_portfolio_manager_book_membership_response,
+    portfolio_manager_book_membership_portfolio_types,
+)
+from .portfolio_tax_lot_window import (
+    build_portfolio_tax_lot_window_response,
+    portfolio_tax_lot_after_sort_key,
+)
 from .reference_data_helpers import (
-    latest_effective_records,
     latest_reference_evidence_timestamp,
     market_reference_data_quality_status,
-    resolve_component_window_rows,
 )
-from .request_fingerprint import request_fingerprint, series_request_fingerprint
+from .reference_data_mappers import (
+    benchmark_definition_response,
+    benchmark_return_series_point,
+    classification_taxonomy_entry,
+    index_definition_response,
+    index_price_series_point,
+    index_return_series_point,
+    risk_free_series_point,
+)
+from .request_fingerprint import (
+    request_fingerprint as build_request_fingerprint,
+)
+from .request_fingerprint import (
+    series_request_fingerprint,
+)
+from .source_data_runtime import (
+    source_product_runtime_metadata,
+    source_product_runtime_metadata_without_as_of_date,
+)
+from .sustainability_preference_profile import (
+    build_sustainability_preference_profile_response,
+)
+from .transaction_cost_curve import (
+    build_transaction_cost_curve_page,
+    build_transaction_cost_curve_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -161,112 +176,11 @@ class IntegrationService:
         self._transaction_repository = TransactionRepository(db)
         self._page_token_codec = PageTokenCodec(load_query_service_settings().page_token_secret)
 
-    @staticmethod
-    def _as_decimal(value: Any) -> Decimal:
-        if isinstance(value, Decimal):
-            return value
-        return Decimal(str(value))
-
-    @staticmethod
-    def _string_list(value: Any) -> list[str]:
-        if not isinstance(value, list):
-            return []
-        return [str(item) for item in value if str(item).strip()]
-
-    @staticmethod
-    def _control_code(value: Any, *, default: str = "") -> str:
-        if value is None:
-            return default
-        normalized = str(value).strip().upper()
-        return normalized or default
-
-    @staticmethod
-    def _runtime_metadata(
-        as_of_date: date,
-        *,
-        data_quality_status: str | None = None,
-        latest_evidence_timestamp: datetime | None = None,
-    ) -> dict[str, object]:
-        return source_data_product_runtime_metadata(
-            as_of_date=as_of_date,
-            data_quality_status=data_quality_status or "UNKNOWN",
-            latest_evidence_timestamp=latest_evidence_timestamp,
-        )
-
-    @staticmethod
-    def _runtime_metadata_for_existing_as_of_date(
-        as_of_date: date,
-        *,
-        data_quality_status: str | None = None,
-        latest_evidence_timestamp: datetime | None = None,
-    ) -> dict[str, object]:
-        metadata = source_data_product_runtime_metadata(
-            as_of_date=as_of_date,
-            data_quality_status=data_quality_status or "UNKNOWN",
-            latest_evidence_timestamp=latest_evidence_timestamp,
-        )
-        metadata.pop("as_of_date")
-        return metadata
-
-    @staticmethod
-    def _latest_reference_evidence_timestamp(*row_groups: list[Any]) -> datetime | None:
-        return latest_reference_evidence_timestamp(*row_groups)
-
-    @staticmethod
-    def _market_reference_data_quality_status(rows: list[Any], required_count: int) -> str:
-        return market_reference_data_quality_status(rows, required_count)
-
-    @staticmethod
-    def _request_fingerprint(payload: dict[str, Any]) -> str:
-        return request_fingerprint(payload)
-
-    @staticmethod
-    def _latest_effective_records(
-        rows: list[Any],
-        *,
-        key_fields: tuple[str, ...],
-        effective_from_field: str,
-    ) -> list[Any]:
-        return latest_effective_records(
-            rows,
-            key_fields=key_fields,
-            effective_from_field=effective_from_field,
-        )
-
-    @staticmethod
-    def _resolve_component_window_rows(
-        rows: list[Any],
-        *,
-        start_date: date,
-        end_date: date,
-    ) -> list[Any]:
-        return resolve_component_window_rows(
-            rows,
-            start_date=start_date,
-            end_date=end_date,
-        )
-
-    @staticmethod
-    def _series_request_fingerprint(
-        series_key: str,
-        identifier_key: str,
-        identifier_value: str,
-        request: Any,
-        extras: dict[str, Any] | None = None,
-    ) -> str:
-        return series_request_fingerprint(
-            series_key=series_key,
-            identifier_key=identifier_key,
-            identifier_value=identifier_value,
-            request=request,
-            extras=extras,
-        )
-
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
-        return self._page_token_codec.encode(payload)
+        return cast(str, self._page_token_codec.encode(payload))
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
-        return self._page_token_codec.decode(token)
+        return cast(dict[str, Any], self._page_token_codec.decode(token))
 
     def get_effective_policy(
         self,
@@ -302,10 +216,10 @@ class IntegrationService:
             source_system=row.source_system,
             assignment_recorded_at=row.assignment_recorded_at,
             assignment_version=int(row.assignment_version),
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 as_of_date,
                 data_quality_status="COMPLETE",
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp([row]),
             ),
         )
 
@@ -327,68 +241,10 @@ class IntegrationService:
             as_of_date=request.as_of_date,
             include_inactive_targets=request.include_inactive_targets,
         )
-        target_rows = [
-            ModelPortfolioTargetRow(
-                instrument_id=row.instrument_id,
-                target_weight=self._as_decimal(row.target_weight),
-                min_weight=(
-                    self._as_decimal(row.min_weight) if row.min_weight is not None else None
-                ),
-                max_weight=(
-                    self._as_decimal(row.max_weight) if row.max_weight is not None else None
-                ),
-                target_status=row.target_status,
-                quality_status=row.quality_status,
-                source_record_id=row.source_record_id,
-            )
-            for row in targets
-        ]
-        total_weight = sum((row.target_weight for row in target_rows), Decimal("0"))
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "MODEL_TARGETS_READY"
-        if not target_rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "MODEL_TARGETS_EMPTY"
-        elif total_weight != Decimal("1.0000000000"):
-            supportability_state = "DEGRADED"
-            supportability_reason = "MODEL_TARGET_WEIGHTS_NOT_ONE"
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(
-            [definition],
-            targets,
-        )
-        return ModelPortfolioTargetResponse(
-            model_portfolio_id=definition.model_portfolio_id,
-            model_portfolio_version=definition.model_portfolio_version,
-            display_name=definition.display_name,
-            base_currency=definition.base_currency,
-            risk_profile=definition.risk_profile,
-            mandate_type=definition.mandate_type,
-            rebalance_frequency=definition.rebalance_frequency,
-            approval_status=definition.approval_status,
-            approved_at=definition.approved_at,
-            effective_from=definition.effective_from,
-            effective_to=definition.effective_to,
-            targets=target_rows,
-            supportability=ModelPortfolioSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                target_count=len(target_rows),
-                total_target_weight=total_weight,
-            ),
-            lineage={
-                "source_system": definition.source_system or "unknown",
-                "source_record_id": definition.source_record_id or "unknown",
-                "contract_version": "rfc_087_v1",
-            },
-            **self._runtime_metadata(
-                request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
-                    targets,
-                    required_count=len(target_rows),
-                ),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-            ),
+        return build_model_portfolio_target_response(
+            definition=definition,
+            request=request,
+            target_rows=targets,
         )
 
     async def resolve_portfolio_manager_book_membership(
@@ -396,11 +252,7 @@ class IntegrationService:
         portfolio_manager_id: str,
         request: PortfolioManagerBookMembershipRequest,
     ) -> PortfolioManagerBookMembershipResponse:
-        portfolio_types = [
-            portfolio_type.strip().upper()
-            for portfolio_type in request.portfolio_types
-            if portfolio_type.strip()
-        ]
+        portfolio_types = portfolio_manager_book_membership_portfolio_types(request)
         rows = await self._portfolio_repository.list_portfolio_manager_book_members(
             portfolio_manager_id=portfolio_manager_id,
             as_of_date=request.as_of_date,
@@ -408,69 +260,11 @@ class IntegrationService:
             portfolio_types=portfolio_types,
             include_inactive=request.include_inactive,
         )
-        members = [
-            PortfolioManagerBookMember(
-                portfolio_id=row.portfolio_id,
-                client_id=row.client_id,
-                booking_center_code=row.booking_center_code,
-                portfolio_type=row.portfolio_type,
-                status=row.status,
-                open_date=row.open_date,
-                close_date=row.close_date,
-                base_currency=row.base_currency,
-                source_record_id=f"portfolio:{row.portfolio_id}",
-            )
-            for row in rows
-        ]
-        filters_applied = ["portfolio_manager_id", "as_of_date"]
-        if request.booking_center_code:
-            filters_applied.append("booking_center_code")
-        if portfolio_types:
-            filters_applied.append("portfolio_types")
-        if not request.include_inactive:
-            filters_applied.extend(["active_lifecycle_window", "active_status"])
-
-        supportability_state: Literal["READY", "INCOMPLETE"] = "READY"
-        supportability_reason = "PM_BOOK_MEMBERSHIP_READY"
-        if not members:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "PM_BOOK_MEMBERSHIP_EMPTY"
-
-        snapshot_id = self._request_fingerprint(
-            {
-                "product_name": "PortfolioManagerBookMembership",
-                "portfolio_manager_id": portfolio_manager_id,
-                "as_of_date": request.as_of_date.isoformat(),
-                "booking_center_code": request.booking_center_code,
-                "portfolio_types": portfolio_types,
-                "include_inactive": request.include_inactive,
-                "portfolio_ids": [member.portfolio_id for member in members],
-            }
-        )
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(rows)
-
-        return PortfolioManagerBookMembershipResponse(
+        return build_portfolio_manager_book_membership_response(
             portfolio_manager_id=portfolio_manager_id,
-            booking_center_code=request.booking_center_code,
-            members=members,
-            supportability=PortfolioManagerBookMembershipSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                returned_portfolio_count=len(members),
-                filters_applied=filters_applied,
-            ),
-            lineage={
-                "source_system": "lotus-core",
-                "source_table": "portfolios",
-                "source_field": "advisor_id",
-                "contract_version": "rfc_041_pm_book_membership_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                data_quality_status="ACCEPTED" if members else "MISSING",
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                snapshot_id=f"pm_book_membership:{snapshot_id}",
-            ),
+            request=request,
+            portfolio_types=portfolio_types,
+            rows=rows,
         )
 
     async def resolve_cio_model_change_affected_cohort(
@@ -491,232 +285,49 @@ class IntegrationService:
             booking_center_code=request.booking_center_code,
             include_inactive_mandates=request.include_inactive_mandates,
         )
-        affected_mandates = [
-            CioModelChangeAffectedMandate(
-                portfolio_id=row.portfolio_id,
-                mandate_id=row.mandate_id,
-                client_id=row.client_id,
-                booking_center_code=row.booking_center_code,
-                jurisdiction_code=row.jurisdiction_code,
-                discretionary_authority_status=row.discretionary_authority_status,
-                model_portfolio_id=row.model_portfolio_id,
-                policy_pack_id=row.policy_pack_id,
-                risk_profile=row.risk_profile,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                binding_version=int(row.binding_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        filters_applied = ["model_portfolio_id", "as_of_date"]
-        if request.booking_center_code:
-            filters_applied.append("booking_center_code")
-        if not request.include_inactive_mandates:
-            filters_applied.append("active_discretionary_authority")
-
-        supportability_state: Literal["READY", "INCOMPLETE"] = "READY"
-        supportability_reason = "CIO_MODEL_CHANGE_COHORT_READY"
-        if not affected_mandates:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "CIO_MODEL_CHANGE_COHORT_EMPTY"
-
-        snapshot_fingerprint = self._request_fingerprint(
-            {
-                "product_name": "CioModelChangeAffectedCohort",
-                "model_portfolio_id": model_portfolio_id,
-                "model_portfolio_version": definition.model_portfolio_version,
-                "as_of_date": request.as_of_date.isoformat(),
-                "booking_center_code": request.booking_center_code,
-                "include_inactive_mandates": request.include_inactive_mandates,
-                "mandate_ids": [mandate.mandate_id for mandate in affected_mandates],
-                "portfolio_ids": [mandate.portfolio_id for mandate in affected_mandates],
-            }
-        )
-        event_id = (
-            "cio_model_change:"
-            f"{model_portfolio_id}:"
-            f"{definition.model_portfolio_version}:"
-            f"{request.as_of_date.isoformat()}:{snapshot_fingerprint}"
-        )
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp(
-            [definition],
-            rows,
-        )
-
-        return CioModelChangeAffectedCohortResponse(
-            model_portfolio_id=definition.model_portfolio_id,
-            model_portfolio_version=definition.model_portfolio_version,
-            model_change_event_id=event_id,
-            approval_state=definition.approval_status,
-            approved_at=definition.approved_at,
-            effective_from=definition.effective_from,
-            effective_to=definition.effective_to,
-            affected_mandates=affected_mandates,
-            supportability=CioModelChangeAffectedCohortSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                returned_mandate_count=len(affected_mandates),
-                filters_applied=filters_applied,
-            ),
-            lineage={
-                "source_system": definition.source_system or "lotus-core",
-                "model_definition_source_record_id": definition.source_record_id or "unknown",
-                "mandate_binding_table": "portfolio_mandate_bindings",
-                "contract_version": "rfc_041_cio_model_change_cohort_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status="ACCEPTED" if affected_mandates else "MISSING",
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=snapshot_fingerprint,
-                snapshot_id=f"cio_model_change_cohort:{snapshot_fingerprint}",
-            ),
+        return build_cio_model_change_affected_cohort_response(
+            definition=definition,
+            request=request,
+            mandate_rows=rows,
         )
 
     async def resolve_dpm_portfolio_universe_candidates(
         self,
         request: DpmPortfolioUniverseCandidateRequest,
     ) -> DpmPortfolioUniverseCandidateResponse:
-        booking_center_code = (
-            request.booking_center_code.strip() if request.booking_center_code else None
-        )
-        if booking_center_code == "":
-            booking_center_code = None
-        model_portfolio_ids = sorted(
-            {
-                model_portfolio_id.strip()
-                for model_portfolio_id in request.model_portfolio_ids
-                if model_portfolio_id.strip()
-            }
-        )
-        request_scope_fingerprint = self._request_fingerprint(
-            {
-                "product_name": "DpmPortfolioUniverseCandidate",
-                "as_of_date": request.as_of_date.isoformat(),
-                "booking_center_code": booking_center_code,
-                "model_portfolio_ids": model_portfolio_ids,
-                "include_inactive_mandates": request.include_inactive_mandates,
-                "tenant_id": request.tenant_id,
-            }
-        )
+        read_scope = dpm_portfolio_universe_read_scope(request)
         cursor = self._decode_page_token(request.page.page_token)
-        token_scope = cursor.get("scope_fingerprint")
-        if token_scope and token_scope != request_scope_fingerprint:
-            raise ValueError("DPM portfolio-universe page token does not match request scope.")
-
-        after_sort_key: tuple[str, str] | None = None
-        if cursor.get("last_portfolio_id") and cursor.get("last_mandate_id"):
-            after_sort_key = (str(cursor["last_portfolio_id"]), str(cursor["last_mandate_id"]))
+        after_sort_key = dpm_portfolio_universe_after_sort_key(
+            cursor=cursor,
+            request_scope_fingerprint=read_scope.request_scope_fingerprint,
+        )
 
         rows = await self._reference_repository.list_dpm_portfolio_universe_candidates(
             as_of_date=request.as_of_date,
-            booking_center_code=booking_center_code,
-            model_portfolio_ids=model_portfolio_ids,
+            booking_center_code=read_scope.booking_center_code,
+            model_portfolio_ids=read_scope.model_portfolio_ids,
             include_inactive_mandates=request.include_inactive_mandates,
             after_sort_key=after_sort_key,
             limit=request.page.page_size + 1,
         )
         has_more = len(rows) > request.page.page_size
         page_rows = rows[: request.page.page_size]
-        candidates = [
-            DpmPortfolioUniverseCandidate(
-                portfolio_id=row.portfolio_id,
-                mandate_id=row.mandate_id,
-                client_id=row.client_id,
-                booking_center_code=row.booking_center_code,
-                jurisdiction_code=row.jurisdiction_code,
-                discretionary_authority_status=row.discretionary_authority_status,
-                model_portfolio_id=row.model_portfolio_id,
-                policy_pack_id=row.policy_pack_id,
-                mandate_objective=row.mandate_objective,
-                risk_profile=row.risk_profile,
-                investment_horizon=row.investment_horizon,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                binding_version=int(row.binding_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in page_rows
-        ]
 
         next_page_token: str | None = None
-        if has_more and candidates:
-            last_candidate = candidates[-1]
-            next_page_token = self._encode_page_token(
-                {
-                    "scope_fingerprint": request_scope_fingerprint,
-                    "last_portfolio_id": last_candidate.portfolio_id,
-                    "last_mandate_id": last_candidate.mandate_id,
-                }
-            )
+        token_payload = dpm_portfolio_universe_next_page_token_payload(
+            request_scope_fingerprint=read_scope.request_scope_fingerprint,
+            page_rows=page_rows,
+            has_more=has_more,
+        )
+        if token_payload:
+            next_page_token = self._encode_page_token(token_payload)
 
-        filters_applied = ["as_of_date"]
-        if booking_center_code:
-            filters_applied.append("booking_center_code")
-        if model_portfolio_ids:
-            filters_applied.append("model_portfolio_ids")
-        if not request.include_inactive_mandates:
-            filters_applied.append("active_discretionary_authority")
-
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE"] = "READY"
-        supportability_reason = "DPM_PORTFOLIO_UNIVERSE_READY"
-        data_quality_status = "ACCEPTED"
-        if not candidates:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "DPM_PORTFOLIO_UNIVERSE_EMPTY"
-            data_quality_status = "MISSING"
-        elif has_more:
-            supportability_state = "DEGRADED"
-            supportability_reason = "DPM_PORTFOLIO_UNIVERSE_PAGE_PARTIAL"
-            data_quality_status = "PARTIAL"
-
-        return DpmPortfolioUniverseCandidateResponse(
-            candidates=candidates,
-            page=ReferencePageMetadata(
-                page_size=request.page.page_size,
-                sort_key="portfolio_id:asc,mandate_id:asc",
-                returned_component_count=len(candidates),
-                request_scope_fingerprint=request_scope_fingerprint,
-                next_page_token=next_page_token,
-            ),
-            supportability=DpmPortfolioUniverseCandidateSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                returned_candidate_count=len(candidates),
-                filters_applied=filters_applied,
-                page_truncated=has_more,
-            ),
-            selection_basis=DpmPortfolioUniverseCandidateSelectionBasis(
-                basis_type="EFFECTIVE_DISCRETIONARY_MANDATE_BINDING",
-                source_table="portfolio_mandate_bindings",
-                included_when=[
-                    "mandate_type=discretionary",
-                    "effective_from<=as_of_date",
-                    "effective_to is null or effective_to>=as_of_date",
-                    "active authority unless include_inactive_mandates=true",
-                ],
-                downstream_boundary=(
-                    "Candidate membership is not relationship householding, suitability approval, "
-                    "portfolio-manager ranking, execution readiness, client communication "
-                    "workflow, or external workflow ownership."
-                ),
-            ),
-            lineage={
-                "source_system": "lotus-core",
-                "source_table": "portfolio_mandate_bindings",
-                "source_filter": "mandate_type=discretionary",
-                "contract_version": "rfc_037_dpm_portfolio_universe_candidate_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=data_quality_status,
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(page_rows),
-                source_batch_fingerprint=request_scope_fingerprint,
-                snapshot_id=f"dpm_portfolio_universe:{request_scope_fingerprint}",
-            ),
+        return build_dpm_portfolio_universe_response(
+            request=request,
+            read_scope=read_scope,
+            page_rows=page_rows,
+            has_more=has_more,
+            next_page_token=next_page_token,
         )
 
     async def resolve_discretionary_mandate_binding(
@@ -733,84 +344,9 @@ class IntegrationService:
         if row is None:
             return None
 
-        missing_data_families: list[str] = []
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "MANDATE_BINDING_READY"
-        discretionary_authority_status = self._control_code(row.discretionary_authority_status)
-        if discretionary_authority_status != "ACTIVE":
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "DISCRETIONARY_AUTHORITY_NOT_ACTIVE"
-            missing_data_families.append("active_discretionary_authority")
-        if request.include_policy_pack and not row.policy_pack_id:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "MANDATE_POLICY_PACK_MISSING"
-            missing_data_families.append("policy_pack")
-        mandate_objective = getattr(row, "mandate_objective", None)
-        review_cadence = getattr(row, "review_cadence", None)
-        last_review_date = getattr(row, "last_review_date", None)
-        next_review_due_date = getattr(row, "next_review_due_date", None)
-        if not mandate_objective:
-            if supportability_state == "READY":
-                supportability_state = "INCOMPLETE"
-                supportability_reason = "MANDATE_OBJECTIVE_MISSING"
-            missing_data_families.append("mandate_objective")
-        if not review_cadence or last_review_date is None or next_review_due_date is None:
-            if supportability_state == "READY":
-                supportability_state = "INCOMPLETE"
-                supportability_reason = "MANDATE_REVIEW_SCHEDULE_MISSING"
-            missing_data_families.append("mandate_review_schedule")
-        elif next_review_due_date < request.as_of_date and supportability_state == "READY":
-            supportability_state = "DEGRADED"
-            supportability_reason = "MANDATE_REVIEW_OVERDUE"
-
-        bands = dict(row.rebalance_bands or {})
-        default_band = self._as_decimal(bands.get("default_band", "0"))
-        cash_reserve_raw = bands.get("cash_reserve_weight")
-
-        return DiscretionaryMandateBindingResponse(
-            portfolio_id=row.portfolio_id,
-            mandate_id=row.mandate_id,
-            client_id=row.client_id,
-            mandate_type=row.mandate_type,
-            discretionary_authority_status=discretionary_authority_status,
-            booking_center_code=row.booking_center_code,
-            jurisdiction_code=row.jurisdiction_code,
-            model_portfolio_id=row.model_portfolio_id,
-            policy_pack_id=row.policy_pack_id if request.include_policy_pack else None,
-            mandate_objective=mandate_objective,
-            risk_profile=row.risk_profile,
-            investment_horizon=row.investment_horizon,
-            review_cadence=review_cadence,
-            last_review_date=last_review_date,
-            next_review_due_date=next_review_due_date,
-            leverage_allowed=bool(row.leverage_allowed),
-            tax_awareness_allowed=bool(row.tax_awareness_allowed),
-            settlement_awareness_required=bool(row.settlement_awareness_required),
-            rebalance_frequency=row.rebalance_frequency,
-            rebalance_bands=RebalanceBandContext(
-                default_band=default_band,
-                cash_reserve_weight=(
-                    self._as_decimal(cash_reserve_raw) if cash_reserve_raw is not None else None
-                ),
-            ),
-            effective_from=row.effective_from,
-            effective_to=row.effective_to,
-            binding_version=int(row.binding_version),
-            supportability=DiscretionaryMandateBindingSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": row.source_system or "unknown",
-                "source_record_id": row.source_record_id or "unknown",
-                "contract_version": "rfc_087_v1",
-            },
-            **self._runtime_metadata(
-                request.as_of_date,
-                data_quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp([row]),
-            ),
+        return build_discretionary_mandate_binding_response(
+            row=row,
+            request=request,
         )
 
     async def get_client_restriction_profile(
@@ -833,76 +369,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_restrictions=request.include_inactive_restrictions,
         )
-        entries = [
-            ClientRestrictionProfileEntry(
-                restriction_scope=row.restriction_scope,
-                restriction_code=row.restriction_code,
-                restriction_status=row.restriction_status,
-                restriction_source=row.restriction_source,
-                applies_to_buy=bool(row.applies_to_buy),
-                applies_to_sell=bool(row.applies_to_sell),
-                instrument_ids=self._string_list(row.instrument_ids),
-                asset_classes=self._string_list(row.asset_classes),
-                issuer_ids=self._string_list(row.issuer_ids),
-                country_codes=self._string_list(row.country_codes),
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                restriction_version=int(row.restriction_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "CLIENT_RESTRICTION_PROFILE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "CLIENT_RESTRICTION_PROFILE_EMPTY"
-            missing_data_families.append("client_restrictions")
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
-        return ClientRestrictionProfileResponse(
+        return build_client_restriction_profile_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            restrictions=entries,
-            supportability=ClientRestrictionProfileSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                restriction_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "client_restriction_profiles,portfolio_mandate_bindings",
-                "contract_version": "rfc_040_client_restriction_profile_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "ClientRestrictionProfile",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "client_restriction_profile:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_sustainability_preference_profile(
@@ -925,83 +396,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_preferences=request.include_inactive_preferences,
         )
-        entries = [
-            SustainabilityPreferenceProfileEntry(
-                preference_framework=row.preference_framework,
-                preference_code=row.preference_code,
-                preference_status=row.preference_status,
-                preference_source=row.preference_source,
-                minimum_allocation=(
-                    self._as_decimal(row.minimum_allocation)
-                    if row.minimum_allocation is not None
-                    else None
-                ),
-                maximum_allocation=(
-                    self._as_decimal(row.maximum_allocation)
-                    if row.maximum_allocation is not None
-                    else None
-                ),
-                applies_to_asset_classes=self._string_list(row.applies_to_asset_classes),
-                exclusion_codes=self._string_list(row.exclusion_codes),
-                positive_tilt_codes=self._string_list(row.positive_tilt_codes),
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                preference_version=int(row.preference_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "SUSTAINABILITY_PREFERENCE_PROFILE_EMPTY"
-            missing_data_families.append("sustainability_preferences")
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
-        return SustainabilityPreferenceProfileResponse(
+        return build_sustainability_preference_profile_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            preferences=entries,
-            supportability=SustainabilityPreferenceProfileSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                preference_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "sustainability_preference_profiles,portfolio_mandate_bindings",
-                "contract_version": "rfc_040_sustainability_preference_profile_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "SustainabilityPreferenceProfile",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "sustainability_preference_profile:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_client_tax_profile(
@@ -1024,80 +423,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_profiles=request.include_inactive_profiles,
         )
-        entries = [
-            ClientTaxProfileEntry(
-                tax_profile_id=row.tax_profile_id,
-                tax_residency_country=row.tax_residency_country,
-                booking_tax_jurisdiction=row.booking_tax_jurisdiction,
-                tax_status=row.tax_status,
-                profile_status=row.profile_status,
-                withholding_tax_rate=(
-                    self._as_decimal(row.withholding_tax_rate)
-                    if row.withholding_tax_rate is not None
-                    else None
-                ),
-                capital_gains_tax_applicable=bool(row.capital_gains_tax_applicable),
-                income_tax_applicable=bool(row.income_tax_applicable),
-                treaty_codes=self._string_list(row.treaty_codes),
-                eligible_account_types=self._string_list(row.eligible_account_types),
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                profile_version=int(row.profile_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "CLIENT_TAX_PROFILE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "CLIENT_TAX_PROFILE_EMPTY"
-            missing_data_families.append("client_tax_profile")
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
-        return ClientTaxProfileResponse(
+        return build_client_tax_profile_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            profiles=entries,
-            supportability=ClientTaxProfileSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                profile_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "client_tax_profiles,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_client_tax_profile_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "ClientTaxProfile",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "client_tax_profile:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_client_tax_rule_set(
@@ -1120,83 +450,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_rules=request.include_inactive_rules,
         )
-        entries = [
-            ClientTaxRuleSetEntry(
-                rule_set_id=row.rule_set_id,
-                tax_year=int(row.tax_year),
-                jurisdiction_code=row.jurisdiction_code,
-                rule_code=row.rule_code,
-                rule_category=row.rule_category,
-                rule_status=row.rule_status,
-                rule_source=row.rule_source,
-                applies_to_asset_classes=self._string_list(row.applies_to_asset_classes),
-                applies_to_security_ids=self._string_list(row.applies_to_security_ids),
-                applies_to_income_types=self._string_list(row.applies_to_income_types),
-                rate=self._as_decimal(row.rate) if row.rate is not None else None,
-                threshold_amount=(
-                    self._as_decimal(row.threshold_amount)
-                    if row.threshold_amount is not None
-                    else None
-                ),
-                threshold_currency=row.threshold_currency,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                rule_version=int(row.rule_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "CLIENT_TAX_RULE_SET_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "CLIENT_TAX_RULE_SET_EMPTY"
-            missing_data_families.append("client_tax_rule_set")
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
-        return ClientTaxRuleSetResponse(
+        return build_client_tax_rule_set_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            rules=entries,
-            supportability=ClientTaxRuleSetSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                rule_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "client_tax_rule_sets,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_client_tax_rule_set_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "ClientTaxRuleSet",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "client_tax_rule_set:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_client_income_needs_schedule(
@@ -1219,73 +477,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_schedules=request.include_inactive_schedules,
         )
-        entries = [
-            ClientIncomeNeedsScheduleEntry(
-                schedule_id=row.schedule_id,
-                need_type=row.need_type,
-                need_status=row.need_status,
-                amount=self._as_decimal(row.amount),
-                currency=row.currency,
-                frequency=row.frequency,
-                start_date=row.start_date,
-                end_date=row.end_date,
-                priority=int(row.priority),
-                funding_policy=row.funding_policy,
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "CLIENT_INCOME_NEEDS_SCHEDULE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "CLIENT_INCOME_NEEDS_SCHEDULE_EMPTY"
-            missing_data_families.append("client_income_needs_schedule")
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
-        return ClientIncomeNeedsScheduleResponse(
+        return build_client_income_needs_schedule_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            schedules=entries,
-            supportability=ClientIncomeNeedsScheduleSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                schedule_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "client_income_needs_schedules,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_client_income_needs_schedule_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "ClientIncomeNeedsSchedule",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "client_income_needs_schedule:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_liquidity_reserve_requirement(
@@ -1308,74 +504,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_requirements=request.include_inactive_requirements,
         )
-        entries = [
-            LiquidityReserveRequirementEntry(
-                reserve_requirement_id=row.reserve_requirement_id,
-                reserve_type=row.reserve_type,
-                reserve_status=row.reserve_status,
-                required_amount=self._as_decimal(row.required_amount),
-                currency=row.currency,
-                horizon_days=int(row.horizon_days),
-                priority=int(row.priority),
-                policy_source=row.policy_source,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                requirement_version=int(row.requirement_version),
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "LIQUIDITY_RESERVE_REQUIREMENT_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "LIQUIDITY_RESERVE_REQUIREMENT_EMPTY"
-            missing_data_families.append("liquidity_reserve_requirement")
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
-        return LiquidityReserveRequirementResponse(
+        return build_liquidity_reserve_requirement_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            requirements=entries,
-            supportability=LiquidityReserveRequirementSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requirement_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "liquidity_reserve_requirements,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_liquidity_reserve_requirement_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "LiquidityReserveRequirement",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "liquidity_reserve_requirement:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_planned_withdrawal_schedule(
@@ -1399,74 +532,11 @@ class IntegrationService:
             mandate_id=binding.mandate_id,
             include_inactive_withdrawals=request.include_inactive_withdrawals,
         )
-        entries = [
-            PlannedWithdrawalScheduleEntry(
-                withdrawal_schedule_id=row.withdrawal_schedule_id,
-                withdrawal_type=row.withdrawal_type,
-                withdrawal_status=row.withdrawal_status,
-                amount=self._as_decimal(row.amount),
-                currency=row.currency,
-                scheduled_date=row.scheduled_date,
-                recurrence_frequency=row.recurrence_frequency,
-                purpose_code=row.purpose_code,
-                source_record_id=row.source_record_id,
-            )
-            for row in rows
-        ]
-        supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "PLANNED_WITHDRAWAL_SCHEDULE_READY"
-        missing_data_families: list[str] = []
-        if not rows:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "PLANNED_WITHDRAWAL_SCHEDULE_EMPTY"
-            missing_data_families.append("planned_withdrawal_schedule")
-
-        latest_evidence_timestamp = self._latest_reference_evidence_timestamp([binding], rows)
-        return PlannedWithdrawalScheduleResponse(
+        return build_planned_withdrawal_schedule_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            horizon_days=request.horizon_days,
-            withdrawals=entries,
-            supportability=PlannedWithdrawalScheduleSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                withdrawal_count=len(entries),
-                missing_data_families=missing_data_families,
-            ),
-            lineage={
-                "source_system": "lotus-core-query-service",
-                "source_table": "planned_withdrawal_schedules,portfolio_mandate_bindings",
-                "contract_version": "rfc_042_planned_withdrawal_schedule_v1",
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if rows else "MISSING"),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "PlannedWithdrawalSchedule",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "horizon_days": request.horizon_days,
-                        "row_count": len(rows),
-                    }
-                ),
-                snapshot_id=(
-                    "planned_withdrawal_schedule:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                            "horizon_days": request.horizon_days,
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
+            rows=rows,
         )
 
     async def get_external_hedge_execution_readiness(
@@ -1482,72 +552,10 @@ class IntegrationService:
         if binding is None:
             return None
 
-        missing_data_families = [
-            "external_currency_exposure",
-            "external_hedge_policy",
-            "external_fx_forward_curve",
-            "external_eligible_hedge_instrument",
-            "external_hedge_execution_readiness",
-        ]
-        blocked_capabilities = [
-            "hedge_advice",
-            "forward_pricing",
-            "counterparty_selection",
-            "best_execution",
-            "oms_acknowledgement",
-            "fills",
-            "settlement",
-            "autonomous_treasury_action",
-        ]
-
-        return ExternalHedgeExecutionReadinessResponse(
+        return build_external_hedge_execution_readiness_response(
             portfolio_id=portfolio_id,
-            client_id=binding.client_id,
-            mandate_id=binding.mandate_id,
-            reporting_currency=request.reporting_currency,
-            exposure_currencies=request.exposure_currencies,
-            readiness_checks=[],
-            supportability=ExternalHedgeExecutionReadinessSupportability(
-                missing_data_families=missing_data_families,
-                blocked_capabilities=blocked_capabilities,
-            ),
-            lineage={
-                "source_system": "external-bank-treasury",
-                "source_table": "not_ingested",
-                "contract_version": "rfc_039_external_hedge_execution_readiness_v1",
-                "integration_status": "not_ingested",
-                "runtime_posture": "fail_closed",
-                "non_claims": ",".join(blocked_capabilities),
-            },
-            **source_data_product_runtime_metadata(
-                as_of_date=request.as_of_date,
-                tenant_id=request.tenant_id,
-                data_quality_status="MISSING",
-                latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
-                    {
-                        "product": "ExternalHedgeExecutionReadiness",
-                        "portfolio_id": portfolio_id,
-                        "client_id": binding.client_id,
-                        "mandate_id": binding.mandate_id,
-                        "as_of_date": request.as_of_date.isoformat(),
-                        "reporting_currency": request.reporting_currency,
-                        "exposure_currencies": sorted(request.exposure_currencies),
-                        "integration_status": "not_ingested",
-                    }
-                ),
-                snapshot_id=(
-                    "external_hedge_execution_readiness:"
-                    + self._request_fingerprint(
-                        {
-                            "portfolio_id": portfolio_id,
-                            "client_id": binding.client_id,
-                            "as_of_date": request.as_of_date.isoformat(),
-                            "integration_status": "not_ingested",
-                        }
-                    )
-                ),
-            ),
+            binding=binding,
+            request=request,
         )
 
     async def get_external_currency_exposure(
@@ -1605,7 +613,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalCurrencyExposure",
                         "portfolio_id": portfolio_id,
@@ -1619,7 +627,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_currency_exposure:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1681,7 +689,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalOrderExecutionAcknowledgement",
                         "portfolio_id": portfolio_id,
@@ -1695,7 +703,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_order_execution_acknowledgement:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1761,7 +769,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalHedgePolicy",
                         "portfolio_id": portfolio_id,
@@ -1775,7 +783,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_hedge_policy:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1841,7 +849,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalEligibleHedgeInstrument",
                         "portfolio_id": portfolio_id,
@@ -1856,7 +864,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_eligible_hedge_instrument:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "portfolio_id": portfolio_id,
                             "client_id": binding.client_id,
@@ -1911,7 +919,7 @@ class IntegrationService:
                 tenant_id=request.tenant_id,
                 data_quality_status="MISSING",
                 latest_evidence_timestamp=None,
-                source_batch_fingerprint=self._request_fingerprint(
+                source_batch_fingerprint=build_request_fingerprint(
                     {
                         "product": "ExternalFXForwardCurve",
                         "as_of_date": request.as_of_date.isoformat(),
@@ -1923,7 +931,7 @@ class IntegrationService:
                 ),
                 snapshot_id=(
                     "external_fx_forward_curve:"
-                    + self._request_fingerprint(
+                    + build_request_fingerprint(
                         {
                             "as_of_date": request.as_of_date.isoformat(),
                             "currency_pairs": sorted(request.currency_pairs),
@@ -1943,97 +951,7 @@ class IntegrationService:
             security_ids=request.security_ids,
             as_of_date=request.as_of_date,
         )
-        rows_by_security_id = {normalize_security_id(row.security_id): row for row in rows}
-
-        records: list[InstrumentEligibilityRecord] = []
-        missing_security_ids: list[str] = []
-        for requested_security_id in request.security_ids:
-            security_id = normalize_security_id(requested_security_id)
-            row = rows_by_security_id.get(security_id)
-            if row is None:
-                missing_security_ids.append(security_id)
-                records.append(
-                    InstrumentEligibilityRecord(
-                        security_id=security_id,
-                        found=False,
-                        eligibility_status="UNKNOWN",
-                        product_shelf_status="UNKNOWN",
-                        buy_allowed=False,
-                        sell_allowed=False,
-                        restriction_reason_codes=["ELIGIBILITY_PROFILE_MISSING"],
-                        settlement_days=None,
-                        settlement_calendar_id=None,
-                        liquidity_tier=None,
-                        issuer_id=None,
-                        issuer_name=None,
-                        ultimate_parent_issuer_id=None,
-                        ultimate_parent_issuer_name=None,
-                        asset_class=None,
-                        country_of_risk=None,
-                        effective_from=None,
-                        effective_to=None,
-                        quality_status="MISSING",
-                        source_record_id=None,
-                    )
-                )
-                continue
-            records.append(
-                InstrumentEligibilityRecord(
-                    security_id=normalize_security_id(row.security_id),
-                    found=True,
-                    eligibility_status=self._control_code(
-                        row.eligibility_status, default="UNKNOWN"
-                    ),
-                    product_shelf_status=self._control_code(
-                        row.product_shelf_status, default="UNKNOWN"
-                    ),
-                    buy_allowed=bool(row.buy_allowed),
-                    sell_allowed=bool(row.sell_allowed),
-                    restriction_reason_codes=list(row.restriction_reason_codes or []),
-                    settlement_days=int(row.settlement_days),
-                    settlement_calendar_id=row.settlement_calendar_id,
-                    liquidity_tier=row.liquidity_tier,
-                    issuer_id=row.issuer_id,
-                    issuer_name=row.issuer_name,
-                    ultimate_parent_issuer_id=row.ultimate_parent_issuer_id,
-                    ultimate_parent_issuer_name=row.ultimate_parent_issuer_name,
-                    asset_class=row.asset_class,
-                    country_of_risk=row.country_of_risk,
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=self._control_code(row.quality_status, default="UNKNOWN"),
-                    source_record_id=row.source_record_id,
-                )
-            )
-
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "INSTRUMENT_ELIGIBILITY_READY"
-        if missing_security_ids:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "INSTRUMENT_ELIGIBILITY_MISSING"
-
-        return InstrumentEligibilityBulkResponse(
-            records=records,
-            supportability=InstrumentEligibilitySupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requested_count=len(request.security_ids),
-                resolved_count=len(request.security_ids) - len(missing_security_ids),
-                missing_security_ids=missing_security_ids,
-            ),
-            lineage={
-                "source_system": "instrument_eligibility",
-                "contract_version": "rfc_087_v1",
-            },
-            **self._runtime_metadata(
-                request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
-                    rows,
-                    required_count=len(request.security_ids),
-                ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
-            ),
-        )
+        return build_instrument_eligibility_bulk_response(request=request, rows=rows)
 
     async def get_portfolio_tax_lot_window(
         self,
@@ -2044,7 +962,7 @@ class IntegrationService:
         if not await self._buy_state_repository.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-        request_scope_fingerprint = self._request_fingerprint(
+        request_scope_fingerprint = build_request_fingerprint(
             {
                 "portfolio_id": portfolio_id,
                 "as_of_date": request.as_of_date.isoformat(),
@@ -2059,54 +977,21 @@ class IntegrationService:
         if token_scope and token_scope != request_scope_fingerprint:
             raise ValueError("Portfolio tax-lot page token does not match request scope.")
 
-        after_sort_key: tuple[date, str] | None = None
-        if cursor.get("last_acquisition_date") and cursor.get("last_lot_id"):
-            after_sort_key = (
-                date.fromisoformat(str(cursor["last_acquisition_date"])),
-                str(cursor["last_lot_id"]),
-            )
-
         rows = await self._buy_state_repository.list_portfolio_tax_lots(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             security_ids=request.security_ids,
             include_closed_lots=request.include_closed_lots,
             lot_status_filter=request.lot_status_filter,
-            after_sort_key=after_sort_key,
+            after_sort_key=portfolio_tax_lot_after_sort_key(cursor),
             limit=request.page.page_size + 1,
         )
         has_more = len(rows) > request.page.page_size
         page_rows = rows[: request.page.page_size]
 
-        lots: list[PortfolioTaxLotRecord] = []
-        for lot, local_currency in page_rows:
-            open_quantity = self._as_decimal(lot.open_quantity)
-            lots.append(
-                PortfolioTaxLotRecord(
-                    portfolio_id=lot.portfolio_id,
-                    security_id=normalize_security_id(lot.security_id),
-                    instrument_id=normalize_security_id(lot.instrument_id),
-                    lot_id=lot.lot_id,
-                    open_quantity=open_quantity,
-                    original_quantity=self._as_decimal(lot.original_quantity),
-                    acquisition_date=lot.acquisition_date,
-                    cost_basis_base=self._as_decimal(lot.lot_cost_base),
-                    cost_basis_local=self._as_decimal(lot.lot_cost_local),
-                    local_currency=local_currency,
-                    tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
-                    source_transaction_id=lot.source_transaction_id,
-                    source_lineage={
-                        "source_system": lot.source_system or "position_lot_state",
-                        "source_transaction_id": lot.source_transaction_id,
-                        "calculation_policy_id": lot.calculation_policy_id or "UNKNOWN",
-                        "calculation_policy_version": lot.calculation_policy_version or "UNKNOWN",
-                    },
-                )
-            )
-
         next_page_token: str | None = None
-        if has_more and lots:
-            last_lot = lots[-1]
+        if has_more and page_rows:
+            last_lot = page_rows[-1][0]
             next_page_token = self._encode_page_token(
                 {
                     "scope_fingerprint": request_scope_fingerprint,
@@ -2115,139 +1000,13 @@ class IntegrationService:
                 }
             )
 
-        requested_security_ids = {
-            normalize_security_id(security_id) for security_id in request.security_ids or []
-        }
-        returned_security_ids = {normalize_security_id(lot.security_id) for lot in lots}
-        missing_security_ids = (
-            [] if has_more else sorted(requested_security_ids - returned_security_ids)
-        )
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "TAX_LOTS_READY"
-        if not lots and not request.security_ids:
-            supportability_state = "UNAVAILABLE"
-            supportability_reason = "TAX_LOTS_EMPTY"
-        elif has_more:
-            supportability_state = "DEGRADED"
-            supportability_reason = "TAX_LOTS_PAGE_PARTIAL"
-        elif request.security_ids and missing_security_ids:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
-
-        return PortfolioTaxLotWindowResponse(
+        return build_portfolio_tax_lot_window_response(
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            lots=lots,
-            page=ReferencePageMetadata(
-                page_size=request.page.page_size,
-                sort_key="acquisition_date:asc,lot_id:asc",
-                returned_component_count=len(lots),
-                request_scope_fingerprint=request_scope_fingerprint,
-                next_page_token=next_page_token,
-            ),
-            supportability=PortfolioTaxLotWindowSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requested_security_count=(
-                    len(request.security_ids) if request.security_ids is not None else None
-                ),
-                returned_lot_count=len(lots),
-                missing_security_ids=missing_security_ids,
-            ),
-            lineage={
-                "source_system": "position_lot_state",
-                "contract_version": "rfc_087_v1",
-            },
-            **self._runtime_metadata_for_existing_as_of_date(
-                request.as_of_date,
-                data_quality_status=(
-                    "COMPLETE"
-                    if supportability_state == "READY"
-                    else "MISSING"
-                    if supportability_state == "UNAVAILABLE"
-                    else "PARTIAL"
-                ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
-                    [lot for lot, _ in page_rows]
-                ),
-            ),
-        )
-
-    @staticmethod
-    def _transaction_fee_amount(transaction: Any) -> Decimal:
-        costs = list(getattr(transaction, "costs", None) or [])
-        if costs:
-            return sum(
-                (IntegrationService._as_decimal(getattr(cost, "amount", Decimal("0"))))
-                for cost in costs
-            )
-        trade_fee = getattr(transaction, "trade_fee", None)
-        if trade_fee is None:
-            return Decimal("0")
-        return IntegrationService._as_decimal(trade_fee)
-
-    @staticmethod
-    def _transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
-        return (
-            normalize_security_id(transaction.security_id),
-            str(transaction.transaction_type).strip().upper(),
-            str(transaction.currency).strip().upper(),
-        )
-
-    @classmethod
-    def _has_observed_transaction_cost_evidence(cls, transaction: Any) -> bool:
-        fee_amount = cls._transaction_fee_amount(transaction)
-        notional = abs(cls._as_decimal(transaction.gross_transaction_amount))
-        return fee_amount > 0 and notional > 0
-
-    @classmethod
-    def _build_transaction_cost_curve_point(
-        cls,
-        *,
-        portfolio_id: str,
-        key: tuple[str, str, str],
-        rows: list[Any],
-    ) -> TransactionCostCurvePoint | None:
-        security_id, transaction_type, currency = key
-        total_cost = sum(cls._transaction_fee_amount(row) for row in rows)
-        total_notional = sum(abs(cls._as_decimal(row.gross_transaction_amount)) for row in rows)
-        if total_cost <= 0 or total_notional <= 0:
-            return None
-
-        cost_bps_values = [
-            (cls._transaction_fee_amount(row) / abs(cls._as_decimal(row.gross_transaction_amount)))
-            * Decimal("10000")
-            for row in rows
-            if abs(cls._as_decimal(row.gross_transaction_amount)) > 0
-        ]
-        if not cost_bps_values:
-            return None
-
-        observed_dates = [row.transaction_date.date() for row in rows]
-        return TransactionCostCurvePoint(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            transaction_type=transaction_type,
-            currency=currency,
-            observation_count=len(rows),
-            total_notional=total_notional,
-            total_cost=total_cost,
-            average_cost_bps=(total_cost / total_notional * Decimal("10000")).quantize(
-                Decimal("0.0001")
-            ),
-            min_cost_bps=min(cost_bps_values).quantize(Decimal("0.0001")),
-            max_cost_bps=max(cost_bps_values).quantize(Decimal("0.0001")),
-            first_observed_date=min(observed_dates),
-            last_observed_date=max(observed_dates),
-            sample_transaction_ids=[
-                str(row.transaction_id)
-                for row in sorted(rows, key=lambda row: row.transaction_id)[:5]
-            ],
-            source_lineage={
-                "source_system": "transactions",
-                "source_table": "transactions,transaction_costs",
-                "contract_version": "rfc_040_wtbd_007_v1",
-            },
+            request=request,
+            request_scope_fingerprint=request_scope_fingerprint,
+            page_rows=page_rows,
+            has_more=has_more,
+            next_page_token=next_page_token,
         )
 
     async def get_transaction_cost_curve(
@@ -2259,7 +1018,7 @@ class IntegrationService:
         if not await self._transaction_repository.portfolio_exists(portfolio_id):
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
-        request_scope_fingerprint = self._request_fingerprint(
+        request_scope_fingerprint = build_request_fingerprint(
             {
                 "portfolio_id": portfolio_id,
                 "as_of_date": request.as_of_date.isoformat(),
@@ -2288,38 +1047,17 @@ class IntegrationService:
             transaction_types=request.transaction_types,
         )
 
-        grouped: dict[tuple[str, str, str], list[Any]] = {}
-        for transaction in transactions:
-            if not self._has_observed_transaction_cost_evidence(transaction):
-                continue
-            grouped.setdefault(self._transaction_cost_curve_key(transaction), []).append(
-                transaction
-            )
+        curve_page = build_transaction_cost_curve_page(
+            portfolio_id=portfolio_id,
+            transactions=transactions,
+            min_observation_count=request.min_observation_count,
+            after_key=after_key,
+            page_size=request.page.page_size,
+        )
 
-        all_points: list[TransactionCostCurvePoint] = []
-        for key in sorted(grouped):
-            rows = grouped[key]
-            if len(rows) < request.min_observation_count:
-                continue
-            point = self._build_transaction_cost_curve_point(
-                portfolio_id=portfolio_id,
-                key=key,
-                rows=rows,
-            )
-            if point is not None:
-                all_points.append(point)
-
-        paged_candidates = [
-            point
-            for point in all_points
-            if not after_key
-            or (point.security_id, point.transaction_type, point.currency) > after_key
-        ]
-        has_more = len(paged_candidates) > request.page.page_size
-        curve_points = paged_candidates[: request.page.page_size]
         next_page_token: str | None = None
-        if has_more and curve_points:
-            last_point = curve_points[-1]
+        if curve_page.has_more and curve_page.points:
+            last_point = curve_page.points[-1]
             next_page_token = self._encode_page_token(
                 {
                     "scope_fingerprint": request_scope_fingerprint,
@@ -2331,188 +1069,33 @@ class IntegrationService:
                 }
             )
 
-        requested_security_ids = {
-            normalize_security_id(security_id) for security_id in request.security_ids or []
-        }
-        returned_security_ids = {normalize_security_id(point.security_id) for point in all_points}
-        missing_security_ids = sorted(requested_security_ids - returned_security_ids)
-
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "TRANSACTION_COST_CURVE_READY"
-        if not all_points:
-            supportability_state = "UNAVAILABLE"
-            supportability_reason = "TRANSACTION_COST_EVIDENCE_NOT_FOUND"
-        elif missing_security_ids:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "TRANSACTION_COST_EVIDENCE_MISSING_FOR_SECURITIES"
-        elif has_more:
-            supportability_state = "DEGRADED"
-            supportability_reason = "TRANSACTION_COST_CURVE_PAGE_PARTIAL"
-
-        return TransactionCostCurveResponse(
+        return build_transaction_cost_curve_response(
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            window=request.window,
-            curve_points=curve_points,
-            page=ReferencePageMetadata(
-                page_size=request.page.page_size,
-                sort_key="security_id:asc,transaction_type:asc,currency:asc",
-                returned_component_count=len(curve_points),
-                request_scope_fingerprint=request_scope_fingerprint,
-                next_page_token=next_page_token,
-            ),
-            supportability=TransactionCostCurveSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requested_security_count=(
-                    len(request.security_ids) if request.security_ids is not None else None
-                ),
-                returned_curve_point_count=len(curve_points),
-                missing_security_ids=missing_security_ids,
-            ),
-            lineage={
-                "source_system": "transactions",
-                "contract_version": "rfc_040_wtbd_007_v1",
-            },
-            **self._runtime_metadata_for_existing_as_of_date(
-                request.as_of_date,
-                data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(transactions),
-            ),
+            request=request,
+            request_scope_fingerprint=request_scope_fingerprint,
+            curve_page=curve_page,
+            transactions=transactions,
+            next_page_token=next_page_token,
         )
 
     async def get_market_data_coverage(
         self,
         request: MarketDataCoverageRequest,
     ) -> MarketDataCoverageWindowResponse:
-        instrument_ids = [
-            normalize_security_id(instrument_id) for instrument_id in request.instrument_ids
-        ]
-        valuation_currency = (
-            normalize_currency_code(request.valuation_currency)
-            if request.valuation_currency is not None
-            else None
-        )
+        read_scope = market_data_coverage_read_scope(request)
         price_rows = await self._reference_repository.list_latest_market_prices(
-            security_ids=instrument_ids,
+            security_ids=read_scope.unique_instrument_ids,
             as_of_date=request.as_of_date,
         )
-        fx_pairs = [(pair.from_currency, pair.to_currency) for pair in request.currency_pairs]
         fx_rows = await self._reference_repository.list_latest_fx_rates(
-            currency_pairs=fx_pairs,
+            currency_pairs=read_scope.unique_fx_pairs,
             as_of_date=request.as_of_date,
         )
-
-        price_by_instrument = {normalize_security_id(row.security_id): row for row in price_rows}
-        fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
-
-        price_coverage: list[MarketDataPriceCoverageRecord] = []
-        missing_instrument_ids: list[str] = []
-        stale_instrument_ids: list[str] = []
-        for instrument_id in instrument_ids:
-            row = price_by_instrument.get(instrument_id)
-            if row is None:
-                missing_instrument_ids.append(instrument_id)
-                price_coverage.append(
-                    MarketDataPriceCoverageRecord(
-                        instrument_id=instrument_id,
-                        found=False,
-                        quality_status="MISSING",
-                    )
-                )
-                continue
-
-            age_days = (request.as_of_date - row.price_date).days
-            quality_status: Literal["READY", "STALE", "MISSING"] = (
-                "STALE" if age_days > request.max_staleness_days else "READY"
-            )
-            if quality_status == "STALE":
-                stale_instrument_ids.append(instrument_id)
-            price_coverage.append(
-                MarketDataPriceCoverageRecord(
-                    instrument_id=instrument_id,
-                    found=True,
-                    price_date=row.price_date,
-                    price=self._as_decimal(row.price),
-                    currency=row.currency,
-                    age_days=age_days,
-                    quality_status=quality_status,
-                )
-            )
-
-        fx_coverage: list[MarketDataFxCoverageRecord] = []
-        missing_currency_pairs: list[str] = []
-        stale_currency_pairs: list[str] = []
-        for pair in request.currency_pairs:
-            pair_key = (pair.from_currency, pair.to_currency)
-            pair_label = f"{pair.from_currency}/{pair.to_currency}"
-            row = fx_by_pair.get(pair_key)
-            if row is None:
-                missing_currency_pairs.append(pair_label)
-                fx_coverage.append(
-                    MarketDataFxCoverageRecord(
-                        from_currency=pair.from_currency,
-                        to_currency=pair.to_currency,
-                        found=False,
-                        quality_status="MISSING",
-                    )
-                )
-                continue
-
-            age_days = (request.as_of_date - row.rate_date).days
-            quality_status = "STALE" if age_days > request.max_staleness_days else "READY"
-            if quality_status == "STALE":
-                stale_currency_pairs.append(pair_label)
-            fx_coverage.append(
-                MarketDataFxCoverageRecord(
-                    from_currency=pair.from_currency,
-                    to_currency=pair.to_currency,
-                    found=True,
-                    rate_date=row.rate_date,
-                    rate=self._as_decimal(row.rate),
-                    age_days=age_days,
-                    quality_status=quality_status,
-                )
-            )
-
-        supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-        supportability_reason = "MARKET_DATA_READY"
-        if missing_instrument_ids or missing_currency_pairs:
-            supportability_state = "INCOMPLETE"
-            supportability_reason = "MARKET_DATA_MISSING"
-        elif stale_instrument_ids or stale_currency_pairs:
-            supportability_state = "DEGRADED"
-            supportability_reason = "MARKET_DATA_STALE"
-
-        return MarketDataCoverageWindowResponse(
-            as_of_date=request.as_of_date,
-            valuation_currency=valuation_currency,
-            price_coverage=price_coverage,
-            fx_coverage=fx_coverage,
-            supportability=MarketDataCoverageSupportability(
-                state=supportability_state,
-                reason=supportability_reason,
-                requested_price_count=len(instrument_ids),
-                resolved_price_count=sum(1 for record in price_coverage if record.found),
-                requested_fx_count=len(request.currency_pairs),
-                resolved_fx_count=sum(1 for record in fx_coverage if record.found),
-                missing_instrument_ids=missing_instrument_ids,
-                stale_instrument_ids=stale_instrument_ids,
-                missing_currency_pairs=missing_currency_pairs,
-                stale_currency_pairs=stale_currency_pairs,
-            ),
-            lineage={
-                "source_system": "market_prices+fx_rates",
-                "contract_version": "rfc_087_v1",
-            },
-            **self._runtime_metadata_for_existing_as_of_date(
-                request.as_of_date,
-                data_quality_status=("COMPLETE" if supportability_state == "READY" else "PARTIAL"),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
-                    price_rows,
-                    fx_rows,
-                ),
-            ),
+        return build_market_data_coverage_response(
+            request=request,
+            read_scope=read_scope,
+            price_rows=price_rows,
+            fx_rows=fx_rows,
         )
 
     async def get_dpm_source_readiness(
@@ -2540,10 +1123,9 @@ class IntegrationService:
             mandate_response = None
         if mandate_response is None:
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="mandate",
                     product_name="DiscretionaryMandateBinding",
-                    state="UNAVAILABLE",
                     reason="MANDATE_BINDING_UNAVAILABLE",
                     missing_items=["mandate_binding"],
                 )
@@ -2554,7 +1136,7 @@ class IntegrationService:
                 resolved_model_portfolio_id or mandate_response.model_portfolio_id
             )
             families.append(
-                DpmSourceFamilyReadiness(
+                dpm_source_family_readiness(
                     family="mandate",
                     product_name="DiscretionaryMandateBinding",
                     state=mandate_response.supportability.state,
@@ -2567,10 +1149,9 @@ class IntegrationService:
         target_instrument_ids: list[str] = []
         if resolved_model_portfolio_id is None:
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="model_targets",
                     product_name="DpmModelPortfolioTarget",
-                    state="UNAVAILABLE",
                     reason="MODEL_PORTFOLIO_ID_UNAVAILABLE",
                     missing_items=["model_portfolio_id"],
                 )
@@ -2589,10 +1170,9 @@ class IntegrationService:
                 model_response = None
             if model_response is None:
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    unavailable_dpm_source_family(
                         family="model_targets",
                         product_name="DpmModelPortfolioTarget",
-                        state="UNAVAILABLE",
                         reason="MODEL_TARGETS_UNAVAILABLE",
                         missing_items=[resolved_model_portfolio_id],
                     )
@@ -2600,7 +1180,7 @@ class IntegrationService:
             else:
                 target_instrument_ids = [target.instrument_id for target in model_response.targets]
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    dpm_source_family_readiness(
                         family="model_targets",
                         product_name="DpmModelPortfolioTarget",
                         state=model_response.supportability.state,
@@ -2621,7 +1201,7 @@ class IntegrationService:
                     )
                 )
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    dpm_source_family_readiness(
                         family="eligibility",
                         product_name="InstrumentEligibilityProfile",
                         state=eligibility.supportability.state,
@@ -2632,20 +1212,18 @@ class IntegrationService:
                 )
             except (LookupError, ValueError):
                 families.append(
-                    DpmSourceFamilyReadiness(
+                    unavailable_dpm_source_family(
                         family="eligibility",
                         product_name="InstrumentEligibilityProfile",
-                        state="UNAVAILABLE",
                         reason="INSTRUMENT_ELIGIBILITY_UNAVAILABLE",
                         missing_items=evaluated_instrument_ids[:10],
                     )
                 )
         else:
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="eligibility",
                     product_name="InstrumentEligibilityProfile",
-                    state="UNAVAILABLE",
                     reason="DPM_INSTRUMENT_UNIVERSE_EMPTY",
                     missing_items=["instrument_ids"],
                 )
@@ -2661,7 +1239,7 @@ class IntegrationService:
                 ),
             )
             families.append(
-                DpmSourceFamilyReadiness(
+                dpm_source_family_readiness(
                     family="tax_lots",
                     product_name="PortfolioTaxLotWindow",
                     state=tax_lots.supportability.state,
@@ -2672,10 +1250,9 @@ class IntegrationService:
             )
         except (LookupError, ValueError):
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="tax_lots",
                     product_name="PortfolioTaxLotWindow",
-                    state="UNAVAILABLE",
                     reason="PORTFOLIO_TAX_LOTS_UNAVAILABLE",
                     missing_items=[portfolio_id],
                 )
@@ -2693,7 +1270,7 @@ class IntegrationService:
                 )
             )
             families.append(
-                DpmSourceFamilyReadiness(
+                dpm_source_family_readiness(
                     family="market_data",
                     product_name="MarketDataCoverageWindow",
                     state=market_data.supportability.state,
@@ -2714,67 +1291,21 @@ class IntegrationService:
             )
         except (LookupError, ValueError):
             families.append(
-                DpmSourceFamilyReadiness(
+                unavailable_dpm_source_family(
                     family="market_data",
                     product_name="MarketDataCoverageWindow",
-                    state="UNAVAILABLE",
                     reason="MARKET_DATA_COVERAGE_UNAVAILABLE",
                     missing_items=["market_data_coverage"],
                 )
             )
 
-        supportability = self._dpm_source_readiness_supportability(families)
-        return DpmSourceReadinessResponse(
+        return build_dpm_source_readiness_response(
             portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-            mandate_id=resolved_mandate_id,
-            model_portfolio_id=resolved_model_portfolio_id,
+            request=request,
+            resolved_mandate_id=resolved_mandate_id,
+            resolved_model_portfolio_id=resolved_model_portfolio_id,
             evaluated_instrument_ids=evaluated_instrument_ids,
             families=families,
-            supportability=supportability,
-            lineage={
-                "source_system": "lotus-core",
-                "contract_version": "rfc_087_v1",
-                "readiness_scope": "dpm_source_family",
-            },
-            **self._runtime_metadata_for_existing_as_of_date(
-                request.as_of_date,
-                data_quality_status=("COMPLETE" if supportability.state == "READY" else "PARTIAL"),
-                latest_evidence_timestamp=None,
-            ),
-        )
-
-    @staticmethod
-    def _dpm_source_readiness_supportability(
-        families: list[DpmSourceFamilyReadiness],
-    ) -> DpmSourceReadinessSupportability:
-        counts: dict[DpmSourceFamilyState, int] = {
-            "READY": 0,
-            "DEGRADED": 0,
-            "INCOMPLETE": 0,
-            "UNAVAILABLE": 0,
-        }
-        for family in families:
-            counts[family.state] += 1
-        if counts["UNAVAILABLE"]:
-            state: DpmSourceFamilyState = "UNAVAILABLE"
-            reason = "DPM_SOURCE_READINESS_UNAVAILABLE"
-        elif counts["INCOMPLETE"]:
-            state = "INCOMPLETE"
-            reason = "DPM_SOURCE_READINESS_INCOMPLETE"
-        elif counts["DEGRADED"]:
-            state = "DEGRADED"
-            reason = "DPM_SOURCE_READINESS_DEGRADED"
-        else:
-            state = "READY"
-            reason = "DPM_SOURCE_READINESS_READY"
-        return DpmSourceReadinessSupportability(
-            state=state,
-            reason=reason,
-            ready_family_count=counts["READY"],
-            degraded_family_count=counts["DEGRADED"],
-            incomplete_family_count=counts["INCOMPLETE"],
-            unavailable_family_count=counts["UNAVAILABLE"],
         )
 
     async def get_benchmark_definition(
@@ -2783,43 +1314,11 @@ class IntegrationService:
         row = await self._reference_repository.get_benchmark_definition(benchmark_id, as_of_date)
         if row is None:
             return None
-        components = self._latest_effective_records(
-            await self._reference_repository.list_benchmark_components(
-                benchmark_id,
-                as_of_date,
-            ),
-            key_fields=("index_id",),
-            effective_from_field="composition_effective_from",
+        components = await self._reference_repository.list_benchmark_components(
+            benchmark_id,
+            as_of_date,
         )
-        return BenchmarkDefinitionResponse(
-            benchmark_id=row.benchmark_id,
-            benchmark_name=row.benchmark_name,
-            benchmark_type=row.benchmark_type,
-            benchmark_currency=row.benchmark_currency,
-            return_convention=row.return_convention,
-            benchmark_status=row.benchmark_status,
-            benchmark_family=row.benchmark_family,
-            benchmark_provider=row.benchmark_provider,
-            rebalance_frequency=row.rebalance_frequency,
-            classification_set_id=row.classification_set_id,
-            classification_labels=dict(row.classification_labels or {}),
-            effective_from=row.effective_from,
-            effective_to=row.effective_to,
-            quality_status=row.quality_status,
-            source_timestamp=row.source_timestamp,
-            source_vendor=row.source_vendor,
-            source_record_id=row.source_record_id,
-            components=[
-                {
-                    "index_id": component.index_id,
-                    "composition_weight": self._as_decimal(component.composition_weight),
-                    "composition_effective_from": component.composition_effective_from,
-                    "composition_effective_to": component.composition_effective_to,
-                    "rebalance_event_id": component.rebalance_event_id,
-                }
-                for component in components
-            ],
-        )
+        return benchmark_definition_response(row, components=components)
 
     async def get_benchmark_composition_window(
         self,
@@ -2833,61 +1332,22 @@ class IntegrationService:
                 end_date=request.window.end_date,
             )
         )
-        if not definition_rows:
+        definition_context = benchmark_composition_definition_context(definition_rows)
+        if definition_context is None:
             return None
 
-        benchmark_currencies = {row.benchmark_currency for row in definition_rows}
-        if len(benchmark_currencies) != 1:
-            raise ValueError(
-                "Benchmark definition currency changed within requested composition window."
-            )
-        definitions = self._latest_effective_records(
-            definition_rows,
-            key_fields=("benchmark_id",),
-            effective_from_field="effective_from",
-        )
-
-        components = self._resolve_component_window_rows(
+        component_rows = (
             await self._reference_repository.list_benchmark_components_overlapping_window(
                 benchmark_id=benchmark_id,
                 start_date=request.window.start_date,
                 end_date=request.window.end_date,
-            ),
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
+            )
         )
-
-        evidence_rows = definitions + components
-        return BenchmarkCompositionWindowResponse(
+        return build_benchmark_composition_window_response(
             benchmark_id=benchmark_id,
-            benchmark_currency=next(iter(benchmark_currencies)),
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            segments=[
-                {
-                    "index_id": component.index_id,
-                    "composition_weight": self._as_decimal(component.composition_weight),
-                    "composition_effective_from": component.composition_effective_from,
-                    "composition_effective_to": component.composition_effective_to,
-                    "rebalance_event_id": component.rebalance_event_id,
-                }
-                for component in components
-            ],
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.benchmark_composition_window",
-            },
-            **self._runtime_metadata(
-                request.window.end_date,
-                data_quality_status=self._market_reference_data_quality_status(
-                    evidence_rows,
-                    required_count=len(evidence_rows),
-                ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(evidence_rows),
-            ),
+            request=request,
+            definition_context=definition_context,
+            component_rows=component_rows,
         )
 
     async def list_benchmark_catalog(
@@ -2897,15 +1357,11 @@ class IntegrationService:
         benchmark_currency: str | None,
         benchmark_status: str | None,
     ) -> BenchmarkCatalogResponse:
-        rows = self._latest_effective_records(
-            await self._reference_repository.list_benchmark_definitions(
-                as_of_date=as_of_date,
-                benchmark_type=benchmark_type,
-                benchmark_currency=benchmark_currency,
-                benchmark_status=benchmark_status,
-            ),
-            key_fields=("benchmark_id",),
-            effective_from_field="effective_from",
+        rows = await self._reference_repository.list_benchmark_definitions(
+            as_of_date=as_of_date,
+            benchmark_type=benchmark_type,
+            benchmark_currency=benchmark_currency,
+            benchmark_status=benchmark_status,
         )
         components_by_benchmark = (
             await self._reference_repository.list_benchmark_components_for_benchmarks(
@@ -2915,42 +1371,8 @@ class IntegrationService:
         )
         records: list[BenchmarkDefinitionResponse] = []
         for row in rows:
-            components = self._latest_effective_records(
-                components_by_benchmark.get(row.benchmark_id, []),
-                key_fields=("index_id",),
-                effective_from_field="composition_effective_from",
-            )
-            records.append(
-                BenchmarkDefinitionResponse(
-                    benchmark_id=row.benchmark_id,
-                    benchmark_name=row.benchmark_name,
-                    benchmark_type=row.benchmark_type,
-                    benchmark_currency=row.benchmark_currency,
-                    return_convention=row.return_convention,
-                    benchmark_status=row.benchmark_status,
-                    benchmark_family=row.benchmark_family,
-                    benchmark_provider=row.benchmark_provider,
-                    rebalance_frequency=row.rebalance_frequency,
-                    classification_set_id=row.classification_set_id,
-                    classification_labels=dict(row.classification_labels or {}),
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=row.quality_status,
-                    source_timestamp=row.source_timestamp,
-                    source_vendor=row.source_vendor,
-                    source_record_id=row.source_record_id,
-                    components=[
-                        {
-                            "index_id": component.index_id,
-                            "composition_weight": self._as_decimal(component.composition_weight),
-                            "composition_effective_from": component.composition_effective_from,
-                            "composition_effective_to": component.composition_effective_to,
-                            "rebalance_event_id": component.rebalance_event_id,
-                        }
-                        for component in components
-                    ],
-                )
-            )
+            components = components_by_benchmark.get(row.benchmark_id, [])
+            records.append(benchmark_definition_response(row, components=components))
         return BenchmarkCatalogResponse(as_of_date=as_of_date, records=records)
 
     async def list_index_catalog(
@@ -2970,26 +1392,7 @@ class IntegrationService:
         )
         return IndexCatalogResponse(
             as_of_date=as_of_date,
-            records=[
-                IndexDefinitionResponse(
-                    index_id=row.index_id,
-                    index_name=row.index_name,
-                    index_currency=row.index_currency,
-                    index_type=row.index_type,
-                    index_status=row.index_status,
-                    index_provider=row.index_provider,
-                    index_market=row.index_market,
-                    classification_set_id=row.classification_set_id,
-                    classification_labels=dict(row.classification_labels or {}),
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=row.quality_status,
-                    source_timestamp=row.source_timestamp,
-                    source_vendor=row.source_vendor,
-                    source_record_id=row.source_record_id,
-                )
-                for row in rows
-            ],
+            records=[index_definition_response(row) for row in rows],
         )
 
     async def get_benchmark_market_series(
@@ -3004,32 +1407,7 @@ class IntegrationService:
         benchmark_currency = (
             definition.benchmark_currency if definition else (request.target_currency or "UNKNOWN")
         )
-        components = self._resolve_component_window_rows(
-            await self._reference_repository.list_benchmark_components_overlapping_window(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        index_ids = sorted({component.index_id for component in components})
-        index_prices = await self._reference_repository.list_index_price_points(
-            index_ids=index_ids,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        index_returns = await self._reference_repository.list_index_return_points(
-            index_ids=index_ids,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        benchmark_returns = await self._reference_repository.list_benchmark_return_points(
-            benchmark_id=benchmark_id,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        request_scope_fingerprint = self._request_fingerprint(
+        request_scope_fingerprint = build_request_fingerprint(
             {
                 "benchmark_id": benchmark_id,
                 "as_of_date": request.as_of_date.isoformat(),
@@ -3050,179 +1428,97 @@ class IntegrationService:
         if token_scope and token_scope != request_scope_fingerprint:
             raise ValueError("Benchmark market series page token does not match request scope.")
         cursor_index_id = cursor.get("last_index_id")
+        candidate_index_ids = (
+            await self._reference_repository.list_benchmark_component_index_ids_overlapping_window(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+                after_index_id=cursor_index_id,
+                limit=page_size + 1,
+            )
+        )
+        has_more = len(candidate_index_ids) > page_size
+        index_ids = candidate_index_ids[:page_size]
+        fx_context = benchmark_market_series_fx_context(
+            benchmark_currency=benchmark_currency,
+            target_currency=request.target_currency,
+            requested_fields=requested_fields,
+        )
+        market_read_names = ["components"]
+        market_reads: list[Any] = [
+            self._reference_repository.list_benchmark_components_overlapping_window(
+                benchmark_id=benchmark_id,
+                start_date=request.window.start_date,
+                end_date=request.window.end_date,
+                index_ids=index_ids,
+            )
+        ]
+        if "index_price" in requested_fields:
+            market_read_names.append("index_prices")
+            market_reads.append(
+                self._reference_repository.list_index_price_points(
+                    index_ids=index_ids,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
+            )
+        if "index_return" in requested_fields:
+            market_read_names.append("index_returns")
+            market_reads.append(
+                self._reference_repository.list_index_return_points(
+                    index_ids=index_ids,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
+            )
+        if "benchmark_return" in requested_fields:
+            market_read_names.append("benchmark_returns")
+            market_reads.append(
+                self._reference_repository.list_benchmark_return_points(
+                    benchmark_id=benchmark_id,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
+            )
 
-        fx_rates: dict[date, Decimal] = {}
-        fx_context_source_currency: str | None = None
-        fx_context_target_currency: str | None = None
-        normalization_status = "native_component_series_only"
-        if request.target_currency:
-            fx_context_source_currency = benchmark_currency
-            fx_context_target_currency = request.target_currency
-            if benchmark_currency != request.target_currency and "fx_rate" in requested_fields:
-                fx_rates = await self._reference_repository.get_fx_rates(
+        if fx_context.should_read_fx_rates:
+            market_read_names.append("fx_rates")
+            market_reads.append(
+                self._reference_repository.get_fx_rates(
                     from_currency=benchmark_currency,
                     to_currency=request.target_currency,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
                 )
-                if fx_rates:
-                    normalization_status = (
-                        "native_component_series_with_benchmark_to_target_fx_context"
-                    )
-                else:
-                    normalization_status = (
-                        "native_component_series_with_missing_benchmark_to_target_fx_context"
-                    )
-            elif benchmark_currency == request.target_currency:
-                normalization_status = (
-                    "native_component_series_with_identity_benchmark_to_target_fx_context"
-                )
-            else:
-                normalization_status = "native_component_series_without_fx_context_request"
+            )
 
-        prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
-        returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
-        benchmark_return_by_date = {row.series_date: row for row in benchmark_returns}
-        component_segments_by_index: dict[str, list[Any]] = {}
-        for row in components:
-            component_segments_by_index.setdefault(row.index_id, []).append(row)
-
-        all_dates = sorted(
-            {row.series_date for row in index_prices + index_returns + benchmark_returns}
-        )
-        component_series_all: list[ComponentSeriesResponse] = []
-        for index_id in sorted(index_ids):
-            points: list[SeriesPoint] = []
-            for current_date in all_dates:
-                price_row = prices_by_index_date.get((index_id, current_date))
-                return_row = returns_by_index_date.get((index_id, current_date))
-                benchmark_return_row = benchmark_return_by_date.get(current_date)
-                component_weight = None
-                for segment in component_segments_by_index.get(index_id, []):
-                    if segment.composition_effective_from <= current_date and (
-                        segment.composition_effective_to is None
-                        or segment.composition_effective_to >= current_date
-                    ):
-                        component_weight = self._as_decimal(segment.composition_weight)
-                        break
-                quality_status = (
-                    (price_row and price_row.quality_status)
-                    or (return_row and return_row.quality_status)
-                    or (benchmark_return_row and benchmark_return_row.quality_status)
-                )
-                points.append(
-                    SeriesPoint(
-                        series_date=current_date,
-                        series_currency=(
-                            (price_row and price_row.series_currency)
-                            or (return_row and return_row.series_currency)
-                            or (benchmark_return_row and benchmark_return_row.series_currency)
-                        ),
-                        index_price=(
-                            self._as_decimal(price_row.index_price)
-                            if price_row and "index_price" in requested_fields
-                            else None
-                        ),
-                        index_return=(
-                            self._as_decimal(return_row.index_return)
-                            if return_row and "index_return" in requested_fields
-                            else None
-                        ),
-                        benchmark_return=(
-                            self._as_decimal(benchmark_return_row.benchmark_return)
-                            if benchmark_return_row and "benchmark_return" in requested_fields
-                            else None
-                        ),
-                        component_weight=(
-                            component_weight if "component_weight" in requested_fields else None
-                        ),
-                        fx_rate=(
-                            fx_rates.get(current_date) if "fx_rate" in requested_fields else None
-                        ),
-                        quality_status=quality_status,
-                    )
-                )
-            component_series_all.append(ComponentSeriesResponse(index_id=index_id, points=points))
-
-        if cursor_index_id:
-            component_series_all = [
-                series for series in component_series_all if series.index_id > cursor_index_id
-            ]
-
-        has_more = len(component_series_all) > page_size
-        component_series = component_series_all[:page_size]
-        returned_index_ids = {series.index_id for series in component_series}
-        returned_index_prices = [row for row in index_prices if row.index_id in returned_index_ids]
-        returned_index_returns = [
-            row for row in index_returns if row.index_id in returned_index_ids
-        ]
-        returned_components = [row for row in components if row.index_id in returned_index_ids]
-        returned_evidence_rows = (
-            returned_components + returned_index_prices + returned_index_returns + benchmark_returns
-        )
-        total_evidence_rows = components + index_prices + index_returns + benchmark_returns
+        market_results = {}
+        for name, market_read in zip(market_read_names, market_reads, strict=True):
+            market_results[name] = await market_read
         next_page_token: str | None = None
-        if has_more and component_series:
+        if has_more and index_ids:
             next_page_token = self._encode_page_token(
                 {
                     "scope_fingerprint": request_scope_fingerprint,
-                    "last_index_id": component_series[-1].index_id,
+                    "last_index_id": index_ids[-1],
                 }
             )
 
-        quality_status_summary: dict[str, int] = {}
-        for component in component_series:
-            for point in component.points:
-                if point.quality_status:
-                    summary_key = quality_status_summary_key(point.quality_status)
-                    quality_status_summary[summary_key] = (
-                        quality_status_summary.get(summary_key, 0) + 1
-                    )
-
-        return BenchmarkMarketSeriesResponse(
+        return build_benchmark_market_series_response(
             benchmark_id=benchmark_id,
-            as_of_date=request.as_of_date,
+            request=request,
             benchmark_currency=benchmark_currency,
-            target_currency=request.target_currency,
-            resolved_window=IntegrationWindow(
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            ),
-            frequency=request.frequency,
-            component_series=component_series,
-            quality_status_summary=quality_status_summary,
-            fx_context_source_currency=fx_context_source_currency,
-            fx_context_target_currency=fx_context_target_currency,
-            normalization_policy="native_component_series_downstream_normalization_required",
-            normalization_status=normalization_status,
-            component_metadata_policy=(
-                "targeted_index_catalog_lookup_required_for_component_metadata"
-            ),
-            request_fingerprint=request_scope_fingerprint,
-            page=ReferencePageMetadata(
-                page_size=page_size,
-                sort_key="index_id:asc",
-                returned_component_count=len(component_series),
-                request_scope_fingerprint=request_scope_fingerprint,
-                next_page_token=next_page_token,
-            ),
-            lineage={
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core-query-service",
-                "generated_by": "integration.market_series",
-            },
-            **self._runtime_metadata_for_existing_as_of_date(
-                request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
-                    returned_evidence_rows,
-                    required_count=(
-                        len(total_evidence_rows) if has_more else len(returned_evidence_rows)
-                    ),
-                ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(
-                    returned_evidence_rows
-                ),
-            ),
+            request_scope_fingerprint=request_scope_fingerprint,
+            page_size=page_size,
+            has_more=has_more,
+            next_page_token=next_page_token,
+            index_ids=index_ids,
+            component_rows=market_results["components"],
+            index_prices=market_results.get("index_prices", []),
+            index_returns=market_results.get("index_returns", []),
+            benchmark_returns=market_results.get("benchmark_returns", []),
+            fx_rates=market_results.get("fx_rates", {}),
+            fx_context=fx_context,
         )
 
     async def get_index_price_series(
@@ -3240,35 +1536,26 @@ class IntegrationService:
                 end_date=request.window.end_date,
             ),
             frequency=request.frequency,
-            points=[
-                IndexPriceSeriesPoint(
-                    series_date=row.series_date,
-                    index_price=self._as_decimal(row.index_price),
-                    series_currency=row.series_currency,
-                    value_convention=row.value_convention,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            points=[index_price_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_price_series",
             },
-            **self._runtime_metadata(
+            **source_product_runtime_metadata(
                 getattr(request, "as_of_date", request.window.end_date),
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
 
     async def get_index_return_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexReturnSeriesResponse:
-        request_fingerprint = self._series_request_fingerprint(
+        request_fingerprint = series_request_fingerprint(
             series_key="index_return_series",
             identifier_key="index_id",
             identifier_value=index_id,
@@ -3288,36 +1575,26 @@ class IntegrationService:
             ),
             frequency=request.frequency,
             request_fingerprint=request_fingerprint,
-            points=[
-                IndexReturnSeriesPoint(
-                    series_date=row.series_date,
-                    index_return=self._as_decimal(row.index_return),
-                    return_period=row.return_period,
-                    return_convention=row.return_convention,
-                    series_currency=row.series_currency,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            points=[index_return_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.index_return_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
 
     async def get_benchmark_return_series(
         self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
     ) -> BenchmarkReturnSeriesResponse:
-        request_fingerprint = self._series_request_fingerprint(
+        request_fingerprint = series_request_fingerprint(
             series_key="benchmark_return_series",
             identifier_key="benchmark_id",
             identifier_value=benchmark_id,
@@ -3337,17 +1614,7 @@ class IntegrationService:
             ),
             frequency=request.frequency,
             request_fingerprint=request_fingerprint,
-            points=[
-                {
-                    "series_date": row.series_date,
-                    "benchmark_return": self._as_decimal(row.benchmark_return),
-                    "return_period": row.return_period,
-                    "return_convention": row.return_convention,
-                    "series_currency": row.series_currency,
-                    "quality_status": row.quality_status,
-                }
-                for row in rows
-            ],
+            points=[benchmark_return_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
@@ -3357,7 +1624,7 @@ class IntegrationService:
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
         normalized_currency = normalize_currency_code(request.currency)
-        request_fingerprint = self._series_request_fingerprint(
+        request_fingerprint = series_request_fingerprint(
             series_key="risk_free_series",
             identifier_key="currency",
             identifier_value=normalized_currency,
@@ -3379,30 +1646,19 @@ class IntegrationService:
             ),
             frequency=request.frequency,
             request_fingerprint=request_fingerprint,
-            points=[
-                RiskFreeSeriesPoint(
-                    series_date=row.series_date,
-                    value=self._as_decimal(row.value),
-                    value_convention=row.value_convention,
-                    day_count_convention=row.day_count_convention,
-                    compounding_convention=row.compounding_convention,
-                    series_currency=row.series_currency,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            points=[risk_free_series_point(row) for row in rows],
             lineage={
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core-query-service",
                 "generated_by": "integration.risk_free_series",
             },
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 request.as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )
 
@@ -3412,7 +1668,7 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
-        request_fingerprint = self._request_fingerprint(
+        request_fingerprint = build_request_fingerprint(
             {
                 "coverage_key": "benchmark_coverage",
                 "benchmark_id": benchmark_id,
@@ -3427,10 +1683,10 @@ class IntegrationService:
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(
-            coverage,
-            start_date,
-            end_date,
+        return market_reference_coverage_response(
+            coverage=coverage,
+            start_date=start_date,
+            end_date=end_date,
             request_fingerprint=request_fingerprint,
         )
 
@@ -3441,7 +1697,7 @@ class IntegrationService:
         end_date: date,
     ) -> CoverageResponse:
         normalized_currency = normalize_currency_code(currency)
-        request_fingerprint = self._request_fingerprint(
+        request_fingerprint = build_request_fingerprint(
             {
                 "coverage_key": "risk_free_coverage",
                 "currency": normalized_currency,
@@ -3456,10 +1712,10 @@ class IntegrationService:
             start_date=start_date,
             end_date=end_date,
         )
-        return self._to_coverage_response(
-            coverage,
-            start_date,
-            end_date,
+        return market_reference_coverage_response(
+            coverage=coverage,
+            start_date=start_date,
+            end_date=end_date,
             request_fingerprint=request_fingerprint,
         )
 
@@ -3468,7 +1724,7 @@ class IntegrationService:
         as_of_date: date,
         taxonomy_scope: str | None = None,
     ) -> ClassificationTaxonomyResponse:
-        request_fingerprint = self._request_fingerprint(
+        request_fingerprint = build_request_fingerprint(
             {
                 "taxonomy_key": "classification_taxonomy",
                 "as_of_date": as_of_date.isoformat(),
@@ -3481,95 +1737,14 @@ class IntegrationService:
         )
         return ClassificationTaxonomyResponse(
             as_of_date=as_of_date,
-            records=[
-                ClassificationTaxonomyEntry(
-                    classification_set_id=row.classification_set_id,
-                    taxonomy_scope=row.taxonomy_scope,
-                    dimension_name=row.dimension_name,
-                    dimension_value=row.dimension_value,
-                    dimension_description=row.dimension_description,
-                    effective_from=row.effective_from,
-                    effective_to=row.effective_to,
-                    quality_status=row.quality_status,
-                )
-                for row in rows
-            ],
+            records=[classification_taxonomy_entry(row) for row in rows],
             request_fingerprint=request_fingerprint,
-            **self._runtime_metadata_for_existing_as_of_date(
+            **source_product_runtime_metadata_without_as_of_date(
                 as_of_date,
-                data_quality_status=self._market_reference_data_quality_status(
+                data_quality_status=market_reference_data_quality_status(
                     rows,
                     required_count=len(rows),
                 ),
-                latest_evidence_timestamp=self._latest_reference_evidence_timestamp(rows),
-            ),
-        )
-
-    @staticmethod
-    def _to_coverage_response(
-        coverage: dict[str, Any],
-        start_date: date,
-        end_date: date,
-        request_fingerprint: str,
-    ) -> CoverageResponse:
-        expected_dates: set[date] = set()
-        cursor = start_date
-        while cursor <= end_date:
-            expected_dates.add(cursor)
-            cursor = cursor + timedelta(days=1)
-
-        observed_start = coverage.get("observed_start_date")
-        observed_end = coverage.get("observed_end_date")
-        observed_dates = {
-            value for value in coverage.get("observed_dates", []) if isinstance(value, date)
-        }
-        if not observed_dates and observed_start and observed_end:
-            observed_cursor = observed_start
-            while observed_cursor <= observed_end:
-                observed_dates.add(observed_cursor)
-                observed_cursor = observed_cursor + timedelta(days=1)
-
-        missing_dates = sorted(expected_dates - observed_dates)
-        quality_counts = dict(coverage.get("quality_status_counts", {}))
-        normalized_quality_counts = {
-            str(status).strip().upper(): int(count)
-            for status, count in quality_counts.items()
-            if count
-        }
-        data_quality_status = classify_market_reference_coverage(
-            MarketReferenceCoverageSignal(
-                required_count=len(expected_dates),
-                observed_count=len(observed_dates),
-                stale_count=sum(
-                    count
-                    for status, count in normalized_quality_counts.items()
-                    if status in STALE_QUALITY_STATUSES
-                ),
-                estimated_count=sum(
-                    count
-                    for status, count in normalized_quality_counts.items()
-                    if status in PARTIAL_QUALITY_STATUSES
-                ),
-                blocking_count=sum(
-                    count
-                    for status, count in normalized_quality_counts.items()
-                    if status in BLOCKING_QUALITY_STATUSES
-                ),
-            )
-        )
-        return CoverageResponse(
-            request_fingerprint=request_fingerprint,
-            observed_start_date=observed_start,
-            observed_end_date=observed_end,
-            expected_start_date=start_date,
-            expected_end_date=end_date,
-            total_points=int(coverage.get("total_points", 0)),
-            missing_dates_count=len(missing_dates),
-            missing_dates_sample=missing_dates[:10],
-            quality_status_distribution=quality_counts,
-            **IntegrationService._runtime_metadata(
-                end_date,
-                data_quality_status=data_quality_status,
-                latest_evidence_timestamp=coverage.get("latest_evidence_timestamp"),
+                latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
             ),
         )

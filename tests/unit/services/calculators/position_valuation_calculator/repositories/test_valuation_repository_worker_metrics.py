@@ -52,6 +52,12 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     compiled_query = str(claim_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "NOT (EXISTS" in compiled_query
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
+    assert (
+        "ORDER BY portfolio_valuation_jobs.portfolio_id ASC, "
+        "portfolio_valuation_jobs.security_id ASC, "
+        "portfolio_valuation_jobs.valuation_date ASC, "
+        "portfolio_valuation_jobs.epoch DESC"
+    ) in compiled_query
 
 
 async def test_find_and_reset_stale_jobs_emits_reset_metric(
@@ -164,6 +170,74 @@ async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled_query
+
+
+async def test_get_lagging_states_uses_scheduler_order(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    states = await repo.get_lagging_states(date(2026, 3, 27), limit=25)
+
+    assert states == []
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.watermark_date < '2026-03-27'" in compiled_query
+    assert (
+        "ORDER BY position_state.updated_at ASC, position_state.portfolio_id ASC, "
+        "position_state.security_id ASC"
+    ) in compiled_query
+    assert "LIMIT 25" in compiled_query
+
+
+async def test_get_terminal_reprocessing_states_uses_scheduler_order(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    states = await repo.get_terminal_reprocessing_states(date(2026, 3, 27), limit=25)
+
+    assert states == []
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_state.status = 'REPROCESSING'" in compiled_query
+    assert "position_state.watermark_date >= '2026-03-27'" in compiled_query
+    assert (
+        "ORDER BY position_state.updated_at ASC, position_state.portfolio_id ASC, "
+        "position_state.security_id ASC"
+    ) in compiled_query
+    assert "LIMIT 25" in compiled_query
+
+
+async def test_get_states_needing_backfill_uses_scheduler_order(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    mock_db_session.execute.return_value = result
+
+    states = await repo.get_states_needing_backfill(date(2026, 3, 27), limit=25)
+
+    assert states == []
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert (
+        "JOIN instruments ON trim(instruments.security_id) = trim(position_state.security_id)"
+        in compiled_query
+    )
+    assert "position_state.watermark_date < '2026-03-27'" in compiled_query
+    assert (
+        "ORDER BY position_state.updated_at ASC, position_state.portfolio_id ASC, "
+        "position_state.security_id ASC"
+    ) in compiled_query
+    assert "LIMIT 25" in compiled_query
 
 
 async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(

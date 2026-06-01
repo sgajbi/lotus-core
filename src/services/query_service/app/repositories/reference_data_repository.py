@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, TypeVar
+from typing import Any
 
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
@@ -30,16 +30,14 @@ from portfolio_common.database_models import (
     SustainabilityPreferenceProfile,
 )
 from portfolio_common.market_reference_quality import (
-    normalize_quality_status,
     quality_status_summary_key,
 )
-from sqlalchemy import and_, func, or_, select, tuple_
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..services.decimal_amounts import decimal_or_none
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
-
-T = TypeVar("T")
 
 
 def _effective_filter(
@@ -63,57 +61,130 @@ def _latest_reference_evidence_timestamp(rows: list[Any]) -> datetime | None:
     return max(timestamps) if timestamps else None
 
 
-def _latest_effective_rows(rows: list[Any], *key_fields: str) -> list[Any]:
-    latest_by_key: dict[tuple[Any, ...], Any] = {}
-    for row in sorted(
-        rows,
-        key=lambda item: (
-            tuple(getattr(item, field) for field in key_fields),
-            getattr(item, "effective_from", None)
-            or getattr(item, "composition_effective_from", None)
-            or date.min,
-            getattr(item, "updated_at", None) or datetime.min,
-            getattr(item, "created_at", None) or datetime.min,
-        ),
-        reverse=True,
-    ):
-        key = tuple(getattr(row, field) for field in key_fields)
-        latest_by_key.setdefault(key, row)
-    return sorted(
-        latest_by_key.values(),
-        key=lambda item: tuple(getattr(item, field) for field in key_fields),
+def _normalize_reference_status(status: str) -> str:
+    return status.strip().lower()
+
+
+def _canonical_series_ranked_subquery(model: Any, *partition_columns: Any, predicates: Any):
+    accepted_quality_rank = case(
+        (func.upper(func.trim(model.quality_status)) == "ACCEPTED", 1),
+        else_=0,
+    )
+    return (
+        select(
+            model.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=partition_columns,
+                order_by=(
+                    accepted_quality_rank.desc(),
+                    model.source_timestamp.desc().nullslast(),
+                    model.series_id.desc(),
+                    model.source_vendor.desc().nullslast(),
+                    model.source_record_id.desc().nullslast(),
+                    model.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
     )
 
 
-def _canonicalize_series_rows(rows: list[T], *key_fields: str) -> list[T]:
-    if not rows:
-        return []
-
-    def sort_key(row: T) -> tuple[Any, ...]:
-        quality_status = normalize_quality_status(getattr(row, "quality_status", None))
-        source_timestamp = getattr(row, "source_timestamp", None)
-        return (
-            *(getattr(row, field) for field in key_fields),
-            1 if quality_status == "ACCEPTED" else 0,
-            source_timestamp.isoformat() if source_timestamp else "",
-            getattr(row, "series_id", "") or "",
-            getattr(row, "source_vendor", "") or "",
-            getattr(row, "source_record_id", "") or "",
-            getattr(row, "id", 0) or 0,
+def _ranked_portfolio_mandate_binding_ids(*predicates: Any):
+    return (
+        select(
+            PortfolioMandateBinding.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    PortfolioMandateBinding.portfolio_id,
+                    PortfolioMandateBinding.mandate_id,
+                ),
+                order_by=(
+                    PortfolioMandateBinding.effective_from.desc(),
+                    PortfolioMandateBinding.observed_at.desc().nullslast(),
+                    PortfolioMandateBinding.binding_version.desc(),
+                    PortfolioMandateBinding.updated_at.desc(),
+                    PortfolioMandateBinding.created_at.desc(),
+                    PortfolioMandateBinding.id.desc(),
+                ),
+            )
+            .label("rn"),
         )
-
-    selected_by_key: dict[tuple[Any, ...], T] = {}
-    for row in sorted(rows, key=sort_key):
-        selected_by_key[tuple(getattr(row, field) for field in key_fields)] = row
-    return [selected_by_key[key] for key in sorted(selected_by_key)]
+        .where(*predicates)
+        .subquery()
+    )
 
 
-def _reference_status_expr(status_column: Any):
-    return func.lower(func.trim(status_column))
+def _ranked_model_portfolio_target_ids(*predicates: Any):
+    return (
+        select(
+            ModelPortfolioTarget.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    ModelPortfolioTarget.model_portfolio_id,
+                    ModelPortfolioTarget.model_portfolio_version,
+                    ModelPortfolioTarget.instrument_id,
+                ),
+                order_by=(
+                    ModelPortfolioTarget.effective_from.desc(),
+                    ModelPortfolioTarget.updated_at.desc(),
+                    ModelPortfolioTarget.created_at.desc(),
+                    ModelPortfolioTarget.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
 
 
-def _normalize_reference_status(status: str) -> str:
-    return status.strip().lower()
+def _ranked_instrument_eligibility_ids(security_id_expr: Any, *predicates: Any):
+    return (
+        select(
+            InstrumentEligibilityProfile.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=security_id_expr,
+                order_by=(
+                    InstrumentEligibilityProfile.effective_from.desc(),
+                    InstrumentEligibilityProfile.observed_at.desc().nullslast(),
+                    InstrumentEligibilityProfile.eligibility_version.desc(),
+                    InstrumentEligibilityProfile.updated_at.desc(),
+                    InstrumentEligibilityProfile.created_at.desc(),
+                    InstrumentEligibilityProfile.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
+
+
+def _ranked_latest_effective_ids(
+    model: Any,
+    *partition_columns: Any,
+    predicates: list[Any],
+    order_by: tuple[Any, ...],
+):
+    return (
+        select(
+            model.id.label("id"),
+            func.row_number()
+            .over(
+                partition_by=partition_columns,
+                order_by=order_by,
+            )
+            .label("rn"),
+        )
+        .where(*predicates)
+        .subquery()
+    )
 
 
 class ReferenceDataRepository:
@@ -150,7 +221,7 @@ class ReferenceDataRepository:
             select(ModelPortfolioDefinition)
             .where(
                 ModelPortfolioDefinition.model_portfolio_id == model_portfolio_id,
-                _reference_status_expr(ModelPortfolioDefinition.approval_status) == "approved",
+                ModelPortfolioDefinition.approval_status == "approved",
                 _effective_filter(
                     ModelPortfolioDefinition.effective_from,
                     ModelPortfolioDefinition.effective_to,
@@ -175,34 +246,27 @@ class ReferenceDataRepository:
         *,
         include_inactive_targets: bool = False,
     ) -> list[ModelPortfolioTarget]:
+        predicates = [
+            ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
+            ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
+            _effective_filter(
+                ModelPortfolioTarget.effective_from,
+                ModelPortfolioTarget.effective_to,
+                as_of_date,
+            ),
+        ]
+        if not include_inactive_targets:
+            predicates.append(ModelPortfolioTarget.target_status == "active")
+
+        ranked = _ranked_model_portfolio_target_ids(*predicates)
         stmt = (
             select(ModelPortfolioTarget)
-            .where(
-                ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
-                ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
-                _effective_filter(
-                    ModelPortfolioTarget.effective_from,
-                    ModelPortfolioTarget.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ModelPortfolioTarget.instrument_id.asc(),
-                ModelPortfolioTarget.effective_from.desc(),
-            )
+            .join(ranked, ModelPortfolioTarget.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(ModelPortfolioTarget.instrument_id.asc())
         )
-        if not include_inactive_targets:
-            stmt = stmt.where(
-                _reference_status_expr(ModelPortfolioTarget.target_status) == "active"
-            )
         result = await self._db.execute(stmt)
-        rows = list(result.scalars().all())
-        return _latest_effective_rows(
-            rows,
-            "model_portfolio_id",
-            "model_portfolio_version",
-            "instrument_id",
-        )
+        return list(result.scalars().all())
 
     async def list_model_portfolio_affected_mandates(
         self,
@@ -212,39 +276,32 @@ class ReferenceDataRepository:
         booking_center_code: str | None = None,
         include_inactive_mandates: bool = False,
     ) -> list[PortfolioMandateBinding]:
+        predicates = [
+            PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
+            PortfolioMandateBinding.mandate_type == "discretionary",
+            _effective_filter(
+                PortfolioMandateBinding.effective_from,
+                PortfolioMandateBinding.effective_to,
+                as_of_date,
+            ),
+        ]
+        if booking_center_code:
+            predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        if not include_inactive_mandates:
+            predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
+
+        ranked = _ranked_portfolio_mandate_binding_ids(*predicates)
         stmt = (
             select(PortfolioMandateBinding)
-            .where(
-                PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
-                PortfolioMandateBinding.mandate_type == "discretionary",
-                _effective_filter(
-                    PortfolioMandateBinding.effective_from,
-                    PortfolioMandateBinding.effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(
                 PortfolioMandateBinding.portfolio_id.asc(),
                 PortfolioMandateBinding.mandate_id.asc(),
-                PortfolioMandateBinding.effective_from.desc(),
-                PortfolioMandateBinding.observed_at.desc().nulls_last(),
-                PortfolioMandateBinding.binding_version.desc(),
-                PortfolioMandateBinding.updated_at.desc(),
             )
         )
-        if booking_center_code:
-            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
-        if not include_inactive_mandates:
-            stmt = stmt.where(
-                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
-                == "active"
-            )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "portfolio_id",
-            "mandate_id",
-        )
+        return list(result.scalars().all())
 
     async def list_dpm_portfolio_universe_candidates(
         self,
@@ -256,50 +313,44 @@ class ReferenceDataRepository:
         after_sort_key: tuple[str, str] | None = None,
         limit: int | None = None,
     ) -> list[PortfolioMandateBinding]:
+        predicates = [
+            PortfolioMandateBinding.mandate_type == "discretionary",
+            _effective_filter(
+                PortfolioMandateBinding.effective_from,
+                PortfolioMandateBinding.effective_to,
+                as_of_date,
+            ),
+        ]
+        if booking_center_code:
+            predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
+        if model_portfolio_ids:
+            predicates.append(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
+        if not include_inactive_mandates:
+            predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
+
+        ranked = _ranked_portfolio_mandate_binding_ids(*predicates)
         stmt = (
             select(PortfolioMandateBinding)
-            .where(
-                PortfolioMandateBinding.mandate_type == "discretionary",
-                _effective_filter(
-                    PortfolioMandateBinding.effective_from,
-                    PortfolioMandateBinding.effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(
                 PortfolioMandateBinding.portfolio_id.asc(),
                 PortfolioMandateBinding.mandate_id.asc(),
-                PortfolioMandateBinding.effective_from.desc(),
-                PortfolioMandateBinding.observed_at.desc().nulls_last(),
-                PortfolioMandateBinding.binding_version.desc(),
-                PortfolioMandateBinding.updated_at.desc(),
             )
-        )
-        if booking_center_code:
-            stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
-        if model_portfolio_ids:
-            stmt = stmt.where(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
-        if not include_inactive_mandates:
-            stmt = stmt.where(
-                _reference_status_expr(PortfolioMandateBinding.discretionary_authority_status)
-                == "active"
-            )
-
-        result = await self._db.execute(stmt)
-        rows = _latest_effective_rows(
-            list(result.scalars().all()),
-            "portfolio_id",
-            "mandate_id",
         )
         if after_sort_key is not None:
-            rows = [
-                row
-                for row in rows
-                if (str(row.portfolio_id), str(row.mandate_id)) > after_sort_key
-            ]
+            stmt = stmt.where(
+                tuple_(
+                    PortfolioMandateBinding.portfolio_id,
+                    PortfolioMandateBinding.mandate_id,
+                )
+                > after_sort_key
+            )
         if limit is not None:
-            rows = rows[:limit]
-        return rows
+            stmt = stmt.limit(limit)
+
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def resolve_discretionary_mandate_binding(
         self,
@@ -344,43 +395,50 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_restrictions: bool = False,
     ) -> list[ClientRestrictionProfile]:
-        stmt = (
-            select(ClientRestrictionProfile)
-            .where(
-                ClientRestrictionProfile.portfolio_id == portfolio_id,
-                ClientRestrictionProfile.client_id == client_id,
-                _effective_filter(
-                    ClientRestrictionProfile.effective_from,
-                    ClientRestrictionProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientRestrictionProfile.restriction_scope.asc(),
-                ClientRestrictionProfile.restriction_code.asc(),
-                ClientRestrictionProfile.effective_from.desc(),
-                ClientRestrictionProfile.observed_at.desc().nulls_last(),
-                ClientRestrictionProfile.restriction_version.desc(),
-                ClientRestrictionProfile.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientRestrictionProfile.portfolio_id == portfolio_id,
+            ClientRestrictionProfile.client_id == client_id,
+            _effective_filter(
+                ClientRestrictionProfile.effective_from,
+                ClientRestrictionProfile.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     ClientRestrictionProfile.mandate_id.is_(None),
                     ClientRestrictionProfile.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_restrictions:
-            stmt = stmt.where(
-                _reference_status_expr(ClientRestrictionProfile.restriction_status) == "active"
-            )
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "restriction_scope",
-            "restriction_code",
+            predicates.append(ClientRestrictionProfile.restriction_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientRestrictionProfile,
+            ClientRestrictionProfile.restriction_scope,
+            ClientRestrictionProfile.restriction_code,
+            predicates=predicates,
+            order_by=(
+                ClientRestrictionProfile.effective_from.desc(),
+                ClientRestrictionProfile.observed_at.desc().nullslast(),
+                ClientRestrictionProfile.restriction_version.desc(),
+                ClientRestrictionProfile.updated_at.desc(),
+                ClientRestrictionProfile.created_at.desc(),
+                ClientRestrictionProfile.id.desc(),
+            ),
         )
+        stmt = (
+            select(ClientRestrictionProfile)
+            .join(ranked, ClientRestrictionProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                ClientRestrictionProfile.restriction_scope.asc(),
+                ClientRestrictionProfile.restriction_code.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_sustainability_preference_profiles(
         self,
@@ -391,44 +449,50 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_preferences: bool = False,
     ) -> list[SustainabilityPreferenceProfile]:
-        stmt = (
-            select(SustainabilityPreferenceProfile)
-            .where(
-                SustainabilityPreferenceProfile.portfolio_id == portfolio_id,
-                SustainabilityPreferenceProfile.client_id == client_id,
-                _effective_filter(
-                    SustainabilityPreferenceProfile.effective_from,
-                    SustainabilityPreferenceProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                SustainabilityPreferenceProfile.preference_framework.asc(),
-                SustainabilityPreferenceProfile.preference_code.asc(),
-                SustainabilityPreferenceProfile.effective_from.desc(),
-                SustainabilityPreferenceProfile.observed_at.desc().nulls_last(),
-                SustainabilityPreferenceProfile.preference_version.desc(),
-                SustainabilityPreferenceProfile.updated_at.desc(),
-            )
-        )
+        predicates = [
+            SustainabilityPreferenceProfile.portfolio_id == portfolio_id,
+            SustainabilityPreferenceProfile.client_id == client_id,
+            _effective_filter(
+                SustainabilityPreferenceProfile.effective_from,
+                SustainabilityPreferenceProfile.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     SustainabilityPreferenceProfile.mandate_id.is_(None),
                     SustainabilityPreferenceProfile.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_preferences:
-            stmt = stmt.where(
-                _reference_status_expr(SustainabilityPreferenceProfile.preference_status)
-                == "active"
-            )
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "preference_framework",
-            "preference_code",
+            predicates.append(SustainabilityPreferenceProfile.preference_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            SustainabilityPreferenceProfile,
+            SustainabilityPreferenceProfile.preference_framework,
+            SustainabilityPreferenceProfile.preference_code,
+            predicates=predicates,
+            order_by=(
+                SustainabilityPreferenceProfile.effective_from.desc(),
+                SustainabilityPreferenceProfile.observed_at.desc().nullslast(),
+                SustainabilityPreferenceProfile.preference_version.desc(),
+                SustainabilityPreferenceProfile.updated_at.desc(),
+                SustainabilityPreferenceProfile.created_at.desc(),
+                SustainabilityPreferenceProfile.id.desc(),
+            ),
         )
+        stmt = (
+            select(SustainabilityPreferenceProfile)
+            .join(ranked, SustainabilityPreferenceProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                SustainabilityPreferenceProfile.preference_framework.asc(),
+                SustainabilityPreferenceProfile.preference_code.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_client_tax_profiles(
         self,
@@ -439,35 +503,46 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_profiles: bool = False,
     ) -> list[ClientTaxProfile]:
-        stmt = (
-            select(ClientTaxProfile)
-            .where(
-                ClientTaxProfile.portfolio_id == portfolio_id,
-                ClientTaxProfile.client_id == client_id,
-                _effective_filter(
-                    ClientTaxProfile.effective_from,
-                    ClientTaxProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientTaxProfile.tax_profile_id.asc(),
-                ClientTaxProfile.effective_from.desc(),
-                ClientTaxProfile.observed_at.desc().nulls_last(),
-                ClientTaxProfile.profile_version.desc(),
-                ClientTaxProfile.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientTaxProfile.portfolio_id == portfolio_id,
+            ClientTaxProfile.client_id == client_id,
+            _effective_filter(
+                ClientTaxProfile.effective_from,
+                ClientTaxProfile.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
-                    ClientTaxProfile.mandate_id.is_(None), ClientTaxProfile.mandate_id == mandate_id
+                    ClientTaxProfile.mandate_id.is_(None),
+                    ClientTaxProfile.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_profiles:
-            stmt = stmt.where(_reference_status_expr(ClientTaxProfile.profile_status) == "active")
+            predicates.append(ClientTaxProfile.profile_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientTaxProfile,
+            ClientTaxProfile.tax_profile_id,
+            predicates=predicates,
+            order_by=(
+                ClientTaxProfile.effective_from.desc(),
+                ClientTaxProfile.observed_at.desc().nullslast(),
+                ClientTaxProfile.profile_version.desc(),
+                ClientTaxProfile.updated_at.desc(),
+                ClientTaxProfile.created_at.desc(),
+                ClientTaxProfile.id.desc(),
+            ),
+        )
+        stmt = (
+            select(ClientTaxProfile)
+            .join(ranked, ClientTaxProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(ClientTaxProfile.tax_profile_id.asc())
+        )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(list(result.scalars().all()), "tax_profile_id")
+        return list(result.scalars().all())
 
     async def list_client_tax_rule_sets(
         self,
@@ -478,43 +553,52 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_rules: bool = False,
     ) -> list[ClientTaxRuleSet]:
-        stmt = (
-            select(ClientTaxRuleSet)
-            .where(
-                ClientTaxRuleSet.portfolio_id == portfolio_id,
-                ClientTaxRuleSet.client_id == client_id,
-                _effective_filter(
-                    ClientTaxRuleSet.effective_from,
-                    ClientTaxRuleSet.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientTaxRuleSet.rule_set_id.asc(),
-                ClientTaxRuleSet.jurisdiction_code.asc(),
-                ClientTaxRuleSet.rule_code.asc(),
-                ClientTaxRuleSet.effective_from.desc(),
-                ClientTaxRuleSet.observed_at.desc().nulls_last(),
-                ClientTaxRuleSet.rule_version.desc(),
-                ClientTaxRuleSet.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientTaxRuleSet.portfolio_id == portfolio_id,
+            ClientTaxRuleSet.client_id == client_id,
+            _effective_filter(
+                ClientTaxRuleSet.effective_from,
+                ClientTaxRuleSet.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     ClientTaxRuleSet.mandate_id.is_(None),
                     ClientTaxRuleSet.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_rules:
-            stmt = stmt.where(_reference_status_expr(ClientTaxRuleSet.rule_status) == "active")
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "rule_set_id",
-            "jurisdiction_code",
-            "rule_code",
+            predicates.append(ClientTaxRuleSet.rule_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientTaxRuleSet,
+            ClientTaxRuleSet.rule_set_id,
+            ClientTaxRuleSet.jurisdiction_code,
+            ClientTaxRuleSet.rule_code,
+            predicates=predicates,
+            order_by=(
+                ClientTaxRuleSet.effective_from.desc(),
+                ClientTaxRuleSet.observed_at.desc().nullslast(),
+                ClientTaxRuleSet.rule_version.desc(),
+                ClientTaxRuleSet.updated_at.desc(),
+                ClientTaxRuleSet.created_at.desc(),
+                ClientTaxRuleSet.id.desc(),
+            ),
         )
+        stmt = (
+            select(ClientTaxRuleSet)
+            .join(ranked, ClientTaxRuleSet.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                ClientTaxRuleSet.rule_set_id.asc(),
+                ClientTaxRuleSet.jurisdiction_code.asc(),
+                ClientTaxRuleSet.rule_code.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_client_income_needs_schedules(
         self,
@@ -525,37 +609,45 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_schedules: bool = False,
     ) -> list[ClientIncomeNeedsSchedule]:
-        stmt = (
-            select(ClientIncomeNeedsSchedule)
-            .where(
-                ClientIncomeNeedsSchedule.portfolio_id == portfolio_id,
-                ClientIncomeNeedsSchedule.client_id == client_id,
-                _effective_filter(
-                    ClientIncomeNeedsSchedule.start_date,
-                    ClientIncomeNeedsSchedule.end_date,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                ClientIncomeNeedsSchedule.schedule_id.asc(),
-                ClientIncomeNeedsSchedule.start_date.desc(),
-                ClientIncomeNeedsSchedule.observed_at.desc().nulls_last(),
-                ClientIncomeNeedsSchedule.updated_at.desc(),
-            )
-        )
+        predicates = [
+            ClientIncomeNeedsSchedule.portfolio_id == portfolio_id,
+            ClientIncomeNeedsSchedule.client_id == client_id,
+            _effective_filter(
+                ClientIncomeNeedsSchedule.start_date,
+                ClientIncomeNeedsSchedule.end_date,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     ClientIncomeNeedsSchedule.mandate_id.is_(None),
                     ClientIncomeNeedsSchedule.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_schedules:
-            stmt = stmt.where(
-                _reference_status_expr(ClientIncomeNeedsSchedule.need_status) == "active"
-            )
+            predicates.append(ClientIncomeNeedsSchedule.need_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            ClientIncomeNeedsSchedule,
+            ClientIncomeNeedsSchedule.schedule_id,
+            predicates=predicates,
+            order_by=(
+                ClientIncomeNeedsSchedule.start_date.desc(),
+                ClientIncomeNeedsSchedule.observed_at.desc().nullslast(),
+                ClientIncomeNeedsSchedule.updated_at.desc(),
+                ClientIncomeNeedsSchedule.created_at.desc(),
+                ClientIncomeNeedsSchedule.id.desc(),
+            ),
+        )
+        stmt = (
+            select(ClientIncomeNeedsSchedule)
+            .join(ranked, ClientIncomeNeedsSchedule.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(ClientIncomeNeedsSchedule.schedule_id.asc())
+        )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(list(result.scalars().all()), "schedule_id")
+        return list(result.scalars().all())
 
     async def list_liquidity_reserve_requirements(
         self,
@@ -566,41 +658,46 @@ class ReferenceDataRepository:
         mandate_id: str | None = None,
         include_inactive_requirements: bool = False,
     ) -> list[LiquidityReserveRequirement]:
-        stmt = (
-            select(LiquidityReserveRequirement)
-            .where(
-                LiquidityReserveRequirement.portfolio_id == portfolio_id,
-                LiquidityReserveRequirement.client_id == client_id,
-                _effective_filter(
-                    LiquidityReserveRequirement.effective_from,
-                    LiquidityReserveRequirement.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                LiquidityReserveRequirement.reserve_requirement_id.asc(),
-                LiquidityReserveRequirement.effective_from.desc(),
-                LiquidityReserveRequirement.observed_at.desc().nulls_last(),
-                LiquidityReserveRequirement.requirement_version.desc(),
-                LiquidityReserveRequirement.updated_at.desc(),
-            )
-        )
+        predicates = [
+            LiquidityReserveRequirement.portfolio_id == portfolio_id,
+            LiquidityReserveRequirement.client_id == client_id,
+            _effective_filter(
+                LiquidityReserveRequirement.effective_from,
+                LiquidityReserveRequirement.effective_to,
+                as_of_date,
+            ),
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     LiquidityReserveRequirement.mandate_id.is_(None),
                     LiquidityReserveRequirement.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_requirements:
-            stmt = stmt.where(
-                _reference_status_expr(LiquidityReserveRequirement.reserve_status) == "active"
-            )
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "reserve_requirement_id",
+            predicates.append(LiquidityReserveRequirement.reserve_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            LiquidityReserveRequirement,
+            LiquidityReserveRequirement.reserve_requirement_id,
+            predicates=predicates,
+            order_by=(
+                LiquidityReserveRequirement.effective_from.desc(),
+                LiquidityReserveRequirement.observed_at.desc().nullslast(),
+                LiquidityReserveRequirement.requirement_version.desc(),
+                LiquidityReserveRequirement.updated_at.desc(),
+                LiquidityReserveRequirement.created_at.desc(),
+                LiquidityReserveRequirement.id.desc(),
+            ),
         )
+        stmt = (
+            select(LiquidityReserveRequirement)
+            .join(ranked, LiquidityReserveRequirement.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(LiquidityReserveRequirement.reserve_requirement_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_planned_withdrawal_schedules(
         self,
@@ -613,38 +710,45 @@ class ReferenceDataRepository:
         include_inactive_withdrawals: bool = False,
     ) -> list[PlannedWithdrawalSchedule]:
         window_end = as_of_date + timedelta(days=horizon_days)
-        stmt = (
-            select(PlannedWithdrawalSchedule)
-            .where(
-                PlannedWithdrawalSchedule.portfolio_id == portfolio_id,
-                PlannedWithdrawalSchedule.client_id == client_id,
-                PlannedWithdrawalSchedule.scheduled_date >= as_of_date,
-                PlannedWithdrawalSchedule.scheduled_date <= window_end,
-            )
-            .order_by(
-                PlannedWithdrawalSchedule.scheduled_date.asc(),
-                PlannedWithdrawalSchedule.withdrawal_schedule_id.asc(),
-                PlannedWithdrawalSchedule.observed_at.desc().nulls_last(),
-                PlannedWithdrawalSchedule.updated_at.desc(),
-            )
-        )
+        predicates = [
+            PlannedWithdrawalSchedule.portfolio_id == portfolio_id,
+            PlannedWithdrawalSchedule.client_id == client_id,
+            PlannedWithdrawalSchedule.scheduled_date >= as_of_date,
+            PlannedWithdrawalSchedule.scheduled_date <= window_end,
+        ]
         if mandate_id:
-            stmt = stmt.where(
+            predicates.append(
                 or_(
                     PlannedWithdrawalSchedule.mandate_id.is_(None),
                     PlannedWithdrawalSchedule.mandate_id == mandate_id,
                 )
             )
         if not include_inactive_withdrawals:
-            stmt = stmt.where(
-                _reference_status_expr(PlannedWithdrawalSchedule.withdrawal_status) == "active"
-            )
-        result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "withdrawal_schedule_id",
-            "scheduled_date",
+            predicates.append(PlannedWithdrawalSchedule.withdrawal_status == "active")
+
+        ranked = _ranked_latest_effective_ids(
+            PlannedWithdrawalSchedule,
+            PlannedWithdrawalSchedule.withdrawal_schedule_id,
+            PlannedWithdrawalSchedule.scheduled_date,
+            predicates=predicates,
+            order_by=(
+                PlannedWithdrawalSchedule.observed_at.desc().nullslast(),
+                PlannedWithdrawalSchedule.updated_at.desc(),
+                PlannedWithdrawalSchedule.created_at.desc(),
+                PlannedWithdrawalSchedule.id.desc(),
+            ),
         )
+        stmt = (
+            select(PlannedWithdrawalSchedule)
+            .join(ranked, PlannedWithdrawalSchedule.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                PlannedWithdrawalSchedule.scheduled_date.asc(),
+                PlannedWithdrawalSchedule.withdrawal_schedule_id.asc(),
+            )
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_instrument_eligibility_profiles(
         self,
@@ -659,26 +763,23 @@ class ReferenceDataRepository:
         if not normalized_security_ids:
             return []
         security_id_expr = func.trim(InstrumentEligibilityProfile.security_id)
+        predicates = (
+            security_id_expr.in_(normalized_security_ids),
+            _effective_filter(
+                InstrumentEligibilityProfile.effective_from,
+                InstrumentEligibilityProfile.effective_to,
+                as_of_date,
+            ),
+        )
+        ranked = _ranked_instrument_eligibility_ids(security_id_expr, *predicates)
         stmt = (
             select(InstrumentEligibilityProfile)
-            .where(
-                security_id_expr.in_(normalized_security_ids),
-                _effective_filter(
-                    InstrumentEligibilityProfile.effective_from,
-                    InstrumentEligibilityProfile.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                security_id_expr.asc(),
-                InstrumentEligibilityProfile.effective_from.desc(),
-                InstrumentEligibilityProfile.observed_at.desc().nulls_last(),
-                InstrumentEligibilityProfile.eligibility_version.desc(),
-                InstrumentEligibilityProfile.updated_at.desc(),
-            )
+            .join(ranked, InstrumentEligibilityProfile.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(security_id_expr.asc())
         )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(list(result.scalars().all()), "security_id")
+        return list(result.scalars().all())
 
     async def get_benchmark_definition(self, benchmark_id: str, as_of_date: date):
         stmt = (
@@ -725,32 +826,46 @@ class ReferenceDataRepository:
         benchmark_currency: str | None = None,
         benchmark_status: str | None = None,
     ) -> list[BenchmarkDefinition]:
-        stmt = select(BenchmarkDefinition).where(
+        predicates = [
             _effective_filter(
                 BenchmarkDefinition.effective_from,
                 BenchmarkDefinition.effective_to,
                 as_of_date,
             )
-        )
+        ]
         if benchmark_type:
-            stmt = stmt.where(BenchmarkDefinition.benchmark_type == benchmark_type)
+            predicates.append(BenchmarkDefinition.benchmark_type == benchmark_type)
         if benchmark_currency:
-            stmt = stmt.where(
+            predicates.append(
                 BenchmarkDefinition.benchmark_currency
                 == normalize_currency_code(benchmark_currency)
             )
         if benchmark_status:
-            stmt = stmt.where(
-                _reference_status_expr(BenchmarkDefinition.benchmark_status)
+            predicates.append(
+                BenchmarkDefinition.benchmark_status
                 == _normalize_reference_status(benchmark_status)
             )
-        result = await self._db.execute(
-            stmt.order_by(
-                BenchmarkDefinition.benchmark_id.asc(),
+
+        ranked = _ranked_latest_effective_ids(
+            BenchmarkDefinition,
+            BenchmarkDefinition.benchmark_id,
+            predicates=predicates,
+            order_by=(
                 BenchmarkDefinition.effective_from.desc(),
-            )
+                BenchmarkDefinition.source_timestamp.desc().nullslast(),
+                BenchmarkDefinition.updated_at.desc(),
+                BenchmarkDefinition.created_at.desc(),
+                BenchmarkDefinition.id.desc(),
+            ),
         )
-        return _latest_effective_rows(list(result.scalars().all()), "benchmark_id")
+        stmt = (
+            select(BenchmarkDefinition)
+            .join(ranked, BenchmarkDefinition.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(BenchmarkDefinition.benchmark_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_index_definitions(
         self,
@@ -760,63 +875,121 @@ class ReferenceDataRepository:
         index_type: str | None = None,
         index_status: str | None = None,
     ) -> list[IndexDefinition]:
-        stmt = select(IndexDefinition).where(
+        predicates = [
             _effective_filter(
                 IndexDefinition.effective_from,
                 IndexDefinition.effective_to,
                 as_of_date,
             )
-        )
+        ]
         if index_ids:
-            stmt = stmt.where(IndexDefinition.index_id.in_(index_ids))
+            predicates.append(IndexDefinition.index_id.in_(index_ids))
         if index_currency:
-            stmt = stmt.where(
+            predicates.append(
                 IndexDefinition.index_currency == normalize_currency_code(index_currency)
             )
         if index_type:
-            stmt = stmt.where(IndexDefinition.index_type == index_type)
+            predicates.append(IndexDefinition.index_type == index_type)
         if index_status:
-            stmt = stmt.where(
-                _reference_status_expr(IndexDefinition.index_status)
-                == _normalize_reference_status(index_status)
+            predicates.append(
+                IndexDefinition.index_status == _normalize_reference_status(index_status)
             )
-        result = await self._db.execute(
-            stmt.order_by(IndexDefinition.index_id.asc(), IndexDefinition.effective_from.desc())
+
+        ranked = _ranked_latest_effective_ids(
+            IndexDefinition,
+            IndexDefinition.index_id,
+            predicates=predicates,
+            order_by=(
+                IndexDefinition.effective_from.desc(),
+                IndexDefinition.source_timestamp.desc().nullslast(),
+                IndexDefinition.updated_at.desc(),
+                IndexDefinition.created_at.desc(),
+                IndexDefinition.id.desc(),
+            ),
         )
-        return _latest_effective_rows(list(result.scalars().all()), "index_id")
+        stmt = (
+            select(IndexDefinition)
+            .join(ranked, IndexDefinition.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(IndexDefinition.index_id.asc())
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_benchmark_components(
         self,
         benchmark_id: str,
         as_of_date: date,
     ) -> list[BenchmarkCompositionSeries]:
+        predicates = [
+            BenchmarkCompositionSeries.benchmark_id == benchmark_id,
+            _effective_filter(
+                BenchmarkCompositionSeries.composition_effective_from,
+                BenchmarkCompositionSeries.composition_effective_to,
+                as_of_date,
+            ),
+        ]
+        ranked = _ranked_latest_effective_ids(
+            BenchmarkCompositionSeries,
+            BenchmarkCompositionSeries.benchmark_id,
+            BenchmarkCompositionSeries.index_id,
+            predicates=predicates,
+            order_by=(
+                BenchmarkCompositionSeries.composition_effective_from.desc(),
+                BenchmarkCompositionSeries.source_timestamp.desc().nullslast(),
+                BenchmarkCompositionSeries.updated_at.desc(),
+                BenchmarkCompositionSeries.created_at.desc(),
+                BenchmarkCompositionSeries.id.desc(),
+            ),
+        )
         stmt = (
             select(BenchmarkCompositionSeries)
-            .where(
-                BenchmarkCompositionSeries.benchmark_id == benchmark_id,
-                _effective_filter(
-                    BenchmarkCompositionSeries.composition_effective_from,
-                    BenchmarkCompositionSeries.composition_effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, BenchmarkCompositionSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(BenchmarkCompositionSeries.index_id.asc())
         )
         result = await self._db.execute(stmt)
-        return _latest_effective_rows(
-            list(result.scalars().all()),
-            "benchmark_id",
-            "index_id",
-        )
+        return list(result.scalars().all())
 
     async def list_benchmark_components_overlapping_window(
         self,
         benchmark_id: str,
         start_date: date,
         end_date: date,
+        index_ids: list[str] | None = None,
     ) -> list[BenchmarkCompositionSeries]:
+        if index_ids is not None and not index_ids:
+            return []
+
+        stmt = select(BenchmarkCompositionSeries).where(
+            BenchmarkCompositionSeries.benchmark_id == benchmark_id,
+            BenchmarkCompositionSeries.composition_effective_from <= end_date,
+            or_(
+                BenchmarkCompositionSeries.composition_effective_to.is_(None),
+                BenchmarkCompositionSeries.composition_effective_to >= start_date,
+            ),
+        )
+        if index_ids:
+            stmt = stmt.where(BenchmarkCompositionSeries.index_id.in_(index_ids))
+        stmt = stmt.order_by(
+            BenchmarkCompositionSeries.composition_effective_from.asc(),
+            BenchmarkCompositionSeries.index_id.asc(),
+        )
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_benchmark_component_index_ids_overlapping_window(
+        self,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+        *,
+        after_index_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[str]:
         stmt = (
-            select(BenchmarkCompositionSeries)
+            select(BenchmarkCompositionSeries.index_id)
+            .distinct()
             .where(
                 BenchmarkCompositionSeries.benchmark_id == benchmark_id,
                 BenchmarkCompositionSeries.composition_effective_from <= end_date,
@@ -825,11 +998,12 @@ class ReferenceDataRepository:
                     BenchmarkCompositionSeries.composition_effective_to >= start_date,
                 ),
             )
-            .order_by(
-                BenchmarkCompositionSeries.composition_effective_from.asc(),
-                BenchmarkCompositionSeries.index_id.asc(),
-            )
         )
+        if after_index_id:
+            stmt = stmt.where(BenchmarkCompositionSeries.index_id > after_index_id)
+        stmt = stmt.order_by(BenchmarkCompositionSeries.index_id.asc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
@@ -841,23 +1015,37 @@ class ReferenceDataRepository:
         if not benchmark_ids:
             return {}
 
+        predicates = [
+            BenchmarkCompositionSeries.benchmark_id.in_(benchmark_ids),
+            _effective_filter(
+                BenchmarkCompositionSeries.composition_effective_from,
+                BenchmarkCompositionSeries.composition_effective_to,
+                as_of_date,
+            ),
+        ]
+        ranked = _ranked_latest_effective_ids(
+            BenchmarkCompositionSeries,
+            BenchmarkCompositionSeries.benchmark_id,
+            BenchmarkCompositionSeries.index_id,
+            predicates=predicates,
+            order_by=(
+                BenchmarkCompositionSeries.composition_effective_from.desc(),
+                BenchmarkCompositionSeries.source_timestamp.desc().nullslast(),
+                BenchmarkCompositionSeries.updated_at.desc(),
+                BenchmarkCompositionSeries.created_at.desc(),
+                BenchmarkCompositionSeries.id.desc(),
+            ),
+        )
         stmt = (
             select(BenchmarkCompositionSeries)
-            .where(
-                BenchmarkCompositionSeries.benchmark_id.in_(benchmark_ids),
-                _effective_filter(
-                    BenchmarkCompositionSeries.composition_effective_from,
-                    BenchmarkCompositionSeries.composition_effective_to,
-                    as_of_date,
-                ),
-            )
+            .join(ranked, BenchmarkCompositionSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(
                 BenchmarkCompositionSeries.benchmark_id.asc(),
                 BenchmarkCompositionSeries.index_id.asc(),
             )
         )
         rows = list((await self._db.execute(stmt)).scalars().all())
-        rows = _latest_effective_rows(rows, "benchmark_id", "index_id")
         grouped: dict[str, list[BenchmarkCompositionSeries]] = defaultdict(list)
         for row in rows:
             grouped[row.benchmark_id].append(row)
@@ -871,21 +1059,25 @@ class ReferenceDataRepository:
     ) -> list[IndexPriceSeries]:
         if not index_ids:
             return []
+        predicates = (
+            IndexPriceSeries.index_id.in_(index_ids),
+            IndexPriceSeries.series_date >= start_date,
+            IndexPriceSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexPriceSeries,
+            IndexPriceSeries.index_id,
+            IndexPriceSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexPriceSeries)
-            .where(
-                IndexPriceSeries.index_id.in_(index_ids),
-                IndexPriceSeries.series_date >= start_date,
-                IndexPriceSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexPriceSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexPriceSeries.index_id.asc(), IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_index_return_points(
         self,
@@ -895,21 +1087,25 @@ class ReferenceDataRepository:
     ) -> list[IndexReturnSeries]:
         if not index_ids:
             return []
+        predicates = (
+            IndexReturnSeries.index_id.in_(index_ids),
+            IndexReturnSeries.series_date >= start_date,
+            IndexReturnSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexReturnSeries,
+            IndexReturnSeries.index_id,
+            IndexReturnSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexReturnSeries)
-            .where(
-                IndexReturnSeries.index_id.in_(index_ids),
-                IndexReturnSeries.series_date >= start_date,
-                IndexReturnSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexReturnSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexReturnSeries.index_id.asc(), IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_benchmark_return_points(
         self,
@@ -917,59 +1113,71 @@ class ReferenceDataRepository:
         start_date: date,
         end_date: date,
     ) -> list[BenchmarkReturnSeries]:
+        predicates = (
+            BenchmarkReturnSeries.benchmark_id == benchmark_id,
+            BenchmarkReturnSeries.series_date >= start_date,
+            BenchmarkReturnSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            BenchmarkReturnSeries,
+            BenchmarkReturnSeries.benchmark_id,
+            BenchmarkReturnSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(BenchmarkReturnSeries)
-            .where(
-                BenchmarkReturnSeries.benchmark_id == benchmark_id,
-                BenchmarkReturnSeries.series_date >= start_date,
-                BenchmarkReturnSeries.series_date <= end_date,
-            )
+            .join(ranked, BenchmarkReturnSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(BenchmarkReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "benchmark_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_index_price_series(
         self, index_id: str, start_date: date, end_date: date
     ) -> list[IndexPriceSeries]:
+        predicates = (
+            IndexPriceSeries.index_id == index_id,
+            IndexPriceSeries.series_date >= start_date,
+            IndexPriceSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexPriceSeries,
+            IndexPriceSeries.index_id,
+            IndexPriceSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexPriceSeries)
-            .where(
-                IndexPriceSeries.index_id == index_id,
-                IndexPriceSeries.series_date >= start_date,
-                IndexPriceSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexPriceSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexPriceSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_index_return_series(
         self, index_id: str, start_date: date, end_date: date
     ) -> list[IndexReturnSeries]:
+        predicates = (
+            IndexReturnSeries.index_id == index_id,
+            IndexReturnSeries.series_date >= start_date,
+            IndexReturnSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            IndexReturnSeries,
+            IndexReturnSeries.index_id,
+            IndexReturnSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(IndexReturnSeries)
-            .where(
-                IndexReturnSeries.index_id == index_id,
-                IndexReturnSeries.series_date >= start_date,
-                IndexReturnSeries.series_date <= end_date,
-            )
+            .join(ranked, IndexReturnSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(IndexReturnSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(
-            list(result.scalars().all()),
-            "index_id",
-            "series_date",
-        )
+        return list(result.scalars().all())
 
     async def list_risk_free_series(
         self,
@@ -977,17 +1185,24 @@ class ReferenceDataRepository:
         start_date: date,
         end_date: date,
     ) -> list[RiskFreeSeries]:
+        predicates = (
+            RiskFreeSeries.series_currency == normalize_currency_code(currency),
+            RiskFreeSeries.series_date >= start_date,
+            RiskFreeSeries.series_date <= end_date,
+        )
+        ranked = _canonical_series_ranked_subquery(
+            RiskFreeSeries,
+            RiskFreeSeries.series_date,
+            predicates=predicates,
+        )
         stmt = (
             select(RiskFreeSeries)
-            .where(
-                RiskFreeSeries.series_currency == normalize_currency_code(currency),
-                RiskFreeSeries.series_date >= start_date,
-                RiskFreeSeries.series_date <= end_date,
-            )
+            .join(ranked, RiskFreeSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
             .order_by(RiskFreeSeries.series_date.asc())
         )
         result = await self._db.execute(stmt)
-        return _canonicalize_series_rows(list(result.scalars().all()), "series_date")
+        return list(result.scalars().all())
 
     async def list_taxonomy(
         self,
@@ -1041,32 +1256,33 @@ class ReferenceDataRepository:
         for row in benchmark_returns:
             quality_counts[quality_status_summary_key(row.quality_status)] += 1
 
-        active_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
-        for component in components:
-            component_start = max(
-                getattr(component, "composition_effective_from", start_date),
-                start_date,
-            )
-            component_end = min(
-                getattr(component, "composition_effective_to", None) or end_date,
-                end_date,
-            )
-            cursor = component_start
-            while cursor <= component_end:
-                active_index_ids_by_date[cursor].add(component.index_id)
-                cursor = cursor + timedelta(days=1)
-
         price_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
         for row in price_points:
             price_index_ids_by_date[row.series_date].add(row.index_id)
 
         benchmark_return_dates = {row.series_date for row in benchmark_returns}
+        candidate_dates = sorted(benchmark_return_dates & set(price_index_ids_by_date))
+
+        def active_component_index_ids(current_date: date) -> set[str]:
+            active_index_ids: set[str] = set()
+            for component in components:
+                component_start = max(
+                    getattr(component, "composition_effective_from", start_date),
+                    start_date,
+                )
+                component_end = min(
+                    getattr(component, "composition_effective_to", None) or end_date,
+                    end_date,
+                )
+                if component_start <= current_date <= component_end:
+                    active_index_ids.add(component.index_id)
+            return active_index_ids
+
         observed_dates = sorted(
             current_date
-            for current_date, required_index_ids in active_index_ids_by_date.items()
-            if required_index_ids
+            for current_date in candidate_dates
+            if (required_index_ids := active_component_index_ids(current_date))
             and required_index_ids.issubset(price_index_ids_by_date.get(current_date, set()))
-            and current_date in benchmark_return_dates
         )
 
         observed_start = min(observed_dates) if observed_dates else None
@@ -1127,7 +1343,12 @@ class ReferenceDataRepository:
         )
         result = await self._db.execute(stmt)
         rows = result.scalars().all()
-        return {row.rate_date: Decimal(row.rate) for row in rows}
+        rates: dict[date, Decimal] = {}
+        for row in rows:
+            rate = decimal_or_none(row.rate)
+            if rate is not None:
+                rates[row.rate_date] = rate
+        return rates
 
     async def list_latest_market_prices(
         self,
@@ -1140,6 +1361,7 @@ class ReferenceDataRepository:
             for security_id in security_ids
             if (normalized := normalize_security_id(security_id))
         ]
+        normalized_security_ids = list(dict.fromkeys(normalized_security_ids))
         if not normalized_security_ids:
             return []
         security_id_expr = func.trim(MarketPrice.security_id)
@@ -1185,6 +1407,7 @@ class ReferenceDataRepository:
             if (normalized_base := normalize_currency_code(base))
             and (normalized_quote := normalize_currency_code(quote))
         ]
+        normalized_pairs = list(dict.fromkeys(normalized_pairs))
         if not normalized_pairs:
             return []
         from_currency_expr = currency_code_sql_expr(FxRate.from_currency)

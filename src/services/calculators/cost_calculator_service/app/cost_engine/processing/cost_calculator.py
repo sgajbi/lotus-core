@@ -1,6 +1,8 @@
 from decimal import Decimal
 from typing import Protocol
 
+from portfolio_common.decimal_amounts import decimal_or_none
+
 from ..domain.enums.transaction_type import TransactionType
 from ..domain.models.transaction import Transaction
 from .disposition_engine import DispositionEngine
@@ -54,10 +56,10 @@ def _add_interest_invariant_error(
 
 
 def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
-    try:
-        return Decimal(str(value))
-    except Exception as exc:  # pragma: no cover - defensive normalization path
-        raise ValueError(f"invalid decimal for {field_name}: {value!r}") from exc
+    resolved_value = decimal_or_none(value)
+    if resolved_value is None:
+        raise ValueError(f"invalid decimal for {field_name}: {value!r}")
+    return resolved_value
 
 
 def _is_cash_instrument(transaction: Transaction) -> bool:
@@ -74,10 +76,19 @@ def _is_cash_instrument(transaction: Transaction) -> bool:
 
 
 def _cash_movement_amount(transaction: Transaction) -> Decimal:
-    gross_amount = Decimal(str(transaction.gross_transaction_amount or 0))
-    quantity_amount = Decimal(str(transaction.quantity or 0))
+    gross_amount = _decimal_or_zero(
+        transaction.gross_transaction_amount,
+        field_name="gross_transaction_amount",
+    )
+    quantity_amount = _decimal_or_zero(transaction.quantity, field_name="quantity")
     movement_amount = gross_amount if not gross_amount.is_zero() else quantity_amount
     return abs(movement_amount)
+
+
+def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return Decimal(0)
+    return _normalize_decimal_field(value, field_name)
 
 
 def _normalize_code(value: object) -> str:

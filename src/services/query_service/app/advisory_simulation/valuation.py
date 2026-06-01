@@ -22,6 +22,7 @@ from src.services.query_service.app.advisory_simulation.models import (
     SimulatedState,
     ValuationMode,
 )
+from src.services.query_service.app.advisory_simulation.precision_policy import to_decimal
 from src.services.query_service.app.services.allocation_calculator import (
     AllocationInputRow,
     calculate_allocation_views,
@@ -40,12 +41,12 @@ def get_fx_rate(market_data: MarketDataSnapshot, from_ccy: str, to_ccy: str) -> 
     pair = f"{from_ccy}/{to_ccy}"
     direct = next((r.rate for r in market_data.fx_rates if r.pair == pair), None)
     if direct:
-        return Decimal(str(direct))
+        return to_decimal(direct)
 
     pair_inv = f"{to_ccy}/{from_ccy}"
     inverse = next((r.rate for r in market_data.fx_rates if r.pair == pair_inv), None)
     if inverse:
-        return Decimal("1.0") / Decimal(str(inverse))
+        return Decimal("1.0") / to_decimal(inverse)
 
     return None
 

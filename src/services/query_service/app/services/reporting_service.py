@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -32,20 +32,18 @@ from ..repositories.reporting_repository import (
 )
 from .allocation_calculator import AllocationInputRow, calculate_allocation_views
 from .cash_balance_service import CashBalanceResolver
+from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_none, decimal_or_zero
+from .fx_conversion import CachedFxRateConverter
 
 ZERO = Decimal("0")
 UNVALUED_STATUS = "UNVALUED"
 
 
-def _normalize_control_code(value: Any, *, default: str = "") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
-
-
 class ReportingService:
     def __init__(self, db: AsyncSession):
         self.repo = ReportingRepository(db)
-        self._fx_cache: dict[tuple[str, str, date], Decimal] = {}
+        self._fx_converter = CachedFxRateConverter(self.repo)
         self._cash_balance_resolver = CashBalanceResolver(
             repo=self.repo,
             convert_amount=self._convert_amount,
@@ -72,14 +70,13 @@ class ReportingService:
         per_portfolio_native: dict[str, Decimal] = defaultdict(lambda: ZERO)
         per_portfolio_positions: dict[str, int] = defaultdict(int)
 
-        for row in rows:
-            native_value = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_value = await self._convert_amount(
-                amount=native_value,
-                from_currency=row.portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=resolved_as_of_date,
-            )
+        row_reporting_values = await self._snapshot_reporting_values(
+            rows=rows,
+            as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
+
+        for row, native_value, reporting_value in row_reporting_values:
             per_portfolio_native[row.portfolio.portfolio_id] += native_value
             per_portfolio_reporting[row.portfolio.portfolio_id] += reporting_value
             per_portfolio_positions[row.portfolio.portfolio_id] += 1
@@ -189,8 +186,12 @@ class ReportingService:
         portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
         if portfolio is None:
             raise LookupError(f"Portfolio with id {request.portfolio_id} not found")
+        resolved_as_of_date = (
+            await self.repo.get_latest_business_date()
+            if request.as_of_date is None
+            else request.as_of_date
+        )
 
-        resolved_as_of_date = request.as_of_date or await self.repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for portfolio summary queries.")
         portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
@@ -209,6 +210,11 @@ class ReportingService:
             resolved_as_of_date=resolved_as_of_date,
             reporting_currency=reporting_currency,
         )
+        row_reporting_values = await self._snapshot_reporting_values(
+            rows=rows,
+            as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
 
         total_portfolio = ZERO
         total_reporting = ZERO
@@ -224,18 +230,11 @@ class ReportingService:
         unvalued_position_count = 0
         snapshot_date = resolved_as_of_date
 
-        for row in rows:
+        for row, portfolio_value, reporting_value in row_reporting_values:
             snapshot_date = max(snapshot_date, row.snapshot.date)
-            portfolio_value = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_value = await self._convert_amount(
-                amount=portfolio_value,
-                from_currency=portfolio_currency,
-                to_currency=reporting_currency,
-                as_of_date=resolved_as_of_date,
-            )
             total_portfolio += portfolio_value
             total_reporting += reporting_value
-            if _normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
+            if normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
                 unvalued_position_count += 1
             else:
                 valued_position_count += 1
@@ -268,6 +267,33 @@ class ReportingService:
             ),
         )
 
+    async def _snapshot_reporting_values(
+        self,
+        *,
+        rows: list[Any],
+        as_of_date: date,
+        reporting_currency: str,
+    ) -> list[tuple[Any, Decimal, Decimal]]:
+        row_native_values = [(row, decimal_or_zero(row.snapshot.market_value)) for row in rows]
+        row_reporting_values = []
+        for row, native_value in row_native_values:
+            row_reporting_values.append(
+                await self._convert_amount(
+                    amount=native_value,
+                    from_currency=row.portfolio.base_currency,
+                    to_currency=reporting_currency,
+                    as_of_date=as_of_date,
+                )
+            )
+        return [
+            (row, native_value, reporting_value)
+            for (row, native_value), reporting_value in zip(
+                row_native_values,
+                row_reporting_values,
+                strict=True,
+            )
+        ]
+
     async def _resolve_allocation_rows(
         self,
         *,
@@ -276,25 +302,38 @@ class ReportingService:
         as_of_date: date,
         reporting_currency: str,
     ) -> tuple[list[tuple[object | None, object, Decimal]], AllocationLookThroughInfo]:
-        direct_rows: list[tuple[object | None, object, Decimal]] = []
+        parent_security_ids: list[str] = []
+        row_parent_security_ids: list[str] = []
         for row in rows:
-            native_value = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_value = await self._convert_amount(
-                amount=native_value,
-                from_currency=row.portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=as_of_date,
-            )
-            direct_rows.append((row.instrument, row.snapshot, reporting_value))
+            parent_security_id = normalize_security_id(row.snapshot.security_id)
+            if parent_security_id:
+                parent_security_ids.append(parent_security_id)
+            row_parent_security_ids.append(parent_security_id)
 
+        reporting_values = await self._snapshot_reporting_values(
+            rows=rows,
+            as_of_date=as_of_date,
+            reporting_currency=reporting_currency,
+        )
         component_rows = await self.repo.list_instrument_lookthrough_components(
-            parent_security_ids=[
-                security_id
-                for row in rows
-                if (security_id := normalize_security_id(row.snapshot.security_id))
-            ],
+            parent_security_ids=list(dict.fromkeys(parent_security_ids)),
             as_of_date=as_of_date,
         )
+
+        resolved_rows = [
+            (row, parent_security_id, reporting_value)
+            for (row, _native_value, reporting_value), parent_security_id in zip(
+                reporting_values,
+                row_parent_security_ids,
+                strict=True,
+            )
+        ]
+
+        direct_rows = [
+            (row.instrument, row.snapshot, reporting_value)
+            for row, _parent_security_id, reporting_value in resolved_rows
+        ]
+
         components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)
         for component_row in component_rows:
             components_by_parent[normalize_security_id(component_row.parent_security_id)].append(
@@ -319,15 +358,7 @@ class ReportingService:
         decomposed_position_count = 0
         undecomposed_requested_count = 0
 
-        for row in rows:
-            parent_security_id = normalize_security_id(row.snapshot.security_id)
-            native_value = Decimal(str(row.snapshot.market_value or ZERO))
-            reporting_value = await self._convert_amount(
-                amount=native_value,
-                from_currency=row.portfolio.base_currency,
-                to_currency=reporting_currency,
-                as_of_date=as_of_date,
-            )
+        for row, parent_security_id, reporting_value in resolved_rows:
             components = components_by_parent.get(parent_security_id, [])
             if parent_security_id not in decomposable_parent_ids:
                 allocation_rows.append((row.instrument, row.snapshot, reporting_value))
@@ -337,11 +368,14 @@ class ReportingService:
 
             decomposed_position_count += 1
             for component in components:
+                component_weight = self._component_weight(component)
+                if component_weight is None:
+                    continue
                 allocation_rows.append(
                     (
                         component.component_instrument,
                         SimpleNamespace(security_id=component.component_security_id),
-                        reporting_value * Decimal(str(component.component_weight)),
+                        reporting_value * component_weight,
                     )
                 )
 
@@ -378,18 +412,29 @@ class ReportingService:
     ) -> bool:
         if not components:
             return False
+        weights = [ReportingService._component_weight(component) for component in components]
+        if any(weight is None for weight in weights):
+            return False
         total_weight = sum(
-            (Decimal(str(component.component_weight)) for component in components),
+            (weight for weight in weights if weight is not None),
             ZERO,
         )
         return abs(total_weight - Decimal("1")) <= Decimal("0.000001")
+
+    @staticmethod
+    def _component_weight(component: InstrumentLookthroughComponentRow) -> Decimal | None:
+        return decimal_or_none(component.component_weight)
 
     async def _resolve_scope_portfolios_and_date(
         self,
         scope: ReportingScope,
         requested_as_of_date: date | None,
     ) -> tuple[list, date]:
-        resolved_as_of_date = requested_as_of_date or await self.repo.get_latest_business_date()
+        if requested_as_of_date is None:
+            resolved_as_of_date = await self.repo.get_latest_business_date()
+        else:
+            resolved_as_of_date = requested_as_of_date
+
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for reporting queries.")
 
@@ -398,6 +443,7 @@ class ReportingService:
             portfolio_ids=scope.portfolio_ids or None,
             booking_center_code=scope.booking_center_code,
         )
+
         if not portfolios:
             raise ValueError("No portfolios matched the requested reporting scope.")
         return portfolios, resolved_as_of_date
@@ -425,14 +471,12 @@ class ReportingService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        if normalized_from_currency == normalized_to_currency:
-            return amount
-        rate = await self._get_fx_rate(
-            normalized_from_currency, normalized_to_currency, as_of_date
+        return await self._fx_converter.convert_amount(
+            amount=amount,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            as_of_date=as_of_date,
         )
-        return amount * rate
 
     async def _get_fx_rate(
         self,
@@ -440,35 +484,4 @@ class ReportingService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
-        if cache_key in self._fx_cache:
-            return self._fx_cache[cache_key]
-        rate = await self.repo.get_latest_fx_rate(
-            from_currency=normalized_from_currency,
-            to_currency=normalized_to_currency,
-            as_of_date=as_of_date,
-        )
-        if rate is None:
-            raise ValueError(
-                "FX rate not found for "
-                f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
-            )
-        rate = Decimal(str(rate))
-        self._fx_cache[cache_key] = rate
-        return rate
-
-    @staticmethod
-    def _latest_snapshot_evidence_timestamp(rows: list[Any]) -> datetime | None:
-        timestamps: list[datetime] = []
-        for row in rows:
-            snapshot = getattr(row, "snapshot", None)
-            for candidate in (
-                getattr(snapshot, "updated_at", None),
-                getattr(snapshot, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None
-
+        return await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date)

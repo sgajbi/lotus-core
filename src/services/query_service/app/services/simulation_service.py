@@ -20,6 +20,7 @@ from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.simulation_repository import SimulationRepository
+from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .position_flow_effects import transaction_quantity_effect_decimal
 
 
@@ -90,6 +91,7 @@ class SimulationService:
         baseline_results = await self.position_repo.get_latest_positions_by_portfolio(
             session.portfolio_id
         )
+        changes = await self.repo.get_changes(session_id)
         use_snapshot = True
         if not baseline_results:
             baseline_results = await self.position_repo.get_latest_position_history_by_portfolio(
@@ -109,17 +111,14 @@ class SimulationService:
                 continue
             baseline_map[security_id] = {
                 "security_id": security_id,
-                "baseline_quantity": Decimal(str(row.quantity)),
-                "proposed_quantity": Decimal(str(row.quantity)),
-                "cost_basis": Decimal(str(row.cost_basis)) if row.cost_basis is not None else None,
-                "cost_basis_local": Decimal(str(row.cost_basis_local))
-                if row.cost_basis_local is not None
-                else None,
+                "baseline_quantity": decimal_or_zero(row.quantity),
+                "proposed_quantity": decimal_or_zero(row.quantity),
+                "cost_basis": decimal_or_none(row.cost_basis),
+                "cost_basis_local": decimal_or_none(row.cost_basis_local),
                 "instrument_name": instrument.name if instrument else security_id,
                 "asset_class": instrument.asset_class if instrument else None,
             }
 
-        changes = await self.repo.get_changes(session_id)
         normalized_changes: list[tuple[str, Any]] = []
         for change in changes:
             security_id = normalize_security_id(change.security_id)
@@ -225,9 +224,9 @@ class SimulationService:
             portfolio_id=row.portfolio_id,
             security_id=row.security_id,
             transaction_type=row.transaction_type,
-            quantity=(Decimal(str(row.quantity)) if row.quantity is not None else None),
-            price=(Decimal(str(row.price)) if row.price is not None else None),
-            amount=(Decimal(str(row.amount)) if row.amount is not None else None),
+            quantity=decimal_or_none(row.quantity),
+            price=decimal_or_none(row.price),
+            amount=decimal_or_none(row.amount),
             currency=row.currency,
             effective_date=row.effective_date,
             metadata=row.change_metadata,

@@ -1,6 +1,8 @@
-import asyncio
-from datetime import date, datetime, timedelta, timezone
+from collections.abc import Awaitable
+from datetime import date, datetime, timezone
+from typing import TypeVar
 
+from portfolio_common.database_models import FinancialReconciliationRun, PipelineStageState
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     BREAK_OPEN,
@@ -37,11 +39,12 @@ from ..dtos.operations_dto import (
 )
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.identifier_normalization import normalize_security_id
-from ..repositories.operations_repository import (
+from ..repositories.operations_models import (
     MissingHistoricalFxDependencySummary,
-    OperationsRepository,
+    ReconciliationFindingSummary,
     SnapshotValuationCoverageSummary,
 )
+from ..repositories.operations_repository import OperationsRepository
 from ..support_policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
@@ -52,10 +55,20 @@ from .portfolio_readiness_builder import (
     PortfolioReadinessSnapshot,
     build_portfolio_readiness_response,
 )
+from .support_job_record_builder import (
+    build_support_job_record,
+    get_support_job_operational_state,
+    is_support_job_retrying,
+    is_support_job_stale,
+    is_terminal_failure_status,
+    normalize_support_job_status,
+)
 from .support_overview_builder import (
     SupportOverviewSnapshot,
     build_support_overview_response,
 )
+
+_PagedRowT = TypeVar("_PagedRowT")
 
 
 class OperationsService:
@@ -124,9 +137,7 @@ class OperationsService:
 
     @staticmethod
     def _normalize_support_job_status(status: str | None) -> str | None:
-        if status is None:
-            return None
-        return status.strip().upper()
+        return normalize_support_job_status(status)
 
     @classmethod
     def _normalize_support_status_filter(cls, status: str | None) -> str | None:
@@ -141,27 +152,20 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
-        normalized_status = cls._normalize_support_job_status(status) or ""
-        if normalized_status == "FAILED":
-            return "FAILED"
-        if normalized_status.startswith("SKIPPED"):
-            return "SKIPPED"
-        if cls._is_support_job_stale(normalized_status, updated_at, now, stale_threshold_minutes):
-            return "STALE_PROCESSING"
-        if normalized_status == "PROCESSING":
-            return "PROCESSING"
-        if normalized_status == "PENDING":
-            return "PENDING"
-        return "COMPLETED"
+        return get_support_job_operational_state(
+            status,
+            updated_at,
+            now,
+            stale_threshold_minutes,
+        )
 
     @classmethod
     def _is_terminal_failure_status(cls, status: str | None) -> bool:
-        return cls._normalize_support_job_status(status) == "FAILED"
+        return is_terminal_failure_status(status)
 
     @classmethod
     def _is_support_job_retrying(cls, status: str, attempt_count: int | None) -> bool:
-        normalized_status = cls._normalize_support_job_status(status)
-        return (attempt_count or 0) > 0 and normalized_status in {"PENDING", "PROCESSING"}
+        return is_support_job_retrying(status, attempt_count)
 
     @staticmethod
     def _normalize_analytics_export_status(status: str | None) -> str | None:
@@ -260,9 +264,7 @@ class OperationsService:
         latest_valuation_job_status: str | None,
     ) -> str:
         normalized_reprocessing_status = cls._normalize_support_job_status(reprocessing_status)
-        normalized_valuation_status = cls._normalize_support_job_status(
-            latest_valuation_job_status
-        )
+        normalized_valuation_status = cls._normalize_support_job_status(latest_valuation_job_status)
         if normalized_reprocessing_status == "REPROCESSING":
             return "REPLAYING"
         if has_artifact_gap:
@@ -318,37 +320,99 @@ class OperationsService:
         reference_now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobRecord:
-        return SupportJobRecord(
+        return build_support_job_record(
             job_id=job_id,
             job_type=job_type,
             business_date=business_date,
             status=status,
-            security_id=normalize_security_id(security_id) if security_id is not None else None,
+            security_id=security_id,
             epoch=epoch,
             attempt_count=attempt_count,
-            is_retrying=self._is_support_job_retrying(status, attempt_count),
             correlation_id=correlation_id,
             created_at=created_at,
             updated_at=updated_at,
-            is_stale_processing=self._is_support_job_stale(
-                status,
-                updated_at,
-                reference_now,
-                stale_threshold_minutes,
-            ),
             failure_reason=failure_reason,
-            is_terminal_failure=self._is_terminal_failure_status(status),
-            operational_state=self._get_support_job_operational_state(
-                status,
-                updated_at,
-                reference_now,
-                stale_threshold_minutes,
-            ),
+            reference_now=reference_now,
+            stale_threshold_minutes=stale_threshold_minutes,
         )
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.repo.portfolio_exists(portfolio_id):
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+
+    async def _resolve_portfolio_latest_business_date(
+        self,
+        portfolio_id: str,
+        *,
+        generated_at_utc: datetime,
+    ) -> date | None:
+        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
+        if not portfolio_exists:
+            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        return await self.repo.get_latest_business_date(as_of=generated_at_utc)
+
+    async def _read_count_and_page(
+        self,
+        count_read: Awaitable[int],
+        page_read: Awaitable[list[_PagedRowT]],
+    ) -> tuple[int, list[_PagedRowT]]:
+        try:
+            total = await count_read
+        except Exception:
+            close = getattr(page_read, "close", None)
+            if callable(close):
+                close()
+            raise
+        rows = await page_read
+        return total, rows
+
+    async def _read_latest_reconciliation_evidence(
+        self,
+        *,
+        portfolio_id: str,
+        latest_control_stage: PipelineStageState | None,
+    ) -> tuple[FinancialReconciliationRun | None, ReconciliationFindingSummary | None]:
+        if latest_control_stage is None:
+            return None, None
+
+        latest_reconciliation_run = await self.repo.get_latest_reconciliation_run_for_portfolio_day(
+            portfolio_id=portfolio_id,
+            business_date=latest_control_stage.business_date,
+            epoch=latest_control_stage.epoch,
+            as_of=latest_control_stage.updated_at,
+        )
+        if latest_reconciliation_run is None:
+            return None, None
+
+        latest_reconciliation_finding_summary = await self.repo.get_reconciliation_finding_summary(
+            latest_reconciliation_run.run_id,
+            as_of=latest_control_stage.updated_at,
+        )
+        return latest_reconciliation_run, latest_reconciliation_finding_summary
+
+    async def _read_latest_booked_dates(
+        self,
+        *,
+        portfolio_id: str,
+        latest_business_date: date | None,
+        generated_at_utc: datetime,
+    ) -> tuple[date | None, date | None]:
+        if latest_business_date is None:
+            return None, None
+
+        latest_booked_transaction_date = await self.repo.get_latest_transaction_date_as_of(
+            portfolio_id,
+            latest_business_date,
+            snapshot_as_of=generated_at_utc,
+        )
+        latest_booked_position_snapshot_date = (
+            await self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
+                portfolio_id,
+                latest_business_date,
+                snapshot_as_of=generated_at_utc,
+            )
+        )
+        return latest_booked_transaction_date, latest_booked_position_snapshot_date
 
     async def get_load_run_progress(
         self,
@@ -376,100 +440,77 @@ class OperationsService:
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> SupportOverviewResponse:
-        await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
-        (
-            latest_business_date,
-            current_epoch,
-            reprocessing_health,
-            valuation_job_health,
-            aggregation_job_health,
-            analytics_export_job_health,
-            latest_transaction_date,
-            latest_position_snapshot_date_unbounded,
-            position_snapshot_history_mismatch_count,
-            latest_control_stage,
-        ) = await asyncio.gather(
-            self.repo.get_latest_business_date(as_of=generated_at_utc),
-            self.repo.get_current_portfolio_epoch(portfolio_id, as_of=generated_at_utc),
-            self.repo.get_reprocessing_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_valuation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_aggregation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_analytics_export_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_transaction_date(portfolio_id, as_of=generated_at_utc),
-            self.repo.get_latest_snapshot_date_for_current_epoch(
-                portfolio_id,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_position_snapshot_history_mismatch_count(
-                portfolio_id,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_financial_reconciliation_control_stage(
-                portfolio_id,
-                as_of=generated_at_utc,
-            ),
+        latest_business_date = await self._resolve_portfolio_latest_business_date(
+            portfolio_id,
+            generated_at_utc=generated_at_utc,
         )
-        latest_reconciliation_run = None
-        latest_reconciliation_finding_summary = None
-        if latest_control_stage is not None:
-            latest_reconciliation_run = (
-                await self.repo.get_latest_reconciliation_run_for_portfolio_day(
-                    portfolio_id=portfolio_id,
-                    business_date=latest_control_stage.business_date,
-                    epoch=latest_control_stage.epoch,
-                    as_of=latest_control_stage.updated_at,
-                )
+        current_epoch = await self.repo.get_current_portfolio_epoch(
+            portfolio_id,
+            as_of=generated_at_utc,
+        )
+        reprocessing_health = await self.repo.get_reprocessing_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        valuation_job_health = await self.repo.get_valuation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        aggregation_job_health = await self.repo.get_aggregation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        analytics_export_job_health = await self.repo.get_analytics_export_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        latest_transaction_date = await self.repo.get_latest_transaction_date(
+            portfolio_id,
+            as_of=generated_at_utc,
+        )
+        latest_position_snapshot_date_unbounded = (
+            await self.repo.get_latest_snapshot_date_for_current_epoch(
+                portfolio_id,
+                as_of=generated_at_utc,
             )
-            if latest_reconciliation_run is not None:
-                latest_reconciliation_finding_summary = (
-                    await self.repo.get_reconciliation_finding_summary(
-                        latest_reconciliation_run.run_id,
-                        as_of=latest_control_stage.updated_at,
-                    )
-                )
-
-        latest_booked_transaction_date = None
-        latest_booked_position_snapshot_date = None
-        if latest_business_date is not None:
-            (
-                latest_booked_transaction_date,
-                latest_booked_position_snapshot_date,
-            ) = await asyncio.gather(
-                self.repo.get_latest_transaction_date_as_of(
-                    portfolio_id,
-                    latest_business_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
-                self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
-                    portfolio_id,
-                    latest_business_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
+        )
+        position_snapshot_history_mismatch_count = (
+            await self.repo.get_position_snapshot_history_mismatch_count(
+                portfolio_id,
+                as_of=generated_at_utc,
             )
+        )
+        latest_control_stage = await self.repo.get_latest_financial_reconciliation_control_stage(
+            portfolio_id,
+            as_of=generated_at_utc,
+        )
+        (
+            latest_reconciliation_run,
+            latest_reconciliation_finding_summary,
+        ) = await self._read_latest_reconciliation_evidence(
+            portfolio_id=portfolio_id,
+            latest_control_stage=latest_control_stage,
+        )
+        (
+            latest_booked_transaction_date,
+            latest_booked_position_snapshot_date,
+        ) = await self._read_latest_booked_dates(
+            portfolio_id=portfolio_id,
+            latest_business_date=latest_business_date,
+            generated_at_utc=generated_at_utc,
+        )
 
         controls_status = latest_control_stage.status if latest_control_stage else None
         controls_blocking = self._is_controls_blocking(controls_status)
@@ -539,26 +580,22 @@ class OperationsService:
                 if as_of_date is None
                 else resolved_as_of_date
             )
-            (
-                latest_booked_transaction_date,
-                latest_booked_position_snapshot_date,
-                missing_fx_summary,
-            ) = await asyncio.gather(
-                self.repo.get_latest_transaction_date_as_of(
+            latest_booked_transaction_date = await self.repo.get_latest_transaction_date_as_of(
+                portfolio_id,
+                resolved_as_of_date,
+                snapshot_as_of=generated_at_utc,
+            )
+            latest_booked_position_snapshot_date = (
+                await self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
                     portfolio_id,
                     resolved_as_of_date,
                     snapshot_as_of=generated_at_utc,
-                ),
-                self.repo.get_latest_snapshot_date_for_current_epoch_as_of(
-                    portfolio_id,
-                    resolved_as_of_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
-                self.repo.get_missing_historical_fx_dependency_summary(
-                    portfolio_id,
-                    resolved_as_of_date,
-                    snapshot_as_of=generated_at_utc,
-                ),
+                )
+            )
+            missing_fx_summary = await self.repo.get_missing_historical_fx_dependency_summary(
+                portfolio_id,
+                resolved_as_of_date,
+                snapshot_as_of=generated_at_utc,
             )
             snapshot_coverage = await self.repo.get_snapshot_valuation_coverage_summary(
                 portfolio_id,
@@ -593,35 +630,30 @@ class OperationsService:
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> CalculatorSloResponse:
-        await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
-        (
-            latest_business_date,
-            reprocessing_health,
-            valuation_job_health,
-            aggregation_job_health,
-        ) = await asyncio.gather(
-            self.repo.get_latest_business_date(as_of=generated_at_utc),
-            self.repo.get_reprocessing_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_valuation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_aggregation_job_health_summary(
-                portfolio_id,
-                stale_minutes=stale_threshold_minutes,
-                failed_window_hours=failed_window_hours,
-                reference_now=generated_at_utc,
-                as_of=generated_at_utc,
-            ),
+        latest_business_date = await self._resolve_portfolio_latest_business_date(
+            portfolio_id,
+            generated_at_utc=generated_at_utc,
+        )
+        reprocessing_health = await self.repo.get_reprocessing_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        valuation_job_health = await self.repo.get_valuation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
+        )
+        aggregation_job_health = await self.repo.get_aggregation_job_health_summary(
+            portfolio_id,
+            stale_minutes=stale_threshold_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=generated_at_utc,
+            as_of=generated_at_utc,
         )
 
         return build_calculator_slo_response(
@@ -648,29 +680,23 @@ class OperationsService:
                 f"'{portfolio_id}' and security '{security_id}'"
             )
 
-        (
-            latest_history_date,
-            latest_snapshot_date,
-            latest_valuation_job,
-        ) = await asyncio.gather(
-            self.repo.get_latest_position_history_date(
-                portfolio_id,
-                security_id,
-                position_state.epoch,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_daily_snapshot_date(
-                portfolio_id,
-                security_id,
-                position_state.epoch,
-                as_of=generated_at_utc,
-            ),
-            self.repo.get_latest_valuation_job(
-                portfolio_id,
-                security_id,
-                position_state.epoch,
-                as_of=generated_at_utc,
-            ),
+        latest_history_date = await self.repo.get_latest_position_history_date(
+            portfolio_id,
+            security_id,
+            position_state.epoch,
+            as_of=generated_at_utc,
+        )
+        latest_snapshot_date = await self.repo.get_latest_daily_snapshot_date(
+            portfolio_id,
+            security_id,
+            position_state.epoch,
+            as_of=generated_at_utc,
+        )
+        latest_valuation_job = await self.repo.get_latest_valuation_job(
+            portfolio_id,
+            security_id,
+            position_state.epoch,
+            as_of=generated_at_utc,
         )
 
         latest_valuation_job_date = (
@@ -716,10 +742,8 @@ class OperationsService:
     ) -> LineageKeyListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
-        normalized_reprocessing_status = self._normalize_support_status_filter(
-            reprocessing_status
-        )
-        total, keys = await asyncio.gather(
+        normalized_reprocessing_status = self._normalize_support_status_filter(reprocessing_status)
+        total, keys = await self._read_count_and_page(
             self.repo.get_lineage_keys_count(
                 portfolio_id=portfolio_id,
                 reprocessing_status=normalized_reprocessing_status,
@@ -774,7 +798,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_valuation_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -840,7 +864,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_aggregation_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -903,7 +927,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_analytics_export_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_analytics_export_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -980,7 +1004,7 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         normalized_status = self._normalize_support_status_filter(status)
-        total, runs = await asyncio.gather(
+        total, runs = await self._read_count_and_page(
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
                 run_id=run_id,
@@ -1060,7 +1084,7 @@ class OperationsService:
         )
         if run is None:
             raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
-        total, findings = await asyncio.gather(
+        total, findings = await self._read_count_and_page(
             self.repo.get_reconciliation_findings_count(
                 run_id=run_id,
                 finding_id=finding_id,
@@ -1127,7 +1151,7 @@ class OperationsService:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
         normalized_status = self._normalize_support_status_filter(status)
-        total, stages = await asyncio.gather(
+        total, stages = await self._read_count_and_page(
             self.repo.get_portfolio_control_stages_count(
                 portfolio_id=portfolio_id,
                 stage_id=stage_id,
@@ -1187,7 +1211,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, keys = await asyncio.gather(
+        total, keys = await self._read_count_and_page(
             self.repo.get_reprocessing_keys_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -1259,7 +1283,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         stale_minutes = stale_threshold_minutes
         normalized_status = self._normalize_support_status_filter(status)
-        total, jobs = await asyncio.gather(
+        total, jobs = await self._read_count_and_page(
             self.repo.get_reprocessing_jobs_count(
                 portfolio_id=portfolio_id,
                 status=normalized_status,
@@ -1321,10 +1345,7 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
-        if cls._normalize_support_job_status(status) != "PROCESSING" or updated_at is None:
-            return False
-        reference_now = now or datetime.now(timezone.utc)
-        return updated_at < reference_now - timedelta(minutes=stale_threshold_minutes)
+        return is_support_job_stale(status, updated_at, now, stale_threshold_minutes)
 
     @classmethod
     def _is_analytics_export_job_stale(

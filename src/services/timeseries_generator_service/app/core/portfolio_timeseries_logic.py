@@ -9,11 +9,18 @@ from portfolio_common.database_models import (
     PortfolioTimeseries,
     PositionTimeseries,
 )
+from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 
 from ..repositories.timeseries_repository import TimeseriesRepository
 
 logger = logging.getLogger(__name__)
+ZERO = Decimal("0")
+
+
+def _decimal_or_zero(value: object) -> Decimal:
+    amount = decimal_or_none(value)
+    return amount if amount is not None else ZERO
 
 
 class FxRateNotFoundError(Exception):
@@ -39,11 +46,11 @@ class PortfolioTimeseriesLogic:
         """
         Calculates a single, complete portfolio time series record for a given day and epoch.
         """
-        total_bod_mv = Decimal(0)
-        total_bod_cf = Decimal(0)
-        total_eod_cf = Decimal(0)
-        total_eod_mv = Decimal(0)
-        total_fees = Decimal(0)
+        total_bod_mv = ZERO
+        total_bod_cf = ZERO
+        total_eod_cf = ZERO
+        total_eod_mv = ZERO
+        total_fees = ZERO
 
         portfolio_currency = PortfolioTimeseriesLogic._normalize_currency(portfolio.base_currency)
         fx_rate_cache: dict[tuple[str, str, date], Decimal] = {}
@@ -73,11 +80,11 @@ class PortfolioTimeseriesLogic:
                 fx_rate_cache=fx_rate_cache,
             )
 
-            total_bod_mv += (pos_ts.bod_market_value or Decimal(0)) * rate
-            total_bod_cf += (pos_ts.bod_cashflow_portfolio or Decimal(0)) * rate
-            total_eod_mv += (pos_ts.eod_market_value or Decimal(0)) * rate
-            total_eod_cf += (pos_ts.eod_cashflow_portfolio or Decimal(0)) * rate
-            total_fees += (pos_ts.fees or Decimal(0)) * rate
+            total_bod_mv += _decimal_or_zero(pos_ts.bod_market_value) * rate
+            total_bod_cf += _decimal_or_zero(pos_ts.bod_cashflow_portfolio) * rate
+            total_eod_mv += _decimal_or_zero(pos_ts.eod_market_value) * rate
+            total_eod_cf += _decimal_or_zero(pos_ts.eod_cashflow_portfolio) * rate
+            total_fees += _decimal_or_zero(pos_ts.fees) * rate
 
         return PortfolioTimeseries(
             portfolio_id=portfolio.portfolio_id,

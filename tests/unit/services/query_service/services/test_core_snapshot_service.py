@@ -354,6 +354,32 @@ async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_
     assert rows["SEC_PADDED"]["position_record"].security_id == "SEC_PADDED"
 
 
+async def test_resolve_baseline_positions_preserves_blank_optional_values(mock_dependencies):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+        (
+            _snapshot_row("SEC_BLANK", "3", " ", ""),
+            _instrument("SEC_BLANK"),
+            SimpleNamespace(status="CURRENT", epoch=7),
+        )
+    ]
+    service = CoreSnapshotService(AsyncMock())
+
+    rows, _source = await service._resolve_baseline_positions(
+        portfolio_id="PORT_001",
+        as_of_date=date(2026, 2, 27),
+        reporting_fx=Decimal("1"),
+        include_cash=True,
+        include_zero=True,
+    )
+
+    record = rows["SEC_BLANK"]["position_record"]
+    assert record.quantity == Decimal("3")
+    assert record.market_value_base is None
+    assert record.market_value_local is None
+    assert record.weight == Decimal("0")
+
+
 async def test_core_snapshot_rejects_projected_sections_in_baseline_mode(mock_dependencies):
     service = CoreSnapshotService(AsyncMock())
     request = CoreSnapshotRequest(
@@ -492,6 +518,29 @@ async def test_core_snapshot_raises_when_new_security_has_no_market_price(mock_d
         await service.get_core_snapshot("PORT_001", request)
 
 
+async def test_core_snapshot_raises_when_new_security_has_blank_market_price(mock_dependencies):
+    (_, _, simulation_repo, price_repo, _, _) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_NEW_US",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        )
+    ]
+    price_repo.get_prices.return_value = [SimpleNamespace(price=" ", currency="USD")]
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.SIMULATION,
+        sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
+        simulation={"session_id": "SIM_1"},
+    )
+
+    with pytest.raises(CoreSnapshotUnavailableSectionError, match="missing market price"):
+        await service.get_core_snapshot("PORT_001", request)
+
+
 @pytest.mark.parametrize(
     ("txn_type", "quantity", "amount", "expected"),
     [
@@ -517,6 +566,15 @@ async def test_get_fx_rate_or_raise_identity_currency(mock_dependencies):
     rate = await service._get_fx_rate_or_raise(" usd ", "USD", date(2026, 2, 27))
     assert rate == Decimal("1")
     fx_repo.get_fx_rates.assert_not_awaited()
+
+
+async def test_get_fx_rate_or_raise_rejects_blank_rate(mock_dependencies):
+    (_, _, _, _, fx_repo, _) = mock_dependencies
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=" ")]
+    service = CoreSnapshotService(AsyncMock())
+
+    with pytest.raises(CoreSnapshotUnavailableSectionError, match="missing FX rate EUR/USD"):
+        await service._get_fx_rate_or_raise("EUR", "USD", date(2026, 2, 27))
 
 
 async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencies):
@@ -671,7 +729,7 @@ async def test_resolve_projected_positions_handles_non_positive_quantity_branch(
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
         baseline_positions={},
         include_zero=True,
         include_cash=True,
@@ -702,7 +760,7 @@ async def test_resolve_projected_positions_normalizes_change_security_ids(mock_d
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
         baseline_positions={
             "SEC_EXISTING": {
                 "security_id": "SEC_EXISTING",
@@ -743,17 +801,14 @@ async def test_resolve_projected_positions_prices_new_security_with_fx(mock_depe
     ]
     instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_EUR", "EUR", "EQUITY")]
     price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency="EUR")]
-    fx_repo.get_fx_rates.side_effect = [
-        [SimpleNamespace(rate=Decimal("1.2"))],  # EUR -> USD portfolio
-        [SimpleNamespace(rate=Decimal("1.5"))],  # USD -> SGD reporting
-    ]
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.2"))]
     service = CoreSnapshotService(AsyncMock())
 
     projected = await service._resolve_projected_positions(
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="SGD",
+        portfolio_to_reporting_fx=Decimal("1.5"),
         baseline_positions={},
         include_zero=True,
         include_cash=True,
@@ -761,6 +816,108 @@ async def test_resolve_projected_positions_prices_new_security_with_fx(mock_depe
 
     assert projected["SEC_NEW_EUR"]["market_value_local"] == Decimal("20")
     assert projected["SEC_NEW_EUR"]["market_value_base"] == Decimal("36")
+    fx_repo.get_fx_rates.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="USD",
+        end_date=date(2026, 2, 27),
+    )
+
+
+async def test_resolve_projected_positions_reuses_market_fx_per_currency(mock_dependencies):
+    (_, _, simulation_repo, price_repo, fx_repo, instrument_repo) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_NEW_EUR_A",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        ),
+        SimpleNamespace(
+            security_id="SEC_NEW_EUR_B",
+            transaction_type="BUY",
+            quantity=Decimal("3"),
+            amount=None,
+        ),
+    ]
+    instrument_repo.get_by_security_ids.return_value = [
+        _instrument("SEC_NEW_EUR_A", "EUR", "EQUITY"),
+        _instrument("SEC_NEW_EUR_B", "EUR", "EQUITY"),
+    ]
+    price_repo.get_prices.return_value = [SimpleNamespace(price=Decimal("10"), currency=" eur ")]
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.2"))]
+    service = CoreSnapshotService(AsyncMock())
+
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1.5"),
+        baseline_positions={},
+        include_zero=True,
+        include_cash=True,
+    )
+
+    assert projected["SEC_NEW_EUR_A"]["market_value_base"] == Decimal("36.0")
+    assert projected["SEC_NEW_EUR_B"]["market_value_base"] == Decimal("54.0")
+    fx_repo.get_fx_rates.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="USD",
+        end_date=date(2026, 2, 27),
+    )
+
+
+async def test_resolve_projected_positions_reads_new_security_prices_sequentially(
+    mock_dependencies,
+):
+    (_, _, simulation_repo, price_repo, fx_repo, instrument_repo) = mock_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_NEW_US_A",
+            transaction_type="BUY",
+            quantity=Decimal("2"),
+            amount=None,
+        ),
+        SimpleNamespace(
+            security_id="SEC_NEW_US_B",
+            transaction_type="BUY",
+            quantity=Decimal("3"),
+            amount=None,
+        ),
+    ]
+    instrument_repo.get_by_security_ids.return_value = [
+        _instrument("SEC_NEW_US_A", "USD", "EQUITY"),
+        _instrument("SEC_NEW_US_B", "USD", "EQUITY"),
+    ]
+    call_order: list[str] = []
+
+    async def get_prices(*, security_id: str, end_date: date):
+        assert end_date == date(2026, 2, 27)
+        if security_id == "SEC_NEW_US_A":
+            call_order.append("SEC_NEW_US_A")
+            return [SimpleNamespace(price=Decimal("10"), currency="USD")]
+        if security_id == "SEC_NEW_US_B":
+            call_order.append("SEC_NEW_US_B")
+            return [SimpleNamespace(price=Decimal("20"), currency="USD")]
+        raise AssertionError(f"unexpected security {security_id}")
+
+    price_repo.get_prices.side_effect = get_prices
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1"))]
+    service = CoreSnapshotService(AsyncMock())
+
+    projected = await service._resolve_projected_positions(
+        session_id="SIM_1",
+        as_of_date=date(2026, 2, 27),
+        portfolio_base_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
+        baseline_positions={},
+        include_zero=True,
+        include_cash=True,
+    )
+
+    assert projected["SEC_NEW_US_A"]["market_value_base"] == Decimal("20")
+    assert projected["SEC_NEW_US_B"]["market_value_base"] == Decimal("60")
+    assert sorted(call_order) == ["SEC_NEW_US_A", "SEC_NEW_US_B"]
+    assert price_repo.get_prices.await_count == 2
 
 
 async def test_resolve_projected_positions_filters_cash_and_zero_quantity(mock_dependencies):
@@ -772,7 +929,7 @@ async def test_resolve_projected_positions_filters_cash_and_zero_quantity(mock_d
         session_id="SIM_1",
         as_of_date=date(2026, 2, 27),
         portfolio_base_currency="USD",
-        reporting_currency="USD",
+        portfolio_to_reporting_fx=Decimal("1"),
         baseline_positions={
             "SEC_CASH": {
                 "security_id": "SEC_CASH",
@@ -844,6 +1001,13 @@ async def test_static_helpers_cover_zero_total_and_delta_paths():
     projected_total = CoreSnapshotService._total_market_value_projected(items)
     assert baseline_total == Decimal("0")
     assert projected_total == Decimal("0")
+
+    optional_items = {
+        "SEC_BLANK": {"market_value_base": " "},
+        "SEC_TEXT": {"market_value_base": "2.25"},
+    }
+    assert CoreSnapshotService._total_market_value_baseline(optional_items) == Decimal("2.25")
+    assert CoreSnapshotService._total_market_value_projected(optional_items) == Decimal("2.25")
 
     delta_rows = CoreSnapshotService._build_delta_section(
         baseline_positions=items,

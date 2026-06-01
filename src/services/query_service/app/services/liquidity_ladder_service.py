@@ -4,7 +4,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +18,10 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..repositories.cashflow_repository import CashflowRepository
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
+from .cashflow_evidence_window import read_cashflow_evidence_window
+from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_zero
+from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
@@ -28,11 +31,6 @@ LIQUIDITY_LADDER_BOUNDARY_NOTE = (
     "Source liquidity evidence only; not an advice, OMS execution, funding recommendation, "
     "best-execution, tax, or market-impact forecast."
 )
-
-
-def _normalize_control_code(value: Any, *, default: str = "UNCLASSIFIED") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
 
 
 @dataclass(frozen=True)
@@ -61,55 +59,45 @@ class PortfolioLiquidityLadderService:
         portfolio = await self.reporting_repo.get_portfolio_by_id(portfolio_id)
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        resolved_as_of_date = (
+            await self.reporting_repo.get_latest_business_date()
+            if as_of_date is None
+            else as_of_date
+        )
 
-        resolved_as_of_date = as_of_date or await self.reporting_repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for liquidity ladder queries.")
 
+        range_end_date = resolved_as_of_date + timedelta(days=horizon_days)
         rows = await self.reporting_repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
-        cash_rows = [row for row in rows if self._is_cash_row(row)]
-        non_cash_rows = [row for row in rows if not self._is_cash_row(row)]
-        opening_cash_balance = self._sum_market_value(cash_rows)
-        tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
-
-        range_end_date = resolved_as_of_date + timedelta(days=horizon_days)
-        booked_series = await self.cashflow_repo.get_portfolio_cashflow_series(
-            portfolio_id=portfolio.portfolio_id,
-            start_date=resolved_as_of_date,
-            end_date=range_end_date,
-        )
-        projected_series = (
-            await self.cashflow_repo.get_projected_settlement_cashflow_series(
-                portfolio_id=portfolio.portfolio_id,
-                start_date=resolved_as_of_date,
-                end_date=range_end_date,
-            )
-            if include_projected
-            else []
-        )
-        latest_cashflow_evidence = await self.cashflow_repo.get_latest_cashflow_evidence_timestamp(
+        cashflow_evidence = await read_cashflow_evidence_window(
+            repo=self.cashflow_repo,
             portfolio_id=portfolio.portfolio_id,
             start_date=resolved_as_of_date,
             end_date=range_end_date,
             include_projected=include_projected,
         )
 
+        cash_rows, non_cash_rows = self._partition_cash_rows(rows)
+        opening_cash_balance = self._sum_market_value(cash_rows)
+        tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
+
         buckets = self._build_ladder_buckets(
             as_of_date=resolved_as_of_date,
             horizon_days=horizon_days,
             opening_cash_balance=opening_cash_balance,
-            booked_series=dict(booked_series),
-            projected_series=dict(projected_series),
+            booked_series=dict(cashflow_evidence.booked_rows),
+            projected_series=dict(cashflow_evidence.projected_rows),
         )
         totals = self._build_totals(
             opening_cash_balance=opening_cash_balance,
             buckets=buckets,
             tier_exposures=tier_exposures,
         )
-        latest_snapshot_evidence = self._latest_snapshot_evidence_timestamp(rows)
+        latest_snapshot_evidence = latest_snapshot_evidence_timestamp(rows)
 
         return PortfolioLiquidityLadderResponse(
             portfolio_id=portfolio.portfolio_id,
@@ -125,7 +113,14 @@ class PortfolioLiquidityLadderService:
                 as_of_date=resolved_as_of_date,
                 data_quality_status=self._data_quality_status(rows=rows, buckets=buckets),
                 latest_evidence_timestamp=max(
-                    (item for item in (latest_snapshot_evidence, latest_cashflow_evidence) if item),
+                    (
+                        item
+                        for item in (
+                            latest_snapshot_evidence,
+                            cashflow_evidence.latest_evidence_timestamp,
+                        )
+                        if item
+                    ),
                     default=None,
                 ),
                 source_batch_fingerprint=(
@@ -173,8 +168,11 @@ class PortfolioLiquidityLadderService:
         tier_values: dict[str, Decimal] = defaultdict(Decimal)
         tier_counts: dict[str, int] = defaultdict(int)
         for row in rows:
-            tier = _normalize_control_code(getattr(row.instrument, "liquidity_tier", None))
-            tier_values[tier] += _decimal_or_zero(getattr(row.snapshot, "market_value", ZERO))
+            tier = normalize_control_code(
+                getattr(row.instrument, "liquidity_tier", None),
+                default="UNCLASSIFIED",
+            )
+            tier_values[tier] += decimal_or_zero(getattr(row.snapshot, "market_value", ZERO))
             tier_counts[tier] += 1
         return [
             AssetLiquidityTierExposure(
@@ -212,27 +210,29 @@ class PortfolioLiquidityLadderService:
 
     @staticmethod
     def _sum_market_value(rows: list[ReportingSnapshotRow]) -> Decimal:
-        return sum((_decimal_or_zero(row.snapshot.market_value) for row in rows), ZERO)
+        return sum((decimal_or_zero(row.snapshot.market_value) for row in rows), ZERO)
+
+    @classmethod
+    def _partition_cash_rows(
+        cls,
+        rows: list[ReportingSnapshotRow],
+    ) -> tuple[list[ReportingSnapshotRow], list[ReportingSnapshotRow]]:
+        cash_rows: list[ReportingSnapshotRow] = []
+        non_cash_rows: list[ReportingSnapshotRow] = []
+        for row in rows:
+            if cls._is_cash_row(row):
+                cash_rows.append(row)
+            else:
+                non_cash_rows.append(row)
+        return cash_rows, non_cash_rows
 
     @staticmethod
     def _is_cash_row(row: ReportingSnapshotRow) -> bool:
         return (
             row.instrument is not None
-            and _normalize_control_code(getattr(row.instrument, "asset_class", None), default="")
+            and normalize_control_code(getattr(row.instrument, "asset_class", None), default="")
             == CASH_ASSET_CLASS
         )
-
-    @staticmethod
-    def _latest_snapshot_evidence_timestamp(rows: list[ReportingSnapshotRow]):
-        timestamps = []
-        for row in rows:
-            for candidate in (
-                getattr(row.snapshot, "updated_at", None),
-                getattr(row.snapshot, "created_at", None),
-            ):
-                if candidate is not None:
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None
 
     @staticmethod
     def _data_quality_status(
@@ -274,17 +274,9 @@ def _date_buckets(*, as_of_date: date, horizon_days: int) -> list[LadderDateBuck
 def _sum_series(series: dict[date, Decimal], bucket: LadderDateBucket) -> Decimal:
     return sum(
         (
-            _decimal_or_zero(amount)
+            decimal_or_zero(amount)
             for flow_date, amount in series.items()
             if bucket.start_date <= flow_date <= bucket.end_date
         ),
         ZERO,
     )
-
-
-def _decimal_or_zero(value: Any) -> Decimal:
-    if value is None:
-        return ZERO
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))

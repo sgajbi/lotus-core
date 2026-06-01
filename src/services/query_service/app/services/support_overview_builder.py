@@ -4,7 +4,7 @@ from datetime import date, datetime
 from portfolio_common.database_models import FinancialReconciliationRun, PipelineStageState
 
 from ..dtos.operations_dto import SupportOverviewResponse
-from ..repositories.operations_repository import (
+from ..repositories.operations_models import (
     ExportJobHealthSummary,
     JobHealthSummary,
     ReconciliationFindingSummary,

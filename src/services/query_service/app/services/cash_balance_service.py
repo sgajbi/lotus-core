@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable
 
@@ -12,14 +12,13 @@ from ..dtos.source_data_product_identity import source_data_product_runtime_meta
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
+from .control_code_normalization import normalize_control_code
+from .decimal_amounts import decimal_or_zero
+from .fx_conversion import CachedFxRateConverter
+from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
-
-
-def _normalize_control_code(value: Any, *, default: str = "") -> str:
-    normalized = str(value or "").strip().upper()
-    return normalized or default
 
 
 class CashBalanceResolver:
@@ -72,7 +71,7 @@ class CashBalanceResolver:
                     cash_rows=cash_rows,
                     account_records=account_records,
                 ),
-                latest_evidence_timestamp=self.latest_snapshot_evidence_timestamp(cash_rows),
+                latest_evidence_timestamp=latest_snapshot_evidence_timestamp(cash_rows),
             ),
         )
 
@@ -98,10 +97,19 @@ class CashBalanceResolver:
             for row in master_rows
             if (security_id := normalize_security_id(row.security_id))
         }
-        fallback_cash_account_id_rows = await self.repo.get_latest_cash_account_ids(
-            portfolio_id=portfolio.portfolio_id,
-            cash_security_ids=cash_security_ids,
-            as_of_date=resolved_as_of_date,
+        fallback_security_ids = [
+            security_id
+            for security_id in dict.fromkeys(cash_security_ids)
+            if security_id not in master_by_security_id
+        ]
+        fallback_cash_account_id_rows = (
+            await self.repo.get_latest_cash_account_ids(
+                portfolio_id=portfolio.portfolio_id,
+                cash_security_ids=fallback_security_ids,
+                as_of_date=resolved_as_of_date,
+            )
+            if fallback_security_ids
+            else {}
         )
         fallback_cash_account_ids = {
             normalize_security_id(security_id): cash_account_id
@@ -113,27 +121,28 @@ class CashBalanceResolver:
             if (security_id := normalize_security_id(row.snapshot.security_id))
         }
 
-        account_records: list[CashAccountBalanceRecord] = []
+        record_inputs: list[dict[str, Any]] = []
         emitted_cash_account_ids: set[str] = set()
 
         for master_row in master_rows:
             security_id = normalize_security_id(master_row.security_id)
             snapshot_row = snapshot_by_security_id.get(security_id)
-            account_record = await self._build_cash_account_balance_record(
-                portfolio=portfolio,
-                snapshot_row=snapshot_row,
-                resolved_as_of_date=resolved_as_of_date,
-                reporting_currency=reporting_currency,
-                cash_account_id=master_row.cash_account_id,
-                security_id=security_id,
-                instrument_name=(
-                    snapshot_row.instrument.name
-                    if snapshot_row and snapshot_row.instrument
-                    else master_row.display_name
-                ),
-                account_currency=master_row.account_currency,
+            record_inputs.append(
+                {
+                    "portfolio": portfolio,
+                    "snapshot_row": snapshot_row,
+                    "resolved_as_of_date": resolved_as_of_date,
+                    "reporting_currency": reporting_currency,
+                    "cash_account_id": master_row.cash_account_id,
+                    "security_id": security_id,
+                    "instrument_name": (
+                        snapshot_row.instrument.name
+                        if snapshot_row and snapshot_row.instrument
+                        else master_row.display_name
+                    ),
+                    "account_currency": master_row.account_currency,
+                }
             )
-            account_records.append(account_record)
             emitted_cash_account_ids.add(master_row.cash_account_id)
 
         for cash_row in cash_rows:
@@ -146,26 +155,30 @@ class CashBalanceResolver:
             )
             if fallback_cash_account_id in emitted_cash_account_ids:
                 continue
-            account_records.append(
-                await self._build_cash_account_balance_record(
-                    portfolio=portfolio,
-                    snapshot_row=cash_row,
-                    resolved_as_of_date=resolved_as_of_date,
-                    reporting_currency=reporting_currency,
-                    cash_account_id=fallback_cash_account_id,
-                    security_id=security_id,
-                    instrument_name=(
-                        cash_row.instrument.name
-                        if cash_row.instrument is not None
-                        else security_id
+            record_inputs.append(
+                {
+                    "portfolio": portfolio,
+                    "snapshot_row": cash_row,
+                    "resolved_as_of_date": resolved_as_of_date,
+                    "reporting_currency": reporting_currency,
+                    "cash_account_id": fallback_cash_account_id,
+                    "security_id": security_id,
+                    "instrument_name": (
+                        cash_row.instrument.name if cash_row.instrument is not None else security_id
                     ),
-                    account_currency=(
+                    "account_currency": (
                         cash_row.instrument.currency
                         if cash_row.instrument and cash_row.instrument.currency
                         else portfolio.base_currency
                     ),
-                )
+                }
             )
+            emitted_cash_account_ids.add(fallback_cash_account_id)
+
+        account_records = [
+            await self._build_cash_account_balance_record(**record_input)
+            for record_input in record_inputs
+        ]
 
         account_records.sort(key=lambda row: (row.account_currency, row.cash_account_id))
         return account_records
@@ -192,8 +205,8 @@ class CashBalanceResolver:
                 or snapshot_row.snapshot.market_value
                 or ZERO
             )
-            native_balance = Decimal(str(native_source_value))
-            portfolio_balance = Decimal(str(snapshot_row.snapshot.market_value or ZERO))
+            native_balance = decimal_or_zero(native_source_value)
+            portfolio_balance = decimal_or_zero(snapshot_row.snapshot.market_value)
         reporting_balance = await self._convert_amount(
             amount=portfolio_balance,
             from_currency=portfolio.base_currency,
@@ -215,21 +228,8 @@ class CashBalanceResolver:
     def is_cash_row(row: Any) -> bool:
         return (
             row.instrument is not None
-            and _normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
+            and normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
         )
-
-    @staticmethod
-    def latest_snapshot_evidence_timestamp(rows: list[Any]) -> datetime | None:
-        timestamps: list[datetime] = []
-        for row in rows:
-            snapshot = getattr(row, "snapshot", None)
-            for candidate in (
-                getattr(snapshot, "updated_at", None),
-                getattr(snapshot, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None
 
     @staticmethod
     def data_quality_status(
@@ -245,7 +245,7 @@ class CashBalanceResolver:
 class CashBalanceService:
     def __init__(self, db: AsyncSession):
         self.repo = ReportingRepository(db)
-        self._fx_cache: dict[tuple[str, str, date], Decimal] = {}
+        self._fx_converter = CachedFxRateConverter(self.repo)
         self._resolver = CashBalanceResolver(repo=self.repo, convert_amount=self._convert_amount)
 
     async def get_cash_balances(
@@ -258,8 +258,10 @@ class CashBalanceService:
         portfolio = await self.repo.get_portfolio_by_id(portfolio_id)
         if portfolio is None:
             raise ValueError(f"Portfolio with id {portfolio_id} not found")
+        resolved_as_of_date = (
+            await self.repo.get_latest_business_date() if as_of_date is None else as_of_date
+        )
 
-        resolved_as_of_date = as_of_date or await self.repo.get_latest_business_date()
         if resolved_as_of_date is None:
             raise ValueError("No business date is available for cash balance queries.")
         effective_reporting_currency = reporting_currency or portfolio.base_currency
@@ -268,6 +270,7 @@ class CashBalanceService:
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
+            instrument_asset_class=CASH_ASSET_CLASS,
         )
         return await self._resolver.build_cash_balances_response(
             portfolio=portfolio,
@@ -284,14 +287,12 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        if normalized_from_currency == normalized_to_currency:
-            return amount
-        rate = await self._get_fx_rate(
-            normalized_from_currency, normalized_to_currency, as_of_date
+        return await self._fx_converter.convert_amount(
+            amount=amount,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            as_of_date=as_of_date,
         )
-        return amount * rate
 
     async def _get_fx_rate(
         self,
@@ -299,21 +300,4 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
-        if cache_key in self._fx_cache:
-            return self._fx_cache[cache_key]
-        rate = await self.repo.get_latest_fx_rate(
-            from_currency=normalized_from_currency,
-            to_currency=normalized_to_currency,
-            as_of_date=as_of_date,
-        )
-        if rate is None:
-            raise ValueError(
-                "FX rate not found for "
-                f"{normalized_from_currency}/{normalized_to_currency} as of {as_of_date}."
-            )
-        resolved_rate = Decimal(str(rate))
-        self._fx_cache[cache_key] = resolved_rate
-        return resolved_rate
+        return await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date)
