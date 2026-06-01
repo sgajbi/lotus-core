@@ -198,14 +198,3 @@ class TransactionService:
                 as_of_date=as_of_date,
             ),
         )
-
-    async def _get_fx_rate(
-        self,
-        from_currency: str,
-        to_currency: str,
-        as_of_date: date,
-    ) -> Decimal:
-        return cast(
-            Decimal,
-            await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date),
-        )

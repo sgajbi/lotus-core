@@ -554,9 +554,8 @@ async def test_get_transactions_raises_when_reporting_currency_rate_missing(
             )
 
 
-async def test_transaction_service_normalizes_fx_cache_and_identity_checks() -> None:
+async def test_transaction_service_convert_amount_delegates_to_fx_converter() -> None:
     repo = AsyncMock(spec=TransactionRepository)
-    repo.get_latest_fx_rate.return_value = Decimal("1.50")
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -570,18 +569,11 @@ async def test_transaction_service_normalizes_fx_cache_and_identity_checks() -> 
             to_currency="USD",
             as_of_date=date(2025, 1, 15),
         )
-        first_rate = await service._get_fx_rate(" eur ", " usd ", date(2025, 1, 15))
-        second_rate = await service._get_fx_rate("EUR", "USD", date(2025, 1, 15))
 
     assert isinstance(service._fx_converter, CachedFxRateConverter)
     assert same_currency == Decimal("10")
-    assert first_rate == Decimal("1.50")
-    assert second_rate == Decimal("1.50")
-    repo.get_latest_fx_rate.assert_awaited_once_with(
-        from_currency="EUR",
-        to_currency="USD",
-        as_of_date=date(2025, 1, 15),
-    )
+    assert not hasattr(service, "_get_fx_rate")
+    repo.get_latest_fx_rate.assert_not_awaited()
 
 
 async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
