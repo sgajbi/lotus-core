@@ -27,6 +27,7 @@ from src.services.query_service.app.services.position_holdings import (
     latest_holdings_evidence_timestamp,
     market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
+    portfolio_position_rows_data,
     portfolio_positions_response_data,
     position_held_since_requests,
     position_requires_market_price_freshness,
@@ -328,6 +329,58 @@ async def test_position_response_data_maps_history_date_and_missing_instrument()
     assert position.isin is None
     assert position.currency is None
     assert position.reprocessing_status is None
+
+
+async def test_portfolio_position_rows_data_applies_snapshot_and_fallback_valuation_policy() -> (
+    None
+):
+    snapshot_row = DailyPositionSnapshot(
+        security_id=" SNAP_A ",
+        quantity=Decimal("100"),
+        cost_basis=Decimal("1000"),
+        cost_basis_local=Decimal("1000"),
+        market_price=Decimal("10"),
+        market_value=Decimal("1000"),
+        market_value_local=Decimal("1000"),
+        unrealized_gain_loss=Decimal("0"),
+        unrealized_gain_loss_local=Decimal("0"),
+        date=date(2025, 1, 1),
+    )
+    history_row = PositionHistory(
+        security_id=" HIST_A ",
+        quantity=Decimal("20"),
+        cost_basis=Decimal("200"),
+        cost_basis_local=Decimal("198"),
+        position_date=date(2025, 1, 2),
+    )
+    instrument = Instrument(name="Mapped Instrument", asset_class="Equity")
+
+    positions = portfolio_position_rows_data(
+        db_results=[
+            (snapshot_row, instrument, PositionState(status="CURRENT")),
+            (history_row, None, PositionState(status="REPROCESSING")),
+        ],
+        snapshot_security_ids={"SNAP_A"},
+        fallback_valuation_map={
+            "HIST_A": {
+                "market_price": Decimal("11"),
+                "market_value": Decimal("220"),
+                "unrealized_gain_loss": Decimal("20"),
+                "market_value_local": Decimal("218"),
+                "unrealized_gain_loss_local": Decimal("20"),
+            }
+        },
+    )
+
+    assert [position.security_id for position in positions] == ["SNAP_A", "HIST_A"]
+    assert positions[0].position_date == date(2025, 1, 1)
+    assert positions[0].valuation is not None
+    assert positions[0].valuation.market_value == Decimal("1000")
+    assert positions[1].instrument_name == "N/A"
+    assert positions[1].position_date == date(2025, 1, 2)
+    assert positions[1].valuation is not None
+    assert positions[1].valuation.market_value == Decimal("220")
+    assert positions[1].reprocessing_status == "REPROCESSING"
 
 
 async def test_assign_position_weights_uses_market_value_share() -> None:

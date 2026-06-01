@@ -113,6 +113,33 @@ def position_response_data(
     )
 
 
+def portfolio_position_rows_data(
+    *,
+    db_results: list[tuple[Any, Any, Any]],
+    snapshot_security_ids: set[str],
+    fallback_valuation_map: dict[str, dict[str, Any] | None],
+) -> list[Position]:
+    positions: list[Position] = []
+    for position_row, instrument, pos_state in db_results:
+        security_id = normalize_security_id(position_row.security_id)
+        is_snapshot_row = security_id in snapshot_security_ids
+        valuation = position_valuation_data(
+            position_row=position_row,
+            is_snapshot_row=is_snapshot_row,
+            fallback_valuation=fallback_valuation_map.get(security_id),
+        )
+        positions.append(
+            position_response_data(
+                position_row=position_row,
+                instrument=instrument,
+                pos_state=pos_state,
+                is_snapshot_row=is_snapshot_row,
+                valuation=valuation,
+            )
+        )
+    return positions
+
+
 def position_weight_base_value(position: Position) -> Decimal:
     if position.valuation is not None and position.valuation.market_value is not None:
         return decimal_or_zero(position.valuation.market_value)

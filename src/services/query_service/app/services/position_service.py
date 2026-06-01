@@ -21,10 +21,9 @@ from .position_holdings import (
     latest_holdings_evidence_timestamp,
     market_price_freshness_security_ids,
     merge_snapshot_and_history_position_rows,
+    portfolio_position_rows_data,
     portfolio_positions_response_data,
     position_held_since_requests,
-    position_response_data,
-    position_valuation_data,
     should_fetch_fallback_valuation_map,
 )
 
@@ -132,24 +131,11 @@ class PositionService:
                 )
             )
 
-        positions = []
-        for position_row, instrument, pos_state in db_results:
-            security_id = normalize_security_id(position_row.security_id)
-            is_snapshot_row = security_id in snapshot_security_ids
-            valuation_dto = position_valuation_data(
-                position_row=position_row,
-                is_snapshot_row=is_snapshot_row,
-                fallback_valuation=fallback_valuation_map.get(security_id),
-            )
-            position_dto = position_response_data(
-                position_row=position_row,
-                instrument=instrument,
-                pos_state=pos_state,
-                is_snapshot_row=is_snapshot_row,
-                valuation=valuation_dto,
-            )
-            positions.append(position_dto)
-
+        positions = portfolio_position_rows_data(
+            db_results=db_results,
+            snapshot_security_ids=snapshot_security_ids,
+            fallback_valuation_map=fallback_valuation_map,
+        )
         assign_position_weights(positions)
 
         held_since_requests = position_held_since_requests(
