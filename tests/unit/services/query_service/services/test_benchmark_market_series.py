@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -7,9 +8,11 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.benchmark_market_series import (
     benchmark_market_series_evidence_plan,
+    benchmark_market_series_evidence_read_names,
     benchmark_market_series_fx_context,
     benchmark_market_series_next_page_token_payload,
     benchmark_market_series_normalization_status,
+    benchmark_market_series_read_evidence,
     benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
 )
@@ -94,6 +97,64 @@ def test_benchmark_market_series_evidence_plan_suppresses_identity_fx_read() -> 
     assert plan.include_index_returns
     assert not plan.include_benchmark_returns
     assert not plan.include_fx_rates
+
+
+def test_benchmark_market_series_evidence_read_names_preserve_repository_order() -> None:
+    fx_context = benchmark_market_series_fx_context(
+        benchmark_currency="EUR",
+        target_currency="USD",
+        requested_fields={"benchmark_return", "index_price", "index_return", "fx_rate"},
+    )
+    plan = benchmark_market_series_evidence_plan(
+        requested_fields={"benchmark_return", "index_price", "index_return", "fx_rate"},
+        fx_context=fx_context,
+    )
+
+    assert benchmark_market_series_evidence_read_names(plan) == [
+        "components",
+        "index_prices",
+        "index_returns",
+        "benchmark_returns",
+        "fx_rates",
+    ]
+
+
+def test_benchmark_market_series_read_evidence_collects_only_planned_families() -> None:
+    async def run_case() -> tuple[dict[str, str], list[str]]:
+        read_order: list[str] = []
+
+        async def read_family(name: str) -> str:
+            read_order.append(name)
+            return f"{name}-rows"
+
+        fx_context = benchmark_market_series_fx_context(
+            benchmark_currency="USD",
+            target_currency="USD",
+            requested_fields={"index_price", "fx_rate"},
+        )
+        plan = benchmark_market_series_evidence_plan(
+            requested_fields={"index_price", "fx_rate"},
+            fx_context=fx_context,
+        )
+        results = await benchmark_market_series_read_evidence(
+            evidence_plan=plan,
+            read_factories={
+                "components": lambda: read_family("components"),
+                "index_prices": lambda: read_family("index_prices"),
+                "index_returns": lambda: read_family("index_returns"),
+                "benchmark_returns": lambda: read_family("benchmark_returns"),
+                "fx_rates": lambda: read_family("fx_rates"),
+            },
+        )
+        return results, read_order
+
+    results, read_order = asyncio.run(run_case())
+
+    assert read_order == ["components", "index_prices"]
+    assert results == {
+        "components": "components-rows",
+        "index_prices": "index_prices-rows",
+    }
 
 
 def test_benchmark_market_series_request_scope_binds_paging_to_request() -> None:

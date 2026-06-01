@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -144,6 +145,32 @@ def benchmark_market_series_evidence_plan(
         include_benchmark_returns="benchmark_return" in requested_fields,
         include_fx_rates=fx_context.should_read_fx_rates,
     )
+
+
+def benchmark_market_series_evidence_read_names(
+    evidence_plan: BenchmarkMarketSeriesEvidencePlan,
+) -> list[str]:
+    read_names = ["components"]
+    if evidence_plan.include_index_prices:
+        read_names.append("index_prices")
+    if evidence_plan.include_index_returns:
+        read_names.append("index_returns")
+    if evidence_plan.include_benchmark_returns:
+        read_names.append("benchmark_returns")
+    if evidence_plan.include_fx_rates:
+        read_names.append("fx_rates")
+    return read_names
+
+
+async def benchmark_market_series_read_evidence(
+    *,
+    evidence_plan: BenchmarkMarketSeriesEvidencePlan,
+    read_factories: Mapping[str, Callable[[], Awaitable[Any]]],
+) -> dict[str, Any]:
+    market_results = {}
+    for read_name in benchmark_market_series_evidence_read_names(evidence_plan):
+        market_results[read_name] = await read_factories[read_name]()
+    return market_results
 
 
 def benchmark_market_series_normalization_status(

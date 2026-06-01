@@ -88,6 +88,7 @@ from .benchmark_market_series import (
     benchmark_market_series_evidence_plan,
     benchmark_market_series_fx_context,
     benchmark_market_series_next_page_token_payload,
+    benchmark_market_series_read_evidence,
     benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
 )
@@ -977,57 +978,42 @@ class IntegrationService:
             requested_fields=request_scope.requested_fields,
             fx_context=fx_context,
         )
-        market_read_names = ["components"]
-        market_reads: list[Any] = [
-            self._reference_repository.list_benchmark_components_overlapping_window(
-                benchmark_id=benchmark_id,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-                index_ids=index_ids,
-            )
-        ]
-        if evidence_plan.include_index_prices:
-            market_read_names.append("index_prices")
-            market_reads.append(
-                self._reference_repository.list_index_price_points(
+        market_results = await benchmark_market_series_read_evidence(
+            evidence_plan=evidence_plan,
+            read_factories={
+                "components": lambda: (
+                    self._reference_repository.list_benchmark_components_overlapping_window(
+                        benchmark_id=benchmark_id,
+                        start_date=request.window.start_date,
+                        end_date=request.window.end_date,
+                        index_ids=index_ids,
+                    )
+                ),
+                "index_prices": lambda: self._reference_repository.list_index_price_points(
                     index_ids=index_ids,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
-                )
-            )
-        if evidence_plan.include_index_returns:
-            market_read_names.append("index_returns")
-            market_reads.append(
-                self._reference_repository.list_index_return_points(
+                ),
+                "index_returns": lambda: self._reference_repository.list_index_return_points(
                     index_ids=index_ids,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
-                )
-            )
-        if evidence_plan.include_benchmark_returns:
-            market_read_names.append("benchmark_returns")
-            market_reads.append(
-                self._reference_repository.list_benchmark_return_points(
-                    benchmark_id=benchmark_id,
-                    start_date=request.window.start_date,
-                    end_date=request.window.end_date,
-                )
-            )
-
-        if evidence_plan.include_fx_rates:
-            market_read_names.append("fx_rates")
-            market_reads.append(
-                self._reference_repository.get_fx_rates(
+                ),
+                "benchmark_returns": lambda: (
+                    self._reference_repository.list_benchmark_return_points(
+                        benchmark_id=benchmark_id,
+                        start_date=request.window.start_date,
+                        end_date=request.window.end_date,
+                    )
+                ),
+                "fx_rates": lambda: self._reference_repository.get_fx_rates(
                     from_currency=benchmark_currency,
                     to_currency=request.target_currency,
                     start_date=request.window.start_date,
                     end_date=request.window.end_date,
-                )
-            )
-
-        market_results = {}
-        for name, market_read in zip(market_read_names, market_reads, strict=True):
-            market_results[name] = await market_read
+                ),
+            },
+        )
         next_page_token: str | None = None
         next_page_token_payload = benchmark_market_series_next_page_token_payload(
             request_scope=request_scope,
