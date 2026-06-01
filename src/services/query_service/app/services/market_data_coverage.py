@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -47,6 +48,30 @@ def market_data_coverage_read_scope(
         valuation_currency=valuation_currency,
         fx_pairs=fx_pairs,
         unique_fx_pairs=list(dict.fromkeys(fx_pairs)),
+    )
+
+
+async def resolve_market_data_coverage_response(
+    *,
+    repository: Any,
+    request: MarketDataCoverageRequest,
+) -> MarketDataCoverageWindowResponse:
+    read_scope = market_data_coverage_read_scope(request)
+    price_rows, fx_rows = await asyncio.gather(
+        repository.list_latest_market_prices(
+            security_ids=read_scope.unique_instrument_ids,
+            as_of_date=request.as_of_date,
+        ),
+        repository.list_latest_fx_rates(
+            currency_pairs=read_scope.unique_fx_pairs,
+            as_of_date=request.as_of_date,
+        ),
+    )
+    return build_market_data_coverage_response(
+        request=request,
+        read_scope=read_scope,
+        price_rows=price_rows,
+        fx_rows=fx_rows,
     )
 
 

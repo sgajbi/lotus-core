@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.market_data_coverage import (
     build_market_data_coverage_response,
     market_data_coverage_read_scope,
+    resolve_market_data_coverage_response,
 )
 
 
@@ -79,6 +81,79 @@ def test_market_data_coverage_response_preserves_ready_evidence_and_runtime_line
         "source_system": "market_prices+fx_rates",
         "contract_version": "rfc_087_v1",
     }
+
+
+def test_resolve_market_data_coverage_response_orchestrates_parallel_reads() -> None:
+    async def run_case() -> tuple[object, list[tuple[str, object]]]:
+        call_log: list[tuple[str, object]] = []
+        prices_started = asyncio.Event()
+        fx_started = asyncio.Event()
+
+        class Repository:
+            async def list_latest_market_prices(
+                self,
+                *,
+                security_ids: list[str],
+                as_of_date: date,
+            ) -> list[SimpleNamespace]:
+                call_log.append(
+                    ("prices", {"security_ids": security_ids, "as_of_date": as_of_date})
+                )
+                prices_started.set()
+                await fx_started.wait()
+                return [
+                    SimpleNamespace(
+                        security_id="EQ_US_AAPL",
+                        price_date=date(2026, 4, 10),
+                        price=Decimal("187.1200000000"),
+                        currency="USD",
+                    )
+                ]
+
+            async def list_latest_fx_rates(
+                self,
+                *,
+                currency_pairs: list[tuple[str, str]],
+                as_of_date: date,
+            ) -> list[SimpleNamespace]:
+                call_log.append(
+                    ("fx", {"currency_pairs": currency_pairs, "as_of_date": as_of_date})
+                )
+                fx_started.set()
+                await prices_started.wait()
+                return [
+                    SimpleNamespace(
+                        from_currency="USD",
+                        to_currency="SGD",
+                        rate_date=date(2026, 4, 10),
+                        rate=Decimal("1.3521000000"),
+                    )
+                ]
+
+        response = await resolve_market_data_coverage_response(
+            repository=Repository(),
+            request=SimpleNamespace(
+                as_of_date=date(2026, 4, 10),
+                instrument_ids=[" EQ_US_AAPL ", "EQ_US_AAPL"],
+                currency_pairs=[
+                    SimpleNamespace(from_currency="USD", to_currency="SGD"),
+                    SimpleNamespace(from_currency="USD", to_currency="SGD"),
+                ],
+                valuation_currency=None,
+                max_staleness_days=5,
+            ),
+        )
+        return response, call_log
+
+    response, call_log = asyncio.run(run_case())
+
+    assert response.supportability.state == "READY"
+    assert response.supportability.requested_price_count == 2
+    assert response.supportability.requested_fx_count == 2
+    assert call_log == [
+        ("prices", {"security_ids": ["EQ_US_AAPL"], "as_of_date": date(2026, 4, 10)}),
+        ("fx", {"currency_pairs": [("USD", "SGD")], "as_of_date": date(2026, 4, 10)}),
+    ]
 
 
 @pytest.mark.parametrize(

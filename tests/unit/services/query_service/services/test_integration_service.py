@@ -4178,7 +4178,7 @@ async def test_market_data_coverage_deduplicates_repository_lookup_scope() -> No
 
 
 @pytest.mark.asyncio
-async def test_market_data_coverage_reads_prices_and_fx_rates_sequentially() -> None:
+async def test_market_data_coverage_reads_prices_and_fx_rates() -> None:
     service = make_service()
     call_order: list[str] = []
 

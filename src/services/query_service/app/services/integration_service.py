@@ -121,8 +121,7 @@ from .liquidity_reserve_requirement import (
     resolve_liquidity_reserve_requirement_response,
 )
 from .market_data_coverage import (
-    build_market_data_coverage_response,
-    market_data_coverage_read_scope,
+    resolve_market_data_coverage_response,
 )
 from .model_portfolio_targets import resolve_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
@@ -468,20 +467,9 @@ class IntegrationService:
         self,
         request: MarketDataCoverageRequest,
     ) -> MarketDataCoverageWindowResponse:
-        read_scope = market_data_coverage_read_scope(request)
-        price_rows = await self._reference_repository.list_latest_market_prices(
-            security_ids=read_scope.unique_instrument_ids,
-            as_of_date=request.as_of_date,
-        )
-        fx_rows = await self._reference_repository.list_latest_fx_rates(
-            currency_pairs=read_scope.unique_fx_pairs,
-            as_of_date=request.as_of_date,
-        )
-        return build_market_data_coverage_response(
+        return await resolve_market_data_coverage_response(
+            repository=self._reference_repository,
             request=request,
-            read_scope=read_scope,
-            price_rows=price_rows,
-            fx_rows=fx_rows,
         )
 
     async def get_dpm_source_readiness(
