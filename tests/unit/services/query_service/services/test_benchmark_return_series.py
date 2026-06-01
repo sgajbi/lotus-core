@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.benchmark_return_series import (
     build_benchmark_return_series_response,
+    resolve_benchmark_return_series_response,
 )
 
 
@@ -55,3 +57,54 @@ def test_build_benchmark_return_series_response_maps_points_and_lineage() -> Non
         "source_system": "lotus-core-query-service",
         "generated_by": "integration.benchmark_return_series",
     }
+
+
+def test_resolve_benchmark_return_series_response_orchestrates_repository_read() -> None:
+    request = BenchmarkReturnSeriesRequest(
+        as_of_date=date(2026, 1, 31),
+        window=IntegrationWindow(
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 31),
+        ),
+        frequency="daily",
+    )
+
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def list_benchmark_return_points(
+                self,
+                **kwargs: object,
+            ) -> list[SimpleNamespace]:
+                calls.append(kwargs)
+                return [
+                    SimpleNamespace(
+                        series_date=date(2026, 1, 30),
+                        benchmark_return=Decimal("0.0019"),
+                        return_period="1d",
+                        return_convention="total_return_index",
+                        series_currency="USD",
+                        quality_status="accepted",
+                    )
+                ]
+
+        response = await resolve_benchmark_return_series_response(
+            repository=Repository(),
+            benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+            request=request,
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response.benchmark_id == "BMK_GLOBAL_BALANCED_60_40"
+    assert response.points[0].benchmark_return == Decimal("0.0019")
+    assert response.request_fingerprint
+    assert calls == [
+        {
+            "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+            "start_date": date(2026, 1, 1),
+            "end_date": date(2026, 1, 31),
+        }
+    ]

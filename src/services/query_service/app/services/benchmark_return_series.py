@@ -11,6 +11,24 @@ from .reference_data_mappers import benchmark_return_series_point
 from .request_fingerprint import series_request_fingerprint
 
 
+async def resolve_benchmark_return_series_response(
+    *,
+    repository: Any,
+    benchmark_id: str,
+    request: BenchmarkReturnSeriesRequest,
+) -> BenchmarkReturnSeriesResponse:
+    rows = await repository.list_benchmark_return_points(
+        benchmark_id=benchmark_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+    )
+    return build_benchmark_return_series_response(
+        benchmark_id=benchmark_id,
+        request=request,
+        rows=rows,
+    )
+
+
 def build_benchmark_return_series_response(
     *,
     benchmark_id: str,

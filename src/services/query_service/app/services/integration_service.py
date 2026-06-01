@@ -85,7 +85,7 @@ from .benchmark_coverage import resolve_benchmark_coverage_response
 from .benchmark_market_series import (
     resolve_benchmark_market_series_response,
 )
-from .benchmark_return_series import build_benchmark_return_series_response
+from .benchmark_return_series import resolve_benchmark_return_series_response
 from .cio_model_change_cohort import resolve_cio_model_change_affected_cohort_response
 from .classification_taxonomy import resolve_classification_taxonomy_response
 from .client_income_needs_schedule import resolve_client_income_needs_schedule_response
@@ -538,15 +538,10 @@ class IntegrationService:
     async def get_benchmark_return_series(
         self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
     ) -> BenchmarkReturnSeriesResponse:
-        rows = await self._reference_repository.list_benchmark_return_points(
-            benchmark_id=benchmark_id,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        )
-        return build_benchmark_return_series_response(
+        return await resolve_benchmark_return_series_response(
+            repository=self._reference_repository,
             benchmark_id=benchmark_id,
             request=request,
-            rows=rows,
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
