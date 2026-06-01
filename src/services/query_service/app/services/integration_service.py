@@ -131,7 +131,6 @@ from .market_data_coverage import (
     build_market_data_coverage_response,
     market_data_coverage_read_scope,
 )
-from .market_reference_coverage import market_reference_coverage_response
 from .model_portfolio_targets import build_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
 from .planned_withdrawal_schedule import build_planned_withdrawal_schedule_response
@@ -147,6 +146,7 @@ from .reference_data_mappers import benchmark_definition_response
 from .request_fingerprint import (
     request_fingerprint as build_request_fingerprint,
 )
+from .risk_free_coverage import build_risk_free_coverage_response
 from .risk_free_series import build_risk_free_series_response
 from .sustainability_preference_profile import (
     build_sustainability_preference_profile_response,
@@ -1273,26 +1273,16 @@ class IntegrationService:
         end_date: date,
     ) -> CoverageResponse:
         normalized_currency = normalize_currency_code(currency)
-        request_fingerprint = build_request_fingerprint(
-            {
-                "coverage_key": "risk_free_coverage",
-                "currency": normalized_currency,
-                "window": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat(),
-                },
-            }
-        )
         coverage = await self._reference_repository.get_risk_free_coverage(
             currency=normalized_currency,
             start_date=start_date,
             end_date=end_date,
         )
-        return market_reference_coverage_response(
+        return build_risk_free_coverage_response(
+            currency=normalized_currency,
             coverage=coverage,
             start_date=start_date,
             end_date=end_date,
-            request_fingerprint=request_fingerprint,
         )
 
     async def get_classification_taxonomy(
