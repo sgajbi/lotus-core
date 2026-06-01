@@ -16,9 +16,11 @@ from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 from src.services.query_service.app.services.position_service import (
     PositionService,
+    assign_position_weights,
     merge_snapshot_and_history_position_rows,
     position_response_data,
     position_valuation_data,
+    position_weight_base_value,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -174,6 +176,78 @@ async def test_position_response_data_maps_history_date_and_missing_instrument()
     assert position.isin is None
     assert position.currency is None
     assert position.reprocessing_status is None
+
+
+async def test_assign_position_weights_uses_market_value_share() -> None:
+    first = Position(
+        security_id="S1",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("75"),
+        position_date=date(2025, 1, 1),
+        instrument_name="First",
+        valuation=ValuationData(market_value=Decimal("100")),
+    )
+    second = Position(
+        security_id="S2",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Second",
+        valuation=ValuationData(market_value=Decimal("300")),
+    )
+
+    assign_position_weights([first, second])
+
+    assert first.weight == Decimal("0.25")
+    assert second.weight == Decimal("0.75")
+
+
+async def test_assign_position_weights_falls_back_to_cost_basis() -> None:
+    valued = Position(
+        security_id="S1",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("75"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Valued",
+        valuation=ValuationData(market_value=Decimal("100")),
+    )
+    unvalued = Position(
+        security_id="S2",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("300"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Unvalued",
+        valuation=ValuationData(market_value=None),
+    )
+
+    assign_position_weights([valued, unvalued])
+
+    assert valued.weight == Decimal("0.25")
+    assert unvalued.weight == Decimal("0.75")
+
+
+async def test_assign_position_weights_sets_zero_when_no_positive_base_value() -> None:
+    first = Position(
+        security_id="S1",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("0"),
+        position_date=date(2025, 1, 1),
+        instrument_name="First",
+        valuation=ValuationData(market_value=Decimal("0")),
+    )
+    second = Position(
+        security_id="S2",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("0"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Second",
+        valuation=ValuationData(market_value=None),
+    )
+
+    assign_position_weights([first, second])
+
+    assert first.weight == Decimal("0")
+    assert second.weight == Decimal("0")
 
 
 @pytest.fixture
@@ -860,8 +934,8 @@ async def test_weight_base_value_prefers_market_value_and_falls_back_to_cost_bas
         valuation=ValuationData(market_value=None),
     )
 
-    assert PositionService._weight_base_value(valued_position) == Decimal("100")
-    assert PositionService._weight_base_value(unvalued_position) == Decimal("75")
+    assert position_weight_base_value(valued_position) == Decimal("100")
+    assert position_weight_base_value(unvalued_position) == Decimal("75")
 
 
 async def test_get_latest_positions_uses_default_held_since_when_map_missing(

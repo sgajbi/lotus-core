@@ -101,6 +101,28 @@ def position_response_data(
     )
 
 
+def position_weight_base_value(position: Position) -> Decimal:
+    if position.valuation is not None and position.valuation.market_value is not None:
+        return decimal_or_zero(position.valuation.market_value)
+    return decimal_or_zero(position.cost_basis)
+
+
+def assign_position_weights(positions: list[Position]) -> None:
+    total_market_value = Decimal(0)
+    position_values: list[Decimal] = []
+    for position in positions:
+        base_value = position_weight_base_value(position)
+        position_values.append(base_value)
+        total_market_value += base_value
+
+    if total_market_value > 0:
+        for position, value in zip(positions, position_values):
+            position.weight = value / total_market_value
+    else:
+        for position in positions:
+            position.weight = Decimal(0)
+
+
 class PositionService:
     """
     Handles the business logic for querying position data.
@@ -233,19 +255,7 @@ class PositionService:
             )
             positions.append(position_dto)
 
-        total_market_value = Decimal(0)
-        position_values: list[Decimal] = []
-        for position in positions:
-            base_value = self._weight_base_value(position)
-            position_values.append(base_value)
-            total_market_value += base_value
-
-        if total_market_value > 0:
-            for position, value in zip(positions, position_values):
-                position.weight = value / total_market_value
-        else:
-            for position in positions:
-                position.weight = Decimal(0)
+        assign_position_weights(positions)
 
         held_since_requests: list[tuple[int, str, int, date]] = []
         for idx, ((position_row, _instrument, pos_state), position) in enumerate(
@@ -349,12 +359,6 @@ class PositionService:
             and position.valuation is not None
             and position.valuation.market_price is not None
         )
-
-    @staticmethod
-    def _weight_base_value(position: Position) -> Decimal:
-        if position.valuation is not None and position.valuation.market_value is not None:
-            return decimal_or_zero(position.valuation.market_value)
-        return decimal_or_zero(position.cost_basis)
 
     @staticmethod
     def _latest_holdings_evidence_timestamp(
