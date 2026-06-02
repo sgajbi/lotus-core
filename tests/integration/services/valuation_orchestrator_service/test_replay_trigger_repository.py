@@ -60,12 +60,8 @@ async def setup_reprocessing_trigger_data(async_db_session: AsyncSession, clean_
             PositionState(
                 portfolio_id="P2", security_id="S2", epoch=0, watermark_date=date(2025, 1, 1)
             ),
-            InstrumentReprocessingState(
-                security_id="S1", earliest_impacted_date=date(2025, 8, 10)
-            ),
-            InstrumentReprocessingState(
-                security_id="S2", earliest_impacted_date=date(2025, 8, 11)
-            ),
+            InstrumentReprocessingState(security_id="S1", earliest_impacted_date=date(2025, 8, 10)),
+            InstrumentReprocessingState(security_id="S2", earliest_impacted_date=date(2025, 8, 11)),
         ]
     )
     await async_db_session.commit()

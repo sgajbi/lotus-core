@@ -176,9 +176,7 @@ async def test_scheduler_drains_zombie_backlog_and_reaches_fresh_live_key(
     jobs_after_first_poll = (
         (
             await async_db_session.execute(
-                select(PortfolioValuationJob).where(
-                    PortfolioValuationJob.portfolio_id == "LIVE_P1"
-                )
+                select(PortfolioValuationJob).where(PortfolioValuationJob.portfolio_id == "LIVE_P1")
             )
         )
         .scalars()
@@ -249,8 +247,7 @@ async def test_scheduler_ignores_missing_instrument_backfill_keys_and_reaches_li
     jobs = (
         (
             await async_db_session.execute(
-                select(PortfolioValuationJob)
-                .order_by(
+                select(PortfolioValuationJob).order_by(
                     PortfolioValuationJob.portfolio_id.asc(),
                     PortfolioValuationJob.valuation_date.asc(),
                 )
@@ -344,9 +341,7 @@ async def test_scheduler_advances_live_watermark_from_first_open_date_not_sentin
     await async_db_session.commit()
     async_db_session.expire_all()
 
-    live_state = await async_db_session.get(
-        PositionState, ("LIVE_ADVANCE_P1", "LIVE_ADVANCE_S1")
-    )
+    live_state = await async_db_session.get(PositionState, ("LIVE_ADVANCE_P1", "LIVE_ADVANCE_S1"))
     assert live_state is not None
     assert live_state.watermark_date == latest_business_date
     assert live_state.status == "CURRENT"

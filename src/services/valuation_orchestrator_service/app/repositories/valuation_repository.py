@@ -55,9 +55,7 @@ class ValuationRepository(ValuationRepositoryBase):
         )
         result = await self.db.execute(stmt)
         claimed_states = list(result.scalars().all())
-        claimed_state_by_security_id = {
-            state.security_id: state for state in claimed_states
-        }
+        claimed_state_by_security_id = {state.security_id: state for state in claimed_states}
         return [
             claimed_state_by_security_id[security_id]
             for security_id in claimed_security_ids

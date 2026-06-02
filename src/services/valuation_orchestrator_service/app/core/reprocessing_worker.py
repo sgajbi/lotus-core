@@ -106,8 +106,8 @@ class ReprocessingWorker:
                                 find_later_holdings = (
                                     valuation_repo.find_portfolios_first_holding_security_after_date
                                 )
-                                affected_portfolios = (
-                                    await find_later_holdings(security_id, earliest_date)
+                                affected_portfolios = await find_later_holdings(
+                                    security_id, earliest_date
                                 )
 
                             should_complete_job = True
@@ -165,9 +165,7 @@ class ReprocessingWorker:
                             terminal_status = "COMPLETE" if should_complete_job else "PENDING"
                             if await job_repo.update_job_status(job.id, terminal_status):
                                 if should_complete_job:
-                                    observe_reprocessing_worker_jobs_completed(
-                                        "RESET_WATERMARKS"
-                                    )
+                                    observe_reprocessing_worker_jobs_completed("RESET_WATERMARKS")
                             else:
                                 ownership_lost_reason = (
                                     "reset_watermarks_terminal_ownership_lost"
