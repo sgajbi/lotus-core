@@ -298,8 +298,7 @@ async def get_load_run_progress(
     business_date: str = Query(
         ...,
         description=(
-            "Target business date in YYYY-MM-DD format used to measure "
-            "completion coverage."
+            "Target business date in YYYY-MM-DD format used to measure completion coverage."
         ),
         examples=["2026-04-17"],
     ),

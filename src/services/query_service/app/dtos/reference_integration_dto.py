@@ -1181,9 +1181,7 @@ class ExternalEligibleHedgeInstrumentSupportability(BaseModel):
     )
     blocked_capabilities: list[str] = Field(
         default_factory=list,
-        description=(
-            "Capabilities explicitly blocked by unavailable eligible-instrument posture."
-        ),
+        description=("Capabilities explicitly blocked by unavailable eligible-instrument posture."),
     )
 
     model_config = ConfigDict()
@@ -1221,9 +1219,7 @@ class ExternalEligibleHedgeInstrumentResponse(SourceDataProductRuntimeMetadata):
     )
     supportability: ExternalEligibleHedgeInstrumentSupportability = Field(
         ...,
-        description=(
-            "Fail-closed supportability posture for external eligible hedge instruments."
-        ),
+        description=("Fail-closed supportability posture for external eligible hedge instruments."),
     )
     lineage: dict[str, str] = Field(
         default_factory=dict,
@@ -2408,9 +2404,7 @@ class ExternalOrderExecutionAcknowledgementSupportability(BaseModel):
     )
     blocked_capabilities: list[str] = Field(
         default_factory=list,
-        description=(
-            "Capabilities explicitly blocked by unavailable OMS acknowledgement posture."
-        ),
+        description=("Capabilities explicitly blocked by unavailable OMS acknowledgement posture."),
     )
 
     model_config = ConfigDict()

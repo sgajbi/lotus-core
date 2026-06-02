@@ -56,4 +56,3 @@ class PortfolioService:
         if not db_portfolio:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
         return PortfolioRecord.model_validate(db_portfolio)
-

@@ -1105,9 +1105,10 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         response_schema["properties"]["resolved_as_of_date"]["description"]
         == "Effective as-of anchor applied to this reference contract."
     )
-    assert "Latest complete performance horizon" in response_schema["properties"][
-        "performance_end_date"
-    ]["description"]
+    assert (
+        "Latest complete performance horizon"
+        in response_schema["properties"]["performance_end_date"]["description"]
+    )
     assert (
         response_schema["properties"]["reference_state_policy"]["default"]
         == "current_portfolio_reference_state"

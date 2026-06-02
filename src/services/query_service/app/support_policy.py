@@ -10,6 +10,4 @@ SUPPORT_FAILED_WINDOW_DESCRIPTION = (
 CALCULATOR_SLO_STALE_THRESHOLD_DESCRIPTION = (
     "Threshold in minutes used to classify stale PROCESSING jobs."
 )
-CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION = (
-    "Window in hours used to count recent failed jobs."
-)
+CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION = "Window in hours used to count recent failed jobs."

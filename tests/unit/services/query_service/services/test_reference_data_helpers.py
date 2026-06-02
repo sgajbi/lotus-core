@@ -95,8 +95,7 @@ def test_resolve_component_window_rows_infers_superseded_effective_end_dates() -
     )
 
     resolved_windows = [
-        (row.composition_effective_from, row.composition_effective_to)
-        for row in resolved_rows
+        (row.composition_effective_from, row.composition_effective_to) for row in resolved_rows
     ]
 
     assert resolved_windows == [
