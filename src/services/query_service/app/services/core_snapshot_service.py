@@ -162,7 +162,10 @@ class CoreSnapshotService:
 
         if request.snapshot_mode == CoreSnapshotMode.SIMULATION:
             session_opts = request.simulation
-            assert session_opts is not None
+            if session_opts is None:
+                raise CoreSnapshotBadRequestError(
+                    "simulation options are required when snapshot_mode=SIMULATION"
+                )
             session = await self.simulation_repo.get_session(session_opts.session_id)
             if session is None:
                 raise CoreSnapshotNotFoundError(

@@ -1185,13 +1185,22 @@ class AnalyticsTimeseriesService:
         started = perf_counter()
         try:
             if request.dataset_type == "portfolio_timeseries":
-                assert request.portfolio_timeseries_request is not None
+                if request.portfolio_timeseries_request is None:
+                    raise AnalyticsInputError(
+                        "INVALID_REQUEST",
+                        "portfolio_timeseries_request is required for "
+                        "portfolio_timeseries exports.",
+                    )
                 data_rows, page_depth = await self._collect_portfolio_timeseries_for_export(
                     portfolio_id=request.portfolio_id,
                     request=request.portfolio_timeseries_request,
                 )
             else:
-                assert request.position_timeseries_request is not None
+                if request.position_timeseries_request is None:
+                    raise AnalyticsInputError(
+                        "INVALID_REQUEST",
+                        "position_timeseries_request is required for position_timeseries exports.",
+                    )
                 data_rows, page_depth = await self._collect_position_timeseries_for_export(
                     portfolio_id=request.portfolio_id,
                     request=request.position_timeseries_request,

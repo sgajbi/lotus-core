@@ -152,3 +152,7 @@ CR-870 removed MD5 from query-service request fingerprint generation by consolid
 and analytics export fingerprints onto the shared SHA-256 helper. The Bandit baseline is down to 16
 findings: 5 low, 11 medium, and 0 high. Security remains report-only until the remaining findings
 are fixed or explicitly governed.
+
+CR-871 replaced production `assert` guards in operations routing, analytics export creation, and
+core snapshot simulation handling with explicit runtime guards and focused tests. The Bandit
+baseline is down to 12 findings: 1 low, 11 medium, and 0 high.

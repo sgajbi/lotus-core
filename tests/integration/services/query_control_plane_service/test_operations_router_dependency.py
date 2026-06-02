@@ -10,9 +10,18 @@ from src.services.query_control_plane_service.app.main import app
 from src.services.query_control_plane_service.app.routers.operations import (
     OperationsService,
     get_operations_service,
+    parse_required_iso_date,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_parse_required_iso_date_rejects_missing_value():
+    with pytest.raises(Exception) as exc_info:
+        parse_required_iso_date("business_date", None)  # type: ignore[arg-type]
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Missing required business_date."
 
 
 def _source_data_product_metadata(

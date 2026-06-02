@@ -2968,6 +2968,55 @@ async def test_create_export_job_completed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_export_job_rejects_missing_portfolio_request_after_runtime_guard() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        job_id="aexp_invalid",
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        status="accepted",
+        request_fingerprint="fp-invalid",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+        started_at=None,
+        completed_at=None,
+    )
+    service.export_repo = SimpleNamespace(
+        get_latest_by_fingerprint=AsyncMock(return_value=None),
+        create_job=AsyncMock(return_value=row),
+        get_job=AsyncMock(return_value=row),
+        mark_running=AsyncMock(
+            side_effect=lambda *_args, **_kwargs: setattr(row, "status", "running")
+        ),
+        mark_completed=AsyncMock(),
+        mark_failed=AsyncMock(
+            side_effect=lambda *_args, **kwargs: (
+                setattr(row, "status", "failed"),
+                setattr(row, "error_message", kwargs["error_message"]),
+            )
+        ),
+    )
+    request = AnalyticsExportCreateRequest.model_construct(
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        portfolio_timeseries_request=None,
+        position_timeseries_request=None,
+        result_format="json",
+        compression="none",
+    )
+
+    response = await service.create_export_job(request)
+
+    assert response.status == "failed"
+    assert row.error_message == (
+        "portfolio_timeseries_request is required for portfolio_timeseries exports."
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_export_job_not_found() -> None:
     service = make_service()
     service.export_repo = SimpleNamespace(get_job=AsyncMock(return_value=None))

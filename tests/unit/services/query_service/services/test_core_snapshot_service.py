@@ -421,6 +421,22 @@ async def test_core_snapshot_raises_when_simulation_session_missing(mock_depende
         await service.get_core_snapshot("PORT_001", request)
 
 
+async def test_core_snapshot_raises_when_simulation_options_missing(mock_dependencies):
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.SIMULATION,
+        sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
+        simulation={"session_id": "SIM_1"},
+    ).model_copy(update={"simulation": None})
+
+    with pytest.raises(
+        CoreSnapshotBadRequestError,
+        match="simulation options are required",
+    ):
+        await service.get_core_snapshot("PORT_001", request)
+
+
 async def test_core_snapshot_raises_when_session_portfolio_mismatch(mock_dependencies):
     (_, _, simulation_repo, _, _, _) = mock_dependencies
     simulation_repo.get_session.return_value = SimpleNamespace(
