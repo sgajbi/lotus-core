@@ -176,3 +176,10 @@ Bandit from report-only to an enforced quality-baseline gate.
 CR-875 added `make quality-bandit-gate` and a dedicated quality-baseline Bandit security workflow
 job. The clean Bandit baseline is now enforced in CI while the report-only workflow retains broader
 security and dependency-audit visibility.
+
+CR-876 cleaned the high-confidence Vulture findings under production source by marking intentional
+callback parameters explicitly unused. It also added `make quality-vulture-source-gate` and a
+dedicated quality-baseline Vulture source dead-code workflow job using
+`python -m vulture src --exclude "*/tests/*" --min-confidence 80`. The production-source dead-code
+baseline is now clean and enforced; the broader `src tests` Vulture report remains report-only
+because many test fixture parameters still require a separate cleanup plan.

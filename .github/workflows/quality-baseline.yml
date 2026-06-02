@@ -109,6 +109,21 @@ jobs:
       - name: Bandit security gate
         run: python -m bandit -r src -c pyproject.toml
 
+  vulture-source-gate:
+    name: Quality Baseline / Vulture Source Dead-Code Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install Vulture
+        run: python -m pip install vulture
+      - name: Vulture source dead-code gate
+        run: python -m vulture src --exclude "*/tests/*" --min-confidence 80
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest

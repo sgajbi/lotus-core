@@ -119,7 +119,7 @@ class ConsumerManager:
 
         logger.info("ConsumerManager initialized", extra={"num_consumers": len(self.consumers)})
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum, _frame):
         """Sets the shutdown event when a signal is received."""
         logger.info("Shutdown signal received", extra={"signal": signal.Signals(signum).name})
         self._shutdown_event.set()

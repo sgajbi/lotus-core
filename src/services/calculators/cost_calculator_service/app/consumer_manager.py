@@ -63,7 +63,7 @@ class ConsumerManager:
 
         logger.info(f"ConsumerManager initialized with {len(self.consumers)} consumer(s).")
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum, _frame):
         logger.info(
             "Received shutdown signal: "
             f"{signal.Signals(signum).name}. Initiating graceful shutdown..."

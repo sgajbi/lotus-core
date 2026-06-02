@@ -80,7 +80,7 @@ class ConsumerManager:
 
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum, _frame):
         logger.info("Received shutdown signal: %s", signal.Signals(signum).name)
         self._shutdown_event.set()
 

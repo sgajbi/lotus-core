@@ -12,7 +12,7 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Coverage | Not measured in initial baseline due collection errors | Add line and branch coverage artifacts after collection is clean |
 | Complexity | Average `A (3.01)` with several D/E hotspots | No new D/E hotspots; refactor existing hotspots by domain priority |
 | Maintainability | Most files A/B; selected C hotspot in OpenAPI enrichment | No new C/D maintainability files |
-| Dead code | Not measured locally; tool missing | Add vulture report-only CI |
+| Dead code | Production-source baseline clean and enforced after CR-876 by `make quality-vulture-source-gate` plus the quality-baseline Vulture source dead-code job; broader `src tests` Vulture report remains noisy with fixture-style test parameters | Keep production-source dead-code regression-free while reducing test-fixture Vulture noise in focused batches |
 | Dependency usage | Not measured locally; tool missing | Add deptry report-only CI |
 | Security | Bandit baseline clean and enforced after CR-875 by `make quality-bandit-gate` plus the quality-baseline Bandit security job | Keep Bandit regression-free while broader dependency-audit/security gates continue to ratchet |
 | Architecture boundaries | Existing strict architecture guard plus 2 kept import-linter contracts enforced by `make quality-import-boundary-gate` after CR-867 | Add focused import contracts as additional ownership boundaries stabilize |

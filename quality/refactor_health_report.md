@@ -15,12 +15,13 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, and Bandit security gates while other baseline checks remain report-only |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, and Vulture source dead-code gates while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
 | Security baseline | Clean and enforced | Bandit reports 0 findings and is enforced by `make quality-bandit-gate` plus the quality-baseline Bandit security job after CR-875 |
+| Production-source dead-code baseline | Clean and enforced | `make quality-vulture-source-gate` reports no high-confidence Vulture findings under production `src` after CR-876 |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
 
@@ -106,3 +107,6 @@ health before that claim is defensible.
     making the security baseline clean.
 31. Added a repo-native Bandit quality gate and a dedicated quality-baseline Bandit security
     workflow job so the clean security baseline is now enforced instead of report-only.
+32. Removed high-confidence Vulture findings from production source and added a repo-native source
+    dead-code gate plus quality-baseline workflow job, keeping production-source dead-code
+    regression-free while broader test-fixture dead-code noise remains report-only.
