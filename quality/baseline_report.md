@@ -114,3 +114,8 @@ regression gate remains clean.
 CR-863 continued the Ruff format ratchet across a bounded timeseries and valuation-orchestrator
 batch. Repository-wide `ruff format --check .` debt is down from 52 to 40 files while the Ruff lint
 regression gate remains clean.
+
+CR-864 continued the Ruff format ratchet across bounded shared test support, persistence repository
+integration collection, portfolio-common unit tests, and local stack contract tests.
+Repository-wide `ruff format --check .` debt is down from 40 to 21 files while the Ruff lint
+regression gate remains clean.

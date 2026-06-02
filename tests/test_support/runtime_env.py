@@ -165,9 +165,7 @@ def build_test_runtime_env(
     for key, default_port in seed_ports.items():
         if preserve_existing and runtime_env.get(key):
             continue
-        runtime_env[key] = (
-            str(_allocate_free_port(used_ports)) if dynamic_ports else default_port
-        )
+        runtime_env[key] = str(_allocate_free_port(used_ports)) if dynamic_ports else default_port
 
     runtime_env.setdefault("POSTGRES_DB", "portfolio_db")
     runtime_env.setdefault("POSTGRES_USER", "user")
@@ -184,18 +182,14 @@ def build_test_runtime_env(
     query_port = runtime_env["LOTUS_QUERY_HOST_PORT"]
     query_control_plane_port = runtime_env["LOTUS_QUERY_CONTROL_PLANE_HOST_PORT"]
 
-    host_database_url = (
-        f"postgresql://{db_user}:{db_password}@localhost:{postgres_port}/{db_name}"
-    )
+    host_database_url = f"postgresql://{db_user}:{db_password}@localhost:{postgres_port}/{db_name}"
     runtime_env["HOST_DATABASE_URL"] = host_database_url
     runtime_env["HOST_QUERY_DATABASE_URL"] = host_database_url
     runtime_env["KAFKA_BOOTSTRAP_SERVERS"] = f"localhost:{kafka_external_port}"
     runtime_env["E2E_INGESTION_URL"] = f"http://localhost:{ingestion_port}"
     runtime_env["E2E_EVENT_REPLAY_URL"] = f"http://localhost:{event_replay_port}"
     runtime_env["E2E_QUERY_URL"] = f"http://localhost:{query_port}"
-    runtime_env["E2E_QUERY_CONTROL_PLANE_URL"] = (
-        f"http://localhost:{query_control_plane_port}"
-    )
+    runtime_env["E2E_QUERY_CONTROL_PLANE_URL"] = f"http://localhost:{query_control_plane_port}"
 
     endpoints = RuntimeEndpoints(
         profile=selected_profile,

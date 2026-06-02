@@ -7,8 +7,7 @@ def test_ca_bundle_a_dependency_rank_normalizes_transaction_type() -> None:
     assert ca_bundle_a_dependency_rank(SimpleNamespace(transaction_type=" spin_off ")) == 0
     assert ca_bundle_a_dependency_rank(SimpleNamespace(transaction_type=" demerger_in ")) == 1
     assert (
-        ca_bundle_a_dependency_rank(SimpleNamespace(transaction_type=" cash_consideration "))
-        == 2
+        ca_bundle_a_dependency_rank(SimpleNamespace(transaction_type=" cash_consideration ")) == 2
     )
 
 

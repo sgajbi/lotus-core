@@ -24,4 +24,3 @@ def detect_runtime_modes(
             continue
         modes.setdefault(runtime_mode, []).append(nodeid)
     return modes
-

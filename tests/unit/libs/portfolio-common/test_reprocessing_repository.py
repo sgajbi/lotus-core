@@ -355,6 +355,4 @@ async def test_reprocess_transactions_fails_on_flush_timeout(
         await repository.reprocess_transactions_by_ids(["TXN_A", "TXN_B"])
 
     assert exc_info.value.failed_transaction_ids == ["TXN_A", "TXN_B"]
-    assert "Delivery confirmation timed out while republishing transactions." in str(
-        exc_info.value
-    )
+    assert "Delivery confirmation timed out while republishing transactions." in str(exc_info.value)

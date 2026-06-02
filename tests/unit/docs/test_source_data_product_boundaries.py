@@ -147,12 +147,9 @@ def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> 
     assert "/integration/portfolios/{portfolio_id}/external-hedge-policy" in wiki
     assert "/integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments" in wiki
     assert "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness" in wiki
+    assert "/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement" in wiki
     assert (
-        "/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement" in wiki
-    )
-    assert (
-        "FX attribution, treasury policy approval, forward pricing, hedge advice"
-        in normalized_wiki
+        "FX attribution, treasury policy approval, forward pricing, hedge advice" in normalized_wiki
     )
     assert "OMS acknowledgement, fills, settlement" in normalized_wiki
     assert "external OMS acknowledgement" in wiki
@@ -576,8 +573,7 @@ def test_external_eligible_hedge_instrument_methodology_is_implementation_backed
     assert "hedge_instrument_suitability" in methodology
     assert "autonomous treasury action" in normalized_methodology
     assert (
-        "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md"
-        in catalog
+        "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md" in catalog
     )
     assert "docs/methodologies/source-data-products/external-eligible-hedge-instrument.md" in wiki
 
@@ -625,8 +621,7 @@ def test_external_hedge_execution_readiness_methodology_is_implementation_backed
     assert "counterparty-selection mode, no OMS acknowledgement mode" in normalized_methodology
     assert "autonomous treasury action" in normalized_methodology
     assert (
-        "docs/methodologies/source-data-products/external-hedge-execution-readiness.md"
-        in catalog
+        "docs/methodologies/source-data-products/external-hedge-execution-readiness.md" in catalog
     )
     assert "docs/methodologies/source-data-products/external-hedge-execution-readiness.md" in wiki
 

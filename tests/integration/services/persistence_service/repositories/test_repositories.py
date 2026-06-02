@@ -37,9 +37,9 @@ async def _transactions_table_has_column(async_db_session: AsyncSession, column_
 async def _assert_transactions_table_has_column(
     async_db_session: AsyncSession, column_name: str
 ) -> None:
-    assert await _transactions_table_has_column(
-        async_db_session, column_name
-    ), f"transactions table is missing required column: {column_name}"
+    assert await _transactions_table_has_column(async_db_session, column_name), (
+        f"transactions table is missing required column: {column_name}"
+    )
 
 
 # --- Fixtures for reusable data ---
@@ -456,9 +456,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
 async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
     clean_db, async_db_session: AsyncSession
 ):
-    await _assert_transactions_table_has_column(
-        async_db_session, "settlement_cash_account_id"
-    )
+    await _assert_transactions_table_has_column(async_db_session, "settlement_cash_account_id")
 
     repo = TransactionDBRepository(async_db_session)
 

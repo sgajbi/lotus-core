@@ -36,9 +36,7 @@ def _cash_security_record(transaction_type: str) -> dict[str, object]:
         (InterestCanonicalTransaction, "INTEREST"),
     ],
 )
-def test_cash_security_models_normalize_transaction_type(
-    model_type, transaction_type: str
-) -> None:
+def test_cash_security_models_normalize_transaction_type(model_type, transaction_type: str) -> None:
     txn = model_type.model_validate(_cash_security_record(transaction_type))
 
     assert txn.transaction_type == transaction_type

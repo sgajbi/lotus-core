@@ -56,10 +56,7 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
 
     assert "--ingestion-base-url http://ingestion_service:8000" in command
     assert "--query-base-url http://query_service:8001" in command
-    assert (
-        "--query-control-plane-base-url http://query_control_plane_service:8002"
-        in command
-    )
+    assert "--query-control-plane-base-url http://query_control_plane_service:8002" in command
     assert "depends_on" not in demo_loader["environment"]
     assert sorted(depends_on) == [
         "ingestion_service",
