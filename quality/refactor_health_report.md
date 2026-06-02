@@ -22,6 +22,7 @@ tested modules.
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
 | Security baseline | Clean and enforced | Bandit reports 0 findings and is enforced by `make quality-bandit-gate` plus the quality-baseline Bandit security job after CR-875 |
 | Production-source dead-code baseline | Clean and enforced | `make quality-vulture-source-gate` reports no high-confidence Vulture findings under production `src` after CR-876 |
+| Dependency-usage baseline | Measured, noisy, report-only | Production `src` deptry baseline reports 928 `DEP003` findings after CR-877; workflow scope now excludes local `.venv` and generated build noise |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
 
@@ -110,3 +111,6 @@ health before that claim is defensible.
 32. Removed high-confidence Vulture findings from production source and added a repo-native source
     dead-code gate plus quality-baseline workflow job, keeping production-source dead-code
     regression-free while broader test-fixture dead-code noise remains report-only.
+33. Scoped the report-only deptry dependency baseline to production source and measured the current
+    928-finding `DEP003` baseline, making dependency metadata and first-party package modeling the
+    next governed cleanup target instead of scanning local environment artifacts.

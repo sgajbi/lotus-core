@@ -159,7 +159,7 @@ jobs:
         run: python -m vulture src tests --min-confidence 80
       - name: Dependency baseline
         continue-on-error: true
-        run: python -m deptry .
+        run: python -m deptry src --extend-exclude "src/services/query_service/build"
       - name: Security baseline
         continue-on-error: true
         run: python -m bandit -r src -c pyproject.toml

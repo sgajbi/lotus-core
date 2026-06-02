@@ -183,3 +183,11 @@ dedicated quality-baseline Vulture source dead-code workflow job using
 `python -m vulture src --exclude "*/tests/*" --min-confidence 80`. The production-source dead-code
 baseline is now clean and enforced; the broader `src tests` Vulture report remains report-only
 because many test fixture parameters still require a separate cleanup plan.
+
+CR-877 scoped the report-only dependency-usage baseline to production source with
+`python -m deptry src --extend-exclude "src/services/query_service/build"` so the workflow no
+longer scans local virtual environments or generated query-service build output. The measured
+production-source baseline is 928 `DEP003` findings across 485 scanned files. The dominant findings
+are first-party module modeling (`portfolio_common`, `src`) and undeclared runtime packages such as
+`sqlalchemy`, `fastapi`, and `pydantic`; deptry remains report-only until package metadata and
+first-party boundaries are made truthful.
