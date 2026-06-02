@@ -5,7 +5,7 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Category | Current Baseline | Target Direction |
 | --- | --- | --- |
 | Python code size | 1,040 files / 213,290 lines under `src` and `tests` | Reduce generated/duplicated quality surface and split large modules |
-| Ruff findings | 0 findings under `python -m ruff check . --statistics`; enforced by `make quality-ruff-gate` and the quality-baseline Ruff regression job | Keep Ruff clean and add format enforcement only after the remaining format baseline is cleaned |
+| Ruff findings | 0 findings under `python -m ruff check . --statistics`; enforced by `make quality-ruff-gate` and the quality-baseline Ruff regression job | Keep Ruff lint regression-free while broader gates continue to ratchet |
 | Ruff format | Clean and enforced by `make quality-ruff-format-gate` plus the quality-baseline Ruff format job after CR-866 | Keep Ruff formatting regression-free while broader gates continue to ratchet |
 | Test collection | 3,575 collected; import/plugin blockers fixed; full all-suite collection stops at governed mixed-runtime guard | Run runtime-separated collection lanes cleanly |
 | Coverage | Not measured in initial baseline due collection errors | Add line and branch coverage artifacts after collection is clean |
@@ -14,6 +14,6 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Dead code | Not measured locally; tool missing | Add vulture report-only CI |
 | Dependency usage | Not measured locally; tool missing | Add deptry report-only CI |
 | Security | Not measured locally; bandit command missing | Add bandit and pip-audit report-only CI |
-| Architecture boundaries | Existing make gate plus import-linter scaffold | Convert report-only contract into regression gate |
+| Architecture boundaries | Existing strict architecture guard plus 2 kept import-linter contracts enforced by `make quality-import-boundary-gate` after CR-867 | Add focused import contracts as additional ownership boundaries stabilize |
 | OpenAPI governance | Existing make gate plus spectral scaffold | Publish spectral/OpenAPI reports |
 | Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |

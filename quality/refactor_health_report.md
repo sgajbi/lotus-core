@@ -15,11 +15,11 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint and Ruff format gates while other baseline checks remain report-only |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, and import boundary gates while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
-| Architecture gates | Existing plus new scaffold | Existing `make architecture-guard`; new `.importlinter` scaffold |
+| Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Existing plus new scaffold | Existing `make openapi-gate`; new `.spectral.yaml` scaffold |
 
 ## Health Assessment
@@ -78,3 +78,6 @@ health before that claim is defensible.
 22. Added an enforced Ruff format gate to the quality-baseline workflow and a repo-native
     `make quality-ruff-format-gate` target so future pull requests cannot reintroduce formatter
     drift.
+23. Corrected and promoted the import-linter architecture boundary scaffold into
+    `make quality-import-boundary-gate` plus an enforced quality-baseline workflow job, keeping
+    router repository access and approved shared FastAPI dependency boundaries regression-free.

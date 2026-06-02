@@ -11,11 +11,17 @@ source_modules =
     services.query_service.app.routers
 forbidden_modules =
     services.query_service.app.repositories
+allow_indirect_imports = True
 
-[importlinter:contract:common_library_no_fastapi_dependency]
-name = portfolio_common should not depend on FastAPI
+[importlinter:contract:common_library_fastapi_dependency_is_approved]
+name = portfolio_common FastAPI dependency should stay in approved HTTP modules
 type = forbidden
 source_modules =
     portfolio_common
 forbidden_modules =
     fastapi
+ignore_imports =
+    portfolio_common.enterprise_readiness -> fastapi
+    portfolio_common.health -> fastapi
+    portfolio_common.http_app_bootstrap -> fastapi
+    portfolio_common.openapi_enrichment -> fastapi

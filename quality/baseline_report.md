@@ -128,3 +128,9 @@ CR-866 added `make quality-ruff-format-gate` and a dedicated quality-baseline wo
 runs `python -m ruff format --check .`. Ruff lint and Ruff format are now both enforced clean
 baselines; the remaining quality tools stay report-only until their baselines are made truthful and
 stable.
+
+CR-867 corrected the `.importlinter` contracts to enforce the intended architecture boundaries
+instead of over-broad indirect dependency rules, added `scripts/import_boundary_gate.py`, and
+promoted import-linter to an enforced quality-baseline job. The import boundary gate currently keeps
+2 contracts: query-service routers do not directly import repositories, and FastAPI dependencies in
+`portfolio_common` remain limited to approved HTTP/cross-cutting modules.

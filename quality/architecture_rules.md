@@ -1,6 +1,6 @@
 # lotus-core Architecture Rules
 
-Status: Initial report-only rule set on 2026-06-02.
+Status: Progressive enforcement rule set on 2026-06-02.
 
 ## Layering Rules
 
@@ -16,5 +16,6 @@ Status: Initial report-only rule set on 2026-06-02.
 ## Initial Enforcement
 
 1. Existing `make architecture-guard` remains authoritative where present.
-2. `.importlinter` starts report-only checks for selected high-value boundaries.
+2. `.importlinter` enforces selected high-value import boundaries through
+   `make quality-import-boundary-gate`.
 3. Future slices should add focused import contracts as ownership boundaries stabilize.

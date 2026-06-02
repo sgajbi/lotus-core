@@ -45,6 +45,21 @@ jobs:
       - name: Ruff format gate
         run: python -m ruff format --check .
 
+  import-boundary-gate:
+    name: Quality Baseline / Import Boundary Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install import-linter
+        run: python -m pip install import-linter
+      - name: Import boundary gate
+        run: python scripts/import_boundary_gate.py
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest
@@ -86,7 +101,7 @@ jobs:
         run: python -m pip_audit
       - name: Import boundary baseline
         continue-on-error: true
-        run: lint-imports
+        run: python scripts/import_boundary_gate.py
       - name: Docstring baseline
         continue-on-error: true
         run: interrogate src
