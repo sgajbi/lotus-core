@@ -76,3 +76,7 @@ down to 218, all `E501`.
 
 CR-854 normalized line length in a first bounded Alembic migration batch. Full Ruff findings are
 down to 172, all `E501`.
+
+CR-855 normalized line length in the remaining Alembic migration hotspots. `python -m ruff check
+. --statistics` is now clean, establishing Ruff as a candidate regression gate instead of a
+report-only debt inventory.

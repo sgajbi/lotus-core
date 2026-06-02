@@ -33,8 +33,18 @@ def upgrade() -> None:
         sa.Column("cashflow_event_seen", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("ready_emitted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_source_event_type", sa.String(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "stage_name",

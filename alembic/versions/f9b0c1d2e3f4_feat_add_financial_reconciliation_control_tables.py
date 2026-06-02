@@ -33,10 +33,25 @@ def upgrade() -> None:
         sa.Column("tolerance", sa.Numeric(18, 10), nullable=True),
         sa.Column("summary", sa.JSON(), nullable=True),
         sa.Column("failure_reason", sa.Text(), nullable=True),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "started_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("run_id"),
     )
@@ -99,7 +114,12 @@ def upgrade() -> None:
         sa.Column("expected_value", sa.JSON(), nullable=True),
         sa.Column("observed_value", sa.JSON(), nullable=True),
         sa.Column("detail", sa.JSON(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.ForeignKeyConstraint(["run_id"], ["financial_reconciliation_runs.run_id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("finding_id"),
@@ -177,7 +197,9 @@ def downgrade() -> None:
         "ix_financial_reconciliation_findings_run_type_severity",
         table_name="financial_reconciliation_findings",
     )
-    op.drop_index("ix_financial_reconciliation_findings_epoch", table_name="financial_reconciliation_findings")
+    op.drop_index(
+        "ix_financial_reconciliation_findings_epoch", table_name="financial_reconciliation_findings"
+    )
     op.drop_index(
         "ix_financial_reconciliation_findings_business_date",
         table_name="financial_reconciliation_findings",
@@ -194,7 +216,10 @@ def downgrade() -> None:
         "ix_financial_reconciliation_findings_portfolio_id",
         table_name="financial_reconciliation_findings",
     )
-    op.drop_index("ix_financial_reconciliation_findings_severity", table_name="financial_reconciliation_findings")
+    op.drop_index(
+        "ix_financial_reconciliation_findings_severity",
+        table_name="financial_reconciliation_findings",
+    )
     op.drop_index(
         "ix_financial_reconciliation_findings_finding_type",
         table_name="financial_reconciliation_findings",
@@ -203,7 +228,10 @@ def downgrade() -> None:
         "ix_financial_reconciliation_findings_reconciliation_type",
         table_name="financial_reconciliation_findings",
     )
-    op.drop_index("ix_financial_reconciliation_findings_run_id", table_name="financial_reconciliation_findings")
+    op.drop_index(
+        "ix_financial_reconciliation_findings_run_id",
+        table_name="financial_reconciliation_findings",
+    )
     op.drop_index(
         "ix_financial_reconciliation_findings_finding_id",
         table_name="financial_reconciliation_findings",
@@ -214,16 +242,24 @@ def downgrade() -> None:
         "ix_financial_reconciliation_runs_type_status_started_at",
         table_name="financial_reconciliation_runs",
     )
-    op.drop_index("ix_financial_reconciliation_runs_status", table_name="financial_reconciliation_runs")
-    op.drop_index("ix_financial_reconciliation_runs_epoch", table_name="financial_reconciliation_runs")
+    op.drop_index(
+        "ix_financial_reconciliation_runs_status", table_name="financial_reconciliation_runs"
+    )
+    op.drop_index(
+        "ix_financial_reconciliation_runs_epoch", table_name="financial_reconciliation_runs"
+    )
     op.drop_index(
         "ix_financial_reconciliation_runs_business_date",
         table_name="financial_reconciliation_runs",
     )
-    op.drop_index("ix_financial_reconciliation_runs_portfolio_id", table_name="financial_reconciliation_runs")
+    op.drop_index(
+        "ix_financial_reconciliation_runs_portfolio_id", table_name="financial_reconciliation_runs"
+    )
     op.drop_index(
         "ix_financial_reconciliation_runs_reconciliation_type",
         table_name="financial_reconciliation_runs",
     )
-    op.drop_index("ix_financial_reconciliation_runs_run_id", table_name="financial_reconciliation_runs")
+    op.drop_index(
+        "ix_financial_reconciliation_runs_run_id", table_name="financial_reconciliation_runs"
+    )
     op.drop_table("financial_reconciliation_runs")
