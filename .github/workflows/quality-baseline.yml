@@ -79,6 +79,21 @@ jobs:
       - name: API vocabulary gate
         run: python scripts/api_vocabulary_inventory.py --validate-only
 
+  typecheck-gate:
+    name: Quality Baseline / Typecheck Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install mypy
+        run: python -m pip install mypy
+      - name: Typecheck gate
+        run: python -m mypy --config-file mypy.ini
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest
@@ -100,6 +115,9 @@ jobs:
       - name: Test collection baseline
         continue-on-error: true
         run: python -m pytest --collect-only -q
+      - name: Typecheck baseline
+        continue-on-error: true
+        run: python -m mypy --config-file mypy.ini
       - name: Complexity baseline
         continue-on-error: true
         run: python -m radon cc src -s -a

@@ -139,3 +139,11 @@ CR-868 promoted the existing clean OpenAPI quality and API vocabulary gates into
 quality-baseline API governance job. `python scripts/openapi_quality_gate.py` passes across the
 registered API services, and `python scripts/api_vocabulary_inventory.py --validate-only` validates
 the governed vocabulary inventory.
+
+CR-869 promoted the clean configured mypy baseline into a dedicated quality-baseline typecheck job
+and removed a stale unused `[mypy-tests.*]` section from `mypy.ini`. `make typecheck` now reports
+success without unused-config noise for the configured query-service DTO/router scope.
+
+CR-869 also measured the local Bandit security baseline. `python -m bandit -r src -c pyproject.toml`
+currently reports 17 findings: 5 low, 11 medium, and 1 high. Security remains report-only until
+those findings are fixed or explicitly governed.
