@@ -24,6 +24,7 @@ tested modules.
 | Production-source dead-code baseline | Clean and enforced | `make quality-vulture-source-gate` reports no high-confidence Vulture findings under production `src` after CR-876 |
 | Dependency-usage baseline | Clean and enforced | `make quality-deptry-source-gate` reports no production-source dependency issues after CR-878 |
 | Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; existing C hotspots remain tracked |
+| Complexity baseline | Improving but not enforceable | CR-880 reduced advisory proposal simulation from F to B; Xenon still reports the cost-calculator consumer F block and `fx_linkage.py` D module |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
 
@@ -120,3 +121,7 @@ health before that claim is defensible.
     production-source deptry baseline into an enforced repo-native and CI quality gate.
 35. Added a Radon-backed maintainability gate that blocks D/E/F source modules while preserving the
     current C-hotspot baseline for focused follow-up refactors.
+36. Reduced advisory proposal simulation complexity by extracting validation, cash-flow, shelf,
+    funding, reconciliation, analytics, suitability, and workflow-gate helpers. The former
+    F-ranked `run_proposal_simulation` block is now B-ranked under Radon, while the broader Xenon
+    gate remains blocked by the cost-calculator consumer and `fx_linkage.py`.

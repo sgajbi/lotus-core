@@ -207,3 +207,12 @@ The new `make quality-maintainability-gate` target uses `scripts/maintainability
 Radon JSON output and fail only when a production source module drops below C. The clean no-D/E/F
 baseline is now enforced in the quality-baseline workflow while existing C hotspots remain visible
 for follow-up refactor slices.
+
+CR-880 reduced the advisory proposal simulation complexity hotspot by extracting helper boundaries
+inside `advisory_engine.py`. `run_proposal_simulation` now reports `B (6)` under
+`python -m radon cc src\services\query_service\app\advisory_simulation\advisory_engine.py -s`, and
+the focused advisory simulation suite reports `29 passed`. Repository-wide Xenon complexity
+enforcement remains report-only because
+`src/services/calculators/cost_calculator_service/app/consumer.py:227 process_message` remains
+F-ranked and `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py` remains
+a D-ranked module.
