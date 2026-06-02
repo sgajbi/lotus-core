@@ -49,10 +49,7 @@ def test_build_fx_rates_payload_returns_full_cross_currency_matrix() -> None:
     )
 
     assert len(payload) == 6
-    assert {
-        (row["from_currency"], row["to_currency"])
-        for row in payload
-    } == {
+    assert {(row["from_currency"], row["to_currency"]) for row in payload} == {
         ("USD", "EUR"),
         ("USD", "SGD"),
         ("EUR", "USD"),

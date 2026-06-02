@@ -216,9 +216,7 @@ async def test_dlq_replayer_does_not_commit_when_replay_flush_times_out(
         await consumer.run()
 
     mock_kafka_producer.publish_message.assert_called_once()
-    assert any(
-        call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list
-    )
+    assert any(call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list)
 
     mock_kafka_producer.publish_message.reset_mock()
     mock_kafka_producer.flush.reset_mock()
@@ -234,6 +232,4 @@ async def test_dlq_replayer_does_not_commit_when_replay_flush_times_out(
         await consumer.run()
 
     mock_kafka_producer.publish_message.assert_called_once()
-    assert any(
-        call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list
-    )
+    assert any(call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list)

@@ -18,7 +18,7 @@ tested modules.
 | Progressive quality CI | Started | `.github/workflows/quality-baseline.yml` now has an enforced Ruff regression gate while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
-| Format baseline | Improving | `python -m ruff format --check .` reports 141 files remaining after CR-857 |
+| Format baseline | Improving | `python -m ruff format --check .` reports 125 files remaining after CR-858 |
 | Architecture gates | Existing plus new scaffold | Existing `make architecture-guard`; new `.importlinter` scaffold |
 | OpenAPI governance | Existing plus new scaffold | Existing `make openapi-gate`; new `.spectral.yaml` scaffold |
 
@@ -57,3 +57,5 @@ health before that claim is defensible.
     `make quality-ruff-gate` target so future pull requests cannot reintroduce Ruff findings.
 13. Started the Ruff format ratchet with a bounded Alembic batch, reducing format debt from 154 to
     141 files while preserving migration graph and SQL smoke behavior.
+14. Continued the Ruff format ratchet across bounded operational scripts, tools, and focused
+    script/tool tests, reducing format debt from 141 to 125 files while keeping Ruff lint clean.

@@ -90,3 +90,7 @@ baselines are not yet clean.
 CR-857 started the Ruff format ratchet with a bounded Alembic formatting batch. Repository-wide
 `ruff format --check .` debt is down from 154 to 141 files while the Ruff lint regression gate
 remains clean.
+
+CR-858 continued the Ruff format ratchet across bounded operational scripts, tools, and their
+focused script/tool tests. Repository-wide `ruff format --check .` debt is down from 141 to 125
+files while the Ruff lint regression gate remains clean.

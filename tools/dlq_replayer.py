@@ -27,6 +27,7 @@ class DLQReplayConsumer(BaseConsumer):
     A consumer designed to read from a DLQ, extract the original message,
     and attempt to republish it to its original topic.
     """
+
     def __init__(self, limit: Optional[int] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._producer: KafkaProducer = get_kafka_producer()

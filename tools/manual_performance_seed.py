@@ -48,15 +48,9 @@ MANUAL_SECURITY_SEEDS: tuple[ManualSecuritySeed, ...] = (
     ManualSecuritySeed(
         "FD_EU_BLACKROCK_ALLOC_MANUAL_001", Decimal("108.4"), "EUR", Decimal("0.982")
     ),
-    ManualSecuritySeed(
-        "FD_US_PIMCO_INC_MANUAL_001", Decimal("102.4"), "USD", Decimal("0.988")
-    ),
-    ManualSecuritySeed(
-        "FI_EU_SIEMENS_2031_MANUAL_001", Decimal("99.25"), "EUR", Decimal("0.992")
-    ),
-    ManualSecuritySeed(
-        "FI_US_TSY_2030_MANUAL_001", Decimal("101.35"), "USD", Decimal("0.994")
-    ),
+    ManualSecuritySeed("FD_US_PIMCO_INC_MANUAL_001", Decimal("102.4"), "USD", Decimal("0.988")),
+    ManualSecuritySeed("FI_EU_SIEMENS_2031_MANUAL_001", Decimal("99.25"), "EUR", Decimal("0.992")),
+    ManualSecuritySeed("FI_US_TSY_2030_MANUAL_001", Decimal("101.35"), "USD", Decimal("0.994")),
 )
 
 BENCHMARK_INDEX_IDS: tuple[str, str] = ("IDX_GLOBAL_EQUITY_TR", "IDX_GLOBAL_BOND_TR")

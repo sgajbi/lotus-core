@@ -179,9 +179,7 @@ def test_compose_down_uses_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
     repo_root = Path("/tmp/repo")
     _compose_down(repo_root=repo_root, compose_file="docker-compose.yml")
 
-    assert calls == [
-        (["docker", "compose", "-f", "docker-compose.yml", "down"], repo_root)
-    ]
+    assert calls == [(["docker", "compose", "-f", "docker-compose.yml", "down"], repo_root)]
 
 
 def test_main_runs_scenario_then_exhaustive_reconciliation(

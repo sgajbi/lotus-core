@@ -14,8 +14,7 @@ def _ledger() -> dict[str, object]:
             {
                 "proof": "platform end-to-end validation",
                 "evidence": (
-                    "docs/architecture/"
-                    "RFC-0083-platform-e2e-runtime-validation-evidence.md"
+                    "docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md"
                 ),
             }
         ],
