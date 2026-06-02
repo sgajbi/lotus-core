@@ -216,3 +216,12 @@ enforcement remains report-only because
 `src/services/calculators/cost_calculator_service/app/consumer.py:227 process_message` remains
 F-ranked and `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py` remains
 a D-ranked module.
+
+CR-881 reduced the cost-calculator consumer complexity hotspot by extracting private helpers for
+transaction preparation, cost-engine processing, persistence, cash-leg validation, bundle-A
+diagnostics, and outbox emission. `CostCalculatorConsumer.process_message` now reports `C (11)`
+under `python -m radon cc src\services\calculators\cost_calculator_service\app\consumer.py -s`,
+and the focused cost-consumer suite reports `26 passed`. Repository-wide Xenon complexity
+enforcement remains report-only because
+`src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py` remains a D-ranked
+module.
