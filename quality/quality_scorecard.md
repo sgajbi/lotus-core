@@ -15,5 +15,5 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Dependency usage | Not measured locally; tool missing | Add deptry report-only CI |
 | Security | Not measured locally; bandit command missing | Add bandit and pip-audit report-only CI |
 | Architecture boundaries | Existing strict architecture guard plus 2 kept import-linter contracts enforced by `make quality-import-boundary-gate` after CR-867 | Add focused import contracts as additional ownership boundaries stabilize |
-| OpenAPI governance | Existing make gate plus spectral scaffold | Publish spectral/OpenAPI reports |
+| OpenAPI governance | Existing OpenAPI quality and API vocabulary gates promoted into the quality-baseline API governance job after CR-868 | Keep API governance regression-free while spectral remains report-only until a stable generated-spec artifact exists |
 | Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |

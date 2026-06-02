@@ -60,6 +60,25 @@ jobs:
       - name: Import boundary gate
         run: python scripts/import_boundary_gate.py
 
+  api-governance-gate:
+    name: Quality Baseline / API Governance Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install repository
+        run: |
+          python -m pip install -U pip
+          python scripts/bootstrap_dev.py
+      - name: OpenAPI quality gate
+        run: python scripts/openapi_quality_gate.py
+      - name: API vocabulary gate
+        run: python scripts/api_vocabulary_inventory.py --validate-only
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest

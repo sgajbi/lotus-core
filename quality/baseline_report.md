@@ -134,3 +134,8 @@ instead of over-broad indirect dependency rules, added `scripts/import_boundary_
 promoted import-linter to an enforced quality-baseline job. The import boundary gate currently keeps
 2 contracts: query-service routers do not directly import repositories, and FastAPI dependencies in
 `portfolio_common` remain limited to approved HTTP/cross-cutting modules.
+
+CR-868 promoted the existing clean OpenAPI quality and API vocabulary gates into a dedicated
+quality-baseline API governance job. `python scripts/openapi_quality_gate.py` passes across the
+registered API services, and `python scripts/api_vocabulary_inventory.py --validate-only` validates
+the governed vocabulary inventory.

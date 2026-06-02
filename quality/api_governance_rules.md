@@ -1,6 +1,6 @@
 # lotus-core API Governance Rules
 
-Status: Initial report-only rule set on 2026-06-02.
+Status: Progressive enforcement rule set on 2026-06-02.
 
 ## Endpoint Requirements
 
@@ -27,5 +27,8 @@ Every public endpoint should provide:
 ## Initial Enforcement
 
 1. Existing `make openapi-gate` and `make api-vocabulary-gate` remain authoritative where present.
-2. `.spectral.yaml` introduces report-only OpenAPI lint posture for CI publication.
-3. Future gates should fail only new regressions before enforcing enterprise thresholds.
+2. `.github/workflows/quality-baseline.yml` now enforces the OpenAPI quality and API vocabulary
+   gates in the API governance job.
+3. `.spectral.yaml` remains report-only until a stable generated-spec artifact path exists for CI
+   publication.
+4. Future gates should fail only new regressions before enforcing enterprise thresholds.
