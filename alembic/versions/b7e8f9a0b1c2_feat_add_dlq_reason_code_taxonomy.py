@@ -44,4 +44,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_consumer_dlq_events_error_reason_code", table_name="consumer_dlq_events")
     op.drop_column("consumer_dlq_events", "error_reason_code")
-

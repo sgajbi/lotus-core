@@ -86,3 +86,7 @@ report-only debt inventory.
 CR-856 added a dedicated Ruff regression gate to the quality-baseline workflow and a repo-native
 `make quality-ruff-gate` target. The broader quality workflow remains report-only for checks whose
 baselines are not yet clean.
+
+CR-857 started the Ruff format ratchet with a bounded Alembic formatting batch. Repository-wide
+`ruff format --check .` debt is down from 154 to 141 files while the Ruff lint regression gate
+remains clean.

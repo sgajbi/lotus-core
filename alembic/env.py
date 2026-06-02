@@ -11,18 +11,18 @@ from alembic import context
 
 # --- CUSTOM SETUP ---
 # Add the project root directory to the Python path.
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # Add the new src directory to the path
-src_path = os.path.join(project_root, 'src')
+src_path = os.path.join(project_root, "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 # Update the path to portfolio-common inside src
-portfolio_common_path = os.path.join(project_root, 'src', 'libs', 'portfolio-common')
+portfolio_common_path = os.path.join(project_root, "src", "libs", "portfolio-common")
 if portfolio_common_path not in sys.path:
     sys.path.insert(0, portfolio_common_path)
 
 # Load environment variables from the .env file at the project root
-dotenv_path = os.path.join(project_root, '.env')
+dotenv_path = os.path.join(project_root, ".env")
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 # --- END CUSTOM SETUP ---
@@ -47,8 +47,7 @@ def get_db_url():
     url = os.environ.get("HOST_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if url is None:
         raise Exception(
-            "Neither HOST_DATABASE_URL nor DATABASE_URL are set. "
-            "Please check your .env file."
+            "Neither HOST_DATABASE_URL nor DATABASE_URL are set. Please check your .env file."
         )
 
     # Ensure the URL uses a synchronous scheme for alembic
@@ -84,9 +83,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

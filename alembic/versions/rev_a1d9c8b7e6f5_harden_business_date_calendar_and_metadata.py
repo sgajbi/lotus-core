@@ -42,4 +42,3 @@ def downgrade() -> None:
     op.drop_column("business_dates", "source_system")
     op.drop_column("business_dates", "market_code")
     op.drop_column("business_dates", "calendar_code")
-

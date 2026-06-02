@@ -47,4 +47,3 @@ def downgrade() -> None:
         "ix_consumer_dlq_events_group_topic_observed_at",
         table_name="consumer_dlq_events",
     )
-

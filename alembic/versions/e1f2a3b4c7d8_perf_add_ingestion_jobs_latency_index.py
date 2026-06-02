@@ -26,4 +26,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_ingestion_jobs_submitted_completed_at", table_name="ingestion_jobs")
-

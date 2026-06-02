@@ -29,4 +29,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("instruments", "ultimate_parent_issuer_name")
     op.drop_column("instruments", "issuer_name")
-
