@@ -73,7 +73,7 @@ class ReconciliationFindingResponse(BaseModel):
                 "observed_value": {"cashflow_count": 0},
                 "detail": {
                     "rule_transaction_type": "BUY",
-                    "reason": "Transaction has a cashflow rule but no persisted cashflow row."
+                    "reason": "Transaction has a cashflow rule but no persisted cashflow row.",
                 },
                 "created_at": "2026-03-06T14:03:11Z",
             }

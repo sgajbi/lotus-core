@@ -98,3 +98,7 @@ files while the Ruff lint regression gate remains clean.
 CR-859 continued the Ruff format ratchet across bounded `portfolio_common` shared-library helpers.
 Repository-wide `ruff format --check .` debt is down from 125 to 110 files while the Ruff lint
 regression gate remains clean.
+
+CR-860 continued the Ruff format ratchet across a bounded calculator and runtime-service batch.
+Repository-wide `ruff format --check .` debt is down from 110 to 90 files while the Ruff lint
+regression gate remains clean.

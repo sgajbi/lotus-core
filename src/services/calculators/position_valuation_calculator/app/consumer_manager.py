@@ -77,9 +77,7 @@ class ConsumerManager:
         uvicorn_config = uvicorn.Config(web_app, host="0.0.0.0", port=8084, log_config=None)
         server = uvicorn.Server(uvicorn_config)
 
-        logger.info(
-            "Starting valuation worker consumer(s), outbox dispatcher, and web server..."
-        )
+        logger.info("Starting valuation worker consumer(s), outbox dispatcher, and web server...")
         self.tasks = [asyncio.create_task(c.run()) for c in self.consumers]
         self.tasks.append(asyncio.create_task(self.dispatcher.run()))
         self.tasks.append(asyncio.create_task(server.serve()))

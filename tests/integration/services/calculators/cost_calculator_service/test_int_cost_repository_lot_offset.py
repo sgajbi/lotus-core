@@ -33,9 +33,9 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
         text("SELECT to_regclass('public.accrued_income_offset_state')")
     )
     assert lot_table_exists, "position_lot_state table is required in the active test schema."
-    assert (
-        offset_table_exists
-    ), "accrued_income_offset_state table is required in the active test schema."
+    assert offset_table_exists, (
+        "accrued_income_offset_state table is required in the active test schema."
+    )
 
     async_db_session.add(
         Portfolio(

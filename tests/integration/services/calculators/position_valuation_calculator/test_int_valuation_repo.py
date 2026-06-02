@@ -1101,9 +1101,7 @@ async def test_find_contiguous_snapshot_dates_stops_at_unreconciled_snapshot(
         {("P-STALE-SNAPSHOT", "S-STALE-SNAPSHOT", 2): date(2026, 3, 11)},
     )
 
-    assert contiguous_dates == {
-        ("P-STALE-SNAPSHOT", "S-STALE-SNAPSHOT"): date(2026, 3, 10)
-    }
+    assert contiguous_dates == {("P-STALE-SNAPSHOT", "S-STALE-SNAPSHOT"): date(2026, 3, 10)}
 
 
 async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
@@ -1575,6 +1573,4 @@ async def test_get_states_needing_backfill_skips_keys_without_instrument(
     repo = ValuationRepository(async_db_session)
     states = await repo.get_states_needing_backfill(date(2025, 8, 12), limit=10)
 
-    assert [(state.portfolio_id, state.security_id) for state in states] == [
-        ("P-VALID", "S-VALID")
-    ]
+    assert [(state.portfolio_id, state.security_id) for state in states] == [("P-VALID", "S-VALID")]

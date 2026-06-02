@@ -98,6 +98,4 @@ async def test_find_contiguous_snapshot_dates_handles_empty_first_open_dates(
 
     contiguous_dates = await repo.find_contiguous_snapshot_dates(states, {})
 
-    assert contiguous_dates == {
-        ("P-EMPTY-OPEN-DATES", "S-EMPTY-OPEN-DATES"): date(2025, 8, 10)
-    }
+    assert contiguous_dates == {("P-EMPTY-OPEN-DATES", "S-EMPTY-OPEN-DATES"): date(2025, 8, 10)}

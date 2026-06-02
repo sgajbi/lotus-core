@@ -155,8 +155,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id
-                    == "valuation.job.requested-0-7",
+                    ProcessedEvent.event_id == "valuation.job.requested-0-7",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )
@@ -354,8 +353,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
         (
             await async_db_session.execute(
                 select(ProcessedEvent).where(
-                    ProcessedEvent.event_id
-                    == "valuation.job.requested-0-8",
+                    ProcessedEvent.event_id == "valuation.job.requested-0-8",
                     ProcessedEvent.service_name == "position-valuation-calculator",
                 )
             )
