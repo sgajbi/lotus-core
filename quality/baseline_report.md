@@ -156,3 +156,8 @@ are fixed or explicitly governed.
 CR-871 replaced production `assert` guards in operations routing, analytics export creation, and
 core snapshot simulation handling with explicit runtime guards and focused tests. The Bandit
 baseline is down to 12 findings: 1 low, 11 medium, and 0 high.
+
+CR-872 replaced string-based enterprise readiness integer setting attribute lookup with explicit
+typed settings access for secret-rotation and write-payload policy knobs. The Bandit baseline is
+down to 11 findings: 0 low, 11 medium, and 0 high. Security remains report-only until the remaining
+medium findings are fixed or explicitly governed.
