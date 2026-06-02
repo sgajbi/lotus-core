@@ -15,14 +15,14 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, and Vulture source dead-code gates while other baseline checks remain report-only |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, and Deptry source dependency gates while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
 | Security baseline | Clean and enforced | Bandit reports 0 findings and is enforced by `make quality-bandit-gate` plus the quality-baseline Bandit security job after CR-875 |
 | Production-source dead-code baseline | Clean and enforced | `make quality-vulture-source-gate` reports no high-confidence Vulture findings under production `src` after CR-876 |
-| Dependency-usage baseline | Measured, noisy, report-only | Production `src` deptry baseline reports 928 `DEP003` findings after CR-877; workflow scope now excludes local `.venv` and generated build noise |
+| Dependency-usage baseline | Clean and enforced | `make quality-deptry-source-gate` reports no production-source dependency issues after CR-878 |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
 
@@ -114,3 +114,6 @@ health before that claim is defensible.
 33. Scoped the report-only deptry dependency baseline to production source and measured the current
     928-finding `DEP003` baseline, making dependency metadata and first-party package modeling the
     next governed cleanup target instead of scanning local environment artifacts.
+34. Made the root shared runtime dependency metadata truthful for deptry, configured first-party
+    and package/module mappings, governed runtime-only dependency exceptions, and promoted the clean
+    production-source deptry baseline into an enforced repo-native and CI quality gate.

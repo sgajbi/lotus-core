@@ -191,3 +191,11 @@ production-source baseline is 928 `DEP003` findings across 485 scanned files. Th
 are first-party module modeling (`portfolio_common`, `src`) and undeclared runtime packages such as
 `sqlalchemy`, `fastapi`, and `pydantic`; deptry remains report-only until package metadata and
 first-party boundaries are made truthful.
+
+CR-878 made root dependency metadata truthful for the shared runtime dependency union, configured
+deptry first-party package/module mapping, and governed runtime-only dependency exceptions for
+packages required by packaging, DB drivers, migrations, or framework runtime behavior but not
+directly imported by production source. The production-source command
+`python -m deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"`
+now reports no dependency issues and is enforced by `make quality-deptry-source-gate` plus a
+dedicated quality-baseline Deptry source dependency workflow job.

@@ -124,6 +124,21 @@ jobs:
       - name: Vulture source dead-code gate
         run: python -m vulture src --exclude "*/tests/*" --min-confidence 80
 
+  deptry-source-gate:
+    name: Quality Baseline / Deptry Source Dependency Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install deptry
+        run: python -m pip install deptry
+      - name: Deptry source dependency gate
+        run: python -m deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest
@@ -159,7 +174,7 @@ jobs:
         run: python -m vulture src tests --min-confidence 80
       - name: Dependency baseline
         continue-on-error: true
-        run: python -m deptry src --extend-exclude "src/services/query_service/build"
+        run: python -m deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"
       - name: Security baseline
         continue-on-error: true
         run: python -m bandit -r src -c pyproject.toml
