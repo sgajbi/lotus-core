@@ -64,15 +64,19 @@ def setup_portfolio_data(clean_db_module, e2e_api_client: E2EApiClient):
     # Poll to ensure all data is persisted before running tests
     e2e_api_client.poll_for_data(
         f"/portfolios?client_id={client_100}",
-        lambda data: data.get("portfolios")
-        and {row["portfolio_id"] for row in data["portfolios"]} == {portfolio_1, portfolio_2},
+        lambda data: (
+            data.get("portfolios")
+            and {row["portfolio_id"] for row in data["portfolios"]} == {portfolio_1, portfolio_2}
+        ),
         timeout=60,
     )
     e2e_api_client.poll_for_data(
         f"/portfolios?portfolio_id={portfolio_3}",
-        lambda data: data.get("portfolios")
-        and len(data["portfolios"]) == 1
-        and data["portfolios"][0]["portfolio_id"] == portfolio_3,
+        lambda data: (
+            data.get("portfolios")
+            and len(data["portfolios"]) == 1
+            and data["portfolios"][0]["portfolio_id"] == portfolio_3
+        ),
         timeout=60,
     )
 
@@ -99,9 +103,7 @@ def test_query_by_portfolio_id(setup_portfolio_data, e2e_api_client: E2EApiClien
 
 def test_query_by_cif_id(setup_portfolio_data, e2e_api_client: E2EApiClient):
     """Tests fetching all portfolios belonging to a specific client (CIF ID)."""
-    response = e2e_api_client.query(
-        f"/portfolios?client_id={setup_portfolio_data['client_100']}"
-    )
+    response = e2e_api_client.query(f"/portfolios?client_id={setup_portfolio_data['client_100']}")
     data = response.json()
 
     assert len(data["portfolios"]) == 2

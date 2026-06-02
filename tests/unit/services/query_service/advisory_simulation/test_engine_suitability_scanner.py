@@ -311,4 +311,3 @@ def test_suitability_sets_highest_new_severity_to_low_when_only_low_issues_exist
 
     assert result.summary.new_count >= 1
     assert result.summary.highest_severity_new == "LOW"
-

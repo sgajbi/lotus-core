@@ -8,6 +8,7 @@ from .data_factory import unique_suffix
 
 AS_OF_DATE = "2025-08-31"
 
+
 @pytest.fixture(scope="module")
 def setup_concentration_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until):
     """

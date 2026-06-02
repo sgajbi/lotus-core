@@ -16,4 +16,3 @@ def test_funding_priority_base_only_prefers_base_when_different_target_currency(
         cash_ledger={"USD": 1000, "EUR": 0, "SGD": 10},
     )
     assert result == ["USD"]
-

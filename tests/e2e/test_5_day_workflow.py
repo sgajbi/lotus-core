@@ -59,32 +59,32 @@ def setup_prerequisites(clean_db_module, e2e_api_client: E2EApiClient):
     # Ingest Instruments
     instruments_payload = {
         "instruments": [
-                {
-                    "securityId": cash_usd_id,
-                    "name": "US Dollar",
-                    "isin": f"CASH_USD_ISIN_{suffix}",
-                    "instrumentCurrency": "USD",
+            {
+                "securityId": cash_usd_id,
+                "name": "US Dollar",
+                "isin": f"CASH_USD_ISIN_{suffix}",
+                "instrumentCurrency": "USD",
                 "productType": "Cash",
             },
-                {
-                    "securityId": cash_eur_id,
-                    "name": "Euro",
-                    "isin": f"CASH_EUR_ISIN_{suffix}",
-                    "instrumentCurrency": "EUR",
+            {
+                "securityId": cash_eur_id,
+                "name": "Euro",
+                "isin": f"CASH_EUR_ISIN_{suffix}",
+                "instrumentCurrency": "EUR",
                 "productType": "Cash",
             },
-                {
-                    "securityId": aapl_id,
-                    "name": "Apple Inc.",
-                    "isin": f"US0378331005_E2E_{suffix}",
-                    "instrumentCurrency": "USD",
+            {
+                "securityId": aapl_id,
+                "name": "Apple Inc.",
+                "isin": f"US0378331005_E2E_{suffix}",
+                "instrumentCurrency": "USD",
                 "productType": "Equity",
             },
-                {
-                    "securityId": ibm_id,
-                    "name": "IBM Corp.",
-                    "isin": f"US4592001014_E2E_{suffix}",
-                    "instrumentCurrency": "USD",
+            {
+                "securityId": ibm_id,
+                "name": "IBM Corp.",
+                "isin": f"US4592001014_E2E_{suffix}",
+                "instrumentCurrency": "USD",
                 "productType": "Equity",
             },
         ]
@@ -182,8 +182,8 @@ def test_day_1_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
     )
     e2e_api_client.ingest(
         "/ingest/market-prices",
-                {
-                    "market_prices": [
+        {
+            "market_prices": [
                 {"securityId": cash_usd_id, "priceDate": DAY_1, "price": 1.0, "currency": "USD"}
             ]
         },
@@ -244,7 +244,7 @@ def test_day_2_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "transaction_id": tx_day2_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
-                    "instrument_id": cash_usd_id,
+                "instrument_id": cash_usd_id,
                 "transaction_date": f"{DAY_2}T11:00:00Z",
                 "transaction_type": "SELL",
                 "quantity": 175025.50,
@@ -322,7 +322,7 @@ def test_day_3_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "transaction_id": tx_day3_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
-                    "instrument_id": cash_usd_id,
+                "instrument_id": cash_usd_id,
                 "transaction_date": f"{DAY_3}T12:00:00Z",
                 "transaction_type": "SELL",
                 "quantity": 70015.00,
@@ -406,7 +406,7 @@ def test_day_4_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "transaction_id": tx_day4_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
-                    "instrument_id": cash_usd_id,
+                "instrument_id": cash_usd_id,
                 "transaction_date": f"{DAY_4}T13:00:00Z",
                 "transaction_type": "BUY",
                 "quantity": 36395.00,
@@ -500,7 +500,7 @@ def test_day_5_workflow(setup_prerequisites, e2e_api_client: E2EApiClient, poll_
                 "transaction_id": tx_day5_cash_settle_id,
                 "portfolio_id": portfolio_id,
                 "security_id": cash_usd_id,
-                    "instrument_id": cash_usd_id,
+                "instrument_id": cash_usd_id,
                 "transaction_date": f"{DAY_5}T09:00:00Z",
                 "transaction_type": "BUY",
                 "quantity": 750.00,

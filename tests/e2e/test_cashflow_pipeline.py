@@ -77,12 +77,14 @@ def setup_cashflow_data(clean_db_module, e2e_api_client: E2EApiClient):
 
     # 3. Poll the query service to ensure the entire pipeline has completed
     poll_url = f"/portfolios/{portfolio_id}/transactions"
+
     def validation_func(data):
         return (
             data.get("transactions")
             and len(data["transactions"]) == 1
             and data["transactions"][0].get("cashflow") is not None
         )
+
     e2e_api_client.poll_for_data(poll_url, validation_func, timeout=60)
 
     return {"transaction_id": transaction_id}

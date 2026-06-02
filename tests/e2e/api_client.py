@@ -81,9 +81,7 @@ class E2EApiClient:
     ) -> requests.Response:
         """Sends a POST request to a specified query endpoint."""
         base_url = (
-            self.query_control_plane_url
-            if endpoint.startswith("/integration/")
-            else self.query_url
+            self.query_control_plane_url if endpoint.startswith("/integration/") else self.query_url
         )
         url = f"{base_url}{endpoint}"
         response = self.session.post(url, json=payload, timeout=20)

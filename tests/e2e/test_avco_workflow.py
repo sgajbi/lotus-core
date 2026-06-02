@@ -101,6 +101,7 @@ def setup_avco_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until
 
     # 3. Poll the query service until the final transaction is fully processed and has a P&L figure
     poll_url = f"/portfolios/{portfolio_id}/transactions"
+
     def validation_func(data):
         return (
             data.get("transactions")
@@ -111,6 +112,7 @@ def setup_avco_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_until
             ).get("realized_gain_loss")
             is not None
         )
+
     e2e_api_client.poll_for_data(poll_url, validation_func, timeout=90)
 
     return {"portfolio_id": portfolio_id, "sell_tx_id": sell_tx_id}

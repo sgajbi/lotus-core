@@ -12,9 +12,7 @@ from .timeseries_support import (
 )
 
 
-def test_cash_only_staged_external_flows_are_not_doubled(
-    clean_db, e2e_api_client: E2EApiClient
-):
+def test_cash_only_staged_external_flows_are_not_doubled(clean_db, e2e_api_client: E2EApiClient):
     suffix = unique_suffix()
     portfolio_id = f"E2E_CASH_STAGE_{suffix}"
     cash_security_id = f"CASH_USD_{suffix}"
@@ -165,8 +163,10 @@ def test_cash_only_staged_external_flows_are_not_doubled(
             "frequency": "daily",
             "page": {"page_size": 200},
         },
-        lambda data: data.get("performance_end_date") == "2026-03-20"
-        and len(data.get("observations", [])) == 5,
+        lambda data: (
+            data.get("performance_end_date") == "2026-03-20"
+            and len(data.get("observations", [])) == 5
+        ),
         timeout=240,
         fail_message="Portfolio cash-only staged-flow timeseries did not mature.",
     )

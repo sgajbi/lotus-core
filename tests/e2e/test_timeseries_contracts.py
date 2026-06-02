@@ -83,8 +83,7 @@ def test_portfolio_timeseries_contract_returns_expected_rows(
         observation = payload["observations"][0]
         assert observation["valuation_date"] == day
         assert (
-            as_decimal(observation["beginning_market_value"])
-            == expected["beginning_market_value"]
+            as_decimal(observation["beginning_market_value"]) == expected["beginning_market_value"]
         )
         assert as_decimal(observation["ending_market_value"]) == expected["ending_market_value"]
         assert observation["valuation_status"] == expected["valuation_status"]

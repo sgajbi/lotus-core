@@ -75,14 +75,10 @@ def test_apply_trade_and_fx_helpers_respect_guard_clauses_and_currency_rounding(
     apply_fx_spot_to_portfolio(portfolio, fx_intent)
 
     usd_cash = next(
-        cash_balance
-        for cash_balance in portfolio.cash_balances
-        if cash_balance.currency == "USD"
+        cash_balance for cash_balance in portfolio.cash_balances if cash_balance.currency == "USD"
     )
     jpy_cash = next(
-        cash_balance
-        for cash_balance in portfolio.cash_balances
-        if cash_balance.currency == "JPY"
+        cash_balance for cash_balance in portfolio.cash_balances if cash_balance.currency == "JPY"
     )
 
     assert usd_cash.amount == Decimal("990")

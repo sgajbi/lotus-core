@@ -190,12 +190,12 @@ def test_db_outage_recovery(
     wait_for_postgres_ready(db_engine)
 
     emit_test_output("\n--- Restarting persistence_service to ensure DB reconnection ---")
-    subprocess.run(
-        _compose_args("restart", "persistence_service"), check=True, capture_output=True
-    )
+    subprocess.run(_compose_args("restart", "persistence_service"), check=True, capture_output=True)
 
     # 6. ACT: Wait for the persistence service to become healthy again
-    wait_for_service_ready(f"http://localhost:{os.environ['LOTUS_PERSISTENCE_HOST_PORT']}/health/ready")
+    wait_for_service_ready(
+        f"http://localhost:{os.environ['LOTUS_PERSISTENCE_HOST_PORT']}/health/ready"
+    )
 
     # 7. ACT/ASSERT: Ingest and persist a new transaction after recovery.
     transaction_payload_after = {
@@ -233,9 +233,9 @@ def test_db_outage_recovery(
     msg = dlq_consumer.poll(timeout=10)
     dlq_consumer.close()
 
-    assert (
-        msg is None
-    ), f"A message was unexpectedly found in the DLQ: {msg.value() if msg else 'None'}"
+    assert msg is None, (
+        f"A message was unexpectedly found in the DLQ: {msg.value() if msg else 'None'}"
+    )
     emit_test_output("\n--- DLQ verified to be empty ---", verbose_only=True)
 
     # 9. RECOVERY BARRIER: restart all core services and wait for end-to-end readiness

@@ -940,4 +940,3 @@ def test_proposal_simulation_skips_buy_intent_without_notional():
 
     assert result.status == "READY"
     assert result.intents == []
-
