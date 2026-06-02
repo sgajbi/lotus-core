@@ -11,8 +11,7 @@ class Instrument(BaseModel):
     security_id: str = Field(
         ...,
         description=(
-            "Canonical security identifier used across portfolios, "
-            "transactions, and valuation."
+            "Canonical security identifier used across portfolios, transactions, and valuation."
         ),
         examples=["SEC_BARC_PERP"],
     )
@@ -202,4 +201,3 @@ class InstrumentIngestionRequest(BaseModel):
             ]
         ],
     )
-

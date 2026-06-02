@@ -84,8 +84,7 @@ async def require_ops_token(
                 detail={
                     "code": "INGESTION_OPS_JWT_SECRET_MISSING",
                     "message": (
-                        "JWT auth is enabled but LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET "
-                        "is missing."
+                        "JWT auth is enabled but LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET is missing."
                     ),
                 },
             )

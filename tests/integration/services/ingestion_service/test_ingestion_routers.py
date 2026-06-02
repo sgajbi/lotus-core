@@ -1997,9 +1997,7 @@ async def test_ingest_model_portfolios_normalizes_base_currency(
     assert body["accepted_count"] == 1
     assert body["idempotency_key"] == "model-portfolio-idem-001"
 
-    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
-        "model_portfolios"
-    ]
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted["model_portfolios"]
     assert len(persisted) == 1
     assert persisted[0]["base_currency"] == "SGD"
 

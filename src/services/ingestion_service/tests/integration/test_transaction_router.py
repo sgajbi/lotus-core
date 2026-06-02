@@ -46,7 +46,7 @@ async def test_ingest_transactions_success(
                 "gross_transaction_amount": 5000.0,
                 "trade_currency": "USD",
                 "currency": "USD",
-            }
+            },
         ]
     }
 
@@ -55,13 +55,11 @@ async def test_ingest_transactions_success(
 
     # THEN
     assert response.status_code == 202
-    assert response.json() == {
-        "message": "Successfully queued 2 transactions for processing."
-    }
+    assert response.json() == {"message": "Successfully queued 2 transactions for processing."}
 
     # Verify that the kafka producer was called correctly for each transaction
     assert mock_kafka_producer.publish_message.call_count == 2
-    
+
     # Check the content of the first published message
     first_call = mock_kafka_producer.publish_message.call_args_list[0]
     assert first_call.kwargs["topic"] == KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC

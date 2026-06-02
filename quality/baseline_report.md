@@ -102,3 +102,7 @@ regression gate remains clean.
 CR-860 continued the Ruff format ratchet across a bounded calculator and runtime-service batch.
 Repository-wide `ruff format --check .` debt is down from 110 to 90 files while the Ruff lint
 regression gate remains clean.
+
+CR-861 continued the Ruff format ratchet across a bounded ingestion and pipeline-orchestrator batch.
+Repository-wide `ruff format --check .` debt is down from 90 to 68 files while the Ruff lint
+regression gate remains clean.

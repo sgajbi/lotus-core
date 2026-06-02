@@ -34,6 +34,8 @@ def _transaction_event() -> TransactionEvent:
         currency="USD",
         epoch=0,
     )
+
+
 async def test_emit_if_ready_skips_outbox_after_losing_stage_ownership(
     clean_db, async_db_session: AsyncSession
 ):

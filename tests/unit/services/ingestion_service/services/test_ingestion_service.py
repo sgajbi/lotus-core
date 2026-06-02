@@ -221,9 +221,8 @@ async def test_publish_reprocessing_requests_fails_on_flush_timeout(
         await ingestion_service.publish_reprocessing_requests(transaction_ids)
 
     assert exc_info.value.failed_record_keys == ["TX1", "TX2"]
-    assert (
-        "Delivery confirmation timed out for reprocessing request delivery confirmation."
-        in str(exc_info.value)
+    assert "Delivery confirmation timed out for reprocessing request delivery confirmation." in str(
+        exc_info.value
     )
 
 

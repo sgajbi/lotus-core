@@ -151,9 +151,7 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
 
     return IngestionServiceSettings(
         adapter_mode=IngestionAdapterModeSettings(
-            portfolio_bundle_enabled=_env_bool(
-                "LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", True
-            ),
+            portfolio_bundle_enabled=_env_bool("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", True),
             upload_apis_enabled=_env_bool("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", True),
         ),
         ops_auth=IngestionOpsAuthSettings(
@@ -176,9 +174,7 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
                 "LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", 5000
             ),
             replay_max_backlog_jobs=_env_int("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", 5000),
-            dlq_budget_events_per_window=_env_int(
-                "LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", 10
-            ),
+            dlq_budget_events_per_window=_env_int("LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", 10),
             default_lookback_minutes=_env_int("LOTUS_CORE_DEFAULT_LOOKBACK_MINUTES", 60),
             default_failure_rate_threshold=_env_decimal(
                 "LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD", "0.03"
@@ -197,13 +193,9 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
                 "VALUATION_SCHEDULER_POLL_INTERVAL", 30
             ),
             valuation_scheduler_batch_size=_env_int("VALUATION_SCHEDULER_BATCH_SIZE", 100),
-            valuation_scheduler_dispatch_rounds=_env_int(
-                "VALUATION_SCHEDULER_DISPATCH_ROUNDS", 10
-            ),
+            valuation_scheduler_dispatch_rounds=_env_int("VALUATION_SCHEDULER_DISPATCH_ROUNDS", 10),
             capacity_assumed_replicas=_env_int("LOTUS_CORE_CAPACITY_ASSUMED_REPLICAS", 1),
-            replay_isolation_mode=_env_str(
-                "LOTUS_CORE_REPLAY_ISOLATION_MODE", "shared_workers"
-            ),
+            replay_isolation_mode=_env_str("LOTUS_CORE_REPLAY_ISOLATION_MODE", "shared_workers"),
             partition_growth_strategy=_env_str(
                 "LOTUS_CORE_PARTITION_GROWTH_STRATEGY", "scale_out_only"
             ),
