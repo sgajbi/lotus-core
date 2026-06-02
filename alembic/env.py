@@ -1,4 +1,5 @@
 # alembic/env.py
+import importlib
 import os
 import sys
 from logging.config import fileConfig
@@ -33,7 +34,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 # Import the models module so SQLAlchemy model classes register with Base.metadata for Alembic.
-from portfolio_common import database_models
+database_models = importlib.import_module("portfolio_common.database_models")
 
 target_metadata = database_models.Base.metadata
 

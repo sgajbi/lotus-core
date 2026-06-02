@@ -67,3 +67,6 @@ Full Ruff findings are down to 271: 250 `E501`, 20 `I001`, and 1 `E402`.
 CR-851 normalized the remaining app and test import-order findings. `python -m ruff check .
 --select I001 --statistics` is now clean, and full Ruff findings are down to 251: 250 `E501` and
 1 `E402`.
+
+CR-852 removed the final `E402` import-position finding from Alembic metadata bootstrap while
+preserving the required path setup order. Full Ruff findings are down to 250, all `E501`.

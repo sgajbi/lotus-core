@@ -17,7 +17,7 @@ tested modules.
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
 | Report-only quality CI | Started | `.github/workflows/quality-baseline.yml` |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
-| Lint baseline | Improving | 251 ruff findings remain; unused-symbol and import-order subsets are clean |
+| Lint baseline | Improving | 250 ruff findings remain; unused-symbol, import-order, and import-position subsets are clean |
 | Architecture gates | Existing plus new scaffold | Existing `make architecture-guard`; new `.importlinter` scaffold |
 | OpenAPI governance | Existing plus new scaffold | Existing `make openapi-gate`; new `.spectral.yaml` scaffold |
 
@@ -44,3 +44,5 @@ health before that claim is defensible.
    removing 12 additional import-order findings.
 7. Normalized the remaining app and test import ordering, removing the last 20 import-order
    findings from the baseline.
+8. Reworked Alembic metadata bootstrap to clear the final import-position finding while preserving
+   path setup and SQLAlchemy model registration.
