@@ -14,7 +14,7 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Maintainability | Most files A/B; selected C hotspot in OpenAPI enrichment | No new C/D maintainability files |
 | Dead code | Not measured locally; tool missing | Add vulture report-only CI |
 | Dependency usage | Not measured locally; tool missing | Add deptry report-only CI |
-| Security | Bandit baseline reduced after CR-872: 11 findings under `python -m bandit -r src -c pyproject.toml` (0 low, 11 medium, 0 high); remains report-only | Fix or govern remaining medium findings before enforcement |
+| Security | Bandit baseline reduced after CR-873: 10 findings under `python -m bandit -r src -c pyproject.toml` (0 low, 10 medium, 0 high); remains report-only | Fix or govern remaining health-probe bind-host findings before enforcement |
 | Architecture boundaries | Existing strict architecture guard plus 2 kept import-linter contracts enforced by `make quality-import-boundary-gate` after CR-867 | Add focused import contracts as additional ownership boundaries stabilize |
 | OpenAPI governance | Existing OpenAPI quality and API vocabulary gates promoted into the quality-baseline API governance job after CR-868 | Keep API governance regression-free while spectral remains report-only until a stable generated-spec artifact exists |
 | Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |

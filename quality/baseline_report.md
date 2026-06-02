@@ -161,3 +161,8 @@ CR-872 replaced string-based enterprise readiness integer setting attribute look
 typed settings access for secret-rotation and write-payload policy knobs. The Bandit baseline is
 down to 11 findings: 0 low, 11 medium, and 0 high. Security remains report-only until the remaining
 medium findings are fixed or explicitly governed.
+
+CR-873 replaced the reprocessing job claim path's interpolated `ORDER BY` SQL with two explicit
+static claim-query templates selected by job type. The Bandit baseline is down to 10 findings:
+0 low, 10 medium, and 0 high. Security remains report-only until the remaining health-probe
+bind-host findings are fixed or explicitly governed.

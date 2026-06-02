@@ -20,7 +20,7 @@ tested modules.
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
-| Security baseline | Improving but not clean | Bandit reports 11 findings after CR-872: 0 low, 11 medium, 0 high |
+| Security baseline | Improving but not clean | Bandit reports 10 findings after CR-873: 0 low, 10 medium, 0 high |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
 
@@ -98,3 +98,6 @@ health before that claim is defensible.
 28. Replaced enterprise readiness string-based integer setting attribute lookup with explicit typed
     settings access, removing the remaining low-severity Bandit finding and reducing the security
     baseline to 11 medium findings with zero low or high findings.
+29. Replaced reprocessing job claim SQL interpolation with static job-type-specific claim-query
+    templates, removing the low-confidence SQL-construction Bandit finding and reducing the
+    security baseline to 10 medium bind-host findings.
