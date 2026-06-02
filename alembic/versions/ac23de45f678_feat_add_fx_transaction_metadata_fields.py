@@ -24,8 +24,12 @@ def upgrade() -> None:
     op.add_column("transactions", sa.Column("fx_cash_leg_role", sa.String(), nullable=True))
     op.add_column("transactions", sa.Column("linked_fx_cash_leg_id", sa.String(), nullable=True))
     op.add_column("transactions", sa.Column("settlement_status", sa.String(), nullable=True))
-    op.add_column("transactions", sa.Column("pair_base_currency", sa.String(length=3), nullable=True))
-    op.add_column("transactions", sa.Column("pair_quote_currency", sa.String(length=3), nullable=True))
+    op.add_column(
+        "transactions", sa.Column("pair_base_currency", sa.String(length=3), nullable=True)
+    )
+    op.add_column(
+        "transactions", sa.Column("pair_quote_currency", sa.String(length=3), nullable=True)
+    )
     op.add_column("transactions", sa.Column("fx_rate_quote_convention", sa.String(), nullable=True))
     op.add_column("transactions", sa.Column("buy_currency", sa.String(length=3), nullable=True))
     op.add_column("transactions", sa.Column("sell_currency", sa.String(length=3), nullable=True))
@@ -39,25 +43,57 @@ def upgrade() -> None:
     op.add_column(
         "transactions", sa.Column("fx_contract_close_transaction_id", sa.String(), nullable=True)
     )
-    op.add_column("transactions", sa.Column("settlement_of_fx_contract_id", sa.String(), nullable=True))
+    op.add_column(
+        "transactions", sa.Column("settlement_of_fx_contract_id", sa.String(), nullable=True)
+    )
     op.add_column("transactions", sa.Column("swap_event_id", sa.String(), nullable=True))
     op.add_column("transactions", sa.Column("near_leg_group_id", sa.String(), nullable=True))
     op.add_column("transactions", sa.Column("far_leg_group_id", sa.String(), nullable=True))
     op.add_column("transactions", sa.Column("spot_exposure_model", sa.String(), nullable=True))
     op.add_column("transactions", sa.Column("fx_realized_pnl_mode", sa.String(), nullable=True))
-    op.add_column("transactions", sa.Column("realized_capital_pnl_local", sa.Numeric(18, 10), nullable=True))
-    op.add_column("transactions", sa.Column("realized_fx_pnl_local", sa.Numeric(18, 10), nullable=True))
-    op.add_column("transactions", sa.Column("realized_total_pnl_local", sa.Numeric(18, 10), nullable=True))
-    op.add_column("transactions", sa.Column("realized_capital_pnl_base", sa.Numeric(18, 10), nullable=True))
-    op.add_column("transactions", sa.Column("realized_fx_pnl_base", sa.Numeric(18, 10), nullable=True))
-    op.add_column("transactions", sa.Column("realized_total_pnl_base", sa.Numeric(18, 10), nullable=True))
+    op.add_column(
+        "transactions", sa.Column("realized_capital_pnl_local", sa.Numeric(18, 10), nullable=True)
+    )
+    op.add_column(
+        "transactions", sa.Column("realized_fx_pnl_local", sa.Numeric(18, 10), nullable=True)
+    )
+    op.add_column(
+        "transactions", sa.Column("realized_total_pnl_local", sa.Numeric(18, 10), nullable=True)
+    )
+    op.add_column(
+        "transactions", sa.Column("realized_capital_pnl_base", sa.Numeric(18, 10), nullable=True)
+    )
+    op.add_column(
+        "transactions", sa.Column("realized_fx_pnl_base", sa.Numeric(18, 10), nullable=True)
+    )
+    op.add_column(
+        "transactions", sa.Column("realized_total_pnl_base", sa.Numeric(18, 10), nullable=True)
+    )
 
-    op.create_index(op.f("ix_transactions_component_type"), "transactions", ["component_type"], unique=False)
-    op.create_index(op.f("ix_transactions_component_id"), "transactions", ["component_id"], unique=False)
-    op.create_index(op.f("ix_transactions_fx_cash_leg_role"), "transactions", ["fx_cash_leg_role"], unique=False)
-    op.create_index(op.f("ix_transactions_linked_fx_cash_leg_id"), "transactions", ["linked_fx_cash_leg_id"], unique=False)
-    op.create_index(op.f("ix_transactions_settlement_status"), "transactions", ["settlement_status"], unique=False)
-    op.create_index(op.f("ix_transactions_fx_contract_id"), "transactions", ["fx_contract_id"], unique=False)
+    op.create_index(
+        op.f("ix_transactions_component_type"), "transactions", ["component_type"], unique=False
+    )
+    op.create_index(
+        op.f("ix_transactions_component_id"), "transactions", ["component_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_transactions_fx_cash_leg_role"), "transactions", ["fx_cash_leg_role"], unique=False
+    )
+    op.create_index(
+        op.f("ix_transactions_linked_fx_cash_leg_id"),
+        "transactions",
+        ["linked_fx_cash_leg_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_transactions_settlement_status"),
+        "transactions",
+        ["settlement_status"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_transactions_fx_contract_id"), "transactions", ["fx_contract_id"], unique=False
+    )
     op.create_index(
         op.f("ix_transactions_fx_contract_open_transaction_id"),
         "transactions",
@@ -76,9 +112,18 @@ def upgrade() -> None:
         ["settlement_of_fx_contract_id"],
         unique=False,
     )
-    op.create_index(op.f("ix_transactions_swap_event_id"), "transactions", ["swap_event_id"], unique=False)
-    op.create_index(op.f("ix_transactions_near_leg_group_id"), "transactions", ["near_leg_group_id"], unique=False)
-    op.create_index(op.f("ix_transactions_far_leg_group_id"), "transactions", ["far_leg_group_id"], unique=False)
+    op.create_index(
+        op.f("ix_transactions_swap_event_id"), "transactions", ["swap_event_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_transactions_near_leg_group_id"),
+        "transactions",
+        ["near_leg_group_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_transactions_far_leg_group_id"), "transactions", ["far_leg_group_id"], unique=False
+    )
 
 
 def downgrade() -> None:
@@ -86,8 +131,12 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_transactions_near_leg_group_id"), table_name="transactions")
     op.drop_index(op.f("ix_transactions_swap_event_id"), table_name="transactions")
     op.drop_index(op.f("ix_transactions_settlement_of_fx_contract_id"), table_name="transactions")
-    op.drop_index(op.f("ix_transactions_fx_contract_close_transaction_id"), table_name="transactions")
-    op.drop_index(op.f("ix_transactions_fx_contract_open_transaction_id"), table_name="transactions")
+    op.drop_index(
+        op.f("ix_transactions_fx_contract_close_transaction_id"), table_name="transactions"
+    )
+    op.drop_index(
+        op.f("ix_transactions_fx_contract_open_transaction_id"), table_name="transactions"
+    )
     op.drop_index(op.f("ix_transactions_fx_contract_id"), table_name="transactions")
     op.drop_index(op.f("ix_transactions_settlement_status"), table_name="transactions")
     op.drop_index(op.f("ix_transactions_linked_fx_cash_leg_id"), table_name="transactions")

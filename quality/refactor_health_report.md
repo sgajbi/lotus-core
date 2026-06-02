@@ -17,7 +17,7 @@ tested modules.
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
 | Report-only quality CI | Started | `.github/workflows/quality-baseline.yml` |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
-| Lint baseline | Improving | 218 ruff findings remain; unused-symbol, import-order, and import-position subsets are clean |
+| Lint baseline | Improving | 172 ruff findings remain; unused-symbol, import-order, and import-position subsets are clean |
 | Architecture gates | Existing plus new scaffold | Existing `make architecture-guard`; new `.importlinter` scaffold |
 | OpenAPI governance | Existing plus new scaffold | Existing `make openapi-gate`; new `.spectral.yaml` scaffold |
 
@@ -48,3 +48,5 @@ health before that claim is defensible.
    path setup and SQLAlchemy model registration.
 9. Started the E501 line-length ratchet on active non-Alembic scripts, tools, app modules, DTOs,
    and focused tests, reducing remaining Ruff findings from 250 to 218.
+10. Normalized line length in the first bounded Alembic migration batch, reducing remaining Ruff
+    findings from 218 to 172 while preserving migration SQL smoke.

@@ -73,3 +73,6 @@ preserving the required path setup order. Full Ruff findings are down to 250, al
 
 CR-853 started the line-length ratchet on active non-Alembic code and tests. Full Ruff findings are
 down to 218, all `E501`.
+
+CR-854 normalized line length in a first bounded Alembic migration batch. Full Ruff findings are
+down to 172, all `E501`.
