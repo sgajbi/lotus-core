@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from portfolio_common.event_supportability import EventFamilyDefinition
+
 from scripts import event_runtime_contract_guard as guard
 
 

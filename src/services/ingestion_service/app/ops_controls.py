@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
-from .settings import get_ingestion_service_settings
 
+from .settings import get_ingestion_service_settings
 
 _SETTINGS = get_ingestion_service_settings()
 

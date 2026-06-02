@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from portfolio_common.ingestion_evidence import (

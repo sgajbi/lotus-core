@@ -1,6 +1,7 @@
 # services/query-service/app/dependencies.py
-from fastapi import Query
 from typing import Dict, Optional
+
+from fastapi import Query
 
 
 def pagination_params(

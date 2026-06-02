@@ -1,8 +1,8 @@
 # services/ingestion_service/tests/integration/test_transaction_router.py
-import pytest
-from httpx import AsyncClient
 from unittest.mock import MagicMock
 
+import pytest
+from httpx import AsyncClient
 from portfolio_common.config import KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC
 
 # Mark all tests in this file as async

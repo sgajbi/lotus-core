@@ -5,7 +5,6 @@ from portfolio_common.source_data_products import (
     SOURCE_DATA_PRODUCT_CATALOG,
 )
 
-
 AUDIT_DOC = (
     Path(__file__).resolve().parents[3]
     / "docs"

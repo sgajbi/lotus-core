@@ -4,7 +4,11 @@ from typing import Any
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
     MiddlewareCallable,
+)
+from portfolio_common.enterprise_readiness import (
     build_enterprise_audit_middleware as build_shared_enterprise_audit_middleware,
+)
+from portfolio_common.enterprise_readiness import (
     redact_sensitive as shared_redact_sensitive,
 )
 

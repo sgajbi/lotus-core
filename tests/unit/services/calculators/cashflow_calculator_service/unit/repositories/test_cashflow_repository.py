@@ -10,7 +10,6 @@ from src.services.calculators.cashflow_calculator_service.app.repositories.cashf
     CashflowRepository,
 )
 
-
 pytestmark = pytest.mark.asyncio
 
 

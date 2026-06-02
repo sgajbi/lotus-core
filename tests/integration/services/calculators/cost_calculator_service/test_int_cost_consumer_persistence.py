@@ -4,11 +4,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import (
-    Transaction as DBTransaction,
     OutboxEvent,
     Portfolio,
     PositionLotState,
     ProcessedEvent,
+)
+from portfolio_common.database_models import (
+    Transaction as DBTransaction,
 )
 from portfolio_common.events import TransactionEvent
 from sqlalchemy import select

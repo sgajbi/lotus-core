@@ -5,6 +5,7 @@ from portfolio_common.source_data_products import (
     SourceDataProductDefinition,
 )
 from portfolio_common.source_data_security import SourceDataSecurityProfile
+
 from scripts import source_data_product_contract_guard as guard
 
 
