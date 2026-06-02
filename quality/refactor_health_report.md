@@ -15,7 +15,7 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Started | `.github/workflows/quality-baseline.yml` now has an enforced Ruff regression gate while other baseline checks remain report-only |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint and Ruff format gates while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
@@ -75,3 +75,6 @@ health before that claim is defensible.
 21. Completed the Ruff format ratchet across the remaining E2E workflow tests and query-service
     advisory-simulation unit tests, reducing format debt from 21 files to zero while keeping Ruff
     lint clean.
+22. Added an enforced Ruff format gate to the quality-baseline workflow and a repo-native
+    `make quality-ruff-format-gate` target so future pull requests cannot reintroduce formatter
+    drift.

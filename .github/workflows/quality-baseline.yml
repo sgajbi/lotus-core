@@ -30,6 +30,21 @@ jobs:
       - name: Ruff regression gate
         run: python -m ruff check . --statistics
 
+  ruff-format-gate:
+    name: Quality Baseline / Ruff Format Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install Ruff
+        run: python -m pip install ruff
+      - name: Ruff format gate
+        run: python -m ruff format --check .
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest

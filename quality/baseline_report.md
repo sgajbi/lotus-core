@@ -123,3 +123,8 @@ regression gate remains clean.
 CR-865 completed the Ruff format ratchet across the remaining E2E workflow tests and
 query-service advisory-simulation unit tests. Repository-wide `ruff format --check .` is now clean
 across 1,070 files, making Ruff format suitable for the next enforced quality gate.
+
+CR-866 added `make quality-ruff-format-gate` and a dedicated quality-baseline workflow job that
+runs `python -m ruff format --check .`. Ruff lint and Ruff format are now both enforced clean
+baselines; the remaining quality tools stay report-only until their baselines are made truthful and
+stable.
