@@ -15,6 +15,7 @@ AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES = {
     "INTEREST",
 }
 
+
 @dataclass(frozen=True)
 class AdjustmentCashLegError(ValueError):
     field: str

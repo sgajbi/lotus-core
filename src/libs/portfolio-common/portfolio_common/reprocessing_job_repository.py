@@ -179,7 +179,7 @@ class ReprocessingJobRepository:
                     "Normalized duplicate pending reset-watermarks jobs before claim.",
                     extra={"deleted_count": normalized_count},
                 )
-            order_clause = "(payload->>'earliest_impacted_date') ASC, " "created_at ASC, id ASC"
+            order_clause = "(payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC"
 
         query = text(
             f"""

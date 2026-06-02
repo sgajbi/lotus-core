@@ -21,9 +21,7 @@ def enrich_buy_transaction_metadata(event: TransactionEvent) -> TransactionEvent
         event.linked_transaction_group_id or f"LTG-BUY-{event.portfolio_id}-{event.transaction_id}"
     )
     calculation_policy_id = event.calculation_policy_id or BUY_DEFAULT_POLICY_ID
-    calculation_policy_version = (
-        event.calculation_policy_version or BUY_DEFAULT_POLICY_VERSION
-    )
+    calculation_policy_version = event.calculation_policy_version or BUY_DEFAULT_POLICY_VERSION
 
     return event.model_copy(
         update={

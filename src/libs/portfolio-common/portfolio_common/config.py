@@ -516,14 +516,10 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
                             _sanitize_consumer_override_map(
                                 group_cfg,
                                 context=(
-                                    "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON"
-                                    f"[{group_id}]"
+                                    f"LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON[{group_id}]"
                                 ),
                             ),
-                            context=(
-                                "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON"
-                                f"[{group_id}]"
-                            ),
+                            context=(f"LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON[{group_id}]"),
                         )
                     )
             else:
