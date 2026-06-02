@@ -166,3 +166,9 @@ CR-873 replaced the reprocessing job claim path's interpolated `ORDER BY` SQL wi
 static claim-query templates selected by job type. The Bandit baseline is down to 10 findings:
 0 low, 10 medium, and 0 high. Security remains report-only until the remaining health-probe
 bind-host findings are fixed or explicitly governed.
+
+CR-874 centralized consumer health-probe bind-host selection in
+`portfolio_common.health_server.health_probe_bind_host()`, routed all worker consumer managers
+through the shared helper, and added focused configuration tests. The Bandit baseline is now clean:
+0 findings across `src`. Security is ready for the next progressive CI ratchet that promotes
+Bandit from report-only to an enforced quality-baseline gate.

@@ -10,6 +10,7 @@ from portfolio_common.config import (
     KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
     KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
+from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
@@ -76,7 +77,9 @@ class ConsumerManager:
         signal.signal(signal.SIGTERM, self._signal_handler)
 
         # NEW: Setup and run the Uvicorn server for health probes
-        uvicorn_config = uvicorn.Config(web_app, host="0.0.0.0", port=8081, log_config=None)
+        uvicorn_config = uvicorn.Config(
+            web_app, host=health_probe_bind_host(), port=8081, log_config=None
+        )
         server = uvicorn.Server(uvicorn_config)
 
         logger.info("Starting all consumer tasks, the outbox dispatcher, and the web server...")

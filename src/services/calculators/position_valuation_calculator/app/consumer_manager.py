@@ -8,6 +8,7 @@ from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
 )
+from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
@@ -74,7 +75,9 @@ class ConsumerManager:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-        uvicorn_config = uvicorn.Config(web_app, host="0.0.0.0", port=8084, log_config=None)
+        uvicorn_config = uvicorn.Config(
+            web_app, host=health_probe_bind_host(), port=8084, log_config=None
+        )
         server = uvicorn.Server(uvicorn_config)
 
         logger.info("Starting valuation worker consumer(s), outbox dispatcher, and web server...")
