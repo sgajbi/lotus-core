@@ -30,7 +30,8 @@ bank-buyable readiness.
 
 1. Full-suite pytest collection is not clean; collection must be fixed before using repository-wide
    test count or coverage as an enterprise readiness claim.
-2. Ruff is not yet repository-clean under the current root config.
+2. Ruff is now repository-clean under the current root config; the next risk is keeping that clean
+   state enforced on every pull request.
 3. Generated `build` copies under `src/services/query_service/build` inflate line-count and
    duplicate-surface metrics.
 4. OpenAPI quality, architecture-boundary, security, dependency, docstring, dead-code, and
@@ -44,7 +45,8 @@ bank-buyable readiness.
 2. Run pytest collection as runtime-separated lanes now that import/plugin collection blockers are
    removed.
 3. Keep generated build copies out of the active source checkout and quality scope.
-4. Convert baseline reports into regression-only gates once stable artifacts exist.
+4. Convert baseline reports into regression-only gates once stable artifacts exist. Ruff is the
+   first converted gate because CR-855 made it repository-clean.
 
 ## Follow-up Measurement
 
@@ -80,3 +82,7 @@ down to 172, all `E501`.
 CR-855 normalized line length in the remaining Alembic migration hotspots. `python -m ruff check
 . --statistics` is now clean, establishing Ruff as a candidate regression gate instead of a
 report-only debt inventory.
+
+CR-856 added a dedicated Ruff regression gate to the quality-baseline workflow and a repo-native
+`make quality-ruff-gate` target. The broader quality workflow remains report-only for checks whose
+baselines are not yet clean.
