@@ -172,3 +172,7 @@ CR-874 centralized consumer health-probe bind-host selection in
 through the shared helper, and added focused configuration tests. The Bandit baseline is now clean:
 0 findings across `src`. Security is ready for the next progressive CI ratchet that promotes
 Bandit from report-only to an enforced quality-baseline gate.
+
+CR-875 added `make quality-bandit-gate` and a dedicated quality-baseline Bandit security workflow
+job. The clean Bandit baseline is now enforced in CI while the report-only workflow retains broader
+security and dependency-audit visibility.

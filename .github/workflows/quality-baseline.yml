@@ -94,6 +94,21 @@ jobs:
       - name: Typecheck gate
         run: python -m mypy --config-file mypy.ini
 
+  bandit-security-gate:
+    name: Quality Baseline / Bandit Security Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install Bandit
+        run: python -m pip install bandit
+      - name: Bandit security gate
+        run: python -m bandit -r src -c pyproject.toml
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest
