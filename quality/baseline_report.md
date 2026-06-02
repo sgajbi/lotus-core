@@ -199,3 +199,11 @@ directly imported by production source. The production-source command
 `python -m deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"`
 now reports no dependency issues and is enforced by `make quality-deptry-source-gate` plus a
 dedicated quality-baseline Deptry source dependency workflow job.
+
+CR-879 measured the source maintainability baseline with `python -m radon mi src -s`. Current
+source has no D/E/F maintainability modules, but it still has C-ranked hotspots in
+`portfolio_common/openapi_enrichment.py` and selected query-service repository/service modules.
+The new `make quality-maintainability-gate` target uses `scripts/maintainability_gate.py` to parse
+Radon JSON output and fail only when a production source module drops below C. The clean no-D/E/F
+baseline is now enforced in the quality-baseline workflow while existing C hotspots remain visible
+for follow-up refactor slices.

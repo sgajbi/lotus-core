@@ -139,6 +139,21 @@ jobs:
       - name: Deptry source dependency gate
         run: python -m deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"
 
+  maintainability-gate:
+    name: Quality Baseline / Maintainability Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install Radon
+        run: python -m pip install radon
+      - name: Maintainability gate
+        run: python scripts/maintainability_gate.py src
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest
