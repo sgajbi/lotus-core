@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from hashlib import md5
 from typing import Any
 
 from fastapi import Depends
@@ -41,6 +39,7 @@ from ..repositories.simulation_repository import SimulationRepository
 from .control_code_normalization import normalize_control_code
 from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .position_flow_effects import transaction_quantity_effect_decimal
+from .request_fingerprint import request_fingerprint
 
 CASH_ASSET_CLASS = "CASH"
 
@@ -91,9 +90,7 @@ class CoreSnapshotService:
 
     @staticmethod
     def _request_fingerprint(payload: dict[str, Any]) -> str:
-        return md5(
-            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
+        return request_fingerprint(payload)
 
     @staticmethod
     def _normalize_freshness_status(status: str | None) -> str | None:

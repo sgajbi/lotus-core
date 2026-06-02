@@ -56,6 +56,7 @@ from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..settings import load_query_service_settings
 from .decimal_amounts import decimal_or_zero
+from .request_fingerprint import request_fingerprint
 
 
 class AnalyticsInputError(RuntimeError):
@@ -81,8 +82,7 @@ class AnalyticsTimeseriesService:
         )
 
     def _request_fingerprint(self, payload: dict) -> str:
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
+        return request_fingerprint(payload)
 
     def _encode_page_token(self, payload: dict) -> str:
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))

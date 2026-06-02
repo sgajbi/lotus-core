@@ -147,3 +147,8 @@ success without unused-config noise for the configured query-service DTO/router 
 CR-869 also measured the local Bandit security baseline. `python -m bandit -r src -c pyproject.toml`
 currently reports 17 findings: 5 low, 11 medium, and 1 high. Security remains report-only until
 those findings are fixed or explicitly governed.
+
+CR-870 removed MD5 from query-service request fingerprint generation by consolidating core snapshot
+and analytics export fingerprints onto the shared SHA-256 helper. The Bandit baseline is down to 16
+findings: 5 low, 11 medium, and 0 high. Security remains report-only until the remaining findings
+are fixed or explicitly governed.
