@@ -22,7 +22,8 @@ def require_portfolio_bundle_adapter_enabled() -> None:
             "message": (
                 "Portfolio bundle adapter mode is disabled. "
                 "Use canonical ingestion endpoints (/ingest/portfolios, /ingest/transactions, "
-                "/ingest/instruments, /ingest/market-prices, /ingest/fx-rates, /ingest/business-dates)."
+                "/ingest/instruments, /ingest/market-prices, /ingest/fx-rates, "
+                "/ingest/business-dates)."
             ),
         },
     )

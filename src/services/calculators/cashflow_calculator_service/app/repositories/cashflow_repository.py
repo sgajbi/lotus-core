@@ -51,7 +51,8 @@ class CashflowRepository:
             return cashflow
         except IntegrityError:
             logger.info(
-                "Cashflow for transaction_id '%s' in epoch %s already exists. Reusing persisted row.",
+                "Cashflow for transaction_id '%s' in epoch %s already exists. "
+                "Reusing persisted row.",
                 cashflow.transaction_id,
                 cashflow.epoch,
             )

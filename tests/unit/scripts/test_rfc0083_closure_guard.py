@@ -13,7 +13,10 @@ def _ledger() -> dict[str, object]:
         "completedRuntimeProof": [
             {
                 "proof": "platform end-to-end validation",
-                "evidence": "docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md",
+                "evidence": (
+                    "docs/architecture/"
+                    "RFC-0083-platform-e2e-runtime-validation-evidence.md"
+                ),
             }
         ],
         "remainingRuntimeProof": ["full PR Merge Gate"],

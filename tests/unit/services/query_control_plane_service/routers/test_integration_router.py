@@ -844,9 +844,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
 
     assert response["product_name"] == "DpmPortfolioUniverseCandidate"
     assert response["candidates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
-    assert response["selection_basis"]["basis_type"] == (
-        "EFFECTIVE_DISCRETIONARY_MANDATE_BINDING"
-    )
+    assert response["selection_basis"]["basis_type"] == ("EFFECTIVE_DISCRETIONARY_MANDATE_BINDING")
     mock_service.resolve_dpm_portfolio_universe_candidates.assert_awaited_once_with(
         request=request,
     )
@@ -1719,9 +1717,7 @@ async def test_get_external_order_execution_acknowledgement_router_function() ->
                 "missing_data_families": ["external_oms_order_execution_acknowledgement"],
                 "blocked_capabilities": ["oms_acknowledgement", "fills", "settlement"],
             },
-            "lineage": {
-                "contract_version": "rfc_042_external_order_execution_acknowledgement_v1"
-            },
+            "lineage": {"contract_version": "rfc_042_external_order_execution_acknowledgement_v1"},
         }
     )
     request = ExternalOrderExecutionAcknowledgementRequest(
@@ -1745,7 +1741,9 @@ async def test_get_external_order_execution_acknowledgement_router_function() ->
 
 
 @pytest.mark.asyncio
-async def test_get_external_order_execution_acknowledgement_router_raises_404_without_binding() -> None:
+async def test_get_external_order_execution_acknowledgement_router_raises_404_without_binding() -> (
+    None
+):
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_external_order_execution_acknowledgement = AsyncMock(return_value=None)
     request = ExternalOrderExecutionAcknowledgementRequest(as_of_date="2026-05-03")

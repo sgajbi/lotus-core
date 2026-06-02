@@ -12,7 +12,9 @@ class BusinessCalendarRepository:
         self._db = db
 
     async def get_latest_business_date(self, calendar_code: str) -> date | None:
-        stmt = select(func.max(BusinessDate.date)).where(BusinessDate.calendar_code == calendar_code)
+        stmt = select(func.max(BusinessDate.date)).where(
+            BusinessDate.calendar_code == calendar_code
+        )
         result = await self._db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -21,4 +23,3 @@ def get_business_calendar_repository(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> BusinessCalendarRepository:
     return BusinessCalendarRepository(db)
-

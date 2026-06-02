@@ -70,3 +70,6 @@ CR-851 normalized the remaining app and test import-order findings. `python -m r
 
 CR-852 removed the final `E402` import-position finding from Alembic metadata bootstrap while
 preserving the required path setup order. Full Ruff findings are down to 250, all `E501`.
+
+CR-853 started the line-length ratchet on active non-Alembic code and tests. Full Ruff findings are
+down to 218, all `E501`.

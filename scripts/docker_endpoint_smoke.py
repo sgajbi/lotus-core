@@ -125,13 +125,18 @@ def build_smoke_cleanup_sql() -> str:
             "delete from accrued_income_offset_state where portfolio_id like 'PORT_SMOKE_%';",
             "delete from cashflows where portfolio_id like 'PORT_SMOKE_%';",
             "delete from transaction_costs where transaction_id like 'TX%_SMOKE_%';",
-            "delete from pipeline_stage_state where portfolio_id like 'PORT_SMOKE_%' or security_id like 'SEC_SMOKE_%' or transaction_id like 'TX%_SMOKE_%';",
+            "delete from pipeline_stage_state "
+            "where portfolio_id like 'PORT_SMOKE_%' "
+            "or security_id like 'SEC_SMOKE_%' "
+            "or transaction_id like 'TX%_SMOKE_%';",
             "delete from processed_events where portfolio_id like 'PORT_SMOKE_%';",
             "delete from cash_account_masters where portfolio_id like 'PORT_SMOKE_%';",
             "delete from portfolio_benchmark_assignments where portfolio_id like 'PORT_SMOKE_%';",
             "delete from transactions where portfolio_id like 'PORT_SMOKE_%';",
             "delete from market_prices where security_id like 'SEC_SMOKE_%';",
-            "delete from instruments where portfolio_id like 'PORT_SMOKE_%' or security_id like 'SEC_SMOKE_%';",
+            "delete from instruments "
+            "where portfolio_id like 'PORT_SMOKE_%' "
+            "or security_id like 'SEC_SMOKE_%';",
             "delete from portfolios where portfolio_id like 'PORT_SMOKE_%';",
         ]
     )
