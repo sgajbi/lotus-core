@@ -140,3 +140,7 @@ health before that claim is defensible.
     coverage calculations into `reference_coverage_calculations.py`. `get_benchmark_coverage` is
     now A-ranked for complexity, and `reference_data_repository.py` improved from `C (4.26)` to
     `C (6.94)`, but it remains a C-ranked maintainability hotspot.
+41. Reduced load-run progress operations repository complexity by extracting scalar statement,
+    summary statement, valuation handoff SQL, and summary-mapping helpers. The former D-ranked
+    `get_load_run_progress` method now reports A-ranked complexity, but
+    `operations_repository.py` remains a C-ranked maintainability hotspot.

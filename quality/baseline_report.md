@@ -246,3 +246,10 @@ coverage helpers into `reference_coverage_calculations.py`. `get_benchmark_cover
 maintainability. The new helper module reports `A (50.34)`. This does not remove
 `reference_data_repository.py` from the current C-ranked maintainability list; the C-hotspot count
 remains 8.
+
+CR-885 reduced the load-run progress operations repository hotspot by splitting scalar statement
+construction, summary-row statement construction, valuation handoff SQL, and summary mapping into
+named helpers. `get_load_run_progress` now reports `A (3)` instead of `D (27)` under Radon
+cyclomatic complexity, and all extracted load-run helper methods report A-ranked complexity.
+`operations_repository.py` remains `C (0.00)` under Radon maintainability, so the C-hotspot count
+remains 8.
