@@ -151,17 +151,35 @@ def test_resolve_market_data_coverage_response_orchestrates_repository_reads() -
 
 
 @pytest.mark.parametrize(
-    ("price_date", "fx_rate_date", "expected_state", "expected_reason"),
+    (
+        "price_date",
+        "fx_rate_date",
+        "expected_state",
+        "expected_reason",
+        "expected_missing_pairs",
+        "expected_stale_pairs",
+    ),
     [
-        (date(2026, 4, 1), date(2026, 4, 10), "DEGRADED", "MARKET_DATA_STALE"),
-        (None, date(2026, 4, 10), "INCOMPLETE", "MARKET_DATA_MISSING"),
+        (date(2026, 4, 1), date(2026, 4, 10), "DEGRADED", "MARKET_DATA_STALE", [], []),
+        (None, date(2026, 4, 10), "INCOMPLETE", "MARKET_DATA_MISSING", [], []),
+        (date(2026, 4, 10), None, "INCOMPLETE", "MARKET_DATA_MISSING", ["USD/SGD"], []),
+        (
+            date(2026, 4, 10),
+            date(2026, 4, 1),
+            "DEGRADED",
+            "MARKET_DATA_STALE",
+            [],
+            ["USD/SGD"],
+        ),
     ],
 )
 def test_market_data_coverage_response_classifies_stale_and_missing_evidence(
     price_date: date | None,
-    fx_rate_date: date,
+    fx_rate_date: date | None,
     expected_state: str,
     expected_reason: str,
+    expected_missing_pairs: list[str],
+    expected_stale_pairs: list[str],
 ) -> None:
     request = MarketDataCoverageRequest(
         as_of_date=date(2026, 4, 10),
@@ -182,14 +200,18 @@ def test_market_data_coverage_response_classifies_stale_and_missing_evidence(
         if price_date is not None
         else []
     )
-    fx_rows = [
-        SimpleNamespace(
-            from_currency="USD",
-            to_currency="SGD",
-            rate_date=fx_rate_date,
-            rate=Decimal("1.3521000000"),
-        )
-    ]
+    fx_rows = (
+        [
+            SimpleNamespace(
+                from_currency="USD",
+                to_currency="SGD",
+                rate_date=fx_rate_date,
+                rate=Decimal("1.3521000000"),
+            )
+        ]
+        if fx_rate_date is not None
+        else []
+    )
 
     response = build_market_data_coverage_response(
         request=request,
@@ -200,4 +222,6 @@ def test_market_data_coverage_response_classifies_stale_and_missing_evidence(
 
     assert response.supportability.state == expected_state
     assert response.supportability.reason == expected_reason
+    assert response.supportability.missing_currency_pairs == expected_missing_pairs
+    assert response.supportability.stale_currency_pairs == expected_stale_pairs
     assert response.data_quality_status == "PARTIAL"
