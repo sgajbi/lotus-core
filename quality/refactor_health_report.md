@@ -397,3 +397,9 @@ health before that claim is defensible.
     and unknown-security fallback into `core_snapshot_instrument_enrichment.py`. The helper module
     reports `A (64.32)` maintainability and A-ranked helper complexity. `core_snapshot_service.py`
     shrank from 1,093 SLOC to 1,067 SLOC, but remains a C-ranked maintainability hotspot.
+89. Reduced core snapshot baseline metadata coupling by extracting current-snapshot versus
+    historical-fallback freshness metadata, latest row/state timestamp selection, single snapshot
+    epoch selection, and empty-baseline epoch suppression into
+    `core_snapshot_baseline_metadata.py`. The helper module reports `A (58.44)` maintainability and
+    A-ranked helper complexity. `core_snapshot_service.py` shrank from 1,067 SLOC to 1,018 SLOC and
+    improved from `C (0.00)` to `C (2.18)`, but remains a C-ranked maintainability hotspot.

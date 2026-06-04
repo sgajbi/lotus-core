@@ -12,6 +12,9 @@ from src.services.query_service.app.dtos.core_snapshot_dto import (
     CoreSnapshotRequest,
     CoreSnapshotSection,
 )
+from src.services.query_service.app.services.core_snapshot_baseline_metadata import (
+    latest_snapshot_timestamp,
+)
 from src.services.query_service.app.services.core_snapshot_calculations import (
     assign_baseline_weights,
     assign_projected_weights,
@@ -665,7 +668,7 @@ async def test_core_snapshot_history_fallback_classifies_data_quality_partial(mo
 
 
 async def test_latest_snapshot_timestamp_uses_latest_row_or_state_timestamp():
-    latest = CoreSnapshotService._latest_snapshot_timestamp(
+    latest = latest_snapshot_timestamp(
         [
             (
                 _snapshot_row(

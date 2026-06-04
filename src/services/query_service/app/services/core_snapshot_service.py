@@ -35,6 +35,7 @@ from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
 from .control_code_normalization import normalize_control_code
+from .core_snapshot_baseline_metadata import baseline_freshness_metadata
 from .core_snapshot_calculations import (
     assign_baseline_weights,
     assign_projected_weights,
@@ -608,7 +609,9 @@ class CoreSnapshotService:
 
         total_base = total_market_value_baseline(baseline)
         assign_baseline_weights(baseline, total_base)
-        return dict(sorted(baseline.items(), key=lambda item: item[0])), self._baseline_freshness(
+        return dict(
+            sorted(baseline.items(), key=lambda item: item[0])
+        ), baseline_freshness_metadata(
             rows=baseline_rows.rows,
             use_snapshot=baseline_rows.use_snapshot,
             has_baseline=bool(baseline),
@@ -752,62 +755,6 @@ class CoreSnapshotService:
             "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
             "liquidity_tier": instrument.liquidity_tier,
         }
-
-    def _baseline_freshness(
-        self,
-        *,
-        rows: list[Any],
-        use_snapshot: bool,
-        has_baseline: bool,
-    ) -> CoreSnapshotFreshnessMetadata:
-        if not use_snapshot:
-            return CoreSnapshotFreshnessMetadata(
-                freshness_status="HISTORICAL_FALLBACK",
-                baseline_source="position_history",
-                snapshot_timestamp=None,
-                snapshot_epoch=None,
-                fallback_reason="NO_CURRENT_POSITION_STATE_ROWS",
-            )
-        return CoreSnapshotFreshnessMetadata(
-            freshness_status="CURRENT_SNAPSHOT",
-            baseline_source="position_state",
-            snapshot_timestamp=self._latest_snapshot_timestamp(rows),
-            snapshot_epoch=self._baseline_snapshot_epoch(rows=rows, has_baseline=has_baseline),
-            fallback_reason=None,
-        )
-
-    def _baseline_snapshot_epoch(
-        self,
-        *,
-        rows: list[Any],
-        has_baseline: bool,
-    ) -> int | None:
-        if not has_baseline:
-            return None
-        return self._single_resolved_epoch(rows)
-
-    @staticmethod
-    def _latest_snapshot_timestamp(rows: list[Any]) -> datetime | None:
-        timestamps: list[datetime] = []
-        for row, _instrument, state in rows:
-            for candidate in (
-                getattr(row, "updated_at", None),
-                getattr(row, "created_at", None),
-                getattr(state, "updated_at", None),
-                getattr(state, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None
-
-    @staticmethod
-    def _single_resolved_epoch(rows: list[Any]) -> int | None:
-        epochs = {
-            int(state.epoch)
-            for _row, _instrument, state in rows
-            if getattr(state, "epoch", None) is not None
-        }
-        return next(iter(epochs)) if len(epochs) == 1 else None
 
     async def _resolve_projected_positions(
         self,
