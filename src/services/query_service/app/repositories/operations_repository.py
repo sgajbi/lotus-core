@@ -26,6 +26,19 @@ from sqlalchemy.orm import aliased
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .date_filters import start_of_next_day
 from .identifier_normalization import normalize_security_id
+from .operations_health_queries import (
+    analytics_export_job_health_aggregate,
+    analytics_export_job_health_result_select,
+    analytics_export_job_health_summary_from_row,
+    int_or_zero,
+    oldest_open_analytics_export_job,
+    oldest_open_support_job,
+    seconds_or_none,
+    support_job_health_aggregate,
+    support_job_health_result_select,
+    support_job_health_summary_from_row,
+    support_job_health_thresholds,
+)
 from .operations_models import (
     ExportJobHealthSummary,
     JobHealthSummary,
@@ -37,17 +50,6 @@ from .operations_models import (
     ResetWatermarkReprocessingJobScope,
     SnapshotValuationCoverageSummary,
 )
-
-
-def _int_or_zero(value) -> int:
-    return int(value) if value is not None else 0
-
-
-def _seconds_or_none(raw) -> float | None:
-    if raw is None:
-        return None
-    seconds = float(raw)
-    return seconds
 
 
 class OperationsRepository:
@@ -655,103 +657,6 @@ class OperationsRepository:
         )
         return stmt
 
-    @staticmethod
-    def _support_job_health_aggregate(base_subq, open_date_column, stale_threshold, failed_since):
-        open_statuses = ("PENDING", "PROCESSING")
-        return (
-            select(
-                func.count().filter(base_subq.c.status.in_(open_statuses)).label("pending_jobs"),
-                func.count().filter(base_subq.c.status == "PROCESSING").label("processing_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "PROCESSING",
-                    base_subq.c.updated_at < stale_threshold,
-                )
-                .label("stale_processing_jobs"),
-                func.count().filter(base_subq.c.status == "FAILED").label("failed_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "FAILED",
-                    base_subq.c.updated_at >= failed_since,
-                )
-                .label("failed_jobs_last_hours"),
-                func.min(open_date_column)
-                .filter(base_subq.c.status.in_(open_statuses))
-                .label("oldest_open_job_date"),
-            )
-            .select_from(base_subq)
-            .subquery()
-        )
-
-    @staticmethod
-    def _oldest_open_support_job(base_subq, open_date_column, *extra_columns):
-        return (
-            select(base_subq.c.id, *extra_columns, base_subq.c.correlation_id)
-            .where(base_subq.c.status.in_(("PENDING", "PROCESSING")))
-            .order_by(
-                open_date_column.asc(),
-                base_subq.c.updated_at.asc(),
-                base_subq.c.id.asc(),
-            )
-            .limit(1)
-            .subquery()
-        )
-
-    @staticmethod
-    def _support_job_health_thresholds(
-        *,
-        stale_minutes: int,
-        failed_window_hours: int,
-        reference_now: datetime,
-    ):
-        return (
-            reference_now - timedelta(minutes=stale_minutes),
-            reference_now - timedelta(hours=failed_window_hours),
-        )
-
-    @staticmethod
-    def _support_job_health_result_select(
-        aggregate_subq,
-        oldest_job_subq,
-        *,
-        include_security: bool = False,
-    ):
-        selected_columns = [
-            aggregate_subq.c.pending_jobs,
-            aggregate_subq.c.processing_jobs,
-            aggregate_subq.c.stale_processing_jobs,
-            aggregate_subq.c.failed_jobs,
-            aggregate_subq.c.failed_jobs_last_hours,
-            aggregate_subq.c.oldest_open_job_date,
-            oldest_job_subq.c.id,
-            oldest_job_subq.c.correlation_id,
-        ]
-        if include_security:
-            selected_columns.append(oldest_job_subq.c.security_id)
-        return (
-            select(*selected_columns).select_from(aggregate_subq).outerjoin(oldest_job_subq, true())
-        )
-
-    @staticmethod
-    def _support_job_health_summary_from_row(
-        row,
-        *,
-        include_security: bool = False,
-    ) -> JobHealthSummary:
-        return JobHealthSummary(
-            pending_jobs=_int_or_zero(row.pending_jobs),
-            processing_jobs=_int_or_zero(row.processing_jobs),
-            stale_processing_jobs=_int_or_zero(row.stale_processing_jobs),
-            failed_jobs=_int_or_zero(row.failed_jobs),
-            failed_jobs_last_hours=_int_or_zero(row.failed_jobs_last_hours),
-            oldest_open_job_date=row.oldest_open_job_date,
-            oldest_open_job_id=row.id,
-            oldest_open_job_correlation_id=row.correlation_id,
-            oldest_open_security_id=(
-                normalize_security_id(row.security_id) if include_security else None
-            ),
-        )
-
     async def _get_support_job_health_summary(
         self,
         base_stmt,
@@ -764,109 +669,29 @@ class OperationsRepository:
         base_subq = base_stmt.subquery()
         open_date_column = getattr(base_subq.c, open_date_column_name)
         extra_columns = (base_subq.c.security_id,) if include_security else ()
-        aggregate_subq = self._support_job_health_aggregate(
+        aggregate_subq = support_job_health_aggregate(
             base_subq,
             open_date_column,
             stale_threshold,
             failed_since,
         )
-        oldest_job_subq = self._oldest_open_support_job(
+        oldest_job_subq = oldest_open_support_job(
             base_subq,
             open_date_column,
             *extra_columns,
         )
         row = (
             await self.db.execute(
-                self._support_job_health_result_select(
+                support_job_health_result_select(
                     aggregate_subq,
                     oldest_job_subq,
                     include_security=include_security,
                 )
             )
         ).one()
-        return self._support_job_health_summary_from_row(
+        return support_job_health_summary_from_row(
             row,
             include_security=include_security,
-        )
-
-    @staticmethod
-    def _analytics_export_job_health_aggregate(
-        base_subq,
-        *,
-        stale_threshold: datetime,
-        failed_since: datetime,
-    ):
-        open_statuses = ("accepted", "running")
-        return (
-            select(
-                func.count().filter(base_subq.c.status == "accepted").label("accepted_jobs"),
-                func.count().filter(base_subq.c.status == "running").label("running_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "running",
-                    base_subq.c.updated_at < stale_threshold,
-                )
-                .label("stale_running_jobs"),
-                func.count().filter(base_subq.c.status == "failed").label("failed_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "failed",
-                    base_subq.c.updated_at >= failed_since,
-                )
-                .label("failed_jobs_last_hours"),
-                func.min(base_subq.c.created_at)
-                .filter(base_subq.c.status.in_(open_statuses))
-                .label("oldest_open_job_created_at"),
-            )
-            .select_from(base_subq)
-            .subquery()
-        )
-
-    @staticmethod
-    def _oldest_open_analytics_export_job(base_subq):
-        return (
-            select(
-                base_subq.c.job_id,
-                base_subq.c.request_fingerprint,
-            )
-            .where(base_subq.c.status.in_(("accepted", "running")))
-            .order_by(
-                base_subq.c.created_at.asc(),
-                base_subq.c.updated_at.asc(),
-                base_subq.c.job_id.asc(),
-            )
-            .limit(1)
-            .subquery()
-        )
-
-    @staticmethod
-    def _analytics_export_job_health_result_select(aggregate_subq, oldest_job_subq):
-        return (
-            select(
-                aggregate_subq.c.accepted_jobs,
-                aggregate_subq.c.running_jobs,
-                aggregate_subq.c.stale_running_jobs,
-                aggregate_subq.c.failed_jobs,
-                aggregate_subq.c.failed_jobs_last_hours,
-                aggregate_subq.c.oldest_open_job_created_at,
-                oldest_job_subq.c.job_id,
-                oldest_job_subq.c.request_fingerprint,
-            )
-            .select_from(aggregate_subq)
-            .outerjoin(oldest_job_subq, true())
-        )
-
-    @staticmethod
-    def _analytics_export_job_health_summary_from_row(row) -> ExportJobHealthSummary:
-        return ExportJobHealthSummary(
-            accepted_jobs=_int_or_zero(row.accepted_jobs),
-            running_jobs=_int_or_zero(row.running_jobs),
-            stale_running_jobs=_int_or_zero(row.stale_running_jobs),
-            failed_jobs=_int_or_zero(row.failed_jobs),
-            failed_jobs_last_hours=_int_or_zero(row.failed_jobs_last_hours),
-            oldest_open_job_created_at=row.oldest_open_job_created_at,
-            oldest_open_job_id=row.job_id,
-            oldest_open_request_fingerprint=row.request_fingerprint,
         )
 
     async def _get_analytics_export_job_health_summary(
@@ -877,21 +702,21 @@ class OperationsRepository:
         failed_since: datetime,
     ) -> ExportJobHealthSummary:
         base_subq = base_stmt.subquery()
-        aggregate_subq = self._analytics_export_job_health_aggregate(
+        aggregate_subq = analytics_export_job_health_aggregate(
             base_subq,
             stale_threshold=stale_threshold,
             failed_since=failed_since,
         )
-        oldest_job_subq = self._oldest_open_analytics_export_job(base_subq)
+        oldest_job_subq = oldest_open_analytics_export_job(base_subq)
         row = (
             await self.db.execute(
-                self._analytics_export_job_health_result_select(
+                analytics_export_job_health_result_select(
                     aggregate_subq,
                     oldest_job_subq,
                 )
             )
         ).one()
-        return self._analytics_export_job_health_summary_from_row(row)
+        return analytics_export_job_health_summary_from_row(row)
 
     @staticmethod
     def _missing_historical_fx_base_stmt(
@@ -959,7 +784,7 @@ class OperationsRepository:
         sample_rows,
     ) -> MissingHistoricalFxDependencySummary:
         return MissingHistoricalFxDependencySummary(
-            missing_count=_int_or_zero(aggregate_row.missing_count),
+            missing_count=int_or_zero(aggregate_row.missing_count),
             earliest_transaction_date=aggregate_row.earliest_transaction_date,
             latest_transaction_date=aggregate_row.latest_transaction_date,
             sample_records=[
@@ -1569,30 +1394,30 @@ class OperationsRepository:
             completed_valuation_portfolios_without_position_timeseries,
             oldest_completed_valuation_without_position_timeseries_at_utc,
         ) = valuation_without_position_timeseries
-        open_valuation_jobs = _int_or_zero(pending_valuation_jobs) + _int_or_zero(
+        open_valuation_jobs = int_or_zero(pending_valuation_jobs) + int_or_zero(
             processing_valuation_jobs
         )
-        open_aggregation_jobs = _int_or_zero(pending_aggregation_jobs) + _int_or_zero(
+        open_aggregation_jobs = int_or_zero(pending_aggregation_jobs) + int_or_zero(
             processing_aggregation_jobs
         )
 
         return LoadRunProgressSummary(
-            portfolios_ingested=_int_or_zero(portfolios_ingested),
-            transactions_ingested=_int_or_zero(transactions_ingested),
-            portfolios_with_snapshots=_int_or_zero(portfolios_with_snapshots),
-            snapshot_rows=_int_or_zero(snapshot_rows),
-            portfolios_with_position_timeseries=_int_or_zero(portfolios_with_position_timeseries),
-            position_timeseries_rows=_int_or_zero(position_timeseries_rows),
-            portfolios_with_timeseries=_int_or_zero(portfolios_with_timeseries),
-            timeseries_rows=_int_or_zero(timeseries_rows),
-            pending_valuation_jobs=_int_or_zero(pending_valuation_jobs),
-            processing_valuation_jobs=_int_or_zero(processing_valuation_jobs),
+            portfolios_ingested=int_or_zero(portfolios_ingested),
+            transactions_ingested=int_or_zero(transactions_ingested),
+            portfolios_with_snapshots=int_or_zero(portfolios_with_snapshots),
+            snapshot_rows=int_or_zero(snapshot_rows),
+            portfolios_with_position_timeseries=int_or_zero(portfolios_with_position_timeseries),
+            position_timeseries_rows=int_or_zero(position_timeseries_rows),
+            portfolios_with_timeseries=int_or_zero(portfolios_with_timeseries),
+            timeseries_rows=int_or_zero(timeseries_rows),
+            pending_valuation_jobs=int_or_zero(pending_valuation_jobs),
+            processing_valuation_jobs=int_or_zero(processing_valuation_jobs),
             open_valuation_jobs=open_valuation_jobs,
-            pending_aggregation_jobs=_int_or_zero(pending_aggregation_jobs),
-            processing_aggregation_jobs=_int_or_zero(processing_aggregation_jobs),
+            pending_aggregation_jobs=int_or_zero(pending_aggregation_jobs),
+            processing_aggregation_jobs=int_or_zero(processing_aggregation_jobs),
             open_aggregation_jobs=open_aggregation_jobs,
-            failed_valuation_jobs=_int_or_zero(failed_valuation_jobs),
-            failed_aggregation_jobs=_int_or_zero(failed_aggregation_jobs),
+            failed_valuation_jobs=int_or_zero(failed_valuation_jobs),
+            failed_aggregation_jobs=int_or_zero(failed_aggregation_jobs),
             oldest_pending_valuation_date=oldest_pending_valuation_date,
             oldest_pending_aggregation_date=oldest_pending_aggregation_date,
             latest_snapshot_date=latest_snapshot_date,
@@ -1606,28 +1431,28 @@ class OperationsRepository:
             ),
             latest_valuation_job_updated_at_utc=latest_valuation_job_updated_at_utc,
             latest_aggregation_job_updated_at_utc=latest_aggregation_job_updated_at_utc,
-            completed_valuation_jobs_without_position_timeseries=_int_or_zero(
+            completed_valuation_jobs_without_position_timeseries=int_or_zero(
                 completed_valuation_jobs_without_position_timeseries
             ),
-            completed_valuation_portfolios_without_position_timeseries=_int_or_zero(
+            completed_valuation_portfolios_without_position_timeseries=int_or_zero(
                 completed_valuation_portfolios_without_position_timeseries
             ),
-            max_completed_valuation_jobs_without_position_timeseries_single_portfolio=_int_or_zero(
+            max_completed_valuation_jobs_without_position_timeseries_single_portfolio=int_or_zero(
                 max_waiting_portfolio_depth
             ),
             oldest_completed_valuation_without_position_timeseries_at_utc=(
                 oldest_completed_valuation_without_position_timeseries_at_utc
             ),
-            valuation_to_position_timeseries_latency_sample_count=_int_or_zero(
+            valuation_to_position_timeseries_latency_sample_count=int_or_zero(
                 valuation_to_position_timeseries_latency_sample_count
             ),
-            valuation_to_position_timeseries_latency_p50_seconds=_seconds_or_none(
+            valuation_to_position_timeseries_latency_p50_seconds=seconds_or_none(
                 valuation_to_position_timeseries_latency_p50_seconds
             ),
-            valuation_to_position_timeseries_latency_p95_seconds=_seconds_or_none(
+            valuation_to_position_timeseries_latency_p95_seconds=seconds_or_none(
                 valuation_to_position_timeseries_latency_p95_seconds
             ),
-            valuation_to_position_timeseries_latency_max_seconds=_seconds_or_none(
+            valuation_to_position_timeseries_latency_max_seconds=seconds_or_none(
                 valuation_to_position_timeseries_latency_max_seconds
             ),
         )
@@ -1754,7 +1579,7 @@ class OperationsRepository:
         reference_now: datetime,
         as_of: Optional[datetime] = None,
     ) -> JobHealthSummary:
-        stale_threshold, failed_since = self._support_job_health_thresholds(
+        stale_threshold, failed_since = support_job_health_thresholds(
             stale_minutes=stale_minutes,
             failed_window_hours=failed_window_hours,
             reference_now=reference_now,
@@ -1788,7 +1613,7 @@ class OperationsRepository:
         reference_now: datetime,
         as_of: Optional[datetime] = None,
     ) -> JobHealthSummary:
-        stale_threshold, failed_since = self._support_job_health_thresholds(
+        stale_threshold, failed_since = support_job_health_thresholds(
             stale_minutes=stale_minutes,
             failed_window_hours=failed_window_hours,
             reference_now=reference_now,
@@ -1820,7 +1645,7 @@ class OperationsRepository:
         reference_now: datetime,
         as_of: Optional[datetime] = None,
     ) -> ExportJobHealthSummary:
-        stale_threshold, failed_since = self._support_job_health_thresholds(
+        stale_threshold, failed_since = support_job_health_thresholds(
             stale_minutes=stale_minutes,
             failed_window_hours=failed_window_hours,
             reference_now=reference_now,

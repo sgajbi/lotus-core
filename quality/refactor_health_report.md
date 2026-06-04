@@ -427,3 +427,11 @@ health before that claim is defensible.
     shrank from 1,278 SLOC to 1,163 SLOC and improved from `C (8.74)` to `B (9.24)`, removing it
     from the active C-ranked maintainability hotspot list. The generated `query_service/build`
     copy remains separate generated-surface debt and is not changed by this slice.
+93. Reduced operations repository health-query coupling by extracting integer/latency row-value
+    normalization, support-job health thresholds, support-job aggregate and oldest-open selectors,
+    support-job health result shaping, analytics-export aggregate and oldest-open selectors, and
+    analytics-export health result shaping into `operations_health_queries.py`. The helper module
+    reports `A (49.26)` maintainability and A-ranked helper complexity.
+    `operations_repository.py` shrank from 2,684 SLOC to 2,522 SLOC, but remains `C (0.00)` under
+    Radon maintainability and needs additional focused extractions before it can leave the active
+    C-ranked hotspot list.
