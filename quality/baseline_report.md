@@ -728,3 +728,11 @@ compatibility re-exports from the original module after shared paging DTOs are d
 extracted module reports `A (41.65)` maintainability. `reference_integration_dto.py` shrank from
 3,078 SLOC to 2,922 SLOC and improved from `C (4.62)` to `C (6.70)`, but remains a C-ranked
 maintainability hotspot.
+
+CR-952 reduced query-service reference integration DTO coupling by extracting the instrument
+eligibility and DPM source-readiness DTO families into
+`reference_integration_instrument_eligibility_dto.py` and
+`reference_integration_dpm_source_readiness_dto.py`, with compatibility re-exports from the
+original module. The extracted modules report `A (41.20)` and `A (42.75)` maintainability.
+`reference_integration_dto.py` shrank from 2,922 SLOC to 2,639 SLOC and improved from `C (6.70)`
+to `B (11.49)`, removing it from the active non-generated C-ranked source hotspot list.
