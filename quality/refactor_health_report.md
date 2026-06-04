@@ -289,3 +289,8 @@ health before that claim is defensible.
     C-ranked `get_position_timeseries` method now reports `A (4)` instead of `C (15)`, removing
     the final C-ranked method from `analytics_timeseries_service.py`; the module remains a
     C-ranked maintainability hotspot and the C-hotspot count remains 7.
+70. Reduced analytics export job creation complexity by extracting reused-job response, dataset
+    collection, export result payload, export result metrics, and completed-job persistence helpers
+    inside `analytics_timeseries_service.py`. The former B-ranked `create_export_job` method now
+    reports `A (4)` instead of `B (8)`, but `analytics_timeseries_service.py` remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.

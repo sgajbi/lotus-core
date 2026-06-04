@@ -452,3 +452,10 @@ next-page token, and diagnostics helpers inside `analytics_timeseries_service.py
 complexity, and the extracted position-timeseries helpers report A-ranked complexity. This removes
 the final C-ranked method from `analytics_timeseries_service.py`; the module still reports
 `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-914 reduced analytics export job creation complexity by extracting reused-job response, dataset
+collection, export result payload, export result metrics, and completed-job persistence helpers
+inside `analytics_timeseries_service.py`. `create_export_job` now reports `A (4)` instead of
+`B (8)` under Radon cyclomatic complexity, and the extracted export job creation helpers report
+A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 7.

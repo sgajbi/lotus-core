@@ -1731,58 +1731,20 @@ class AnalyticsTimeseriesService:
             request_fingerprint=request_fingerprint,
         )
         if reused:
-            disposition = (
-                "reused_completed"
-                if self._normalize_export_job_status(row.status) == "completed"
-                else "reused_inflight"
-            )
-            return self._to_export_response(row, disposition=disposition)
+            return self._reused_export_job_response(row)
 
         job_id = row.job_id
         await self._mark_export_job_running(job_id)
 
         started = perf_counter()
         try:
-            if request.dataset_type == "portfolio_timeseries":
-                if request.portfolio_timeseries_request is None:
-                    raise AnalyticsInputError(
-                        "INVALID_REQUEST",
-                        "portfolio_timeseries_request is required for "
-                        "portfolio_timeseries exports.",
-                    )
-                data_rows, page_depth = await self._collect_portfolio_timeseries_for_export(
-                    portfolio_id=request.portfolio_id,
-                    request=request.portfolio_timeseries_request,
-                )
-            else:
-                if request.position_timeseries_request is None:
-                    raise AnalyticsInputError(
-                        "INVALID_REQUEST",
-                        "position_timeseries_request is required for position_timeseries exports.",
-                    )
-                data_rows, page_depth = await self._collect_position_timeseries_for_export(
-                    portfolio_id=request.portfolio_id,
-                    request=request.position_timeseries_request,
-                )
-            result_payload = {
-                "job_id": job_id,
-                "dataset_type": request.dataset_type,
-                "request_fingerprint": request_fingerprint,
-                "lifecycle_mode": self._EXPORT_LIFECYCLE_MODE,
-                "generated_at": datetime.now(UTC).isoformat(),
-                "contract_version": "rfc_063_v1",
-                "result_row_count": len(data_rows),
-                "data": self._jsonable(data_rows),
-            }
-            result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
-            ANALYTICS_EXPORT_RESULT_BYTES.labels(
-                request.result_format, request.compression
-            ).observe(result_bytes)
-            ANALYTICS_EXPORT_PAGE_DEPTH.labels(request.dataset_type).observe(page_depth)
-            row = await self._mark_export_job_completed(
-                job_id,
-                result_payload=result_payload,
-                result_row_count=len(data_rows),
+            data_rows, page_depth = await self._collect_export_dataset(request)
+            row = await self._complete_export_job_with_result(
+                job_id=job_id,
+                request=request,
+                request_fingerprint=request_fingerprint,
+                data_rows=data_rows,
+                page_depth=page_depth,
             )
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
             return self._to_export_response(row, disposition="created")
@@ -1806,6 +1768,95 @@ class AnalyticsTimeseriesService:
             ANALYTICS_EXPORT_JOB_DURATION_SECONDS.labels(request.dataset_type).observe(
                 perf_counter() - started
             )
+
+    def _reused_export_job_response(self, row: object) -> AnalyticsExportJobResponse:
+        disposition = (
+            "reused_completed"
+            if self._normalize_export_job_status(row.status) == "completed"
+            else "reused_inflight"
+        )
+        return self._to_export_response(row, disposition=disposition)
+
+    async def _collect_export_dataset(
+        self, request: AnalyticsExportCreateRequest
+    ) -> tuple[list[dict[str, object]], int]:
+        if request.dataset_type == "portfolio_timeseries":
+            if request.portfolio_timeseries_request is None:
+                raise AnalyticsInputError(
+                    "INVALID_REQUEST",
+                    "portfolio_timeseries_request is required for portfolio_timeseries exports.",
+                )
+            return await self._collect_portfolio_timeseries_for_export(
+                portfolio_id=request.portfolio_id,
+                request=request.portfolio_timeseries_request,
+            )
+        if request.position_timeseries_request is None:
+            raise AnalyticsInputError(
+                "INVALID_REQUEST",
+                "position_timeseries_request is required for position_timeseries exports.",
+            )
+        return await self._collect_position_timeseries_for_export(
+            portfolio_id=request.portfolio_id,
+            request=request.position_timeseries_request,
+        )
+
+    async def _complete_export_job_with_result(
+        self,
+        *,
+        job_id: str,
+        request: AnalyticsExportCreateRequest,
+        request_fingerprint: str,
+        data_rows: list[dict[str, object]],
+        page_depth: int,
+    ) -> object:
+        result_payload = self._export_result_payload(
+            job_id=job_id,
+            dataset_type=request.dataset_type,
+            request_fingerprint=request_fingerprint,
+            data_rows=data_rows,
+        )
+        self._record_export_result_metrics(
+            request=request,
+            result_payload=result_payload,
+            page_depth=page_depth,
+        )
+        return await self._mark_export_job_completed(
+            job_id,
+            result_payload=result_payload,
+            result_row_count=len(data_rows),
+        )
+
+    def _export_result_payload(
+        self,
+        *,
+        job_id: str,
+        dataset_type: str,
+        request_fingerprint: str,
+        data_rows: list[dict[str, object]],
+    ) -> dict[str, object]:
+        return {
+            "job_id": job_id,
+            "dataset_type": dataset_type,
+            "request_fingerprint": request_fingerprint,
+            "lifecycle_mode": self._EXPORT_LIFECYCLE_MODE,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "contract_version": "rfc_063_v1",
+            "result_row_count": len(data_rows),
+            "data": self._jsonable(data_rows),
+        }
+
+    @staticmethod
+    def _record_export_result_metrics(
+        *,
+        request: AnalyticsExportCreateRequest,
+        result_payload: dict[str, object],
+        page_depth: int,
+    ) -> None:
+        result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
+        ANALYTICS_EXPORT_RESULT_BYTES.labels(request.result_format, request.compression).observe(
+            result_bytes
+        )
+        ANALYTICS_EXPORT_PAGE_DEPTH.labels(request.dataset_type).observe(page_depth)
 
     async def get_export_job(self, job_id: str) -> AnalyticsExportJobResponse:
         row = await self.export_repo.get_job(job_id)
