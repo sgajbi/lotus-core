@@ -666,3 +666,11 @@ filtering into `operations_analytics_export_queries.py`. The helper module repor
 maintainability and A-ranked helper complexity. `operations_repository.py` shrank from 1,723 SLOC
 to 1,689 SLOC, but remains `C (0.00)` under Radon maintainability and needs additional focused
 extractions before it can leave the active C-ranked hotspot list.
+
+CR-944 reduced operations repository reconciliation-run scope coupling by extracting
+reconciliation-run status normalization, failed/replay priority ordering, as-of filtering, identity
+filtering, attribute filtering, and composed run-scope helpers into
+`operations_reconciliation_run_queries.py`. The helper module reports `A (47.04)` maintainability
+and A-ranked helper complexity. `operations_repository.py` shrank from 1,689 SLOC to 1,596 SLOC,
+but remains `C (0.00)` under Radon maintainability and needs additional focused extractions before
+it can leave the active C-ranked hotspot list.
