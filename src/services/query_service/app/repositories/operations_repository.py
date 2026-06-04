@@ -787,6 +787,110 @@ class OperationsRepository:
         )
 
     @staticmethod
+    def _analytics_export_job_health_aggregate(
+        base_subq,
+        *,
+        stale_threshold: datetime,
+        failed_since: datetime,
+    ):
+        open_statuses = ("accepted", "running")
+        return (
+            select(
+                func.count().filter(base_subq.c.status == "accepted").label("accepted_jobs"),
+                func.count().filter(base_subq.c.status == "running").label("running_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "running",
+                    base_subq.c.updated_at < stale_threshold,
+                )
+                .label("stale_running_jobs"),
+                func.count().filter(base_subq.c.status == "failed").label("failed_jobs"),
+                func.count()
+                .filter(
+                    base_subq.c.status == "failed",
+                    base_subq.c.updated_at >= failed_since,
+                )
+                .label("failed_jobs_last_hours"),
+                func.min(base_subq.c.created_at)
+                .filter(base_subq.c.status.in_(open_statuses))
+                .label("oldest_open_job_created_at"),
+            )
+            .select_from(base_subq)
+            .subquery()
+        )
+
+    @staticmethod
+    def _oldest_open_analytics_export_job(base_subq):
+        return (
+            select(
+                base_subq.c.job_id,
+                base_subq.c.request_fingerprint,
+            )
+            .where(base_subq.c.status.in_(("accepted", "running")))
+            .order_by(
+                base_subq.c.created_at.asc(),
+                base_subq.c.updated_at.asc(),
+                base_subq.c.job_id.asc(),
+            )
+            .limit(1)
+            .subquery()
+        )
+
+    @staticmethod
+    def _analytics_export_job_health_result_select(aggregate_subq, oldest_job_subq):
+        return (
+            select(
+                aggregate_subq.c.accepted_jobs,
+                aggregate_subq.c.running_jobs,
+                aggregate_subq.c.stale_running_jobs,
+                aggregate_subq.c.failed_jobs,
+                aggregate_subq.c.failed_jobs_last_hours,
+                aggregate_subq.c.oldest_open_job_created_at,
+                oldest_job_subq.c.job_id,
+                oldest_job_subq.c.request_fingerprint,
+            )
+            .select_from(aggregate_subq)
+            .outerjoin(oldest_job_subq, true())
+        )
+
+    @staticmethod
+    def _analytics_export_job_health_summary_from_row(row) -> ExportJobHealthSummary:
+        return ExportJobHealthSummary(
+            accepted_jobs=_int_or_zero(row.accepted_jobs),
+            running_jobs=_int_or_zero(row.running_jobs),
+            stale_running_jobs=_int_or_zero(row.stale_running_jobs),
+            failed_jobs=_int_or_zero(row.failed_jobs),
+            failed_jobs_last_hours=_int_or_zero(row.failed_jobs_last_hours),
+            oldest_open_job_created_at=row.oldest_open_job_created_at,
+            oldest_open_job_id=row.job_id,
+            oldest_open_request_fingerprint=row.request_fingerprint,
+        )
+
+    async def _get_analytics_export_job_health_summary(
+        self,
+        base_stmt,
+        *,
+        stale_threshold: datetime,
+        failed_since: datetime,
+    ) -> ExportJobHealthSummary:
+        base_subq = base_stmt.subquery()
+        aggregate_subq = self._analytics_export_job_health_aggregate(
+            base_subq,
+            stale_threshold=stale_threshold,
+            failed_since=failed_since,
+        )
+        oldest_job_subq = self._oldest_open_analytics_export_job(base_subq)
+        row = (
+            await self.db.execute(
+                self._analytics_export_job_health_result_select(
+                    aggregate_subq,
+                    oldest_job_subq,
+                )
+            )
+        ).one()
+        return self._analytics_export_job_health_summary_from_row(row)
+
+    @staticmethod
     def _apply_load_run_artifact_scope(
         stmt,
         artifact_model,
@@ -1560,8 +1664,11 @@ class OperationsRepository:
         reference_now: datetime,
         as_of: Optional[datetime] = None,
     ) -> ExportJobHealthSummary:
-        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        failed_since = reference_now - timedelta(hours=failed_window_hours)
+        stale_threshold, failed_since = self._support_job_health_thresholds(
+            stale_minutes=stale_minutes,
+            failed_window_hours=failed_window_hours,
+            reference_now=reference_now,
+        )
         base_stmt = select(
             AnalyticsExportJob.status.label("status"),
             AnalyticsExportJob.updated_at.label("updated_at"),
@@ -1574,70 +1681,10 @@ class OperationsRepository:
             portfolio_id=portfolio_id,
             as_of=as_of,
         )
-        base_subq = base_stmt.subquery()
-        aggregate_subq = (
-            select(
-                func.count().filter(base_subq.c.status == "accepted").label("accepted_jobs"),
-                func.count().filter(base_subq.c.status == "running").label("running_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "running",
-                    base_subq.c.updated_at < stale_threshold,
-                )
-                .label("stale_running_jobs"),
-                func.count().filter(base_subq.c.status == "failed").label("failed_jobs"),
-                func.count()
-                .filter(
-                    base_subq.c.status == "failed",
-                    base_subq.c.updated_at >= failed_since,
-                )
-                .label("failed_jobs_last_hours"),
-                func.min(base_subq.c.created_at)
-                .filter(base_subq.c.status.in_(("accepted", "running")))
-                .label("oldest_open_job_created_at"),
-            )
-            .select_from(base_subq)
-            .subquery()
-        )
-        oldest_job_subq = (
-            select(
-                base_subq.c.job_id,
-                base_subq.c.request_fingerprint,
-            )
-            .where(base_subq.c.status.in_(("accepted", "running")))
-            .order_by(
-                base_subq.c.created_at.asc(),
-                base_subq.c.updated_at.asc(),
-                base_subq.c.job_id.asc(),
-            )
-            .limit(1)
-            .subquery()
-        )
-        row = (
-            await self.db.execute(
-                select(
-                    aggregate_subq.c.accepted_jobs,
-                    aggregate_subq.c.running_jobs,
-                    aggregate_subq.c.stale_running_jobs,
-                    aggregate_subq.c.failed_jobs,
-                    aggregate_subq.c.failed_jobs_last_hours,
-                    aggregate_subq.c.oldest_open_job_created_at,
-                    oldest_job_subq.c.job_id,
-                    oldest_job_subq.c.request_fingerprint,
-                )
-                .select_from(aggregate_subq)
-                .outerjoin(oldest_job_subq, true())
-            )
-        ).one()
-        return ExportJobHealthSummary(
-            accepted_jobs=int(row.accepted_jobs or 0),
-            running_jobs=int(row.running_jobs or 0),
-            stale_running_jobs=int(row.stale_running_jobs or 0),
-            failed_jobs=int(row.failed_jobs or 0),
-            failed_jobs_last_hours=int(row.failed_jobs_last_hours or 0),
-            oldest_open_job_created_at=row.oldest_open_job_created_at,
-            oldest_open_job_id=row.job_id,
-            oldest_open_request_fingerprint=row.request_fingerprint,
+        return await self._get_analytics_export_job_health_summary(
+            base_stmt,
+            stale_threshold=stale_threshold,
+            failed_since=failed_since,
         )
 
     async def get_latest_transaction_date(

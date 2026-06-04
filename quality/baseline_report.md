@@ -298,3 +298,9 @@ aggregate-result selection, row-mapping, and execution helpers for valuation and
 `A (1)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted support-job health
 helpers report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 8.
+
+CR-893 reduced analytics export health summary orchestration by extracting aggregate, oldest-open
+lookup, result-selection, row-mapping, and execution helpers. `get_analytics_export_job_health_summary`
+now reports `A (1)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted
+analytics export health helpers report A-ranked complexity. `operations_repository.py` remains
+`C (0.00)` under Radon maintainability, so the C-hotspot count remains 8.

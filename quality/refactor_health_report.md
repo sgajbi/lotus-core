@@ -173,3 +173,7 @@ health before that claim is defensible.
     `get_valuation_job_health_summary` and `get_aggregation_job_health_summary` methods now report
     A-ranked complexity, but `operations_repository.py` remains a C-ranked maintainability
     hotspot.
+49. Reduced analytics export health summary complexity by extracting aggregate, oldest-open
+    lookup, result-selection, row-mapping, and execution helpers. The former B-ranked
+    `get_analytics_export_job_health_summary` method now reports A-ranked complexity, but
+    `operations_repository.py` remains a C-ranked maintainability hotspot.
