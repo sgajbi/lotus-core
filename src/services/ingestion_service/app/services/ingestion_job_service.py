@@ -75,6 +75,7 @@ from .ingestion_record_status import (
     failed_record_keys_from_failures,
     replayable_record_keys_from_payload,
 )
+from .ingestion_retry_guardrails import assert_replay_guardrails
 from .ingestion_slo_status import (
     build_slo_status_response,
     load_ingestion_slo_snapshot,
@@ -1248,27 +1249,19 @@ class IngestionJobService:
         replay_record_count: int,
     ) -> None:
         mode = await self.get_ops_mode()
-        if mode.mode == "paused":
-            raise PermissionError("Retries are blocked while ingestion is paused.")
         now = datetime.now(UTC)
-        if mode.replay_window_start and now < mode.replay_window_start:
-            raise PermissionError("Current time is before configured replay window.")
-        if mode.replay_window_end and now > mode.replay_window_end:
-            raise PermissionError("Current time is after configured replay window.")
-        if now < submitted_at:
-            raise PermissionError("Retry blocked: job submission timestamp is in the future.")
-        if replay_record_count > REPLAY_MAX_RECORDS_PER_REQUEST:
-            raise PermissionError(
-                "Retry blocked: requested replay record count exceeds configured limit. "
-                f"requested_records={replay_record_count}, "
-                f"max_records={REPLAY_MAX_RECORDS_PER_REQUEST}."
-            )
         backlog_jobs = await self._count_backlog_jobs()
-        if backlog_jobs >= REPLAY_MAX_BACKLOG_JOBS:
-            raise PermissionError(
-                "Retry blocked: ingestion backlog exceeds configured replay safety threshold. "
-                f"backlog_jobs={backlog_jobs}, max_backlog_jobs={REPLAY_MAX_BACKLOG_JOBS}."
-            )
+        assert_replay_guardrails(
+            mode=mode.mode,
+            replay_window_start=mode.replay_window_start,
+            replay_window_end=mode.replay_window_end,
+            submitted_at=submitted_at,
+            replay_record_count=replay_record_count,
+            backlog_jobs=backlog_jobs,
+            now=now,
+            max_records_per_request=REPLAY_MAX_RECORDS_PER_REQUEST,
+            max_backlog_jobs=REPLAY_MAX_BACKLOG_JOBS,
+        )
 
     async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
         now = datetime.now(UTC)

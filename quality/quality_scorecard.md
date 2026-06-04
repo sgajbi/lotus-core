@@ -79,3 +79,7 @@ Status: Initial scorecard baseline on 2026-06-02.
   `IngestionJobService.get_error_budget_status` from `B (9)` to `A (1)` and shrinking
   `ingestion_job_service.py` from 1,304 SLOC to 1,207 SLOC. The service improves from `C (5.70)`
   to `C (8.17)` and remains the remaining active non-generated C-ranked source hotspot.
+- CR-964 extracted A-ranked `ingestion_retry_guardrails.py`, reducing
+  `IngestionJobService.assert_retry_allowed_for_records` from `B (9)` to `A (1)` and improving
+  `ingestion_job_service.py` from `C (8.17)` to `B (9.82)`. This clears the active
+  non-generated C-ranked source hotspot list.

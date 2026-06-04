@@ -803,3 +803,9 @@ error-budget response assembly into `ingestion_error_budget_status.py`. `get_err
 improved from `B (9)` to `A (1)`, while the helper module reports `A (47.37)` maintainability.
 `ingestion_job_service.py` shrank from 1,304 SLOC to 1,207 SLOC and improved from `C (5.70)` to
 `C (8.17)`, but remains the remaining active non-generated C-ranked source hotspot.
+
+CR-964 reduced ingestion retry guardrail coupling by extracting deterministic retry-policy
+enforcement into `ingestion_retry_guardrails.py`. `assert_retry_allowed_for_records` improved from
+`B (9)` to `A (1)`, while the helper module reports `A (59.19)` maintainability.
+`ingestion_job_service.py` shrank from 1,207 SLOC to 1,200 SLOC and improved from `C (8.17)` to
+`B (9.82)`, clearing the active non-generated C-ranked source hotspot list.
