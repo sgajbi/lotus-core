@@ -574,3 +574,9 @@ CR-931 removed stale analytics quality and performance-horizon wrapper methods f
 1,388 SLOC to 1,325 SLOC, and improved from `C (7.80)` to `B (9.21)` under Radon maintainability.
 The generated `query_service/build` copy remains separate generated-surface debt and is not changed
 by this slice.
+
+CR-932 reduced core snapshot instrument-enrichment coupling by extracting requested security-id
+normalization, returned-instrument lookup-map construction, ordered DTO record construction, and
+unknown-security fallback into `core_snapshot_instrument_enrichment.py`. The helper module reports
+`A (64.32)` maintainability and A-ranked helper complexity. `core_snapshot_service.py` shrank from
+1,093 SLOC to 1,067 SLOC, but remains a C-ranked maintainability hotspot.

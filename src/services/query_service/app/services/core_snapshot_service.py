@@ -42,6 +42,10 @@ from .core_snapshot_calculations import (
     total_market_value_baseline,
     total_market_value_projected,
 )
+from .core_snapshot_instrument_enrichment import (
+    instrument_enrichment_records,
+    requested_instrument_security_ids,
+)
 from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .position_flow_effects import transaction_quantity_effect_decimal
 from .request_fingerprint import request_fingerprint
@@ -1112,46 +1116,13 @@ class CoreSnapshotService:
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
     ) -> list[InstrumentEnrichmentRecord]:
-        requested_ids = self._requested_instrument_security_ids(security_ids)
-        by_security_id = await self._instrument_enrichment_map(requested_ids)
-        return [
-            self._instrument_enrichment_record(
-                security_id=security_id,
-                instrument=by_security_id.get(security_id),
-            )
-            for security_id in requested_ids
-        ]
-
-    @staticmethod
-    def _requested_instrument_security_ids(security_ids: list[str]) -> list[str]:
-        requested_ids = [value.strip() for value in security_ids if value and value.strip()]
+        requested_ids = requested_instrument_security_ids(security_ids)
         if not requested_ids:
             raise CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
-        return requested_ids
-
-    async def _instrument_enrichment_map(self, security_ids: list[str]) -> dict[str, Any]:
-        instruments = await self.instrument_repo.get_by_security_ids(security_ids)
-        return {
-            security_id: item
-            for item in instruments
-            if (security_id := normalize_security_id(item.security_id))
-        }
-
-    @staticmethod
-    def _instrument_enrichment_record(
-        *,
-        security_id: str,
-        instrument: Any,
-    ) -> InstrumentEnrichmentRecord:
-        if instrument is None:
-            return InstrumentEnrichmentRecord(security_id=security_id)
-        return InstrumentEnrichmentRecord(
-            security_id=security_id,
-            issuer_id=instrument.issuer_id,
-            issuer_name=instrument.issuer_name,
-            ultimate_parent_issuer_id=instrument.ultimate_parent_issuer_id,
-            ultimate_parent_issuer_name=instrument.ultimate_parent_issuer_name,
-            liquidity_tier=instrument.liquidity_tier,
+        instruments = await self.instrument_repo.get_by_security_ids(requested_ids)
+        return instrument_enrichment_records(
+            requested_ids=requested_ids,
+            instruments=instruments,
         )
 
     async def _get_fx_rate_or_raise(
