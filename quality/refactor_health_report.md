@@ -456,3 +456,10 @@ health before that claim is defensible.
     `A (38.78)` maintainability and A-ranked helper complexity. `operations_repository.py` shrank
     from 2,388 SLOC to 2,211 SLOC, but remains `C (0.00)` under Radon maintainability and needs
     additional focused extractions before it can leave the active C-ranked hotspot list.
+97. Reduced operations repository load-run progress coupling by extracting scalar statement
+    construction, valuation and aggregation summary statement construction, valuation-to-position
+    timeseries handoff diagnostics, and `LoadRunProgressSummary` row shaping into
+    `operations_load_run_queries.py`. The helper module reports `A (44.96)` maintainability and
+    A-ranked helper complexity. `operations_repository.py` shrank from 2,211 SLOC to 1,832 SLOC,
+    but remains `C (0.00)` under Radon maintainability and needs additional focused extractions
+    before it can leave the active C-ranked hotspot list.
