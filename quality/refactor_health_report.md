@@ -339,3 +339,9 @@ health before that claim is defensible.
     maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from
     1,590 SLOC to 1,582 SLOC, but remains a C-ranked maintainability hotspot and the C-hotspot count
     remains 7.
+79. Reduced analytics pagination and diagnostics coupling by extracting request-scope fingerprint
+    construction, cursor parsing, next-token payload construction, diagnostics assembly, and
+    stale-point counting into `analytics_pagination.py`. The helper module reports `A (43.97)`
+    maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from
+    1,582 SLOC to 1,548 SLOC, but remains a C-ranked maintainability hotspot and the C-hotspot count
+    remains 7.

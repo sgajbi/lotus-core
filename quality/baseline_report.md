@@ -512,3 +512,10 @@ classification into `analytics_fx_rates.py`. The helper module reports `A (51.85
 maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,590
 SLOC to 1,582 SLOC, but still reports `C (0.00)` under Radon maintainability, so the C-hotspot
 count remains 7.
+
+CR-923 reduced analytics pagination and diagnostics coupling by extracting request-scope
+fingerprint construction, cursor parsing, next-token payload construction, diagnostics assembly,
+and stale-point counting into `analytics_pagination.py`. The helper module reports `A (43.97)`
+maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,582
+SLOC to 1,548 SLOC, but still reports `C (0.00)` under Radon maintainability, so the C-hotspot
+count remains 7.
