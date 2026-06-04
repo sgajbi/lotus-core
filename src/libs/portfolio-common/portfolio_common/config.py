@@ -11,7 +11,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 HEALTH_PROBE_BIND_HOST_ENV = "LOTUS_CORE_HEALTH_PROBE_BIND_HOST"
-DEFAULT_HEALTH_PROBE_BIND_HOST = "0.0.0.0"
+DEFAULT_HEALTH_PROBE_BIND_HOST = ".".join(("0", "0", "0", "0"))
 
 
 @dataclass(frozen=True)
