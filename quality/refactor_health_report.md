@@ -255,3 +255,9 @@ health before that claim is defensible.
     maintainability and no B-or-worse methods under Radon cyclomatic complexity.
     `core_snapshot_service.py` shrank from 1,208 SLOC / 518 LLOC to 1,093 SLOC / 464 LLOC, but it
     remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.
+64. Reduced analytics portfolio-observation complexity by extracting page scope, support-input
+    reads, row bucketing, per-date observation assembly, FX rate guards, and next-page token
+    helpers inside `analytics_timeseries_service.py`. The former D-ranked
+    `_portfolio_observation_rows` method now reports `A (2)` instead of `D (22)`, but
+    `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
+    C-hotspot count remains 7.

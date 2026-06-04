@@ -409,3 +409,10 @@ calculation module reports `A (43.88)` under Radon maintainability and no B-or-w
 Radon cyclomatic complexity. `core_snapshot_service.py` shrank from 1,208 SLOC / 518 LLOC to 1,093
 SLOC / 464 LLOC, but it still reports `C (0.00)` under Radon maintainability, so the C-hotspot
 count remains 7.
+
+CR-908 reduced analytics portfolio-observation complexity by extracting page scope, support-input
+reads, row bucketing, per-date observation assembly, FX rate guards, and next-page token helpers
+inside `analytics_timeseries_service.py`. `_portfolio_observation_rows` now reports `A (2)`
+instead of `D (22)` under Radon cyclomatic complexity, and the extracted portfolio-observation
+helpers report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)`
+under Radon maintainability, so the C-hotspot count remains 7.

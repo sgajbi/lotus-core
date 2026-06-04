@@ -87,6 +87,22 @@ class _PositionPageScope:
     security_ids: list[str]
 
 
+@dataclass(frozen=True)
+class _PortfolioObservationPageScope:
+    page_dates: list[date]
+    has_more: bool
+
+
+@dataclass(frozen=True)
+class _PortfolioObservationSupportInputs:
+    position_rows: list[object]
+    portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
+    position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
+    position_to_portfolio_rates: dict[str, dict[date, Decimal]]
+    portfolio_to_reporting_rates: dict[date, Decimal]
+    previous_eod_by_security: dict[str, Decimal]
+
+
 class AnalyticsTimeseriesService:
     _EXPORT_LIFECYCLE_MODE = "inline_job_execution"
 
@@ -379,42 +395,76 @@ class AnalyticsTimeseriesService:
             end_date=resolved_window.end_date,
             snapshot_epoch=snapshot_epoch,
         )
-        paged_dates = [day for day in observed_dates if cursor_date is None or day > cursor_date]
-        has_more = len(paged_dates) > page_size
-        page_dates = paged_dates[:page_size]
-        if not page_dates:
+        page_scope = self._portfolio_observation_page_scope(
+            observed_dates=observed_dates,
+            cursor_date=cursor_date,
+            page_size=page_size,
+        )
+        if not page_scope.page_dates:
             return [], {}, observed_dates, snapshot_epoch, None
 
-        position_rows = await self.repo.list_position_timeseries_rows_unpaged(
+        support_inputs = await self._portfolio_observation_support_inputs(
             portfolio_id=portfolio_id,
-            start_date=min(page_dates),
-            end_date=max(page_dates),
+            page_dates=page_scope.page_dates,
             snapshot_epoch=snapshot_epoch,
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
+        )
+        observations, quality_distribution = self._portfolio_observations_for_page(
+            page_dates=page_scope.page_dates,
+            support_inputs=support_inputs,
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
+        )
+        next_page_token = self._portfolio_observation_next_page_token(
+            page_scope=page_scope,
+            snapshot_epoch=snapshot_epoch,
+            request_scope_fingerprint=request_scope_fingerprint,
+        )
+        return observations, quality_distribution, observed_dates, snapshot_epoch, next_page_token
+
+    @staticmethod
+    def _portfolio_observation_page_scope(
+        *,
+        observed_dates: list[date],
+        cursor_date: date | None,
+        page_size: int,
+    ) -> _PortfolioObservationPageScope:
+        paged_dates = [day for day in observed_dates if cursor_date is None or day > cursor_date]
+        return _PortfolioObservationPageScope(
+            page_dates=paged_dates[:page_size],
+            has_more=len(paged_dates) > page_size,
         )
 
-        position_currencies = {
-            str(row.position_currency)
-            for row in position_rows
-            if getattr(row, "position_currency", None)
-        }
-        normalized_security_ids = sorted(
-            {
-                security_id
-                for row in position_rows
-                if (security_id := normalize_security_id(row.security_id))
-            }
+    async def _portfolio_observation_support_inputs(
+        self,
+        *,
+        portfolio_id: str,
+        page_dates: list[date],
+        snapshot_epoch: int,
+        portfolio_currency: str,
+        reporting_currency: str,
+    ) -> _PortfolioObservationSupportInputs:
+        page_start_date = min(page_dates)
+        page_end_date = max(page_dates)
+        position_rows = await self.repo.list_position_timeseries_rows_unpaged(
+            portfolio_id=portfolio_id,
+            start_date=page_start_date,
+            end_date=page_end_date,
+            snapshot_epoch=snapshot_epoch,
         )
+        normalized_security_ids = self._portfolio_position_security_ids(position_rows)
         position_to_portfolio_rates = await self._get_position_to_portfolio_rate_maps(
-            position_currencies=position_currencies,
+            position_currencies=self._portfolio_position_currencies(position_rows),
             portfolio_currency=portfolio_currency,
-            start_date=min(page_dates),
-            end_date=max(page_dates),
+            start_date=page_start_date,
+            end_date=page_end_date,
         )
         portfolio_to_reporting_rates = await self._get_conversion_rates(
             portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
-            start_date=min(page_dates),
-            end_date=max(page_dates),
+            start_date=page_start_date,
+            end_date=page_end_date,
         )
         portfolio_cashflow_rows = await self.repo.list_portfolio_cashflow_rows(
             portfolio_id=portfolio_id,
@@ -433,106 +483,205 @@ class AnalyticsTimeseriesService:
             security_ids=normalized_security_ids,
             snapshot_epoch=snapshot_epoch,
         )
-        portfolio_cashflows_by_date = self._portfolio_cash_flows_for_dates(
-            portfolio_cashflow_rows,
-            reporting_currency=reporting_currency,
-            portfolio_currency=portfolio_currency,
-            fx_rates=portfolio_to_reporting_rates,
+        return _PortfolioObservationSupportInputs(
+            position_rows=position_rows,
+            portfolio_cashflows_by_date=self._portfolio_cash_flows_for_dates(
+                portfolio_cashflow_rows,
+                reporting_currency=reporting_currency,
+                portfolio_currency=portfolio_currency,
+                fx_rates=portfolio_to_reporting_rates,
+            ),
+            position_cashflows_by_key=self._position_cash_flows_for_keys(position_cashflow_rows),
+            position_to_portfolio_rates=position_to_portfolio_rates,
+            portfolio_to_reporting_rates=portfolio_to_reporting_rates,
+            previous_eod_by_security=self._previous_eod_by_security(previous_rows),
         )
-        position_cashflows_by_key = self._position_cash_flows_for_keys(position_cashflow_rows)
 
-        row_buckets: dict[date, list[object]] = defaultdict(list)
-        for row in position_rows:
-            if row.valuation_date in page_dates:
-                row_buckets[row.valuation_date].append(row)
+    @staticmethod
+    def _portfolio_position_currencies(position_rows: list[object]) -> set[str]:
+        return {
+            str(row.position_currency)
+            for row in position_rows
+            if getattr(row, "position_currency", None)
+        }
 
-        observations: list[PortfolioTimeseriesObservation] = []
-        quality_distribution: dict[str, int] = {}
-        previous_eod_by_security = {
+    @staticmethod
+    def _portfolio_position_security_ids(position_rows: list[object]) -> list[str]:
+        return sorted(
+            {
+                security_id
+                for row in position_rows
+                if (security_id := normalize_security_id(row.security_id))
+            }
+        )
+
+    @staticmethod
+    def _previous_eod_by_security(previous_rows: list[object]) -> dict[str, Decimal]:
+        return {
             normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
             for row in previous_rows
         }
-        for valuation_date in page_dates:
-            conversion_rate = Decimal("1")
-            if reporting_currency != portfolio_currency:
-                if valuation_date not in portfolio_to_reporting_rates:
-                    raise AnalyticsInputError(
-                        "INSUFFICIENT_DATA",
-                        "Missing FX rate for "
-                        f"{portfolio_currency}/{reporting_currency} on {valuation_date}.",
-                    )
-                conversion_rate = portfolio_to_reporting_rates[valuation_date]
 
-            beginning_market_value = Decimal("0")
-            ending_market_value = Decimal("0")
-            quality = "final"
-            portfolio_cashflows = portfolio_cashflows_by_date.get(valuation_date, [])
-            has_portfolio_external_flow = self._has_external_flow(portfolio_cashflows)
-            current_eod_by_security: dict[str, Decimal] = {}
-            for row in row_buckets.get(valuation_date, []):
-                position_currency = (
-                    normalize_currency_code(str(getattr(row, "position_currency")))
-                    if getattr(row, "position_currency", None)
-                    else ""
-                )
-                position_to_portfolio_rate = Decimal("1")
-                if position_currency and position_currency != portfolio_currency:
-                    rate_map = position_to_portfolio_rates.get(position_currency, {})
-                    if valuation_date not in rate_map:
-                        raise AnalyticsInputError(
-                            "INSUFFICIENT_DATA",
-                            "Missing FX rate for "
-                            f"{position_currency}/{portfolio_currency} on {valuation_date}.",
-                        )
-                    position_to_portfolio_rate = rate_map[valuation_date]
-                cash_flows = position_cashflows_by_key.get(
-                    (normalize_security_id(row.security_id), valuation_date), []
-                )
-                beginning_market_value_position = self._effective_beginning_market_value(
+    def _portfolio_observations_for_page(
+        self,
+        *,
+        page_dates: list[date],
+        support_inputs: _PortfolioObservationSupportInputs,
+        portfolio_currency: str,
+        reporting_currency: str,
+    ) -> tuple[list[PortfolioTimeseriesObservation], dict[str, int]]:
+        observations: list[PortfolioTimeseriesObservation] = []
+        quality_distribution: dict[str, int] = {}
+        previous_eod_by_security = dict(support_inputs.previous_eod_by_security)
+        row_buckets = self._portfolio_row_buckets(
+            page_dates=page_dates,
+            position_rows=support_inputs.position_rows,
+        )
+        for valuation_date in page_dates:
+            observation, quality, previous_eod_by_security = self._portfolio_observation_for_date(
+                valuation_date=valuation_date,
+                rows=row_buckets.get(valuation_date, []),
+                support_inputs=support_inputs,
+                previous_eod_by_security=previous_eod_by_security,
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+            )
+            quality_distribution[quality] = quality_distribution.get(quality, 0) + 1
+            observations.append(observation)
+        return observations, quality_distribution
+
+    @staticmethod
+    def _portfolio_row_buckets(
+        *,
+        page_dates: list[date],
+        position_rows: list[object],
+    ) -> dict[date, list[object]]:
+        page_date_set = set(page_dates)
+        row_buckets: dict[date, list[object]] = defaultdict(list)
+        for row in position_rows:
+            if row.valuation_date in page_date_set:
+                row_buckets[row.valuation_date].append(row)
+        return row_buckets
+
+    def _portfolio_observation_for_date(
+        self,
+        *,
+        valuation_date: date,
+        rows: list[object],
+        support_inputs: _PortfolioObservationSupportInputs,
+        previous_eod_by_security: dict[str, Decimal],
+        portfolio_currency: str,
+        reporting_currency: str,
+    ) -> tuple[PortfolioTimeseriesObservation, str, dict[str, Decimal]]:
+        conversion_rate = self._portfolio_to_reporting_observation_rate(
+            valuation_date=valuation_date,
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
+            portfolio_to_reporting_rates=support_inputs.portfolio_to_reporting_rates,
+        )
+        beginning_market_value = Decimal("0")
+        ending_market_value = Decimal("0")
+        quality = "final"
+        portfolio_cashflows = support_inputs.portfolio_cashflows_by_date.get(valuation_date, [])
+        has_portfolio_external_flow = self._has_external_flow(portfolio_cashflows)
+        current_eod_by_security: dict[str, Decimal] = {}
+        for row in rows:
+            security_id = normalize_security_id(row.security_id)
+            position_to_portfolio_rate = self._position_to_portfolio_observation_rate(
+                row=row,
+                valuation_date=valuation_date,
+                portfolio_currency=portfolio_currency,
+                position_to_portfolio_rates=support_inputs.position_to_portfolio_rates,
+            )
+            cash_flows = support_inputs.position_cashflows_by_key.get(
+                (security_id, valuation_date), []
+            )
+            beginning_market_value += (
+                self._effective_beginning_market_value(
                     row,
-                    previous_eod_market_value=previous_eod_by_security.get(
-                        normalize_security_id(row.security_id)
-                    ),
+                    previous_eod_market_value=previous_eod_by_security.get(security_id),
                     cash_flows=cash_flows,
                     has_portfolio_external_flow=has_portfolio_external_flow,
                 )
-                beginning_market_value += (
-                    beginning_market_value_position * position_to_portfolio_rate * conversion_rate
-                )
-                ending_market_value += (
-                    decimal_or_zero(row.eod_market_value)
-                    * position_to_portfolio_rate
-                    * conversion_rate
-                )
-                current_eod_by_security[normalize_security_id(row.security_id)] = decimal_or_zero(
-                    row.eod_market_value
-                )
-                if int(row.epoch) > 0:
-                    quality = "restated"
-            previous_eod_by_security = current_eod_by_security
-
-            quality_distribution[quality] = quality_distribution.get(quality, 0) + 1
-            observations.append(
-                PortfolioTimeseriesObservation(
-                    valuation_date=valuation_date,
-                    beginning_market_value=beginning_market_value,
-                    ending_market_value=ending_market_value,
-                    valuation_status=quality,
-                    cash_flows=portfolio_cashflows,
-                    cash_flow_currency=reporting_currency,
-                )
+                * position_to_portfolio_rate
+                * conversion_rate
             )
+            ending_eod = decimal_or_zero(row.eod_market_value)
+            ending_market_value += ending_eod * position_to_portfolio_rate * conversion_rate
+            current_eod_by_security[security_id] = ending_eod
+            if int(row.epoch) > 0:
+                quality = "restated"
+        return (
+            PortfolioTimeseriesObservation(
+                valuation_date=valuation_date,
+                beginning_market_value=beginning_market_value,
+                ending_market_value=ending_market_value,
+                valuation_status=quality,
+                cash_flows=portfolio_cashflows,
+                cash_flow_currency=reporting_currency,
+            ),
+            quality,
+            current_eod_by_security,
+        )
 
-        next_page_token: str | None = None
-        if has_more:
-            next_page_token = self._encode_page_token(
-                {
-                    "valuation_date": page_dates[-1].isoformat(),
-                    "snapshot_epoch": snapshot_epoch,
-                    "scope_fingerprint": request_scope_fingerprint,
-                }
+    @staticmethod
+    def _portfolio_to_reporting_observation_rate(
+        *,
+        valuation_date: date,
+        portfolio_currency: str,
+        reporting_currency: str,
+        portfolio_to_reporting_rates: dict[date, Decimal],
+    ) -> Decimal:
+        if reporting_currency == portfolio_currency:
+            return Decimal("1")
+        if valuation_date not in portfolio_to_reporting_rates:
+            raise AnalyticsInputError(
+                "INSUFFICIENT_DATA",
+                "Missing FX rate for "
+                f"{portfolio_currency}/{reporting_currency} on {valuation_date}.",
             )
-        return observations, quality_distribution, observed_dates, snapshot_epoch, next_page_token
+        return portfolio_to_reporting_rates[valuation_date]
+
+    @staticmethod
+    def _position_to_portfolio_observation_rate(
+        *,
+        row: object,
+        valuation_date: date,
+        portfolio_currency: str,
+        position_to_portfolio_rates: dict[str, dict[date, Decimal]],
+    ) -> Decimal:
+        position_currency = (
+            normalize_currency_code(str(getattr(row, "position_currency")))
+            if getattr(row, "position_currency", None)
+            else ""
+        )
+        if not position_currency or position_currency == portfolio_currency:
+            return Decimal("1")
+        rate_map = position_to_portfolio_rates.get(position_currency, {})
+        if valuation_date not in rate_map:
+            raise AnalyticsInputError(
+                "INSUFFICIENT_DATA",
+                "Missing FX rate for "
+                f"{position_currency}/{portfolio_currency} on {valuation_date}.",
+            )
+        return rate_map[valuation_date]
+
+    def _portfolio_observation_next_page_token(
+        self,
+        *,
+        page_scope: _PortfolioObservationPageScope,
+        snapshot_epoch: int,
+        request_scope_fingerprint: str,
+    ) -> str | None:
+        if not page_scope.has_more:
+            return None
+        return self._encode_page_token(
+            {
+                "valuation_date": page_scope.page_dates[-1].isoformat(),
+                "snapshot_epoch": snapshot_epoch,
+                "scope_fingerprint": request_scope_fingerprint,
+            }
+        )
 
     async def get_portfolio_timeseries(
         self,
