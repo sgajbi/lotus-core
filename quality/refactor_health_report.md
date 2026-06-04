@@ -164,3 +164,7 @@ health before that claim is defensible.
     and job-identity filter helpers. The former B-ranked `_apply_reprocessing_job_scope` helper
     now reports A-ranked complexity, but `operations_repository.py` remains a C-ranked
     maintainability hotspot.
+47. Reduced current position history operations repository scope complexity by extracting security
+    expression resolution, normalized security filtering, and history-date/as-of filter helpers.
+    The former B-ranked `_apply_current_position_history_scope` helper now reports A-ranked
+    complexity, but `operations_repository.py` remains a C-ranked maintainability hotspot.

@@ -284,3 +284,10 @@ identity filters into named helpers. `_apply_reprocessing_job_scope` now reports
 of `B (6)` under Radon cyclomatic complexity, and the extracted reprocessing job scope helpers
 report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 8.
+
+CR-891 reduced the current position history filtering hotspot by splitting security expression
+resolution, normalized security filtering, and history-date/as-of filtering into named helpers.
+`_apply_current_position_history_scope` now reports `A (1)` instead of `B (6)` under Radon
+cyclomatic complexity, and the extracted position-history scope helpers report A-ranked
+complexity. `operations_repository.py` remains `C (0.00)` under Radon maintainability, so the
+C-hotspot count remains 8.

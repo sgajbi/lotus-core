@@ -746,6 +746,52 @@ class OperationsRepository:
         return stmt
 
     @staticmethod
+    def _position_history_security_expressions(
+        *,
+        position_history_security_id=None,
+        position_state_security_id=None,
+    ):
+        return (
+            position_history_security_id
+            if position_history_security_id is not None
+            else OperationsRepository._security_id_expr(PositionHistory.security_id),
+            position_state_security_id
+            if position_state_security_id is not None
+            else OperationsRepository._security_id_expr(PositionState.security_id),
+        )
+
+    @staticmethod
+    def _apply_position_history_security_scope(
+        stmt,
+        *,
+        position_history_security_id,
+        position_state_security_id,
+        normalized_security_id=None,
+    ):
+        if normalized_security_id is None:
+            return stmt
+        return stmt.where(
+            position_history_security_id == normalized_security_id,
+            position_state_security_id == normalized_security_id,
+        )
+
+    @staticmethod
+    def _apply_position_history_time_scope(
+        stmt,
+        *,
+        history_date_on_or_before=None,
+        history_as_of: Optional[datetime] = None,
+    ):
+        if history_date_on_or_before is not None:
+            stmt = stmt.where(PositionHistory.position_date <= history_date_on_or_before)
+        if history_as_of is not None:
+            stmt = stmt.where(
+                PositionHistory.created_at <= history_as_of,
+                PositionState.updated_at <= history_as_of,
+            )
+        return stmt
+
+    @staticmethod
     def _apply_current_position_history_scope(
         stmt,
         *,
@@ -756,15 +802,12 @@ class OperationsRepository:
         history_date_on_or_before=None,
         history_as_of: Optional[datetime] = None,
     ):
-        position_history_security_id = (
-            position_history_security_id
-            if position_history_security_id is not None
-            else OperationsRepository._security_id_expr(PositionHistory.security_id)
-        )
-        position_state_security_id = (
-            position_state_security_id
-            if position_state_security_id is not None
-            else OperationsRepository._security_id_expr(PositionState.security_id)
+        (
+            position_history_security_id,
+            position_state_security_id,
+        ) = OperationsRepository._position_history_security_expressions(
+            position_history_security_id=position_history_security_id,
+            position_state_security_id=position_state_security_id,
         )
         stmt = stmt.join(
             PositionState,
@@ -774,19 +817,17 @@ class OperationsRepository:
                 PositionHistory.epoch == PositionState.epoch,
             ),
         ).where(PositionHistory.portfolio_id == portfolio_id)
-        if normalized_security_id is not None:
-            stmt = stmt.where(
-                position_history_security_id == normalized_security_id,
-                position_state_security_id == normalized_security_id,
-            )
-        if history_date_on_or_before is not None:
-            stmt = stmt.where(PositionHistory.position_date <= history_date_on_or_before)
-        if history_as_of is not None:
-            stmt = stmt.where(
-                PositionHistory.created_at <= history_as_of,
-                PositionState.updated_at <= history_as_of,
-            )
-        return stmt
+        stmt = OperationsRepository._apply_position_history_security_scope(
+            stmt,
+            position_history_security_id=position_history_security_id,
+            position_state_security_id=position_state_security_id,
+            normalized_security_id=normalized_security_id,
+        )
+        return OperationsRepository._apply_position_history_time_scope(
+            stmt,
+            history_date_on_or_before=history_date_on_or_before,
+            history_as_of=history_as_of,
+        )
 
     def _current_epoch_snapshot_date_stmt(
         self,
