@@ -336,6 +336,45 @@ class ClientTaxProfileRecord(BaseModel):
     model_config = ConfigDict()
 
 
+def _validate_tax_rule_effective_window(
+    *,
+    effective_from: date,
+    effective_to: date | None,
+) -> None:
+    if effective_to is not None and effective_to < effective_from:
+        raise ValueError("effective_to must be on or after effective_from")
+
+
+def _validate_tax_rule_threshold_pair(
+    *,
+    threshold_amount: Decimal | None,
+    threshold_currency: str | None,
+) -> None:
+    if threshold_amount is not None and not threshold_currency:
+        raise ValueError("threshold_currency is required when threshold_amount is supplied")
+    if threshold_currency and threshold_amount is None:
+        raise ValueError("threshold_amount is required when threshold_currency is supplied")
+
+
+def _validate_tax_rule_evidence(
+    *,
+    applies_to_asset_classes: list[str],
+    applies_to_security_ids: list[str],
+    applies_to_income_types: list[str],
+    rate: Decimal | None,
+    threshold_amount: Decimal | None,
+) -> None:
+    if (
+        applies_to_asset_classes
+        or applies_to_security_ids
+        or applies_to_income_types
+        or rate is not None
+        or threshold_amount is not None
+    ):
+        return
+    raise ValueError("tax rule set records must carry bounded rule evidence")
+
+
 class ClientTaxRuleSetRecord(BaseModel):
     client_id: str = Field(..., description="Client identifier bound to the tax rule set.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the tax rule set.")
@@ -380,20 +419,21 @@ class ClientTaxRuleSetRecord(BaseModel):
 
     @model_validator(mode="after")
     def validate_rule(self) -> "ClientTaxRuleSetRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        if self.threshold_amount is not None and not self.threshold_currency:
-            raise ValueError("threshold_currency is required when threshold_amount is supplied")
-        if self.threshold_currency and self.threshold_amount is None:
-            raise ValueError("threshold_amount is required when threshold_currency is supplied")
-        if not (
-            self.applies_to_asset_classes
-            or self.applies_to_security_ids
-            or self.applies_to_income_types
-            or self.rate is not None
-            or self.threshold_amount is not None
-        ):
-            raise ValueError("tax rule set records must carry bounded rule evidence")
+        _validate_tax_rule_effective_window(
+            effective_from=self.effective_from,
+            effective_to=self.effective_to,
+        )
+        _validate_tax_rule_threshold_pair(
+            threshold_amount=self.threshold_amount,
+            threshold_currency=self.threshold_currency,
+        )
+        _validate_tax_rule_evidence(
+            applies_to_asset_classes=self.applies_to_asset_classes,
+            applies_to_security_ids=self.applies_to_security_ids,
+            applies_to_income_types=self.applies_to_income_types,
+            rate=self.rate,
+            threshold_amount=self.threshold_amount,
+        )
         return self
 
     model_config = ConfigDict()

@@ -55,3 +55,7 @@ Status: Initial scorecard baseline on 2026-06-02.
 - CR-957 extracted A-ranked `ingestion_job_listing.py`, reducing `IngestionJobService.list_jobs`
   from `C (11)` to `A (4)` and removing the final C-ranked method from the service. The service
   improves to `C (2.32)` but remains an active C-ranked maintainability hotspot.
+- CR-958 extracted tax-rule validation helpers inside `reference_data_dto.py`, reducing
+  `ClientTaxRuleSetRecord.validate_rule` from `C (12)` to `A (1)` and removing the only C-ranked
+  method from the module. `reference_data_dto.py` remains an active C-ranked maintainability
+  hotspot because of size and remaining B-ranked DTO classes/validators.

@@ -564,3 +564,8 @@ health before that claim is defensible.
      and page-slicing helpers into `ingestion_job_listing.py`. `list_jobs` improved from `C (11)`
      to `A (4)`, removing the final C-ranked method from `ingestion_job_service.py`. The service
      reports `C (2.32)` maintainability, while the helper module reports `A (46.25)`.
+114. Reduced reference-data tax rule validation coupling by extracting effective-window,
+     threshold-pair, and bounded-evidence helpers inside `reference_data_dto.py`.
+     `ClientTaxRuleSetRecord.validate_rule` improved from `C (12)` to `A (1)`, removing the only
+     C-ranked method from `reference_data_dto.py`. The module remains `C (0.00)` because of size
+     and remaining B-ranked DTO classes/validators.
