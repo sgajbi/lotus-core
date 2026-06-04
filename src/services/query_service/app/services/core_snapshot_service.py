@@ -652,137 +652,289 @@ class CoreSnapshotService:
         include_cash: bool,
     ) -> dict[str, dict[str, Any]]:
         projected: dict[str, dict[str, Any]] = {
-            key: dict(value) for key, value in baseline_positions.items()
+            key: self._baseline_projected_position(value)
+            for key, value in baseline_positions.items()
         }
-        for value in projected.values():
-            value["baseline_quantity"] = value["quantity"]
 
+        normalized_changes = await self._normalized_simulation_changes(session_id)
+        await self._seed_missing_projected_instruments(projected, normalized_changes)
+        self._apply_projected_position_changes(projected, normalized_changes)
+        await self._value_projected_positions(
+            projected=projected,
+            as_of_date=as_of_date,
+            portfolio_base_currency=portfolio_base_currency,
+            portfolio_to_reporting_fx=portfolio_to_reporting_fx,
+            include_cash=include_cash,
+            include_zero=include_zero,
+        )
+        filtered = self._filtered_projected_positions(
+            projected,
+            include_cash=include_cash,
+            include_zero=include_zero,
+        )
+
+        return dict(sorted(filtered.items(), key=lambda item: item[0]))
+
+    @staticmethod
+    def _baseline_projected_position(value: dict[str, Any]) -> dict[str, Any]:
+        projected_value = dict(value)
+        projected_value["baseline_quantity"] = projected_value["quantity"]
+        return projected_value
+
+    async def _normalized_simulation_changes(self, session_id: str) -> list[tuple[str, Any]]:
         changes = await self.simulation_repo.get_changes(session_id)
-        normalized_changes: list[tuple[str, Any]] = []
-        for change in changes:
-            security_id = normalize_security_id(change.security_id)
-            if not security_id:
-                raise CoreSnapshotUnavailableSectionError(
-                    "positions_projected unavailable: simulation change missing security_id"
-                )
-            normalized_changes.append((security_id, change))
+        return [self._normalized_simulation_change(change) for change in changes]
 
+    @staticmethod
+    def _normalized_simulation_change(change: Any) -> tuple[str, Any]:
+        security_id = normalize_security_id(change.security_id)
+        if not security_id:
+            raise CoreSnapshotUnavailableSectionError(
+                "positions_projected unavailable: simulation change missing security_id"
+            )
+        return security_id, change
+
+    async def _seed_missing_projected_instruments(
+        self,
+        projected: dict[str, dict[str, Any]],
+        normalized_changes: list[tuple[str, Any]],
+    ) -> None:
+        missing_security_ids = self._missing_projected_security_ids(projected, normalized_changes)
+        if not missing_security_ids:
+            return
+        instrument_map = await self._projected_instrument_map(missing_security_ids)
+        for security_id in missing_security_ids:
+            projected[security_id] = self._new_projected_position(
+                security_id,
+                self._required_projected_instrument(security_id, instrument_map),
+            )
+
+    @staticmethod
+    def _missing_projected_security_ids(
+        projected: dict[str, dict[str, Any]],
+        normalized_changes: list[tuple[str, Any]],
+    ) -> list[str]:
         changed_security_ids = {security_id for security_id, _change in normalized_changes}
-        missing_security_ids = [sid for sid in changed_security_ids if sid not in projected]
-        if missing_security_ids:
-            instruments = await self.instrument_repo.get_by_security_ids(missing_security_ids)
-            instrument_map = {
-                security_id: item
-                for item in instruments
-                if (security_id := normalize_security_id(item.security_id))
-            }
-            for security_id in missing_security_ids:
-                instrument = instrument_map.get(security_id)
-                if instrument is None:
-                    raise CoreSnapshotUnavailableSectionError(
-                        f"positions_projected unavailable: missing instrument {security_id}"
-                    )
-                projected[security_id] = {
-                    "security_id": security_id,
-                    "quantity": Decimal(0),
-                    "baseline_quantity": Decimal(0),
-                    "market_value_base": Decimal(0),
-                    "market_value_local": Decimal(0),
-                    "currency": instrument.currency,
-                    "instrument_name": instrument.name,
-                    "asset_class": instrument.asset_class,
-                    "sector": instrument.sector,
-                    "country_of_risk": instrument.country_of_risk,
-                    "isin": instrument.isin,
-                    "issuer_id": instrument.issuer_id,
-                    "issuer_name": instrument.issuer_name,
-                    "ultimate_parent_issuer_id": instrument.ultimate_parent_issuer_id,
-                    "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
-                    "liquidity_tier": instrument.liquidity_tier,
-                }
+        return [sid for sid in changed_security_ids if sid not in projected]
 
+    async def _projected_instrument_map(self, security_ids: list[str]) -> dict[str, Any]:
+        instruments = await self.instrument_repo.get_by_security_ids(security_ids)
+        return {
+            security_id: item
+            for item in instruments
+            if (security_id := normalize_security_id(item.security_id))
+        }
+
+    @staticmethod
+    def _required_projected_instrument(
+        security_id: str,
+        instrument_map: dict[str, Any],
+    ) -> Any:
+        instrument = instrument_map.get(security_id)
+        if instrument is None:
+            raise CoreSnapshotUnavailableSectionError(
+                f"positions_projected unavailable: missing instrument {security_id}"
+            )
+        return instrument
+
+    @staticmethod
+    def _new_projected_position(security_id: str, instrument: Any) -> dict[str, Any]:
+        return {
+            "security_id": security_id,
+            "quantity": Decimal(0),
+            "baseline_quantity": Decimal(0),
+            "market_value_base": Decimal(0),
+            "market_value_local": Decimal(0),
+            "currency": instrument.currency,
+            "instrument_name": instrument.name,
+            "asset_class": instrument.asset_class,
+            "sector": instrument.sector,
+            "country_of_risk": instrument.country_of_risk,
+            "isin": instrument.isin,
+            "issuer_id": instrument.issuer_id,
+            "issuer_name": instrument.issuer_name,
+            "ultimate_parent_issuer_id": instrument.ultimate_parent_issuer_id,
+            "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
+            "liquidity_tier": instrument.liquidity_tier,
+        }
+
+    def _apply_projected_position_changes(
+        self,
+        projected: dict[str, dict[str, Any]],
+        normalized_changes: list[tuple[str, Any]],
+    ) -> None:
         for security_id, change in normalized_changes:
             entry = projected[security_id]
-            delta = self._change_quantity_effect(change)
-            entry["quantity"] = entry["quantity"] + delta
+            entry["quantity"] = entry["quantity"] + self._change_quantity_effect(change)
 
+    async def _value_projected_positions(
+        self,
+        *,
+        projected: dict[str, dict[str, Any]],
+        as_of_date,
+        portfolio_base_currency: str,
+        portfolio_to_reporting_fx: Decimal,
+        include_cash: bool,
+        include_zero: bool,
+    ) -> None:
+        price_required = self._apply_baseline_projected_values(
+            projected,
+            include_cash=include_cash,
+            include_zero=include_zero,
+        )
+        if price_required:
+            await self._apply_priced_projected_values(
+                price_required=price_required,
+                projected=projected,
+                as_of_date=as_of_date,
+                portfolio_base_currency=portfolio_base_currency,
+                portfolio_to_reporting_fx=portfolio_to_reporting_fx,
+            )
+
+    def _apply_baseline_projected_values(
+        self,
+        projected: dict[str, dict[str, Any]],
+        *,
+        include_cash: bool,
+        include_zero: bool,
+    ) -> dict[str, tuple[dict[str, Any], Decimal]]:
         price_required: dict[str, tuple[dict[str, Any], Decimal]] = {}
         for security_id, entry in projected.items():
-            if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
+            if self._skip_projected_position(
+                entry, include_cash=include_cash, include_zero=include_zero
+            ):
                 continue
-            if not include_zero and entry["quantity"] == Decimal(0):
+            if self._apply_baseline_projected_value(entry):
                 continue
-            baseline_qty = entry["baseline_quantity"]
-            if baseline_qty > 0 and entry.get("market_value_base") is not None:
-                unit_base = entry["market_value_base"] / baseline_qty
-                entry["market_value_base"] = unit_base * entry["quantity"]
-                if entry.get("market_value_local") is not None:
-                    unit_local = entry["market_value_local"] / baseline_qty
-                    entry["market_value_local"] = unit_local * entry["quantity"]
-                continue
-
             quantity = entry["quantity"]
             if quantity <= 0:
                 entry["market_value_base"] = Decimal(0)
                 entry["market_value_local"] = Decimal(0)
                 continue
-
             price_required[security_id] = (entry, quantity)
+        return price_required
 
-        if price_required:
-            price_rows_by_security = {}
-            for security_id in price_required:
-                price_rows_by_security[security_id] = await self.price_repo.get_prices(
-                    security_id=security_id,
-                    end_date=as_of_date,
-                )
-            priced_values: dict[str, tuple[Decimal, str]] = {}
-            market_currencies: set[str] = set()
-            for security_id, (entry, quantity) in price_required.items():
-                prices = price_rows_by_security[security_id]
-                if not prices:
-                    raise CoreSnapshotUnavailableSectionError(
-                        f"positions_projected unavailable: missing market price for {security_id}"
-                    )
-                latest_price = prices[-1]
-                missing_price_message = (
-                    f"positions_projected unavailable: missing market price for {security_id}"
-                )
-                local_value = (
-                    self._required_decimal(
-                        latest_price.price,
-                        message=missing_price_message,
-                    )
-                    * quantity
-                )
-                market_currency = normalize_currency_code(str(latest_price.currency))
-                priced_values[security_id] = (local_value, market_currency)
-                market_currencies.add(market_currency)
+    @staticmethod
+    def _apply_baseline_projected_value(entry: dict[str, Any]) -> bool:
+        baseline_qty = entry["baseline_quantity"]
+        if baseline_qty <= 0 or entry.get("market_value_base") is None:
+            return False
+        unit_base = entry["market_value_base"] / baseline_qty
+        entry["market_value_base"] = unit_base * entry["quantity"]
+        if entry.get("market_value_local") is not None:
+            unit_local = entry["market_value_local"] / baseline_qty
+            entry["market_value_local"] = unit_local * entry["quantity"]
+        return True
 
-            market_to_portfolio_fx = {}
-            for market_currency in sorted(market_currencies):
-                market_to_portfolio_fx[market_currency] = await self._get_fx_rate_or_raise(
-                    from_currency=market_currency,
-                    to_currency=portfolio_base_currency,
-                    as_of_date=as_of_date,
-                )
+    async def _apply_priced_projected_values(
+        self,
+        *,
+        price_required: dict[str, tuple[dict[str, Any], Decimal]],
+        projected: dict[str, dict[str, Any]],
+        as_of_date,
+        portfolio_base_currency: str,
+        portfolio_to_reporting_fx: Decimal,
+    ) -> None:
+        priced_values = await self._priced_projected_local_values(
+            price_required=price_required,
+            as_of_date=as_of_date,
+        )
+        market_to_portfolio_fx = await self._market_to_portfolio_fx_rates(
+            market_currencies={
+                market_currency for _value, market_currency in priced_values.values()
+            },
+            portfolio_base_currency=portfolio_base_currency,
+            as_of_date=as_of_date,
+        )
+        for security_id, (local_value, market_currency) in priced_values.items():
+            entry = projected[security_id]
+            portfolio_value = local_value * market_to_portfolio_fx[market_currency]
+            entry["market_value_local"] = local_value
+            entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
 
-            for security_id, (local_value, market_currency) in priced_values.items():
-                entry = projected[security_id]
-                fx_to_portfolio = market_to_portfolio_fx[market_currency]
-                portfolio_value = local_value * fx_to_portfolio
-                entry["market_value_local"] = local_value
-                entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
+    async def _priced_projected_local_values(
+        self,
+        *,
+        price_required: dict[str, tuple[dict[str, Any], Decimal]],
+        as_of_date,
+    ) -> dict[str, tuple[Decimal, str]]:
+        priced_values: dict[str, tuple[Decimal, str]] = {}
+        for security_id, _entry_and_quantity in price_required.items():
+            priced_values[security_id] = await self._priced_projected_local_value(
+                security_id=security_id,
+                quantity=price_required[security_id][1],
+                as_of_date=as_of_date,
+            )
+        return priced_values
 
-        filtered: dict[str, dict[str, Any]] = {}
-        for key, value in projected.items():
-            if not include_cash and _is_cash_asset_class(value.get("asset_class")):
-                continue
-            if not include_zero and value["quantity"] == Decimal(0):
-                continue
-            filtered[key] = value
+    async def _priced_projected_local_value(
+        self,
+        *,
+        security_id: str,
+        quantity: Decimal,
+        as_of_date,
+    ) -> tuple[Decimal, str]:
+        prices = await self.price_repo.get_prices(security_id=security_id, end_date=as_of_date)
+        if not prices:
+            raise CoreSnapshotUnavailableSectionError(
+                f"positions_projected unavailable: missing market price for {security_id}"
+            )
+        latest_price = prices[-1]
+        missing_price_message = (
+            f"positions_projected unavailable: missing market price for {security_id}"
+        )
+        local_value = (
+            self._required_decimal(
+                latest_price.price,
+                message=missing_price_message,
+            )
+            * quantity
+        )
+        return local_value, normalize_currency_code(str(latest_price.currency))
 
-        return dict(sorted(filtered.items(), key=lambda item: item[0]))
+    async def _market_to_portfolio_fx_rates(
+        self,
+        *,
+        market_currencies: set[str],
+        portfolio_base_currency: str,
+        as_of_date,
+    ) -> dict[str, Decimal]:
+        market_to_portfolio_fx = {}
+        for market_currency in sorted(market_currencies):
+            market_to_portfolio_fx[market_currency] = await self._get_fx_rate_or_raise(
+                from_currency=market_currency,
+                to_currency=portfolio_base_currency,
+                as_of_date=as_of_date,
+            )
+        return market_to_portfolio_fx
+
+    def _filtered_projected_positions(
+        self,
+        projected: dict[str, dict[str, Any]],
+        *,
+        include_cash: bool,
+        include_zero: bool,
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            key: value
+            for key, value in projected.items()
+            if not self._skip_projected_position(
+                value,
+                include_cash=include_cash,
+                include_zero=include_zero,
+            )
+        }
+
+    @staticmethod
+    def _skip_projected_position(
+        entry: dict[str, Any],
+        *,
+        include_cash: bool,
+        include_zero: bool,
+    ) -> bool:
+        if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
+            return True
+        return not include_zero and entry["quantity"] == Decimal(0)
 
     @staticmethod
     def _change_quantity_effect(change) -> Decimal:

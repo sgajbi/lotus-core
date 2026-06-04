@@ -357,3 +357,11 @@ fingerprinting, and response construction helpers inside `core_snapshot_service.
 `get_core_snapshot` now reports `A (4)` instead of `E (39)` under Radon cyclomatic complexity, and
 the newly extracted orchestration helpers all report A-ranked complexity. `core_snapshot_service.py`
 still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-901 reduced core snapshot projected-position complexity by extracting baseline copy, simulation
+change normalization, missing-instrument seeding, quantity-delta application, baseline/priced
+valuation, market-to-portfolio FX, and output filtering helpers inside `core_snapshot_service.py`.
+`_resolve_projected_positions` now reports `A (2)` instead of `E (34)` under Radon cyclomatic
+complexity, and the extracted projected-position helpers report A-ranked complexity.
+`core_snapshot_service.py` still reports `C (0.00)` under Radon maintainability, so the C-hotspot
+count remains 7.

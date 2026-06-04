@@ -214,3 +214,9 @@ health before that claim is defensible.
     former E-ranked `get_core_snapshot` method now reports `A (4)` instead of `E (39)`, but
     `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot count
     remains 7.
+57. Reduced core snapshot projected-position complexity by extracting baseline copy, simulation
+    change normalization, missing-instrument seeding, quantity-delta application, baseline/priced
+    valuation, market-to-portfolio FX, and output filtering helpers inside
+    `core_snapshot_service.py`. The former E-ranked `_resolve_projected_positions` method now
+    reports `A (2)` instead of `E (34)`, but `core_snapshot_service.py` remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.
