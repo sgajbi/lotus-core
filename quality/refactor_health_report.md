@@ -510,3 +510,11 @@ health before that claim is defensible.
      `operations_repository.py` shrank from 1,332 SLOC to 1,247 SLOC and improved from
      `C (6.24)` to `B (9.54)`, removing it from the active source C-ranked maintainability
      hotspot list. Generated `query_service/build` copies remain separate generated-surface debt.
+105. Reduced query-service reference integration DTO coupling by extracting transaction-cost curve
+     and benchmark market-series DTO families into
+     `reference_integration_transaction_cost_dto.py` and
+     `reference_integration_benchmark_market_series_dto.py`, with compatibility re-exports from
+     the original module. The extracted modules report `A (37.79)` and `A (38.91)`
+     maintainability. `reference_integration_dto.py` shrank from 3,637 SLOC to 3,264 SLOC and
+     improved from `C (0.00)` to `C (1.33)`, but remains a C-ranked maintainability hotspot
+     requiring further DTO-family extractions.

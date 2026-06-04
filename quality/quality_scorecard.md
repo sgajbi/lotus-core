@@ -18,3 +18,11 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Architecture boundaries | Existing strict architecture guard plus 2 kept import-linter contracts enforced by `make quality-import-boundary-gate` after CR-867 | Add focused import contracts as additional ownership boundaries stabilize |
 | OpenAPI governance | Existing OpenAPI quality and API vocabulary gates promoted into the quality-baseline API governance job after CR-868 | Keep API governance regression-free while spectral remains report-only until a stable generated-spec artifact exists |
 | Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |
+
+## Incremental Maintainability Updates
+
+- CR-949 extracted A-ranked `reference_integration_transaction_cost_dto.py` and
+  `reference_integration_benchmark_market_series_dto.py`, reducing
+  `reference_integration_dto.py` from 3,637 SLOC to 3,264 SLOC and improving it from `C (0.00)`
+  to `C (1.33)`. The module remains an active C-ranked hotspot requiring further DTO-family
+  extractions.
