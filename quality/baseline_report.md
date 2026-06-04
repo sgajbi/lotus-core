@@ -498,3 +498,10 @@ period start lookup, inception clamping, and invalid-window/period classificatio
 `analytics_windows.py`. The helper module reports `A (54.96)` maintainability and A-ranked helper
 complexity. `analytics_timeseries_service.py` shrank from 1,751 SLOC to 1,707 SLOC, but still
 reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-921 reduced analytics cash-flow policy coupling by extracting cash-flow DTO construction,
+portfolio/reporting FX conversion checks, position-flow grouping, internal/external flow predicates,
+and beginning-market-value repair rules into `analytics_cash_flows.py`. The helper module reports
+`A (37.12)` maintainability and A-ranked helper complexity. `analytics_timeseries_service.py`
+shrank from 1,707 SLOC to 1,590 SLOC, but still reports `C (0.00)` under Radon maintainability, so
+the C-hotspot count remains 7.

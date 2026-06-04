@@ -8,10 +8,6 @@ from decimal import Decimal
 from time import perf_counter
 from uuid import uuid4
 
-from portfolio_common.analytics_cashflow_semantics import (
-    classify_analytics_cash_flow,
-    normalize_position_flow_amount,
-)
 from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
     ANALYTICS_EXPORT_JOBS_TOTAL,
@@ -49,6 +45,14 @@ from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRe
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..settings import load_query_service_settings
+from .analytics_cash_flows import (
+    AnalyticsCashFlowError,
+    build_cash_flow_observation,
+    effective_beginning_market_value,
+    has_external_flow,
+    portfolio_cash_flows_for_dates,
+    position_cash_flows_for_keys,
+)
 from .analytics_export_jobs import (
     analytics_export_job_response,
     analytics_export_result_payload,
@@ -221,18 +225,7 @@ class AnalyticsTimeseriesService:
         *,
         amount: Decimal,
     ) -> CashFlowObservation:
-        cash_flow_type, flow_scope = classify_analytics_cash_flow(
-            classification=str(row.classification),
-            is_position_flow=bool(row.is_position_flow),
-            is_portfolio_flow=bool(row.is_portfolio_flow),
-        )
-        return CashFlowObservation(
-            amount=amount,
-            timing=str(row.timing).strip().lower(),
-            cash_flow_type=cash_flow_type,
-            flow_scope=flow_scope,
-            source_classification=str(row.classification),
-        )
+        return build_cash_flow_observation(row, amount=amount)
 
     def _portfolio_cash_flows_for_dates(
         self,
@@ -242,59 +235,25 @@ class AnalyticsTimeseriesService:
         portfolio_currency: str,
         fx_rates: dict[date, Decimal],
     ) -> dict[date, list[CashFlowObservation]]:
-        normalized_reporting_currency = normalize_currency_code(reporting_currency)
-        normalized_portfolio_currency = normalize_currency_code(portfolio_currency)
-        flows_by_date: dict[date, list[CashFlowObservation]] = defaultdict(list)
-        for row in cashflow_rows:
-            conversion_rate = Decimal("1")
-            if normalized_reporting_currency != normalized_portfolio_currency:
-                valuation_date = row.valuation_date
-                if valuation_date not in fx_rates:
-                    raise AnalyticsInputError(
-                        "INSUFFICIENT_DATA",
-                        "Missing FX rate for "
-                        f"{normalized_portfolio_currency}/{normalized_reporting_currency} "
-                        f"on {valuation_date}.",
-                    )
-                conversion_rate = fx_rates[valuation_date]
-            flows_by_date[row.valuation_date].append(
-                self._build_cash_flow_observation(
-                    row,
-                    amount=decimal_or_zero(row.amount) * conversion_rate,
-                )
+        try:
+            return portfolio_cash_flows_for_dates(
+                cashflow_rows,
+                reporting_currency=reporting_currency,
+                portfolio_currency=portfolio_currency,
+                fx_rates=fx_rates,
             )
-        return flows_by_date
+        except AnalyticsCashFlowError as exc:
+            raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
 
     def _position_cash_flows_for_keys(
         self,
         cashflow_rows: list[object],
     ) -> dict[tuple[str, date], list[CashFlowObservation]]:
-        flows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = defaultdict(list)
-        for row in cashflow_rows:
-            amount = decimal_or_zero(row.amount)
-            if bool(row.is_position_flow):
-                amount = normalize_position_flow_amount(
-                    amount=amount,
-                    classification=str(row.classification),
-                )
-            flows_by_key[(normalize_security_id(row.security_id), row.valuation_date)].append(
-                self._build_cash_flow_observation(row, amount=amount)
-            )
-        return flows_by_key
+        return position_cash_flows_for_keys(cashflow_rows)
 
     @staticmethod
     def _has_external_flow(cash_flows: list[CashFlowObservation]) -> bool:
-        return any(flow.flow_scope == "external" for flow in cash_flows)
-
-    @staticmethod
-    def _has_only_internal_flows(cash_flows: list[CashFlowObservation]) -> bool:
-        return bool(cash_flows) and all(flow.flow_scope == "internal" for flow in cash_flows)
-
-    @staticmethod
-    def _is_cash_book_position(row: object) -> bool:
-        asset_class = str(getattr(row, "asset_class", "") or "").strip().casefold()
-        security_id = str(getattr(row, "security_id", "") or "").strip().upper()
-        return asset_class == "cash" or security_id.startswith("CASH_")
+        return has_external_flow(cash_flows)
 
     @staticmethod
     def _effective_beginning_market_value(
@@ -304,98 +263,11 @@ class AnalyticsTimeseriesService:
         cash_flows: list[CashFlowObservation],
         has_portfolio_external_flow: bool,
     ) -> Decimal:
-        stored_beginning = decimal_or_zero(row.bod_market_value)
-        ending = decimal_or_zero(row.eod_market_value)
-        bod_position_flow = decimal_or_zero(getattr(row, "bod_cashflow_position", 0))
-
-        if AnalyticsTimeseriesService._has_prior_eod_continuity(
+        return effective_beginning_market_value(
+            row,
             previous_eod_market_value=previous_eod_market_value,
-            bod_position_flow=bod_position_flow,
-        ):
-            return previous_eod_market_value
-
-        has_internal_position_flow = AnalyticsTimeseriesService._has_only_internal_flows(cash_flows)
-        if AnalyticsTimeseriesService._is_internal_cash_book_settlement(
-            row=row,
+            cash_flows=cash_flows,
             has_portfolio_external_flow=has_portfolio_external_flow,
-            has_internal_position_flow=has_internal_position_flow,
-        ):
-            return ending
-
-        if AnalyticsTimeseriesService._can_repair_beginning_from_previous_eod(
-            previous_eod_market_value=previous_eod_market_value,
-            stored_beginning=stored_beginning,
-            bod_position_flow=bod_position_flow,
-            has_portfolio_external_flow=has_portfolio_external_flow,
-            has_internal_position_flow=has_internal_position_flow,
-        ):
-            return previous_eod_market_value + bod_position_flow
-
-        if AnalyticsTimeseriesService._is_new_internally_funded_position(
-            previous_eod_market_value=previous_eod_market_value,
-            ending=ending,
-            has_portfolio_external_flow=has_portfolio_external_flow,
-            has_internal_position_flow=has_internal_position_flow,
-        ):
-            return ending
-
-        return stored_beginning
-
-    @staticmethod
-    def _has_prior_eod_continuity(
-        *,
-        previous_eod_market_value: Decimal | None,
-        bod_position_flow: Decimal,
-    ) -> bool:
-        return (
-            previous_eod_market_value is not None
-            and previous_eod_market_value != 0
-            and bod_position_flow == 0
-        )
-
-    @staticmethod
-    def _is_internal_cash_book_settlement(
-        *,
-        row: object,
-        has_portfolio_external_flow: bool,
-        has_internal_position_flow: bool,
-    ) -> bool:
-        return (
-            AnalyticsTimeseriesService._is_cash_book_position(row)
-            and not has_portfolio_external_flow
-            and has_internal_position_flow
-        )
-
-    @staticmethod
-    def _can_repair_beginning_from_previous_eod(
-        *,
-        previous_eod_market_value: Decimal | None,
-        stored_beginning: Decimal,
-        bod_position_flow: Decimal,
-        has_portfolio_external_flow: bool,
-        has_internal_position_flow: bool,
-    ) -> bool:
-        return (
-            previous_eod_market_value is not None
-            and stored_beginning == 0
-            and bod_position_flow != 0
-            and not has_portfolio_external_flow
-            and has_internal_position_flow
-        )
-
-    @staticmethod
-    def _is_new_internally_funded_position(
-        *,
-        previous_eod_market_value: Decimal | None,
-        ending: Decimal,
-        has_portfolio_external_flow: bool,
-        has_internal_position_flow: bool,
-    ) -> bool:
-        no_prior_capital = previous_eod_market_value is None or previous_eod_market_value == 0
-        return (
-            no_prior_capital
-            and ending != 0
-            and (not has_portfolio_external_flow and has_internal_position_flow)
         )
 
     async def _portfolio_observation_rows(
