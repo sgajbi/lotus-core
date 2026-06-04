@@ -253,3 +253,9 @@ named helpers. `get_load_run_progress` now reports `A (3)` instead of `D (27)` u
 cyclomatic complexity, and all extracted load-run helper methods report A-ranked complexity.
 `operations_repository.py` remains `C (0.00)` under Radon maintainability, so the C-hotspot count
 remains 8.
+
+CR-886 reduced the reconciliation run filtering hotspot by splitting time, identity, and run
+attribute filters into named helpers. `_apply_reconciliation_run_scope` now reports `A (2)` instead
+of `C (11)` under Radon cyclomatic complexity, and the extracted reconciliation run scope helpers
+all report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 8.

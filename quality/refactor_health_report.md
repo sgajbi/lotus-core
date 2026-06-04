@@ -144,3 +144,7 @@ health before that claim is defensible.
     summary statement, valuation handoff SQL, and summary-mapping helpers. The former D-ranked
     `get_load_run_progress` method now reports A-ranked complexity, but
     `operations_repository.py` remains a C-ranked maintainability hotspot.
+42. Reduced reconciliation run operations repository scope complexity by extracting time,
+    identity, and run-attribute filter helpers. The former C-ranked
+    `_apply_reconciliation_run_scope` helper now reports A-ranked complexity, but
+    `operations_repository.py` remains a C-ranked maintainability hotspot.

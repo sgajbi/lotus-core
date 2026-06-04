@@ -321,6 +321,55 @@ class OperationsRepository:
             else_=9,
         )
 
+    @staticmethod
+    def _apply_reconciliation_run_time_scope(
+        stmt,
+        *,
+        as_of: Optional[datetime],
+        include_started_as_of: bool,
+    ):
+        if as_of is None:
+            return stmt
+        stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
+        if include_started_as_of:
+            stmt = stmt.where(FinancialReconciliationRun.started_at <= as_of)
+        return stmt
+
+    @staticmethod
+    def _apply_reconciliation_run_identity_scope(
+        stmt,
+        *,
+        run_id: Optional[str],
+        correlation_id: Optional[str],
+        requested_by: Optional[str],
+        dedupe_key: Optional[str],
+    ):
+        if run_id:
+            stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
+        if correlation_id:
+            stmt = stmt.where(FinancialReconciliationRun.correlation_id == correlation_id)
+        if requested_by:
+            stmt = stmt.where(FinancialReconciliationRun.requested_by == requested_by)
+        if dedupe_key:
+            stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
+        return stmt
+
+    @staticmethod
+    def _apply_reconciliation_run_attribute_scope(
+        stmt,
+        *,
+        reconciliation_type: Optional[str],
+        business_date: Optional[date],
+        epoch: Optional[int],
+    ):
+        if reconciliation_type:
+            stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
+        if business_date is not None:
+            stmt = stmt.where(FinancialReconciliationRun.business_date == business_date)
+        if epoch is not None:
+            stmt = stmt.where(FinancialReconciliationRun.epoch == epoch)
+        return stmt
+
     def _apply_reconciliation_run_scope(
         self,
         stmt,
@@ -338,24 +387,24 @@ class OperationsRepository:
         include_started_as_of: bool = False,
     ):
         stmt = stmt.where(FinancialReconciliationRun.portfolio_id == portfolio_id)
-        if as_of is not None:
-            stmt = stmt.where(FinancialReconciliationRun.updated_at <= as_of)
-            if include_started_as_of:
-                stmt = stmt.where(FinancialReconciliationRun.started_at <= as_of)
-        if run_id:
-            stmt = stmt.where(FinancialReconciliationRun.run_id == run_id)
-        if correlation_id:
-            stmt = stmt.where(FinancialReconciliationRun.correlation_id == correlation_id)
-        if requested_by:
-            stmt = stmt.where(FinancialReconciliationRun.requested_by == requested_by)
-        if dedupe_key:
-            stmt = stmt.where(FinancialReconciliationRun.dedupe_key == dedupe_key)
-        if reconciliation_type:
-            stmt = stmt.where(FinancialReconciliationRun.reconciliation_type == reconciliation_type)
-        if business_date is not None:
-            stmt = stmt.where(FinancialReconciliationRun.business_date == business_date)
-        if epoch is not None:
-            stmt = stmt.where(FinancialReconciliationRun.epoch == epoch)
+        stmt = self._apply_reconciliation_run_time_scope(
+            stmt,
+            as_of=as_of,
+            include_started_as_of=include_started_as_of,
+        )
+        stmt = self._apply_reconciliation_run_identity_scope(
+            stmt,
+            run_id=run_id,
+            correlation_id=correlation_id,
+            requested_by=requested_by,
+            dedupe_key=dedupe_key,
+        )
+        stmt = self._apply_reconciliation_run_attribute_scope(
+            stmt,
+            reconciliation_type=reconciliation_type,
+            business_date=business_date,
+            epoch=epoch,
+        )
         if status:
             stmt = stmt.where(
                 self._reconciliation_status_filter(FinancialReconciliationRun.status, status)
