@@ -386,3 +386,9 @@ health before that claim is defensible.
     maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from
     1,402 SLOC to 1,388 SLOC and improved from `C (6.86)` to `C (7.80)` under Radon
     maintainability, while the C-hotspot count remains 7.
+87. Removed stale analytics quality and performance-horizon wrapper methods from
+    `analytics_timeseries_service.py` after their policies were already extracted into
+    `analytics_quality.py`. The active service now calls the helper functions directly, shrank
+    from 1,388 SLOC to 1,325 SLOC, and improved from `C (7.80)` to `B (9.21)` under Radon
+    maintainability. The generated `query_service/build` copy remains separate generated-surface
+    debt and is not changed by this slice.

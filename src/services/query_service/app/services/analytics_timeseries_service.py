@@ -110,7 +110,6 @@ from .analytics_quality import (
     bounded_latest_performance_date,
     latest_portfolio_horizon_candidate,
     latest_position_horizon_with_observations,
-    performance_horizon_candidates,
     portfolio_reference_data_quality_status,
     portfolio_reference_evidence_timestamp,
     quality_status_from_epoch,
@@ -642,7 +641,7 @@ class AnalyticsTimeseriesService:
             expected_business_dates=expected_business_dates,
             observed_dates=observed_dates,
         )
-        data_quality_status = self._timeseries_data_quality_status(
+        data_quality_status = timeseries_data_quality_status(
             required_count=len(expected_business_dates),
             observed_count=len(observed_dates),
             stale_count=diagnostics.stale_points_count,
@@ -812,7 +811,7 @@ class AnalyticsTimeseriesService:
             dimensions=request.dimensions,
             include_cash_flows=request.include_cash_flows,
         )
-        data_quality_status = self._timeseries_data_quality_status(
+        data_quality_status = timeseries_data_quality_status(
             required_count=len(response_rows),
             observed_count=len(response_rows),
             stale_count=diagnostics.stale_points_count,
@@ -1149,35 +1148,12 @@ class AnalyticsTimeseriesService:
             **source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
-                data_quality_status=self._portfolio_reference_data_quality_status(
+                data_quality_status=portfolio_reference_data_quality_status(
                     performance_end_date=performance_end_date,
                 ),
-                latest_evidence_timestamp=self._portfolio_reference_evidence_timestamp(portfolio),
+                latest_evidence_timestamp=portfolio_reference_evidence_timestamp(portfolio),
             ),
         )
-
-    @staticmethod
-    def _timeseries_data_quality_status(
-        *,
-        required_count: int,
-        observed_count: int,
-        stale_count: int,
-        warning_issue_count: int = 0,
-    ) -> str:
-        return timeseries_data_quality_status(
-            required_count=required_count,
-            observed_count=observed_count,
-            stale_count=stale_count,
-            warning_issue_count=warning_issue_count,
-        )
-
-    @staticmethod
-    def _portfolio_reference_data_quality_status(*, performance_end_date: date | None) -> str:
-        return portfolio_reference_data_quality_status(performance_end_date=performance_end_date)
-
-    @staticmethod
-    def _portfolio_reference_evidence_timestamp(portfolio: object) -> datetime | None:
-        return portfolio_reference_evidence_timestamp(portfolio)
 
     async def _latest_available_performance_date(
         self,
@@ -1188,63 +1164,17 @@ class AnalyticsTimeseriesService:
     ) -> date | None:
         latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
         latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
-        latest_position_date = self._latest_position_horizon_with_observations(
+        latest_position_date = latest_position_horizon_with_observations(
             latest_position_date=latest_position_date,
             observed_dates=observed_dates,
         )
-        return self._bounded_latest_performance_date(
-            portfolio_candidate=self._latest_portfolio_horizon_candidate(
+        return bounded_latest_performance_date(
+            portfolio_candidate=latest_portfolio_horizon_candidate(
                 latest_portfolio_date=latest_portfolio_date,
                 observed_dates=observed_dates,
             ),
             latest_position_date=latest_position_date,
             as_of_date=as_of_date,
-        )
-
-    @staticmethod
-    def _latest_position_horizon_with_observations(
-        *,
-        latest_position_date: date | None,
-        observed_dates: list[date] | None,
-    ) -> date | None:
-        return latest_position_horizon_with_observations(
-            latest_position_date=latest_position_date,
-            observed_dates=observed_dates,
-        )
-
-    @staticmethod
-    def _latest_portfolio_horizon_candidate(
-        *,
-        latest_portfolio_date: date | None,
-        observed_dates: list[date] | None,
-    ) -> date | None:
-        return latest_portfolio_horizon_candidate(
-            latest_portfolio_date=latest_portfolio_date,
-            observed_dates=observed_dates,
-        )
-
-    @staticmethod
-    def _bounded_latest_performance_date(
-        *,
-        portfolio_candidate: date | None,
-        latest_position_date: date | None,
-        as_of_date: date,
-    ) -> date | None:
-        return bounded_latest_performance_date(
-            portfolio_candidate=portfolio_candidate,
-            latest_position_date=latest_position_date,
-            as_of_date=as_of_date,
-        )
-
-    @staticmethod
-    def _performance_horizon_candidates(
-        *,
-        portfolio_candidate: date | None,
-        latest_position_date: date | None,
-    ) -> list[date]:
-        return performance_horizon_candidates(
-            portfolio_candidate=portfolio_candidate,
-            latest_position_date=latest_position_date,
         )
 
     async def _reserve_export_job(
