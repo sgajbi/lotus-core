@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,8 +35,8 @@ class OperatingBandDecision:
 def _threshold_signal(
     *,
     metric_name: str,
-    metric_value: float | Decimal,
-    threshold: float | Decimal,
+    metric_value: Any,
+    threshold: Any,
 ) -> str | None:
     if metric_value < threshold:
         return None
