@@ -103,6 +103,13 @@ class _PortfolioObservationSupportInputs:
     previous_eod_by_security: dict[str, Decimal]
 
 
+@dataclass(frozen=True)
+class _PositionTimeseriesCursor:
+    cursor_date: date | None
+    cursor_security_id: str | None
+    snapshot_epoch: int | None
+
+
 class AnalyticsTimeseriesService:
     _EXPORT_LIFECYCLE_MODE = "inline_job_execution"
 
@@ -949,51 +956,31 @@ class AnalyticsTimeseriesService:
         reporting_currency = normalize_currency_code(
             str(request.reporting_currency or portfolio_currency)
         )
-        request_scope_fingerprint = self._request_fingerprint(
-            {
-                "endpoint": "position-timeseries",
-                "portfolio_id": portfolio_id,
-                "as_of_date": request.as_of_date.isoformat(),
-                "resolved_window": resolved_window.model_dump(mode="json"),
-                "frequency": request.frequency,
-                "reporting_currency": reporting_currency,
-                "security_ids": request.filters.security_ids,
-                "position_ids": request.filters.position_ids,
-                "dimension_filters": [
-                    f.model_dump(mode="json") for f in request.filters.dimension_filters
-                ],
-                "dimensions": request.dimensions,
-                "include_cash_flows": request.include_cash_flows,
-            }
+        request_scope_fingerprint = self._position_timeseries_scope_fingerprint(
+            portfolio_id=portfolio_id,
+            request=request,
+            resolved_window=resolved_window,
+            reporting_currency=reporting_currency,
         )
-        cursor = self._decode_page_token(request.page.page_token)
-        token_scope = cursor.get("scope_fingerprint")
-        if token_scope is not None and token_scope != request_scope_fingerprint:
-            raise AnalyticsInputError("INVALID_REQUEST", "Page token does not match request scope.")
-        cursor_date = (
-            date.fromisoformat(cursor["valuation_date"]) if cursor.get("valuation_date") else None
+        cursor = self._position_timeseries_cursor(
+            page_token=request.page.page_token,
+            request_scope_fingerprint=request_scope_fingerprint,
         )
-        cursor_security_id = cursor.get("security_id")
-        dimension_filters = {
-            item.dimension: set(item.values) for item in request.filters.dimension_filters
-        }
-        snapshot_epoch = int(cursor["snapshot_epoch"]) if cursor.get("snapshot_epoch") else None
-        if snapshot_epoch is None:
-            snapshot_epoch = await self.repo.get_position_snapshot_epoch(
-                portfolio_id=portfolio_id,
-                start_date=resolved_window.start_date,
-                end_date=resolved_window.end_date,
-                security_ids=request.filters.security_ids,
-                position_ids=request.filters.position_ids,
-                dimension_filters=dimension_filters,
-            )
+        dimension_filters = self._position_dimension_filters(request)
+        snapshot_epoch = await self._position_snapshot_epoch(
+            portfolio_id=portfolio_id,
+            request=request,
+            resolved_window=resolved_window,
+            dimension_filters=dimension_filters,
+            cursor=cursor,
+        )
         rows = await self.repo.list_position_timeseries_rows(
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
             page_size=request.page.page_size,
-            cursor_date=cursor_date,
-            cursor_security_id=cursor_security_id,
+            cursor_date=cursor.cursor_date,
+            cursor_security_id=cursor.cursor_security_id,
             security_ids=request.filters.security_ids,
             position_ids=request.filters.position_ids,
             dimension_filters=dimension_filters,
@@ -1020,25 +1007,21 @@ class AnalyticsTimeseriesService:
             support_inputs=support_inputs,
         )
 
-        next_page_token: str | None = None
-        if has_more and rows_page:
-            last = rows_page[-1]
-            next_page_token = self._encode_page_token(
-                {
-                    "valuation_date": last.valuation_date.isoformat(),
-                    "security_id": normalize_security_id(last.security_id),
-                    "snapshot_epoch": snapshot_epoch,
-                    "scope_fingerprint": request_scope_fingerprint,
-                }
-            )
-
-        stale_points_count = sum(
-            count for status_name, count in quality_distribution.items() if status_name != "final"
+        next_page_token = self._position_timeseries_next_page_token(
+            has_more=has_more,
+            rows_page=rows_page,
+            snapshot_epoch=snapshot_epoch,
+            request_scope_fingerprint=request_scope_fingerprint,
+        )
+        diagnostics = self._position_timeseries_diagnostics(
+            quality_distribution=quality_distribution,
+            dimensions=request.dimensions,
+            include_cash_flows=request.include_cash_flows,
         )
         data_quality_status = self._timeseries_data_quality_status(
             required_count=len(response_rows),
             observed_count=len(response_rows),
-            stale_count=stale_points_count,
+            stale_count=diagnostics.stale_points_count,
             warning_issue_count=1 if next_page_token else 0,
         )
 
@@ -1062,13 +1045,7 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
-            diagnostics=QualityDiagnostics(
-                quality_status_distribution=quality_distribution,
-                missing_dates_count=0,
-                stale_points_count=stale_points_count,
-                requested_dimensions=list(request.dimensions),
-                cash_flows_included=request.include_cash_flows,
-            ),
+            diagnostics=diagnostics,
             page=PageMetadata(
                 page_size=request.page.page_size,
                 returned_row_count=len(response_rows),
@@ -1083,6 +1060,118 @@ class AnalyticsTimeseriesService:
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
             ),
+        )
+
+    def _position_timeseries_scope_fingerprint(
+        self,
+        *,
+        portfolio_id: str,
+        request: PositionAnalyticsTimeseriesRequest,
+        resolved_window: AnalyticsWindow,
+        reporting_currency: str,
+    ) -> str:
+        return self._request_fingerprint(
+            {
+                "endpoint": "position-timeseries",
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "resolved_window": resolved_window.model_dump(mode="json"),
+                "frequency": request.frequency,
+                "reporting_currency": reporting_currency,
+                "security_ids": request.filters.security_ids,
+                "position_ids": request.filters.position_ids,
+                "dimension_filters": [
+                    f.model_dump(mode="json") for f in request.filters.dimension_filters
+                ],
+                "dimensions": request.dimensions,
+                "include_cash_flows": request.include_cash_flows,
+            }
+        )
+
+    def _position_timeseries_cursor(
+        self,
+        *,
+        page_token: str | None,
+        request_scope_fingerprint: str,
+    ) -> _PositionTimeseriesCursor:
+        cursor = self._decode_page_token(page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope is not None and token_scope != request_scope_fingerprint:
+            raise AnalyticsInputError("INVALID_REQUEST", "Page token does not match request scope.")
+        return _PositionTimeseriesCursor(
+            cursor_date=(
+                date.fromisoformat(cursor["valuation_date"])
+                if cursor.get("valuation_date")
+                else None
+            ),
+            cursor_security_id=cursor.get("security_id"),
+            snapshot_epoch=(
+                int(cursor["snapshot_epoch"]) if cursor.get("snapshot_epoch") else None
+            ),
+        )
+
+    @staticmethod
+    def _position_dimension_filters(
+        request: PositionAnalyticsTimeseriesRequest,
+    ) -> dict[str, set[str]]:
+        return {item.dimension: set(item.values) for item in request.filters.dimension_filters}
+
+    async def _position_snapshot_epoch(
+        self,
+        *,
+        portfolio_id: str,
+        request: PositionAnalyticsTimeseriesRequest,
+        resolved_window: AnalyticsWindow,
+        dimension_filters: dict[str, set[str]],
+        cursor: _PositionTimeseriesCursor,
+    ) -> int:
+        if cursor.snapshot_epoch is not None:
+            return cursor.snapshot_epoch
+        return await self.repo.get_position_snapshot_epoch(
+            portfolio_id=portfolio_id,
+            start_date=resolved_window.start_date,
+            end_date=resolved_window.end_date,
+            security_ids=request.filters.security_ids,
+            position_ids=request.filters.position_ids,
+            dimension_filters=dimension_filters,
+        )
+
+    def _position_timeseries_next_page_token(
+        self,
+        *,
+        has_more: bool,
+        rows_page: list[object],
+        snapshot_epoch: int,
+        request_scope_fingerprint: str,
+    ) -> str | None:
+        if not has_more or not rows_page:
+            return None
+        last = rows_page[-1]
+        return self._encode_page_token(
+            {
+                "valuation_date": last.valuation_date.isoformat(),
+                "security_id": normalize_security_id(last.security_id),
+                "snapshot_epoch": snapshot_epoch,
+                "scope_fingerprint": request_scope_fingerprint,
+            }
+        )
+
+    @staticmethod
+    def _position_timeseries_diagnostics(
+        *,
+        quality_distribution: dict[str, int],
+        dimensions: list[str],
+        include_cash_flows: bool,
+    ) -> QualityDiagnostics:
+        stale_points_count = sum(
+            count for status_name, count in quality_distribution.items() if status_name != "final"
+        )
+        return QualityDiagnostics(
+            quality_status_distribution=quality_distribution,
+            missing_dates_count=0,
+            stale_points_count=stale_points_count,
+            requested_dimensions=list(dimensions),
+            cash_flows_included=include_cash_flows,
         )
 
     async def _position_page_support_inputs(

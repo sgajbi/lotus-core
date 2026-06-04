@@ -444,3 +444,11 @@ fingerprinting, page-token cursor validation, and diagnostics construction helpe
 `C (11)` under Radon cyclomatic complexity, and the extracted portfolio-timeseries helpers report
 A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 7.
+
+CR-913 reduced analytics position-timeseries orchestration complexity by extracting request-scope
+fingerprinting, cursor validation, dimension-filter projection, snapshot-epoch resolution,
+next-page token, and diagnostics helpers inside `analytics_timeseries_service.py`.
+`get_position_timeseries` now reports `A (4)` instead of `C (15)` under Radon cyclomatic
+complexity, and the extracted position-timeseries helpers report A-ranked complexity. This removes
+the final C-ranked method from `analytics_timeseries_service.py`; the module still reports
+`C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.

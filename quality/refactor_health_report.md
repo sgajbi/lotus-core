@@ -283,3 +283,9 @@ health before that claim is defensible.
     `analytics_timeseries_service.py`. The former C-ranked `get_portfolio_timeseries` method now
     reports `A (4)` instead of `C (11)`, but `analytics_timeseries_service.py` remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+69. Reduced analytics position-timeseries orchestration complexity by extracting request-scope
+    fingerprinting, cursor validation, dimension-filter projection, snapshot-epoch resolution,
+    next-page token, and diagnostics helpers inside `analytics_timeseries_service.py`. The former
+    C-ranked `get_position_timeseries` method now reports `A (4)` instead of `C (15)`, removing
+    the final C-ranked method from `analytics_timeseries_service.py`; the module remains a
+    C-ranked maintainability hotspot and the C-hotspot count remains 7.
