@@ -59,6 +59,12 @@ from .ingestion_backlog_breakdown import (
     build_backlog_breakdown_response,
     empty_backlog_breakdown_response,
 )
+from .ingestion_job_listing import (
+    IngestionJobListFilters,
+    build_cursor_lookup_statement,
+    build_ingestion_job_list_statement,
+    ingestion_job_list_page,
+)
 from .ingestion_operating_band import (
     OperatingBandPolicy,
     OperatingBandSignals,
@@ -486,27 +492,22 @@ class IngestionJobService:
         limit: int = 100,
     ) -> tuple[list[IngestionJobResponse], str | None]:
         async for db in get_async_db_session():
-            stmt = select(DBIngestionJob)
-            if status is not None:
-                stmt = stmt.where(DBIngestionJob.status == status)
-            if entity_type is not None:
-                stmt = stmt.where(DBIngestionJob.entity_type == entity_type)
-            if submitted_from is not None:
-                stmt = stmt.where(DBIngestionJob.submitted_at >= submitted_from)
-            if submitted_to is not None:
-                stmt = stmt.where(DBIngestionJob.submitted_at <= submitted_to)
+            cursor_row = None
             if cursor is not None:
-                cursor_row = await db.scalar(
-                    select(DBIngestionJob).where(DBIngestionJob.job_id == cursor).limit(1)
-                )
-                if cursor_row is not None:
-                    stmt = stmt.where(DBIngestionJob.id < cursor_row.id)
-            stmt = stmt.order_by(desc(DBIngestionJob.id)).limit(limit + 1)
+                cursor_row = await db.scalar(build_cursor_lookup_statement(cursor=cursor))
+            stmt = build_ingestion_job_list_statement(
+                filters=IngestionJobListFilters(
+                    status=status,
+                    entity_type=entity_type,
+                    submitted_from=submitted_from,
+                    submitted_to=submitted_to,
+                ),
+                cursor_row=cursor_row,
+                limit=limit,
+            )
             rows = list((await db.scalars(stmt)).all())
-            has_more = len(rows) > limit
-            page_rows = rows[:limit]
-            next_cursor = page_rows[-1].job_id if has_more and page_rows else None
-            return ([_to_response(row) for row in page_rows], next_cursor)
+            page = ingestion_job_list_page(rows=rows, limit=limit)
+            return ([_to_response(row) for row in page.rows], page.next_cursor)
         return ([], None)
 
     async def list_failures(

@@ -760,3 +760,8 @@ ordering, concentration-share calculation, and response assembly into `ingestion
 `get_backlog_breakdown` improved from `C (13)` to `A (3)`, while the helper module reports
 `A (51.73)` maintainability. `ingestion_job_service.py` shrank from 1,477 SLOC to 1,419 SLOC and
 improved from `C (0.00)` to `C (0.81)`, but remains a C-ranked maintainability hotspot.
+
+CR-957 reduced ingestion job listing coupling by extracting filter, cursor lookup, statement
+building, and page-slicing helpers into `ingestion_job_listing.py`. `list_jobs` improved from
+`C (11)` to `A (4)`, removing the final C-ranked method from `ingestion_job_service.py`. The
+service reports `C (2.32)` maintainability, while the helper module reports `A (46.25)`.
