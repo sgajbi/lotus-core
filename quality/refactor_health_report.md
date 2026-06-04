@@ -197,3 +197,9 @@ health before that claim is defensible.
     `list_dpm_portfolio_universe_candidates` method now reports A-ranked complexity, and
     `reference_data_repository.py` improved from `C (7.55)` to `C (8.74)`, but it remains a
     C-ranked maintainability hotspot.
+54. Reduced operations-service runtime-state maintainability debt by extracting source-data
+    product runtime metadata, reconciliation status aggregation, analytics export normalization,
+    stale-running detection, and export operational-state classification into
+    `operations_runtime_state.py`. `operations_service.py` improved from `C (5.44)` to
+    `B (9.91)`, removing it from the current C-ranked maintainability hotspot list and reducing
+    the C-hotspot count from 8 to 7.

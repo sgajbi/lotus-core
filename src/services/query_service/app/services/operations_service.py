@@ -4,10 +4,7 @@ from typing import TypeVar
 
 from portfolio_common.database_models import FinancialReconciliationRun, PipelineStageState
 from portfolio_common.reconciliation_quality import (
-    BLOCKED,
-    BREAK_OPEN,
     COMPLETE,
-    PARTIAL,
     UNKNOWN,
     ReconciliationRunSignal,
     classify_finding_status,
@@ -37,7 +34,6 @@ from ..dtos.operations_dto import (
     SupportJobRecord,
     SupportOverviewResponse,
 )
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.operations_models import (
     MissingHistoricalFxDependencySummary,
@@ -51,6 +47,14 @@ from ..support_policy import (
 )
 from .calculator_slo_builder import build_calculator_slo_response
 from .load_run_progress_builder import build_load_run_progress_response
+from .operations_runtime_state import (
+    aggregate_reconciliation_statuses,
+    analytics_export_operational_state,
+    evidence_product_runtime_metadata,
+    is_analytics_export_job_stale,
+    normalize_analytics_export_status,
+    normalize_analytics_export_status_filter,
+)
 from .portfolio_readiness_builder import (
     PortfolioReadinessSnapshot,
     build_portfolio_readiness_response,
@@ -83,19 +87,11 @@ class OperationsService:
         evidence_timestamps: list[datetime | None],
         reconciliation_status: str = UNKNOWN,
     ) -> dict[str, object]:
-        resolved_as_of_dates = [as_of_date for as_of_date in as_of_dates if as_of_date is not None]
-        resolved_timestamps = [
-            evidence_timestamp
-            for evidence_timestamp in evidence_timestamps
-            if evidence_timestamp is not None
-        ]
-        return source_data_product_runtime_metadata(
-            as_of_date=(
-                max(resolved_as_of_dates) if resolved_as_of_dates else generated_at_utc.date()
-            ),
-            generated_at=generated_at_utc,
+        return evidence_product_runtime_metadata(
+            generated_at_utc=generated_at_utc,
+            as_of_dates=as_of_dates,
+            evidence_timestamps=evidence_timestamps,
             reconciliation_status=reconciliation_status,
-            latest_evidence_timestamp=(max(resolved_timestamps) if resolved_timestamps else None),
         )
 
     @staticmethod
@@ -123,17 +119,7 @@ class OperationsService:
 
     @staticmethod
     def _aggregate_statuses(statuses: list[str]) -> str:
-        if not statuses:
-            return UNKNOWN
-        if BLOCKED in statuses:
-            return BLOCKED
-        if BREAK_OPEN in statuses:
-            return BREAK_OPEN
-        if PARTIAL in statuses:
-            return PARTIAL
-        if all(status == COMPLETE for status in statuses):
-            return COMPLETE
-        return UNKNOWN
+        return aggregate_reconciliation_statuses(statuses)
 
     @staticmethod
     def _normalize_support_job_status(status: str | None) -> str | None:
@@ -169,14 +155,11 @@ class OperationsService:
 
     @staticmethod
     def _normalize_analytics_export_status(status: str | None) -> str | None:
-        if status is None:
-            return None
-        return status.strip().lower()
+        return normalize_analytics_export_status(status)
 
     @classmethod
     def _normalize_analytics_export_status_filter(cls, status: str | None) -> str | None:
-        normalized_status = cls._normalize_analytics_export_status(status)
-        return normalized_status or None
+        return normalize_analytics_export_status_filter(status)
 
     @classmethod
     def _get_analytics_export_operational_state(
@@ -186,16 +169,12 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> str:
-        status = cls._normalize_analytics_export_status(status) or ""
-        if status == "failed":
-            return "FAILED"
-        if cls._is_analytics_export_job_stale(status, updated_at, now, stale_threshold_minutes):
-            return "STALE_RUNNING"
-        if status == "running":
-            return "RUNNING"
-        if status == "accepted":
-            return "ACCEPTED"
-        return "COMPLETED"
+        return analytics_export_operational_state(
+            status,
+            updated_at,
+            now,
+            stale_threshold_minutes,
+        )
 
     @classmethod
     def _get_reconciliation_operational_state(cls, status: str | None) -> str:
@@ -1355,10 +1334,8 @@ class OperationsService:
         now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> bool:
-        normalized_status = cls._normalize_analytics_export_status(status)
-        normalized_status = "PROCESSING" if normalized_status == "running" else normalized_status
-        return cls._is_support_job_stale(
-            normalized_status,
+        return is_analytics_export_job_stale(
+            status,
             updated_at,
             now,
             stale_threshold_minutes,

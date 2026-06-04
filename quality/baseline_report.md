@@ -333,3 +333,13 @@ of `B (6)` under Radon cyclomatic complexity, and `reference_data_repository.py`
 `C (7.55)` to `C (8.74)` under Radon maintainability. The new DPM query helper module reports
 `A (53.24)`. This does not remove `reference_data_repository.py` from the current C-ranked
 maintainability list; the C-hotspot count remains 8.
+
+CR-898 reduced operations-service runtime-state debt by extracting source-data product runtime
+metadata, reconciliation status aggregation, analytics export normalization, stale-running
+detection, and export operational-state classification into `operations_runtime_state.py`.
+`OperationsService._evidence_product_runtime_metadata`, `OperationsService._aggregate_statuses`,
+and `OperationsService._get_analytics_export_operational_state` now each report `A (1)` under
+Radon cyclomatic complexity. `operations_service.py` improved from `C (5.44)` to `B (9.91)` under
+Radon maintainability, and the new runtime-state helper module reports `A (46.40)`. This removes
+`operations_service.py` from the current C-ranked maintainability list and reduces the C-hotspot
+count from 8 to 7.
