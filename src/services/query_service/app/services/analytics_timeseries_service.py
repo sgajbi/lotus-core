@@ -1661,14 +1661,10 @@ class AnalyticsTimeseriesService:
                 dataset_type=request.dataset_type,
             )
             if existing is not None:
-                existing_status = self._normalize_export_job_status(existing.status)
-                if existing_status == "completed":
+                if self._export_job_is_completed(existing):
                     return existing, True
-                if existing_status in {"accepted", "running"}:
-                    stale_threshold = datetime.now(UTC) - timedelta(
-                        minutes=self._analytics_export_stale_timeout_minutes
-                    )
-                    if existing.updated_at is not None and existing.updated_at >= stale_threshold:
+                if self._export_job_is_inflight(existing):
+                    if self._export_job_is_fresh(existing):
                         return existing, True
                     await self.export_repo.mark_failed(
                         existing,
@@ -1685,6 +1681,18 @@ class AnalyticsTimeseriesService:
                 compression=request.compression,
             )
             return row, False
+
+    def _export_job_is_completed(self, row: object) -> bool:
+        return self._normalize_export_job_status(row.status) == "completed"
+
+    def _export_job_is_inflight(self, row: object) -> bool:
+        return self._normalize_export_job_status(row.status) in {"accepted", "running"}
+
+    def _export_job_is_fresh(self, row: object) -> bool:
+        return row.updated_at is not None and row.updated_at >= self._export_job_stale_threshold()
+
+    def _export_job_stale_threshold(self) -> datetime:
+        return datetime.now(UTC) - timedelta(minutes=self._analytics_export_stale_timeout_minutes)
 
     async def _mark_export_job_running(self, job_id: str) -> object:
         async with self.db.begin():

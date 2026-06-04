@@ -459,3 +459,9 @@ inside `analytics_timeseries_service.py`. `create_export_job` now reports `A (4)
 `B (8)` under Radon cyclomatic complexity, and the extracted export job creation helpers report
 A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 7.
+
+CR-915 reduced analytics export job reservation complexity by extracting completed, in-flight,
+freshness, and stale-threshold policy helpers inside `analytics_timeseries_service.py`.
+`_reserve_export_job` now reports `A (5)` instead of `B (6)` under Radon cyclomatic complexity, and
+the extracted export reservation helpers report A-ranked complexity. `analytics_timeseries_service.py`
+still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.

@@ -294,3 +294,8 @@ health before that claim is defensible.
     inside `analytics_timeseries_service.py`. The former B-ranked `create_export_job` method now
     reports `A (4)` instead of `B (8)`, but `analytics_timeseries_service.py` remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+71. Reduced analytics export job reservation complexity by extracting completed, in-flight,
+    freshness, and stale-threshold policy helpers inside `analytics_timeseries_service.py`. The
+    former B-ranked `_reserve_export_job` method now reports `A (5)` instead of `B (6)`, but
+    `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
+    C-hotspot count remains 7.
