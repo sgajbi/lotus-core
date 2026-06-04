@@ -797,3 +797,9 @@ capacity response loading into `ingestion_capacity_status.py`. `get_capacity_sta
 `B (9)` to `A (1)`, while the helper module reports `A (43.64)` maintainability.
 `ingestion_job_service.py` shrank from 1,420 SLOC to 1,304 SLOC and improved from `C (2.32)` to
 `C (5.70)`, but remains the remaining active non-generated C-ranked source hotspot.
+
+CR-963 reduced ingestion error-budget status coupling by extracting default and loaded
+error-budget response assembly into `ingestion_error_budget_status.py`. `get_error_budget_status`
+improved from `B (9)` to `A (1)`, while the helper module reports `A (47.37)` maintainability.
+`ingestion_job_service.py` shrank from 1,304 SLOC to 1,207 SLOC and improved from `C (5.70)` to
+`C (8.17)`, but remains the remaining active non-generated C-ranked source hotspot.

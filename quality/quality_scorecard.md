@@ -75,3 +75,7 @@ Status: Initial scorecard baseline on 2026-06-02.
   `IngestionJobService.get_capacity_status` from `B (9)` to `A (1)` and shrinking
   `ingestion_job_service.py` from 1,420 SLOC to 1,304 SLOC. The service improves from `C (2.32)`
   to `C (5.70)` and remains the remaining active non-generated C-ranked source hotspot.
+- CR-963 extracted A-ranked `ingestion_error_budget_status.py`, reducing
+  `IngestionJobService.get_error_budget_status` from `B (9)` to `A (1)` and shrinking
+  `ingestion_job_service.py` from 1,304 SLOC to 1,207 SLOC. The service improves from `C (5.70)`
+  to `C (8.17)` and remains the remaining active non-generated C-ranked source hotspot.
