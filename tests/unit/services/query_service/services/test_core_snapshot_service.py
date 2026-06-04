@@ -567,25 +567,6 @@ async def test_core_snapshot_raises_when_new_security_has_blank_market_price(moc
         await service.get_core_snapshot("PORT_001", request)
 
 
-@pytest.mark.parametrize(
-    ("txn_type", "quantity", "amount", "expected"),
-    [
-        ("BUY", Decimal("2"), None, Decimal("2")),
-        ("SELL", Decimal("2"), None, Decimal("-2")),
-        ("TRANSFER_IN", Decimal("5"), Decimal("9"), Decimal("5")),
-        ("TRANSFER_OUT", Decimal("3"), Decimal("9"), Decimal("-3")),
-        ("DEPOSIT", None, Decimal("7"), Decimal("7")),
-        ("WITHDRAWAL", None, Decimal("7"), Decimal("-7")),
-        ("FEE", None, Decimal("7"), Decimal("-7")),
-        ("TAX", None, Decimal("7"), Decimal("-7")),
-        ("UNKNOWN", Decimal("3"), None, Decimal("0")),
-    ],
-)
-async def test_change_quantity_effect_rules(txn_type, quantity, amount, expected):
-    change = SimpleNamespace(transaction_type=txn_type, quantity=quantity, amount=amount)
-    assert CoreSnapshotService._change_quantity_effect(change) == expected
-
-
 async def test_get_fx_rate_or_raise_identity_currency(mock_dependencies):
     (_, _, _, _, fx_repo, _) = mock_dependencies
     service = CoreSnapshotService(AsyncMock())

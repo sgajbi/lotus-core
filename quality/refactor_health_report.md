@@ -410,3 +410,12 @@ health before that claim is defensible.
     maintainability and A-ranked helper complexity. `core_snapshot_service.py` shrank from 1,018
     SLOC to 896 SLOC and improved from `C (2.18)` to `C (6.12)`, but remains a C-ranked
     maintainability hotspot.
+91. Reduced core snapshot projected-position policy coupling by extracting baseline-to-projected
+    copying, missing projected security-id discovery, new projected instrument payload
+    construction, transaction quantity mutation, baseline unit-value reuse, positive new-position
+    pricing requirements, and cash/zero filtering into `core_snapshot_projected_positions.py`.
+    The helper module reports `A (42.61)` maintainability and A-ranked helper complexity.
+    `core_snapshot_service.py` shrank from 896 SLOC to 789 SLOC and improved from `C (6.12)` to
+    `B (12.41)`, removing it from the active C-ranked maintainability hotspot list. The generated
+    `query_service/build` copy remains separate generated-surface debt and is not changed by this
+    slice.
