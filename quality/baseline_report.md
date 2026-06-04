@@ -430,3 +430,10 @@ helpers inside `analytics_timeseries_service.py`. `_latest_available_performance
 `A (1)` instead of `C (12)` under Radon cyclomatic complexity, and the extracted horizon helpers
 report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 7.
+
+CR-911 reduced analytics window-resolution complexity by extracting explicit-window bounding,
+period-start selection, and inception-date clamping helpers inside
+`analytics_timeseries_service.py`. `_resolve_window` now reports `A (2)` instead of `C (11)` under
+Radon cyclomatic complexity, and the extracted window-resolution helpers report A-ranked
+complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon maintainability,
+so the C-hotspot count remains 7.

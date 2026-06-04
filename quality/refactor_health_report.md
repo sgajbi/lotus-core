@@ -273,3 +273,8 @@ health before that claim is defensible.
     `_latest_available_performance_date` method now reports `A (1)` instead of `C (12)`, but
     `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
     C-hotspot count remains 7.
+67. Reduced analytics window-resolution complexity by extracting explicit-window bounding,
+    period-start selection, and inception-date clamping helpers inside
+    `analytics_timeseries_service.py`. The former C-ranked `_resolve_window` method now reports
+    `A (2)` instead of `C (11)`, but `analytics_timeseries_service.py` remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.

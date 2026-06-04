@@ -160,33 +160,63 @@ class AnalyticsTimeseriesService:
         inception_date: date,
     ) -> AnalyticsWindow:
         if window is not None:
-            end_date = min(window.end_date, as_of_date)
-            if window.start_date > end_date:
-                raise AnalyticsInputError(
-                    "INVALID_REQUEST", "window.start_date must be before or equal to end_date."
-                )
-            return AnalyticsWindow(start_date=window.start_date, end_date=end_date)
+            return self._bounded_explicit_window(window=window, as_of_date=as_of_date)
 
-        if period == "one_month":
-            start = as_of_date - timedelta(days=31)
-        elif period == "three_months":
-            start = as_of_date - timedelta(days=92)
-        elif period == "ytd":
-            start = date(as_of_date.year, 1, 1)
-        elif period == "one_year":
-            start = as_of_date - timedelta(days=365)
-        elif period == "three_years":
-            start = as_of_date - timedelta(days=365 * 3)
-        elif period == "five_years":
-            start = as_of_date - timedelta(days=365 * 5)
-        elif period == "inception":
-            start = inception_date
-        else:
+        return AnalyticsWindow(
+            start_date=self._clamped_period_start_date(
+                as_of_date=as_of_date,
+                period=period,
+                inception_date=inception_date,
+            ),
+            end_date=as_of_date,
+        )
+
+    @staticmethod
+    def _bounded_explicit_window(
+        *,
+        window: AnalyticsWindow,
+        as_of_date: date,
+    ) -> AnalyticsWindow:
+        end_date = min(window.end_date, as_of_date)
+        if window.start_date > end_date:
+            raise AnalyticsInputError(
+                "INVALID_REQUEST", "window.start_date must be before or equal to end_date."
+            )
+        return AnalyticsWindow(start_date=window.start_date, end_date=end_date)
+
+    @staticmethod
+    def _clamped_period_start_date(
+        *,
+        as_of_date: date,
+        period: str | None,
+        inception_date: date,
+    ) -> date:
+        start_date = AnalyticsTimeseriesService._period_start_date(
+            as_of_date=as_of_date,
+            period=period,
+            inception_date=inception_date,
+        )
+        return max(start_date, inception_date)
+
+    @staticmethod
+    def _period_start_date(
+        *,
+        as_of_date: date,
+        period: str | None,
+        inception_date: date,
+    ) -> date:
+        period_start_dates = {
+            "one_month": as_of_date - timedelta(days=31),
+            "three_months": as_of_date - timedelta(days=92),
+            "ytd": date(as_of_date.year, 1, 1),
+            "one_year": as_of_date - timedelta(days=365),
+            "three_years": as_of_date - timedelta(days=365 * 3),
+            "five_years": as_of_date - timedelta(days=365 * 5),
+            "inception": inception_date,
+        }
+        if period not in period_start_dates:
             raise AnalyticsInputError("INVALID_REQUEST", "Unsupported period value.")
-
-        if start < inception_date:
-            start = inception_date
-        return AnalyticsWindow(start_date=start, end_date=as_of_date)
+        return period_start_dates[period]
 
     async def _get_conversion_rates(
         self,
