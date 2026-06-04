@@ -966,6 +966,84 @@ class OperationsRepository:
         )
 
     @staticmethod
+    def _lineage_latest_date_subquery(
+        model,
+        date_column,
+        security_id_expr,
+        position_state_security_id,
+        *,
+        as_of_column=None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = select(func.max(date_column)).where(
+            model.portfolio_id == PositionState.portfolio_id,
+            security_id_expr == position_state_security_id,
+            model.epoch == PositionState.epoch,
+        )
+        if as_of is not None and as_of_column is not None:
+            stmt = stmt.where(as_of_column <= as_of)
+        return stmt.correlate(PositionState).scalar_subquery()
+
+    @staticmethod
+    def _lineage_artifact_gap_case(
+        *,
+        latest_position_history_date,
+        latest_daily_snapshot_date,
+        latest_valuation_job_date,
+        latest_valuation_job_status,
+    ):
+        return case(
+            (latest_position_history_date.is_(None), False),
+            (latest_daily_snapshot_date.is_(None), True),
+            (latest_daily_snapshot_date < latest_position_history_date, True),
+            (latest_valuation_job_date.is_(None), True),
+            (latest_valuation_job_date < latest_position_history_date, True),
+            (latest_valuation_job_status.in_(("FAILED", "PENDING", "PROCESSING")), True),
+            else_=False,
+        )
+
+    @staticmethod
+    def _lineage_priority_case(*, has_artifact_gap, latest_valuation_job_status):
+        return case(
+            (PositionState.status == "REPROCESSING", 0),
+            (
+                and_(has_artifact_gap.is_(True), latest_valuation_job_status == "FAILED"),
+                1,
+            ),
+            (has_artifact_gap.is_(True), 2),
+            else_=9,
+        )
+
+    @staticmethod
+    def _lineage_keys_select(
+        *,
+        position_state_security_id,
+        latest_position_history_date,
+        latest_daily_snapshot_date,
+        latest_valuation_job,
+    ):
+        return (
+            select(
+                position_state_security_id.label("security_id"),
+                PositionState.epoch,
+                PositionState.watermark_date,
+                PositionState.status.label("reprocessing_status"),
+                latest_position_history_date.label("latest_position_history_date"),
+                latest_daily_snapshot_date.label("latest_daily_snapshot_date"),
+                latest_valuation_job.c.latest_valuation_job_date.label("latest_valuation_job_date"),
+                latest_valuation_job.c.latest_valuation_job_id.label("latest_valuation_job_id"),
+                latest_valuation_job.c.latest_valuation_job_status.label(
+                    "latest_valuation_job_status"
+                ),
+                latest_valuation_job.c.latest_valuation_job_correlation_id.label(
+                    "latest_valuation_job_correlation_id"
+                ),
+            )
+            .select_from(PositionState)
+            .outerjoin(latest_valuation_job, true())
+        )
+
+    @staticmethod
     def _apply_load_run_artifact_scope(
         stmt,
         artifact_model,
@@ -2091,90 +2169,43 @@ class OperationsRepository:
         if security_id is not None and not normalized_security_id:
             return []
         position_state_security_id = self._security_id_expr(PositionState.security_id)
-        position_history_security_id = self._security_id_expr(PositionHistory.security_id)
-        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        latest_position_history_date = select(func.max(PositionHistory.position_date)).where(
-            PositionHistory.portfolio_id == PositionState.portfolio_id,
-            position_history_security_id == position_state_security_id,
-            PositionHistory.epoch == PositionState.epoch,
+        latest_position_history_date = self._lineage_latest_date_subquery(
+            PositionHistory,
+            PositionHistory.position_date,
+            self._security_id_expr(PositionHistory.security_id),
+            position_state_security_id,
+            as_of_column=PositionHistory.created_at,
+            as_of=as_of,
         )
-        if as_of is not None:
-            latest_position_history_date = latest_position_history_date.where(
-                PositionHistory.created_at <= as_of
-            )
-        latest_position_history_date = latest_position_history_date.correlate(
-            PositionState
-        ).scalar_subquery()
-        latest_daily_snapshot_date = select(func.max(DailyPositionSnapshot.date)).where(
-            DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-            snapshot_security_id == position_state_security_id,
-            DailyPositionSnapshot.epoch == PositionState.epoch,
+        latest_daily_snapshot_date = self._lineage_latest_date_subquery(
+            DailyPositionSnapshot,
+            DailyPositionSnapshot.date,
+            self._security_id_expr(DailyPositionSnapshot.security_id),
+            position_state_security_id,
+            as_of_column=DailyPositionSnapshot.created_at,
+            as_of=as_of,
         )
-        if as_of is not None:
-            latest_daily_snapshot_date = latest_daily_snapshot_date.where(
-                DailyPositionSnapshot.created_at <= as_of
-            )
-        latest_daily_snapshot_date = latest_daily_snapshot_date.correlate(
-            PositionState
-        ).scalar_subquery()
         latest_valuation_job = self._latest_valuation_job_lateral(
             position_state_security_id,
             as_of,
         )
         latest_valuation_job_date = latest_valuation_job.c.latest_valuation_job_date
-        latest_valuation_job_id = latest_valuation_job.c.latest_valuation_job_id
         latest_valuation_job_status = latest_valuation_job.c.latest_valuation_job_status
-        latest_valuation_job_correlation_id = (
-            latest_valuation_job.c.latest_valuation_job_correlation_id
+        has_artifact_gap = self._lineage_artifact_gap_case(
+            latest_position_history_date=latest_position_history_date,
+            latest_daily_snapshot_date=latest_daily_snapshot_date,
+            latest_valuation_job_date=latest_valuation_job_date,
+            latest_valuation_job_status=latest_valuation_job_status,
         )
-        has_artifact_gap = case(
-            (latest_position_history_date.is_(None), False),
-            (
-                latest_daily_snapshot_date.is_(None),
-                True,
-            ),
-            (
-                latest_daily_snapshot_date < latest_position_history_date,
-                True,
-            ),
-            (
-                latest_valuation_job_date.is_(None),
-                True,
-            ),
-            (
-                latest_valuation_job_date < latest_position_history_date,
-                True,
-            ),
-            (
-                latest_valuation_job_status.in_(("FAILED", "PENDING", "PROCESSING")),
-                True,
-            ),
-            else_=False,
+        lineage_priority = self._lineage_priority_case(
+            has_artifact_gap=has_artifact_gap,
+            latest_valuation_job_status=latest_valuation_job_status,
         )
-        lineage_priority = case(
-            (PositionState.status == "REPROCESSING", 0),
-            (
-                and_(has_artifact_gap.is_(True), latest_valuation_job_status == "FAILED"),
-                1,
-            ),
-            (has_artifact_gap.is_(True), 2),
-            else_=9,
-        )
-        stmt = (
-            select(
-                position_state_security_id.label("security_id"),
-                PositionState.epoch,
-                PositionState.watermark_date,
-                PositionState.status.label("reprocessing_status"),
-                latest_position_history_date.label("latest_position_history_date"),
-                latest_daily_snapshot_date.label("latest_daily_snapshot_date"),
-                latest_valuation_job_date.label("latest_valuation_job_date"),
-                latest_valuation_job_id.label("latest_valuation_job_id"),
-                latest_valuation_job_status.label("latest_valuation_job_status"),
-                latest_valuation_job_correlation_id.label("latest_valuation_job_correlation_id"),
-            )
-            .select_from(PositionState)
-            .outerjoin(latest_valuation_job, true())
+        stmt = self._lineage_keys_select(
+            position_state_security_id=position_state_security_id,
+            latest_position_history_date=latest_position_history_date,
+            latest_daily_snapshot_date=latest_daily_snapshot_date,
+            latest_valuation_job=latest_valuation_job,
         )
         stmt = self._apply_reprocessing_key_scope(
             stmt,

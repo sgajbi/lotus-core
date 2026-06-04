@@ -311,3 +311,10 @@ base-scope SQL, aggregate SQL, sample SQL, sample-record mapping, and summary as
 cyclomatic complexity, and the extracted missing-FX helpers report A-ranked complexity.
 `operations_repository.py` remains `C (0.00)` under Radon maintainability, so the C-hotspot count
 remains 8.
+
+CR-895 reduced lineage key query orchestration by extracting correlated latest-date subqueries,
+artifact-gap policy, lineage priority policy, and result projection helpers. `get_lineage_keys`
+now reports `A (4)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted
+lineage helpers report A-ranked complexity. This removes the remaining B-ranked method from
+`operations_repository.py`; the module still reports `C (0.00)` under Radon maintainability, so
+the C-hotspot count remains 8.

@@ -182,3 +182,8 @@ health before that claim is defensible.
     helpers. The former B-ranked `get_missing_historical_fx_dependency_summary` method now reports
     A-ranked complexity, but `operations_repository.py` remains a C-ranked maintainability
     hotspot.
+51. Reduced lineage key query complexity by extracting correlated latest-date subqueries,
+    artifact-gap policy, lineage priority policy, and result projection helpers. The former
+    B-ranked `get_lineage_keys` method now reports A-ranked complexity, removing the remaining
+    B-ranked method from `operations_repository.py`; the module remains a C-ranked maintainability
+    hotspot.
