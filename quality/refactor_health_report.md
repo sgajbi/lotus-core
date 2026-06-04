@@ -495,3 +495,10 @@ health before that claim is defensible.
      The helper module reports `A (43.47)` maintainability and A-ranked helper complexity.
      `operations_repository.py` shrank from 1,538 SLOC to 1,403 SLOC and improved from
      `C (0.21)` to `C (4.42)`, but remains a C-ranked maintainability hotspot.
+103. Reduced operations repository reconciliation-finding query coupling by extracting run/as-of
+     filtering, finding/security/transaction filters, severity-priority ordering, summary select
+     construction, aggregate/top-blocking summary selection, and `ReconciliationFindingSummary`
+     row shaping into `operations_reconciliation_finding_queries.py`. The helper module reports
+     `A (50.89)` maintainability and A-ranked helper complexity. `operations_repository.py`
+     shrank from 1,403 SLOC to 1,332 SLOC and improved from `C (4.42)` to `C (6.24)`, but
+     remains a C-ranked maintainability hotspot.

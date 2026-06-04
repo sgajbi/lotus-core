@@ -73,6 +73,13 @@ from .operations_position_scope_queries import (
     current_epoch_snapshot_date_stmt,
     latest_transaction_date_stmt,
 )
+from .operations_reconciliation_finding_queries import (
+    apply_reconciliation_finding_scope,
+    reconciliation_finding_severity_rank,
+    reconciliation_finding_summary_base_select,
+    reconciliation_finding_summary_from_row,
+    reconciliation_finding_summary_select,
+)
 from .operations_reconciliation_run_queries import (
     apply_reconciliation_run_scope,
     reconciliation_run_priority,
@@ -188,28 +195,6 @@ class OperationsRepository:
             (governed_status == "PENDING", 3),
             else_=9,
         )
-
-    def _apply_reconciliation_finding_scope(
-        self,
-        stmt,
-        *,
-        run_id: str,
-        finding_id: Optional[str] = None,
-        normalized_security_id: Optional[str] = None,
-        transaction_id: Optional[str] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(FinancialReconciliationFinding.run_id == run_id)
-        if as_of is not None:
-            stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)
-        if finding_id:
-            stmt = stmt.where(FinancialReconciliationFinding.finding_id == finding_id)
-        if normalized_security_id:
-            finding_security_id = self._security_id_expr(FinancialReconciliationFinding.security_id)
-            stmt = stmt.where(finding_security_id == normalized_security_id)
-        if transaction_id:
-            stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
-        return stmt
 
     async def _get_support_job_health_summary(
         self,
@@ -1151,14 +1136,7 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        severity = FinancialReconciliationFinding.severity
-        severity_rank = case(
-            (severity == "ERROR", 0),
-            (severity == "WARNING", 1),
-            (severity == "INFO", 2),
-            else_=9,
-        )
-        stmt = self._apply_reconciliation_finding_scope(
+        stmt = apply_reconciliation_finding_scope(
             select(FinancialReconciliationFinding),
             run_id=run_id,
             finding_id=finding_id,
@@ -1167,7 +1145,7 @@ class OperationsRepository:
             as_of=as_of,
         )
         stmt = stmt.order_by(
-            severity_rank.asc(),
+            reconciliation_finding_severity_rank().asc(),
             FinancialReconciliationFinding.finding_type.asc(),
             FinancialReconciliationFinding.created_at.desc(),
             FinancialReconciliationFinding.id.asc(),
@@ -1187,7 +1165,7 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        stmt = self._apply_reconciliation_finding_scope(
+        stmt = apply_reconciliation_finding_scope(
             select(func.count()).select_from(FinancialReconciliationFinding),
             run_id=run_id,
             finding_id=finding_id,
@@ -1200,63 +1178,13 @@ class OperationsRepository:
     async def get_reconciliation_finding_summary(
         self, run_id: str, as_of: Optional[datetime] = None
     ) -> ReconciliationFindingSummary:
-        base_stmt = select(
-            FinancialReconciliationFinding.severity.label("severity"),
-            FinancialReconciliationFinding.created_at.label("created_at"),
-            FinancialReconciliationFinding.id.label("id"),
-            FinancialReconciliationFinding.finding_id.label("finding_id"),
-            FinancialReconciliationFinding.finding_type.label("finding_type"),
-            self._security_id_expr(FinancialReconciliationFinding.security_id).label("security_id"),
-            FinancialReconciliationFinding.transaction_id.label("transaction_id"),
-        )
-        base_stmt = self._apply_reconciliation_finding_scope(
-            base_stmt,
+        base_stmt = apply_reconciliation_finding_scope(
+            reconciliation_finding_summary_base_select(),
             run_id=run_id,
             as_of=as_of,
         )
-        base_subq = base_stmt.subquery()
-        aggregate_subq = (
-            select(
-                func.count().label("total_findings"),
-                func.count().filter(base_subq.c.severity == "ERROR").label("blocking_findings"),
-            )
-            .select_from(base_subq)
-            .subquery()
-        )
-        top_blocking_subq = (
-            select(
-                base_subq.c.finding_id,
-                base_subq.c.finding_type,
-                base_subq.c.security_id,
-                base_subq.c.transaction_id,
-            )
-            .where(base_subq.c.severity == "ERROR")
-            .order_by(base_subq.c.created_at.desc(), base_subq.c.id.desc())
-            .limit(1)
-            .subquery()
-        )
-        row = (
-            await self.db.execute(
-                select(
-                    aggregate_subq.c.total_findings,
-                    aggregate_subq.c.blocking_findings,
-                    top_blocking_subq.c.finding_id,
-                    top_blocking_subq.c.finding_type,
-                    top_blocking_subq.c.security_id,
-                    top_blocking_subq.c.transaction_id,
-                )
-                .select_from(aggregate_subq)
-                .outerjoin(top_blocking_subq, true())
-            )
-        ).one()
-        return ReconciliationFindingSummary(
-            total_findings=int(row.total_findings or 0),
-            blocking_findings=int(row.blocking_findings or 0),
-            top_blocking_finding_id=row.finding_id,
-            top_blocking_finding_type=row.finding_type,
-            top_blocking_finding_security_id=normalize_security_id(row.security_id),
-            top_blocking_finding_transaction_id=row.transaction_id,
-        )
+        row = (await self.db.execute(reconciliation_finding_summary_select(base_stmt))).one()
+        return reconciliation_finding_summary_from_row(row)
 
     async def get_portfolio_control_stages_count(
         self,
