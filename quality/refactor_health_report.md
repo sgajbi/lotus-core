@@ -584,3 +584,9 @@ health before that claim is defensible.
      maintainability. `reference_data_dto.py` shrank from 1,376 SLOC to 1,282 SLOC and improved
      from `C (6.43)` to `B (9.31)`, removing it from the active non-generated C-ranked source
      hotspot list.
+118. Reduced ingestion capacity-status coupling by extracting capacity group derivation and
+     capacity response loading into `ingestion_capacity_status.py`. `get_capacity_status` improved
+     from `B (9)` to `A (1)`, while the helper module reports `A (43.64)` maintainability.
+     `ingestion_job_service.py` shrank from 1,420 SLOC to 1,304 SLOC and improved from
+     `C (2.32)` to `C (5.70)`, but remains the remaining active non-generated C-ranked source
+     hotspot.
