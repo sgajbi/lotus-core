@@ -232,3 +232,9 @@ CR-882 reduced the final current Xenon blocker by extracting pure helper boundar
 and the focused FX linkage suite reports `5 passed`. `make quality-complexity-gate` now runs
 `python -m xenon --max-absolute E --max-modules C --max-average A src` cleanly and is enforced in
 the quality-baseline workflow.
+
+CR-883 reduced the shared OpenAPI enrichment maintainability hotspot by extracting schema
+example/description inference into `portfolio_common.openapi_examples`. `openapi_enrichment.py` now
+reports `A (25.84)` and the new helper module reports `B (17.56)` under
+`python -m radon mi src\libs\portfolio-common\portfolio_common\openapi_enrichment.py src\libs\portfolio-common\portfolio_common\openapi_examples.py -s`.
+The current C-ranked maintainability list no longer includes `openapi_enrichment.py`.

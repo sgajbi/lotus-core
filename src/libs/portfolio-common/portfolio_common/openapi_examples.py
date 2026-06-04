@@ -1,0 +1,327 @@
+"""Shared OpenAPI schema example and description inference."""
+
+from __future__ import annotations
+
+import re
+from copy import deepcopy
+from typing import Any
+
+_EXAMPLE_BY_KEY = {
+    "portfolio_id": "DEMO_DPM_EUR_001",
+    "session_id": "SIM_0001",
+    "change_id": "CHG_0001",
+    "security_id": "AAPL",
+    "instrument_id": "EQ_US_AAPL",
+    "transaction_id": "TXN_0001",
+    "consumer_system": "lotus-manage",
+    "tenant_id": "default",
+    "policy_version": "tenant-default-v1",
+    "currency": "USD",
+    "base_currency": "USD",
+    "as_of_date": "2026-02-27",
+    "generated_at": "2026-02-27T10:30:00Z",
+    "created_at": "2026-02-27T10:30:00Z",
+    "effective_date": "2026-02-27",
+    "status": "ACTIVE",
+    "method": "POST",
+    "path": "/portfolios/DEMO_DPM_EUR_001/positions",
+    "workflow_key": "portfolio_bulk_onboarding",
+    "contract_version": "v1",
+    "source_service": "lotus-core",
+    "asset_class": "Equity",
+    "instrument_type": "CommonStock",
+    "issuer_name": "Apple Inc.",
+    "issuer_country": "US",
+    "isin": "US0378331005",
+    "cusip": "037833100",
+    "sedol": "2046251",
+    "ticker": "AAPL",
+    "security_name": "Apple Inc. Common Stock",
+    "price_date": "2026-02-27",
+    "transaction_type": "BUY",
+    "quantity": 100.0,
+    "price": 182.35,
+    "trade_fee": 7.5,
+    "brokerage": 2.5,
+    "stamp_duty": 1.2,
+    "exchange_fee": 0.7,
+    "gst": 0.45,
+    "other_fees": 0.15,
+    "gross_transaction_amount": 18235.0,
+    "net_cost": 18242.5,
+    "trade_currency": "USD",
+    "from_currency": "USD",
+    "to_currency": "SGD",
+    "rate": 1.3524,
+    "methodology": "EOD_CLOSE",
+    "source_system": "OMS_PRIMARY",
+    "correlation_id": "ING:1a2b3c4d-1234-5678-9abc-000000000001",
+    "request_id": "REQ:1a2b3c4d-1234-5678-9abc-000000000001",
+    "trace_id": "5f475bcbfb2c4fb68b1b6a2ed2d1c216",
+}
+
+
+def to_snake_case(value: str) -> str:
+    transformed = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", value)
+    transformed = transformed.replace("-", "_").replace(" ", "_")
+    return transformed.lower()
+
+
+def humanize(key: str) -> str:
+    return to_snake_case(key).replace("_", " ").strip()
+
+
+def infer_example(prop_name: str, prop_schema: dict[str, Any]) -> Any:
+    key = to_snake_case(prop_name)
+    if key in _EXAMPLE_BY_KEY:
+        return _EXAMPLE_BY_KEY[key]
+
+    enum_values = prop_schema.get("enum")
+    if isinstance(enum_values, list) and enum_values:
+        return enum_values[0]
+
+    schema_type = prop_schema.get("type")
+    schema_format = prop_schema.get("format")
+    if schema_type == "array":
+        item_schema = prop_schema.get("items", {})
+        return [infer_example(f"{prop_name}_item", item_schema)]
+    if schema_type == "object":
+        return {"key": "value"}
+    if schema_type == "boolean":
+        return True
+    if schema_type == "integer":
+        return _infer_integer_example(key)
+    if schema_type == "number":
+        return _infer_number_example(key)
+
+    if schema_format == "date":
+        return "2026-02-27"
+    if schema_format == "date-time":
+        return "2026-02-27T10:30:00Z"
+
+    return _infer_string_like_example(key=key, schema_type=schema_type)
+
+
+def _infer_integer_example(key: str) -> int:
+    if "ttl" in key or "hours" in key:
+        return 24
+    if "version" in key:
+        return 1
+    return 10
+
+
+def _infer_number_example(key: str) -> float:
+    if "weight" in key:
+        return 0.125
+    if "price" in key or "rate" in key:
+        return 1.2345
+    if "quantity" in key:
+        return 100.0
+    if "pnl" in key or "amount" in key or "value" in key:
+        return 125000.5
+    return 10.5
+
+
+def _infer_string_like_example(*, key: str, schema_type: object) -> str:
+    if key.endswith("_id"):
+        entity = key[: -len("_id")]
+        return f"{entity.upper()}_001"
+    if "currency" in key:
+        return "USD"
+    if "date" in key:
+        return "2026-02-27"
+    if "time" in key or "timestamp" in key:
+        return "2026-02-27T10:30:00Z"
+    if "status" in key:
+        return "ACTIVE"
+    if schema_type == "string":
+        return f"example_{key}"
+    return f"{key}_example"
+
+
+def infer_description(model_name: str, prop_name: str, prop_schema: dict[str, Any]) -> str:
+    key = to_snake_case(prop_name)
+    text = humanize(prop_name)
+    if key.endswith("_id"):
+        entity = key[: -len("_id")].replace("_", " ")
+        return f"Unique {entity} identifier."
+    if "date" in key and prop_schema.get("format") == "date":
+        return f"Business date for {text}."
+    if "time" in key or prop_schema.get("format") == "date-time":
+        return f"Timestamp for {text}."
+    if "currency" in key:
+        return f"ISO currency code for {text}."
+    if "amount" in key or "value" in key or "pnl" in key:
+        return f"Monetary value for {text}."
+    if "quantity" in key:
+        return f"Quantity value for {text}."
+    if "rate" in key or "price" in key:
+        return f"Rate/price value for {text}."
+    if "status" in key:
+        return f"Current status for {text}."
+    return f"{humanize(model_name)} field: {text}."
+
+
+def resolve_ref_schema(root_schema: dict[str, Any], ref: str) -> dict[str, Any]:
+    if not ref.startswith("#/"):
+        return {}
+    current: Any = root_schema
+    for segment in ref.removeprefix("#/").split("/"):
+        if not isinstance(current, dict):
+            return {}
+        current = current.get(segment)
+    return current if isinstance(current, dict) else {}
+
+
+def build_schema_example(
+    schema_node: dict[str, Any] | None,
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None = None,
+) -> Any:
+    if not isinstance(schema_node, dict):
+        return None
+
+    explicit_example = _explicit_schema_example(schema_node)
+    if explicit_example is not None:
+        return explicit_example
+
+    ref_example = _build_ref_example(
+        schema_node,
+        root_schema=root_schema,
+        seen_refs=seen_refs,
+    )
+    if ref_example is not None:
+        return ref_example
+
+    union_example = _build_union_example(
+        schema_node,
+        root_schema=root_schema,
+        seen_refs=seen_refs,
+    )
+    if union_example is not None:
+        return union_example
+
+    schema_type = schema_node.get("type")
+    if schema_type == "object" or "properties" in schema_node:
+        return _build_object_example(schema_node, root_schema=root_schema, seen_refs=seen_refs)
+    if schema_type == "array":
+        return _build_array_example(schema_node, root_schema=root_schema, seen_refs=seen_refs)
+
+    title = schema_node.get("title")
+    prop_name = title if isinstance(title, str) and title else "value"
+    return infer_example(prop_name, schema_node)
+
+
+def _explicit_schema_example(schema_node: dict[str, Any]) -> Any:
+    if "example" in schema_node:
+        return deepcopy(schema_node["example"])
+    examples = schema_node.get("examples")
+    if isinstance(examples, list) and examples:
+        return deepcopy(examples[0])
+    return None
+
+
+def _build_ref_example(
+    schema_node: dict[str, Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> Any:
+    ref = schema_node.get("$ref")
+    if not isinstance(ref, str):
+        return None
+    if seen_refs is None:
+        seen_refs = set()
+    if ref in seen_refs:
+        return None
+    next_seen_refs = set(seen_refs)
+    next_seen_refs.add(ref)
+    return build_schema_example(
+        resolve_ref_schema(root_schema, ref),
+        root_schema=root_schema,
+        seen_refs=next_seen_refs,
+    )
+
+
+def _build_union_example(
+    schema_node: dict[str, Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> Any:
+    for union_key in ("allOf", "oneOf", "anyOf"):
+        variants = schema_node.get(union_key)
+        if not isinstance(variants, list) or not variants:
+            continue
+        value = _build_all_of_example(variants, root_schema=root_schema, seen_refs=seen_refs)
+        if union_key == "allOf" and value:
+            return value
+        if union_key != "allOf":
+            value = _first_available_variant_example(
+                variants,
+                root_schema=root_schema,
+                seen_refs=seen_refs,
+            )
+            if value is not None:
+                return value
+    return None
+
+
+def _build_all_of_example(
+    variants: list[Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for variant in variants:
+        value = build_schema_example(variant, root_schema=root_schema, seen_refs=seen_refs)
+        if isinstance(value, dict):
+            merged.update(value)
+    return merged
+
+
+def _first_available_variant_example(
+    variants: list[Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> Any:
+    for variant in variants:
+        value = build_schema_example(variant, root_schema=root_schema, seen_refs=seen_refs)
+        if value is not None:
+            return value
+    return None
+
+
+def _build_object_example(
+    schema_node: dict[str, Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> dict[str, Any]:
+    properties = schema_node.get("properties", {})
+    if not isinstance(properties, dict):
+        return {}
+    example: dict[str, Any] = {}
+    required = set(schema_node.get("required", []))
+    for prop_name, prop_schema in properties.items():
+        value = build_schema_example(prop_schema, root_schema=root_schema, seen_refs=seen_refs)
+        if value is None and prop_name not in required:
+            continue
+        if value is None and isinstance(prop_schema, dict):
+            value = infer_example(prop_name, prop_schema)
+        example[prop_name] = value
+    return example
+
+
+def _build_array_example(
+    schema_node: dict[str, Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> list[Any]:
+    item_schema = schema_node.get("items", {})
+    value = build_schema_example(item_schema, root_schema=root_schema, seen_refs=seen_refs)
+    return [] if value is None else [value]

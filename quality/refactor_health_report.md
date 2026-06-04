@@ -23,7 +23,7 @@ tested modules.
 | Security baseline | Clean and enforced | Bandit reports 0 findings and is enforced by `make quality-bandit-gate` plus the quality-baseline Bandit security job after CR-875 |
 | Production-source dead-code baseline | Clean and enforced | `make quality-vulture-source-gate` reports no high-confidence Vulture findings under production `src` after CR-876 |
 | Dependency-usage baseline | Clean and enforced | `make quality-deptry-source-gate` reports no production-source dependency issues after CR-878 |
-| Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; existing C hotspots remain tracked |
+| Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; CR-883 removed shared OpenAPI enrichment from the C-ranked hotspot list |
 | Complexity baseline | Clean and enforced | CR-880 reduced advisory proposal simulation from F to B, CR-881 reduced the cost-calculator consumer from F to C, and CR-882 reduced FX linkage from D to B; `make quality-complexity-gate` now passes |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
@@ -133,3 +133,6 @@ health before that claim is defensible.
     cash-leg role, contract-instrument routing, and contract lifecycle helpers. The former D-ranked
     `fx_linkage.py` module now passes the broad Xenon threshold, enabling the enforced
     `quality-complexity-gate`.
+39. Reduced shared OpenAPI enrichment maintainability debt by extracting reusable schema
+    example/description inference into `portfolio_common.openapi_examples`. `openapi_enrichment.py`
+    now reports A-ranked maintainability and no longer appears in the current C-hotspot list.
