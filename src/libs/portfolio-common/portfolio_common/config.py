@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+HEALTH_PROBE_BIND_HOST_ENV = "LOTUS_CORE_HEALTH_PROBE_BIND_HOST"
+DEFAULT_HEALTH_PROBE_BIND_HOST = "0.0.0.0"
+
 
 @dataclass(frozen=True)
 class KafkaTopicDefinition:
@@ -70,6 +73,11 @@ def _env_bool(name: str, default: bool) -> bool:
         extra={"setting": name, "raw_value": raw, "default": default},
     )
     return default
+
+
+def load_health_probe_bind_host() -> str:
+    configured_host = os.getenv(HEALTH_PROBE_BIND_HOST_ENV, "").strip()
+    return configured_host or DEFAULT_HEALTH_PROBE_BIND_HOST
 
 
 # Database Configurations

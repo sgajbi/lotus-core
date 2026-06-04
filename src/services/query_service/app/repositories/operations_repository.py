@@ -43,8 +43,11 @@ def _int_or_zero(value) -> int:
     return int(value) if value is not None else 0
 
 
-def _float_or_none(value) -> float | None:
-    return float(value) if value is not None else None
+def _seconds_or_none(raw) -> float | None:
+    if raw is None:
+        return None
+    seconds = float(raw)
+    return seconds
 
 
 class OperationsRepository:
@@ -1618,13 +1621,13 @@ class OperationsRepository:
             valuation_to_position_timeseries_latency_sample_count=_int_or_zero(
                 valuation_to_position_timeseries_latency_sample_count
             ),
-            valuation_to_position_timeseries_latency_p50_seconds=_float_or_none(
+            valuation_to_position_timeseries_latency_p50_seconds=_seconds_or_none(
                 valuation_to_position_timeseries_latency_p50_seconds
             ),
-            valuation_to_position_timeseries_latency_p95_seconds=_float_or_none(
+            valuation_to_position_timeseries_latency_p95_seconds=_seconds_or_none(
                 valuation_to_position_timeseries_latency_p95_seconds
             ),
-            valuation_to_position_timeseries_latency_max_seconds=_float_or_none(
+            valuation_to_position_timeseries_latency_max_seconds=_seconds_or_none(
                 valuation_to_position_timeseries_latency_max_seconds
             ),
         )
