@@ -544,3 +544,8 @@ health before that claim is defensible.
      `get_job_record_status` improved from `C (20)` to `A (4)`, while the helper module reports
      `A (59.21)` maintainability. `ingestion_job_service.py` shrank from 1,656 SLOC to 1,633 SLOC
      and remains a C-ranked maintainability hotspot requiring additional focused extractions.
+110. Reduced ingestion operating-band policy coupling by extracting operating-band policy,
+     signal, decision, and classification helpers into `ingestion_operating_band.py`. The extracted
+     classifier moved out of the service and now reports `B (7)` in an `A (50.49)` helper module.
+     `ingestion_job_service.py` shrank from 1,633 SLOC to 1,545 SLOC and remains a C-ranked
+     maintainability hotspot requiring additional focused extractions.

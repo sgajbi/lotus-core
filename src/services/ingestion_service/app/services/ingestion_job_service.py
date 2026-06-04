@@ -56,6 +56,11 @@ from ..DTOs.ingestion_job_dto import (
     IngestionStalledJobResponse,
 )
 from ..settings import get_ingestion_service_settings
+from .ingestion_operating_band import (
+    OperatingBandPolicy,
+    OperatingBandSignals,
+    classify_operating_band,
+)
 from .ingestion_record_status import (
     failed_record_keys_from_failures,
     replayable_record_keys_from_payload,
@@ -87,33 +92,6 @@ CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_RUNTIME_POLICY.calculator_peak_lag_age_s
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class OperatingBandPolicy:
-    yellow_backlog_age_seconds: float
-    orange_backlog_age_seconds: float
-    red_backlog_age_seconds: float
-    yellow_dlq_pressure_ratio: Decimal
-    orange_dlq_pressure_ratio: Decimal
-    red_dlq_pressure_ratio: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class OperatingBandSignals:
-    backlog_age_seconds: float
-    dlq_pressure_ratio: Decimal
-    breach_failure_rate: bool
-    breach_queue_latency: bool
-    breach_backlog_age: bool
-    failure_rate: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class OperatingBandDecision:
-    operating_band: Literal["green", "yellow", "orange", "red"]
-    recommended_action: str
-    triggered_signals: list[str]
-
-
 OPERATING_BAND_POLICY = OperatingBandPolicy(
     yellow_backlog_age_seconds=_RUNTIME_POLICY.operating_band.yellow_backlog_age_seconds,
     orange_backlog_age_seconds=_RUNTIME_POLICY.operating_band.orange_backlog_age_seconds,
@@ -122,84 +100,6 @@ OPERATING_BAND_POLICY = OperatingBandPolicy(
     orange_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.orange_dlq_pressure_ratio,
     red_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.red_dlq_pressure_ratio,
 )
-
-
-def classify_operating_band(
-    *,
-    signals: OperatingBandSignals,
-    policy: OperatingBandPolicy = OPERATING_BAND_POLICY,
-) -> OperatingBandDecision:
-    triggered_signals: list[str] = []
-    if (
-        signals.backlog_age_seconds >= policy.red_backlog_age_seconds
-        or signals.dlq_pressure_ratio >= policy.red_dlq_pressure_ratio
-    ):
-        if signals.backlog_age_seconds >= policy.red_backlog_age_seconds:
-            triggered_signals.append(f"backlog_age_seconds>={int(policy.red_backlog_age_seconds)}")
-        if signals.dlq_pressure_ratio >= policy.red_dlq_pressure_ratio:
-            triggered_signals.append(
-                f"dlq_pressure_ratio>={policy.red_dlq_pressure_ratio.normalize()}"
-            )
-        return OperatingBandDecision(
-            operating_band="red",
-            recommended_action=(
-                "Enter incident mode and block non-emergency replay until lag pressure stabilizes."
-            ),
-            triggered_signals=triggered_signals,
-        )
-
-    if (
-        signals.backlog_age_seconds >= policy.orange_backlog_age_seconds
-        or signals.dlq_pressure_ratio >= policy.orange_dlq_pressure_ratio
-        or signals.breach_failure_rate
-        or signals.breach_queue_latency
-        or signals.breach_backlog_age
-    ):
-        if signals.backlog_age_seconds >= policy.orange_backlog_age_seconds:
-            triggered_signals.append(
-                f"backlog_age_seconds>={int(policy.orange_backlog_age_seconds)}"
-            )
-        if signals.dlq_pressure_ratio >= policy.orange_dlq_pressure_ratio:
-            triggered_signals.append(
-                f"dlq_pressure_ratio>={policy.orange_dlq_pressure_ratio.normalize()}"
-            )
-        if signals.breach_failure_rate:
-            triggered_signals.append("breach_failure_rate")
-        if signals.breach_queue_latency:
-            triggered_signals.append("breach_queue_latency")
-        if signals.breach_backlog_age:
-            triggered_signals.append("breach_backlog_age")
-        return OperatingBandDecision(
-            operating_band="orange",
-            recommended_action=(
-                "Aggressively scale calculators and pause non-critical replay operations."
-            ),
-            triggered_signals=triggered_signals,
-        )
-
-    if (
-        signals.backlog_age_seconds >= policy.yellow_backlog_age_seconds
-        or signals.dlq_pressure_ratio >= policy.yellow_dlq_pressure_ratio
-    ):
-        if signals.backlog_age_seconds >= policy.yellow_backlog_age_seconds:
-            triggered_signals.append(
-                f"backlog_age_seconds>={int(policy.yellow_backlog_age_seconds)}"
-            )
-        if signals.dlq_pressure_ratio >= policy.yellow_dlq_pressure_ratio:
-            triggered_signals.append(
-                f"dlq_pressure_ratio>={policy.yellow_dlq_pressure_ratio.normalize()}"
-            )
-        return OperatingBandDecision(
-            operating_band="yellow",
-            recommended_action="Scale up one band and monitor DLQ pressure.",
-            triggered_signals=triggered_signals,
-        )
-
-    return OperatingBandDecision(
-        operating_band="green",
-        recommended_action="Hold baseline replicas.",
-        triggered_signals=["stable_signals"],
-    )
 
 
 @dataclass(slots=True)
@@ -795,7 +695,8 @@ class IngestionJobService:
                 breach_queue_latency=bool(slo_status.breach_queue_latency),
                 breach_backlog_age=bool(slo_status.breach_backlog_age),
                 failure_rate=failure_rate,
-            )
+            ),
+            policy=OPERATING_BAND_POLICY,
         )
 
         return IngestionOperatingBandResponse(

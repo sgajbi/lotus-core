@@ -40,3 +40,7 @@ Status: Initial scorecard baseline on 2026-06-02.
   `IngestionJobService.get_job_record_status` from `C (20)` to `A (4)` and shrinking
   `ingestion_job_service.py` from 1,656 SLOC to 1,633 SLOC. The service remains an active C-ranked
   maintainability hotspot requiring additional focused extractions.
+- CR-954 extracted A-ranked `ingestion_operating_band.py`, moving the C-ranked operating-band
+  classifier out of `ingestion_job_service.py` and reducing the service from 1,633 SLOC to 1,545
+  SLOC. The service remains an active C-ranked maintainability hotspot requiring additional focused
+  extractions.
