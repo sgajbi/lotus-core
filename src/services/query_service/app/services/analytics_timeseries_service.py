@@ -788,22 +788,15 @@ class AnalyticsTimeseriesService:
         reporting_currency = normalize_currency_code(
             str(request.reporting_currency or portfolio_currency)
         )
-        request_scope_fingerprint = self._request_fingerprint(
-            {
-                "endpoint": "portfolio-timeseries",
-                "portfolio_id": portfolio_id,
-                "as_of_date": request.as_of_date.isoformat(),
-                "resolved_window": resolved_window.model_dump(mode="json"),
-                "frequency": request.frequency,
-                "reporting_currency": reporting_currency,
-            }
+        request_scope_fingerprint = self._portfolio_timeseries_scope_fingerprint(
+            portfolio_id=portfolio_id,
+            request=request,
+            resolved_window=resolved_window,
+            reporting_currency=reporting_currency,
         )
-        cursor = self._decode_page_token(request.page.page_token)
-        token_scope = cursor.get("scope_fingerprint")
-        if token_scope is not None and token_scope != request_scope_fingerprint:
-            raise AnalyticsInputError("INVALID_REQUEST", "Page token does not match request scope.")
-        cursor_date = (
-            date.fromisoformat(cursor["valuation_date"]) if cursor.get("valuation_date") else None
+        cursor_date = self._portfolio_timeseries_cursor_date(
+            page_token=request.page.page_token,
+            request_scope_fingerprint=request_scope_fingerprint,
         )
         expected_business_dates = await self.repo.list_business_dates(
             start_date=resolved_window.start_date,
@@ -830,17 +823,15 @@ class AnalyticsTimeseriesService:
             as_of_date=request.as_of_date,
             observed_dates=observed_dates,
         )
-        observed_date_set = set(observed_dates)
-        missing_dates_count = sum(
-            1 for expected_date in expected_business_dates if expected_date not in observed_date_set
-        )
-        stale_points_count = sum(
-            count for status_name, count in quality_distribution.items() if status_name != "final"
+        diagnostics = self._portfolio_timeseries_diagnostics(
+            quality_distribution=quality_distribution,
+            expected_business_dates=expected_business_dates,
+            observed_dates=observed_dates,
         )
         data_quality_status = self._timeseries_data_quality_status(
             required_count=len(expected_business_dates),
             observed_count=len(observed_dates),
-            stale_count=stale_points_count,
+            stale_count=diagnostics.stale_points_count,
             warning_issue_count=1 if next_page_token else 0,
         )
         fingerprint = self._request_fingerprint(
@@ -866,14 +857,7 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
-            diagnostics=PortfolioQualityDiagnostics(
-                quality_status_distribution=quality_distribution,
-                missing_dates_count=missing_dates_count,
-                stale_points_count=stale_points_count,
-                expected_business_dates_count=len(expected_business_dates),
-                returned_observation_dates_count=len(observed_dates),
-                cash_flows_included=True,
-            ),
+            diagnostics=diagnostics,
             page=PageMetadata(
                 page_size=request.page.page_size,
                 returned_row_count=len(observations),
@@ -888,6 +872,62 @@ class AnalyticsTimeseriesService:
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
             ),
+        )
+
+    def _portfolio_timeseries_scope_fingerprint(
+        self,
+        *,
+        portfolio_id: str,
+        request: PortfolioAnalyticsTimeseriesRequest,
+        resolved_window: AnalyticsWindow,
+        reporting_currency: str,
+    ) -> str:
+        return self._request_fingerprint(
+            {
+                "endpoint": "portfolio-timeseries",
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date.isoformat(),
+                "resolved_window": resolved_window.model_dump(mode="json"),
+                "frequency": request.frequency,
+                "reporting_currency": reporting_currency,
+            }
+        )
+
+    def _portfolio_timeseries_cursor_date(
+        self,
+        *,
+        page_token: str | None,
+        request_scope_fingerprint: str,
+    ) -> date | None:
+        cursor = self._decode_page_token(page_token)
+        token_scope = cursor.get("scope_fingerprint")
+        if token_scope is not None and token_scope != request_scope_fingerprint:
+            raise AnalyticsInputError("INVALID_REQUEST", "Page token does not match request scope.")
+        if not cursor.get("valuation_date"):
+            return None
+        return date.fromisoformat(cursor["valuation_date"])
+
+    @staticmethod
+    def _portfolio_timeseries_diagnostics(
+        *,
+        quality_distribution: dict[str, int],
+        expected_business_dates: list[date],
+        observed_dates: list[date],
+    ) -> PortfolioQualityDiagnostics:
+        observed_date_set = set(observed_dates)
+        missing_dates_count = sum(
+            1 for expected_date in expected_business_dates if expected_date not in observed_date_set
+        )
+        stale_points_count = sum(
+            count for status_name, count in quality_distribution.items() if status_name != "final"
+        )
+        return PortfolioQualityDiagnostics(
+            quality_status_distribution=quality_distribution,
+            missing_dates_count=missing_dates_count,
+            stale_points_count=stale_points_count,
+            expected_business_dates_count=len(expected_business_dates),
+            returned_observation_dates_count=len(observed_dates),
+            cash_flows_included=True,
         )
 
     async def get_position_timeseries(

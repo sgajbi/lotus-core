@@ -278,3 +278,8 @@ health before that claim is defensible.
     `analytics_timeseries_service.py`. The former C-ranked `_resolve_window` method now reports
     `A (2)` instead of `C (11)`, but `analytics_timeseries_service.py` remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+68. Reduced analytics portfolio-timeseries orchestration complexity by extracting request-scope
+    fingerprinting, page-token cursor validation, and diagnostics construction helpers inside
+    `analytics_timeseries_service.py`. The former C-ranked `get_portfolio_timeseries` method now
+    reports `A (4)` instead of `C (11)`, but `analytics_timeseries_service.py` remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.

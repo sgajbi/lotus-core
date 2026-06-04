@@ -437,3 +437,10 @@ period-start selection, and inception-date clamping helpers inside
 Radon cyclomatic complexity, and the extracted window-resolution helpers report A-ranked
 complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon maintainability,
 so the C-hotspot count remains 7.
+
+CR-912 reduced analytics portfolio-timeseries orchestration complexity by extracting request-scope
+fingerprinting, page-token cursor validation, and diagnostics construction helpers inside
+`analytics_timeseries_service.py`. `get_portfolio_timeseries` now reports `A (4)` instead of
+`C (11)` under Radon cyclomatic complexity, and the extracted portfolio-timeseries helpers report
+A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 7.
