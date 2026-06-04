@@ -31,7 +31,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
-    IngestionBacklogBreakdownItemResponse,
     IngestionBacklogBreakdownResponse,
     IngestionCapacityGroupResponse,
     IngestionCapacityStatusResponse,
@@ -56,6 +55,10 @@ from ..DTOs.ingestion_job_dto import (
     IngestionStalledJobResponse,
 )
 from ..settings import get_ingestion_service_settings
+from .ingestion_backlog_breakdown import (
+    build_backlog_breakdown_response,
+    empty_backlog_breakdown_response,
+)
 from .ingestion_operating_band import (
     OperatingBandPolicy,
     OperatingBandSignals,
@@ -924,79 +927,15 @@ class IngestionJobService:
                 .group_by(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
             )
 
-            grouped_rows = rows.all()
-            items: list[IngestionBacklogBreakdownItemResponse] = []
-            for (
-                endpoint,
-                entity_type,
-                total_jobs_raw,
-                accepted_jobs_raw,
-                queued_jobs_raw,
-                failed_jobs_raw,
-                oldest_backlog_submitted_at,
-            ) in grouped_rows:
-                accepted_jobs = int(accepted_jobs_raw or 0)
-                queued_jobs = int(queued_jobs_raw or 0)
-                failed_jobs = int(failed_jobs_raw or 0)
-                backlog_jobs = int(accepted_jobs + queued_jobs)
-                oldest_backlog_age_seconds = (
-                    float((now_utc - oldest_backlog_submitted_at).total_seconds())
-                    if oldest_backlog_submitted_at is not None
-                    else 0.0
-                )
-                total_jobs = int(total_jobs_raw or 0)
-                failure_rate = (
-                    Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
-                )
-                items.append(
-                    IngestionBacklogBreakdownItemResponse(
-                        endpoint=endpoint,
-                        entity_type=entity_type,
-                        total_jobs=total_jobs,
-                        accepted_jobs=accepted_jobs,
-                        queued_jobs=queued_jobs,
-                        failed_jobs=failed_jobs,
-                        backlog_jobs=backlog_jobs,
-                        oldest_backlog_submitted_at=oldest_backlog_submitted_at,
-                        oldest_backlog_age_seconds=oldest_backlog_age_seconds,
-                        failure_rate=failure_rate,
-                    )
-                )
-
-            items = sorted(
-                items,
-                key=lambda item: (item.backlog_jobs, item.oldest_backlog_age_seconds),
-                reverse=True,
-            )[:limit]
-
-            largest_group_backlog_jobs = int(items[0].backlog_jobs if items else 0)
-            if total_backlog_jobs > 0:
-                largest_group_backlog_share = Decimal(largest_group_backlog_jobs) / Decimal(
-                    total_backlog_jobs
-                )
-                top_3_backlog_jobs = int(sum(item.backlog_jobs for item in items[:3]))
-                top_3_backlog_share = Decimal(top_3_backlog_jobs) / Decimal(total_backlog_jobs)
-            else:
-                largest_group_backlog_share = Decimal("0")
-                top_3_backlog_share = Decimal("0")
-
-            return IngestionBacklogBreakdownResponse(
+            return build_backlog_breakdown_response(
                 lookback_minutes=lookback_minutes,
                 total_backlog_jobs=total_backlog_jobs,
-                largest_group_backlog_jobs=largest_group_backlog_jobs,
-                largest_group_backlog_share=largest_group_backlog_share,
-                top_3_backlog_share=top_3_backlog_share,
-                groups=items,
+                grouped_rows=list(rows.all()),
+                now=now_utc,
+                limit=limit,
             )
 
-        return IngestionBacklogBreakdownResponse(
-            lookback_minutes=lookback_minutes,
-            total_backlog_jobs=0,
-            largest_group_backlog_jobs=0,
-            largest_group_backlog_share=Decimal("0"),
-            top_3_backlog_share=Decimal("0"),
-            groups=[],
-        )
+        return empty_backlog_breakdown_response(lookback_minutes=lookback_minutes)
 
     async def list_stalled_jobs(
         self,

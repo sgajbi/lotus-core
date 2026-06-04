@@ -754,3 +754,9 @@ and threshold response assembly into `ingestion_slo_status.py`. `get_slo_status`
 `C (17)` to `A (3)`, while the helper module reports `A (42.76)` maintainability.
 `ingestion_job_service.py` shrank from 1,545 SLOC to 1,477 SLOC and remains a C-ranked
 maintainability hotspot requiring additional focused extractions.
+
+CR-956 reduced ingestion backlog breakdown coupling by extracting grouped row normalization,
+ordering, concentration-share calculation, and response assembly into `ingestion_backlog_breakdown.py`.
+`get_backlog_breakdown` improved from `C (13)` to `A (3)`, while the helper module reports
+`A (51.73)` maintainability. `ingestion_job_service.py` shrank from 1,477 SLOC to 1,419 SLOC and
+improved from `C (0.00)` to `C (0.81)`, but remains a C-ranked maintainability hotspot.

@@ -48,3 +48,7 @@ Status: Initial scorecard baseline on 2026-06-02.
   `IngestionJobService.get_slo_status` from `C (17)` to `A (3)` and shrinking the service from
   1,545 SLOC to 1,477 SLOC. The service remains an active C-ranked maintainability hotspot
   requiring additional focused extractions.
+- CR-956 extracted A-ranked `ingestion_backlog_breakdown.py`, reducing
+  `IngestionJobService.get_backlog_breakdown` from `C (13)` to `A (3)` and shrinking the service
+  from 1,477 SLOC to 1,419 SLOC. The service improves to `C (0.81)` but remains an active
+  C-ranked maintainability hotspot.
