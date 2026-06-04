@@ -16,9 +16,8 @@ from portfolio_common.database_models import (
     PositionState,
     ReprocessingJob,
 )
-from sqlalchemy import and_, case, func, or_, select, true
+from sqlalchemy import and_, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from .identifier_normalization import normalize_security_id
 from .operations_analytics_export_queries import (
@@ -72,6 +71,7 @@ from .operations_position_scope_queries import (
     apply_portfolio_security_epoch_scope,
     current_epoch_snapshot_date_stmt,
     latest_transaction_date_stmt,
+    security_id_expr,
 )
 from .operations_reconciliation_finding_queries import (
     apply_reconciliation_finding_scope,
@@ -93,108 +93,16 @@ from .operations_reprocessing_queries import (
 from .operations_support_job_queries import (
     apply_aggregation_job_scope,
     apply_valuation_job_scope,
+    has_superseding_valuation_epoch,
+    is_actionable_valuation_job,
+    latest_valuation_job_lateral,
+    support_job_priority,
 )
 
 
 class OperationsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
-
-    @staticmethod
-    def _support_job_status_filter(status_column, status: str):
-        return status_column == status.strip().upper()
-
-    @staticmethod
-    def _security_id_expr(security_id_column):
-        return func.trim(security_id_column)
-
-    @staticmethod
-    def _is_actionable_valuation_job(*, as_of: Optional[datetime] = None):
-        superseding_job = aliased(PortfolioValuationJob)
-        valuation_job_security_id = OperationsRepository._security_id_expr(
-            PortfolioValuationJob.security_id
-        )
-        superseding_job_security_id = OperationsRepository._security_id_expr(
-            superseding_job.security_id
-        )
-        superseded_pending_exists = select(superseding_job.id).where(
-            superseding_job.portfolio_id == PortfolioValuationJob.portfolio_id,
-            superseding_job_security_id == valuation_job_security_id,
-            superseding_job.valuation_date == PortfolioValuationJob.valuation_date,
-            superseding_job.epoch > PortfolioValuationJob.epoch,
-        )
-        if as_of is not None:
-            superseded_pending_exists = superseded_pending_exists.where(
-                superseding_job.updated_at <= as_of
-            )
-
-        return or_(
-            PortfolioValuationJob.status != "PENDING",
-            ~superseded_pending_exists.correlate(PortfolioValuationJob).exists(),
-        )
-
-    @staticmethod
-    def _has_superseding_valuation_epoch(*, as_of: Optional[datetime] = None):
-        superseding_job = aliased(PortfolioValuationJob)
-        valuation_job_security_id = OperationsRepository._security_id_expr(
-            PortfolioValuationJob.security_id
-        )
-        superseding_job_security_id = OperationsRepository._security_id_expr(
-            superseding_job.security_id
-        )
-        superseding_exists = select(superseding_job.id).where(
-            superseding_job.portfolio_id == PortfolioValuationJob.portfolio_id,
-            superseding_job_security_id == valuation_job_security_id,
-            superseding_job.valuation_date == PortfolioValuationJob.valuation_date,
-            superseding_job.epoch > PortfolioValuationJob.epoch,
-        )
-        if as_of is not None:
-            superseding_exists = superseding_exists.where(superseding_job.updated_at <= as_of)
-        return superseding_exists.correlate(PortfolioValuationJob).exists()
-
-    @staticmethod
-    def _latest_valuation_job_lateral(position_state_security_id, as_of):
-        valuation_job_security_id = OperationsRepository._security_id_expr(
-            PortfolioValuationJob.security_id
-        )
-        latest_valuation_job = select(
-            PortfolioValuationJob.valuation_date.label("latest_valuation_job_date"),
-            PortfolioValuationJob.id.label("latest_valuation_job_id"),
-            PortfolioValuationJob.status.label("latest_valuation_job_status"),
-            PortfolioValuationJob.correlation_id.label("latest_valuation_job_correlation_id"),
-        ).where(
-            PortfolioValuationJob.portfolio_id == PositionState.portfolio_id,
-            valuation_job_security_id == position_state_security_id,
-            PortfolioValuationJob.epoch == PositionState.epoch,
-        )
-        if as_of is not None:
-            latest_valuation_job = latest_valuation_job.where(
-                PortfolioValuationJob.created_at <= as_of,
-                PortfolioValuationJob.updated_at <= as_of,
-            )
-        return (
-            latest_valuation_job.order_by(
-                PortfolioValuationJob.valuation_date.desc(),
-                PortfolioValuationJob.id.desc(),
-            )
-            .limit(1)
-            .correlate(PositionState)
-            .lateral()
-        )
-
-    @staticmethod
-    def _support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
-        governed_status = status_column
-        return case(
-            (governed_status == "FAILED", 0),
-            (
-                and_(governed_status == "PROCESSING", updated_at_column < stale_threshold),
-                1,
-            ),
-            (governed_status == "PROCESSING", 2),
-            (governed_status == "PENDING", 3),
-            else_=9,
-        )
 
     async def _get_support_job_health_summary(
         self,
@@ -274,13 +182,13 @@ class OperationsRepository:
             transaction_pattern=transaction_pattern,
             business_date=business_date,
             as_of=as_of,
-            has_superseding_valuation_epoch=self._has_superseding_valuation_epoch(as_of=as_of),
+            has_superseding_valuation_epoch=has_superseding_valuation_epoch(as_of=as_of),
         )
         execute_statements = load_run_progress_execute_statements(
             portfolio_pattern=portfolio_pattern,
             as_of=as_of,
-            actionable_valuation_job=self._is_actionable_valuation_job(as_of=as_of),
-            has_superseding_valuation_epoch=self._has_superseding_valuation_epoch(as_of=as_of),
+            actionable_valuation_job=is_actionable_valuation_job(as_of=as_of),
+            has_superseding_valuation_epoch=has_superseding_valuation_epoch(as_of=as_of),
         )
 
         scalar_values = [await self.db.scalar(stmt) for stmt in scalar_statements]
@@ -315,7 +223,7 @@ class OperationsRepository:
             PositionState.status.label("status"),
             PositionState.updated_at.label("updated_at"),
             PositionState.watermark_date.label("watermark_date"),
-            self._security_id_expr(PositionState.security_id).label("security_id"),
+            security_id_expr(PositionState.security_id).label("security_id"),
             PositionState.epoch.label("epoch"),
         )
         base_stmt = apply_reprocessing_key_scope(
@@ -397,12 +305,12 @@ class OperationsRepository:
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.id.label("id"),
             PortfolioValuationJob.correlation_id.label("correlation_id"),
-            self._security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
+            security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
         )
         base_stmt = apply_valuation_job_scope(
             base_stmt,
             portfolio_id=portfolio_id,
-            actionable_valuation_job=self._is_actionable_valuation_job(as_of=as_of),
+            actionable_valuation_job=is_actionable_valuation_job(as_of=as_of),
             as_of=as_of,
         )
         return await self._get_support_job_health_summary(
@@ -533,8 +441,8 @@ class OperationsRepository:
     async def get_position_snapshot_history_mismatch_count(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> int:
-        history_security_id = self._security_id_expr(PositionHistory.security_id)
-        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        history_security_id = security_id_expr(PositionHistory.security_id)
+        snapshot_security_id = security_id_expr(DailyPositionSnapshot.security_id)
         latest_history = select(
             PositionHistory.portfolio_id,
             history_security_id.label("security_id"),
@@ -710,7 +618,7 @@ class OperationsRepository:
         normalized_security_id = normalize_security_id(security_id)
         if not normalized_security_id:
             return None
-        history_security_id = self._security_id_expr(PositionHistory.security_id)
+        history_security_id = security_id_expr(PositionHistory.security_id)
         stmt = apply_portfolio_security_epoch_scope(
             select(func.max(PositionHistory.position_date)),
             PositionHistory,
@@ -729,7 +637,7 @@ class OperationsRepository:
         normalized_security_id = normalize_security_id(security_id)
         if not normalized_security_id:
             return None
-        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
+        snapshot_security_id = security_id_expr(DailyPositionSnapshot.security_id)
         stmt = apply_portfolio_security_epoch_scope(
             select(func.max(DailyPositionSnapshot.date)),
             DailyPositionSnapshot,
@@ -752,7 +660,7 @@ class OperationsRepository:
         normalized_security_id = normalize_security_id(security_id)
         if not normalized_security_id:
             return None
-        valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
+        valuation_job_security_id = security_id_expr(PortfolioValuationJob.security_id)
         stmt = apply_portfolio_security_epoch_scope(
             select(PortfolioValuationJob),
             PortfolioValuationJob,
@@ -804,11 +712,11 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        position_state_security_id = self._security_id_expr(PositionState.security_id)
+        position_state_security_id = security_id_expr(PositionState.security_id)
         latest_position_history_date = lineage_latest_date_subquery(
             PositionHistory,
             PositionHistory.position_date,
-            self._security_id_expr(PositionHistory.security_id),
+            security_id_expr(PositionHistory.security_id),
             position_state_security_id,
             as_of_column=PositionHistory.created_at,
             as_of=as_of,
@@ -816,12 +724,12 @@ class OperationsRepository:
         latest_daily_snapshot_date = lineage_latest_date_subquery(
             DailyPositionSnapshot,
             DailyPositionSnapshot.date,
-            self._security_id_expr(DailyPositionSnapshot.security_id),
+            security_id_expr(DailyPositionSnapshot.security_id),
             position_state_security_id,
             as_of_column=DailyPositionSnapshot.created_at,
             as_of=as_of,
         )
-        latest_valuation_job = self._latest_valuation_job_lateral(
+        latest_valuation_job = latest_valuation_job_lateral(
             position_state_security_id,
             as_of,
         )
@@ -879,7 +787,7 @@ class OperationsRepository:
         stmt = apply_valuation_job_scope(
             select(func.count()).select_from(PortfolioValuationJob),
             portfolio_id=portfolio_id,
-            actionable_valuation_job=self._is_actionable_valuation_job(as_of=as_of),
+            actionable_valuation_job=is_actionable_valuation_job(as_of=as_of),
             status=status,
             business_date=business_date,
             normalized_security_id=normalized_security_id,
@@ -913,7 +821,7 @@ class OperationsRepository:
         stmt = apply_valuation_job_scope(
             select(PortfolioValuationJob),
             portfolio_id=portfolio_id,
-            actionable_valuation_job=self._is_actionable_valuation_job(as_of=as_of),
+            actionable_valuation_job=is_actionable_valuation_job(as_of=as_of),
             status=status,
             business_date=business_date,
             normalized_security_id=normalized_security_id,
@@ -923,7 +831,7 @@ class OperationsRepository:
         )
         stmt = (
             stmt.order_by(
-                self._support_job_priority(
+                support_job_priority(
                     PortfolioValuationJob.status,
                     PortfolioValuationJob.updated_at,
                     stale_threshold,
@@ -983,7 +891,7 @@ class OperationsRepository:
         )
         stmt = (
             stmt.order_by(
-                self._support_job_priority(
+                support_job_priority(
                     PortfolioAggregationJob.status,
                     PortfolioAggregationJob.updated_at,
                     stale_threshold,
@@ -1279,7 +1187,7 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        state_security_id = self._security_id_expr(PositionState.security_id)
+        state_security_id = security_id_expr(PositionState.security_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = apply_reprocessing_key_scope(
@@ -1374,7 +1282,7 @@ class OperationsRepository:
         )
         stmt = (
             stmt.order_by(
-                self._support_job_priority(
+                support_job_priority(
                     ReprocessingJob.status,
                     ReprocessingJob.updated_at,
                     stale_threshold,

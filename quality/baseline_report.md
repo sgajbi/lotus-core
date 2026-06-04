@@ -696,3 +696,13 @@ shaping into `operations_reconciliation_finding_queries.py`. The helper module r
 maintainability and A-ranked helper complexity. `operations_repository.py` shrank from 1,403 SLOC
 to 1,332 SLOC and improved from `C (4.42)` to `C (6.24)`, but remains a C-ranked
 maintainability hotspot.
+
+CR-948 reduced operations repository support-job SQL helper coupling by extracting actionable
+valuation-job filtering, superseding valuation-epoch detection, latest valuation-job lateral
+selection, support-job priority ordering, and reusable security-id expression use into
+`operations_support_job_queries.py` and `operations_position_scope_queries.py`. The expanded
+support helper reports `A (35.97)` maintainability and A-ranked helper complexity.
+`operations_repository.py` shrank from 1,332 SLOC to 1,247 SLOC and improved from `C (6.24)` to
+`B (9.54)`, removing it from the active source C-ranked maintainability hotspot list. Generated
+`query_service/build` copies remain separate generated-surface debt and are not changed by this
+slice.
