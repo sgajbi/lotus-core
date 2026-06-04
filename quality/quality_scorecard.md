@@ -63,3 +63,7 @@ Status: Initial scorecard baseline on 2026-06-02.
   rule-set DTO family, reducing `reference_data_dto.py` from 1,686 SLOC to 1,511 SLOC and
   improving it from `C (0.00)` to `C (1.05)`. The original module remains an active C-ranked
   hotspot requiring further DTO-family extractions.
+- CR-960 extracted A-ranked `reference_data_client_preference_dto.py` for the client restriction
+  and sustainability preference DTO family, reducing `reference_data_dto.py` from 1,511 SLOC to
+  1,376 SLOC and improving it from `C (1.05)` to `C (6.43)`. The original module remains an
+  active C-ranked hotspot requiring further DTO-family extractions.

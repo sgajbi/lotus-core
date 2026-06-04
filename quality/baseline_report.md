@@ -778,3 +778,10 @@ rule-set DTO family into `reference_data_tax_dto.py`, with compatibility re-expo
 `reference_data_dto.py` shrank from 1,686 SLOC to 1,511 SLOC and improved from `C (0.00)` to
 `C (1.05)`, but remains an active C-ranked maintainability hotspot requiring additional DTO-family
 extractions.
+
+CR-960 reduced reference-data client preference DTO coupling by extracting the client restriction
+and sustainability preference DTO family into `reference_data_client_preference_dto.py`, with
+compatibility assignments from `reference_data_dto.py`. The extracted module reports `A (32.04)`
+maintainability. `reference_data_dto.py` shrank from 1,511 SLOC to 1,376 SLOC and improved from
+`C (1.05)` to `C (6.43)`, but remains an active C-ranked maintainability hotspot requiring
+additional DTO-family extractions.
