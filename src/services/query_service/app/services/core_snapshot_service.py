@@ -36,6 +36,7 @@ from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
 from .control_code_normalization import normalize_control_code
 from .core_snapshot_baseline_metadata import baseline_freshness_metadata
+from .core_snapshot_baseline_positions import baseline_position_entries
 from .core_snapshot_calculations import (
     assign_baseline_weights,
     assign_projected_weights,
@@ -47,7 +48,7 @@ from .core_snapshot_instrument_enrichment import (
     instrument_enrichment_records,
     requested_instrument_security_ids,
 )
-from .decimal_amounts import decimal_or_none, decimal_or_zero
+from .decimal_amounts import decimal_or_none
 from .position_flow_effects import transaction_quantity_effect_decimal
 from .request_fingerprint import request_fingerprint
 
@@ -593,25 +594,16 @@ class CoreSnapshotService:
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
         )
-        baseline: dict[str, dict[str, Any]] = {}
-        for row, instrument, _state in baseline_rows.rows:
-            entry = self._baseline_position_entry(
-                row=row,
-                instrument=instrument,
-                use_snapshot=baseline_rows.use_snapshot,
-                reporting_fx=reporting_fx,
-                include_cash=include_cash,
-                include_zero=include_zero,
-            )
-            if entry is None:
-                continue
-            baseline[entry["security_id"]] = entry
-
+        baseline = baseline_position_entries(
+            rows=baseline_rows.rows,
+            use_snapshot=baseline_rows.use_snapshot,
+            reporting_fx=reporting_fx,
+            include_cash=include_cash,
+            include_zero=include_zero,
+        )
         total_base = total_market_value_baseline(baseline)
         assign_baseline_weights(baseline, total_base)
-        return dict(
-            sorted(baseline.items(), key=lambda item: item[0])
-        ), baseline_freshness_metadata(
+        return baseline, baseline_freshness_metadata(
             rows=baseline_rows.rows,
             use_snapshot=baseline_rows.use_snapshot,
             has_baseline=bool(baseline),
@@ -634,127 +626,6 @@ class CoreSnapshotService:
             as_of_date=as_of_date,
         )
         return _BaselinePositionRows(rows=history_rows, use_snapshot=False)
-
-    def _baseline_position_entry(
-        self,
-        *,
-        row: Any,
-        instrument: Any,
-        use_snapshot: bool,
-        reporting_fx: Decimal,
-        include_cash: bool,
-        include_zero: bool,
-    ) -> dict[str, Any] | None:
-        quantity = decimal_or_zero(row.quantity)
-        if self._skip_baseline_position(
-            quantity=quantity,
-            instrument=instrument,
-            include_cash=include_cash,
-            include_zero=include_zero,
-        ):
-            return None
-        security_id = normalize_security_id(row.security_id)
-        if not security_id:
-            return None
-        market_value_base, market_value_local = self._baseline_market_values(
-            row=row,
-            use_snapshot=use_snapshot,
-            reporting_fx=reporting_fx,
-        )
-        return self._baseline_position_payload(
-            security_id=security_id,
-            quantity=quantity,
-            market_value_base=market_value_base,
-            market_value_local=market_value_local,
-            instrument=instrument,
-        )
-
-    @staticmethod
-    def _skip_baseline_position(
-        *,
-        quantity: Decimal,
-        instrument: Any,
-        include_cash: bool,
-        include_zero: bool,
-    ) -> bool:
-        if not include_zero and quantity == Decimal(0):
-            return True
-        return (
-            not include_cash
-            and instrument is not None
-            and _is_cash_asset_class(instrument.asset_class)
-        )
-
-    @staticmethod
-    def _baseline_market_values(
-        *,
-        row: Any,
-        use_snapshot: bool,
-        reporting_fx: Decimal,
-    ) -> tuple[Decimal | None, Decimal | None]:
-        if use_snapshot:
-            market_value_base_raw = decimal_or_none(row.market_value)
-            market_value_local = decimal_or_none(row.market_value_local)
-        else:
-            market_value_base_raw = decimal_or_none(row.cost_basis)
-            market_value_local = decimal_or_none(row.cost_basis_local)
-        market_value_base = (
-            market_value_base_raw * reporting_fx if market_value_base_raw is not None else None
-        )
-        return market_value_base, market_value_local
-
-    @staticmethod
-    def _baseline_position_payload(
-        *,
-        security_id: str,
-        quantity: Decimal,
-        market_value_base: Decimal | None,
-        market_value_local: Decimal | None,
-        instrument: Any,
-    ) -> dict[str, Any]:
-        payload = {
-            "security_id": security_id,
-            "quantity": quantity,
-            "market_value_base": market_value_base,
-            "market_value_local": market_value_local,
-        }
-        if instrument is None:
-            payload.update(CoreSnapshotService._missing_instrument_payload(security_id))
-        else:
-            payload.update(CoreSnapshotService._baseline_instrument_payload(instrument))
-        return payload
-
-    @staticmethod
-    def _missing_instrument_payload(security_id: str) -> dict[str, Any]:
-        return {
-            "currency": None,
-            "instrument_name": security_id,
-            "asset_class": None,
-            "sector": None,
-            "country_of_risk": None,
-            "isin": None,
-            "issuer_id": None,
-            "issuer_name": None,
-            "ultimate_parent_issuer_id": None,
-            "ultimate_parent_issuer_name": None,
-            "liquidity_tier": None,
-        }
-
-    @staticmethod
-    def _baseline_instrument_payload(instrument: Any) -> dict[str, Any]:
-        return {
-            "currency": instrument.currency,
-            "instrument_name": instrument.name,
-            "asset_class": instrument.asset_class,
-            "sector": instrument.sector,
-            "country_of_risk": instrument.country_of_risk,
-            "isin": instrument.isin,
-            "issuer_id": instrument.issuer_id,
-            "issuer_name": instrument.issuer_name,
-            "ultimate_parent_issuer_id": instrument.ultimate_parent_issuer_id,
-            "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
-            "liquidity_tier": instrument.liquidity_tier,
-        }
 
     async def _resolve_projected_positions(
         self,
