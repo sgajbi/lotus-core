@@ -304,3 +304,9 @@ health before that claim is defensible.
     B-ranked `_jsonable` helper now reports `A (5)` instead of `B (7)`, but
     `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
     C-hotspot count remains 7.
+73. Reduced analytics export NDJSON result complexity by extracting malformed-payload validation,
+    metadata/data row rendering, UTF-8 encoding, media type, content-encoding, and optional gzip
+    handling into `analytics_export_ndjson.py`. The former B-ranked
+    `get_export_result_ndjson` method now reports `A (5)` instead of `B (7)`, and the helper
+    module reports A-ranked maintainability. `analytics_timeseries_service.py` remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.

@@ -471,3 +471,10 @@ list, and dictionary JSON conversion helpers inside `analytics_timeseries_servic
 now reports `A (5)` instead of `B (7)` under Radon cyclomatic complexity, and the extracted export
 serialization helpers report A-ranked complexity. `analytics_timeseries_service.py` still reports
 `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-917 reduced analytics export NDJSON result complexity by extracting malformed-payload validation,
+metadata/data row rendering, UTF-8 encoding, media type, content-encoding, and optional gzip
+handling into `analytics_export_ndjson.py`. `get_export_result_ndjson` now reports `A (5)` instead
+of `B (7)` under Radon cyclomatic complexity, and the extracted helper module reports A-ranked
+maintainability. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 7.

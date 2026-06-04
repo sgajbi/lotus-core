@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import gzip
 import hashlib
 import hmac
 import json
@@ -56,6 +55,7 @@ from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRe
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..settings import load_query_service_settings
+from .analytics_export_ndjson import AnalyticsExportNdjsonError, analytics_export_ndjson_result
 from .decimal_amounts import decimal_or_zero
 from .request_fingerprint import request_fingerprint
 
@@ -1912,26 +1912,16 @@ class AnalyticsTimeseriesService:
             )
         if not isinstance(row.result_payload, dict):
             raise AnalyticsInputError("INSUFFICIENT_DATA", "Export job completed without payload.")
-        payload_data = row.result_payload.get("data")
-        if not isinstance(payload_data, list):
-            raise AnalyticsInputError("INSUFFICIENT_DATA", "Export payload data is malformed.")
-
-        header = {
-            "record_type": "metadata",
-            "job_id": row.job_id,
-            "dataset_type": row.dataset_type,
-            "generated_at": row.result_payload.get("generated_at"),
-            "contract_version": row.result_payload.get("contract_version"),
-        }
-        lines = [json.dumps(header, separators=(",", ":"))]
-        for item in payload_data:
-            lines.append(json.dumps({"record_type": "data", "record": item}, separators=(",", ":")))
-        encoded = ("\n".join(lines) + "\n").encode("utf-8")
-        content_encoding = "none"
-        if compression == "gzip":
-            encoded = gzip.compress(encoded)
-            content_encoding = "gzip"
-        return (encoded, "application/x-ndjson", content_encoding)
+        try:
+            result = analytics_export_ndjson_result(
+                job_id=row.job_id,
+                dataset_type=row.dataset_type,
+                result_payload=row.result_payload,
+                compression=compression,
+            )
+        except AnalyticsExportNdjsonError as exc:
+            raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
+        return (result.content, result.media_type, result.content_encoding)
 
     async def _collect_portfolio_timeseries_for_export(
         self, *, portfolio_id: str, request: PortfolioAnalyticsTimeseriesRequest
