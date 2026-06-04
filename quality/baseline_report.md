@@ -548,3 +548,9 @@ between valuation dates, dimension projection, and position/reporting currency v
 A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,513 SLOC to 1,424 SLOC
 and improved from `C (1.52)` to `C (3.48)` under Radon maintainability, while the C-hotspot count
 remains 7.
+
+CR-928 reduced analytics export execution coupling by extracting portfolio and position export page
+traversal loops into `analytics_export_execution.py`. The helper module reports `A (51.47)`
+maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,424
+SLOC to 1,402 SLOC and improved from `C (3.48)` to `C (5.40)` under Radon maintainability, while
+the C-hotspot count remains 7.

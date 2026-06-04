@@ -46,6 +46,10 @@ from .analytics_cash_flows import (
     portfolio_cash_flows_for_dates,
     position_cash_flows_for_keys,
 )
+from .analytics_export_execution import (
+    collect_portfolio_timeseries_for_export,
+    collect_position_timeseries_for_export,
+)
 from .analytics_export_jobs import (
     analytics_export_job_response,
     analytics_export_result_payload,
@@ -1472,43 +1476,17 @@ class AnalyticsTimeseriesService:
     async def _collect_portfolio_timeseries_for_export(
         self, *, portfolio_id: str, request: PortfolioAnalyticsTimeseriesRequest
     ) -> tuple[list[dict[str, object]], int]:
-        rows: list[dict[str, object]] = []
-        page_depth = 0
-        page_token: str | None = None
-        while True:
-            page_depth += 1
-            page_request = request.page.model_copy(
-                update={"page_token": page_token, "page_size": 2000}
-            )
-            paged_request = request.model_copy(update={"page": page_request})
-            response = await self.get_portfolio_timeseries(
-                portfolio_id=portfolio_id,
-                request=paged_request,
-            )
-            rows.extend([item.model_dump(mode="json") for item in response.observations])
-            page_token = response.page.next_page_token
-            if not page_token:
-                break
-        return rows, page_depth
+        return await collect_portfolio_timeseries_for_export(
+            portfolio_id=portfolio_id,
+            request=request,
+            get_portfolio_timeseries=self.get_portfolio_timeseries,
+        )
 
     async def _collect_position_timeseries_for_export(
         self, *, portfolio_id: str, request: PositionAnalyticsTimeseriesRequest
     ) -> tuple[list[dict[str, object]], int]:
-        rows: list[dict[str, object]] = []
-        page_depth = 0
-        page_token: str | None = None
-        while True:
-            page_depth += 1
-            page_request = request.page.model_copy(
-                update={"page_token": page_token, "page_size": 2000}
-            )
-            paged_request = request.model_copy(update={"page": page_request})
-            response = await self.get_position_timeseries(
-                portfolio_id=portfolio_id,
-                request=paged_request,
-            )
-            rows.extend([item.model_dump(mode="json") for item in response.rows])
-            page_token = response.page.next_page_token
-            if not page_token:
-                break
-        return rows, page_depth
+        return await collect_position_timeseries_for_export(
+            portfolio_id=portfolio_id,
+            request=request,
+            get_position_timeseries=self.get_position_timeseries,
+        )
