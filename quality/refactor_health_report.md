@@ -249,3 +249,9 @@ health before that claim is defensible.
     `_snapshot_data_quality_status` method now reports `A (4)` instead of `B (6)`, and
     `core_snapshot_service.py` now has no B-or-worse methods under Radon cyclomatic complexity,
     but it remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.
+63. Reduced core snapshot service module size and responsibility by extracting market-value total,
+    position weight assignment, and delta-section construction helpers into
+    `core_snapshot_calculations.py`. The new calculation module reports `A (43.88)` under Radon
+    maintainability and no B-or-worse methods under Radon cyclomatic complexity.
+    `core_snapshot_service.py` shrank from 1,208 SLOC / 518 LLOC to 1,093 SLOC / 464 LLOC, but it
+    remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.

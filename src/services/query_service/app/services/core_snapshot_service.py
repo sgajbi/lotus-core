@@ -11,14 +11,12 @@ from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.core_snapshot_dto import (
-    CoreSnapshotDeltaRecord,
     CoreSnapshotFreshnessMetadata,
     CoreSnapshotGovernanceMetadata,
     CoreSnapshotInstrumentEnrichmentRecord,
     CoreSnapshotMode,
     CoreSnapshotPolicyProvenance,
     CoreSnapshotPortfolioTotals,
-    CoreSnapshotPositionRecord,
     CoreSnapshotRequest,
     CoreSnapshotResponse,
     CoreSnapshotSection,
@@ -37,6 +35,13 @@ from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
 from .control_code_normalization import normalize_control_code
+from .core_snapshot_calculations import (
+    assign_baseline_weights,
+    assign_projected_weights,
+    build_delta_section,
+    total_market_value_baseline,
+    total_market_value_projected,
+)
 from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .position_flow_effects import transaction_quantity_effect_decimal
 from .request_fingerprint import request_fingerprint
@@ -107,13 +112,6 @@ class _CoreSnapshotGovernanceResolution:
 class _BaselinePositionRows:
     rows: list[Any]
     use_snapshot: bool
-
-
-@dataclass(frozen=True)
-class _DeltaPositionValues:
-    quantity: Decimal
-    market_value_base: Decimal
-    weight: Decimal
 
 
 class CoreSnapshotService:
@@ -200,7 +198,7 @@ class CoreSnapshotService:
                 item["position_record"] for item in baseline_positions.values()
             ]
 
-        baseline_total = self._total_market_value_baseline(baseline_positions)
+        baseline_total = total_market_value_baseline(baseline_positions)
         projection = await self._snapshot_projection(
             portfolio_id=portfolio_id,
             request=request,
@@ -279,7 +277,7 @@ class CoreSnapshotService:
         )
         return _CoreSnapshotProjection(
             positions=projected_positions,
-            total_market_value=self._total_market_value_projected(projected_positions),
+            total_market_value=total_market_value_projected(projected_positions),
             simulation_metadata=CoreSnapshotSimulationMetadata(
                 session_id=session.session_id,
                 version=session.version,
@@ -383,7 +381,7 @@ class CoreSnapshotService:
             return
         if projected_positions is None:
             raise CoreSnapshotUnavailableSectionError("positions_projected unavailable")
-        self._assign_projected_weights(projected_positions, projected_total)
+        assign_projected_weights(projected_positions, projected_total)
         sections_payload.positions_projected = [
             item["position_record"] for item in projected_positions.values()
         ]
@@ -402,7 +400,7 @@ class CoreSnapshotService:
             return
         if projected_positions is None:
             raise CoreSnapshotUnavailableSectionError("positions_delta unavailable")
-        sections_payload.positions_delta = self._build_delta_section(
+        sections_payload.positions_delta = build_delta_section(
             baseline_positions=baseline_positions,
             projected_positions=projected_positions,
             baseline_total=baseline_total,
@@ -604,8 +602,8 @@ class CoreSnapshotService:
                 continue
             baseline[entry["security_id"]] = entry
 
-        total_base = self._total_market_value_baseline(baseline)
-        self._assign_baseline_weights(baseline, total_base)
+        total_base = total_market_value_baseline(baseline)
+        assign_baseline_weights(baseline, total_base)
         return dict(sorted(baseline.items(), key=lambda item: item[0])), self._baseline_freshness(
             rows=baseline_rows.rows,
             use_snapshot=baseline_rows.use_snapshot,
@@ -1185,130 +1183,6 @@ class CoreSnapshotService:
         if resolved_value is None:
             raise CoreSnapshotUnavailableSectionError(message)
         return resolved_value
-
-    @staticmethod
-    def _total_market_value_baseline(items: dict[str, dict[str, Any]]) -> Decimal:
-        total = Decimal(0)
-        for item in items.values():
-            market_value = decimal_or_none(item.get("market_value_base"))
-            if market_value is not None:
-                total += market_value
-        return total
-
-    @staticmethod
-    def _total_market_value_projected(items: dict[str, dict[str, Any]]) -> Decimal:
-        total = Decimal(0)
-        for item in items.values():
-            total += decimal_or_zero(item.get("market_value_base"))
-        return total
-
-    @staticmethod
-    def _assign_baseline_weights(items: dict[str, dict[str, Any]], total: Decimal) -> None:
-        for item in items.values():
-            if total > 0 and item["market_value_base"] is not None:
-                weight = item["market_value_base"] / total
-            else:
-                weight = Decimal(0)
-            item["position_record"] = CoreSnapshotPositionRecord(
-                security_id=item["security_id"],
-                quantity=item["quantity"],
-                market_value_base=item["market_value_base"],
-                market_value_local=item["market_value_local"],
-                weight=weight,
-                currency=item["currency"],
-            )
-
-    @staticmethod
-    def _assign_projected_weights(items: dict[str, dict[str, Any]], total: Decimal) -> None:
-        for item in items.values():
-            weight = (item["market_value_base"] / total) if total > 0 else Decimal(0)
-            item["position_record"] = CoreSnapshotPositionRecord(
-                security_id=item["security_id"],
-                quantity=item["quantity"],
-                market_value_base=item["market_value_base"],
-                market_value_local=item["market_value_local"],
-                weight=weight,
-                currency=item["currency"],
-            )
-
-    @staticmethod
-    def _build_delta_section(
-        baseline_positions: dict[str, dict[str, Any]],
-        projected_positions: dict[str, dict[str, Any]],
-        baseline_total: Decimal,
-        projected_total: Decimal,
-    ) -> list[CoreSnapshotDeltaRecord]:
-        return [
-            CoreSnapshotService._delta_record(
-                security_id=security_id,
-                baseline=CoreSnapshotService._delta_position_values(
-                    position=baseline_positions.get(security_id),
-                    total=baseline_total,
-                ),
-                projected=CoreSnapshotService._delta_position_values(
-                    position=projected_positions.get(security_id),
-                    total=projected_total,
-                ),
-            )
-            for security_id in CoreSnapshotService._delta_security_ids(
-                baseline_positions=baseline_positions,
-                projected_positions=projected_positions,
-            )
-        ]
-
-    @staticmethod
-    def _delta_security_ids(
-        *,
-        baseline_positions: dict[str, dict[str, Any]],
-        projected_positions: dict[str, dict[str, Any]],
-    ) -> list[str]:
-        return sorted(set(baseline_positions) | set(projected_positions))
-
-    @staticmethod
-    def _delta_position_values(
-        *,
-        position: dict[str, Any] | None,
-        total: Decimal,
-    ) -> _DeltaPositionValues:
-        if position is None:
-            return _DeltaPositionValues(
-                quantity=Decimal(0),
-                market_value_base=Decimal(0),
-                weight=Decimal(0),
-            )
-        market_value_base = position["market_value_base"]
-        return _DeltaPositionValues(
-            quantity=position["quantity"],
-            market_value_base=market_value_base,
-            weight=CoreSnapshotService._delta_weight(
-                market_value_base=market_value_base,
-                total=total,
-            ),
-        )
-
-    @staticmethod
-    def _delta_weight(*, market_value_base: Decimal, total: Decimal) -> Decimal:
-        if total <= 0:
-            return Decimal(0)
-        return market_value_base / total
-
-    @staticmethod
-    def _delta_record(
-        *,
-        security_id: str,
-        baseline: _DeltaPositionValues,
-        projected: _DeltaPositionValues,
-    ) -> CoreSnapshotDeltaRecord:
-        return CoreSnapshotDeltaRecord(
-            security_id=security_id,
-            baseline_quantity=baseline.quantity,
-            projected_quantity=projected.quantity,
-            delta_quantity=projected.quantity - baseline.quantity,
-            baseline_market_value_base=baseline.market_value_base,
-            projected_market_value_base=projected.market_value_base,
-            delta_market_value_base=projected.market_value_base - baseline.market_value_base,
-            delta_weight=projected.weight - baseline.weight,
-        )
 
 
 def get_core_snapshot_service(

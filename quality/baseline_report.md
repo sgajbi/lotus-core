@@ -402,3 +402,10 @@ current-snapshot completeness predicate inside `core_snapshot_service.py`.
 complexity. `core_snapshot_service.py` now has no B-or-worse methods under Radon cyclomatic
 complexity, but it still reports `C (0.00)` under Radon maintainability, so the C-hotspot count
 remains 7.
+
+CR-907 reduced core snapshot service module size by extracting market-value total, position weight
+assignment, and delta-section construction helpers into `core_snapshot_calculations.py`. The new
+calculation module reports `A (43.88)` under Radon maintainability and no B-or-worse methods under
+Radon cyclomatic complexity. `core_snapshot_service.py` shrank from 1,208 SLOC / 518 LLOC to 1,093
+SLOC / 464 LLOC, but it still reports `C (0.00)` under Radon maintainability, so the C-hotspot
+count remains 7.
