@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from builtins import float as float_type
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select, true
@@ -15,7 +16,7 @@ def int_or_zero(value) -> int:
 def seconds_or_none(raw) -> float | None:
     if raw is None:
         return None
-    return float(raw)
+    return float_type(raw)
 
 
 def support_job_health_aggregate(base_subq, open_date_column, stale_threshold, failed_since):
