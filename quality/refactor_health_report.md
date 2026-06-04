@@ -351,3 +351,9 @@ health before that claim is defensible.
     helper module reports `A (52.85)` maintainability and A-ranked helper complexity.
     `analytics_timeseries_service.py` shrank from 1,548 SLOC to 1,536 SLOC, but remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+81. Reduced analytics position-page scope coupling by extracting position page date ranges,
+    first-page date selection, security-id collection for page support reads, dimension filter
+    conversion, and prior-day EOD filtering into `analytics_position_pages.py`. The helper module
+    reports `A (58.69)` maintainability and A-ranked helper complexity.
+    `analytics_timeseries_service.py` shrank from 1,536 SLOC to 1,523 SLOC, but remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.

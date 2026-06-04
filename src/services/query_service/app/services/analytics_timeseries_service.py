@@ -79,6 +79,12 @@ from .analytics_pagination import (
     position_timeseries_next_page_token,
     position_timeseries_scope_fingerprint,
 )
+from .analytics_position_pages import (
+    PositionPageScope,
+    position_dimension_filters,
+    position_page_scope,
+    previous_position_eod_by_security,
+)
 from .analytics_quality import (
     bounded_latest_performance_date,
     latest_portfolio_horizon_candidate,
@@ -110,15 +116,6 @@ class _PositionPageSupportInputs:
     position_to_portfolio_rates: dict[str, dict[date, Decimal]]
     fx_rates: dict[date, Decimal]
     previous_eod_by_security: dict[str, Decimal]
-
-
-@dataclass(frozen=True)
-class _PositionPageScope:
-    page_dates: list[date]
-    page_start_date: date
-    page_end_date: date
-    first_page_date: date
-    security_ids: list[str]
 
 
 @dataclass(frozen=True)
@@ -892,7 +889,7 @@ class AnalyticsTimeseriesService:
     def _position_dimension_filters(
         request: PositionAnalyticsTimeseriesRequest,
     ) -> dict[str, set[str]]:
-        return {item.dimension: set(item.values) for item in request.filters.dimension_filters}
+        return position_dimension_filters(request)
 
     async def _position_snapshot_epoch(
         self,
@@ -1012,20 +1009,10 @@ class AnalyticsTimeseriesService:
         *,
         rows_page: list[object],
         fallback_start_date: date,
-    ) -> _PositionPageScope:
-        page_dates = sorted({row.valuation_date for row in rows_page})
-        return _PositionPageScope(
-            page_dates=page_dates,
-            page_start_date=min(page_dates, default=fallback_start_date),
-            page_end_date=max(page_dates, default=fallback_start_date),
-            first_page_date=min(row.valuation_date for row in rows_page),
-            security_ids=sorted(
-                {
-                    security_id
-                    for row in rows_page
-                    if (security_id := normalize_security_id(row.security_id))
-                }
-            ),
+    ) -> PositionPageScope:
+        return position_page_scope(
+            rows_page=rows_page,
+            fallback_start_date=fallback_start_date,
         )
 
     @staticmethod
@@ -1034,12 +1021,10 @@ class AnalyticsTimeseriesService:
         previous_rows: list[object],
         first_page_date: date,
     ) -> dict[str, Decimal]:
-        previous_date = first_page_date - timedelta(days=1)
-        return {
-            normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
-            for row in previous_rows
-            if row.valuation_date == previous_date
-        }
+        return previous_position_eod_by_security(
+            previous_rows=previous_rows,
+            first_page_date=first_page_date,
+        )
 
     async def _position_page_cash_flows_by_key(
         self,
