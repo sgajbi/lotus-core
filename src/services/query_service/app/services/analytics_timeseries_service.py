@@ -1374,25 +1374,71 @@ class AnalyticsTimeseriesService:
     ) -> date | None:
         latest_portfolio_date = await self.repo.get_latest_portfolio_timeseries_date(portfolio_id)
         latest_position_date = await self.repo.get_latest_position_timeseries_date(portfolio_id)
-        if observed_dates:
-            observed_latest = max(observed_dates)
-            latest_position_date = (
-                observed_latest
-                if latest_position_date is None
-                else max(latest_position_date, observed_latest)
-            )
+        latest_position_date = self._latest_position_horizon_with_observations(
+            latest_position_date=latest_position_date,
+            observed_dates=observed_dates,
+        )
+        return self._bounded_latest_performance_date(
+            portfolio_candidate=self._latest_portfolio_horizon_candidate(
+                latest_portfolio_date=latest_portfolio_date,
+                observed_dates=observed_dates,
+            ),
+            latest_position_date=latest_position_date,
+            as_of_date=as_of_date,
+        )
 
+    @staticmethod
+    def _latest_position_horizon_with_observations(
+        *,
+        latest_position_date: date | None,
+        observed_dates: list[date] | None,
+    ) -> date | None:
+        if not observed_dates:
+            return latest_position_date
+        observed_latest = max(observed_dates)
+        return (
+            observed_latest
+            if latest_position_date is None
+            else max(latest_position_date, observed_latest)
+        )
+
+    @staticmethod
+    def _latest_portfolio_horizon_candidate(
+        *,
+        latest_portfolio_date: date | None,
+        observed_dates: list[date] | None,
+    ) -> date | None:
         portfolio_dates = [
             candidate for candidate in (latest_portfolio_date, *(observed_dates or [])) if candidate
         ]
-        portfolio_candidate = max(portfolio_dates) if portfolio_dates else None
-        if portfolio_candidate is None and latest_position_date is None:
+        return max(portfolio_dates) if portfolio_dates else None
+
+    @staticmethod
+    def _bounded_latest_performance_date(
+        *,
+        portfolio_candidate: date | None,
+        latest_position_date: date | None,
+        as_of_date: date,
+    ) -> date | None:
+        horizon_candidates = AnalyticsTimeseriesService._performance_horizon_candidates(
+            portfolio_candidate=portfolio_candidate,
+            latest_position_date=latest_position_date,
+        )
+        if not horizon_candidates:
             return None
-        if portfolio_candidate is None:
-            return min(latest_position_date, as_of_date) if latest_position_date else None
-        if latest_position_date is None:
-            return min(portfolio_candidate, as_of_date)
-        return min(portfolio_candidate, latest_position_date, as_of_date)
+        return min(*horizon_candidates, as_of_date)
+
+    @staticmethod
+    def _performance_horizon_candidates(
+        *,
+        portfolio_candidate: date | None,
+        latest_position_date: date | None,
+    ) -> list[date]:
+        return [
+            candidate
+            for candidate in (portfolio_candidate, latest_position_date)
+            if candidate is not None
+        ]
 
     @staticmethod
     def _export_result_endpoint(job_id: str) -> str:

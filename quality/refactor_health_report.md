@@ -267,3 +267,9 @@ health before that claim is defensible.
     `_effective_beginning_market_value` method now reports `A (5)` instead of `C (17)`, but
     `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
     C-hotspot count remains 7.
+66. Reduced analytics latest-performance-horizon complexity by extracting observed-date promotion,
+    portfolio candidate selection, available horizon collection, and as-of-date bounding helpers
+    inside `analytics_timeseries_service.py`. The former C-ranked
+    `_latest_available_performance_date` method now reports `A (1)` instead of `C (12)`, but
+    `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
+    C-hotspot count remains 7.

@@ -423,3 +423,10 @@ predicates inside `analytics_timeseries_service.py`. `_effective_beginning_marke
 reports `A (5)` instead of `C (17)` under Radon cyclomatic complexity, and the extracted policy
 predicates report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)`
 under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-910 reduced analytics latest-performance-horizon complexity by extracting observed-date
+promotion, portfolio candidate selection, available horizon collection, and as-of-date bounding
+helpers inside `analytics_timeseries_service.py`. `_latest_available_performance_date` now reports
+`A (1)` instead of `C (12)` under Radon cyclomatic complexity, and the extracted horizon helpers
+report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 7.
