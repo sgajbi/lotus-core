@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -79,6 +78,15 @@ from .analytics_pagination import (
     position_timeseries_next_page_token,
     position_timeseries_scope_fingerprint,
 )
+from .analytics_portfolio_pages import (
+    AnalyticsPortfolioPageError,
+    PortfolioObservationPageScope,
+    portfolio_observation_next_page_token,
+    portfolio_observation_page_scope,
+    portfolio_row_buckets,
+    portfolio_to_reporting_observation_rate,
+    position_to_portfolio_observation_rate,
+)
 from .analytics_position_pages import (
     PositionPageScope,
     position_dimension_filters,
@@ -116,12 +124,6 @@ class _PositionPageSupportInputs:
     position_to_portfolio_rates: dict[str, dict[date, Decimal]]
     fx_rates: dict[date, Decimal]
     previous_eod_by_security: dict[str, Decimal]
-
-
-@dataclass(frozen=True)
-class _PortfolioObservationPageScope:
-    page_dates: list[date]
-    has_more: bool
 
 
 @dataclass(frozen=True)
@@ -327,11 +329,11 @@ class AnalyticsTimeseriesService:
         observed_dates: list[date],
         cursor_date: date | None,
         page_size: int,
-    ) -> _PortfolioObservationPageScope:
-        paged_dates = [day for day in observed_dates if cursor_date is None or day > cursor_date]
-        return _PortfolioObservationPageScope(
-            page_dates=paged_dates[:page_size],
-            has_more=len(paged_dates) > page_size,
+    ) -> PortfolioObservationPageScope:
+        return portfolio_observation_page_scope(
+            observed_dates=observed_dates,
+            cursor_date=cursor_date,
+            page_size=page_size,
         )
 
     async def _portfolio_observation_support_inputs(
@@ -454,12 +456,7 @@ class AnalyticsTimeseriesService:
         page_dates: list[date],
         position_rows: list[object],
     ) -> dict[date, list[object]]:
-        page_date_set = set(page_dates)
-        row_buckets: dict[date, list[object]] = defaultdict(list)
-        for row in position_rows:
-            if row.valuation_date in page_date_set:
-                row_buckets[row.valuation_date].append(row)
-        return row_buckets
+        return portfolio_row_buckets(page_dates=page_dates, position_rows=position_rows)
 
     def _portfolio_observation_for_date(
         self,
@@ -530,15 +527,15 @@ class AnalyticsTimeseriesService:
         reporting_currency: str,
         portfolio_to_reporting_rates: dict[date, Decimal],
     ) -> Decimal:
-        if reporting_currency == portfolio_currency:
-            return Decimal("1")
-        if valuation_date not in portfolio_to_reporting_rates:
-            raise AnalyticsInputError(
-                "INSUFFICIENT_DATA",
-                "Missing FX rate for "
-                f"{portfolio_currency}/{reporting_currency} on {valuation_date}.",
+        try:
+            return portfolio_to_reporting_observation_rate(
+                valuation_date=valuation_date,
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+                portfolio_to_reporting_rates=portfolio_to_reporting_rates,
             )
-        return portfolio_to_reporting_rates[valuation_date]
+        except AnalyticsPortfolioPageError as exc:
+            raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
 
     @staticmethod
     def _position_to_portfolio_observation_rate(
@@ -548,37 +545,28 @@ class AnalyticsTimeseriesService:
         portfolio_currency: str,
         position_to_portfolio_rates: dict[str, dict[date, Decimal]],
     ) -> Decimal:
-        position_currency = (
-            normalize_currency_code(str(getattr(row, "position_currency")))
-            if getattr(row, "position_currency", None)
-            else ""
-        )
-        if not position_currency or position_currency == portfolio_currency:
-            return Decimal("1")
-        rate_map = position_to_portfolio_rates.get(position_currency, {})
-        if valuation_date not in rate_map:
-            raise AnalyticsInputError(
-                "INSUFFICIENT_DATA",
-                "Missing FX rate for "
-                f"{position_currency}/{portfolio_currency} on {valuation_date}.",
+        try:
+            return position_to_portfolio_observation_rate(
+                row=row,
+                valuation_date=valuation_date,
+                portfolio_currency=portfolio_currency,
+                position_to_portfolio_rates=position_to_portfolio_rates,
             )
-        return rate_map[valuation_date]
+        except AnalyticsPortfolioPageError as exc:
+            raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
 
     def _portfolio_observation_next_page_token(
         self,
         *,
-        page_scope: _PortfolioObservationPageScope,
+        page_scope: PortfolioObservationPageScope,
         snapshot_epoch: int,
         request_scope_fingerprint: str,
     ) -> str | None:
-        if not page_scope.has_more:
-            return None
-        return self._encode_page_token(
-            {
-                "valuation_date": page_scope.page_dates[-1].isoformat(),
-                "snapshot_epoch": snapshot_epoch,
-                "scope_fingerprint": request_scope_fingerprint,
-            }
+        return portfolio_observation_next_page_token(
+            page_scope=page_scope,
+            snapshot_epoch=snapshot_epoch,
+            request_scope_fingerprint=request_scope_fingerprint,
+            encode_page_token=self._encode_page_token,
         )
 
     async def get_portfolio_timeseries(

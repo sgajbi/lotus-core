@@ -357,3 +357,9 @@ health before that claim is defensible.
     reports `A (58.69)` maintainability and A-ranked helper complexity.
     `analytics_timeseries_service.py` shrank from 1,536 SLOC to 1,523 SLOC, but remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+82. Reduced analytics portfolio-page scope coupling by extracting portfolio observation page
+    slicing, page-date row buckets, same-currency observation rates, missing cross-currency rate
+    classification, and portfolio next-page token payloads into `analytics_portfolio_pages.py`.
+    The helper module reports `A (46.28)` maintainability and A-ranked helper complexity.
+    `analytics_timeseries_service.py` shrank from 1,523 SLOC to 1,513 SLOC and improved from
+    `C (0.00)` to `C (1.52)` under Radon maintainability, while the C-hotspot count remains 7.
