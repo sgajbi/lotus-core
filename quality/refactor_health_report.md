@@ -363,3 +363,10 @@ health before that claim is defensible.
     The helper module reports `A (46.28)` maintainability and A-ranked helper complexity.
     `analytics_timeseries_service.py` shrank from 1,523 SLOC to 1,513 SLOC and improved from
     `C (0.00)` to `C (1.52)` under Radon maintainability, while the C-hotspot count remains 7.
+83. Reduced analytics position-response coupling by extracting position response DTO construction,
+    valuation-status distribution accumulation, same-security previous-EOD carry-forward between
+    valuation dates, dimension projection, and position/reporting currency value conversion into
+    `analytics_position_responses.py`. The helper module reports `A (49.05)` maintainability and
+    A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,513 SLOC to
+    1,424 SLOC and improved from `C (1.52)` to `C (3.48)` under Radon maintainability, while the
+    C-hotspot count remains 7.
