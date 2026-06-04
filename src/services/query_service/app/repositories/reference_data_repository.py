@@ -29,7 +29,7 @@ from portfolio_common.database_models import (
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
-from sqlalchemy import and_, case, func, or_, select, tuple_
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..services.decimal_amounts import decimal_or_none
@@ -40,6 +40,7 @@ from .reference_coverage_calculations import (
     observed_benchmark_coverage_dates,
     quality_status_counts,
 )
+from .reference_dpm_queries import dpm_portfolio_universe_stmt
 from .reference_fx_queries import latest_fx_rates_stmt, normalized_currency_pairs
 
 
@@ -306,42 +307,14 @@ class ReferenceDataRepository:
         after_sort_key: tuple[str, str] | None = None,
         limit: int | None = None,
     ) -> list[PortfolioMandateBinding]:
-        predicates = [
-            PortfolioMandateBinding.mandate_type == "discretionary",
-            _effective_filter(
-                PortfolioMandateBinding.effective_from,
-                PortfolioMandateBinding.effective_to,
-                as_of_date,
-            ),
-        ]
-        if booking_center_code:
-            predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
-        if model_portfolio_ids:
-            predicates.append(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
-        if not include_inactive_mandates:
-            predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
-
-        ranked = _ranked_portfolio_mandate_binding_ids(*predicates)
-        stmt = (
-            select(PortfolioMandateBinding)
-            .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(
-                PortfolioMandateBinding.portfolio_id.asc(),
-                PortfolioMandateBinding.mandate_id.asc(),
-            )
+        stmt = dpm_portfolio_universe_stmt(
+            as_of_date=as_of_date,
+            booking_center_code=booking_center_code,
+            model_portfolio_ids=model_portfolio_ids,
+            include_inactive_mandates=include_inactive_mandates,
+            after_sort_key=after_sort_key,
+            limit=limit,
         )
-        if after_sort_key is not None:
-            stmt = stmt.where(
-                tuple_(
-                    PortfolioMandateBinding.portfolio_id,
-                    PortfolioMandateBinding.mandate_id,
-                )
-                > after_sort_key
-            )
-        if limit is not None:
-            stmt = stmt.limit(limit)
-
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 

@@ -191,3 +191,9 @@ health before that claim is defensible.
     SQL construction into `reference_fx_queries.py`. The former B-ranked `list_latest_fx_rates`
     method now reports A-ranked complexity, and `reference_data_repository.py` improved from
     `C (6.94)` to `C (7.55)`, but it remains a C-ranked maintainability hotspot.
+53. Reduced DPM portfolio-universe query complexity by extracting DPM source eligibility,
+    canonical mandate-binding ranking, cursor, and limit SQL construction into
+    `reference_dpm_queries.py`. The former B-ranked
+    `list_dpm_portfolio_universe_candidates` method now reports A-ranked complexity, and
+    `reference_data_repository.py` improved from `C (7.55)` to `C (8.74)`, but it remains a
+    C-ranked maintainability hotspot.

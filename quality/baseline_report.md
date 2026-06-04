@@ -325,3 +325,11 @@ construction into `reference_fx_queries.py`. `list_latest_fx_rates` now reports 
 `C (6.94)` to `C (7.55)` under Radon maintainability. The new FX query helper module reports
 `A (60.98)`. This does not remove `reference_data_repository.py` from the current C-ranked
 maintainability list; the C-hotspot count remains 8.
+
+CR-897 reduced DPM portfolio-universe query debt by extracting DPM source eligibility predicates,
+canonical mandate-binding ranking, cursor pagination, and limit SQL construction into
+`reference_dpm_queries.py`. `list_dpm_portfolio_universe_candidates` now reports `A (1)` instead
+of `B (6)` under Radon cyclomatic complexity, and `reference_data_repository.py` improved from
+`C (7.55)` to `C (8.74)` under Radon maintainability. The new DPM query helper module reports
+`A (53.24)`. This does not remove `reference_data_repository.py` from the current C-ranked
+maintainability list; the C-hotspot count remains 8.
