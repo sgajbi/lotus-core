@@ -304,3 +304,10 @@ lookup, result-selection, row-mapping, and execution helpers. `get_analytics_exp
 now reports `A (1)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted
 analytics export health helpers report A-ranked complexity. `operations_repository.py` remains
 `C (0.00)` under Radon maintainability, so the C-hotspot count remains 8.
+
+CR-894 reduced missing historical FX dependency summary orchestration by extracting transaction
+base-scope SQL, aggregate SQL, sample SQL, sample-record mapping, and summary assembly helpers.
+`get_missing_historical_fx_dependency_summary` now reports `A (1)` instead of `B (6)` under Radon
+cyclomatic complexity, and the extracted missing-FX helpers report A-ranked complexity.
+`operations_repository.py` remains `C (0.00)` under Radon maintainability, so the C-hotspot count
+remains 8.

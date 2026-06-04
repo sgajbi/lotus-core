@@ -177,3 +177,8 @@ health before that claim is defensible.
     lookup, result-selection, row-mapping, and execution helpers. The former B-ranked
     `get_analytics_export_job_health_summary` method now reports A-ranked complexity, but
     `operations_repository.py` remains a C-ranked maintainability hotspot.
+50. Reduced missing historical FX dependency summary complexity by extracting transaction
+    base-scope SQL, aggregate SQL, sample SQL, sample-record mapping, and summary assembly
+    helpers. The former B-ranked `get_missing_historical_fx_dependency_summary` method now reports
+    A-ranked complexity, but `operations_repository.py` remains a C-ranked maintainability
+    hotspot.
