@@ -233,3 +233,9 @@ health before that claim is defensible.
     reports `A (2)` instead of `C (13)`, removing the remaining C-ranked method from the module,
     but `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot
     count remains 7.
+60. Reduced core snapshot simulation-validation complexity by extracting required simulation
+    options, required session lookup, portfolio ownership validation, and expected-version
+    validation helpers inside `core_snapshot_service.py`. The former B-ranked
+    `_validated_simulation_session` method now reports `A (1)` instead of `B (6)`, but
+    `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot count
+    remains 7.

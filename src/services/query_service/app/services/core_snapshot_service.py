@@ -270,26 +270,41 @@ class CoreSnapshotService:
         )
 
     async def _validated_simulation_session(self, portfolio_id: str, request: CoreSnapshotRequest):
+        session_opts = self._required_simulation_options(request)
+        session = await self._required_simulation_session(session_opts.session_id)
+        self._validate_simulation_portfolio(session=session, portfolio_id=portfolio_id)
+        self._validate_simulation_version(
+            session=session,
+            expected_version=session_opts.expected_version,
+        )
+        return session
+
+    @staticmethod
+    def _required_simulation_options(request: CoreSnapshotRequest):
         session_opts = request.simulation
         if session_opts is None:
             raise CoreSnapshotBadRequestError(
                 "simulation options are required when snapshot_mode=SIMULATION"
             )
-        session = await self.simulation_repo.get_session(session_opts.session_id)
+        return session_opts
+
+    async def _required_simulation_session(self, session_id: str):
+        session = await self.simulation_repo.get_session(session_id)
         if session is None:
-            raise CoreSnapshotNotFoundError(
-                f"Simulation session {session_opts.session_id} not found"
-            )
+            raise CoreSnapshotNotFoundError(f"Simulation session {session_id} not found")
+        return session
+
+    @staticmethod
+    def _validate_simulation_portfolio(*, session: Any, portfolio_id: str) -> None:
         if session.portfolio_id != portfolio_id:
             raise CoreSnapshotConflictError(
                 "Simulation session does not belong to requested portfolio"
             )
-        if (
-            session_opts.expected_version is not None
-            and session.version != session_opts.expected_version
-        ):
+
+    @staticmethod
+    def _validate_simulation_version(*, session: Any, expected_version: int | None) -> None:
+        if expected_version is not None and session.version != expected_version:
             raise CoreSnapshotConflictError("Simulation expected_version mismatch")
-        return session
 
     @staticmethod
     def _validate_baseline_snapshot_sections(sections: list[CoreSnapshotSection]) -> None:

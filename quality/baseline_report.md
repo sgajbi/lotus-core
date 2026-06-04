@@ -381,3 +381,10 @@ normalization, enrichment lookup-map construction, and per-security DTO mapping 
 A-ranked complexity. This removes the remaining C-ranked method from `core_snapshot_service.py`,
 but the module still reports `C (0.00)` under Radon maintainability, so the C-hotspot count
 remains 7.
+
+CR-904 reduced core snapshot simulation-validation complexity by extracting required simulation
+options, required session lookup, portfolio ownership validation, and expected-version validation
+helpers inside `core_snapshot_service.py`. `_validated_simulation_session` now reports `A (1)`
+instead of `B (6)` under Radon cyclomatic complexity, and the extracted simulation-validation
+helpers report A-ranked complexity. `core_snapshot_service.py` still reports `C (0.00)` under
+Radon maintainability, so the C-hotspot count remains 7.
