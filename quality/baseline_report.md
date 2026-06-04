@@ -278,3 +278,9 @@ business-date filters into named helpers. `_apply_portfolio_control_stage_scope`
 `A (3)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted portfolio-control
 stage scope helpers report A-ranked complexity. `operations_repository.py` remains `C (0.00)`
 under Radon maintainability, so the C-hotspot count remains 8.
+
+CR-890 reduced the reprocessing job filtering hotspot by splitting payload security and job
+identity filters into named helpers. `_apply_reprocessing_job_scope` now reports `A (3)` instead
+of `B (6)` under Radon cyclomatic complexity, and the extracted reprocessing job scope helpers
+report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 8.

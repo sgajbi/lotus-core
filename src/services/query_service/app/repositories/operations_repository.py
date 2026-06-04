@@ -575,6 +575,30 @@ class OperationsRepository:
             else_=9,
         )
 
+    @staticmethod
+    def _apply_reprocessing_job_identity_scope(
+        stmt,
+        *,
+        job_id: Optional[int],
+        correlation_id: Optional[str],
+    ):
+        if job_id is not None:
+            stmt = stmt.where(ReprocessingJob.id == job_id)
+        if correlation_id:
+            stmt = stmt.where(ReprocessingJob.correlation_id == correlation_id)
+        return stmt
+
+    @staticmethod
+    def _apply_reprocessing_job_security_scope(
+        stmt,
+        *,
+        reset_scope: ResetWatermarkReprocessingJobScope,
+        normalized_security_id: Optional[str],
+    ):
+        if normalized_security_id:
+            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
+        return stmt
+
     def _apply_reprocessing_key_scope(
         self,
         stmt,
@@ -616,12 +640,16 @@ class OperationsRepository:
             stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
         if status:
             stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
-        if normalized_security_id:
-            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
-        if job_id is not None:
-            stmt = stmt.where(ReprocessingJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(ReprocessingJob.correlation_id == correlation_id)
+        stmt = self._apply_reprocessing_job_security_scope(
+            stmt,
+            reset_scope=reset_scope,
+            normalized_security_id=normalized_security_id,
+        )
+        stmt = self._apply_reprocessing_job_identity_scope(
+            stmt,
+            job_id=job_id,
+            correlation_id=correlation_id,
+        )
         return stmt
 
     @staticmethod
