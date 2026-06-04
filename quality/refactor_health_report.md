@@ -569,3 +569,8 @@ health before that claim is defensible.
      `ClientTaxRuleSetRecord.validate_rule` improved from `C (12)` to `A (1)`, removing the only
      C-ranked method from `reference_data_dto.py`. The module remains `C (0.00)` because of size
      and remaining B-ranked DTO classes/validators.
+115. Reduced reference-data tax DTO coupling by extracting the client tax profile and tax rule-set
+     DTO family into `reference_data_tax_dto.py`, with compatibility re-exports from the original
+     module. The extracted module reports `A (29.60)` maintainability. `reference_data_dto.py`
+     shrank from 1,686 SLOC to 1,511 SLOC and improved from `C (0.00)` to `C (1.05)`, but remains
+     a C-ranked maintainability hotspot.

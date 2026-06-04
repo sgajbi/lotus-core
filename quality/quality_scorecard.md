@@ -59,3 +59,7 @@ Status: Initial scorecard baseline on 2026-06-02.
   `ClientTaxRuleSetRecord.validate_rule` from `C (12)` to `A (1)` and removing the only C-ranked
   method from the module. `reference_data_dto.py` remains an active C-ranked maintainability
   hotspot because of size and remaining B-ranked DTO classes/validators.
+- CR-959 extracted A-ranked `reference_data_tax_dto.py` for the client tax profile and tax
+  rule-set DTO family, reducing `reference_data_dto.py` from 1,686 SLOC to 1,511 SLOC and
+  improving it from `C (0.00)` to `C (1.05)`. The original module remains an active C-ranked
+  hotspot requiring further DTO-family extractions.
