@@ -103,6 +103,12 @@ class _CoreSnapshotGovernanceResolution:
     tenant_id: str
 
 
+@dataclass(frozen=True)
+class _BaselinePositionRows:
+    rows: list[Any]
+    use_snapshot: bool
+
+
 class CoreSnapshotService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -547,76 +553,203 @@ class CoreSnapshotService:
         include_cash: bool,
         include_zero: bool,
     ) -> tuple[dict[str, dict[str, Any]], CoreSnapshotFreshnessMetadata]:
+        baseline_rows = await self._baseline_position_rows(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+        )
+        baseline: dict[str, dict[str, Any]] = {}
+        for row, instrument, _state in baseline_rows.rows:
+            entry = self._baseline_position_entry(
+                row=row,
+                instrument=instrument,
+                use_snapshot=baseline_rows.use_snapshot,
+                reporting_fx=reporting_fx,
+                include_cash=include_cash,
+                include_zero=include_zero,
+            )
+            if entry is None:
+                continue
+            baseline[entry["security_id"]] = entry
+
+        total_base = self._total_market_value_baseline(baseline)
+        self._assign_baseline_weights(baseline, total_base)
+        return dict(sorted(baseline.items(), key=lambda item: item[0])), self._baseline_freshness(
+            rows=baseline_rows.rows,
+            use_snapshot=baseline_rows.use_snapshot,
+            has_baseline=bool(baseline),
+        )
+
+    async def _baseline_position_rows(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date,
+    ) -> _BaselinePositionRows:
         rows = await self.position_repo.get_latest_positions_by_portfolio_as_of_date(
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
         )
-        use_snapshot = True
-        if not rows:
-            rows = await self.position_repo.get_latest_position_history_by_portfolio_as_of_date(
-                portfolio_id=portfolio_id,
-                as_of_date=as_of_date,
-            )
-            use_snapshot = False
-
-        baseline: dict[str, dict[str, Any]] = {}
-        for row, instrument, _state in rows:
-            quantity = decimal_or_zero(row.quantity)
-            if not include_zero and quantity == Decimal(0):
-                continue
-            if not include_cash and instrument and _is_cash_asset_class(instrument.asset_class):
-                continue
-
-            if use_snapshot:
-                market_value_base_raw = decimal_or_none(row.market_value)
-                market_value_local = decimal_or_none(row.market_value_local)
-            else:
-                market_value_base_raw = decimal_or_none(row.cost_basis)
-                market_value_local = decimal_or_none(row.cost_basis_local)
-
-            market_value_base = (
-                market_value_base_raw * reporting_fx if market_value_base_raw is not None else None
-            )
-
-            security_id = normalize_security_id(row.security_id)
-            if not security_id:
-                continue
-
-            baseline[security_id] = {
-                "security_id": security_id,
-                "quantity": quantity,
-                "market_value_base": market_value_base,
-                "market_value_local": market_value_local,
-                "currency": instrument.currency if instrument else None,
-                "instrument_name": instrument.name if instrument else security_id,
-                "asset_class": instrument.asset_class if instrument else None,
-                "sector": instrument.sector if instrument else None,
-                "country_of_risk": instrument.country_of_risk if instrument else None,
-                "isin": instrument.isin if instrument else None,
-                "issuer_id": instrument.issuer_id if instrument else None,
-                "issuer_name": instrument.issuer_name if instrument else None,
-                "ultimate_parent_issuer_id": (
-                    instrument.ultimate_parent_issuer_id if instrument else None
-                ),
-                "ultimate_parent_issuer_name": (
-                    instrument.ultimate_parent_issuer_name if instrument else None
-                ),
-                "liquidity_tier": instrument.liquidity_tier if instrument else None,
-            }
-
-        total_base = self._total_market_value_baseline(baseline)
-        self._assign_baseline_weights(baseline, total_base)
-        source = "position_state" if use_snapshot else "position_history"
-        freshness = CoreSnapshotFreshnessMetadata(
-            freshness_status=("CURRENT_SNAPSHOT" if use_snapshot else "HISTORICAL_FALLBACK"),
-            baseline_source=source,
-            snapshot_timestamp=(self._latest_snapshot_timestamp(rows) if use_snapshot else None),
-            snapshot_epoch=(
-                self._single_resolved_epoch(rows) if use_snapshot and baseline else None
-            ),
-            fallback_reason=(None if use_snapshot else "NO_CURRENT_POSITION_STATE_ROWS"),
+        if rows:
+            return _BaselinePositionRows(rows=rows, use_snapshot=True)
+        history_rows = await self.position_repo.get_latest_position_history_by_portfolio_as_of_date(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
         )
-        return dict(sorted(baseline.items(), key=lambda item: item[0])), freshness
+        return _BaselinePositionRows(rows=history_rows, use_snapshot=False)
+
+    def _baseline_position_entry(
+        self,
+        *,
+        row: Any,
+        instrument: Any,
+        use_snapshot: bool,
+        reporting_fx: Decimal,
+        include_cash: bool,
+        include_zero: bool,
+    ) -> dict[str, Any] | None:
+        quantity = decimal_or_zero(row.quantity)
+        if self._skip_baseline_position(
+            quantity=quantity,
+            instrument=instrument,
+            include_cash=include_cash,
+            include_zero=include_zero,
+        ):
+            return None
+        security_id = normalize_security_id(row.security_id)
+        if not security_id:
+            return None
+        market_value_base, market_value_local = self._baseline_market_values(
+            row=row,
+            use_snapshot=use_snapshot,
+            reporting_fx=reporting_fx,
+        )
+        return self._baseline_position_payload(
+            security_id=security_id,
+            quantity=quantity,
+            market_value_base=market_value_base,
+            market_value_local=market_value_local,
+            instrument=instrument,
+        )
+
+    @staticmethod
+    def _skip_baseline_position(
+        *,
+        quantity: Decimal,
+        instrument: Any,
+        include_cash: bool,
+        include_zero: bool,
+    ) -> bool:
+        if not include_zero and quantity == Decimal(0):
+            return True
+        return (
+            not include_cash
+            and instrument is not None
+            and _is_cash_asset_class(instrument.asset_class)
+        )
+
+    @staticmethod
+    def _baseline_market_values(
+        *,
+        row: Any,
+        use_snapshot: bool,
+        reporting_fx: Decimal,
+    ) -> tuple[Decimal | None, Decimal | None]:
+        if use_snapshot:
+            market_value_base_raw = decimal_or_none(row.market_value)
+            market_value_local = decimal_or_none(row.market_value_local)
+        else:
+            market_value_base_raw = decimal_or_none(row.cost_basis)
+            market_value_local = decimal_or_none(row.cost_basis_local)
+        market_value_base = (
+            market_value_base_raw * reporting_fx if market_value_base_raw is not None else None
+        )
+        return market_value_base, market_value_local
+
+    @staticmethod
+    def _baseline_position_payload(
+        *,
+        security_id: str,
+        quantity: Decimal,
+        market_value_base: Decimal | None,
+        market_value_local: Decimal | None,
+        instrument: Any,
+    ) -> dict[str, Any]:
+        payload = {
+            "security_id": security_id,
+            "quantity": quantity,
+            "market_value_base": market_value_base,
+            "market_value_local": market_value_local,
+        }
+        if instrument is None:
+            payload.update(CoreSnapshotService._missing_instrument_payload(security_id))
+        else:
+            payload.update(CoreSnapshotService._baseline_instrument_payload(instrument))
+        return payload
+
+    @staticmethod
+    def _missing_instrument_payload(security_id: str) -> dict[str, Any]:
+        return {
+            "currency": None,
+            "instrument_name": security_id,
+            "asset_class": None,
+            "sector": None,
+            "country_of_risk": None,
+            "isin": None,
+            "issuer_id": None,
+            "issuer_name": None,
+            "ultimate_parent_issuer_id": None,
+            "ultimate_parent_issuer_name": None,
+            "liquidity_tier": None,
+        }
+
+    @staticmethod
+    def _baseline_instrument_payload(instrument: Any) -> dict[str, Any]:
+        return {
+            "currency": instrument.currency,
+            "instrument_name": instrument.name,
+            "asset_class": instrument.asset_class,
+            "sector": instrument.sector,
+            "country_of_risk": instrument.country_of_risk,
+            "isin": instrument.isin,
+            "issuer_id": instrument.issuer_id,
+            "issuer_name": instrument.issuer_name,
+            "ultimate_parent_issuer_id": instrument.ultimate_parent_issuer_id,
+            "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
+            "liquidity_tier": instrument.liquidity_tier,
+        }
+
+    def _baseline_freshness(
+        self,
+        *,
+        rows: list[Any],
+        use_snapshot: bool,
+        has_baseline: bool,
+    ) -> CoreSnapshotFreshnessMetadata:
+        if not use_snapshot:
+            return CoreSnapshotFreshnessMetadata(
+                freshness_status="HISTORICAL_FALLBACK",
+                baseline_source="position_history",
+                snapshot_timestamp=None,
+                snapshot_epoch=None,
+                fallback_reason="NO_CURRENT_POSITION_STATE_ROWS",
+            )
+        return CoreSnapshotFreshnessMetadata(
+            freshness_status="CURRENT_SNAPSHOT",
+            baseline_source="position_state",
+            snapshot_timestamp=self._latest_snapshot_timestamp(rows),
+            snapshot_epoch=self._baseline_snapshot_epoch(rows=rows, has_baseline=has_baseline),
+            fallback_reason=None,
+        )
+
+    def _baseline_snapshot_epoch(
+        self,
+        *,
+        rows: list[Any],
+        has_baseline: bool,
+    ) -> int | None:
+        if not has_baseline:
+            return None
+        return self._single_resolved_epoch(rows)
 
     @staticmethod
     def _latest_snapshot_timestamp(rows: list[Any]) -> datetime | None:

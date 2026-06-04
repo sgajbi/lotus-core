@@ -365,3 +365,11 @@ valuation, market-to-portfolio FX, and output filtering helpers inside `core_sna
 complexity, and the extracted projected-position helpers report A-ranked complexity.
 `core_snapshot_service.py` still reports `C (0.00)` under Radon maintainability, so the C-hotspot
 count remains 7.
+
+CR-902 reduced core snapshot baseline-position complexity by extracting current snapshot/history
+row selection, row-to-entry mapping, cash/zero filtering, market-value selection,
+instrument/no-instrument payload construction, and freshness metadata helpers inside
+`core_snapshot_service.py`. `_resolve_baseline_positions` now reports `A (3)` instead of `D (28)`
+under Radon cyclomatic complexity, and the extracted baseline-position helpers report A-ranked
+complexity. This removes the remaining D-ranked method from `core_snapshot_service.py`, but the
+module still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.

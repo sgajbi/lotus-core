@@ -220,3 +220,10 @@ health before that claim is defensible.
     `core_snapshot_service.py`. The former E-ranked `_resolve_projected_positions` method now
     reports `A (2)` instead of `E (34)`, but `core_snapshot_service.py` remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+58. Reduced core snapshot baseline-position complexity by extracting current snapshot/history row
+    selection, row-to-entry mapping, cash/zero filtering, market-value selection,
+    instrument/no-instrument payload construction, and freshness metadata helpers inside
+    `core_snapshot_service.py`. The former D-ranked `_resolve_baseline_positions` method now
+    reports `A (3)` instead of `D (28)`, removing the remaining D-ranked method from the module,
+    but `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot
+    count remains 7.
