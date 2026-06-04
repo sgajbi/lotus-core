@@ -482,3 +482,10 @@ health before that claim is defensible.
      maintainability and A-ranked helper complexity. `operations_repository.py` shrank from 1,689
      SLOC to 1,596 SLOC, but remains `C (0.00)` under Radon maintainability and needs additional
      focused extractions before it can leave the active C-ranked hotspot list.
+101. Reduced operations repository portfolio-control scope coupling by extracting
+     portfolio-control status normalization, failed/replay priority ordering, identity filtering,
+     business-date filtering, and composed stage-scope helpers into
+     `operations_portfolio_control_queries.py`. The helper module reports `A (53.89)`
+     maintainability and A-ranked helper complexity. `operations_repository.py` shrank from 1,596
+     SLOC to 1,538 SLOC and improved from `C (0.00)` to `C (0.21)`, but remains a C-ranked
+     maintainability hotspot.

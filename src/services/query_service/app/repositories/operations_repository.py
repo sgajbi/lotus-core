@@ -63,6 +63,10 @@ from .operations_models import (
     ResetWatermarkReprocessingJobScope,
     SnapshotValuationCoverageSummary,
 )
+from .operations_portfolio_control_queries import (
+    apply_portfolio_control_stage_scope,
+    portfolio_control_stage_priority,
+)
 from .operations_position_scope_queries import (
     apply_current_epoch_snapshot_scope,
     apply_current_position_history_scope,
@@ -90,10 +94,6 @@ class OperationsRepository:
 
     @staticmethod
     def _reprocessing_status_filter(status_column, status: str):
-        return status_column == status.strip().upper()
-
-    @staticmethod
-    def _portfolio_control_status_filter(status_column, status: str):
         return status_column == status.strip().upper()
 
     @staticmethod
@@ -264,69 +264,6 @@ class OperationsRepository:
             stmt = stmt.where(finding_security_id == normalized_security_id)
         if transaction_id:
             stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
-        return stmt
-
-    @staticmethod
-    def _portfolio_control_stage_priority(status_column):
-        governed_status = status_column
-        return case(
-            (governed_status.in_(("FAILED", "REQUIRES_REPLAY")), 0),
-            else_=9,
-        )
-
-    @staticmethod
-    def _apply_portfolio_control_stage_identity_scope(
-        stmt,
-        *,
-        stage_id: Optional[int],
-        stage_name: Optional[str],
-    ):
-        if stage_id is not None:
-            stmt = stmt.where(PipelineStageState.id == stage_id)
-        if stage_name:
-            stmt = stmt.where(PipelineStageState.stage_name == stage_name)
-        return stmt
-
-    @staticmethod
-    def _apply_portfolio_control_stage_attribute_scope(
-        stmt,
-        *,
-        business_date: Optional[date],
-    ):
-        if business_date:
-            stmt = stmt.where(PipelineStageState.business_date == business_date)
-        return stmt
-
-    def _apply_portfolio_control_stage_scope(
-        self,
-        stmt,
-        *,
-        portfolio_id: str,
-        stage_id: Optional[int] = None,
-        stage_name: Optional[str] = None,
-        business_date: Optional[date] = None,
-        status: Optional[str] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(
-            PipelineStageState.portfolio_id == portfolio_id,
-            PipelineStageState.transaction_id.like("portfolio-stage:%"),
-        )
-        if as_of is not None:
-            stmt = stmt.where(PipelineStageState.updated_at <= as_of)
-        stmt = self._apply_portfolio_control_stage_identity_scope(
-            stmt,
-            stage_id=stage_id,
-            stage_name=stage_name,
-        )
-        stmt = self._apply_portfolio_control_stage_attribute_scope(
-            stmt,
-            business_date=business_date,
-        )
-        if status:
-            stmt = stmt.where(
-                self._portfolio_control_status_filter(PipelineStageState.status, status)
-            )
         return stmt
 
     @staticmethod
@@ -1474,7 +1411,7 @@ class OperationsRepository:
         status: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        stmt = self._apply_portfolio_control_stage_scope(
+        stmt = apply_portfolio_control_stage_scope(
             select(func.count()).select_from(PipelineStageState),
             portfolio_id=portfolio_id,
             stage_id=stage_id,
@@ -1496,7 +1433,7 @@ class OperationsRepository:
         status: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> list[PipelineStageState]:
-        stmt = self._apply_portfolio_control_stage_scope(
+        stmt = apply_portfolio_control_stage_scope(
             select(PipelineStageState),
             portfolio_id=portfolio_id,
             stage_id=stage_id,
@@ -1507,7 +1444,7 @@ class OperationsRepository:
         )
         stmt = (
             stmt.order_by(
-                self._portfolio_control_stage_priority(PipelineStageState.status).asc(),
+                portfolio_control_stage_priority(PipelineStageState.status).asc(),
                 PipelineStageState.business_date.desc(),
                 PipelineStageState.epoch.desc(),
                 PipelineStageState.updated_at.desc(),
