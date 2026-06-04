@@ -152,3 +152,7 @@ health before that claim is defensible.
     valuation-attribute, and valuation-identity filter helpers. The former B-ranked
     `_apply_valuation_job_scope` helper now reports A-ranked complexity, but
     `operations_repository.py` remains a C-ranked maintainability hotspot.
+44. Reduced aggregation job operations repository scope complexity by extracting aggregation-date
+    and aggregation-identity filter helpers. The former B-ranked
+    `_apply_aggregation_job_scope` helper now reports A-ranked complexity, but
+    `operations_repository.py` remains a C-ranked maintainability hotspot.

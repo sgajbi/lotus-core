@@ -266,3 +266,9 @@ filtering, valuation attributes, and valuation identity filters into named helpe
 complexity, and the extracted valuation scope helpers all report A-ranked complexity.
 `operations_repository.py` remains `C (0.00)` under Radon maintainability, so the C-hotspot count
 remains 8.
+
+CR-888 reduced the aggregation job filtering hotspot by splitting aggregation-date and
+aggregation-identity filters into named helpers. `_apply_aggregation_job_scope` now reports
+`A (3)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted aggregation scope
+helpers report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 8.

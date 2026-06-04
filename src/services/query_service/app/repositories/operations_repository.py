@@ -254,6 +254,29 @@ class OperationsRepository:
             stmt = stmt.where(valuation_job_security_id == normalized_security_id)
         return stmt
 
+    @staticmethod
+    def _apply_aggregation_identity_scope(
+        stmt,
+        *,
+        job_id: Optional[int],
+        correlation_id: Optional[str],
+    ):
+        if job_id is not None:
+            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
+        if correlation_id:
+            stmt = stmt.where(PortfolioAggregationJob.correlation_id == correlation_id)
+        return stmt
+
+    @staticmethod
+    def _apply_aggregation_attribute_scope(
+        stmt,
+        *,
+        business_date: Optional[date],
+    ):
+        if business_date:
+            stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
+        return stmt
+
     def _apply_valuation_job_scope(
         self,
         stmt,
@@ -307,12 +330,12 @@ class OperationsRepository:
             stmt = stmt.where(
                 self._support_job_status_filter(PortfolioAggregationJob.status, status)
             )
-        if business_date:
-            stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
-        if job_id is not None:
-            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(PortfolioAggregationJob.correlation_id == correlation_id)
+        stmt = self._apply_aggregation_attribute_scope(stmt, business_date=business_date)
+        stmt = self._apply_aggregation_identity_scope(
+            stmt,
+            job_id=job_id,
+            correlation_id=correlation_id,
+        )
         return stmt
 
     @staticmethod
