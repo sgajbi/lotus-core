@@ -150,13 +150,24 @@ class CoreSnapshotService:
         )
         if freshness_status == "HISTORICAL_FALLBACK":
             return PARTIAL
-        if (
-            freshness_status == "CURRENT_SNAPSHOT"
-            and freshness.snapshot_timestamp is not None
-            and freshness.snapshot_epoch is not None
+        if CoreSnapshotService._is_complete_current_snapshot(
+            freshness=freshness,
+            freshness_status=freshness_status,
         ):
             return COMPLETE
         return PARTIAL
+
+    @staticmethod
+    def _is_complete_current_snapshot(
+        *,
+        freshness: CoreSnapshotFreshnessMetadata,
+        freshness_status: str | None,
+    ) -> bool:
+        return (
+            freshness_status == "CURRENT_SNAPSHOT"
+            and freshness.snapshot_timestamp is not None
+            and freshness.snapshot_epoch is not None
+        )
 
     async def get_core_snapshot(
         self,

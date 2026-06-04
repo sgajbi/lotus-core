@@ -244,3 +244,8 @@ health before that claim is defensible.
     `core_snapshot_service.py`. The former B-ranked `_build_delta_section` method now reports
     `A (2)` instead of `B (10)`, but `core_snapshot_service.py` remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+62. Reduced core snapshot data-quality classification complexity by extracting the
+    current-snapshot completeness predicate inside `core_snapshot_service.py`. The former B-ranked
+    `_snapshot_data_quality_status` method now reports `A (4)` instead of `B (6)`, and
+    `core_snapshot_service.py` now has no B-or-worse methods under Radon cyclomatic complexity,
+    but it remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.

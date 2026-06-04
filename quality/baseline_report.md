@@ -395,3 +395,10 @@ delta value extraction, weight calculation, and record construction helpers insi
 Radon cyclomatic complexity, and the extracted delta-section helpers report A-ranked complexity.
 `core_snapshot_service.py` still reports `C (0.00)` under Radon maintainability, so the C-hotspot
 count remains 7.
+
+CR-906 reduced core snapshot data-quality classification complexity by extracting the
+current-snapshot completeness predicate inside `core_snapshot_service.py`.
+`_snapshot_data_quality_status` now reports `A (4)` instead of `B (6)` under Radon cyclomatic
+complexity. `core_snapshot_service.py` now has no B-or-worse methods under Radon cyclomatic
+complexity, but it still reports `C (0.00)` under Radon maintainability, so the C-hotspot count
+remains 7.
