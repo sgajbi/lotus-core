@@ -715,3 +715,9 @@ original module. The extracted modules report `A (37.79)` and `A (38.91)` mainta
 `reference_integration_dto.py` shrank from 3,637 SLOC to 3,264 SLOC and improved from `C (0.00)`
 to `C (1.33)`, but remains a C-ranked maintainability hotspot requiring further DTO-family
 extractions.
+
+CR-950 reduced query-service reference integration DTO coupling by extracting the market-data
+coverage DTO family into `reference_integration_market_data_coverage_dto.py`, with compatibility
+re-exports from the original module before DPM readiness DTOs. The extracted module reports
+`A (35.77)` maintainability. `reference_integration_dto.py` shrank from 3,264 SLOC to 3,078 SLOC
+and improved from `C (1.33)` to `C (4.62)`, but remains a C-ranked maintainability hotspot.

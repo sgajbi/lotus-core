@@ -26,3 +26,6 @@ Status: Initial scorecard baseline on 2026-06-02.
   `reference_integration_dto.py` from 3,637 SLOC to 3,264 SLOC and improving it from `C (0.00)`
   to `C (1.33)`. The module remains an active C-ranked hotspot requiring further DTO-family
   extractions.
+- CR-950 extracted A-ranked `reference_integration_market_data_coverage_dto.py`, reducing
+  `reference_integration_dto.py` from 3,264 SLOC to 3,078 SLOC and improving it from `C (1.33)`
+  to `C (4.62)`. The module remains an active C-ranked hotspot.
