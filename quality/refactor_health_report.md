@@ -310,3 +310,9 @@ health before that claim is defensible.
     `get_export_result_ndjson` method now reports `A (5)` instead of `B (7)`, and the helper
     module reports A-ranked maintainability. `analytics_timeseries_service.py` remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+74. Reduced analytics export job policy coupling by extracting status normalization, result
+    endpoint construction, job response shaping, reused-job disposition, result payload
+    construction, JSON-safe conversion, and export result metric recording into
+    `analytics_export_jobs.py`. The helper module reports `A (50.45)` maintainability and
+    A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,844 SLOC to
+    1,770 SLOC, but remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.

@@ -19,6 +19,7 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
 )
+from src.services.query_service.app.services.analytics_export_jobs import analytics_export_jsonable
 from src.services.query_service.app.services.analytics_timeseries_service import (
     AnalyticsInputError,
     AnalyticsTimeseriesService,
@@ -3050,8 +3051,7 @@ async def test_get_export_result_ndjson_gzip() -> None:
 
 
 def test_jsonable_converts_decimal_and_date() -> None:
-    service = make_service()
-    converted = service._jsonable(  # pylint: disable=protected-access
+    converted = analytics_export_jsonable(
         {"amount": Decimal("1.23"), "as_of_date": date(2025, 1, 1), "nested": [Decimal("2.00")]}
     )
     assert converted == {

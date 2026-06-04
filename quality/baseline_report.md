@@ -478,3 +478,10 @@ handling into `analytics_export_ndjson.py`. `get_export_result_ndjson` now repor
 of `B (7)` under Radon cyclomatic complexity, and the extracted helper module reports A-ranked
 maintainability. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 7.
+
+CR-918 reduced analytics export job policy coupling by extracting status normalization, result
+endpoint construction, job response shaping, reused-job disposition, result payload construction,
+JSON-safe conversion, and export result metric recording into `analytics_export_jobs.py`. The
+helper module reports `A (50.45)` maintainability and A-ranked helper complexity.
+`analytics_timeseries_service.py` shrank from 1,844 SLOC to 1,770 SLOC, but still reports
+`C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.

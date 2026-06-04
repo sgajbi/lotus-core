@@ -19,8 +19,6 @@ from portfolio_common.analytics_cashflow_semantics import (
 from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
     ANALYTICS_EXPORT_JOBS_TOTAL,
-    ANALYTICS_EXPORT_PAGE_DEPTH,
-    ANALYTICS_EXPORT_RESULT_BYTES,
 )
 from portfolio_common.reconciliation_quality import (
     COMPLETE,
@@ -55,6 +53,13 @@ from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRe
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..settings import load_query_service_settings
+from .analytics_export_jobs import (
+    analytics_export_job_response,
+    analytics_export_result_payload,
+    normalize_analytics_export_job_status,
+    record_analytics_export_result_metrics,
+    reused_analytics_export_job_response,
+)
 from .analytics_export_ndjson import AnalyticsExportNdjsonError, analytics_export_ndjson_result
 from .decimal_amounts import decimal_or_zero
 from .request_fingerprint import request_fingerprint
@@ -1599,69 +1604,6 @@ class AnalyticsTimeseriesService:
             if candidate is not None
         ]
 
-    @staticmethod
-    def _export_result_endpoint(job_id: str) -> str:
-        return f"/integration/exports/analytics-timeseries/jobs/{job_id}/result"
-
-    @staticmethod
-    def _normalize_export_job_status(status: str | None) -> str | None:
-        if status is None:
-            return None
-        normalized_status = status.strip().lower()
-        return normalized_status or None
-
-    @classmethod
-    def _to_export_response(
-        cls, row: object, *, disposition: str = "status_lookup"
-    ) -> AnalyticsExportJobResponse:
-        normalized_status = cls._normalize_export_job_status(row.status)
-        return AnalyticsExportJobResponse(
-            job_id=row.job_id,
-            dataset_type=row.dataset_type,
-            portfolio_id=row.portfolio_id,
-            status=normalized_status or row.status,
-            disposition=disposition,
-            lifecycle_mode=cls._EXPORT_LIFECYCLE_MODE,
-            request_fingerprint=row.request_fingerprint,
-            result_available=normalized_status == "completed",
-            result_endpoint=cls._export_result_endpoint(row.job_id),
-            result_format=row.result_format,
-            compression=row.compression,
-            result_row_count=row.result_row_count,
-            error_message=row.error_message,
-            created_at=row.created_at,
-            started_at=row.started_at,
-            completed_at=row.completed_at,
-        )
-
-    @staticmethod
-    def _jsonable(value: object) -> object:
-        if isinstance(value, Decimal):
-            return AnalyticsTimeseriesService._jsonable_decimal(value)
-        if isinstance(value, (date, datetime)):
-            return AnalyticsTimeseriesService._jsonable_temporal(value)
-        if isinstance(value, list):
-            return AnalyticsTimeseriesService._jsonable_list(value)
-        if isinstance(value, dict):
-            return AnalyticsTimeseriesService._jsonable_dict(value)
-        return value
-
-    @staticmethod
-    def _jsonable_decimal(value: Decimal) -> str:
-        return str(value)
-
-    @staticmethod
-    def _jsonable_temporal(value: date | datetime) -> str:
-        return value.isoformat()
-
-    @staticmethod
-    def _jsonable_list(value: list[object]) -> list[object]:
-        return [AnalyticsTimeseriesService._jsonable(item) for item in value]
-
-    @staticmethod
-    def _jsonable_dict(value: dict[object, object]) -> dict[str, object]:
-        return {str(key): AnalyticsTimeseriesService._jsonable(item) for key, item in value.items()}
-
     async def _reserve_export_job(
         self,
         *,
@@ -1697,10 +1639,10 @@ class AnalyticsTimeseriesService:
             return row, False
 
     def _export_job_is_completed(self, row: object) -> bool:
-        return self._normalize_export_job_status(row.status) == "completed"
+        return normalize_analytics_export_job_status(row.status) == "completed"
 
     def _export_job_is_inflight(self, row: object) -> bool:
-        return self._normalize_export_job_status(row.status) in {"accepted", "running"}
+        return normalize_analytics_export_job_status(row.status) in {"accepted", "running"}
 
     def _export_job_is_fresh(self, row: object) -> bool:
         return row.updated_at is not None and row.updated_at >= self._export_job_stale_threshold()
@@ -1753,7 +1695,9 @@ class AnalyticsTimeseriesService:
             request_fingerprint=request_fingerprint,
         )
         if reused:
-            return self._reused_export_job_response(row)
+            return reused_analytics_export_job_response(
+                row, lifecycle_mode=self._EXPORT_LIFECYCLE_MODE
+            )
 
         job_id = row.job_id
         await self._mark_export_job_running(job_id)
@@ -1769,11 +1713,19 @@ class AnalyticsTimeseriesService:
                 page_depth=page_depth,
             )
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
-            return self._to_export_response(row, disposition="created")
+            return analytics_export_job_response(
+                row,
+                lifecycle_mode=self._EXPORT_LIFECYCLE_MODE,
+                disposition="created",
+            )
         except AnalyticsInputError as exc:
             row = await self._mark_export_job_failed(job_id, error_message=str(exc))
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
-            return self._to_export_response(row, disposition="created")
+            return analytics_export_job_response(
+                row,
+                lifecycle_mode=self._EXPORT_LIFECYCLE_MODE,
+                disposition="created",
+            )
         except Exception:
             logger.exception(
                 "Analytics export job %s failed unexpectedly for dataset %s",
@@ -1790,14 +1742,6 @@ class AnalyticsTimeseriesService:
             ANALYTICS_EXPORT_JOB_DURATION_SECONDS.labels(request.dataset_type).observe(
                 perf_counter() - started
             )
-
-    def _reused_export_job_response(self, row: object) -> AnalyticsExportJobResponse:
-        disposition = (
-            "reused_completed"
-            if self._normalize_export_job_status(row.status) == "completed"
-            else "reused_inflight"
-        )
-        return self._to_export_response(row, disposition=disposition)
 
     async def _collect_export_dataset(
         self, request: AnalyticsExportCreateRequest
@@ -1831,14 +1775,17 @@ class AnalyticsTimeseriesService:
         data_rows: list[dict[str, object]],
         page_depth: int,
     ) -> object:
-        result_payload = self._export_result_payload(
+        result_payload = analytics_export_result_payload(
             job_id=job_id,
             dataset_type=request.dataset_type,
             request_fingerprint=request_fingerprint,
+            lifecycle_mode=self._EXPORT_LIFECYCLE_MODE,
             data_rows=data_rows,
         )
-        self._record_export_result_metrics(
-            request=request,
+        record_analytics_export_result_metrics(
+            result_format=request.result_format,
+            compression=request.compression,
+            dataset_type=request.dataset_type,
             result_payload=result_payload,
             page_depth=page_depth,
         )
@@ -1848,49 +1795,17 @@ class AnalyticsTimeseriesService:
             result_row_count=len(data_rows),
         )
 
-    def _export_result_payload(
-        self,
-        *,
-        job_id: str,
-        dataset_type: str,
-        request_fingerprint: str,
-        data_rows: list[dict[str, object]],
-    ) -> dict[str, object]:
-        return {
-            "job_id": job_id,
-            "dataset_type": dataset_type,
-            "request_fingerprint": request_fingerprint,
-            "lifecycle_mode": self._EXPORT_LIFECYCLE_MODE,
-            "generated_at": datetime.now(UTC).isoformat(),
-            "contract_version": "rfc_063_v1",
-            "result_row_count": len(data_rows),
-            "data": self._jsonable(data_rows),
-        }
-
-    @staticmethod
-    def _record_export_result_metrics(
-        *,
-        request: AnalyticsExportCreateRequest,
-        result_payload: dict[str, object],
-        page_depth: int,
-    ) -> None:
-        result_bytes = len(json.dumps(result_payload, separators=(",", ":")).encode("utf-8"))
-        ANALYTICS_EXPORT_RESULT_BYTES.labels(request.result_format, request.compression).observe(
-            result_bytes
-        )
-        ANALYTICS_EXPORT_PAGE_DEPTH.labels(request.dataset_type).observe(page_depth)
-
     async def get_export_job(self, job_id: str) -> AnalyticsExportJobResponse:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        return self._to_export_response(row)
+        return analytics_export_job_response(row, lifecycle_mode=self._EXPORT_LIFECYCLE_MODE)
 
     async def get_export_result_json(self, job_id: str) -> AnalyticsExportJsonResultResponse:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if self._normalize_export_job_status(row.status) != "completed":
+        if normalize_analytics_export_job_status(row.status) != "completed":
             raise AnalyticsInputError(
                 "UNSUPPORTED_CONFIGURATION",
                 "Export job is not completed yet; result unavailable.",
@@ -1905,7 +1820,7 @@ class AnalyticsTimeseriesService:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if self._normalize_export_job_status(row.status) != "completed":
+        if normalize_analytics_export_job_status(row.status) != "completed":
             raise AnalyticsInputError(
                 "UNSUPPORTED_CONFIGURATION",
                 "Export job is not completed yet; result unavailable.",
