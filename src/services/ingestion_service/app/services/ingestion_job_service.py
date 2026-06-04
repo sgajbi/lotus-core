@@ -65,6 +65,10 @@ from .ingestion_record_status import (
     failed_record_keys_from_failures,
     replayable_record_keys_from_payload,
 )
+from .ingestion_slo_status import (
+    build_slo_status_response,
+    load_ingestion_slo_snapshot,
+)
 
 _SETTINGS = get_ingestion_service_settings()
 _RUNTIME_POLICY = _SETTINGS.runtime_policy
@@ -564,105 +568,28 @@ class IngestionJobService:
         backlog_age_threshold_seconds: float = 300.0,
     ) -> IngestionSloStatusResponse:
         async for db in get_async_db_session():
-            since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            # Prefer DB-side aggregation (including percentile) to avoid loading all jobs in memory.
-            p95_latency = 0.0
-            total_jobs = 0
-            failed_jobs = 0
-            backlog_age_seconds = 0.0
+            now = datetime.now(UTC)
+            since = now - timedelta(minutes=lookback_minutes)
             try:
-                latency_seconds = case(
-                    (
-                        DBIngestionJob.completed_at.is_not(None),
-                        func.extract(
-                            "epoch",
-                            DBIngestionJob.completed_at - DBIngestionJob.submitted_at,
-                        ),
-                    ),
-                    else_=None,
+                snapshot = await load_ingestion_slo_snapshot(
+                    db,
+                    since=since,
+                    now=now,
                 )
-                row = (
-                    await db.execute(
-                        select(
-                            func.count(DBIngestionJob.id).label("total_jobs"),
-                            func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
-                                "failed_jobs"
-                            ),
-                            func.min(
-                                case(
-                                    (
-                                        DBIngestionJob.status.in_(["accepted", "queued"]),
-                                        DBIngestionJob.submitted_at,
-                                    ),
-                                    else_=None,
-                                )
-                            ).label("oldest_backlog_submitted_at"),
-                            func.percentile_cont(0.95)
-                            .within_group(latency_seconds)
-                            .label("p95_latency"),
-                        ).where(DBIngestionJob.submitted_at >= since)
-                    )
-                ).one()
-                total_jobs = int(row[0] or 0)
-                failed_jobs = int(row[1] or 0)
-                oldest_backlog_submitted_at = row[2]
-                p95_latency = float(row[3] or 0.0)
-                if oldest_backlog_submitted_at is not None:
-                    backlog_age_seconds = float(
-                        (datetime.now(UTC) - oldest_backlog_submitted_at).total_seconds()
-                    )
-            except SQLAlchemyError:
-                # Fallback path for dialects/environments without percentile_cont support.
-                try:
-                    jobs = (
-                        await db.scalars(
-                            select(DBIngestionJob).where(DBIngestionJob.submitted_at >= since)
-                        )
-                    ).all()
-                    total_jobs = len(jobs)
-                    failed_jobs = len([j for j in jobs if j.status == "failed"])
-
-                    latencies = [
-                        (j.completed_at - j.submitted_at).total_seconds()
-                        for j in jobs
-                        if j.completed_at is not None
-                    ]
-                    latencies.sort()
-                    if latencies:
-                        p95_index = max(
-                            0,
-                            min(len(latencies) - 1, int(len(latencies) * 0.95) - 1),
-                        )
-                        p95_latency = float(latencies[p95_index])
-
-                    non_terminal = [j for j in jobs if j.status in {"accepted", "queued"}]
-                    if non_terminal:
-                        oldest = min(non_terminal, key=lambda item: item.submitted_at)
-                        backlog_age_seconds = float(
-                            (datetime.now(UTC) - oldest.submitted_at).total_seconds()
-                        )
-                except SQLAlchemyError as exc:
-                    logger.warning(
-                        "ingestion_slo_status_fallback_unavailable",
-                        extra={"lookback_minutes": lookback_minutes},
-                        exc_info=exc,
-                    )
-                    return self._default_slo_status(lookback_minutes=lookback_minutes)
-            INGESTION_BACKLOG_AGE_SECONDS.set(backlog_age_seconds)
-
-            failure_rate = (
-                Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")
-            )
-            return IngestionSloStatusResponse(
+            except SQLAlchemyError as exc:
+                logger.warning(
+                    "ingestion_slo_status_fallback_unavailable",
+                    extra={"lookback_minutes": lookback_minutes},
+                    exc_info=exc,
+                )
+                return self._default_slo_status(lookback_minutes=lookback_minutes)
+            INGESTION_BACKLOG_AGE_SECONDS.set(snapshot.backlog_age_seconds)
+            return build_slo_status_response(
                 lookback_minutes=lookback_minutes,
-                total_jobs=total_jobs,
-                failed_jobs=failed_jobs,
-                failure_rate=failure_rate,
-                p95_queue_latency_seconds=p95_latency,
-                backlog_age_seconds=backlog_age_seconds,
-                breach_failure_rate=failure_rate > failure_rate_threshold,
-                breach_queue_latency=p95_latency > queue_latency_threshold_seconds,
-                breach_backlog_age=backlog_age_seconds > backlog_age_threshold_seconds,
+                snapshot=snapshot,
+                failure_rate_threshold=failure_rate_threshold,
+                queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+                backlog_age_threshold_seconds=backlog_age_threshold_seconds,
             )
         return self._default_slo_status(lookback_minutes=lookback_minutes)
 

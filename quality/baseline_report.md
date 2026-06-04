@@ -748,3 +748,9 @@ signal, decision, and classification helpers into `ingestion_operating_band.py`.
 classifier moved out of the service and now reports `B (7)` in an `A (50.49)` helper module.
 `ingestion_job_service.py` shrank from 1,633 SLOC to 1,545 SLOC and remains a C-ranked
 maintainability hotspot requiring additional focused extractions.
+
+CR-955 reduced ingestion SLO status coupling by extracting DB aggregate/fallback snapshot loading
+and threshold response assembly into `ingestion_slo_status.py`. `get_slo_status` improved from
+`C (17)` to `A (3)`, while the helper module reports `A (42.76)` maintainability.
+`ingestion_job_service.py` shrank from 1,545 SLOC to 1,477 SLOC and remains a C-ranked
+maintainability hotspot requiring additional focused extractions.
