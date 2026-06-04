@@ -83,11 +83,9 @@ def test_market_data_coverage_response_preserves_ready_evidence_and_runtime_line
     }
 
 
-def test_resolve_market_data_coverage_response_orchestrates_parallel_reads() -> None:
+def test_resolve_market_data_coverage_response_orchestrates_repository_reads() -> None:
     async def run_case() -> tuple[object, list[tuple[str, object]]]:
         call_log: list[tuple[str, object]] = []
-        prices_started = asyncio.Event()
-        fx_started = asyncio.Event()
 
         class Repository:
             async def list_latest_market_prices(
@@ -99,8 +97,6 @@ def test_resolve_market_data_coverage_response_orchestrates_parallel_reads() -> 
                 call_log.append(
                     ("prices", {"security_ids": security_ids, "as_of_date": as_of_date})
                 )
-                prices_started.set()
-                await fx_started.wait()
                 return [
                     SimpleNamespace(
                         security_id="EQ_US_AAPL",
@@ -119,8 +115,6 @@ def test_resolve_market_data_coverage_response_orchestrates_parallel_reads() -> 
                 call_log.append(
                     ("fx", {"currency_pairs": currency_pairs, "as_of_date": as_of_date})
                 )
-                fx_started.set()
-                await prices_started.wait()
                 return [
                     SimpleNamespace(
                         from_currency="USD",

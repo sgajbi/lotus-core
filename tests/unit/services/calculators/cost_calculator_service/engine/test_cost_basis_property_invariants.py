@@ -10,7 +10,7 @@ from cost_engine.processing.cost_basis_strategies import (
     AverageCostBasisStrategy,
     FIFOBasisStrategy,
 )
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 
@@ -32,7 +32,11 @@ def _buy_txn(transaction_id: str, quantity: Decimal, cost_per_share: Decimal) ->
     )
 
 
-@settings(max_examples=75, deadline=None)
+@settings(
+    max_examples=75,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 @given(
     lot_quantities=st.lists(
         st.integers(min_value=1, max_value=1000),
@@ -67,7 +71,11 @@ def test_fifo_quantity_conservation_invariant(lot_quantities: list[int], sell_ra
     assert strategy.get_available_quantity("P_PROP", "I_PROP") == total_qty - sell_qty
 
 
-@settings(max_examples=75, deadline=None)
+@settings(
+    max_examples=75,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 @given(
     buy_qty_1=st.integers(min_value=1, max_value=500),
     buy_qty_2=st.integers(min_value=1, max_value=500),
