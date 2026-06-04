@@ -40,6 +40,7 @@ from .reference_coverage_calculations import (
     observed_benchmark_coverage_dates,
     quality_status_counts,
 )
+from .reference_fx_queries import latest_fx_rates_stmt, normalized_currency_pairs
 
 
 def _effective_filter(
@@ -1361,41 +1362,12 @@ class ReferenceDataRepository:
         if not currency_pairs:
             return []
 
-        normalized_pairs = [
-            (normalized_base, normalized_quote)
-            for base, quote in currency_pairs
-            if (normalized_base := normalize_currency_code(base))
-            and (normalized_quote := normalize_currency_code(quote))
-        ]
-        normalized_pairs = list(dict.fromkeys(normalized_pairs))
+        normalized_pairs = normalized_currency_pairs(currency_pairs)
         if not normalized_pairs:
             return []
-        from_currency_expr = currency_code_sql_expr(FxRate.from_currency)
-        to_currency_expr = currency_code_sql_expr(FxRate.to_currency)
-        latest_rate_dates = (
-            select(
-                from_currency_expr.label("from_currency"),
-                to_currency_expr.label("to_currency"),
-                func.max(FxRate.rate_date).label("latest_rate_date"),
-            )
-            .where(
-                tuple_(from_currency_expr, to_currency_expr).in_(normalized_pairs),
-                FxRate.rate_date <= as_of_date,
-            )
-            .group_by(from_currency_expr, to_currency_expr)
-            .subquery()
-        )
-        stmt = (
-            select(FxRate)
-            .join(
-                latest_rate_dates,
-                and_(
-                    from_currency_expr == latest_rate_dates.c.from_currency,
-                    to_currency_expr == latest_rate_dates.c.to_currency,
-                    FxRate.rate_date == latest_rate_dates.c.latest_rate_date,
-                ),
-            )
-            .order_by(from_currency_expr.asc(), to_currency_expr.asc())
+        stmt = latest_fx_rates_stmt(
+            normalized_pairs=normalized_pairs,
+            as_of_date=as_of_date,
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

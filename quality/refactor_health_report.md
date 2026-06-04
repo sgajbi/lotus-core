@@ -187,3 +187,7 @@ health before that claim is defensible.
     B-ranked `get_lineage_keys` method now reports A-ranked complexity, removing the remaining
     B-ranked method from `operations_repository.py`; the module remains a C-ranked maintainability
     hotspot.
+52. Reduced reference FX-rate query complexity by extracting FX pair normalization and latest-rate
+    SQL construction into `reference_fx_queries.py`. The former B-ranked `list_latest_fx_rates`
+    method now reports A-ranked complexity, and `reference_data_repository.py` improved from
+    `C (6.94)` to `C (7.55)`, but it remains a C-ranked maintainability hotspot.

@@ -318,3 +318,10 @@ now reports `A (4)` instead of `B (6)` under Radon cyclomatic complexity, and th
 lineage helpers report A-ranked complexity. This removes the remaining B-ranked method from
 `operations_repository.py`; the module still reports `C (0.00)` under Radon maintainability, so
 the C-hotspot count remains 8.
+
+CR-896 reduced reference FX-rate query debt by extracting FX pair normalization and latest-rate SQL
+construction into `reference_fx_queries.py`. `list_latest_fx_rates` now reports `A (3)` instead of
+`B (6)` under Radon cyclomatic complexity, and `reference_data_repository.py` improved from
+`C (6.94)` to `C (7.55)` under Radon maintainability. The new FX query helper module reports
+`A (60.98)`. This does not remove `reference_data_repository.py` from the current C-ranked
+maintainability list; the C-hotspot count remains 8.
