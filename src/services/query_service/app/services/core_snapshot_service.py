@@ -78,6 +78,31 @@ class SnapshotGovernanceContext:
     warnings: list[str]
 
 
+@dataclass(frozen=True)
+class _CoreSnapshotCurrencyContext:
+    portfolio_currency: str
+    reporting_currency: str
+    reporting_fx: Decimal
+
+
+@dataclass(frozen=True)
+class _CoreSnapshotProjection:
+    positions: dict[str, dict[str, Any]] | None
+    total_market_value: Decimal
+    simulation_metadata: CoreSnapshotSimulationMetadata | None
+
+
+@dataclass(frozen=True)
+class _CoreSnapshotGovernanceResolution:
+    requested_sections: list[CoreSnapshotSection]
+    applied_sections: list[CoreSnapshotSection]
+    dropped_sections: list[CoreSnapshotSection]
+    policy_provenance: CoreSnapshotPolicyProvenance
+    warnings: list[str]
+    consumer_system: str
+    tenant_id: str
+
+
 class CoreSnapshotService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -130,216 +155,388 @@ class CoreSnapshotService:
         if portfolio is None:
             raise CoreSnapshotNotFoundError(f"Portfolio {portfolio_id} not found")
 
-        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
-        reporting_currency = normalize_currency_code(
-            str(request.reporting_currency or portfolio.base_currency)
-        )
-        reporting_fx = await self._get_fx_rate_or_raise(
-            from_currency=portfolio_currency,
-            to_currency=reporting_currency,
+        currency_context = await self._snapshot_currency_context(
+            portfolio_base_currency=portfolio.base_currency,
+            requested_reporting_currency=request.reporting_currency,
             as_of_date=request.as_of_date,
         )
 
         baseline_positions, freshness_meta = await self._resolve_baseline_positions(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
-            reporting_fx=reporting_fx,
+            reporting_fx=currency_context.reporting_fx,
             include_cash=request.options.include_cash_positions,
             include_zero=request.options.include_zero_quantity_positions,
         )
 
         sections_payload = CoreSnapshotSections()
-        simulation_metadata: CoreSnapshotSimulationMetadata | None = None
 
         if CoreSnapshotSection.POSITIONS_BASELINE in request.sections:
             sections_payload.positions_baseline = [
                 item["position_record"] for item in baseline_positions.values()
             ]
 
-        projected_positions: dict[str, dict[str, Any]] | None = None
-        projected_total = Decimal(0)
         baseline_total = self._total_market_value_baseline(baseline_positions)
+        projection = await self._snapshot_projection(
+            portfolio_id=portfolio_id,
+            request=request,
+            portfolio_currency=currency_context.portfolio_currency,
+            reporting_fx=currency_context.reporting_fx,
+            baseline_positions=baseline_positions,
+        )
+        projected_positions = projection.positions
 
-        if request.snapshot_mode == CoreSnapshotMode.SIMULATION:
-            session_opts = request.simulation
-            if session_opts is None:
-                raise CoreSnapshotBadRequestError(
-                    "simulation options are required when snapshot_mode=SIMULATION"
-                )
-            session = await self.simulation_repo.get_session(session_opts.session_id)
-            if session is None:
-                raise CoreSnapshotNotFoundError(
-                    f"Simulation session {session_opts.session_id} not found"
-                )
-            if session.portfolio_id != portfolio_id:
-                raise CoreSnapshotConflictError(
-                    "Simulation session does not belong to requested portfolio"
-                )
-            if (
-                session_opts.expected_version is not None
-                and session.version != session_opts.expected_version
-            ):
-                raise CoreSnapshotConflictError("Simulation expected_version mismatch")
+        self._populate_requested_snapshot_sections(
+            sections_payload=sections_payload,
+            request=request,
+            baseline_positions=baseline_positions,
+            projected_positions=projected_positions,
+            baseline_total=baseline_total,
+            projected_total=projection.total_market_value,
+        )
+        governance_resolution = self._snapshot_governance_resolution(
+            request=request,
+            governance=governance,
+        )
+        return self._build_core_snapshot_response(
+            portfolio_id=portfolio_id,
+            request=request,
+            currency_context=currency_context,
+            freshness=freshness_meta,
+            governance=governance_resolution,
+            simulation_metadata=projection.simulation_metadata,
+            sections=sections_payload,
+            baseline_count=len(baseline_positions),
+        )
 
-            simulation_metadata = CoreSnapshotSimulationMetadata(
+    async def _snapshot_currency_context(
+        self,
+        *,
+        portfolio_base_currency: str,
+        requested_reporting_currency: str | None,
+        as_of_date,
+    ) -> _CoreSnapshotCurrencyContext:
+        portfolio_currency = normalize_currency_code(str(portfolio_base_currency))
+        reporting_currency = normalize_currency_code(
+            str(requested_reporting_currency or portfolio_base_currency)
+        )
+        return _CoreSnapshotCurrencyContext(
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
+            reporting_fx=await self._get_fx_rate_or_raise(
+                from_currency=portfolio_currency,
+                to_currency=reporting_currency,
+                as_of_date=as_of_date,
+            ),
+        )
+
+    async def _snapshot_projection(
+        self,
+        *,
+        portfolio_id: str,
+        request: CoreSnapshotRequest,
+        portfolio_currency: str,
+        reporting_fx: Decimal,
+        baseline_positions: dict[str, dict[str, Any]],
+    ) -> _CoreSnapshotProjection:
+        if request.snapshot_mode != CoreSnapshotMode.SIMULATION:
+            self._validate_baseline_snapshot_sections(request.sections)
+            return _CoreSnapshotProjection(None, Decimal(0), None)
+
+        session = await self._validated_simulation_session(portfolio_id, request)
+        projected_positions = await self._resolve_projected_positions(
+            session_id=session.session_id,
+            as_of_date=request.as_of_date,
+            portfolio_base_currency=portfolio_currency,
+            portfolio_to_reporting_fx=reporting_fx,
+            baseline_positions=baseline_positions,
+            include_zero=request.options.include_zero_quantity_positions,
+            include_cash=request.options.include_cash_positions,
+        )
+        return _CoreSnapshotProjection(
+            positions=projected_positions,
+            total_market_value=self._total_market_value_projected(projected_positions),
+            simulation_metadata=CoreSnapshotSimulationMetadata(
                 session_id=session.session_id,
                 version=session.version,
                 baseline_as_of_date=request.as_of_date,
-            )
-            projected_positions = await self._resolve_projected_positions(
-                session_id=session.session_id,
-                as_of_date=request.as_of_date,
-                portfolio_base_currency=portfolio_currency,
-                portfolio_to_reporting_fx=reporting_fx,
-                baseline_positions=baseline_positions,
-                include_zero=request.options.include_zero_quantity_positions,
-                include_cash=request.options.include_cash_positions,
-            )
-            projected_total = self._total_market_value_projected(projected_positions)
-        else:
-            if (
-                CoreSnapshotSection.POSITIONS_PROJECTED in request.sections
-                or CoreSnapshotSection.POSITIONS_DELTA in request.sections
-            ):
-                raise CoreSnapshotBadRequestError(
-                    "Projected and delta sections require snapshot_mode=SIMULATION"
-                )
+            ),
+        )
 
-        if CoreSnapshotSection.POSITIONS_PROJECTED in request.sections:
-            if projected_positions is None:
-                raise CoreSnapshotUnavailableSectionError("positions_projected unavailable")
-            self._assign_projected_weights(projected_positions, projected_total)
-            sections_payload.positions_projected = [
-                item["position_record"] for item in projected_positions.values()
-            ]
+    async def _validated_simulation_session(self, portfolio_id: str, request: CoreSnapshotRequest):
+        session_opts = request.simulation
+        if session_opts is None:
+            raise CoreSnapshotBadRequestError(
+                "simulation options are required when snapshot_mode=SIMULATION"
+            )
+        session = await self.simulation_repo.get_session(session_opts.session_id)
+        if session is None:
+            raise CoreSnapshotNotFoundError(
+                f"Simulation session {session_opts.session_id} not found"
+            )
+        if session.portfolio_id != portfolio_id:
+            raise CoreSnapshotConflictError(
+                "Simulation session does not belong to requested portfolio"
+            )
+        if (
+            session_opts.expected_version is not None
+            and session.version != session_opts.expected_version
+        ):
+            raise CoreSnapshotConflictError("Simulation expected_version mismatch")
+        return session
 
-        if CoreSnapshotSection.POSITIONS_DELTA in request.sections:
-            if projected_positions is None:
-                raise CoreSnapshotUnavailableSectionError("positions_delta unavailable")
-            sections_payload.positions_delta = self._build_delta_section(
-                baseline_positions=baseline_positions,
-                projected_positions=projected_positions,
-                baseline_total=baseline_total,
-                projected_total=projected_total,
+    @staticmethod
+    def _validate_baseline_snapshot_sections(sections: list[CoreSnapshotSection]) -> None:
+        if (
+            CoreSnapshotSection.POSITIONS_PROJECTED in sections
+            or CoreSnapshotSection.POSITIONS_DELTA in sections
+        ):
+            raise CoreSnapshotBadRequestError(
+                "Projected and delta sections require snapshot_mode=SIMULATION"
             )
 
-        if CoreSnapshotSection.PORTFOLIO_TOTALS in request.sections:
-            sections_payload.portfolio_totals = CoreSnapshotPortfolioTotals(
-                baseline_total_market_value_base=baseline_total,
-                projected_total_market_value_base=(
-                    projected_total if projected_positions is not None else None
+    def _populate_requested_snapshot_sections(
+        self,
+        *,
+        sections_payload: CoreSnapshotSections,
+        request: CoreSnapshotRequest,
+        baseline_positions: dict[str, dict[str, Any]],
+        projected_positions: dict[str, dict[str, Any]] | None,
+        baseline_total: Decimal,
+        projected_total: Decimal,
+    ) -> None:
+        self._populate_projected_positions_section(
+            sections_payload=sections_payload,
+            requested_sections=request.sections,
+            projected_positions=projected_positions,
+            projected_total=projected_total,
+        )
+        self._populate_delta_section(
+            sections_payload=sections_payload,
+            requested_sections=request.sections,
+            baseline_positions=baseline_positions,
+            projected_positions=projected_positions,
+            baseline_total=baseline_total,
+            projected_total=projected_total,
+        )
+        self._populate_portfolio_totals_section(
+            sections_payload=sections_payload,
+            requested_sections=request.sections,
+            baseline_total=baseline_total,
+            projected_positions=projected_positions,
+            projected_total=projected_total,
+        )
+        self._populate_instrument_enrichment_section(
+            sections_payload=sections_payload,
+            requested_sections=request.sections,
+            baseline_positions=baseline_positions,
+        )
+
+    def _populate_projected_positions_section(
+        self,
+        *,
+        sections_payload: CoreSnapshotSections,
+        requested_sections: list[CoreSnapshotSection],
+        projected_positions: dict[str, dict[str, Any]] | None,
+        projected_total: Decimal,
+    ) -> None:
+        if CoreSnapshotSection.POSITIONS_PROJECTED not in requested_sections:
+            return
+        if projected_positions is None:
+            raise CoreSnapshotUnavailableSectionError("positions_projected unavailable")
+        self._assign_projected_weights(projected_positions, projected_total)
+        sections_payload.positions_projected = [
+            item["position_record"] for item in projected_positions.values()
+        ]
+
+    def _populate_delta_section(
+        self,
+        *,
+        sections_payload: CoreSnapshotSections,
+        requested_sections: list[CoreSnapshotSection],
+        baseline_positions: dict[str, dict[str, Any]],
+        projected_positions: dict[str, dict[str, Any]] | None,
+        baseline_total: Decimal,
+        projected_total: Decimal,
+    ) -> None:
+        if CoreSnapshotSection.POSITIONS_DELTA not in requested_sections:
+            return
+        if projected_positions is None:
+            raise CoreSnapshotUnavailableSectionError("positions_delta unavailable")
+        sections_payload.positions_delta = self._build_delta_section(
+            baseline_positions=baseline_positions,
+            projected_positions=projected_positions,
+            baseline_total=baseline_total,
+            projected_total=projected_total,
+        )
+
+    @staticmethod
+    def _populate_portfolio_totals_section(
+        *,
+        sections_payload: CoreSnapshotSections,
+        requested_sections: list[CoreSnapshotSection],
+        baseline_total: Decimal,
+        projected_positions: dict[str, dict[str, Any]] | None,
+        projected_total: Decimal,
+    ) -> None:
+        if CoreSnapshotSection.PORTFOLIO_TOTALS not in requested_sections:
+            return
+        sections_payload.portfolio_totals = CoreSnapshotPortfolioTotals(
+            baseline_total_market_value_base=baseline_total,
+            projected_total_market_value_base=(
+                projected_total if projected_positions is not None else None
+            ),
+            delta_total_market_value_base=(
+                projected_total - baseline_total if projected_positions is not None else None
+            ),
+        )
+
+    def _populate_instrument_enrichment_section(
+        self,
+        *,
+        sections_payload: CoreSnapshotSections,
+        requested_sections: list[CoreSnapshotSection],
+        baseline_positions: dict[str, dict[str, Any]],
+    ) -> None:
+        if CoreSnapshotSection.INSTRUMENT_ENRICHMENT not in requested_sections:
+            return
+        sections_payload.instrument_enrichment = [
+            self._core_snapshot_instrument_enrichment(item) for item in baseline_positions.values()
+        ]
+
+    @staticmethod
+    def _core_snapshot_instrument_enrichment(
+        item: dict[str, Any],
+    ) -> CoreSnapshotInstrumentEnrichmentRecord:
+        return CoreSnapshotInstrumentEnrichmentRecord(
+            security_id=item["security_id"],
+            isin=item["isin"],
+            asset_class=item["asset_class"],
+            sector=item["sector"],
+            country_of_risk=item["country_of_risk"],
+            instrument_name=item["instrument_name"],
+            issuer_id=item["issuer_id"],
+            issuer_name=item["issuer_name"],
+            ultimate_parent_issuer_id=item["ultimate_parent_issuer_id"],
+            ultimate_parent_issuer_name=item["ultimate_parent_issuer_name"],
+            liquidity_tier=item["liquidity_tier"],
+        )
+
+    @staticmethod
+    def _snapshot_governance_resolution(
+        *,
+        request: CoreSnapshotRequest,
+        governance: SnapshotGovernanceContext | None,
+    ) -> _CoreSnapshotGovernanceResolution:
+        if governance is not None:
+            return _CoreSnapshotGovernanceResolution(
+                requested_sections=governance.requested_sections,
+                applied_sections=governance.applied_sections,
+                dropped_sections=governance.dropped_sections,
+                policy_provenance=CoreSnapshotPolicyProvenance(
+                    policy_version=governance.policy_version,
+                    policy_source=governance.policy_source,
+                    matched_rule_id=governance.matched_rule_id,
+                    strict_mode=governance.strict_mode,
                 ),
-                delta_total_market_value_base=(
-                    projected_total - baseline_total if projected_positions is not None else None
-                ),
+                warnings=governance.warnings,
+                consumer_system=governance.consumer_system,
+                tenant_id=governance.tenant_id,
             )
-
-        if CoreSnapshotSection.INSTRUMENT_ENRICHMENT in request.sections:
-            sections_payload.instrument_enrichment = [
-                CoreSnapshotInstrumentEnrichmentRecord(
-                    security_id=item["security_id"],
-                    isin=item["isin"],
-                    asset_class=item["asset_class"],
-                    sector=item["sector"],
-                    country_of_risk=item["country_of_risk"],
-                    instrument_name=item["instrument_name"],
-                    issuer_id=item["issuer_id"],
-                    issuer_name=item["issuer_name"],
-                    ultimate_parent_issuer_id=item["ultimate_parent_issuer_id"],
-                    ultimate_parent_issuer_name=item["ultimate_parent_issuer_name"],
-                    liquidity_tier=item["liquidity_tier"],
-                )
-                for item in baseline_positions.values()
-            ]
-
-        requested_sections = (
-            governance.requested_sections if governance is not None else list(request.sections)
-        )
-        applied_sections = (
-            governance.applied_sections if governance is not None else list(request.sections)
-        )
-        dropped_sections = governance.dropped_sections if governance is not None else []
-        policy_provenance = CoreSnapshotPolicyProvenance(
-            policy_version=(
-                governance.policy_version
-                if governance is not None
-                else "snapshot.policy.inline.default"
+        return _CoreSnapshotGovernanceResolution(
+            requested_sections=list(request.sections),
+            applied_sections=list(request.sections),
+            dropped_sections=[],
+            policy_provenance=CoreSnapshotPolicyProvenance(
+                policy_version="snapshot.policy.inline.default",
+                policy_source="snapshot.inline.default",
+                matched_rule_id="snapshot.default",
+                strict_mode=False,
             ),
-            policy_source=(
-                governance.policy_source if governance is not None else "snapshot.inline.default"
-            ),
-            matched_rule_id=(
-                governance.matched_rule_id if governance is not None else "snapshot.default"
-            ),
-            strict_mode=governance.strict_mode if governance is not None else False,
-        )
-        warnings = governance.warnings if governance is not None else []
-        request_fingerprint = self._request_fingerprint(
-            {
-                "portfolio_id": portfolio_id,
-                "request": request.model_dump(mode="json"),
-                "governance": {
-                    "consumer_system": (
-                        governance.consumer_system
-                        if governance is not None
-                        else request.consumer_system
-                    ),
-                    "tenant_id": (
-                        governance.tenant_id if governance is not None else request.tenant_id
-                    ),
-                    "requested_sections": [section.value for section in requested_sections],
-                    "applied_sections": [section.value for section in applied_sections],
-                    "dropped_sections": [section.value for section in dropped_sections],
-                    "policy_version": policy_provenance.policy_version,
-                    "policy_source": policy_provenance.policy_source,
-                    "matched_rule_id": policy_provenance.matched_rule_id,
-                    "strict_mode": policy_provenance.strict_mode,
-                    "warnings": warnings,
-                },
-            }
+            warnings=[],
+            consumer_system=request.consumer_system,
+            tenant_id=request.tenant_id,
         )
 
+    def _build_core_snapshot_response(
+        self,
+        *,
+        portfolio_id: str,
+        request: CoreSnapshotRequest,
+        currency_context: _CoreSnapshotCurrencyContext,
+        freshness: CoreSnapshotFreshnessMetadata,
+        governance: _CoreSnapshotGovernanceResolution,
+        simulation_metadata: CoreSnapshotSimulationMetadata | None,
+        sections: CoreSnapshotSections,
+        baseline_count: int,
+    ) -> CoreSnapshotResponse:
         generated_at = datetime.now(UTC)
-        resolved_tenant_id = governance.tenant_id if governance is not None else request.tenant_id
-
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
             snapshot_mode=request.snapshot_mode,
             contract_version="rfc_081_v1",
-            request_fingerprint=request_fingerprint,
-            freshness=freshness_meta,
+            request_fingerprint=self._core_snapshot_request_fingerprint(
+                portfolio_id=portfolio_id,
+                request=request,
+                governance=governance,
+            ),
+            freshness=freshness,
             governance=CoreSnapshotGovernanceMetadata(
-                consumer_system=(
-                    governance.consumer_system
-                    if governance is not None
-                    else request.consumer_system
-                ),
-                tenant_id=governance.tenant_id if governance is not None else request.tenant_id,
-                requested_sections=requested_sections,
-                applied_sections=applied_sections,
-                dropped_sections=dropped_sections,
-                policy_provenance=policy_provenance,
-                warnings=warnings,
+                consumer_system=governance.consumer_system,
+                tenant_id=governance.tenant_id,
+                requested_sections=governance.requested_sections,
+                applied_sections=governance.applied_sections,
+                dropped_sections=governance.dropped_sections,
+                policy_provenance=governance.policy_provenance,
+                warnings=governance.warnings,
             ),
             valuation_context=CoreSnapshotValuationContext(
-                portfolio_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
+                portfolio_currency=currency_context.portfolio_currency,
+                reporting_currency=currency_context.reporting_currency,
                 position_basis=request.options.position_basis,
                 weight_basis=request.options.weight_basis,
             ),
             simulation=simulation_metadata,
-            sections=sections_payload,
+            sections=sections,
             **source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
-                tenant_id=resolved_tenant_id,
+                tenant_id=governance.tenant_id,
                 data_quality_status=self._snapshot_data_quality_status(
-                    freshness=freshness_meta,
-                    baseline_count=len(baseline_positions),
+                    freshness=freshness,
+                    baseline_count=baseline_count,
                 ),
-                latest_evidence_timestamp=freshness_meta.snapshot_timestamp,
-                policy_version=policy_provenance.policy_version,
+                latest_evidence_timestamp=freshness.snapshot_timestamp,
+                policy_version=governance.policy_provenance.policy_version,
             ),
+        )
+
+    def _core_snapshot_request_fingerprint(
+        self,
+        *,
+        portfolio_id: str,
+        request: CoreSnapshotRequest,
+        governance: _CoreSnapshotGovernanceResolution,
+    ) -> str:
+        return self._request_fingerprint(
+            {
+                "portfolio_id": portfolio_id,
+                "request": request.model_dump(mode="json"),
+                "governance": {
+                    "consumer_system": governance.consumer_system,
+                    "tenant_id": governance.tenant_id,
+                    "requested_sections": [
+                        section.value for section in governance.requested_sections
+                    ],
+                    "applied_sections": [section.value for section in governance.applied_sections],
+                    "dropped_sections": [section.value for section in governance.dropped_sections],
+                    "policy_version": governance.policy_provenance.policy_version,
+                    "policy_source": governance.policy_provenance.policy_source,
+                    "matched_rule_id": governance.policy_provenance.matched_rule_id,
+                    "strict_mode": governance.policy_provenance.strict_mode,
+                    "warnings": governance.warnings,
+                },
+            }
         )
 
     async def _resolve_baseline_positions(

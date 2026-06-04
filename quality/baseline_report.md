@@ -350,3 +350,10 @@ helpers inside `analytics_timeseries_service.py`. `get_position_timeseries` now 
 instead of `E (37)` under Radon cyclomatic complexity, and the extracted row-assembly helpers all
 report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 7.
+
+CR-900 reduced core snapshot orchestration complexity by extracting currency context resolution,
+simulation projection/session validation, section population, governance resolution,
+fingerprinting, and response construction helpers inside `core_snapshot_service.py`.
+`get_core_snapshot` now reports `A (4)` instead of `E (39)` under Radon cyclomatic complexity, and
+the newly extracted orchestration helpers all report A-ranked complexity. `core_snapshot_service.py`
+still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.

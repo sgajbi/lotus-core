@@ -208,3 +208,9 @@ health before that claim is defensible.
     inside `analytics_timeseries_service.py`. The former E-ranked `get_position_timeseries`
     method now reports `C (15)` instead of `E (37)`, but `analytics_timeseries_service.py`
     remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.
+56. Reduced core snapshot orchestration complexity by extracting currency context resolution,
+    simulation projection/session validation, section population, governance resolution,
+    fingerprinting, and response construction helpers inside `core_snapshot_service.py`. The
+    former E-ranked `get_core_snapshot` method now reports `A (4)` instead of `E (39)`, but
+    `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot count
+    remains 7.
