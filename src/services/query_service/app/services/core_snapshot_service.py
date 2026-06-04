@@ -109,6 +109,13 @@ class _BaselinePositionRows:
     use_snapshot: bool
 
 
+@dataclass(frozen=True)
+class _DeltaPositionValues:
+    quantity: Decimal
+    market_value_base: Decimal
+    weight: Decimal
+
+
 class CoreSnapshotService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -1220,38 +1227,77 @@ class CoreSnapshotService:
         baseline_total: Decimal,
         projected_total: Decimal,
     ) -> list[CoreSnapshotDeltaRecord]:
-        all_ids = sorted(set(baseline_positions.keys()) | set(projected_positions.keys()))
-        rows: list[CoreSnapshotDeltaRecord] = []
-        for security_id in all_ids:
-            baseline = baseline_positions.get(security_id)
-            projected = projected_positions.get(security_id)
-            baseline_qty = baseline["quantity"] if baseline else Decimal(0)
-            projected_qty = projected["quantity"] if projected else Decimal(0)
-            baseline_mv = baseline["market_value_base"] if baseline else Decimal(0)
-            projected_mv = projected["market_value_base"] if projected else Decimal(0)
-            baseline_weight = (
-                (baseline_mv / baseline_total)
-                if baseline_total > 0 and baseline is not None
-                else Decimal(0)
+        return [
+            CoreSnapshotService._delta_record(
+                security_id=security_id,
+                baseline=CoreSnapshotService._delta_position_values(
+                    position=baseline_positions.get(security_id),
+                    total=baseline_total,
+                ),
+                projected=CoreSnapshotService._delta_position_values(
+                    position=projected_positions.get(security_id),
+                    total=projected_total,
+                ),
             )
-            projected_weight = (
-                (projected_mv / projected_total)
-                if projected_total > 0 and projected is not None
-                else Decimal(0)
+            for security_id in CoreSnapshotService._delta_security_ids(
+                baseline_positions=baseline_positions,
+                projected_positions=projected_positions,
             )
-            rows.append(
-                CoreSnapshotDeltaRecord(
-                    security_id=security_id,
-                    baseline_quantity=baseline_qty,
-                    projected_quantity=projected_qty,
-                    delta_quantity=projected_qty - baseline_qty,
-                    baseline_market_value_base=baseline_mv,
-                    projected_market_value_base=projected_mv,
-                    delta_market_value_base=projected_mv - baseline_mv,
-                    delta_weight=projected_weight - baseline_weight,
-                )
+        ]
+
+    @staticmethod
+    def _delta_security_ids(
+        *,
+        baseline_positions: dict[str, dict[str, Any]],
+        projected_positions: dict[str, dict[str, Any]],
+    ) -> list[str]:
+        return sorted(set(baseline_positions) | set(projected_positions))
+
+    @staticmethod
+    def _delta_position_values(
+        *,
+        position: dict[str, Any] | None,
+        total: Decimal,
+    ) -> _DeltaPositionValues:
+        if position is None:
+            return _DeltaPositionValues(
+                quantity=Decimal(0),
+                market_value_base=Decimal(0),
+                weight=Decimal(0),
             )
-        return rows
+        market_value_base = position["market_value_base"]
+        return _DeltaPositionValues(
+            quantity=position["quantity"],
+            market_value_base=market_value_base,
+            weight=CoreSnapshotService._delta_weight(
+                market_value_base=market_value_base,
+                total=total,
+            ),
+        )
+
+    @staticmethod
+    def _delta_weight(*, market_value_base: Decimal, total: Decimal) -> Decimal:
+        if total <= 0:
+            return Decimal(0)
+        return market_value_base / total
+
+    @staticmethod
+    def _delta_record(
+        *,
+        security_id: str,
+        baseline: _DeltaPositionValues,
+        projected: _DeltaPositionValues,
+    ) -> CoreSnapshotDeltaRecord:
+        return CoreSnapshotDeltaRecord(
+            security_id=security_id,
+            baseline_quantity=baseline.quantity,
+            projected_quantity=projected.quantity,
+            delta_quantity=projected.quantity - baseline.quantity,
+            baseline_market_value_base=baseline.market_value_base,
+            projected_market_value_base=projected.market_value_base,
+            delta_market_value_base=projected.market_value_base - baseline.market_value_base,
+            delta_weight=projected.weight - baseline.weight,
+        )
 
 
 def get_core_snapshot_service(

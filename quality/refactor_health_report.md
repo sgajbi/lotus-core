@@ -239,3 +239,8 @@ health before that claim is defensible.
     `_validated_simulation_session` method now reports `A (1)` instead of `B (6)`, but
     `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot count
     remains 7.
+61. Reduced core snapshot delta-section complexity by extracting delta security-id selection,
+    delta value extraction, weight calculation, and record construction helpers inside
+    `core_snapshot_service.py`. The former B-ranked `_build_delta_section` method now reports
+    `A (2)` instead of `B (10)`, but `core_snapshot_service.py` remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.

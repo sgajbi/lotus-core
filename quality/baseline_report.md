@@ -388,3 +388,10 @@ helpers inside `core_snapshot_service.py`. `_validated_simulation_session` now r
 instead of `B (6)` under Radon cyclomatic complexity, and the extracted simulation-validation
 helpers report A-ranked complexity. `core_snapshot_service.py` still reports `C (0.00)` under
 Radon maintainability, so the C-hotspot count remains 7.
+
+CR-905 reduced core snapshot delta-section complexity by extracting delta security-id selection,
+delta value extraction, weight calculation, and record construction helpers inside
+`core_snapshot_service.py`. `_build_delta_section` now reports `A (2)` instead of `B (10)` under
+Radon cyclomatic complexity, and the extracted delta-section helpers report A-ranked complexity.
+`core_snapshot_service.py` still reports `C (0.00)` under Radon maintainability, so the C-hotspot
+count remains 7.
