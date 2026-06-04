@@ -1081,35 +1081,47 @@ class CoreSnapshotService:
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
     ) -> list[InstrumentEnrichmentRecord]:
+        requested_ids = self._requested_instrument_security_ids(security_ids)
+        by_security_id = await self._instrument_enrichment_map(requested_ids)
+        return [
+            self._instrument_enrichment_record(
+                security_id=security_id,
+                instrument=by_security_id.get(security_id),
+            )
+            for security_id in requested_ids
+        ]
+
+    @staticmethod
+    def _requested_instrument_security_ids(security_ids: list[str]) -> list[str]:
         requested_ids = [value.strip() for value in security_ids if value and value.strip()]
         if not requested_ids:
             raise CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
+        return requested_ids
 
-        instruments = await self.instrument_repo.get_by_security_ids(requested_ids)
-        by_security_id = {
+    async def _instrument_enrichment_map(self, security_ids: list[str]) -> dict[str, Any]:
+        instruments = await self.instrument_repo.get_by_security_ids(security_ids)
+        return {
             security_id: item
             for item in instruments
             if (security_id := normalize_security_id(item.security_id))
         }
 
-        records: list[InstrumentEnrichmentRecord] = []
-        for security_id in requested_ids:
-            instrument = by_security_id.get(security_id)
-            records.append(
-                InstrumentEnrichmentRecord(
-                    security_id=security_id,
-                    issuer_id=(instrument.issuer_id if instrument else None),
-                    issuer_name=(instrument.issuer_name if instrument else None),
-                    ultimate_parent_issuer_id=(
-                        instrument.ultimate_parent_issuer_id if instrument else None
-                    ),
-                    ultimate_parent_issuer_name=(
-                        instrument.ultimate_parent_issuer_name if instrument else None
-                    ),
-                    liquidity_tier=(instrument.liquidity_tier if instrument else None),
-                )
-            )
-        return records
+    @staticmethod
+    def _instrument_enrichment_record(
+        *,
+        security_id: str,
+        instrument: Any,
+    ) -> InstrumentEnrichmentRecord:
+        if instrument is None:
+            return InstrumentEnrichmentRecord(security_id=security_id)
+        return InstrumentEnrichmentRecord(
+            security_id=security_id,
+            issuer_id=instrument.issuer_id,
+            issuer_name=instrument.issuer_name,
+            ultimate_parent_issuer_id=instrument.ultimate_parent_issuer_id,
+            ultimate_parent_issuer_name=instrument.ultimate_parent_issuer_name,
+            liquidity_tier=instrument.liquidity_tier,
+        )
 
     async def _get_fx_rate_or_raise(
         self, from_currency: str, to_currency: str, as_of_date

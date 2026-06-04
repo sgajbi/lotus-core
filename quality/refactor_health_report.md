@@ -227,3 +227,9 @@ health before that claim is defensible.
     reports `A (3)` instead of `D (28)`, removing the remaining D-ranked method from the module,
     but `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot
     count remains 7.
+59. Reduced core snapshot instrument-enrichment complexity by extracting request identifier
+    normalization, enrichment lookup-map construction, and per-security DTO mapping helpers inside
+    `core_snapshot_service.py`. The former C-ranked `get_instrument_enrichment_bulk` method now
+    reports `A (2)` instead of `C (13)`, removing the remaining C-ranked method from the module,
+    but `core_snapshot_service.py` remains a C-ranked maintainability hotspot and the C-hotspot
+    count remains 7.

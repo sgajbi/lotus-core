@@ -373,3 +373,11 @@ instrument/no-instrument payload construction, and freshness metadata helpers in
 under Radon cyclomatic complexity, and the extracted baseline-position helpers report A-ranked
 complexity. This removes the remaining D-ranked method from `core_snapshot_service.py`, but the
 module still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-903 reduced core snapshot instrument-enrichment complexity by extracting request identifier
+normalization, enrichment lookup-map construction, and per-security DTO mapping helpers inside
+`core_snapshot_service.py`. `get_instrument_enrichment_bulk` now reports `A (2)` instead of
+`C (13)` under Radon cyclomatic complexity, and the extracted instrument-enrichment helpers report
+A-ranked complexity. This removes the remaining C-ranked method from `core_snapshot_service.py`,
+but the module still reports `C (0.00)` under Radon maintainability, so the C-hotspot count
+remains 7.
