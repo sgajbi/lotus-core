@@ -785,3 +785,9 @@ compatibility assignments from `reference_data_dto.py`. The extracted module rep
 maintainability. `reference_data_dto.py` shrank from 1,511 SLOC to 1,376 SLOC and improved from
 `C (1.05)` to `C (6.43)`, but remains an active C-ranked maintainability hotspot requiring
 additional DTO-family extractions.
+
+CR-961 reduced reference-data instrument eligibility DTO coupling by extracting the instrument
+eligibility profile DTO family into `reference_data_instrument_eligibility_dto.py`, with
+compatibility assignments from `reference_data_dto.py`. The extracted module reports `A (40.98)`
+maintainability. `reference_data_dto.py` shrank from 1,376 SLOC to 1,282 SLOC and improved from
+`C (6.43)` to `B (9.31)`, removing it from the active non-generated C-ranked source hotspot list.

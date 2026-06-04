@@ -537,8 +537,7 @@ health before that claim is defensible.
      original module. The extracted modules report `A (41.20)` and `A (42.75)` maintainability.
      `reference_integration_dto.py` shrank from 2,922 SLOC to 2,639 SLOC and improved from
      `C (6.70)` to `B (11.49)`, removing it from the active non-generated C-ranked source hotspot
-     list. Active non-generated C-ranked source hotspots are now limited to `reference_data_dto.py`
-     and `ingestion_job_service.py`.
+     list at that checkpoint. The remaining hotspot list has continued to narrow in later slices.
 109. Reduced ingestion job record-status coupling by extracting failed-record-key normalization
      and endpoint-specific replayable-key extraction into `ingestion_record_status.py`.
      `get_job_record_status` improved from `C (20)` to `A (4)`, while the helper module reports
@@ -579,3 +578,9 @@ health before that claim is defensible.
      compatibility assignments from the original module. The extracted module reports `A (32.04)`
      maintainability. `reference_data_dto.py` shrank from 1,511 SLOC to 1,376 SLOC and improved
      from `C (1.05)` to `C (6.43)`, but remains a C-ranked maintainability hotspot.
+117. Reduced reference-data instrument eligibility DTO coupling by extracting the DPM instrument
+     eligibility profile DTO family into `reference_data_instrument_eligibility_dto.py`, with
+     compatibility assignments from the original module. The extracted module reports `A (40.98)`
+     maintainability. `reference_data_dto.py` shrank from 1,376 SLOC to 1,282 SLOC and improved
+     from `C (6.43)` to `B (9.31)`, removing it from the active non-generated C-ranked source
+     hotspot list.

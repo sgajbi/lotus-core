@@ -8,6 +8,7 @@ from portfolio_common.currency_codes import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator, model_validator
 
 from . import reference_data_client_preference_dto as _client_preference_dto
+from . import reference_data_instrument_eligibility_dto as _instrument_eligibility_dto
 from . import reference_data_tax_dto as _tax_dto
 
 ClientRestrictionProfileIngestionRequest = (
@@ -22,6 +23,10 @@ ClientTaxProfileIngestionRequest = _tax_dto.ClientTaxProfileIngestionRequest
 ClientTaxProfileRecord = _tax_dto.ClientTaxProfileRecord
 ClientTaxRuleSetIngestionRequest = _tax_dto.ClientTaxRuleSetIngestionRequest
 ClientTaxRuleSetRecord = _tax_dto.ClientTaxRuleSetRecord
+InstrumentEligibilityProfileIngestionRequest = (
+    _instrument_eligibility_dto.InstrumentEligibilityProfileIngestionRequest
+)
+InstrumentEligibilityProfileRecord = _instrument_eligibility_dto.InstrumentEligibilityProfileRecord
 
 
 class PortfolioBenchmarkAssignmentRecord(BaseModel):
@@ -333,93 +338,6 @@ class PlannedWithdrawalScheduleRecord(BaseModel):
     @classmethod
     def _normalize_currency(cls, value: object) -> str:
         return normalize_currency_code(value)
-
-    model_config = ConfigDict()
-
-
-class InstrumentEligibilityProfileRecord(BaseModel):
-    security_id: str = Field(
-        ..., description="Canonical instrument/security identifier.", examples=["AAPL"]
-    )
-    eligibility_status: Literal["APPROVED", "RESTRICTED", "SELL_ONLY", "BANNED", "UNKNOWN"] = Field(
-        ..., description="DPM eligibility status for this instrument.", examples=["APPROVED"]
-    )
-    product_shelf_status: Literal["APPROVED", "RESTRICTED", "SELL_ONLY", "BANNED", "SUSPENDED"] = (
-        Field(..., description="Product shelf status used by DPM execution.", examples=["APPROVED"])
-    )
-    buy_allowed: bool = Field(
-        ..., description="Whether DPM may create buy orders for this instrument.", examples=[True]
-    )
-    sell_allowed: bool = Field(
-        ..., description="Whether DPM may create sell orders for this instrument.", examples=[True]
-    )
-    restriction_reason_codes: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Bounded restriction codes. Sensitive free-text rationale is not returned by the "
-            "DPM API."
-        ),
-        examples=[["PRIVATE_ASSET_REVIEW"]],
-    )
-    restriction_rationale: str | None = Field(
-        None,
-        description="Operator-only source rationale retained for audit; not exposed downstream.",
-        examples=["Investment office review required before new buys."],
-    )
-    settlement_days: int = Field(
-        ..., description="Expected settlement cycle in business days.", ge=0, examples=[2]
-    )
-    settlement_calendar_id: str = Field(
-        ..., description="Settlement calendar identifier.", examples=["US_NYSE"]
-    )
-    liquidity_tier: Literal["L1", "L2", "L3", "L4", "L5"] | None = Field(
-        None, description="Liquidity tier used by DPM controls.", examples=["L1"]
-    )
-    issuer_id: str | None = Field(None, description="Direct issuer identifier.", examples=["APPLE"])
-    issuer_name: str | None = Field(
-        None, description="Direct issuer name.", examples=["Apple Inc."]
-    )
-    ultimate_parent_issuer_id: str | None = Field(
-        None, description="Ultimate parent issuer identifier.", examples=["APPLE_PARENT"]
-    )
-    ultimate_parent_issuer_name: str | None = Field(
-        None, description="Ultimate parent issuer name.", examples=["Apple Inc."]
-    )
-    asset_class: str | None = Field(None, description="Asset class label.", examples=["Equity"])
-    country_of_risk: str | None = Field(None, description="Country of risk.", examples=["US"])
-    effective_from: date = Field(
-        ..., description="Eligibility effective start date.", examples=["2026-04-01"]
-    )
-    effective_to: date | None = Field(
-        None, description="Eligibility effective end date, null when open-ended.", examples=None
-    )
-    eligibility_version: int = Field(
-        1, description="Eligibility version used for effective-date tie-breaks.", ge=1
-    )
-    source_system: str | None = Field(
-        None, description="Upstream shelf/compliance source system.", examples=["product_shelf"]
-    )
-    source_record_id: str | None = Field(
-        None, description="Source record identifier for replay.", examples=["AAPL-elig-20260401"]
-    )
-    observed_at: datetime | None = Field(
-        None, description="Timestamp when the source observed or published this profile."
-    )
-    quality_status: str = Field(
-        "accepted",
-        description="Data quality status for the eligibility profile.",
-        examples=["accepted"],
-    )
-
-    @model_validator(mode="after")
-    def validate_effective_window(self) -> "InstrumentEligibilityProfileRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        if self.product_shelf_status in {"BANNED", "SUSPENDED"} and self.buy_allowed:
-            raise ValueError("buy_allowed must be false for banned or suspended instruments")
-        if self.product_shelf_status == "BANNED" and self.sell_allowed:
-            raise ValueError("sell_allowed must be false for banned instruments")
-        return self
 
     model_config = ConfigDict()
 
@@ -1205,26 +1123,6 @@ class PlannedWithdrawalScheduleIngestionRequest(BaseModel):
         ]
         if len(keys) != len(set(keys)):
             raise ValueError("planned_withdrawal_schedules contains duplicate effective records")
-        return self
-
-    model_config = ConfigDict()
-
-
-class InstrumentEligibilityProfileIngestionRequest(BaseModel):
-    eligibility_profiles: list[InstrumentEligibilityProfileRecord] = Field(
-        ...,
-        description="Effective-dated instrument eligibility profiles to ingest or upsert.",
-        min_length=1,
-    )
-
-    @model_validator(mode="after")
-    def validate_profile_uniqueness(self) -> "InstrumentEligibilityProfileIngestionRequest":
-        keys = [
-            (profile.security_id, profile.effective_from, profile.eligibility_version)
-            for profile in self.eligibility_profiles
-        ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("eligibility_profiles contains duplicate effective records")
         return self
 
     model_config = ConfigDict()
