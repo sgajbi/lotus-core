@@ -621,3 +621,11 @@ and analytics-export health result shaping into `operations_health_queries.py`. 
 reports `A (49.26)` maintainability and A-ranked helper complexity. `operations_repository.py`
 shrank from 2,684 SLOC to 2,522 SLOC, but remains `C (0.00)` under Radon maintainability and needs
 additional focused extractions before it can leave the active C-ranked hotspot list.
+
+CR-938 reduced operations repository missing-historical-FX diagnostic coupling by extracting the
+base transaction query, aggregate missing-count and transaction-date range query, deterministic
+sample query, sample-record normalization, and summary DTO construction into
+`operations_missing_fx_queries.py`. The helper module reports `A (55.27)` maintainability and
+A-ranked helper complexity. `operations_repository.py` shrank from 2,522 SLOC to 2,456 SLOC, but
+remains `C (0.00)` under Radon maintainability and needs additional focused extractions before it
+can leave the active C-ranked hotspot list.
