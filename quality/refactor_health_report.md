@@ -524,3 +524,9 @@ health before that claim is defensible.
      module reports `A (35.77)` maintainability. `reference_integration_dto.py` shrank from
      3,264 SLOC to 3,078 SLOC and improved from `C (1.33)` to `C (4.62)`, but remains a C-ranked
      maintainability hotspot.
+107. Reduced query-service reference integration DTO coupling by extracting the portfolio tax-lot
+     window DTO family into `reference_integration_portfolio_tax_lot_dto.py`, with compatibility
+     re-exports from the original module after shared paging DTOs are defined. The extracted
+     module reports `A (41.65)` maintainability. `reference_integration_dto.py` shrank from
+     3,078 SLOC to 2,922 SLOC and improved from `C (4.62)` to `C (6.70)`, but remains a C-ranked
+     maintainability hotspot.

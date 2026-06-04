@@ -29,3 +29,6 @@ Status: Initial scorecard baseline on 2026-06-02.
 - CR-950 extracted A-ranked `reference_integration_market_data_coverage_dto.py`, reducing
   `reference_integration_dto.py` from 3,264 SLOC to 3,078 SLOC and improving it from `C (1.33)`
   to `C (4.62)`. The module remains an active C-ranked hotspot.
+- CR-951 extracted A-ranked `reference_integration_portfolio_tax_lot_dto.py`, reducing
+  `reference_integration_dto.py` from 3,078 SLOC to 2,922 SLOC and improving it from `C (4.62)`
+  to `C (6.70)`. The module remains an active C-ranked hotspot.
