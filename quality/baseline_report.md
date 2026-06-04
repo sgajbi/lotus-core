@@ -238,3 +238,11 @@ example/description inference into `portfolio_common.openapi_examples`. `openapi
 reports `A (25.84)` and the new helper module reports `B (17.56)` under
 `python -m radon mi src\libs\portfolio-common\portfolio_common\openapi_enrichment.py src\libs\portfolio-common\portfolio_common\openapi_examples.py -s`.
 The current C-ranked maintainability list no longer includes `openapi_enrichment.py`.
+
+CR-884 reduced reference-data coverage calculation debt by extracting pure benchmark and risk-free
+coverage helpers into `reference_coverage_calculations.py`. `get_benchmark_coverage` now reports
+`A (4)` instead of `C (11)` under Radon cyclomatic complexity, and
+`reference_data_repository.py` improved from `C (4.26)` to `C (6.94)` under Radon
+maintainability. The new helper module reports `A (50.34)`. This does not remove
+`reference_data_repository.py` from the current C-ranked maintainability list; the C-hotspot count
+remains 8.

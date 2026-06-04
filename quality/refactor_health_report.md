@@ -136,3 +136,7 @@ health before that claim is defensible.
 39. Reduced shared OpenAPI enrichment maintainability debt by extracting reusable schema
     example/description inference into `portfolio_common.openapi_examples`. `openapi_enrichment.py`
     now reports A-ranked maintainability and no longer appears in the current C-hotspot list.
+40. Reduced reference-data coverage calculation debt by extracting benchmark and risk-free
+    coverage calculations into `reference_coverage_calculations.py`. `get_benchmark_coverage` is
+    now A-ranked for complexity, and `reference_data_repository.py` improved from `C (4.26)` to
+    `C (6.94)`, but it remains a C-ranked maintainability hotspot.

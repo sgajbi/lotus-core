@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -29,15 +29,17 @@ from portfolio_common.database_models import (
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
-from portfolio_common.market_reference_quality import (
-    quality_status_summary_key,
-)
 from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..services.decimal_amounts import decimal_or_none
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
+from .reference_coverage_calculations import (
+    latest_reference_evidence_timestamp,
+    observed_benchmark_coverage_dates,
+    quality_status_counts,
+)
 
 
 def _effective_filter(
@@ -49,16 +51,6 @@ def _effective_filter(
         effective_from_column <= as_of_date,
         or_(effective_to_column.is_(None), effective_to_column >= as_of_date),
     )
-
-
-def _latest_reference_evidence_timestamp(rows: list[Any]) -> datetime | None:
-    timestamps: list[datetime] = []
-    for row in rows:
-        for field_name in ("observed_at", "source_timestamp", "updated_at", "created_at"):
-            value = getattr(row, field_name, None)
-            if isinstance(value, datetime):
-                timestamps.append(value)
-    return max(timestamps) if timestamps else None
 
 
 def _normalize_reference_status(status: str) -> str:
@@ -1249,53 +1241,24 @@ class ReferenceDataRepository:
             start_date,
             end_date,
         )
-        total_points = len(price_points) + len(benchmark_returns)
-        quality_counts: dict[str, int] = defaultdict(int)
-        for row in price_points:
-            quality_counts[quality_status_summary_key(row.quality_status)] += 1
-        for row in benchmark_returns:
-            quality_counts[quality_status_summary_key(row.quality_status)] += 1
-
-        price_index_ids_by_date: dict[date, set[str]] = defaultdict(set)
-        for row in price_points:
-            price_index_ids_by_date[row.series_date].add(row.index_id)
-
-        benchmark_return_dates = {row.series_date for row in benchmark_returns}
-        candidate_dates = sorted(benchmark_return_dates & set(price_index_ids_by_date))
-
-        def active_component_index_ids(current_date: date) -> set[str]:
-            active_index_ids: set[str] = set()
-            for component in components:
-                component_start = max(
-                    getattr(component, "composition_effective_from", start_date),
-                    start_date,
-                )
-                component_end = min(
-                    getattr(component, "composition_effective_to", None) or end_date,
-                    end_date,
-                )
-                if component_start <= current_date <= component_end:
-                    active_index_ids.add(component.index_id)
-            return active_index_ids
-
-        observed_dates = sorted(
-            current_date
-            for current_date in candidate_dates
-            if (required_index_ids := active_component_index_ids(current_date))
-            and required_index_ids.issubset(price_index_ids_by_date.get(current_date, set()))
+        observed_dates = observed_benchmark_coverage_dates(
+            components=components,
+            price_points=price_points,
+            benchmark_returns=benchmark_returns,
+            start_date=start_date,
+            end_date=end_date,
         )
-
+        total_points = len(price_points) + len(benchmark_returns)
         observed_start = min(observed_dates) if observed_dates else None
         observed_end = max(observed_dates) if observed_dates else None
+        coverage_rows = price_points + benchmark_returns
         return {
             "total_points": total_points,
             "observed_start_date": observed_start,
             "observed_end_date": observed_end,
             "observed_dates": observed_dates,
-            "quality_status_counts": dict(quality_counts),
-            "latest_evidence_timestamp": _latest_reference_evidence_timestamp(
-                price_points + benchmark_returns
-            ),
+            "quality_status_counts": quality_status_counts(coverage_rows),
+            "latest_evidence_timestamp": latest_reference_evidence_timestamp(coverage_rows),
         }
 
     async def get_risk_free_coverage(
@@ -1306,18 +1269,15 @@ class ReferenceDataRepository:
     ) -> dict[str, Any]:
         points = await self.list_risk_free_series(currency, start_date, end_date)
         all_dates = [row.series_date for row in points]
-        quality_counts: dict[str, int] = defaultdict(int)
-        for row in points:
-            quality_counts[quality_status_summary_key(row.quality_status)] += 1
         observed_start = min(all_dates) if all_dates else None
         observed_end = max(all_dates) if all_dates else None
         return {
             "total_points": len(points),
             "observed_start_date": observed_start,
             "observed_end_date": observed_end,
-            "quality_status_counts": dict(quality_counts),
+            "quality_status_counts": quality_status_counts(points),
             "observed_dates": all_dates,
-            "latest_evidence_timestamp": _latest_reference_evidence_timestamp(points),
+            "latest_evidence_timestamp": latest_reference_evidence_timestamp(points),
         }
 
     async def get_fx_rates(
