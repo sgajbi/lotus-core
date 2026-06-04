@@ -539,3 +539,8 @@ health before that claim is defensible.
      `C (6.70)` to `B (11.49)`, removing it from the active non-generated C-ranked source hotspot
      list. Active non-generated C-ranked source hotspots are now limited to `reference_data_dto.py`
      and `ingestion_job_service.py`.
+109. Reduced ingestion job record-status coupling by extracting failed-record-key normalization
+     and endpoint-specific replayable-key extraction into `ingestion_record_status.py`.
+     `get_job_record_status` improved from `C (20)` to `A (4)`, while the helper module reports
+     `A (59.21)` maintainability. `ingestion_job_service.py` shrank from 1,656 SLOC to 1,633 SLOC
+     and remains a C-ranked maintainability hotspot requiring additional focused extractions.

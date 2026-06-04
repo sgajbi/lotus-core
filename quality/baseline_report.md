@@ -736,3 +736,9 @@ eligibility and DPM source-readiness DTO families into
 original module. The extracted modules report `A (41.20)` and `A (42.75)` maintainability.
 `reference_integration_dto.py` shrank from 2,922 SLOC to 2,639 SLOC and improved from `C (6.70)`
 to `B (11.49)`, removing it from the active non-generated C-ranked source hotspot list.
+
+CR-953 reduced ingestion job record-status coupling by extracting failed-record-key normalization
+and endpoint-specific replayable-key extraction into `ingestion_record_status.py`.
+`get_job_record_status` improved from `C (20)` to `A (4)`, while the helper module reports
+`A (59.21)` maintainability. `ingestion_job_service.py` shrank from 1,656 SLOC to 1,633 SLOC and
+remains a C-ranked maintainability hotspot requiring additional focused extractions.

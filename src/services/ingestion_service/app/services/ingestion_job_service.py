@@ -56,6 +56,10 @@ from ..DTOs.ingestion_job_dto import (
     IngestionStalledJobResponse,
 )
 from ..settings import get_ingestion_service_settings
+from .ingestion_record_status import (
+    failed_record_keys_from_failures,
+    replayable_record_keys_from_payload,
+)
 
 _SETTINGS = get_ingestion_service_settings()
 _RUNTIME_POLICY = _SETTINGS.runtime_policy
@@ -1422,45 +1426,17 @@ class IngestionJobService:
                 )
             ).all()
 
-            failed_keys: set[str] = set()
-            for failure in failures:
-                for item in list(failure.failed_record_keys or []):
-                    if isinstance(item, str):
-                        failed_keys.add(item)
-
             payload = row.request_payload if isinstance(row.request_payload, dict) else {}
-            replayable_keys: list[str] = []
-            if row.endpoint == "/ingest/transactions":
-                replayable_keys = [
-                    str(item.get("transaction_id"))
-                    for item in payload.get("transactions", [])
-                    if item.get("transaction_id")
-                ]
-            elif row.endpoint == "/ingest/portfolios":
-                replayable_keys = [
-                    str(item.get("portfolio_id"))
-                    for item in payload.get("portfolios", [])
-                    if item.get("portfolio_id")
-                ]
-            elif row.endpoint == "/ingest/instruments":
-                replayable_keys = [
-                    str(item.get("security_id"))
-                    for item in payload.get("instruments", [])
-                    if item.get("security_id")
-                ]
-            elif row.endpoint == "/ingest/business-dates":
-                replayable_keys = [
-                    str(item.get("business_date"))
-                    for item in payload.get("business_dates", [])
-                    if item.get("business_date")
-                ]
 
             return IngestionJobRecordStatusResponse(
                 job_id=row.job_id,
                 entity_type=row.entity_type,
                 accepted_count=row.accepted_count,
-                failed_record_keys=sorted(failed_keys),
-                replayable_record_keys=replayable_keys,
+                failed_record_keys=failed_record_keys_from_failures(list(failures)),
+                replayable_record_keys=replayable_record_keys_from_payload(
+                    endpoint=row.endpoint,
+                    payload=payload,
+                ),
             )
         return None
 

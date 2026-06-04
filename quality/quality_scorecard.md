@@ -36,3 +36,7 @@ Status: Initial scorecard baseline on 2026-06-02.
   `reference_integration_dpm_source_readiness_dto.py`, reducing `reference_integration_dto.py`
   from 2,922 SLOC to 2,639 SLOC and improving it from `C (6.70)` to `B (11.49)`. This removes
   `reference_integration_dto.py` from the active non-generated C-ranked source hotspot list.
+- CR-953 extracted A-ranked `ingestion_record_status.py`, reducing
+  `IngestionJobService.get_job_record_status` from `C (20)` to `A (4)` and shrinking
+  `ingestion_job_service.py` from 1,656 SLOC to 1,633 SLOC. The service remains an active C-ranked
+  maintainability hotspot requiring additional focused extractions.
