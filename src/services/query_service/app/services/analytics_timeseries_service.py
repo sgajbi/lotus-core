@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from time import perf_counter
 from uuid import uuid4
@@ -56,6 +56,11 @@ from .analytics_export_jobs import (
     normalize_analytics_export_job_status,
     record_analytics_export_result_metrics,
     reused_analytics_export_job_response,
+)
+from .analytics_export_lifecycle import (
+    export_job_is_completed,
+    export_job_is_fresh,
+    export_job_is_inflight,
 )
 from .analytics_export_ndjson import AnalyticsExportNdjsonError, analytics_export_ndjson_result
 from .analytics_fx_rates import (
@@ -1252,10 +1257,13 @@ class AnalyticsTimeseriesService:
                 dataset_type=request.dataset_type,
             )
             if existing is not None:
-                if self._export_job_is_completed(existing):
+                if export_job_is_completed(existing):
                     return existing, True
-                if self._export_job_is_inflight(existing):
-                    if self._export_job_is_fresh(existing):
+                if export_job_is_inflight(existing):
+                    if export_job_is_fresh(
+                        existing,
+                        timeout_minutes=self._analytics_export_stale_timeout_minutes,
+                    ):
                         return existing, True
                     await self.export_repo.mark_failed(
                         existing,
@@ -1272,18 +1280,6 @@ class AnalyticsTimeseriesService:
                 compression=request.compression,
             )
             return row, False
-
-    def _export_job_is_completed(self, row: object) -> bool:
-        return normalize_analytics_export_job_status(row.status) == "completed"
-
-    def _export_job_is_inflight(self, row: object) -> bool:
-        return normalize_analytics_export_job_status(row.status) in {"accepted", "running"}
-
-    def _export_job_is_fresh(self, row: object) -> bool:
-        return row.updated_at is not None and row.updated_at >= self._export_job_stale_threshold()
-
-    def _export_job_stale_threshold(self) -> datetime:
-        return datetime.now(UTC) - timedelta(minutes=self._analytics_export_stale_timeout_minutes)
 
     async def _mark_export_job_running(self, job_id: str) -> object:
         async with self.db.begin():
