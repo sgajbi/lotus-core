@@ -809,3 +809,9 @@ enforcement into `ingestion_retry_guardrails.py`. `assert_retry_allowed_for_reco
 `B (9)` to `A (1)`, while the helper module reports `A (59.19)` maintainability.
 `ingestion_job_service.py` shrank from 1,207 SLOC to 1,200 SLOC and improved from `C (8.17)` to
 `B (9.82)`, clearing the active non-generated C-ranked source hotspot list.
+
+CR-965 reduced ingestion reprocessing queue-health coupling by extracting SQL aggregation and
+queue response assembly into `ingestion_reprocessing_queue_health.py`.
+`get_reprocessing_queue_health` improved from `B (7)` to `A (1)`, while the helper module reports
+`A (51.01)` maintainability. `ingestion_job_service.py` shrank from 1,200 SLOC to 1,137 SLOC and
+improved from `B (9.82)` to `B (11.79)`.
