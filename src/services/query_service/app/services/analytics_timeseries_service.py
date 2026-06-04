@@ -1637,16 +1637,30 @@ class AnalyticsTimeseriesService:
     @staticmethod
     def _jsonable(value: object) -> object:
         if isinstance(value, Decimal):
-            return str(value)
+            return AnalyticsTimeseriesService._jsonable_decimal(value)
         if isinstance(value, (date, datetime)):
-            return value.isoformat()
+            return AnalyticsTimeseriesService._jsonable_temporal(value)
         if isinstance(value, list):
-            return [AnalyticsTimeseriesService._jsonable(item) for item in value]
+            return AnalyticsTimeseriesService._jsonable_list(value)
         if isinstance(value, dict):
-            return {
-                str(key): AnalyticsTimeseriesService._jsonable(item) for key, item in value.items()
-            }
+            return AnalyticsTimeseriesService._jsonable_dict(value)
         return value
+
+    @staticmethod
+    def _jsonable_decimal(value: Decimal) -> str:
+        return str(value)
+
+    @staticmethod
+    def _jsonable_temporal(value: date | datetime) -> str:
+        return value.isoformat()
+
+    @staticmethod
+    def _jsonable_list(value: list[object]) -> list[object]:
+        return [AnalyticsTimeseriesService._jsonable(item) for item in value]
+
+    @staticmethod
+    def _jsonable_dict(value: dict[object, object]) -> dict[str, object]:
+        return {str(key): AnalyticsTimeseriesService._jsonable(item) for key, item in value.items()}
 
     async def _reserve_export_job(
         self,

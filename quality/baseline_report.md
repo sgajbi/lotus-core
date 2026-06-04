@@ -465,3 +465,9 @@ freshness, and stale-threshold policy helpers inside `analytics_timeseries_servi
 `_reserve_export_job` now reports `A (5)` instead of `B (6)` under Radon cyclomatic complexity, and
 the extracted export reservation helpers report A-ranked complexity. `analytics_timeseries_service.py`
 still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-916 reduced analytics export JSON serialization complexity by extracting Decimal, temporal,
+list, and dictionary JSON conversion helpers inside `analytics_timeseries_service.py`. `_jsonable`
+now reports `A (5)` instead of `B (7)` under Radon cyclomatic complexity, and the extracted export
+serialization helpers report A-ranked complexity. `analytics_timeseries_service.py` still reports
+`C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.

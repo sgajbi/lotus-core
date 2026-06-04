@@ -299,3 +299,8 @@ health before that claim is defensible.
     former B-ranked `_reserve_export_job` method now reports `A (5)` instead of `B (6)`, but
     `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
     C-hotspot count remains 7.
+72. Reduced analytics export JSON serialization complexity by extracting Decimal, temporal, list,
+    and dictionary JSON conversion helpers inside `analytics_timeseries_service.py`. The former
+    B-ranked `_jsonable` helper now reports `A (5)` instead of `B (7)`, but
+    `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
+    C-hotspot count remains 7.
