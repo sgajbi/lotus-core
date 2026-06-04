@@ -489,3 +489,9 @@ health before that claim is defensible.
      maintainability and A-ranked helper complexity. `operations_repository.py` shrank from 1,596
      SLOC to 1,538 SLOC and improved from `C (0.00)` to `C (0.21)`, but remains a C-ranked
      maintainability hotspot.
+102. Reduced operations repository reprocessing scope coupling by extracting reprocessing status
+     normalization, stale-key priority ordering, reset-watermark job portfolio eligibility, payload
+     expression extraction, key filtering, and job filtering into `operations_reprocessing_queries.py`.
+     The helper module reports `A (43.47)` maintainability and A-ranked helper complexity.
+     `operations_repository.py` shrank from 1,538 SLOC to 1,403 SLOC and improved from
+     `C (0.21)` to `C (4.42)`, but remains a C-ranked maintainability hotspot.

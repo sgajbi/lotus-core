@@ -681,3 +681,10 @@ business-date filtering, and composed stage-scope helpers into
 `operations_portfolio_control_queries.py`. The helper module reports `A (53.89)` maintainability
 and A-ranked helper complexity. `operations_repository.py` shrank from 1,596 SLOC to 1,538 SLOC
 and improved from `C (0.00)` to `C (0.21)`, but remains a C-ranked maintainability hotspot.
+
+CR-946 reduced operations repository reprocessing scope coupling by extracting reprocessing status
+normalization, stale-key priority ordering, reset-watermark job portfolio eligibility, payload
+expression extraction, key filtering, and job filtering into `operations_reprocessing_queries.py`.
+The helper module reports `A (43.47)` maintainability and A-ranked helper complexity.
+`operations_repository.py` shrank from 1,538 SLOC to 1,403 SLOC and improved from `C (0.21)` to
+`C (4.42)`, but remains a C-ranked maintainability hotspot.

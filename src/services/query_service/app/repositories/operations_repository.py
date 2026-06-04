@@ -16,7 +16,7 @@ from portfolio_common.database_models import (
     PositionState,
     ReprocessingJob,
 )
-from sqlalchemy import Date, and_, case, cast, func, or_, select, true
+from sqlalchemy import and_, case, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -60,7 +60,6 @@ from .operations_models import (
     MissingHistoricalFxDependencySummary,
     ReconciliationFindingSummary,
     ReprocessingHealthSummary,
-    ResetWatermarkReprocessingJobScope,
     SnapshotValuationCoverageSummary,
 )
 from .operations_portfolio_control_queries import (
@@ -78,6 +77,12 @@ from .operations_reconciliation_run_queries import (
     apply_reconciliation_run_scope,
     reconciliation_run_priority,
 )
+from .operations_reprocessing_queries import (
+    apply_reprocessing_job_scope,
+    apply_reprocessing_key_scope,
+    reprocessing_key_priority,
+    reset_watermark_reprocessing_job_scope,
+)
 from .operations_support_job_queries import (
     apply_aggregation_job_scope,
     apply_valuation_job_scope,
@@ -90,10 +95,6 @@ class OperationsRepository:
 
     @staticmethod
     def _support_job_status_filter(status_column, status: str):
-        return status_column == status.strip().upper()
-
-    @staticmethod
-    def _reprocessing_status_filter(status_column, status: str):
         return status_column == status.strip().upper()
 
     @staticmethod
@@ -175,62 +176,6 @@ class OperationsRepository:
         )
 
     @staticmethod
-    def _reprocessing_job_portfolio_scope_exists(
-        portfolio_id: str,
-        security_id_expr,
-        impacted_date_expr,
-    ):
-        position_state_security_id = OperationsRepository._security_id_expr(
-            PositionState.security_id
-        )
-        position_history_security_id = OperationsRepository._security_id_expr(
-            PositionHistory.security_id
-        )
-        latest_history = select(
-            PositionHistory.quantity.label("quantity"),
-            func.row_number()
-            .over(
-                partition_by=PositionHistory.portfolio_id,
-                order_by=[PositionHistory.position_date.desc(), PositionHistory.id.desc()],
-            )
-            .label("rn"),
-        )
-        latest_history = apply_current_position_history_scope(
-            latest_history,
-            portfolio_id=portfolio_id,
-            position_history_security_id=position_history_security_id,
-            position_state_security_id=position_state_security_id,
-            normalized_security_id=security_id_expr,
-            history_date_on_or_before=impacted_date_expr,
-        )
-        latest_history = latest_history.correlate(ReprocessingJob).subquery()
-
-        return (
-            select(1)
-            .select_from(latest_history)
-            .where(latest_history.c.rn == 1, latest_history.c.quantity > 0)
-            .exists()
-        )
-
-    @staticmethod
-    def _reset_watermark_reprocessing_job_scope(
-        portfolio_id: str,
-    ) -> ResetWatermarkReprocessingJobScope:
-        security_id_expr = func.trim(ReprocessingJob.payload["security_id"].as_string())
-        impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
-        impacted_date_cast = cast(impacted_date_expr, Date)
-        portfolio_scope_exists = OperationsRepository._reprocessing_job_portfolio_scope_exists(
-            portfolio_id=portfolio_id,
-            security_id_expr=security_id_expr,
-            impacted_date_expr=impacted_date_cast,
-        )
-        return ResetWatermarkReprocessingJobScope(
-            security_id_expr=security_id_expr,
-            impacted_date_expr=impacted_date_expr,
-            portfolio_scope_exists=portfolio_scope_exists,
-        )
-
-    @staticmethod
     def _support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
         governed_status = status_column
         return case(
@@ -264,95 +209,6 @@ class OperationsRepository:
             stmt = stmt.where(finding_security_id == normalized_security_id)
         if transaction_id:
             stmt = stmt.where(FinancialReconciliationFinding.transaction_id == transaction_id)
-        return stmt
-
-    @staticmethod
-    def _reprocessing_key_priority(status_column, updated_at_column, stale_threshold: datetime):
-        governed_status = status_column
-        return case(
-            (
-                and_(governed_status == "REPROCESSING", updated_at_column < stale_threshold),
-                0,
-            ),
-            (governed_status == "REPROCESSING", 1),
-            else_=9,
-        )
-
-    @staticmethod
-    def _apply_reprocessing_job_identity_scope(
-        stmt,
-        *,
-        job_id: Optional[int],
-        correlation_id: Optional[str],
-    ):
-        if job_id is not None:
-            stmt = stmt.where(ReprocessingJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(ReprocessingJob.correlation_id == correlation_id)
-        return stmt
-
-    @staticmethod
-    def _apply_reprocessing_job_security_scope(
-        stmt,
-        *,
-        reset_scope: ResetWatermarkReprocessingJobScope,
-        normalized_security_id: Optional[str],
-    ):
-        if normalized_security_id:
-            stmt = stmt.where(reset_scope.security_id_expr == normalized_security_id)
-        return stmt
-
-    def _apply_reprocessing_key_scope(
-        self,
-        stmt,
-        *,
-        portfolio_id: str,
-        status: Optional[str] = None,
-        normalized_security_id: Optional[str] = None,
-        watermark_date: Optional[date] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(PositionState.portfolio_id == portfolio_id)
-        if as_of is not None:
-            stmt = stmt.where(PositionState.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._reprocessing_status_filter(PositionState.status, status))
-        if normalized_security_id:
-            state_security_id = self._security_id_expr(PositionState.security_id)
-            stmt = stmt.where(state_security_id == normalized_security_id)
-        if watermark_date:
-            stmt = stmt.where(PositionState.watermark_date == watermark_date)
-        return stmt
-
-    def _apply_reprocessing_job_scope(
-        self,
-        stmt,
-        *,
-        reset_scope: ResetWatermarkReprocessingJobScope,
-        status: Optional[str] = None,
-        normalized_security_id: Optional[str] = None,
-        job_id: Optional[int] = None,
-        correlation_id: Optional[str] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(
-            ReprocessingJob.job_type == "RESET_WATERMARKS",
-            reset_scope.portfolio_scope_exists,
-        )
-        if as_of is not None:
-            stmt = stmt.where(ReprocessingJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._support_job_status_filter(ReprocessingJob.status, status))
-        stmt = self._apply_reprocessing_job_security_scope(
-            stmt,
-            reset_scope=reset_scope,
-            normalized_security_id=normalized_security_id,
-        )
-        stmt = self._apply_reprocessing_job_identity_scope(
-            stmt,
-            job_id=job_id,
-            correlation_id=correlation_id,
-        )
         return stmt
 
     async def _get_support_job_health_summary(
@@ -455,7 +311,7 @@ class OperationsRepository:
     async def get_current_portfolio_epoch(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[int]:
-        stmt = self._apply_reprocessing_key_scope(
+        stmt = apply_reprocessing_key_scope(
             select(func.max(PositionState.epoch)),
             portfolio_id=portfolio_id,
             as_of=as_of,
@@ -477,7 +333,7 @@ class OperationsRepository:
             self._security_id_expr(PositionState.security_id).label("security_id"),
             PositionState.epoch.label("epoch"),
         )
-        base_stmt = self._apply_reprocessing_key_scope(
+        base_stmt = apply_reprocessing_key_scope(
             base_stmt,
             portfolio_id=portfolio_id,
             as_of=as_of,
@@ -855,7 +711,7 @@ class OperationsRepository:
         normalized_security_id = normalize_security_id(security_id)
         if not normalized_security_id:
             return None
-        stmt = self._apply_reprocessing_key_scope(
+        stmt = apply_reprocessing_key_scope(
             select(PositionState),
             portfolio_id=portfolio_id,
             normalized_security_id=normalized_security_id,
@@ -940,7 +796,7 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        stmt = self._apply_reprocessing_key_scope(
+        stmt = apply_reprocessing_key_scope(
             select(func.count()).select_from(PositionState),
             portfolio_id=portfolio_id,
             status=reprocessing_status,
@@ -1002,7 +858,7 @@ class OperationsRepository:
             latest_daily_snapshot_date=latest_daily_snapshot_date,
             latest_valuation_job=latest_valuation_job,
         )
-        stmt = self._apply_reprocessing_key_scope(
+        stmt = apply_reprocessing_key_scope(
             stmt,
             portfolio_id=portfolio_id,
             status=reprocessing_status,
@@ -1468,7 +1324,7 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        stmt = self._apply_reprocessing_key_scope(
+        stmt = apply_reprocessing_key_scope(
             select(func.count()).select_from(PositionState),
             portfolio_id=portfolio_id,
             status=status,
@@ -1498,7 +1354,7 @@ class OperationsRepository:
         state_security_id = self._security_id_expr(PositionState.security_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = self._apply_reprocessing_key_scope(
+        stmt = apply_reprocessing_key_scope(
             select(PositionState),
             portfolio_id=portfolio_id,
             status=status,
@@ -1508,7 +1364,7 @@ class OperationsRepository:
         )
         stmt = (
             stmt.order_by(
-                self._reprocessing_key_priority(
+                reprocessing_key_priority(
                     PositionState.status,
                     PositionState.updated_at,
                     stale_threshold,
@@ -1535,8 +1391,8 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        reset_scope = self._reset_watermark_reprocessing_job_scope(portfolio_id)
-        stmt = self._apply_reprocessing_job_scope(
+        reset_scope = reset_watermark_reprocessing_job_scope(portfolio_id)
+        stmt = apply_reprocessing_job_scope(
             select(func.count()).select_from(ReprocessingJob),
             reset_scope=reset_scope,
             status=status,
@@ -1565,10 +1421,10 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        reset_scope = self._reset_watermark_reprocessing_job_scope(portfolio_id)
+        reset_scope = reset_watermark_reprocessing_job_scope(portfolio_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = self._apply_reprocessing_job_scope(
+        stmt = apply_reprocessing_job_scope(
             select(
                 ReprocessingJob.id,
                 ReprocessingJob.job_type,
