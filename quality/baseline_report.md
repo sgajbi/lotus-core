@@ -225,3 +225,10 @@ and the focused cost-consumer suite reports `26 passed`. Repository-wide Xenon c
 enforcement remains report-only because
 `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py` remains a D-ranked
 module.
+
+CR-882 reduced the final current Xenon blocker by extracting pure helper boundaries inside
+`fx_linkage.py`. `enrich_fx_transaction_metadata` now reports `B (7)` under
+`python -m radon cc src\libs\portfolio-common\portfolio_common\transaction_domain\fx_linkage.py -s`,
+and the focused FX linkage suite reports `5 passed`. `make quality-complexity-gate` now runs
+`python -m xenon --max-absolute E --max-modules C --max-average A src` cleanly and is enforced in
+the quality-baseline workflow.

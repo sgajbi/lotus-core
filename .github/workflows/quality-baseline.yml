@@ -154,6 +154,21 @@ jobs:
       - name: Maintainability gate
         run: python scripts/maintainability_gate.py src
 
+  complexity-gate:
+    name: Quality Baseline / Complexity Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install Xenon
+        run: python -m pip install xenon
+      - name: Complexity gate
+        run: python -m xenon --max-absolute E --max-modules C --max-average A src
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest

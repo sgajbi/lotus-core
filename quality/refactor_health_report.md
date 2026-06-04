@@ -15,7 +15,7 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, and maintainability gates while other baseline checks remain report-only |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, and complexity gates while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
@@ -24,7 +24,7 @@ tested modules.
 | Production-source dead-code baseline | Clean and enforced | `make quality-vulture-source-gate` reports no high-confidence Vulture findings under production `src` after CR-876 |
 | Dependency-usage baseline | Clean and enforced | `make quality-deptry-source-gate` reports no production-source dependency issues after CR-878 |
 | Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; existing C hotspots remain tracked |
-| Complexity baseline | Improving but not enforceable | CR-880 reduced advisory proposal simulation from F to B and CR-881 reduced the cost-calculator consumer from F to C; Xenon still reports `fx_linkage.py` as a D-ranked module |
+| Complexity baseline | Clean and enforced | CR-880 reduced advisory proposal simulation from F to B, CR-881 reduced the cost-calculator consumer from F to C, and CR-882 reduced FX linkage from D to B; `make quality-complexity-gate` now passes |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
 
@@ -123,9 +123,13 @@ health before that claim is defensible.
     current C-hotspot baseline for focused follow-up refactors.
 36. Reduced advisory proposal simulation complexity by extracting validation, cash-flow, shelf,
     funding, reconciliation, analytics, suitability, and workflow-gate helpers. The former
-    F-ranked `run_proposal_simulation` block is now B-ranked under Radon, while the broader Xenon
-    gate remains blocked by the cost-calculator consumer and `fx_linkage.py`.
+    F-ranked `run_proposal_simulation` block is now B-ranked under Radon. At that point, the
+    broader Xenon gate remained blocked by the cost-calculator consumer and `fx_linkage.py`.
 37. Reduced cost-calculator consumer complexity by extracting transaction preparation,
     cost-engine processing, persistence, cash-leg validation, bundle-A diagnostics, and outbox
-    emission helpers. The former F-ranked `process_message` block is now C-ranked, leaving
-    `fx_linkage.py` as the remaining D-ranked Xenon blocker.
+    emission helpers. The former F-ranked `process_message` block is now C-ranked. At that point,
+    `fx_linkage.py` was the remaining D-ranked Xenon blocker.
+38. Reduced FX linkage complexity by extracting economic-event linkage, swap group, contract id,
+    cash-leg role, contract-instrument routing, and contract lifecycle helpers. The former D-ranked
+    `fx_linkage.py` module now passes the broad Xenon threshold, enabling the enforced
+    `quality-complexity-gate`.
