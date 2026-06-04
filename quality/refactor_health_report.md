@@ -419,3 +419,11 @@ health before that claim is defensible.
     `B (12.41)`, removing it from the active C-ranked maintainability hotspot list. The generated
     `query_service/build` copy remains separate generated-surface debt and is not changed by this
     slice.
+92. Reduced reference-data repository query-helper coupling by extracting effective-window
+    filtering, reference status normalization, canonical series ranking, latest-effective row
+    ranking, DPM mandate binding ranking, model portfolio target ranking, and instrument
+    eligibility ranking into `reference_data_query_helpers.py`. The helper module reports
+    `A (61.46)` maintainability and A-ranked helper complexity. `reference_data_repository.py`
+    shrank from 1,278 SLOC to 1,163 SLOC and improved from `C (8.74)` to `B (9.24)`, removing it
+    from the active C-ranked maintainability hotspot list. The generated `query_service/build`
+    copy remains separate generated-surface debt and is not changed by this slice.

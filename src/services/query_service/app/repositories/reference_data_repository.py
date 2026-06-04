@@ -29,7 +29,7 @@ from portfolio_common.database_models import (
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..services.decimal_amounts import decimal_or_none
@@ -40,145 +40,17 @@ from .reference_coverage_calculations import (
     observed_benchmark_coverage_dates,
     quality_status_counts,
 )
+from .reference_data_query_helpers import (
+    canonical_series_ranked_subquery,
+    effective_filter,
+    normalize_reference_status,
+    ranked_instrument_eligibility_ids,
+    ranked_latest_effective_ids,
+    ranked_model_portfolio_target_ids,
+    ranked_portfolio_mandate_binding_ids,
+)
 from .reference_dpm_queries import dpm_portfolio_universe_stmt
 from .reference_fx_queries import latest_fx_rates_stmt, normalized_currency_pairs
-
-
-def _effective_filter(
-    effective_from_column: Any,
-    effective_to_column: Any,
-    as_of_date: date,
-):
-    return and_(
-        effective_from_column <= as_of_date,
-        or_(effective_to_column.is_(None), effective_to_column >= as_of_date),
-    )
-
-
-def _normalize_reference_status(status: str) -> str:
-    return status.strip().lower()
-
-
-def _canonical_series_ranked_subquery(model: Any, *partition_columns: Any, predicates: Any):
-    accepted_quality_rank = case(
-        (func.upper(func.trim(model.quality_status)) == "ACCEPTED", 1),
-        else_=0,
-    )
-    return (
-        select(
-            model.id.label("id"),
-            func.row_number()
-            .over(
-                partition_by=partition_columns,
-                order_by=(
-                    accepted_quality_rank.desc(),
-                    model.source_timestamp.desc().nullslast(),
-                    model.series_id.desc(),
-                    model.source_vendor.desc().nullslast(),
-                    model.source_record_id.desc().nullslast(),
-                    model.id.desc(),
-                ),
-            )
-            .label("rn"),
-        )
-        .where(*predicates)
-        .subquery()
-    )
-
-
-def _ranked_portfolio_mandate_binding_ids(*predicates: Any):
-    return (
-        select(
-            PortfolioMandateBinding.id.label("id"),
-            func.row_number()
-            .over(
-                partition_by=(
-                    PortfolioMandateBinding.portfolio_id,
-                    PortfolioMandateBinding.mandate_id,
-                ),
-                order_by=(
-                    PortfolioMandateBinding.effective_from.desc(),
-                    PortfolioMandateBinding.observed_at.desc().nullslast(),
-                    PortfolioMandateBinding.binding_version.desc(),
-                    PortfolioMandateBinding.updated_at.desc(),
-                    PortfolioMandateBinding.created_at.desc(),
-                    PortfolioMandateBinding.id.desc(),
-                ),
-            )
-            .label("rn"),
-        )
-        .where(*predicates)
-        .subquery()
-    )
-
-
-def _ranked_model_portfolio_target_ids(*predicates: Any):
-    return (
-        select(
-            ModelPortfolioTarget.id.label("id"),
-            func.row_number()
-            .over(
-                partition_by=(
-                    ModelPortfolioTarget.model_portfolio_id,
-                    ModelPortfolioTarget.model_portfolio_version,
-                    ModelPortfolioTarget.instrument_id,
-                ),
-                order_by=(
-                    ModelPortfolioTarget.effective_from.desc(),
-                    ModelPortfolioTarget.updated_at.desc(),
-                    ModelPortfolioTarget.created_at.desc(),
-                    ModelPortfolioTarget.id.desc(),
-                ),
-            )
-            .label("rn"),
-        )
-        .where(*predicates)
-        .subquery()
-    )
-
-
-def _ranked_instrument_eligibility_ids(security_id_expr: Any, *predicates: Any):
-    return (
-        select(
-            InstrumentEligibilityProfile.id.label("id"),
-            func.row_number()
-            .over(
-                partition_by=security_id_expr,
-                order_by=(
-                    InstrumentEligibilityProfile.effective_from.desc(),
-                    InstrumentEligibilityProfile.observed_at.desc().nullslast(),
-                    InstrumentEligibilityProfile.eligibility_version.desc(),
-                    InstrumentEligibilityProfile.updated_at.desc(),
-                    InstrumentEligibilityProfile.created_at.desc(),
-                    InstrumentEligibilityProfile.id.desc(),
-                ),
-            )
-            .label("rn"),
-        )
-        .where(*predicates)
-        .subquery()
-    )
-
-
-def _ranked_latest_effective_ids(
-    model: Any,
-    *partition_columns: Any,
-    predicates: list[Any],
-    order_by: tuple[Any, ...],
-):
-    return (
-        select(
-            model.id.label("id"),
-            func.row_number()
-            .over(
-                partition_by=partition_columns,
-                order_by=order_by,
-            )
-            .label("rn"),
-        )
-        .where(*predicates)
-        .subquery()
-    )
 
 
 class ReferenceDataRepository:
@@ -190,7 +62,7 @@ class ReferenceDataRepository:
             select(PortfolioBenchmarkAssignment)
             .where(
                 PortfolioBenchmarkAssignment.portfolio_id == portfolio_id,
-                _effective_filter(
+                effective_filter(
                     PortfolioBenchmarkAssignment.effective_from,
                     PortfolioBenchmarkAssignment.effective_to,
                     as_of_date,
@@ -216,7 +88,7 @@ class ReferenceDataRepository:
             .where(
                 ModelPortfolioDefinition.model_portfolio_id == model_portfolio_id,
                 ModelPortfolioDefinition.approval_status == "approved",
-                _effective_filter(
+                effective_filter(
                     ModelPortfolioDefinition.effective_from,
                     ModelPortfolioDefinition.effective_to,
                     as_of_date,
@@ -243,7 +115,7 @@ class ReferenceDataRepository:
         predicates = [
             ModelPortfolioTarget.model_portfolio_id == model_portfolio_id,
             ModelPortfolioTarget.model_portfolio_version == model_portfolio_version,
-            _effective_filter(
+            effective_filter(
                 ModelPortfolioTarget.effective_from,
                 ModelPortfolioTarget.effective_to,
                 as_of_date,
@@ -252,7 +124,7 @@ class ReferenceDataRepository:
         if not include_inactive_targets:
             predicates.append(ModelPortfolioTarget.target_status == "active")
 
-        ranked = _ranked_model_portfolio_target_ids(*predicates)
+        ranked = ranked_model_portfolio_target_ids(*predicates)
         stmt = (
             select(ModelPortfolioTarget)
             .join(ranked, ModelPortfolioTarget.id == ranked.c.id)
@@ -273,7 +145,7 @@ class ReferenceDataRepository:
         predicates = [
             PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
             PortfolioMandateBinding.mandate_type == "discretionary",
-            _effective_filter(
+            effective_filter(
                 PortfolioMandateBinding.effective_from,
                 PortfolioMandateBinding.effective_to,
                 as_of_date,
@@ -284,7 +156,7 @@ class ReferenceDataRepository:
         if not include_inactive_mandates:
             predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
 
-        ranked = _ranked_portfolio_mandate_binding_ids(*predicates)
+        ranked = ranked_portfolio_mandate_binding_ids(*predicates)
         stmt = (
             select(PortfolioMandateBinding)
             .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
@@ -331,7 +203,7 @@ class ReferenceDataRepository:
             .where(
                 PortfolioMandateBinding.portfolio_id == portfolio_id,
                 PortfolioMandateBinding.mandate_type == "discretionary",
-                _effective_filter(
+                effective_filter(
                     PortfolioMandateBinding.effective_from,
                     PortfolioMandateBinding.effective_to,
                     as_of_date,
@@ -364,7 +236,7 @@ class ReferenceDataRepository:
         predicates = [
             ClientRestrictionProfile.portfolio_id == portfolio_id,
             ClientRestrictionProfile.client_id == client_id,
-            _effective_filter(
+            effective_filter(
                 ClientRestrictionProfile.effective_from,
                 ClientRestrictionProfile.effective_to,
                 as_of_date,
@@ -380,7 +252,7 @@ class ReferenceDataRepository:
         if not include_inactive_restrictions:
             predicates.append(ClientRestrictionProfile.restriction_status == "active")
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             ClientRestrictionProfile,
             ClientRestrictionProfile.restriction_scope,
             ClientRestrictionProfile.restriction_code,
@@ -418,7 +290,7 @@ class ReferenceDataRepository:
         predicates = [
             SustainabilityPreferenceProfile.portfolio_id == portfolio_id,
             SustainabilityPreferenceProfile.client_id == client_id,
-            _effective_filter(
+            effective_filter(
                 SustainabilityPreferenceProfile.effective_from,
                 SustainabilityPreferenceProfile.effective_to,
                 as_of_date,
@@ -434,7 +306,7 @@ class ReferenceDataRepository:
         if not include_inactive_preferences:
             predicates.append(SustainabilityPreferenceProfile.preference_status == "active")
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             SustainabilityPreferenceProfile,
             SustainabilityPreferenceProfile.preference_framework,
             SustainabilityPreferenceProfile.preference_code,
@@ -472,7 +344,7 @@ class ReferenceDataRepository:
         predicates = [
             ClientTaxProfile.portfolio_id == portfolio_id,
             ClientTaxProfile.client_id == client_id,
-            _effective_filter(
+            effective_filter(
                 ClientTaxProfile.effective_from,
                 ClientTaxProfile.effective_to,
                 as_of_date,
@@ -488,7 +360,7 @@ class ReferenceDataRepository:
         if not include_inactive_profiles:
             predicates.append(ClientTaxProfile.profile_status == "active")
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             ClientTaxProfile,
             ClientTaxProfile.tax_profile_id,
             predicates=predicates,
@@ -522,7 +394,7 @@ class ReferenceDataRepository:
         predicates = [
             ClientTaxRuleSet.portfolio_id == portfolio_id,
             ClientTaxRuleSet.client_id == client_id,
-            _effective_filter(
+            effective_filter(
                 ClientTaxRuleSet.effective_from,
                 ClientTaxRuleSet.effective_to,
                 as_of_date,
@@ -538,7 +410,7 @@ class ReferenceDataRepository:
         if not include_inactive_rules:
             predicates.append(ClientTaxRuleSet.rule_status == "active")
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             ClientTaxRuleSet,
             ClientTaxRuleSet.rule_set_id,
             ClientTaxRuleSet.jurisdiction_code,
@@ -578,7 +450,7 @@ class ReferenceDataRepository:
         predicates = [
             ClientIncomeNeedsSchedule.portfolio_id == portfolio_id,
             ClientIncomeNeedsSchedule.client_id == client_id,
-            _effective_filter(
+            effective_filter(
                 ClientIncomeNeedsSchedule.start_date,
                 ClientIncomeNeedsSchedule.end_date,
                 as_of_date,
@@ -594,7 +466,7 @@ class ReferenceDataRepository:
         if not include_inactive_schedules:
             predicates.append(ClientIncomeNeedsSchedule.need_status == "active")
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             ClientIncomeNeedsSchedule,
             ClientIncomeNeedsSchedule.schedule_id,
             predicates=predicates,
@@ -627,7 +499,7 @@ class ReferenceDataRepository:
         predicates = [
             LiquidityReserveRequirement.portfolio_id == portfolio_id,
             LiquidityReserveRequirement.client_id == client_id,
-            _effective_filter(
+            effective_filter(
                 LiquidityReserveRequirement.effective_from,
                 LiquidityReserveRequirement.effective_to,
                 as_of_date,
@@ -643,7 +515,7 @@ class ReferenceDataRepository:
         if not include_inactive_requirements:
             predicates.append(LiquidityReserveRequirement.reserve_status == "active")
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             LiquidityReserveRequirement,
             LiquidityReserveRequirement.reserve_requirement_id,
             predicates=predicates,
@@ -692,7 +564,7 @@ class ReferenceDataRepository:
         if not include_inactive_withdrawals:
             predicates.append(PlannedWithdrawalSchedule.withdrawal_status == "active")
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             PlannedWithdrawalSchedule,
             PlannedWithdrawalSchedule.withdrawal_schedule_id,
             PlannedWithdrawalSchedule.scheduled_date,
@@ -731,13 +603,13 @@ class ReferenceDataRepository:
         security_id_expr = func.trim(InstrumentEligibilityProfile.security_id)
         predicates = (
             security_id_expr.in_(normalized_security_ids),
-            _effective_filter(
+            effective_filter(
                 InstrumentEligibilityProfile.effective_from,
                 InstrumentEligibilityProfile.effective_to,
                 as_of_date,
             ),
         )
-        ranked = _ranked_instrument_eligibility_ids(security_id_expr, *predicates)
+        ranked = ranked_instrument_eligibility_ids(security_id_expr, *predicates)
         stmt = (
             select(InstrumentEligibilityProfile)
             .join(ranked, InstrumentEligibilityProfile.id == ranked.c.id)
@@ -752,7 +624,7 @@ class ReferenceDataRepository:
             select(BenchmarkDefinition)
             .where(
                 BenchmarkDefinition.benchmark_id == benchmark_id,
-                _effective_filter(
+                effective_filter(
                     BenchmarkDefinition.effective_from,
                     BenchmarkDefinition.effective_to,
                     as_of_date,
@@ -793,7 +665,7 @@ class ReferenceDataRepository:
         benchmark_status: str | None = None,
     ) -> list[BenchmarkDefinition]:
         predicates = [
-            _effective_filter(
+            effective_filter(
                 BenchmarkDefinition.effective_from,
                 BenchmarkDefinition.effective_to,
                 as_of_date,
@@ -808,11 +680,10 @@ class ReferenceDataRepository:
             )
         if benchmark_status:
             predicates.append(
-                BenchmarkDefinition.benchmark_status
-                == _normalize_reference_status(benchmark_status)
+                BenchmarkDefinition.benchmark_status == normalize_reference_status(benchmark_status)
             )
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             BenchmarkDefinition,
             BenchmarkDefinition.benchmark_id,
             predicates=predicates,
@@ -842,7 +713,7 @@ class ReferenceDataRepository:
         index_status: str | None = None,
     ) -> list[IndexDefinition]:
         predicates = [
-            _effective_filter(
+            effective_filter(
                 IndexDefinition.effective_from,
                 IndexDefinition.effective_to,
                 as_of_date,
@@ -858,10 +729,10 @@ class ReferenceDataRepository:
             predicates.append(IndexDefinition.index_type == index_type)
         if index_status:
             predicates.append(
-                IndexDefinition.index_status == _normalize_reference_status(index_status)
+                IndexDefinition.index_status == normalize_reference_status(index_status)
             )
 
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             IndexDefinition,
             IndexDefinition.index_id,
             predicates=predicates,
@@ -889,13 +760,13 @@ class ReferenceDataRepository:
     ) -> list[BenchmarkCompositionSeries]:
         predicates = [
             BenchmarkCompositionSeries.benchmark_id == benchmark_id,
-            _effective_filter(
+            effective_filter(
                 BenchmarkCompositionSeries.composition_effective_from,
                 BenchmarkCompositionSeries.composition_effective_to,
                 as_of_date,
             ),
         ]
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             BenchmarkCompositionSeries,
             BenchmarkCompositionSeries.benchmark_id,
             BenchmarkCompositionSeries.index_id,
@@ -983,13 +854,13 @@ class ReferenceDataRepository:
 
         predicates = [
             BenchmarkCompositionSeries.benchmark_id.in_(benchmark_ids),
-            _effective_filter(
+            effective_filter(
                 BenchmarkCompositionSeries.composition_effective_from,
                 BenchmarkCompositionSeries.composition_effective_to,
                 as_of_date,
             ),
         ]
-        ranked = _ranked_latest_effective_ids(
+        ranked = ranked_latest_effective_ids(
             BenchmarkCompositionSeries,
             BenchmarkCompositionSeries.benchmark_id,
             BenchmarkCompositionSeries.index_id,
@@ -1030,7 +901,7 @@ class ReferenceDataRepository:
             IndexPriceSeries.series_date >= start_date,
             IndexPriceSeries.series_date <= end_date,
         )
-        ranked = _canonical_series_ranked_subquery(
+        ranked = canonical_series_ranked_subquery(
             IndexPriceSeries,
             IndexPriceSeries.index_id,
             IndexPriceSeries.series_date,
@@ -1058,7 +929,7 @@ class ReferenceDataRepository:
             IndexReturnSeries.series_date >= start_date,
             IndexReturnSeries.series_date <= end_date,
         )
-        ranked = _canonical_series_ranked_subquery(
+        ranked = canonical_series_ranked_subquery(
             IndexReturnSeries,
             IndexReturnSeries.index_id,
             IndexReturnSeries.series_date,
@@ -1084,7 +955,7 @@ class ReferenceDataRepository:
             BenchmarkReturnSeries.series_date >= start_date,
             BenchmarkReturnSeries.series_date <= end_date,
         )
-        ranked = _canonical_series_ranked_subquery(
+        ranked = canonical_series_ranked_subquery(
             BenchmarkReturnSeries,
             BenchmarkReturnSeries.benchmark_id,
             BenchmarkReturnSeries.series_date,
@@ -1107,7 +978,7 @@ class ReferenceDataRepository:
             IndexPriceSeries.series_date >= start_date,
             IndexPriceSeries.series_date <= end_date,
         )
-        ranked = _canonical_series_ranked_subquery(
+        ranked = canonical_series_ranked_subquery(
             IndexPriceSeries,
             IndexPriceSeries.index_id,
             IndexPriceSeries.series_date,
@@ -1130,7 +1001,7 @@ class ReferenceDataRepository:
             IndexReturnSeries.series_date >= start_date,
             IndexReturnSeries.series_date <= end_date,
         )
-        ranked = _canonical_series_ranked_subquery(
+        ranked = canonical_series_ranked_subquery(
             IndexReturnSeries,
             IndexReturnSeries.index_id,
             IndexReturnSeries.series_date,
@@ -1156,7 +1027,7 @@ class ReferenceDataRepository:
             RiskFreeSeries.series_date >= start_date,
             RiskFreeSeries.series_date <= end_date,
         )
-        ranked = _canonical_series_ranked_subquery(
+        ranked = canonical_series_ranked_subquery(
             RiskFreeSeries,
             RiskFreeSeries.series_date,
             predicates=predicates,
@@ -1176,7 +1047,7 @@ class ReferenceDataRepository:
         taxonomy_scope: str | None = None,
     ) -> list[ClassificationTaxonomy]:
         stmt = select(ClassificationTaxonomy).where(
-            _effective_filter(
+            effective_filter(
                 ClassificationTaxonomy.effective_from,
                 ClassificationTaxonomy.effective_to,
                 as_of_date,
