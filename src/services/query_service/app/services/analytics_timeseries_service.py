@@ -53,7 +53,6 @@ from .analytics_export_execution import (
 from .analytics_export_jobs import (
     analytics_export_job_response,
     analytics_export_result_payload,
-    normalize_analytics_export_job_status,
     record_analytics_export_result_metrics,
     reused_analytics_export_job_response,
 )
@@ -62,7 +61,11 @@ from .analytics_export_lifecycle import (
     export_job_is_fresh,
     export_job_is_inflight,
 )
-from .analytics_export_ndjson import AnalyticsExportNdjsonError, analytics_export_ndjson_result
+from .analytics_export_results import (
+    AnalyticsExportResultError,
+    analytics_export_json_result_response,
+    analytics_export_ndjson_result_response,
+)
 from .analytics_fx_rates import (
     AnalyticsFxRateError,
     get_portfolio_to_reporting_rates,
@@ -1436,14 +1439,10 @@ class AnalyticsTimeseriesService:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if normalize_analytics_export_job_status(row.status) != "completed":
-            raise AnalyticsInputError(
-                "UNSUPPORTED_CONFIGURATION",
-                "Export job is not completed yet; result unavailable.",
-            )
-        if not isinstance(row.result_payload, dict):
-            raise AnalyticsInputError("INSUFFICIENT_DATA", "Export job completed without payload.")
-        return AnalyticsExportJsonResultResponse(**row.result_payload)
+        try:
+            return analytics_export_json_result_response(row)
+        except AnalyticsExportResultError as exc:
+            raise AnalyticsInputError(exc.code, str(exc)) from exc
 
     async def get_export_result_ndjson(
         self, job_id: str, *, compression: str
@@ -1451,23 +1450,10 @@ class AnalyticsTimeseriesService:
         row = await self.export_repo.get_job(job_id)
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
-        if normalize_analytics_export_job_status(row.status) != "completed":
-            raise AnalyticsInputError(
-                "UNSUPPORTED_CONFIGURATION",
-                "Export job is not completed yet; result unavailable.",
-            )
-        if not isinstance(row.result_payload, dict):
-            raise AnalyticsInputError("INSUFFICIENT_DATA", "Export job completed without payload.")
         try:
-            result = analytics_export_ndjson_result(
-                job_id=row.job_id,
-                dataset_type=row.dataset_type,
-                result_payload=row.result_payload,
-                compression=compression,
-            )
-        except AnalyticsExportNdjsonError as exc:
-            raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
-        return (result.content, result.media_type, result.content_encoding)
+            return analytics_export_ndjson_result_response(row, compression=compression)
+        except AnalyticsExportResultError as exc:
+            raise AnalyticsInputError(exc.code, str(exc)) from exc
 
     async def _collect_portfolio_timeseries_for_export(
         self, *, portfolio_id: str, request: PortfolioAnalyticsTimeseriesRequest

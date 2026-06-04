@@ -380,3 +380,9 @@ health before that claim is defensible.
     The helper module reports `A (62.35)` maintainability and A-ranked helper complexity.
     `analytics_timeseries_service.py` remained 1,402 SLOC and improved from `C (5.40)` to
     `C (6.86)` under Radon maintainability, while the C-hotspot count remains 7.
+86. Reduced analytics export result coupling by extracting completed-result payload validation,
+    JSON result DTO construction, NDJSON result transport construction, and malformed-payload error
+    mapping into `analytics_export_results.py`. The helper module reports `A (62.17)`
+    maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from
+    1,402 SLOC to 1,388 SLOC and improved from `C (6.86)` to `C (7.80)` under Radon
+    maintainability, while the C-hotspot count remains 7.
