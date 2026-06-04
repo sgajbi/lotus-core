@@ -203,3 +203,8 @@ health before that claim is defensible.
     `operations_runtime_state.py`. `operations_service.py` improved from `C (5.44)` to
     `B (9.91)`, removing it from the current C-ranked maintainability hotspot list and reducing
     the C-hotspot count from 8 to 7.
+55. Reduced position-timeseries orchestration complexity by extracting page support-input reads,
+    page scope resolution, previous-EOD continuity inputs, row assembly, and FX-rate guard helpers
+    inside `analytics_timeseries_service.py`. The former E-ranked `get_position_timeseries`
+    method now reports `C (15)` instead of `E (37)`, but `analytics_timeseries_service.py`
+    remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.

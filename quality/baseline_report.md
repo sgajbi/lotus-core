@@ -343,3 +343,10 @@ Radon cyclomatic complexity. `operations_service.py` improved from `C (5.44)` to
 Radon maintainability, and the new runtime-state helper module reports `A (46.40)`. This removes
 `operations_service.py` from the current C-ranked maintainability list and reduces the C-hotspot
 count from 8 to 7.
+
+CR-899 reduced position-timeseries orchestration complexity by extracting page support-input reads,
+page scope resolution, previous-EOD continuity inputs, position row assembly, and FX-rate guard
+helpers inside `analytics_timeseries_service.py`. `get_position_timeseries` now reports `C (15)`
+instead of `E (37)` under Radon cyclomatic complexity, and the extracted row-assembly helpers all
+report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 7.
