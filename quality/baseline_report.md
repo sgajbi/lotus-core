@@ -492,3 +492,9 @@ signature comparison, blank-token handling, and malformed/signature error classi
 `analytics_page_tokens.py`. The helper module reports `A (59.76)` maintainability and A-ranked
 helper complexity. `analytics_timeseries_service.py` shrank from 1,770 SLOC to 1,751 SLOC, but
 still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-920 reduced analytics window policy coupling by extracting explicit-window bounding, supported
+period start lookup, inception clamping, and invalid-window/period classification into
+`analytics_windows.py`. The helper module reports `A (54.96)` maintainability and A-ranked helper
+complexity. `analytics_timeseries_service.py` shrank from 1,751 SLOC to 1,707 SLOC, but still
+reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
