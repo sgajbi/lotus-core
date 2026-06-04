@@ -259,3 +259,10 @@ attribute filters into named helpers. `_apply_reconciliation_run_scope` now repo
 of `C (11)` under Radon cyclomatic complexity, and the extracted reconciliation run scope helpers
 all report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 8.
+
+CR-887 reduced the valuation job filtering hotspot by splitting direct-lookup-aware actionable-job
+filtering, valuation attributes, and valuation identity filters into named helpers.
+`_apply_valuation_job_scope` now reports `A (3)` instead of `B (9)` under Radon cyclomatic
+complexity, and the extracted valuation scope helpers all report A-ranked complexity.
+`operations_repository.py` remains `C (0.00)` under Radon maintainability, so the C-hotspot count
+remains 8.

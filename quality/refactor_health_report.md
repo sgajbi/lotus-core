@@ -148,3 +148,7 @@ health before that claim is defensible.
     identity, and run-attribute filter helpers. The former C-ranked
     `_apply_reconciliation_run_scope` helper now reports A-ranked complexity, but
     `operations_repository.py` remains a C-ranked maintainability hotspot.
+43. Reduced valuation job operations repository scope complexity by extracting actionable-job,
+    valuation-attribute, and valuation-identity filter helpers. The former B-ranked
+    `_apply_valuation_job_scope` helper now reports A-ranked complexity, but
+    `operations_repository.py` remains a C-ranked maintainability hotspot.
