@@ -442,3 +442,10 @@ health before that claim is defensible.
     A-ranked helper complexity. `operations_repository.py` shrank from 2,522 SLOC to 2,456 SLOC,
     but remains `C (0.00)` under Radon maintainability and needs additional focused extractions
     before it can leave the active C-ranked hotspot list.
+95. Reduced operations repository lineage query coupling by extracting latest artifact-date
+    correlated subqueries, lineage artifact-gap classification, lineage priority ordering, and
+    lineage-key select construction into `operations_lineage_queries.py`. The helper module
+    reports `A (58.81)` maintainability and A-ranked helper complexity.
+    `operations_repository.py` shrank from 2,456 SLOC to 2,388 SLOC, but remains `C (0.00)` under
+    Radon maintainability and needs additional focused extractions before it can leave the active
+    C-ranked hotspot list.
