@@ -333,3 +333,9 @@ health before that claim is defensible.
     module reports `A (37.12)` maintainability and A-ranked helper complexity.
     `analytics_timeseries_service.py` shrank from 1,707 SLOC to 1,590 SLOC, but remains a C-ranked
     maintainability hotspot and the C-hotspot count remains 7.
+78. Reduced analytics FX policy coupling by extracting portfolio/reporting FX map retrieval,
+    position/portfolio FX map retrieval, same-currency identity handling, and missing-rate
+    classification into `analytics_fx_rates.py`. The helper module reports `A (51.85)`
+    maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from
+    1,590 SLOC to 1,582 SLOC, but remains a C-ranked maintainability hotspot and the C-hotspot count
+    remains 7.

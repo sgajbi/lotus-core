@@ -61,6 +61,13 @@ from .analytics_export_jobs import (
     reused_analytics_export_job_response,
 )
 from .analytics_export_ndjson import AnalyticsExportNdjsonError, analytics_export_ndjson_result
+from .analytics_fx_rates import (
+    AnalyticsFxRateError,
+    get_portfolio_to_reporting_rates,
+    get_position_to_portfolio_rate_maps,
+    portfolio_to_reporting_rate,
+    position_to_portfolio_rate,
+)
 from .analytics_page_tokens import (
     AnalyticsPageTokenError,
     AnalyticsPageTokenSignatureError,
@@ -175,13 +182,10 @@ class AnalyticsTimeseriesService:
         start_date: date,
         end_date: date,
     ) -> dict[date, Decimal]:
-        normalized_portfolio_currency = normalize_currency_code(portfolio_currency)
-        normalized_reporting_currency = normalize_currency_code(reporting_currency)
-        if normalized_portfolio_currency == normalized_reporting_currency:
-            return {}
-        return await self.repo.get_fx_rates_map(
-            from_currency=normalized_portfolio_currency,
-            to_currency=normalized_reporting_currency,
+        return await get_portfolio_to_reporting_rates(
+            self.repo,
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -194,24 +198,13 @@ class AnalyticsTimeseriesService:
         start_date: date,
         end_date: date,
     ) -> dict[str, dict[date, Decimal]]:
-        normalized_portfolio_currency = normalize_currency_code(portfolio_currency)
-        normalized_position_currencies = {
-            normalize_currency_code(position_currency)
-            for position_currency in position_currencies
-            if position_currency
-        }
-        rates: dict[str, dict[date, Decimal]] = {}
-        for position_currency in sorted(normalized_position_currencies):
-            if position_currency == normalized_portfolio_currency:
-                rates[position_currency] = {}
-                continue
-            rates[position_currency] = await self.repo.get_fx_rates_map(
-                from_currency=position_currency,
-                to_currency=normalized_portfolio_currency,
-                start_date=start_date,
-                end_date=end_date,
-            )
-        return rates
+        return await get_position_to_portfolio_rate_maps(
+            self.repo,
+            position_currencies=position_currencies,
+            portfolio_currency=portfolio_currency,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
     @staticmethod
     def _quality_status_from_epoch(epoch: int) -> str:
@@ -1225,16 +1218,15 @@ class AnalyticsTimeseriesService:
         valuation_date: date,
         position_to_portfolio_rates: dict[str, dict[date, Decimal]],
     ) -> Decimal:
-        if position_currency == portfolio_currency:
-            return Decimal("1")
-        rate_map = position_to_portfolio_rates.get(position_currency, {})
-        if valuation_date not in rate_map:
-            raise AnalyticsInputError(
-                "INSUFFICIENT_DATA",
-                "Missing FX rate for "
-                f"{position_currency}/{portfolio_currency} on {valuation_date}.",
+        try:
+            return position_to_portfolio_rate(
+                position_currency=position_currency,
+                portfolio_currency=portfolio_currency,
+                valuation_date=valuation_date,
+                position_to_portfolio_rates=position_to_portfolio_rates,
             )
-        return rate_map[valuation_date]
+        except AnalyticsFxRateError as exc:
+            raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
 
     @staticmethod
     def _portfolio_to_reporting_rate(
@@ -1244,15 +1236,15 @@ class AnalyticsTimeseriesService:
         valuation_date: date,
         fx_rates: dict[date, Decimal],
     ) -> Decimal:
-        if reporting_currency == portfolio_currency:
-            return Decimal("1")
-        if valuation_date not in fx_rates:
-            raise AnalyticsInputError(
-                "INSUFFICIENT_DATA",
-                "Missing FX rate for "
-                f"{portfolio_currency}/{reporting_currency} on {valuation_date}.",
+        try:
+            return portfolio_to_reporting_rate(
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+                valuation_date=valuation_date,
+                fx_rates=fx_rates,
             )
-        return fx_rates[valuation_date]
+        except AnalyticsFxRateError as exc:
+            raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
 
     async def get_portfolio_reference(
         self,
