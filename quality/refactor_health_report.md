@@ -449,3 +449,10 @@ health before that claim is defensible.
     `operations_repository.py` shrank from 2,456 SLOC to 2,388 SLOC, but remains `C (0.00)` under
     Radon maintainability and needs additional focused extractions before it can leave the active
     C-ranked hotspot list.
+96. Reduced operations repository position-scope query coupling by extracting load-run artifact
+    and job filtering, portfolio/security/epoch evidence filtering, current position-history
+    scope construction, current epoch snapshot scope construction, and latest transaction-date
+    statement construction into `operations_position_scope_queries.py`. The helper module reports
+    `A (38.78)` maintainability and A-ranked helper complexity. `operations_repository.py` shrank
+    from 2,388 SLOC to 2,211 SLOC, but remains `C (0.00)` under Radon maintainability and needs
+    additional focused extractions before it can leave the active C-ranked hotspot list.

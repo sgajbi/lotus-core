@@ -23,7 +23,6 @@ from sqlalchemy import Date, and_, case, cast, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from .date_filters import start_of_next_day
 from .identifier_normalization import normalize_security_id
 from .operations_health_queries import (
     analytics_export_job_health_aggregate,
@@ -59,6 +58,15 @@ from .operations_models import (
     ReprocessingHealthSummary,
     ResetWatermarkReprocessingJobScope,
     SnapshotValuationCoverageSummary,
+)
+from .operations_position_scope_queries import (
+    apply_current_epoch_snapshot_scope,
+    apply_current_position_history_scope,
+    apply_load_run_artifact_scope,
+    apply_load_run_job_scope,
+    apply_portfolio_security_epoch_scope,
+    current_epoch_snapshot_date_stmt,
+    latest_transaction_date_stmt,
 )
 
 
@@ -181,7 +189,7 @@ class OperationsRepository:
             )
             .label("rn"),
         )
-        latest_history = OperationsRepository._apply_current_position_history_scope(
+        latest_history = apply_current_position_history_scope(
             latest_history,
             portfolio_id=portfolio_id,
             position_history_security_id=position_history_security_id,
@@ -728,201 +736,6 @@ class OperationsRepository:
         ).one()
         return analytics_export_job_health_summary_from_row(row)
 
-    @staticmethod
-    def _apply_load_run_artifact_scope(
-        stmt,
-        artifact_model,
-        *,
-        portfolio_pattern: str,
-        business_date: Optional[date] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(artifact_model.portfolio_id.like(portfolio_pattern))
-        if business_date is not None:
-            stmt = stmt.where(artifact_model.date == business_date)
-        if as_of is not None:
-            stmt = stmt.where(artifact_model.created_at <= as_of)
-        return stmt
-
-    @staticmethod
-    def _apply_load_run_job_scope(
-        stmt,
-        job_model,
-        *,
-        portfolio_pattern: str,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(job_model.portfolio_id.like(portfolio_pattern))
-        if as_of is not None:
-            stmt = stmt.where(job_model.updated_at <= as_of)
-        return stmt
-
-    @staticmethod
-    def _apply_portfolio_security_epoch_scope(
-        stmt,
-        evidence_model,
-        security_id_expr,
-        *,
-        portfolio_id: str,
-        normalized_security_id: str,
-        epoch: int,
-        as_of: Optional[datetime] = None,
-        as_of_columns=(),
-    ):
-        stmt = stmt.where(
-            evidence_model.portfolio_id == portfolio_id,
-            security_id_expr == normalized_security_id,
-            evidence_model.epoch == epoch,
-        )
-        if as_of is not None:
-            for as_of_column in as_of_columns:
-                stmt = stmt.where(as_of_column <= as_of)
-        return stmt
-
-    @staticmethod
-    def _position_history_security_expressions(
-        *,
-        position_history_security_id=None,
-        position_state_security_id=None,
-    ):
-        return (
-            position_history_security_id
-            if position_history_security_id is not None
-            else OperationsRepository._security_id_expr(PositionHistory.security_id),
-            position_state_security_id
-            if position_state_security_id is not None
-            else OperationsRepository._security_id_expr(PositionState.security_id),
-        )
-
-    @staticmethod
-    def _apply_position_history_security_scope(
-        stmt,
-        *,
-        position_history_security_id,
-        position_state_security_id,
-        normalized_security_id=None,
-    ):
-        if normalized_security_id is None:
-            return stmt
-        return stmt.where(
-            position_history_security_id == normalized_security_id,
-            position_state_security_id == normalized_security_id,
-        )
-
-    @staticmethod
-    def _apply_position_history_time_scope(
-        stmt,
-        *,
-        history_date_on_or_before=None,
-        history_as_of: Optional[datetime] = None,
-    ):
-        if history_date_on_or_before is not None:
-            stmt = stmt.where(PositionHistory.position_date <= history_date_on_or_before)
-        if history_as_of is not None:
-            stmt = stmt.where(
-                PositionHistory.created_at <= history_as_of,
-                PositionState.updated_at <= history_as_of,
-            )
-        return stmt
-
-    @staticmethod
-    def _apply_current_position_history_scope(
-        stmt,
-        *,
-        portfolio_id: str,
-        position_history_security_id=None,
-        position_state_security_id=None,
-        normalized_security_id=None,
-        history_date_on_or_before=None,
-        history_as_of: Optional[datetime] = None,
-    ):
-        (
-            position_history_security_id,
-            position_state_security_id,
-        ) = OperationsRepository._position_history_security_expressions(
-            position_history_security_id=position_history_security_id,
-            position_state_security_id=position_state_security_id,
-        )
-        stmt = stmt.join(
-            PositionState,
-            and_(
-                PositionHistory.portfolio_id == PositionState.portfolio_id,
-                position_history_security_id == position_state_security_id,
-                PositionHistory.epoch == PositionState.epoch,
-            ),
-        ).where(PositionHistory.portfolio_id == portfolio_id)
-        stmt = OperationsRepository._apply_position_history_security_scope(
-            stmt,
-            position_history_security_id=position_history_security_id,
-            position_state_security_id=position_state_security_id,
-            normalized_security_id=normalized_security_id,
-        )
-        return OperationsRepository._apply_position_history_time_scope(
-            stmt,
-            history_date_on_or_before=history_date_on_or_before,
-            history_as_of=history_as_of,
-        )
-
-    def _current_epoch_snapshot_date_stmt(
-        self,
-        *,
-        portfolio_id: str,
-        as_of_date: Optional[date] = None,
-        snapshot_as_of: Optional[datetime] = None,
-    ):
-        return self._apply_current_epoch_snapshot_scope(
-            select(func.max(DailyPositionSnapshot.date)),
-            portfolio_id=portfolio_id,
-            as_of_date=as_of_date,
-            snapshot_as_of=snapshot_as_of,
-        )
-
-    def _apply_current_epoch_snapshot_scope(
-        self,
-        stmt,
-        *,
-        portfolio_id: str,
-        snapshot_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
-        snapshot_as_of: Optional[datetime] = None,
-    ):
-        snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        state_security_id = self._security_id_expr(PositionState.security_id)
-        stmt = stmt.join(
-            PositionState,
-            and_(
-                DailyPositionSnapshot.portfolio_id == PositionState.portfolio_id,
-                snapshot_security_id == state_security_id,
-                DailyPositionSnapshot.epoch == PositionState.epoch,
-            ),
-        ).where(DailyPositionSnapshot.portfolio_id == portfolio_id)
-        if snapshot_date is not None:
-            stmt = stmt.where(DailyPositionSnapshot.date == snapshot_date)
-        if as_of_date is not None:
-            stmt = stmt.where(DailyPositionSnapshot.date <= as_of_date)
-        if snapshot_as_of is not None:
-            stmt = stmt.where(
-                DailyPositionSnapshot.created_at <= snapshot_as_of,
-                PositionState.updated_at <= snapshot_as_of,
-            )
-        return stmt
-
-    @staticmethod
-    def _latest_transaction_date_stmt(
-        *,
-        portfolio_id: str,
-        as_of_date: Optional[date] = None,
-        snapshot_as_of: Optional[datetime] = None,
-    ):
-        stmt = select(func.max(Transaction.transaction_date)).where(
-            Transaction.portfolio_id == portfolio_id
-        )
-        if as_of_date is not None:
-            stmt = stmt.where(Transaction.transaction_date < start_of_next_day(as_of_date))
-        if snapshot_as_of is not None:
-            stmt = stmt.where(Transaction.created_at <= snapshot_as_of)
-        return stmt
-
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none() is not None
@@ -945,42 +758,42 @@ class OperationsRepository:
             .select_from(Transaction)
             .where(Transaction.transaction_id.like(transaction_pattern))
         )
-        snapshot_portfolios_stmt = self._apply_load_run_artifact_scope(
+        snapshot_portfolios_stmt = apply_load_run_artifact_scope(
             select(func.count(func.distinct(DailyPositionSnapshot.portfolio_id))),
             DailyPositionSnapshot,
             portfolio_pattern=portfolio_pattern,
             business_date=business_date,
             as_of=as_of,
         )
-        snapshot_rows_stmt = self._apply_load_run_artifact_scope(
+        snapshot_rows_stmt = apply_load_run_artifact_scope(
             select(func.count()).select_from(DailyPositionSnapshot),
             DailyPositionSnapshot,
             portfolio_pattern=portfolio_pattern,
             business_date=business_date,
             as_of=as_of,
         )
-        position_timeseries_portfolios_stmt = self._apply_load_run_artifact_scope(
+        position_timeseries_portfolios_stmt = apply_load_run_artifact_scope(
             select(func.count(func.distinct(PositionTimeseries.portfolio_id))),
             PositionTimeseries,
             portfolio_pattern=portfolio_pattern,
             business_date=business_date,
             as_of=as_of,
         )
-        position_timeseries_rows_stmt = self._apply_load_run_artifact_scope(
+        position_timeseries_rows_stmt = apply_load_run_artifact_scope(
             select(func.count()).select_from(PositionTimeseries),
             PositionTimeseries,
             portfolio_pattern=portfolio_pattern,
             business_date=business_date,
             as_of=as_of,
         )
-        timeseries_portfolios_stmt = self._apply_load_run_artifact_scope(
+        timeseries_portfolios_stmt = apply_load_run_artifact_scope(
             select(func.count(func.distinct(PortfolioTimeseries.portfolio_id))),
             PortfolioTimeseries,
             portfolio_pattern=portfolio_pattern,
             business_date=business_date,
             as_of=as_of,
         )
-        timeseries_rows_stmt = self._apply_load_run_artifact_scope(
+        timeseries_rows_stmt = apply_load_run_artifact_scope(
             select(func.count()).select_from(PortfolioTimeseries),
             PortfolioTimeseries,
             portfolio_pattern=portfolio_pattern,
@@ -995,33 +808,33 @@ class OperationsRepository:
             portfolio_pattern=portfolio_pattern,
             as_of=as_of,
         )
-        latest_snapshot_stmt = self._apply_load_run_artifact_scope(
+        latest_snapshot_stmt = apply_load_run_artifact_scope(
             select(func.max(DailyPositionSnapshot.date)),
             DailyPositionSnapshot,
             portfolio_pattern=portfolio_pattern,
             as_of=as_of,
         )
-        latest_snapshot_materialized_stmt = self._apply_load_run_artifact_scope(
+        latest_snapshot_materialized_stmt = apply_load_run_artifact_scope(
             select(func.max(DailyPositionSnapshot.created_at)),
             DailyPositionSnapshot,
             portfolio_pattern=portfolio_pattern,
             business_date=business_date,
             as_of=as_of,
         )
-        latest_position_timeseries_materialized_stmt = self._apply_load_run_artifact_scope(
+        latest_position_timeseries_materialized_stmt = apply_load_run_artifact_scope(
             select(func.max(PositionTimeseries.created_at)),
             PositionTimeseries,
             portfolio_pattern=portfolio_pattern,
             business_date=business_date,
             as_of=as_of,
         )
-        latest_timeseries_stmt = self._apply_load_run_artifact_scope(
+        latest_timeseries_stmt = apply_load_run_artifact_scope(
             select(func.max(PortfolioTimeseries.date)),
             PortfolioTimeseries,
             portfolio_pattern=portfolio_pattern,
             as_of=as_of,
         )
-        latest_portfolio_timeseries_materialized_stmt = self._apply_load_run_artifact_scope(
+        latest_portfolio_timeseries_materialized_stmt = apply_load_run_artifact_scope(
             select(func.max(PortfolioTimeseries.created_at)),
             PortfolioTimeseries,
             portfolio_pattern=portfolio_pattern,
@@ -1056,7 +869,7 @@ class OperationsRepository:
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.updated_at.label("updated_at"),
         )
-        valuation_base = self._apply_load_run_job_scope(
+        valuation_base = apply_load_run_job_scope(
             valuation_base,
             PortfolioValuationJob,
             portfolio_pattern=portfolio_pattern,
@@ -1069,7 +882,7 @@ class OperationsRepository:
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
         )
-        aggregation_base = self._apply_load_run_job_scope(
+        aggregation_base = apply_load_run_job_scope(
             aggregation_base,
             PortfolioAggregationJob,
             portfolio_pattern=portfolio_pattern,
@@ -1123,7 +936,7 @@ class OperationsRepository:
             PortfolioValuationJob.epoch.label("epoch"),
             PortfolioValuationJob.updated_at.label("valuation_completed_at_utc"),
         )
-        valuation_handoff_base = self._apply_load_run_job_scope(
+        valuation_handoff_base = apply_load_run_job_scope(
             valuation_handoff_base,
             PortfolioValuationJob,
             portfolio_pattern=portfolio_pattern,
@@ -1528,7 +1341,7 @@ class OperationsRepository:
     async def get_latest_transaction_date(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[date]:
-        stmt = self._latest_transaction_date_stmt(
+        stmt = latest_transaction_date_stmt(
             portfolio_id=portfolio_id,
             snapshot_as_of=as_of,
         )
@@ -1541,7 +1354,7 @@ class OperationsRepository:
         as_of_date: date,
         snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
-        stmt = self._latest_transaction_date_stmt(
+        stmt = latest_transaction_date_stmt(
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             snapshot_as_of=snapshot_as_of,
@@ -1560,7 +1373,7 @@ class OperationsRepository:
     async def get_latest_snapshot_date_for_current_epoch(
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> Optional[date]:
-        stmt = self._current_epoch_snapshot_date_stmt(
+        stmt = current_epoch_snapshot_date_stmt(
             portfolio_id=portfolio_id,
             snapshot_as_of=as_of,
         )
@@ -1572,7 +1385,7 @@ class OperationsRepository:
         as_of_date: date,
         snapshot_as_of: Optional[datetime] = None,
     ) -> Optional[date]:
-        stmt = self._current_epoch_snapshot_date_stmt(
+        stmt = current_epoch_snapshot_date_stmt(
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
             snapshot_as_of=snapshot_as_of,
@@ -1590,7 +1403,7 @@ class OperationsRepository:
             PositionHistory.epoch,
             func.max(PositionHistory.position_date).label("latest_history_date"),
         )
-        latest_history = self._apply_current_position_history_scope(
+        latest_history = apply_current_position_history_scope(
             latest_history,
             portfolio_id=portfolio_id,
             position_history_security_id=history_security_id,
@@ -1605,7 +1418,7 @@ class OperationsRepository:
             DailyPositionSnapshot.epoch,
             func.max(DailyPositionSnapshot.date).label("latest_snapshot_date"),
         ).select_from(DailyPositionSnapshot)
-        latest_snapshot = self._apply_current_epoch_snapshot_scope(
+        latest_snapshot = apply_current_epoch_snapshot_scope(
             latest_snapshot,
             portfolio_id=portfolio_id,
             snapshot_as_of=as_of,
@@ -1656,7 +1469,7 @@ class OperationsRepository:
             )
             .label("valued_positions"),
         ).select_from(DailyPositionSnapshot)
-        stmt = self._apply_current_epoch_snapshot_scope(
+        stmt = apply_current_epoch_snapshot_scope(
             stmt,
             portfolio_id=portfolio_id,
             snapshot_date=snapshot_date,
@@ -1760,7 +1573,7 @@ class OperationsRepository:
         if not normalized_security_id:
             return None
         history_security_id = self._security_id_expr(PositionHistory.security_id)
-        stmt = self._apply_portfolio_security_epoch_scope(
+        stmt = apply_portfolio_security_epoch_scope(
             select(func.max(PositionHistory.position_date)),
             PositionHistory,
             history_security_id,
@@ -1779,7 +1592,7 @@ class OperationsRepository:
         if not normalized_security_id:
             return None
         snapshot_security_id = self._security_id_expr(DailyPositionSnapshot.security_id)
-        stmt = self._apply_portfolio_security_epoch_scope(
+        stmt = apply_portfolio_security_epoch_scope(
             select(func.max(DailyPositionSnapshot.date)),
             DailyPositionSnapshot,
             snapshot_security_id,
@@ -1802,7 +1615,7 @@ class OperationsRepository:
         if not normalized_security_id:
             return None
         valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
-        stmt = self._apply_portfolio_security_epoch_scope(
+        stmt = apply_portfolio_security_epoch_scope(
             select(PortfolioValuationJob),
             PortfolioValuationJob,
             valuation_job_security_id,
