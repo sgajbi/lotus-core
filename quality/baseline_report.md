@@ -272,3 +272,9 @@ aggregation-identity filters into named helpers. `_apply_aggregation_job_scope` 
 `A (3)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted aggregation scope
 helpers report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
 maintainability, so the C-hotspot count remains 8.
+
+CR-889 reduced the portfolio-control stage filtering hotspot by splitting stage identity and
+business-date filters into named helpers. `_apply_portfolio_control_stage_scope` now reports
+`A (3)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted portfolio-control
+stage scope helpers report A-ranked complexity. `operations_repository.py` remains `C (0.00)`
+under Radon maintainability, so the C-hotspot count remains 8.

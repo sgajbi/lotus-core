@@ -156,3 +156,7 @@ health before that claim is defensible.
     and aggregation-identity filter helpers. The former B-ranked
     `_apply_aggregation_job_scope` helper now reports A-ranked complexity, but
     `operations_repository.py` remains a C-ranked maintainability hotspot.
+45. Reduced portfolio-control stage operations repository scope complexity by extracting stage
+    identity and business-date filter helpers. The former B-ranked
+    `_apply_portfolio_control_stage_scope` helper now reports A-ranked complexity, but
+    `operations_repository.py` remains a C-ranked maintainability hotspot.

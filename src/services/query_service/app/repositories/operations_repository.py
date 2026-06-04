@@ -508,6 +508,29 @@ class OperationsRepository:
             else_=9,
         )
 
+    @staticmethod
+    def _apply_portfolio_control_stage_identity_scope(
+        stmt,
+        *,
+        stage_id: Optional[int],
+        stage_name: Optional[str],
+    ):
+        if stage_id is not None:
+            stmt = stmt.where(PipelineStageState.id == stage_id)
+        if stage_name:
+            stmt = stmt.where(PipelineStageState.stage_name == stage_name)
+        return stmt
+
+    @staticmethod
+    def _apply_portfolio_control_stage_attribute_scope(
+        stmt,
+        *,
+        business_date: Optional[date],
+    ):
+        if business_date:
+            stmt = stmt.where(PipelineStageState.business_date == business_date)
+        return stmt
+
     def _apply_portfolio_control_stage_scope(
         self,
         stmt,
@@ -525,12 +548,15 @@ class OperationsRepository:
         )
         if as_of is not None:
             stmt = stmt.where(PipelineStageState.updated_at <= as_of)
-        if stage_id is not None:
-            stmt = stmt.where(PipelineStageState.id == stage_id)
-        if stage_name:
-            stmt = stmt.where(PipelineStageState.stage_name == stage_name)
-        if business_date:
-            stmt = stmt.where(PipelineStageState.business_date == business_date)
+        stmt = self._apply_portfolio_control_stage_identity_scope(
+            stmt,
+            stage_id=stage_id,
+            stage_name=stage_name,
+        )
+        stmt = self._apply_portfolio_control_stage_attribute_scope(
+            stmt,
+            business_date=business_date,
+        )
         if status:
             stmt = stmt.where(
                 self._portfolio_control_status_filter(PipelineStageState.status, status)
