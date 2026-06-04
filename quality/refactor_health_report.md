@@ -469,3 +469,9 @@ health before that claim is defensible.
     `A (43.44)` maintainability and A-ranked helper complexity. `operations_repository.py` shrank
     from 1,832 SLOC to 1,723 SLOC, but remains `C (0.00)` under Radon maintainability and needs
     additional focused extractions before it can leave the active C-ranked hotspot list.
+99. Reduced operations repository analytics-export scope coupling by extracting analytics-export
+    status normalization, stale/open job priority ordering, and composed job-scope filtering into
+    `operations_analytics_export_queries.py`. The helper module reports `A (55.97)`
+    maintainability and A-ranked helper complexity. `operations_repository.py` shrank from 1,723
+    SLOC to 1,689 SLOC, but remains `C (0.00)` under Radon maintainability and needs additional
+    focused extractions before it can leave the active C-ranked hotspot list.

@@ -21,6 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from .identifier_normalization import normalize_security_id
+from .operations_analytics_export_queries import (
+    analytics_export_job_priority,
+    apply_analytics_export_job_scope,
+)
 from .operations_health_queries import (
     analytics_export_job_health_aggregate,
     analytics_export_job_health_result_select,
@@ -239,47 +243,6 @@ class OperationsRepository:
             (governed_status == "PENDING", 3),
             else_=9,
         )
-
-    @staticmethod
-    def _analytics_export_status_filter(status_column, status: str):
-        return status_column == status.strip().lower()
-
-    @staticmethod
-    def _analytics_export_job_priority(status_column, updated_at_column, stale_threshold: datetime):
-        governed_status = status_column
-        return case(
-            (governed_status == "failed", 0),
-            (
-                and_(governed_status == "running", updated_at_column < stale_threshold),
-                1,
-            ),
-            (governed_status == "running", 2),
-            (governed_status == "accepted", 3),
-            else_=9,
-        )
-
-    def _apply_analytics_export_job_scope(
-        self,
-        stmt,
-        *,
-        portfolio_id: str,
-        status: Optional[str] = None,
-        job_id: Optional[str] = None,
-        request_fingerprint: Optional[str] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(AnalyticsExportJob.portfolio_id == portfolio_id)
-        if as_of is not None:
-            stmt = stmt.where(AnalyticsExportJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(
-                self._analytics_export_status_filter(AnalyticsExportJob.status, status)
-            )
-        if job_id:
-            stmt = stmt.where(AnalyticsExportJob.job_id == job_id)
-        if request_fingerprint:
-            stmt = stmt.where(AnalyticsExportJob.request_fingerprint == request_fingerprint)
-        return stmt
 
     @staticmethod
     def _reconciliation_run_priority(status_column):
@@ -823,7 +786,7 @@ class OperationsRepository:
             AnalyticsExportJob.job_id.label("job_id"),
             AnalyticsExportJob.request_fingerprint.label("request_fingerprint"),
         )
-        base_stmt = self._apply_analytics_export_job_scope(
+        base_stmt = apply_analytics_export_job_scope(
             base_stmt,
             portfolio_id=portfolio_id,
             as_of=as_of,
@@ -1363,7 +1326,7 @@ class OperationsRepository:
         request_fingerprint: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        stmt = self._apply_analytics_export_job_scope(
+        stmt = apply_analytics_export_job_scope(
             select(func.count()).select_from(AnalyticsExportJob),
             portfolio_id=portfolio_id,
             status=status,
@@ -1387,7 +1350,7 @@ class OperationsRepository:
     ) -> list[AnalyticsExportJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = self._apply_analytics_export_job_scope(
+        stmt = apply_analytics_export_job_scope(
             select(AnalyticsExportJob),
             portfolio_id=portfolio_id,
             status=status,
@@ -1397,7 +1360,7 @@ class OperationsRepository:
         )
         stmt = (
             stmt.order_by(
-                self._analytics_export_job_priority(
+                analytics_export_job_priority(
                     AnalyticsExportJob.status,
                     AnalyticsExportJob.updated_at,
                     stale_threshold,
