@@ -19,6 +19,25 @@ Status: Initial scorecard baseline on 2026-06-02.
 | OpenAPI governance | Existing OpenAPI quality and API vocabulary gates promoted into the quality-baseline API governance job after CR-868 | Keep API governance regression-free while spectral remains report-only until a stable generated-spec artifact exists |
 | Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |
 
+## Current PR Evidence Snapshot
+
+Local evidence captured on 2026-06-05 after CR-964:
+
+- `make quality-ruff-gate` => passed
+- `make quality-ruff-format-gate` => passed; 1,151 files already formatted
+- `make quality-bandit-gate` => passed; Bandit reported 0 issues across `src`
+- `make quality-import-boundary-gate` => passed; 2 import-linter contracts kept
+- `make quality-vulture-source-gate` => passed
+- `make quality-deptry-source-gate` => passed; no dependency issues found
+- `make openapi-gate` => passed
+- `make api-vocabulary-gate` => passed
+- `make typecheck` => passed; 48 source files checked
+- `make no-alias-gate` => passed
+- `make warning-gate` => passed; 2,914 unit tests, 9 deselected, 0 warnings
+- Current measured source hotspots: `reference_data_dto.py` `B (9.31)` and
+  `ingestion_job_service.py` `B (9.82)`; active non-generated C-ranked source hotspot list is
+  clear.
+
 ## Incremental Maintainability Updates
 
 - CR-949 extracted A-ranked `reference_integration_transaction_cost_dto.py` and
