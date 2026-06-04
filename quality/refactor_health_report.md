@@ -316,3 +316,9 @@ health before that claim is defensible.
     `analytics_export_jobs.py`. The helper module reports `A (50.45)` maintainability and
     A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,844 SLOC to
     1,770 SLOC, but remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.
+75. Reduced analytics page-token security-policy coupling by extracting deterministic cursor
+    payload serialization, envelope encoding, SHA-256 HMAC signing, constant-time signature
+    comparison, blank-token handling, and malformed/signature error classification into
+    `analytics_page_tokens.py`. The helper module reports `A (59.76)` maintainability and
+    A-ranked helper complexity. `analytics_timeseries_service.py` shrank from 1,770 SLOC to
+    1,751 SLOC, but remains a C-ranked maintainability hotspot and the C-hotspot count remains 7.

@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -61,6 +57,12 @@ from .analytics_export_jobs import (
     reused_analytics_export_job_response,
 )
 from .analytics_export_ndjson import AnalyticsExportNdjsonError, analytics_export_ndjson_result
+from .analytics_page_tokens import (
+    AnalyticsPageTokenError,
+    AnalyticsPageTokenSignatureError,
+    decode_analytics_page_token,
+    encode_analytics_page_token,
+)
 from .decimal_amounts import decimal_or_zero
 from .request_fingerprint import request_fingerprint
 
@@ -132,35 +134,14 @@ class AnalyticsTimeseriesService:
         return request_fingerprint(payload)
 
     def _encode_page_token(self, payload: dict) -> str:
-        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        signature = hmac.new(
-            self._page_token_secret.encode("utf-8"),
-            serialized.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        envelope = {"p": payload, "s": signature}
-        return base64.urlsafe_b64encode(json.dumps(envelope).encode("utf-8")).decode("utf-8")
+        return encode_analytics_page_token(payload=payload, secret=self._page_token_secret)
 
     def _decode_page_token(self, token: str | None) -> dict:
-        if not token:
-            return {}
         try:
-            decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
-            envelope = json.loads(decoded)
-            payload = envelope["p"]
-            signature = envelope["s"]
-            serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-            expected = hmac.new(
-                self._page_token_secret.encode("utf-8"),
-                serialized.encode("utf-8"),
-                hashlib.sha256,
-            ).hexdigest()
-            if not hmac.compare_digest(signature, expected):
-                raise AnalyticsInputError("INVALID_REQUEST", "Invalid page token signature.")
-            return payload
-        except AnalyticsInputError:
-            raise
-        except Exception as exc:
+            return decode_analytics_page_token(token=token, secret=self._page_token_secret)
+        except AnalyticsPageTokenSignatureError as exc:
+            raise AnalyticsInputError("INVALID_REQUEST", str(exc)) from exc
+        except AnalyticsPageTokenError as exc:
             raise AnalyticsInputError("INVALID_REQUEST", "Malformed page token.") from exc
 
     def _resolve_window(

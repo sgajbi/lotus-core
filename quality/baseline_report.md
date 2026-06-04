@@ -485,3 +485,10 @@ JSON-safe conversion, and export result metric recording into `analytics_export_
 helper module reports `A (50.45)` maintainability and A-ranked helper complexity.
 `analytics_timeseries_service.py` shrank from 1,844 SLOC to 1,770 SLOC, but still reports
 `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-919 reduced analytics page-token security-policy coupling by extracting deterministic cursor
+payload serialization, deterministic envelope encoding, SHA-256 HMAC signing, constant-time
+signature comparison, blank-token handling, and malformed/signature error classification into
+`analytics_page_tokens.py`. The helper module reports `A (59.76)` maintainability and A-ranked
+helper complexity. `analytics_timeseries_service.py` shrank from 1,770 SLOC to 1,751 SLOC, but
+still reports `C (0.00)` under Radon maintainability, so the C-hotspot count remains 7.
