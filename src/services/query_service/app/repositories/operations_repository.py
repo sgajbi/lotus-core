@@ -66,6 +66,10 @@ from .operations_position_scope_queries import (
     current_epoch_snapshot_date_stmt,
     latest_transaction_date_stmt,
 )
+from .operations_support_job_queries import (
+    apply_aggregation_job_scope,
+    apply_valuation_job_scope,
+)
 
 
 class OperationsRepository:
@@ -235,129 +239,6 @@ class OperationsRepository:
             (governed_status == "PENDING", 3),
             else_=9,
         )
-
-    def _apply_valuation_actionable_scope(
-        self,
-        stmt,
-        *,
-        job_id: Optional[int],
-        correlation_id: Optional[str],
-        as_of: Optional[datetime],
-    ):
-        if job_id is None and correlation_id is None:
-            return stmt.where(self._is_actionable_valuation_job(as_of=as_of))
-        return stmt
-
-    @staticmethod
-    def _apply_valuation_identity_scope(
-        stmt,
-        *,
-        job_id: Optional[int],
-        correlation_id: Optional[str],
-    ):
-        if job_id is not None:
-            stmt = stmt.where(PortfolioValuationJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(PortfolioValuationJob.correlation_id == correlation_id)
-        return stmt
-
-    def _apply_valuation_attribute_scope(
-        self,
-        stmt,
-        *,
-        business_date: Optional[date],
-        normalized_security_id: Optional[str],
-    ):
-        if business_date:
-            stmt = stmt.where(PortfolioValuationJob.valuation_date == business_date)
-        if normalized_security_id:
-            valuation_job_security_id = self._security_id_expr(PortfolioValuationJob.security_id)
-            stmt = stmt.where(valuation_job_security_id == normalized_security_id)
-        return stmt
-
-    @staticmethod
-    def _apply_aggregation_identity_scope(
-        stmt,
-        *,
-        job_id: Optional[int],
-        correlation_id: Optional[str],
-    ):
-        if job_id is not None:
-            stmt = stmt.where(PortfolioAggregationJob.id == job_id)
-        if correlation_id:
-            stmt = stmt.where(PortfolioAggregationJob.correlation_id == correlation_id)
-        return stmt
-
-    @staticmethod
-    def _apply_aggregation_attribute_scope(
-        stmt,
-        *,
-        business_date: Optional[date],
-    ):
-        if business_date:
-            stmt = stmt.where(PortfolioAggregationJob.aggregation_date == business_date)
-        return stmt
-
-    def _apply_valuation_job_scope(
-        self,
-        stmt,
-        *,
-        portfolio_id: str,
-        status: Optional[str] = None,
-        business_date: Optional[date] = None,
-        normalized_security_id: Optional[str] = None,
-        job_id: Optional[int] = None,
-        correlation_id: Optional[str] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(PortfolioValuationJob.portfolio_id == portfolio_id)
-        stmt = self._apply_valuation_actionable_scope(
-            stmt,
-            job_id=job_id,
-            correlation_id=correlation_id,
-            as_of=as_of,
-        )
-        if as_of is not None:
-            stmt = stmt.where(PortfolioValuationJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(self._support_job_status_filter(PortfolioValuationJob.status, status))
-        stmt = self._apply_valuation_attribute_scope(
-            stmt,
-            business_date=business_date,
-            normalized_security_id=normalized_security_id,
-        )
-        stmt = self._apply_valuation_identity_scope(
-            stmt,
-            job_id=job_id,
-            correlation_id=correlation_id,
-        )
-        return stmt
-
-    def _apply_aggregation_job_scope(
-        self,
-        stmt,
-        *,
-        portfolio_id: str,
-        status: Optional[str] = None,
-        business_date: Optional[date] = None,
-        job_id: Optional[int] = None,
-        correlation_id: Optional[str] = None,
-        as_of: Optional[datetime] = None,
-    ):
-        stmt = stmt.where(PortfolioAggregationJob.portfolio_id == portfolio_id)
-        if as_of is not None:
-            stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
-        if status:
-            stmt = stmt.where(
-                self._support_job_status_filter(PortfolioAggregationJob.status, status)
-            )
-        stmt = self._apply_aggregation_attribute_scope(stmt, business_date=business_date)
-        stmt = self._apply_aggregation_identity_scope(
-            stmt,
-            job_id=job_id,
-            correlation_id=correlation_id,
-        )
-        return stmt
 
     @staticmethod
     def _analytics_export_status_filter(status_column, status: str):
@@ -876,9 +757,10 @@ class OperationsRepository:
             PortfolioValuationJob.correlation_id.label("correlation_id"),
             self._security_id_expr(PortfolioValuationJob.security_id).label("security_id"),
         )
-        base_stmt = self._apply_valuation_job_scope(
+        base_stmt = apply_valuation_job_scope(
             base_stmt,
             portfolio_id=portfolio_id,
+            actionable_valuation_job=self._is_actionable_valuation_job(as_of=as_of),
             as_of=as_of,
         )
         return await self._get_support_job_health_summary(
@@ -909,7 +791,7 @@ class OperationsRepository:
             PortfolioAggregationJob.id.label("id"),
             PortfolioAggregationJob.correlation_id.label("correlation_id"),
         )
-        base_stmt = self._apply_aggregation_job_scope(
+        base_stmt = apply_aggregation_job_scope(
             base_stmt,
             portfolio_id=portfolio_id,
             as_of=as_of,
@@ -1352,9 +1234,10 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        stmt = self._apply_valuation_job_scope(
+        stmt = apply_valuation_job_scope(
             select(func.count()).select_from(PortfolioValuationJob),
             portfolio_id=portfolio_id,
+            actionable_valuation_job=self._is_actionable_valuation_job(as_of=as_of),
             status=status,
             business_date=business_date,
             normalized_security_id=normalized_security_id,
@@ -1385,9 +1268,10 @@ class OperationsRepository:
             return []
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = self._apply_valuation_job_scope(
+        stmt = apply_valuation_job_scope(
             select(PortfolioValuationJob),
             portfolio_id=portfolio_id,
+            actionable_valuation_job=self._is_actionable_valuation_job(as_of=as_of),
             status=status,
             business_date=business_date,
             normalized_security_id=normalized_security_id,
@@ -1420,7 +1304,7 @@ class OperationsRepository:
         correlation_id: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> int:
-        stmt = self._apply_aggregation_job_scope(
+        stmt = apply_aggregation_job_scope(
             select(func.count()).select_from(PortfolioAggregationJob),
             portfolio_id=portfolio_id,
             status=status,
@@ -1446,7 +1330,7 @@ class OperationsRepository:
     ) -> list[PortfolioAggregationJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
-        stmt = self._apply_aggregation_job_scope(
+        stmt = apply_aggregation_job_scope(
             select(PortfolioAggregationJob),
             portfolio_id=portfolio_id,
             status=status,
