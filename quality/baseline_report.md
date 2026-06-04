@@ -291,3 +291,10 @@ resolution, normalized security filtering, and history-date/as-of filtering into
 cyclomatic complexity, and the extracted position-history scope helpers report A-ranked
 complexity. `operations_repository.py` remains `C (0.00)` under Radon maintainability, so the
 C-hotspot count remains 8.
+
+CR-892 reduced duplicated support-job health summary orchestration by extracting shared threshold,
+aggregate-result selection, row-mapping, and execution helpers for valuation and aggregation jobs.
+`get_valuation_job_health_summary` and `get_aggregation_job_health_summary` now both report
+`A (1)` instead of `B (6)` under Radon cyclomatic complexity, and the extracted support-job health
+helpers report A-ranked complexity. `operations_repository.py` remains `C (0.00)` under Radon
+maintainability, so the C-hotspot count remains 8.

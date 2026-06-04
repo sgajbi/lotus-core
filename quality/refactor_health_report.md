@@ -168,3 +168,8 @@ health before that claim is defensible.
     expression resolution, normalized security filtering, and history-date/as-of filter helpers.
     The former B-ranked `_apply_current_position_history_scope` helper now reports A-ranked
     complexity, but `operations_repository.py` remains a C-ranked maintainability hotspot.
+48. Reduced valuation and aggregation support-job health summary complexity by extracting shared
+    threshold, aggregate-result selection, row-mapping, and execution helpers. The former B-ranked
+    `get_valuation_job_health_summary` and `get_aggregation_job_health_summary` methods now report
+    A-ranked complexity, but `operations_repository.py` remains a C-ranked maintainability
+    hotspot.
