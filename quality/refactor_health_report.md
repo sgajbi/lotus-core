@@ -261,3 +261,9 @@ health before that claim is defensible.
     `_portfolio_observation_rows` method now reports `A (2)` instead of `D (22)`, but
     `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
     C-hotspot count remains 7.
+65. Reduced analytics beginning-market-value policy complexity by extracting prior-EOD continuity,
+    internal cash-book settlement, previous-EOD repair, and new internally funded position
+    predicates inside `analytics_timeseries_service.py`. The former C-ranked
+    `_effective_beginning_market_value` method now reports `A (5)` instead of `C (17)`, but
+    `analytics_timeseries_service.py` remains a C-ranked maintainability hotspot and the
+    C-hotspot count remains 7.

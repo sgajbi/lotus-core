@@ -416,3 +416,10 @@ inside `analytics_timeseries_service.py`. `_portfolio_observation_rows` now repo
 instead of `D (22)` under Radon cyclomatic complexity, and the extracted portfolio-observation
 helpers report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)`
 under Radon maintainability, so the C-hotspot count remains 7.
+
+CR-909 reduced analytics beginning-market-value policy complexity by extracting prior-EOD
+continuity, internal cash-book settlement, previous-EOD repair, and new internally funded position
+predicates inside `analytics_timeseries_service.py`. `_effective_beginning_market_value` now
+reports `A (5)` instead of `C (17)` under Radon cyclomatic complexity, and the extracted policy
+predicates report A-ranked complexity. `analytics_timeseries_service.py` still reports `C (0.00)`
+under Radon maintainability, so the C-hotspot count remains 7.

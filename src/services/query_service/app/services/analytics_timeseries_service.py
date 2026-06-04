@@ -333,40 +333,95 @@ class AnalyticsTimeseriesService:
         ending = decimal_or_zero(row.eod_market_value)
         bod_position_flow = decimal_or_zero(getattr(row, "bod_cashflow_position", 0))
 
-        if (
-            previous_eod_market_value is not None
-            and previous_eod_market_value != 0
-            and bod_position_flow == 0
+        if AnalyticsTimeseriesService._has_prior_eod_continuity(
+            previous_eod_market_value=previous_eod_market_value,
+            bod_position_flow=bod_position_flow,
         ):
             return previous_eod_market_value
 
         has_internal_position_flow = AnalyticsTimeseriesService._has_only_internal_flows(cash_flows)
-        if (
-            AnalyticsTimeseriesService._is_cash_book_position(row)
-            and not has_portfolio_external_flow
-            and has_internal_position_flow
+        if AnalyticsTimeseriesService._is_internal_cash_book_settlement(
+            row=row,
+            has_portfolio_external_flow=has_portfolio_external_flow,
+            has_internal_position_flow=has_internal_position_flow,
         ):
             return ending
 
-        if (
+        if AnalyticsTimeseriesService._can_repair_beginning_from_previous_eod(
+            previous_eod_market_value=previous_eod_market_value,
+            stored_beginning=stored_beginning,
+            bod_position_flow=bod_position_flow,
+            has_portfolio_external_flow=has_portfolio_external_flow,
+            has_internal_position_flow=has_internal_position_flow,
+        ):
+            return previous_eod_market_value + bod_position_flow
+
+        if AnalyticsTimeseriesService._is_new_internally_funded_position(
+            previous_eod_market_value=previous_eod_market_value,
+            ending=ending,
+            has_portfolio_external_flow=has_portfolio_external_flow,
+            has_internal_position_flow=has_internal_position_flow,
+        ):
+            return ending
+
+        return stored_beginning
+
+    @staticmethod
+    def _has_prior_eod_continuity(
+        *,
+        previous_eod_market_value: Decimal | None,
+        bod_position_flow: Decimal,
+    ) -> bool:
+        return (
+            previous_eod_market_value is not None
+            and previous_eod_market_value != 0
+            and bod_position_flow == 0
+        )
+
+    @staticmethod
+    def _is_internal_cash_book_settlement(
+        *,
+        row: object,
+        has_portfolio_external_flow: bool,
+        has_internal_position_flow: bool,
+    ) -> bool:
+        return (
+            AnalyticsTimeseriesService._is_cash_book_position(row)
+            and not has_portfolio_external_flow
+            and has_internal_position_flow
+        )
+
+    @staticmethod
+    def _can_repair_beginning_from_previous_eod(
+        *,
+        previous_eod_market_value: Decimal | None,
+        stored_beginning: Decimal,
+        bod_position_flow: Decimal,
+        has_portfolio_external_flow: bool,
+        has_internal_position_flow: bool,
+    ) -> bool:
+        return (
             previous_eod_market_value is not None
             and stored_beginning == 0
             and bod_position_flow != 0
             and not has_portfolio_external_flow
             and has_internal_position_flow
-        ):
-            return previous_eod_market_value + bod_position_flow
+        )
 
+    @staticmethod
+    def _is_new_internally_funded_position(
+        *,
+        previous_eod_market_value: Decimal | None,
+        ending: Decimal,
+        has_portfolio_external_flow: bool,
+        has_internal_position_flow: bool,
+    ) -> bool:
         no_prior_capital = previous_eod_market_value is None or previous_eod_market_value == 0
-        if (
+        return (
             no_prior_capital
             and ending != 0
-            and not has_portfolio_external_flow
-            and has_internal_position_flow
-        ):
-            return ending
-
-        return stored_beginning
+            and (not has_portfolio_external_flow and has_internal_position_flow)
+        )
 
     async def _portfolio_observation_rows(
         self,
