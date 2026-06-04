@@ -12,12 +12,6 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
     ANALYTICS_EXPORT_JOBS_TOTAL,
 )
-from portfolio_common.reconciliation_quality import (
-    COMPLETE,
-    PARTIAL,
-    DataQualityCoverageSignal,
-    classify_data_quality_coverage,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.analytics_input_dto import (
@@ -84,6 +78,16 @@ from .analytics_pagination import (
     position_timeseries_diagnostics,
     position_timeseries_next_page_token,
     position_timeseries_scope_fingerprint,
+)
+from .analytics_quality import (
+    bounded_latest_performance_date,
+    latest_portfolio_horizon_candidate,
+    latest_position_horizon_with_observations,
+    performance_horizon_candidates,
+    portfolio_reference_data_quality_status,
+    portfolio_reference_evidence_timestamp,
+    quality_status_from_epoch,
+    timeseries_data_quality_status,
 )
 from .analytics_windows import AnalyticsWindowError, resolve_analytics_window
 from .decimal_amounts import decimal_or_zero
@@ -212,9 +216,7 @@ class AnalyticsTimeseriesService:
 
     @staticmethod
     def _quality_status_from_epoch(epoch: int) -> str:
-        if epoch > 0:
-            return "restated"
-        return "final"
+        return quality_status_from_epoch(epoch)
 
     @staticmethod
     def _build_cash_flow_observation(
@@ -1268,27 +1270,20 @@ class AnalyticsTimeseriesService:
         stale_count: int,
         warning_issue_count: int = 0,
     ) -> str:
-        return classify_data_quality_coverage(
-            DataQualityCoverageSignal(
-                required_count=required_count,
-                observed_count=observed_count,
-                stale_count=stale_count,
-                warning_issue_count=warning_issue_count,
-            )
+        return timeseries_data_quality_status(
+            required_count=required_count,
+            observed_count=observed_count,
+            stale_count=stale_count,
+            warning_issue_count=warning_issue_count,
         )
 
     @staticmethod
     def _portfolio_reference_data_quality_status(*, performance_end_date: date | None) -> str:
-        return COMPLETE if performance_end_date is not None else PARTIAL
+        return portfolio_reference_data_quality_status(performance_end_date=performance_end_date)
 
     @staticmethod
     def _portfolio_reference_evidence_timestamp(portfolio: object) -> datetime | None:
-        timestamps = [
-            timestamp
-            for field_name in ("source_timestamp", "updated_at", "created_at")
-            if isinstance(timestamp := getattr(portfolio, field_name, None), datetime)
-        ]
-        return max(timestamps) if timestamps else None
+        return portfolio_reference_evidence_timestamp(portfolio)
 
     async def _latest_available_performance_date(
         self,
@@ -1318,13 +1313,9 @@ class AnalyticsTimeseriesService:
         latest_position_date: date | None,
         observed_dates: list[date] | None,
     ) -> date | None:
-        if not observed_dates:
-            return latest_position_date
-        observed_latest = max(observed_dates)
-        return (
-            observed_latest
-            if latest_position_date is None
-            else max(latest_position_date, observed_latest)
+        return latest_position_horizon_with_observations(
+            latest_position_date=latest_position_date,
+            observed_dates=observed_dates,
         )
 
     @staticmethod
@@ -1333,10 +1324,10 @@ class AnalyticsTimeseriesService:
         latest_portfolio_date: date | None,
         observed_dates: list[date] | None,
     ) -> date | None:
-        portfolio_dates = [
-            candidate for candidate in (latest_portfolio_date, *(observed_dates or [])) if candidate
-        ]
-        return max(portfolio_dates) if portfolio_dates else None
+        return latest_portfolio_horizon_candidate(
+            latest_portfolio_date=latest_portfolio_date,
+            observed_dates=observed_dates,
+        )
 
     @staticmethod
     def _bounded_latest_performance_date(
@@ -1345,13 +1336,11 @@ class AnalyticsTimeseriesService:
         latest_position_date: date | None,
         as_of_date: date,
     ) -> date | None:
-        horizon_candidates = AnalyticsTimeseriesService._performance_horizon_candidates(
+        return bounded_latest_performance_date(
             portfolio_candidate=portfolio_candidate,
             latest_position_date=latest_position_date,
+            as_of_date=as_of_date,
         )
-        if not horizon_candidates:
-            return None
-        return min(*horizon_candidates, as_of_date)
 
     @staticmethod
     def _performance_horizon_candidates(
@@ -1359,11 +1348,10 @@ class AnalyticsTimeseriesService:
         portfolio_candidate: date | None,
         latest_position_date: date | None,
     ) -> list[date]:
-        return [
-            candidate
-            for candidate in (portfolio_candidate, latest_position_date)
-            if candidate is not None
-        ]
+        return performance_horizon_candidates(
+            portfolio_candidate=portfolio_candidate,
+            latest_position_date=latest_position_date,
+        )
 
     async def _reserve_export_job(
         self,

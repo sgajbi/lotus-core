@@ -345,3 +345,9 @@ health before that claim is defensible.
     maintainability and A-ranked helper complexity. `analytics_timeseries_service.py` shrank from
     1,582 SLOC to 1,548 SLOC, but remains a C-ranked maintainability hotspot and the C-hotspot count
     remains 7.
+80. Reduced analytics quality and horizon coupling by extracting row quality labels, data-quality
+    coverage classification, portfolio-reference completeness classification, evidence timestamp
+    selection, and latest portfolio/position horizon bounding into `analytics_quality.py`. The
+    helper module reports `A (52.85)` maintainability and A-ranked helper complexity.
+    `analytics_timeseries_service.py` shrank from 1,548 SLOC to 1,536 SLOC, but remains a C-ranked
+    maintainability hotspot and the C-hotspot count remains 7.
