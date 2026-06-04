@@ -8,6 +8,7 @@ Create Date: 2026-03-28 16:55:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -199,16 +200,10 @@ def downgrade() -> None:
     )
     op.drop_index("ix_cash_account_masters_closed_on", table_name="cash_account_masters")
     op.drop_index("ix_cash_account_masters_opened_on", table_name="cash_account_masters")
-    op.drop_index(
-        "ix_cash_account_masters_lifecycle_status", table_name="cash_account_masters"
-    )
+    op.drop_index("ix_cash_account_masters_lifecycle_status", table_name="cash_account_masters")
     op.drop_index("ix_cash_account_masters_account_role", table_name="cash_account_masters")
-    op.drop_index(
-        "ix_cash_account_masters_account_currency", table_name="cash_account_masters"
-    )
+    op.drop_index("ix_cash_account_masters_account_currency", table_name="cash_account_masters")
     op.drop_index("ix_cash_account_masters_security_id", table_name="cash_account_masters")
     op.drop_index("ix_cash_account_masters_portfolio_id", table_name="cash_account_masters")
-    op.drop_index(
-        "ix_cash_account_masters_cash_account_id", table_name="cash_account_masters"
-    )
+    op.drop_index("ix_cash_account_masters_cash_account_id", table_name="cash_account_masters")
     op.drop_table("cash_account_masters")

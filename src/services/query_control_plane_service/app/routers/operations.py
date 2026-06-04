@@ -80,6 +80,16 @@ def parse_optional_iso_date(field_name: str, value: Optional[str]) -> Optional[d
         ) from exc
 
 
+def parse_required_iso_date(field_name: str, value: str) -> date:
+    parsed_value = parse_optional_iso_date(field_name, value)
+    if parsed_value is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Missing required {field_name}.",
+        )
+    return parsed_value
+
+
 async def execute_operations_call(
     operation: Awaitable[T],
     *,
@@ -298,15 +308,13 @@ async def get_load_run_progress(
     business_date: str = Query(
         ...,
         description=(
-            "Target business date in YYYY-MM-DD format used to measure "
-            "completion coverage."
+            "Target business date in YYYY-MM-DD format used to measure completion coverage."
         ),
         examples=["2026-04-17"],
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
-    parsed_business_date = parse_optional_iso_date("business_date", business_date)
-    assert parsed_business_date is not None
+    parsed_business_date = parse_required_iso_date("business_date", business_date)
     return await execute_operations_call(
         service.get_load_run_progress(run_id=run_id, business_date=parsed_business_date),
         log_message="Failed to build load-run progress for run %s",

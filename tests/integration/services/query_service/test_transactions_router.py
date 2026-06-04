@@ -8,15 +8,15 @@ import pytest_asyncio
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+)
 from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,
     PortfolioRealizedTaxSummaryResponse,
     RealizedTaxCurrencyTotal,
     TransactionCostRecord,
     TransactionRecord,
-)
-from src.services.query_service.app.dtos.source_data_product_identity import (
-    source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.main import app
 

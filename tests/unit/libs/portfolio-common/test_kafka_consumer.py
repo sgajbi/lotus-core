@@ -154,10 +154,7 @@ async def test_run_loop_dlq_commit_failure_does_not_crash_or_re_dlq(
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
-    assert (
-        "Offset commit failed after successful DLQ publication"
-        in mock_warning.call_args.args[0]
-    )
+    assert "Offset commit failed after successful DLQ publication" in mock_warning.call_args.args[0]
 
 
 async def test_run_loop_retryable_error_does_not_commit(

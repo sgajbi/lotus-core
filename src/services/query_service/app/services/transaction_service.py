@@ -1,32 +1,36 @@
 # services/query-service/app/services/transaction_service.py
 import logging
-from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
-from typing import Any, Optional, cast
+from typing import Optional, cast
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
-from ..dtos.transaction_dto import (
-    PaginatedTransactionResponse,
-    PortfolioRealizedTaxSummaryResponse,
-    RealizedTaxCurrencyTotal,
-    TransactionRecord,
-)
+from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
+from .portfolio_validation import ensure_portfolio_exists
+from .transaction_dates import (
+    realized_tax_effective_as_of_date,
+    transaction_ledger_effective_as_of_date,
+)
+from .transaction_metadata import (
+    realized_tax_summary_filters,
+    transaction_ledger_filters,
+)
+from .transaction_reads import read_realized_tax_evidence, read_transaction_ledger_page
+from .transaction_realized_tax import (
+    portfolio_realized_tax_summary_response,
+    realized_tax_currency_totals,
+    realized_tax_reporting_currency_total,
+)
+from .transaction_records import (
+    paginated_transaction_ledger_response,
+    transaction_records_from_rows,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class _RealizedTaxAccumulator:
-    transaction_count: int = 0
-    withholding_tax_amount: Decimal = Decimal("0")
-    other_tax_deductions_amount: Decimal = Decimal("0")
 
 
 class TransactionService:
@@ -35,22 +39,8 @@ class TransactionService:
     """
 
     def __init__(self, db: AsyncSession):
-        self.db = db
         self.repo = TransactionRepository(db)
         self._fx_converter = CachedFxRateConverter(self.repo)
-
-    @staticmethod
-    def _ledger_data_quality_status(
-        *,
-        total_count: int,
-        returned_count: int,
-        skip: int,
-    ) -> str:
-        if total_count <= 0:
-            return cast(str, UNKNOWN)
-        if skip > 0 or returned_count < total_count:
-            return cast(str, PARTIAL)
-        return cast(str, COMPLETE)
 
     async def get_transactions(
         self,
@@ -79,93 +69,56 @@ class TransactionService:
         """
         logger.info(f"Fetching transactions for portfolio '{portfolio_id}'.")
 
-        needs_default_as_of_date = as_of_date is None and not include_projected
-        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
-        if not portfolio_exists:
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
-        default_as_of_date = (
-            await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        effective_as_of_date = await transaction_ledger_effective_as_of_date(
+            repository=self.repo,
+            as_of_date=as_of_date,
+            include_projected=include_projected,
         )
 
-        effective_as_of_date = default_as_of_date
-        if effective_as_of_date is None and needs_default_as_of_date:
-            effective_as_of_date = date.today()
+        ledger_filters = transaction_ledger_filters(
+            portfolio_id=portfolio_id,
+            instrument_id=instrument_id,
+            security_id=security_id,
+            transaction_type=transaction_type,
+            component_type=component_type,
+            linked_transaction_group_id=linked_transaction_group_id,
+            fx_contract_id=fx_contract_id,
+            swap_event_id=swap_event_id,
+            near_leg_group_id=near_leg_group_id,
+            far_leg_group_id=far_leg_group_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=effective_as_of_date,
+        )
 
-        ledger_filters = {
-            "portfolio_id": portfolio_id,
-            "instrument_id": instrument_id,
-            "security_id": security_id,
-            "transaction_type": transaction_type,
-            "component_type": component_type,
-            "linked_transaction_group_id": linked_transaction_group_id,
-            "fx_contract_id": fx_contract_id,
-            "swap_event_id": swap_event_id,
-            "near_leg_group_id": near_leg_group_id,
-            "far_leg_group_id": far_leg_group_id,
-            "start_date": start_date,
-            "end_date": end_date,
-            "as_of_date": effective_as_of_date,
-        }
-
-        total_count = await self.repo.get_transactions_count(**ledger_filters)
-
-        db_results: list[Any]
-        if total_count == 0:
-            db_results = []
-            latest_evidence_timestamp = None
-        else:
-            db_results = await self.repo.get_transactions(
-                skip=skip,
-                limit=limit,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                **ledger_filters,
-            )
-            if skip > 0 or limit < total_count:
-                latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
-                    **ledger_filters
-                )
-            else:
-                if len(db_results) == total_count:
-                    latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(
-                        db_results
-                    )
-                else:
-                    latest_evidence_timestamp = await self.repo.get_latest_evidence_timestamp(
-                        **ledger_filters
-                    )
+        ledger_page = await read_transaction_ledger_page(
+            repository=self.repo,
+            ledger_filters=ledger_filters,
+            skip=skip,
+            limit=limit,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
         resolved_reporting_currency = reporting_currency
 
-        transactions = []
-        for transaction in db_results:
-            record = TransactionRecord.model_validate(transaction)
-            record.costs = [cost for cost in transaction.costs or []]
-            if transaction.cashflow:
-                record.cashflow = transaction.cashflow
-            if resolved_reporting_currency and effective_as_of_date is not None:
-                await self._apply_reporting_currency_fields(
-                    record=record,
-                    reporting_currency=resolved_reporting_currency,
-                    as_of_date=effective_as_of_date,
-                )
-            transactions.append(record)
+        transactions = await transaction_records_from_rows(
+            rows=ledger_page.rows,
+            reporting_currency=resolved_reporting_currency,
+            as_of_date=effective_as_of_date,
+            convert_amount=self._convert_amount,
+        )
 
-        return PaginatedTransactionResponse(
+        return paginated_transaction_ledger_response(
             portfolio_id=portfolio_id,
             reporting_currency=resolved_reporting_currency,
-            total=total_count,
+            total_count=ledger_page.total_count,
             skip=skip,
             limit=limit,
             transactions=transactions,
-            **source_data_product_runtime_metadata(
-                as_of_date=effective_as_of_date or end_date or date.today(),
-                data_quality_status=self._ledger_data_quality_status(
-                    total_count=total_count,
-                    returned_count=len(transactions),
-                    skip=skip,
-                ),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-            ),
+            effective_as_of_date=effective_as_of_date,
+            end_date=end_date,
+            latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
         )
 
     async def get_realized_tax_summary(
@@ -182,160 +135,46 @@ class TransactionService:
         base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
         if base_currency is None:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")
-        default_as_of_date = (
-            await self.repo.get_latest_business_date() if as_of_date is None else as_of_date
+        effective_as_of_date = await realized_tax_effective_as_of_date(
+            repository=self.repo,
+            as_of_date=as_of_date,
         )
         normalized_base_currency = normalize_currency_code(str(base_currency))
         resolved_reporting_currency = (
             normalize_currency_code(reporting_currency) if reporting_currency is not None else None
         )
 
-        effective_as_of_date = default_as_of_date or date.today()
-        ledger_filters = {
-            "portfolio_id": portfolio_id,
-            "start_date": start_date,
-            "end_date": end_date,
-            "as_of_date": effective_as_of_date,
-        }
-        source_transaction_count = await self.repo.get_transactions_count(**ledger_filters)
-        tax_transactions = await self.repo.list_realized_tax_evidence_transactions(
-            **ledger_filters,
+        ledger_filters = realized_tax_summary_filters(
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=effective_as_of_date,
         )
-        latest_evidence_timestamp = self._latest_transaction_evidence_timestamp(tax_transactions)
+        realized_tax_evidence = await read_realized_tax_evidence(
+            repository=self.repo,
+            ledger_filters=ledger_filters,
+        )
 
-        currency_totals = self._realized_tax_currency_totals(tax_transactions)
-        reporting_currency_total = None
-        if resolved_reporting_currency is not None:
-            converted_currency_totals = []
-            for total in currency_totals:
-                converted_currency_totals.append(
-                    await self._convert_amount(
-                        amount=total.total_tax_amount,
-                        from_currency=total.currency,
-                        to_currency=resolved_reporting_currency,
-                        as_of_date=effective_as_of_date,
-                    )
-                )
-            reporting_currency_total = sum(converted_currency_totals, Decimal("0"))
+        currency_totals = realized_tax_currency_totals(realized_tax_evidence.tax_transactions)
+        reporting_currency_total = await realized_tax_reporting_currency_total(
+            currency_totals=currency_totals,
+            reporting_currency=resolved_reporting_currency,
+            as_of_date=effective_as_of_date,
+            convert_amount=self._convert_amount,
+        )
 
-        return PortfolioRealizedTaxSummaryResponse(
+        return portfolio_realized_tax_summary_response(
             portfolio_id=portfolio_id,
             base_currency=normalized_base_currency,
             reporting_currency=resolved_reporting_currency,
             start_date=start_date,
             end_date=end_date,
-            source_transaction_count=source_transaction_count,
-            tax_evidence_transaction_count=sum(
-                total.transaction_count for total in currency_totals
-            ),
+            as_of_date=effective_as_of_date,
+            source_transaction_count=realized_tax_evidence.source_transaction_count,
             currency_totals=currency_totals,
             reporting_currency_total_tax_amount=reporting_currency_total,
-            reason_codes=[
-                "PORTFOLIO_REALIZED_TAX_SUMMARY_READY"
-                if currency_totals
-                else "PORTFOLIO_REALIZED_TAX_EVIDENCE_EMPTY"
-            ],
-            **source_data_product_runtime_metadata(
-                as_of_date=effective_as_of_date,
-                data_quality_status=self._ledger_data_quality_status(
-                    total_count=source_transaction_count,
-                    returned_count=source_transaction_count,
-                    skip=0,
-                ),
-                latest_evidence_timestamp=latest_evidence_timestamp,
-            ),
+            latest_evidence_timestamp=realized_tax_evidence.latest_evidence_timestamp,
         )
-
-    @staticmethod
-    def _realized_tax_currency_totals(
-        transactions: list[object],
-    ) -> list[RealizedTaxCurrencyTotal]:
-        totals: dict[str, _RealizedTaxAccumulator] = {}
-        for transaction in transactions:
-            currency = normalize_currency_code(str(getattr(transaction, "currency")))
-            bucket = totals.setdefault(currency, _RealizedTaxAccumulator())
-            withholding_tax = getattr(transaction, "withholding_tax_amount") or Decimal("0")
-            other_deductions = getattr(transaction, "other_interest_deductions_amount") or Decimal(
-                "0"
-            )
-            bucket.transaction_count += 1
-            bucket.withholding_tax_amount += withholding_tax
-            bucket.other_tax_deductions_amount += other_deductions
-
-        return [
-            RealizedTaxCurrencyTotal(
-                currency=currency,
-                transaction_count=bucket.transaction_count,
-                withholding_tax_amount=bucket.withholding_tax_amount,
-                other_tax_deductions_amount=bucket.other_tax_deductions_amount,
-                total_tax_amount=bucket.withholding_tax_amount + bucket.other_tax_deductions_amount,
-            )
-            for currency, bucket in sorted(totals.items())
-        ]
-
-    @staticmethod
-    def _latest_transaction_evidence_timestamp(transactions: list[object]) -> datetime | None:
-        return max(
-            (
-                updated_at
-                for transaction in transactions
-                if (updated_at := getattr(transaction, "updated_at", None)) is not None
-            ),
-            default=None,
-        )
-
-    async def _apply_reporting_currency_fields(
-        self,
-        *,
-        record: TransactionRecord,
-        reporting_currency: str,
-        as_of_date: date,
-    ) -> None:
-        money_fields = (
-            ("gross_transaction_amount", "gross_transaction_amount_reporting_currency", "book"),
-            ("gross_cost", "gross_cost_reporting_currency", "book"),
-            ("trade_fee", "trade_fee_reporting_currency", "trade"),
-            ("net_cost", "net_cost_reporting_currency", "book"),
-            ("realized_gain_loss", "realized_gain_loss_reporting_currency", "book"),
-            (
-                "realized_capital_pnl_local",
-                "realized_capital_pnl_local_reporting_currency",
-                "trade",
-            ),
-            ("realized_fx_pnl_local", "realized_fx_pnl_local_reporting_currency", "trade"),
-            ("realized_total_pnl_local", "realized_total_pnl_local_reporting_currency", "trade"),
-            ("withholding_tax_amount", "withholding_tax_amount_reporting_currency", "book"),
-            (
-                "other_interest_deductions_amount",
-                "other_interest_deductions_amount_reporting_currency",
-                "book",
-            ),
-            ("net_interest_amount", "net_interest_amount_reporting_currency", "book"),
-        )
-        for source_field, target_field, currency_basis in money_fields:
-            amount = getattr(record, source_field)
-            if amount is None:
-                continue
-            converted_value = await self._convert_amount(
-                amount=amount,
-                from_currency=self._source_currency_for_field(
-                    record=record,
-                    currency_basis=currency_basis,
-                ),
-                to_currency=reporting_currency,
-                as_of_date=as_of_date,
-            )
-            setattr(record, target_field, converted_value)
-
-    @staticmethod
-    def _source_currency_for_field(
-        *,
-        record: TransactionRecord,
-        currency_basis: str,
-    ) -> str:
-        if currency_basis == "trade" and record.trade_currency:
-            return cast(str, record.trade_currency)
-        return cast(str, record.currency)
 
     async def _convert_amount(
         self,
@@ -353,15 +192,4 @@ class TransactionService:
                 to_currency=to_currency,
                 as_of_date=as_of_date,
             ),
-        )
-
-    async def _get_fx_rate(
-        self,
-        from_currency: str,
-        to_currency: str,
-        as_of_date: date,
-    ) -> Decimal:
-        return cast(
-            Decimal,
-            await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date),
         )

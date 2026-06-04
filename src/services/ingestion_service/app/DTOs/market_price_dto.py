@@ -61,4 +61,3 @@ class MarketPriceIngestionRequest(BaseModel):
             ]
         ],
     )
-

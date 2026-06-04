@@ -7,9 +7,9 @@ Create Date: 2026-02-27 11:30:00
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a7d3c9f1e4b2"
@@ -29,4 +29,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("instruments", "ultimate_parent_issuer_name")
     op.drop_column("instruments", "issuer_name")
-

@@ -12,6 +12,13 @@ from src.services.query_service.app.dtos.core_snapshot_dto import (
     CoreSnapshotRequest,
     CoreSnapshotSection,
 )
+from src.services.query_service.app.services.core_snapshot_calculations import (
+    assign_baseline_weights,
+    assign_projected_weights,
+    build_delta_section,
+    total_market_value_baseline,
+    total_market_value_projected,
+)
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
@@ -418,6 +425,22 @@ async def test_core_snapshot_raises_when_simulation_session_missing(mock_depende
     )
 
     with pytest.raises(CoreSnapshotNotFoundError):
+        await service.get_core_snapshot("PORT_001", request)
+
+
+async def test_core_snapshot_raises_when_simulation_options_missing(mock_dependencies):
+    service = CoreSnapshotService(AsyncMock())
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.SIMULATION,
+        sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
+        simulation={"session_id": "SIM_1"},
+    ).model_copy(update={"simulation": None})
+
+    with pytest.raises(
+        CoreSnapshotBadRequestError,
+        match="simulation options are required",
+    ):
         await service.get_core_snapshot("PORT_001", request)
 
 
@@ -993,12 +1016,12 @@ async def test_static_helpers_cover_zero_total_and_delta_paths():
             "currency": "USD",
         }
     }
-    CoreSnapshotService._assign_baseline_weights(items, Decimal("0"))
-    CoreSnapshotService._assign_projected_weights(items, Decimal("0"))
+    assign_baseline_weights(items, Decimal("0"))
+    assign_projected_weights(items, Decimal("0"))
     assert items["SEC_1"]["position_record"].weight == Decimal("0")
 
-    baseline_total = CoreSnapshotService._total_market_value_baseline(items)
-    projected_total = CoreSnapshotService._total_market_value_projected(items)
+    baseline_total = total_market_value_baseline(items)
+    projected_total = total_market_value_projected(items)
     assert baseline_total == Decimal("0")
     assert projected_total == Decimal("0")
 
@@ -1006,10 +1029,10 @@ async def test_static_helpers_cover_zero_total_and_delta_paths():
         "SEC_BLANK": {"market_value_base": " "},
         "SEC_TEXT": {"market_value_base": "2.25"},
     }
-    assert CoreSnapshotService._total_market_value_baseline(optional_items) == Decimal("2.25")
-    assert CoreSnapshotService._total_market_value_projected(optional_items) == Decimal("2.25")
+    assert total_market_value_baseline(optional_items) == Decimal("2.25")
+    assert total_market_value_projected(optional_items) == Decimal("2.25")
 
-    delta_rows = CoreSnapshotService._build_delta_section(
+    delta_rows = build_delta_section(
         baseline_positions=items,
         projected_positions={},
         baseline_total=Decimal("0"),

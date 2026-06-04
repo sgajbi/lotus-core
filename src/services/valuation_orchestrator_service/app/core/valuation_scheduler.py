@@ -68,8 +68,7 @@ class ValuationScheduler:
         watermark_updated_at: datetime | None = None,
     ) -> str:
         base_correlation_id = (
-            f"SCHEDULER_BACKFILL:{portfolio_id}:{security_id}:"
-            f"{epoch}:{valuation_date.isoformat()}"
+            f"SCHEDULER_BACKFILL:{portfolio_id}:{security_id}:{epoch}:{valuation_date.isoformat()}"
         )
         if watermark_updated_at is None:
             return base_correlation_id

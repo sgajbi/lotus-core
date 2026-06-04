@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -83,6 +84,61 @@ def dpm_portfolio_universe_next_page_token_payload(
         "last_portfolio_id": str(last_row.portfolio_id),
         "last_mandate_id": str(last_row.mandate_id),
     }
+
+
+def dpm_portfolio_universe_page_token(
+    *,
+    request_scope_fingerprint: str,
+    page_rows: list[Any],
+    has_more: bool,
+    encode_page_token: Callable[[dict[str, str]], str],
+) -> str | None:
+    payload = dpm_portfolio_universe_next_page_token_payload(
+        request_scope_fingerprint=request_scope_fingerprint,
+        page_rows=page_rows,
+        has_more=has_more,
+    )
+    if payload is None:
+        return None
+    return encode_page_token(payload)
+
+
+async def resolve_dpm_portfolio_universe_candidate_response(
+    *,
+    repository: Any,
+    request: DpmPortfolioUniverseCandidateRequest,
+    decode_page_token: Callable[[str | None], dict[str, Any]],
+    encode_page_token: Callable[[dict[str, str]], str],
+) -> DpmPortfolioUniverseCandidateResponse:
+    read_scope = dpm_portfolio_universe_read_scope(request)
+    after_sort_key = dpm_portfolio_universe_after_sort_key(
+        cursor=decode_page_token(request.page.page_token),
+        request_scope_fingerprint=read_scope.request_scope_fingerprint,
+    )
+    rows = await repository.list_dpm_portfolio_universe_candidates(
+        as_of_date=request.as_of_date,
+        booking_center_code=read_scope.booking_center_code,
+        model_portfolio_ids=read_scope.model_portfolio_ids,
+        include_inactive_mandates=request.include_inactive_mandates,
+        after_sort_key=after_sort_key,
+        limit=request.page.page_size + 1,
+    )
+    has_more = len(rows) > request.page.page_size
+    page_rows = rows[: request.page.page_size]
+    next_page_token = dpm_portfolio_universe_page_token(
+        request_scope_fingerprint=read_scope.request_scope_fingerprint,
+        page_rows=page_rows,
+        has_more=has_more,
+        encode_page_token=encode_page_token,
+    )
+
+    return build_dpm_portfolio_universe_response(
+        request=request,
+        read_scope=read_scope,
+        page_rows=page_rows,
+        has_more=has_more,
+        next_page_token=next_page_token,
+    )
 
 
 def build_dpm_portfolio_universe_response(

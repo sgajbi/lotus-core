@@ -16,6 +16,32 @@ from .reference_data_mappers import model_portfolio_target_row
 from .source_data_runtime import source_product_runtime_metadata
 
 
+async def resolve_model_portfolio_target_response(
+    *,
+    repository: Any,
+    model_portfolio_id: str,
+    request: ModelPortfolioTargetRequest,
+) -> ModelPortfolioTargetResponse | None:
+    definition = await repository.resolve_model_portfolio_definition(
+        model_portfolio_id=model_portfolio_id,
+        as_of_date=request.as_of_date,
+    )
+    if definition is None:
+        return None
+
+    targets = await repository.list_model_portfolio_targets(
+        model_portfolio_id=model_portfolio_id,
+        model_portfolio_version=definition.model_portfolio_version,
+        as_of_date=request.as_of_date,
+        include_inactive_targets=request.include_inactive_targets,
+    )
+    return build_model_portfolio_target_response(
+        definition=definition,
+        request=request,
+        target_rows=targets,
+    )
+
+
 def build_model_portfolio_target_response(
     *,
     definition: Any,

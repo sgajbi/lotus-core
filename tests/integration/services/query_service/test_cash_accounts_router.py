@@ -49,9 +49,7 @@ async def test_get_cash_accounts(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["cash_accounts"][0]["cash_account_id"] == "CASH-ACC-USD-001"
-    mock_service.get_cash_accounts.assert_awaited_once_with(
-        "P1", as_of_date=date(2026, 3, 27)
-    )
+    mock_service.get_cash_accounts.assert_awaited_once_with("P1", as_of_date=date(2026, 3, 27))
 
 
 async def test_get_cash_accounts_without_as_of_date_forwards_none(async_test_client):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -14,6 +15,7 @@ from ..dtos.reference_integration_dto import (
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
 from .reference_data_helpers import latest_reference_evidence_timestamp
+from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
@@ -29,6 +31,122 @@ class TransactionCostCurvePage:
     points: list[TransactionCostCurvePoint]
     all_curve_keys: list[tuple[str, str, str]]
     has_more: bool
+
+
+@dataclass(frozen=True)
+class TransactionCostCurveRequestScope:
+    request_fingerprint: str
+    after_key: tuple[str, str, str] | tuple[()]
+
+
+def transaction_cost_curve_request_scope(
+    *,
+    portfolio_id: str,
+    request: TransactionCostCurveRequest,
+    cursor: dict[str, Any],
+) -> TransactionCostCurveRequestScope:
+    request_fingerprint = build_request_fingerprint(
+        {
+            "portfolio_id": portfolio_id,
+            "as_of_date": request.as_of_date.isoformat(),
+            "window": {
+                "start_date": request.window.start_date.isoformat(),
+                "end_date": request.window.end_date.isoformat(),
+            },
+            "security_ids": sorted(request.security_ids or []),
+            "transaction_types": sorted(request.transaction_types or []),
+            "min_observation_count": request.min_observation_count,
+            "tenant_id": request.tenant_id,
+        }
+    )
+    token_scope = cursor.get("scope_fingerprint")
+    if token_scope and token_scope != request_fingerprint:
+        raise ValueError("Transaction cost curve page token does not match request scope.")
+
+    return TransactionCostCurveRequestScope(
+        request_fingerprint=request_fingerprint,
+        after_key=tuple(cursor.get("last_curve_key") or ()),
+    )
+
+
+def transaction_cost_curve_next_page_token_payload(
+    *,
+    request_scope: TransactionCostCurveRequestScope,
+    curve_page: TransactionCostCurvePage,
+) -> dict[str, Any] | None:
+    if not curve_page.has_more or not curve_page.points:
+        return None
+    last_point = curve_page.points[-1]
+    return {
+        "scope_fingerprint": request_scope.request_fingerprint,
+        "last_curve_key": [
+            last_point.security_id,
+            last_point.transaction_type,
+            last_point.currency,
+        ],
+    }
+
+
+def transaction_cost_curve_page_token(
+    *,
+    request_scope: TransactionCostCurveRequestScope,
+    curve_page: TransactionCostCurvePage,
+    encode_page_token: Callable[[dict[str, Any]], str],
+) -> str | None:
+    payload = transaction_cost_curve_next_page_token_payload(
+        request_scope=request_scope,
+        curve_page=curve_page,
+    )
+    if payload is None:
+        return None
+    return encode_page_token(payload)
+
+
+async def resolve_transaction_cost_curve_response(
+    *,
+    repository: Any,
+    portfolio_id: str,
+    request: TransactionCostCurveRequest,
+    decode_page_token: Callable[[str | None], dict[str, Any]],
+    encode_page_token: Callable[[dict[str, Any]], str],
+) -> TransactionCostCurveResponse:
+    if not await repository.portfolio_exists(portfolio_id):
+        raise LookupError(f"Portfolio with id {portfolio_id} not found")
+
+    request_scope = transaction_cost_curve_request_scope(
+        portfolio_id=portfolio_id,
+        request=request,
+        cursor=decode_page_token(request.page.page_token),
+    )
+    transactions = await repository.list_transaction_cost_evidence(
+        portfolio_id=portfolio_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+        as_of_date=request.as_of_date,
+        security_ids=request.security_ids,
+        transaction_types=request.transaction_types,
+    )
+    curve_page = build_transaction_cost_curve_page(
+        portfolio_id=portfolio_id,
+        transactions=transactions,
+        min_observation_count=request.min_observation_count,
+        after_key=request_scope.after_key,
+        page_size=request.page.page_size,
+    )
+    next_page_token = transaction_cost_curve_page_token(
+        request_scope=request_scope,
+        curve_page=curve_page,
+        encode_page_token=encode_page_token,
+    )
+
+    return build_transaction_cost_curve_response(
+        portfolio_id=portfolio_id,
+        request=request,
+        request_scope_fingerprint=request_scope.request_fingerprint,
+        curve_page=curve_page,
+        transactions=transactions,
+        next_page_token=next_page_token,
+    )
 
 
 def transaction_fee_amount(transaction: Any) -> Decimal:

@@ -43,9 +43,7 @@ PORTFOLIO_RATE_LIMIT_EXCEEDED_EXAMPLE = {
     responses={
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the portfolio request.",
-            "content": {
-                "application/json": {"example": PORTFOLIO_RATE_LIMIT_EXCEEDED_EXAMPLE}
-            },
+            "content": {"application/json": {"example": PORTFOLIO_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Ingestion operating mode blocked writes.",
@@ -143,4 +141,3 @@ async def ingest_portfolios(
         accepted_count=num_portfolios,
         idempotency_key=idempotency_key,
     )
-

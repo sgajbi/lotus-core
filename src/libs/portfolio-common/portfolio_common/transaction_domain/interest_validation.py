@@ -189,8 +189,7 @@ def validate_interest_transaction(
                 code=InterestValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT,
                 field="settlement_cash_account_id",
                 message=(
-                    "settlement_cash_account_id is required when "
-                    "cash_entry_mode is AUTO_GENERATE."
+                    "settlement_cash_account_id is required when cash_entry_mode is AUTO_GENERATE."
                 ),
             )
         )

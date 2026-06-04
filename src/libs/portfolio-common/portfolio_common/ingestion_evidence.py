@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 
-
 SOURCE_BATCH_ID_PREFIX = "srcbatch"
 
 ACCEPTED = "accepted"

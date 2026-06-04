@@ -9,6 +9,7 @@ from ..dtos.sell_state_dto import (
 )
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.sell_state_repository import SellStateRepository
+from .portfolio_validation import ensure_portfolio_exists
 
 
 class SellStateService:
@@ -31,8 +32,7 @@ class SellStateService:
     async def get_sell_disposals(
         self, portfolio_id: str, security_id: str
     ) -> SellDisposalsResponse:
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
 
         security_id = normalize_security_id(security_id)
         rows = await self.repo.get_sell_disposals(
@@ -76,8 +76,7 @@ class SellStateService:
     async def get_sell_cash_linkage(
         self, portfolio_id: str, transaction_id: str
     ) -> SellCashLinkageResponse:
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
 
         row = await self.repo.get_sell_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id

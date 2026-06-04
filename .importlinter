@@ -1,0 +1,27 @@
+[importlinter]
+root_packages =
+    services
+    portfolio_common
+include_external_packages = True
+
+[importlinter:contract:query_service_routers_do_not_import_repositories]
+name = Query service routers should not import repositories directly
+type = forbidden
+source_modules =
+    services.query_service.app.routers
+forbidden_modules =
+    services.query_service.app.repositories
+allow_indirect_imports = True
+
+[importlinter:contract:common_library_fastapi_dependency_is_approved]
+name = portfolio_common FastAPI dependency should stay in approved HTTP modules
+type = forbidden
+source_modules =
+    portfolio_common
+forbidden_modules =
+    fastapi
+ignore_imports =
+    portfolio_common.enterprise_readiness -> fastapi
+    portfolio_common.health -> fastapi
+    portfolio_common.http_app_bootstrap -> fastapi
+    portfolio_common.openapi_enrichment -> fastapi

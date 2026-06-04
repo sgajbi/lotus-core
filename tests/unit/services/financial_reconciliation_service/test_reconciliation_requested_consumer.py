@@ -110,7 +110,6 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_service = mock_dependencies["service"]
-    mock_db_session = mock_dependencies["db_session"]
     mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_idempotency_repo.claim_event_processing.return_value = True
     mock_service.run_automatic_bundle.return_value = {

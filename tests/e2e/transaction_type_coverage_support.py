@@ -68,9 +68,7 @@ def build_transaction_payloads(
     for idx, tx_type in enumerate(sorted(SUPPORTED_TRANSACTION_TYPES)):
         ts = base_ts + timedelta(minutes=idx)
         tx_id = f"{portfolio_id}_{tx_type}_{idx:02d}"
-        resolved_security_id = (
-            cash_security_id if tx_type in CASH_INSTRUMENT_TYPES else security_id
-        )
+        resolved_security_id = cash_security_id if tx_type in CASH_INSTRUMENT_TYPES else security_id
         quantity = Decimal("1")
         price = Decimal("10")
         gross = Decimal("100")

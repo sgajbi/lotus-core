@@ -33,9 +33,9 @@ async def test_kafka_setup_ensures_topics_exist_and_is_idempotent(kafka_admin_cl
     topics_after_startup = kafka_admin_client.list_topics(timeout=5).topics
 
     missing_at_start = [topic for topic in TOPICS_TO_CREATE if topic not in topics_after_startup]
-    assert (
-        not missing_at_start
-    ), f"Topics that should have been created at startup are missing: {missing_at_start}"
+    assert not missing_at_start, (
+        f"Topics that should have been created at startup are missing: {missing_at_start}"
+    )
 
     # ACT
     # Run the topic creation logic again to test for idempotency.

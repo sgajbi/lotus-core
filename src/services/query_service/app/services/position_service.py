@@ -1,23 +1,19 @@
 # src/services/query_service/app/services/position_service.py
 import logging
-from datetime import date, datetime
-from decimal import Decimal
-from typing import Any, Optional
+from datetime import date
+from typing import Optional
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.position_dto import (
     PortfolioPositionHistoryResponse,
     PortfolioPositionsResponse,
-    Position,
-    PositionHistoryRecord,
 )
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
-from ..dtos.valuation_dto import ValuationData
-from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.position_repository import PositionRepository
-from .decimal_amounts import decimal_or_zero
+from .portfolio_validation import ensure_portfolio_exists
+from .position_history_reads import position_history_response
+from .position_holdings_reads import effective_holdings_read_as_of_date
+from .position_holdings_response import portfolio_holdings_response
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +24,6 @@ class PositionService:
     """
 
     def __init__(self, db: AsyncSession):
-        self.db = db
         self.repo = PositionRepository(db)
 
     async def get_position_history(
@@ -45,32 +40,14 @@ class PositionService:
             f"Fetching position history for security '{security_id}' in portfolio '{portfolio_id}'."
         )
 
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
 
-        security_id = normalize_security_id(security_id)
-        db_results = await self.repo.get_position_history_by_security(
+        return await position_history_response(
+            repository=self.repo,
             portfolio_id=portfolio_id,
             security_id=security_id,
             start_date=start_date,
             end_date=end_date,
-        )
-
-        positions = []
-        for position_history_obj, reprocessing_status in db_results:
-            record = PositionHistoryRecord(
-                position_date=position_history_obj.position_date,
-                transaction_id=position_history_obj.transaction_id,
-                quantity=position_history_obj.quantity,
-                cost_basis=position_history_obj.cost_basis,
-                cost_basis_local=position_history_obj.cost_basis_local,
-                valuation=None,
-                reprocessing_status=reprocessing_status,
-            )
-            positions.append(record)
-
-        return PortfolioPositionHistoryResponse(
-            portfolio_id=portfolio_id, security_id=security_id, positions=positions
         )
 
     async def get_portfolio_positions(
@@ -84,256 +61,15 @@ class PositionService:
         """
         logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
 
-        needs_default_as_of_date = as_of_date is None and not include_projected
-        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
-        if not portfolio_exists:
-            raise LookupError(f"Portfolio with id {portfolio_id} not found")
-        default_as_of_date = (
-            await self.repo.get_latest_business_date() if needs_default_as_of_date else as_of_date
+        await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
+        effective_as_of_date = await effective_holdings_read_as_of_date(
+            repository=self.repo,
+            requested_as_of_date=as_of_date,
+            include_projected=include_projected,
         )
 
-        effective_as_of_date = default_as_of_date
-        if effective_as_of_date is None and needs_default_as_of_date:
-            effective_as_of_date = date.today()
-
-        if effective_as_of_date is not None:
-            snapshot_results = await self.repo.get_latest_positions_by_portfolio_as_of_date(
-                portfolio_id, effective_as_of_date
-            )
-            history_results = await self.repo.get_latest_position_history_by_portfolio_as_of_date(
-                portfolio_id,
-                effective_as_of_date,
-            )
-        else:
-            snapshot_results = await self.repo.get_latest_positions_by_portfolio(portfolio_id)
-            history_results = await self.repo.get_latest_position_history_by_portfolio(portfolio_id)
-
-        snapshot_results_by_security = {
-            normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)
-            for position_row, instrument, pos_state in snapshot_results
-        }
-        db_results = list(snapshot_results_by_security.values())
-        history_supplements = [
-            (position_row, instrument, pos_state)
-            for position_row, instrument, pos_state in history_results
-            if normalize_security_id(position_row.security_id) not in snapshot_results_by_security
-        ]
-        db_results.extend(history_supplements)
-
-        snapshot_security_ids = set(snapshot_results_by_security.keys())
-        fallback_valuation_map: dict[str, dict[str, float | None]] = {}
-        if history_supplements or (db_results and not snapshot_security_ids):
-            fallback_security_ids = sorted(
-                {
-                    security_id
-                    for position_row, _instrument, _pos_state in history_supplements
-                    if (security_id := normalize_security_id(position_row.security_id))
-                }
-            )
-            fallback_valuation_map = (
-                await self.repo.get_latest_snapshot_valuation_map_as_of_date(
-                    portfolio_id,
-                    effective_as_of_date,
-                    security_ids=fallback_security_ids or None,
-                )
-                if effective_as_of_date is not None
-                else await self.repo.get_latest_snapshot_valuation_map(
-                    portfolio_id,
-                    security_ids=fallback_security_ids or None,
-                )
-            )
-
-        positions = []
-        for position_row, instrument, pos_state in db_results:
-            security_id = normalize_security_id(position_row.security_id)
-            is_snapshot_row = security_id in snapshot_security_ids
-            valuation_dto = None
-            if is_snapshot_row:
-                valuation_dto = ValuationData(
-                    market_price=position_row.market_price,
-                    market_value=position_row.market_value,
-                    unrealized_gain_loss=position_row.unrealized_gain_loss,
-                    market_value_local=position_row.market_value_local,
-                    unrealized_gain_loss_local=position_row.unrealized_gain_loss_local,
-                )
-            else:
-                fallback_valuation = fallback_valuation_map.get(security_id)
-                if fallback_valuation is not None:
-                    valuation_dto = ValuationData(
-                        market_price=fallback_valuation.get("market_price"),
-                        market_value=fallback_valuation.get("market_value"),
-                        unrealized_gain_loss=fallback_valuation.get("unrealized_gain_loss"),
-                        market_value_local=fallback_valuation.get("market_value_local"),
-                        unrealized_gain_loss_local=fallback_valuation.get(
-                            "unrealized_gain_loss_local"
-                        ),
-                    )
-                else:
-                    # Maintain valuation continuity while snapshot backfill catches up.
-                    valuation_dto = ValuationData(
-                        market_price=None,
-                        market_value=position_row.cost_basis,
-                        unrealized_gain_loss=0,
-                        market_value_local=position_row.cost_basis_local,
-                        unrealized_gain_loss_local=0,
-                    )
-            position_dto = Position(
-                security_id=security_id,
-                quantity=position_row.quantity,
-                cost_basis=position_row.cost_basis,
-                cost_basis_local=position_row.cost_basis_local,
-                instrument_name=instrument.name if instrument else "N/A",
-                position_date=(
-                    position_row.date if is_snapshot_row else position_row.position_date
-                ),
-                asset_class=instrument.asset_class if instrument else None,
-                isin=instrument.isin if instrument else None,
-                currency=instrument.currency if instrument else None,
-                sector=instrument.sector if instrument else None,
-                country_of_risk=instrument.country_of_risk if instrument else None,
-                product_type=instrument.product_type if instrument else None,
-                rating=instrument.rating if instrument else None,
-                liquidity_tier=instrument.liquidity_tier if instrument else None,
-                valuation=valuation_dto,
-                reprocessing_status=pos_state.status if pos_state else None,
-            )
-            positions.append(position_dto)
-
-        total_market_value = Decimal(0)
-        position_values: list[Decimal] = []
-        for position in positions:
-            base_value = self._weight_base_value(position)
-            position_values.append(base_value)
-            total_market_value += base_value
-
-        if total_market_value > 0:
-            for position, value in zip(positions, position_values):
-                position.weight = value / total_market_value
-        else:
-            for position in positions:
-                position.weight = Decimal(0)
-
-        held_since_requests: list[tuple[int, str, int, date]] = []
-        for idx, ((position_row, _instrument, pos_state), position) in enumerate(
-            zip(db_results, positions)
-        ):
-            epoch = getattr(pos_state, "epoch", None)
-            if epoch is None:
-                position.held_since_date = position.position_date
-                continue
-            held_since_requests.append(
-                (
-                    idx,
-                    normalize_security_id(position_row.security_id),
-                    int(epoch),
-                    position.position_date,
-                )
-            )
-
-        response_as_of_date = effective_as_of_date or max(
-            (position.position_date for position in positions), default=date.today()
-        )
-        market_price_security_ids = sorted(
-            {
-                security_id
-                for position in positions
-                if self._requires_market_price_freshness(position)
-                if (security_id := normalize_security_id(position.security_id))
-            }
-        )
-
-        if held_since_requests:
-            held_since_map = await self.repo.get_held_since_dates(
-                portfolio_id=portfolio_id,
-                security_epoch_pairs=[
-                    (security_id, epoch) for _, security_id, epoch, _ in held_since_requests
-                ],
-            )
-            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-                security_ids=market_price_security_ids,
-                as_of_date=response_as_of_date,
-            )
-            for idx, security_id, epoch, default_date in held_since_requests:
-                positions[idx].held_since_date = held_since_map.get(
-                    (security_id, epoch), default_date
-                )
-        else:
-            latest_market_price_dates = await self.repo.get_latest_market_price_dates(
-                security_ids=market_price_security_ids,
-                as_of_date=response_as_of_date,
-            )
-        return PortfolioPositionsResponse(
+        return await portfolio_holdings_response(
+            repository=self.repo,
             portfolio_id=portfolio_id,
-            positions=positions,
-            **source_data_product_runtime_metadata(
-                as_of_date=response_as_of_date,
-                data_quality_status=self._holdings_data_quality_status(
-                    positions=positions,
-                    history_supplements=history_supplements,
-                    response_as_of_date=response_as_of_date,
-                    latest_market_price_dates=latest_market_price_dates,
-                ),
-                latest_evidence_timestamp=self._latest_holdings_evidence_timestamp(db_results),
-            ),
+            effective_as_of_date=effective_as_of_date,
         )
-
-    @staticmethod
-    def _holdings_data_quality_status(
-        *,
-        positions: list[Position],
-        history_supplements: list[tuple[Any, Any, Any]],
-        response_as_of_date: date,
-        latest_market_price_dates: dict[str, date],
-    ) -> str:
-        if not positions:
-            return UNKNOWN
-        normalized_statuses = [
-            (position.reprocessing_status or "").strip().upper() for position in positions
-        ]
-        if any(not status for status in normalized_statuses):
-            return UNKNOWN
-        if any(status != "CURRENT" for status in normalized_statuses):
-            return STALE
-        if any(
-            (
-                latest_market_price_dates.get(normalize_security_id(position.security_id))
-                != response_as_of_date
-                if PositionService._requires_market_price_freshness(position)
-                else False
-            )
-            for position in positions
-        ):
-            return STALE
-        if history_supplements:
-            return PARTIAL
-        return COMPLETE
-
-    @staticmethod
-    def _requires_market_price_freshness(position: Position) -> bool:
-        return (
-            (position.asset_class or "").strip().upper() != "CASH"
-            and position.valuation is not None
-            and position.valuation.market_price is not None
-        )
-
-    @staticmethod
-    def _weight_base_value(position: Position) -> Decimal:
-        if position.valuation is not None and position.valuation.market_value is not None:
-            return decimal_or_zero(position.valuation.market_value)
-        return decimal_or_zero(position.cost_basis)
-
-    @staticmethod
-    def _latest_holdings_evidence_timestamp(
-        db_results: list[tuple[Any, Any, Any]],
-    ) -> datetime | None:
-        timestamps: list[datetime] = []
-        for position_row, _instrument, pos_state in db_results:
-            for candidate in (
-                getattr(position_row, "updated_at", None),
-                getattr(position_row, "created_at", None),
-                getattr(pos_state, "updated_at", None),
-                getattr(pos_state, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None

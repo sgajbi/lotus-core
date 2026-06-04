@@ -6,10 +6,9 @@ import pytest
 from portfolio_common.database_models import Cashflow
 from sqlalchemy.exc import IntegrityError
 
-from src.services.calculators.cashflow_calculator_service.app.repositories.cashflow_repository import (
-    CashflowRepository,
+from src.services.calculators.cashflow_calculator_service.app.repositories import (
+    cashflow_repository,
 )
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -42,7 +41,7 @@ async def test_create_cashflow_reuses_existing_row_on_duplicate() -> None:
     execute_result.scalars.return_value.first.return_value = existing_cashflow
     db_session.execute.return_value = execute_result
 
-    repository = CashflowRepository(db_session)
+    repository = cashflow_repository.CashflowRepository(db_session)
     duplicate_cashflow = Cashflow(
         transaction_id="TXN-001",
         portfolio_id="PORT-001",

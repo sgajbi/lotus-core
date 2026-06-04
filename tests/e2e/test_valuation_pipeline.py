@@ -97,6 +97,7 @@ def setup_valuation_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_
     # This is a reliable indicator that the entire pipeline has completed.
     query = "SELECT valuation_status FROM daily_position_snapshots WHERE portfolio_id = :pid AND security_id = :sid AND date = :date"  # noqa: E501
     params = {"pid": portfolio_id, "sid": security_id, "date": tx_date}
+
     def validation_func(r):
         return r is not None and r.valuation_status == "VALUED_CURRENT"
 

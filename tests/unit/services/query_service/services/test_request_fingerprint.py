@@ -19,6 +19,10 @@ def test_request_fingerprint_changes_with_payload_value() -> None:
     )
 
 
+def test_request_fingerprint_uses_sha256_length() -> None:
+    assert len(request_fingerprint({"portfolio_id": "PB_001"})) == 64
+
+
 def test_series_request_fingerprint_includes_window_and_extras() -> None:
     request = SimpleNamespace(
         as_of_date=date(2026, 5, 3),

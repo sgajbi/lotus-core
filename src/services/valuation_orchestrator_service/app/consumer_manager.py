@@ -9,6 +9,7 @@ from portfolio_common.config import (
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
 )
+from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.runtime_supervision import (
     shutdown_runtime_components,
@@ -68,7 +69,7 @@ class ConsumerManager:
             len(self.consumers),
         )
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum, _frame):
         logger.info("Received shutdown signal: %s", signal.Signals(signum).name)
         self._shutdown_event.set()
 
@@ -79,7 +80,9 @@ class ConsumerManager:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-        uvicorn_config = uvicorn.Config(web_app, host="0.0.0.0", port=8087, log_config=None)
+        uvicorn_config = uvicorn.Config(
+            web_app, host=health_probe_bind_host(), port=8087, log_config=None
+        )
         server = uvicorn.Server(uvicorn_config)
 
         self.tasks = [asyncio.create_task(c.run()) for c in self.consumers]

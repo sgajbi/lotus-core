@@ -17,9 +17,7 @@ def _sha256(path: Path) -> str:
 
 
 def _git_head() -> str:
-    return subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
-    ).strip()
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
 
 
 def _extract_base_image(dockerfile: Path) -> str:

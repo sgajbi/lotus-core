@@ -7,9 +7,9 @@ Create Date: 2026-03-03 14:15:00
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b7e8f9a0b1c2"
@@ -44,4 +44,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_consumer_dlq_events_error_reason_code", table_name="consumer_dlq_events")
     op.drop_column("consumer_dlq_events", "error_reason_code")
-

@@ -46,6 +46,34 @@ def benchmark_composition_definition_context(
     )
 
 
+async def resolve_benchmark_composition_window_response(
+    *,
+    repository: Any,
+    benchmark_id: str,
+    request: BenchmarkCompositionWindowRequest,
+) -> BenchmarkCompositionWindowResponse | None:
+    definition_rows = await repository.list_benchmark_definitions_overlapping_window(
+        benchmark_id=benchmark_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+    )
+    definition_context = benchmark_composition_definition_context(definition_rows)
+    if definition_context is None:
+        return None
+
+    component_rows = await repository.list_benchmark_components_overlapping_window(
+        benchmark_id=benchmark_id,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+    )
+    return build_benchmark_composition_window_response(
+        benchmark_id=benchmark_id,
+        request=request,
+        definition_context=definition_context,
+        component_rows=component_rows,
+    )
+
+
 def build_benchmark_composition_window_response(
     *,
     benchmark_id: str,

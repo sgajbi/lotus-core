@@ -114,9 +114,7 @@ async def test_get_instruments_with_filters(
     mock_result.scalars.return_value.all.return_value = []
 
     # ACT
-    await repository.get_instruments(
-        skip=0, limit=100, security_id=" SEC1 ", product_type="Equity"
-    )
+    await repository.get_instruments(skip=0, limit=100, security_id=" SEC1 ", product_type="Equity")
 
     # ASSERT
     executed_stmt = mock_db_session.execute.call_args[0][0]

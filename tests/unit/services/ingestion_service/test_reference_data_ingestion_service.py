@@ -207,17 +207,17 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
                 "quality_status",
             ],
         ),
-            (
-                "upsert_benchmark_definitions",
-                [
-                    {
-                        "benchmark_id": "BMK_001",
-                        "benchmark_currency": "USD",
-                        "effective_from": "2026-01-01",
-                    }
-                ],
-                ["benchmark_id", "effective_from"],
-                [
+        (
+            "upsert_benchmark_definitions",
+            [
+                {
+                    "benchmark_id": "BMK_001",
+                    "benchmark_currency": "USD",
+                    "effective_from": "2026-01-01",
+                }
+            ],
+            ["benchmark_id", "effective_from"],
+            [
                 "benchmark_name",
                 "benchmark_type",
                 "benchmark_currency",

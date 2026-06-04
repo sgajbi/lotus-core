@@ -144,11 +144,7 @@ def create_health_router(
             (dep_map[dep][0], dep_map[dep][1]) for dep in dependencies if dep in dep_map
         ]
         now = time.monotonic()
-        if (
-            readiness_cache_ttl_seconds > 0
-            and cached_dep_status is not None
-            and now < cached_until
-        ):
+        if readiness_cache_ttl_seconds > 0 and cached_dep_status is not None and now < cached_until:
             all_ok = cached_all_ok
             dep_status = dict(cached_dep_status)
         else:

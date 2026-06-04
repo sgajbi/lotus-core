@@ -17,7 +17,6 @@ from portfolio_common.event_supportability import (
     validate_event_supportability_catalog,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPO_ROOT / "src"
 

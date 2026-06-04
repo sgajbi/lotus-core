@@ -238,12 +238,8 @@ class HealthMonitor:
                         HealthSample(
                             captured_at=_utc_now(),
                             backlog_jobs=int(summary_payload.get("backlog_jobs", 0)),
-                            backlog_age_seconds=float(
-                                slo_payload.get("backlog_age_seconds", 0.0)
-                            ),
-                            dlq_events_in_window=int(
-                                budget_payload.get("dlq_events_in_window", 0)
-                            ),
+                            backlog_age_seconds=float(slo_payload.get("backlog_age_seconds", 0.0)),
+                            dlq_events_in_window=int(budget_payload.get("dlq_events_in_window", 0)),
                             replay_pressure_ratio=float(
                                 budget_payload.get(
                                     "replay_backlog_pressure_ratio",
@@ -436,9 +432,9 @@ def expected_total_market_value(
     portfolio_count: int,
     specs: list[InstrumentSpec],
 ) -> Decimal:
-    return (
-        expected_portfolio_market_value(specs) * Decimal(portfolio_count)
-    ).quantize(Decimal("0.0000000001"))
+    return (expected_portfolio_market_value(specs) * Decimal(portfolio_count)).quantize(
+        Decimal("0.0000000001")
+    )
 
 
 def _wait_ready(*, base_urls: list[str], timeout_seconds: int) -> None:
@@ -467,9 +463,7 @@ def _post_payload(
 ) -> None:
     response = session.post(f"{base_url}{endpoint}", json=payload, timeout=120)
     if response.status_code == 429:
-        raise RateLimitError(
-            f"POST {endpoint} failed with status=429: {response.text[:500]}"
-        )
+        raise RateLimitError(f"POST {endpoint} failed with status=429: {response.text[:500]}")
     if response.status_code not in {200, 201, 202}:
         raise RuntimeError(
             f"POST {endpoint} failed with status={response.status_code}: {response.text[:500]}"
@@ -1106,8 +1100,7 @@ def _collect_sample_portfolios(
     expected_value = expected_portfolio_market_value(specs)
     for portfolio_id in portfolio_ids:
         positions_url = (
-            f"{query_base_url}/portfolios/{portfolio_id}/positions"
-            f"?as_of_date={trade_date}"
+            f"{query_base_url}/portfolios/{portfolio_id}/positions?as_of_date={trade_date}"
         )
         tx_url = (
             f"{query_base_url}/portfolios/{portfolio_id}/transactions"
@@ -1166,9 +1159,7 @@ def _collect_sample_portfolios(
                 transactions_count=len(transactions),
                 support_publish_allowed=bool(support.get("publish_allowed", False)),
                 support_pending_valuation_jobs=int(support.get("pending_valuation_jobs", 0)),
-                support_pending_aggregation_jobs=int(
-                    support.get("pending_aggregation_jobs", 0)
-                ),
+                support_pending_aggregation_jobs=int(support.get("pending_aggregation_jobs", 0)),
                 support_latest_booked_position_snapshot_date=support.get(
                     "latest_booked_position_snapshot_date"
                 ),
@@ -1242,8 +1233,7 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         failures.append(f"incomplete_portfolios {tie_out.incomplete_portfolios} != 0")
     if tie_out.portfolios_waiting_for_snapshots != 0:
         failures.append(
-            "portfolios_waiting_for_snapshots "
-            f"{tie_out.portfolios_waiting_for_snapshots} != 0"
+            f"portfolios_waiting_for_snapshots {tie_out.portfolios_waiting_for_snapshots} != 0"
         )
     if tie_out.snapshots_count != int(report.config["transaction_count"]):
         failures.append(

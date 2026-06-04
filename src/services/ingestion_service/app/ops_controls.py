@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
-from .settings import get_ingestion_service_settings
 
+from .settings import get_ingestion_service_settings
 
 _SETTINGS = get_ingestion_service_settings()
 
@@ -27,6 +27,7 @@ RATE_LIMIT_ENABLED = _SETTINGS.rate_limit.enabled
 RATE_LIMIT_WINDOW_SECONDS = _SETTINGS.rate_limit.window_seconds
 RATE_LIMIT_MAX_REQUESTS = _SETTINGS.rate_limit.max_requests
 RATE_LIMIT_MAX_RECORDS = _SETTINGS.rate_limit.max_records
+
 
 @dataclass(slots=True)
 class _WriteEvent:
@@ -82,7 +83,9 @@ async def require_ops_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={
                     "code": "INGESTION_OPS_JWT_SECRET_MISSING",
-                    "message": "JWT auth is enabled but LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET is missing.",
+                    "message": (
+                        "JWT auth is enabled but LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET is missing."
+                    ),
                 },
             )
         parts = token.split(".")

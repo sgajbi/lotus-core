@@ -18,7 +18,6 @@ from portfolio_common.source_data_security import (
     required_source_data_capability,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 ROUTER_ROOTS = {

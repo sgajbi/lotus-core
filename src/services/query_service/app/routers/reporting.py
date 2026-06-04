@@ -14,9 +14,7 @@ from ..services.reporting_service import ReportingService
 
 router = APIRouter(prefix="/reporting", tags=["Wealth Reporting"])
 
-PORTFOLIO_SUMMARY_NOT_FOUND_RESPONSE_EXAMPLE = {
-    "detail": "Portfolio with id PORT-001 not found"
-}
+PORTFOLIO_SUMMARY_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-001 not found"}
 PORTFOLIO_SUMMARY_INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
     "detail": "FX rate not found for USD/SGD as of 2026-03-27."
 }
@@ -124,5 +122,3 @@ async def query_portfolio_summary(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-
-

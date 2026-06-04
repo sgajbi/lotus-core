@@ -232,17 +232,14 @@ def validate_fx_transaction(
                 )
             )
 
-    if transaction_type in {"FX_FORWARD", "FX_SWAP"} or component_type.startswith(
-        "FX_CONTRACT"
-    ):
+    if transaction_type in {"FX_FORWARD", "FX_SWAP"} or component_type.startswith("FX_CONTRACT"):
         if not txn.fx_contract_id:
             issues.append(
                 FxValidationIssue(
                     code=FxValidationReasonCode.MISSING_FX_CONTRACT_ID,
                     field="fx_contract_id",
                     message=(
-                        "fx_contract_id is required for forwards, swaps, and contract "
-                        "components."
+                        "fx_contract_id is required for forwards, swaps, and contract components."
                     ),
                 )
             )
@@ -268,10 +265,7 @@ def validate_fx_transaction(
                 )
             )
 
-    if (
-        txn.spot_exposure_model is not None
-        and spot_exposure_model not in FX_SPOT_EXPOSURE_MODELS
-    ):
+    if txn.spot_exposure_model is not None and spot_exposure_model not in FX_SPOT_EXPOSURE_MODELS:
         issues.append(
             FxValidationIssue(
                 code=FxValidationReasonCode.INVALID_SPOT_EXPOSURE_MODEL,
@@ -280,10 +274,7 @@ def validate_fx_transaction(
             )
         )
 
-    if (
-        txn.fx_realized_pnl_mode is not None
-        and realized_pnl_mode not in FX_REALIZED_PNL_MODES
-    ):
+    if txn.fx_realized_pnl_mode is not None and realized_pnl_mode not in FX_REALIZED_PNL_MODES:
         issues.append(
             FxValidationIssue(
                 code=FxValidationReasonCode.INVALID_REALIZED_PNL_MODE,

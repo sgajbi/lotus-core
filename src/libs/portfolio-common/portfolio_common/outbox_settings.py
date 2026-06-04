@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+
 def _normalize_positive_default(default: int) -> int:
     try:
         return max(1, int(default))

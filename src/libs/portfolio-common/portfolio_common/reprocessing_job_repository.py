@@ -14,6 +14,51 @@ from .utils import async_timed
 logger = logging.getLogger(__name__)
 
 
+def _claim_pending_jobs_query(job_type: str):
+    if job_type == "RESET_WATERMARKS":
+        return text(
+            """
+            UPDATE reprocessing_jobs
+            SET status = 'PROCESSING',
+                updated_at = now(),
+                last_attempted_at = now(),
+                attempt_count = attempt_count + 1
+            WHERE status = 'PENDING'
+              AND job_type = :job_type
+              AND id IN (
+                SELECT id
+                FROM reprocessing_jobs
+                WHERE status = 'PENDING' AND job_type = :job_type
+                ORDER BY (payload->>'earliest_impacted_date') ASC, created_at ASC, id ASC
+                LIMIT :batch_size
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *;
+            """
+        )
+
+    return text(
+        """
+        UPDATE reprocessing_jobs
+        SET status = 'PROCESSING',
+            updated_at = now(),
+            last_attempted_at = now(),
+            attempt_count = attempt_count + 1
+        WHERE status = 'PENDING'
+          AND job_type = :job_type
+          AND id IN (
+            SELECT id
+            FROM reprocessing_jobs
+            WHERE status = 'PENDING' AND job_type = :job_type
+            ORDER BY created_at ASC, id ASC
+            LIMIT :batch_size
+            FOR UPDATE SKIP LOCKED
+        )
+        RETURNING *;
+        """
+    )
+
+
 class ReprocessingJobRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -171,7 +216,6 @@ class ReprocessingJobRepository:
         Finds PENDING jobs, atomically claims them by updating their
         status to PROCESSING, and returns the claimed jobs.
         """
-        order_clause = "created_at ASC, id ASC"
         if job_type == "RESET_WATERMARKS":
             normalized_count = await self.normalize_pending_reset_watermarks_duplicates()
             if normalized_count:
@@ -179,28 +223,8 @@ class ReprocessingJobRepository:
                     "Normalized duplicate pending reset-watermarks jobs before claim.",
                     extra={"deleted_count": normalized_count},
                 )
-            order_clause = "(payload->>'earliest_impacted_date') ASC, " "created_at ASC, id ASC"
 
-        query = text(
-            f"""
-            UPDATE reprocessing_jobs
-            SET status = 'PROCESSING',
-                updated_at = now(),
-                last_attempted_at = now(),
-                attempt_count = attempt_count + 1
-            WHERE status = 'PENDING'
-              AND job_type = :job_type
-              AND id IN (
-                SELECT id
-                FROM reprocessing_jobs
-                WHERE status = 'PENDING' AND job_type = :job_type
-                ORDER BY {order_clause}
-                LIMIT :batch_size
-                FOR UPDATE SKIP LOCKED
-            )
-            RETURNING *;
-            """
-        )
+        query = _claim_pending_jobs_query(job_type)
         result = await self.db.execute(
             query,
             {

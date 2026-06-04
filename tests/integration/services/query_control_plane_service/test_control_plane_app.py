@@ -25,8 +25,8 @@ from tests.integration.services.query_control_plane_service.openapi_schema_contr
     DPM_MANDATE_BINDING_SCHEMA_ROOTS,
     DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS,
     DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS,
-    DPM_PORTFOLIO_UNIVERSE_CANDIDATE_SCHEMA_ROOTS,
     DPM_PORTFOLIO_TAX_LOT_SCHEMA_ROOTS,
+    DPM_PORTFOLIO_UNIVERSE_CANDIDATE_SCHEMA_ROOTS,
     DPM_SOURCE_READINESS_SCHEMA_ROOTS,
     DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS,
     INGESTION_EVIDENCE_SCHEMA_ROOTS,
@@ -1105,9 +1105,10 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
         response_schema["properties"]["resolved_as_of_date"]["description"]
         == "Effective as-of anchor applied to this reference contract."
     )
-    assert "Latest complete performance horizon" in response_schema["properties"][
-        "performance_end_date"
-    ]["description"]
+    assert (
+        "Latest complete performance horizon"
+        in response_schema["properties"]["performance_end_date"]["description"]
+    )
     assert (
         response_schema["properties"]["reference_state_policy"]["default"]
         == "current_portfolio_reference_state"

@@ -34,7 +34,7 @@ TOPIC_CONFIG = {
     # Prevents an out-of-sync replica from being elected as leader, avoiding data loss.
     "unclean.leader.election.enable": "false",
     # Example retention policy: 7 days
-    "retention.ms": "604800000"
+    "retention.ms": "604800000",
 }
 
 TOPICS_TO_CREATE = list(KAFKA_TOPIC_RUNTIME_NAMES)
@@ -56,9 +56,10 @@ def create_topics(admin_client: AdminClient):
             topic,
             num_partitions=_partition_count_for_topic(topic),
             replication_factor=REPLICATION_FACTOR,
-            config=TOPIC_CONFIG
+            config=TOPIC_CONFIG,
         )
-        for topic in TOPICS_TO_CREATE if topic not in existing_topics
+        for topic in TOPICS_TO_CREATE
+        if topic not in existing_topics
     ]
 
     if not new_topic_list:
@@ -81,9 +82,10 @@ def create_topics(admin_client: AdminClient):
         except Exception as e:
             logger.error(f"An unexpected error occurred for topic '{topic}': {e}")
 
+
 def main():
     """Main function to set up Kafka topics."""
-    conf = {'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS}
+    conf = {"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS}
     admin_client = AdminClient(conf)
 
     # Retry connecting to Kafka
@@ -111,5 +113,6 @@ def main():
     create_topics(admin_client)
     logger.info("Kafka topic setup complete.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

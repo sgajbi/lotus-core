@@ -53,11 +53,7 @@ class PipelineStageRepository:
             )
             .returning(PipelineStageState)
         )
-        stage = (
-            await self.db.execute(
-                stmt.execution_options(populate_existing=True)
-            )
-        ).scalar_one()
+        stage = (await self.db.execute(stmt.execution_options(populate_existing=True))).scalar_one()
         if stage.portfolio_id != portfolio_id:
             raise ValueError(
                 "Pipeline stage key collision detected for different portfolios: "

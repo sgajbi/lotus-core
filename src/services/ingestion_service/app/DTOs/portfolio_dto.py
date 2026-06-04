@@ -23,16 +23,14 @@ class Portfolio(BaseModel):
     open_date: date = Field(
         ...,
         description=(
-            "Portfolio activation date from which transactions and positions "
-            "are considered valid."
+            "Portfolio activation date from which transactions and positions are considered valid."
         ),
         examples=["2025-01-01"],
     )
     close_date: Optional[date] = Field(
         None,
         description=(
-            "Optional portfolio closure date after which new activity should "
-            "not be accepted."
+            "Optional portfolio closure date after which new activity should not be accepted."
         ),
         examples=["2026-12-31"],
     )
@@ -62,8 +60,7 @@ class Portfolio(BaseModel):
     booking_center_code: str = Field(
         ...,
         description=(
-            "Booking-center or legal-entity code that owns the portfolio "
-            "record operationally."
+            "Booking-center or legal-entity code that owns the portfolio record operationally."
         ),
         examples=["SG_BOOKING"],
     )
@@ -80,8 +77,7 @@ class Portfolio(BaseModel):
     advisor_id: Optional[str] = Field(
         None,
         description=(
-            "Optional adviser or relationship-manager identifier associated "
-            "with the portfolio."
+            "Optional adviser or relationship-manager identifier associated with the portfolio."
         ),
         examples=["ADV_0042"],
     )
@@ -93,8 +89,7 @@ class Portfolio(BaseModel):
     cost_basis_method: Optional[CostBasisMethod] = Field(
         CostBasisMethod.FIFO,
         description=(
-            "Canonical cost-basis method used for sell linkage and realized "
-            "P&L calculation."
+            "Canonical cost-basis method used for sell linkage and realized P&L calculation."
         ),
         examples=["FIFO"],
     )

@@ -119,8 +119,14 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
 
     # 4. Poll until the final position is valued, ensuring the pipeline has completed
     pos_url = f"/portfolios/{portfolio_id}/positions"
+
     def pos_validation(data):
-        return data.get("positions") and len(data["positions"]) == 1 and data["positions"][0].get("valuation", {}).get("unrealized_gain_loss") is not None  # noqa: E501
+        return (
+            data.get("positions")
+            and len(data["positions"]) == 1
+            and data["positions"][0].get("valuation", {}).get("unrealized_gain_loss") is not None
+        )  # noqa: E501
+
     e2e_api_client.poll_for_data(pos_url, pos_validation, timeout=120)
 
     return {"portfolio_id": portfolio_id, "security_id": security_id}
@@ -183,9 +189,7 @@ def test_unrealized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: 
     )
 
 
-def test_final_position_state_dual_currency(
-    setup_dual_currency_data, e2e_api_client: E2EApiClient
-):
+def test_final_position_state_dual_currency(setup_dual_currency_data, e2e_api_client: E2EApiClient):
     portfolio_id = setup_dual_currency_data["portfolio_id"]
     security_id = setup_dual_currency_data["security_id"]
     assert_positions_state(

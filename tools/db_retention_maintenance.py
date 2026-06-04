@@ -4,10 +4,9 @@ import argparse
 import json
 from dataclasses import dataclass
 
+from portfolio_common.db import SessionLocal
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
-
-from portfolio_common.db import SessionLocal
 
 
 @dataclass(frozen=True)

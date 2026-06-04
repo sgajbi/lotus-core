@@ -7,9 +7,9 @@ Create Date: 2026-02-28 12:45:00
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d4e5f6a7b8c9"
@@ -20,9 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column("cashflows", sa.Column("economic_event_id", sa.String(), nullable=True))
-    op.add_column(
-        "cashflows", sa.Column("linked_transaction_group_id", sa.String(), nullable=True)
-    )
+    op.add_column("cashflows", sa.Column("linked_transaction_group_id", sa.String(), nullable=True))
     op.create_index(
         "ix_cashflows_economic_event_id",
         "cashflows",
@@ -75,9 +73,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("lot_id"),
         sa.UniqueConstraint("source_transaction_id"),
     )
-    op.create_index(
-        "ix_position_lot_state_lot_id", "position_lot_state", ["lot_id"], unique=False
-    )
+    op.create_index("ix_position_lot_state_lot_id", "position_lot_state", ["lot_id"], unique=False)
     op.create_index(
         "ix_position_lot_state_portfolio_id",
         "position_lot_state",

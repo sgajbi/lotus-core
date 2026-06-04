@@ -7,9 +7,9 @@ Create Date: 2026-03-01 21:30:00.000000
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "e1f2a3b4c6d7"
@@ -33,27 +33,53 @@ def upgrade() -> None:
         sa.Column("result_format", sa.String(), server_default="json", nullable=False),
         sa.Column("compression", sa.String(), server_default="none", nullable=False),
         sa.Column("error_message", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_analytics_export_jobs_dataset_type"), "analytics_export_jobs", ["dataset_type"], unique=False)
-    op.create_index(op.f("ix_analytics_export_jobs_job_id"), "analytics_export_jobs", ["job_id"], unique=True)
-    op.create_index(op.f("ix_analytics_export_jobs_portfolio_id"), "analytics_export_jobs", ["portfolio_id"], unique=False)
+    op.create_index(
+        op.f("ix_analytics_export_jobs_dataset_type"),
+        "analytics_export_jobs",
+        ["dataset_type"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_analytics_export_jobs_job_id"), "analytics_export_jobs", ["job_id"], unique=True
+    )
+    op.create_index(
+        op.f("ix_analytics_export_jobs_portfolio_id"),
+        "analytics_export_jobs",
+        ["portfolio_id"],
+        unique=False,
+    )
     op.create_index(
         op.f("ix_analytics_export_jobs_request_fingerprint"),
         "analytics_export_jobs",
         ["request_fingerprint"],
         unique=False,
     )
-    op.create_index(op.f("ix_analytics_export_jobs_status"), "analytics_export_jobs", ["status"], unique=False)
+    op.create_index(
+        op.f("ix_analytics_export_jobs_status"), "analytics_export_jobs", ["status"], unique=False
+    )
 
 
 def downgrade() -> None:
     op.drop_index(op.f("ix_analytics_export_jobs_status"), table_name="analytics_export_jobs")
-    op.drop_index(op.f("ix_analytics_export_jobs_request_fingerprint"), table_name="analytics_export_jobs")
+    op.drop_index(
+        op.f("ix_analytics_export_jobs_request_fingerprint"), table_name="analytics_export_jobs"
+    )
     op.drop_index(op.f("ix_analytics_export_jobs_portfolio_id"), table_name="analytics_export_jobs")
     op.drop_index(op.f("ix_analytics_export_jobs_job_id"), table_name="analytics_export_jobs")
     op.drop_index(op.f("ix_analytics_export_jobs_dataset_type"), table_name="analytics_export_jobs")

@@ -123,13 +123,40 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("benchmark_id", "effective_from", name="_benchmark_definition_effective_uc"),
+        sa.UniqueConstraint(
+            "benchmark_id", "effective_from", name="_benchmark_definition_effective_uc"
+        ),
     )
-    op.create_index("ix_benchmark_definitions_benchmark_id", "benchmark_definitions", ["benchmark_id"], unique=False)
-    op.create_index("ix_benchmark_definitions_effective_from", "benchmark_definitions", ["effective_from"], unique=False)
-    op.create_index("ix_benchmark_definitions_effective_to", "benchmark_definitions", ["effective_to"], unique=False)
-    op.create_index("ix_benchmark_definitions_benchmark_status", "benchmark_definitions", ["benchmark_status"], unique=False)
-    op.create_index("ix_benchmark_definitions_quality_status", "benchmark_definitions", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_benchmark_definitions_benchmark_id",
+        "benchmark_definitions",
+        ["benchmark_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_definitions_effective_from",
+        "benchmark_definitions",
+        ["effective_from"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_definitions_effective_to",
+        "benchmark_definitions",
+        ["effective_to"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_definitions_benchmark_status",
+        "benchmark_definitions",
+        ["benchmark_status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_definitions_quality_status",
+        "benchmark_definitions",
+        ["quality_status"],
+        unique=False,
+    )
 
     op.create_table(
         "index_definitions",
@@ -164,11 +191,21 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("index_id", "effective_from", name="_index_definition_effective_uc"),
     )
-    op.create_index("ix_index_definitions_index_id", "index_definitions", ["index_id"], unique=False)
-    op.create_index("ix_index_definitions_effective_from", "index_definitions", ["effective_from"], unique=False)
-    op.create_index("ix_index_definitions_effective_to", "index_definitions", ["effective_to"], unique=False)
-    op.create_index("ix_index_definitions_index_status", "index_definitions", ["index_status"], unique=False)
-    op.create_index("ix_index_definitions_quality_status", "index_definitions", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_index_definitions_index_id", "index_definitions", ["index_id"], unique=False
+    )
+    op.create_index(
+        "ix_index_definitions_effective_from", "index_definitions", ["effective_from"], unique=False
+    )
+    op.create_index(
+        "ix_index_definitions_effective_to", "index_definitions", ["effective_to"], unique=False
+    )
+    op.create_index(
+        "ix_index_definitions_index_status", "index_definitions", ["index_status"], unique=False
+    )
+    op.create_index(
+        "ix_index_definitions_quality_status", "index_definitions", ["quality_status"], unique=False
+    )
 
     op.create_table(
         "benchmark_composition_series",
@@ -203,12 +240,42 @@ def upgrade() -> None:
             name="_benchmark_composition_effective_uc",
         ),
     )
-    op.create_index("ix_benchmark_composition_series_benchmark_id", "benchmark_composition_series", ["benchmark_id"], unique=False)
-    op.create_index("ix_benchmark_composition_series_index_id", "benchmark_composition_series", ["index_id"], unique=False)
-    op.create_index("ix_benchmark_composition_series_composition_effective_from", "benchmark_composition_series", ["composition_effective_from"], unique=False)
-    op.create_index("ix_benchmark_composition_series_composition_effective_to", "benchmark_composition_series", ["composition_effective_to"], unique=False)
-    op.create_index("ix_benchmark_composition_series_rebalance_event_id", "benchmark_composition_series", ["rebalance_event_id"], unique=False)
-    op.create_index("ix_benchmark_composition_series_quality_status", "benchmark_composition_series", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_benchmark_composition_series_benchmark_id",
+        "benchmark_composition_series",
+        ["benchmark_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_composition_series_index_id",
+        "benchmark_composition_series",
+        ["index_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_composition_series_composition_effective_from",
+        "benchmark_composition_series",
+        ["composition_effective_from"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_composition_series_composition_effective_to",
+        "benchmark_composition_series",
+        ["composition_effective_to"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_composition_series_rebalance_event_id",
+        "benchmark_composition_series",
+        ["rebalance_event_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_composition_series_quality_status",
+        "benchmark_composition_series",
+        ["quality_status"],
+        unique=False,
+    )
 
     op.create_table(
         "index_price_series",
@@ -238,10 +305,21 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("series_id", "index_id", "series_date", name="_index_price_series_uc"),
     )
-    op.create_index("ix_index_price_series_series_id", "index_price_series", ["series_id"], unique=False)
-    op.create_index("ix_index_price_series_index_id", "index_price_series", ["index_id"], unique=False)
-    op.create_index("ix_index_price_series_series_date", "index_price_series", ["series_date"], unique=False)
-    op.create_index("ix_index_price_series_quality_status", "index_price_series", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_index_price_series_series_id", "index_price_series", ["series_id"], unique=False
+    )
+    op.create_index(
+        "ix_index_price_series_index_id", "index_price_series", ["index_id"], unique=False
+    )
+    op.create_index(
+        "ix_index_price_series_series_date", "index_price_series", ["series_date"], unique=False
+    )
+    op.create_index(
+        "ix_index_price_series_quality_status",
+        "index_price_series",
+        ["quality_status"],
+        unique=False,
+    )
 
     op.create_table(
         "index_return_series",
@@ -272,10 +350,21 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("series_id", "index_id", "series_date", name="_index_return_series_uc"),
     )
-    op.create_index("ix_index_return_series_series_id", "index_return_series", ["series_id"], unique=False)
-    op.create_index("ix_index_return_series_index_id", "index_return_series", ["index_id"], unique=False)
-    op.create_index("ix_index_return_series_series_date", "index_return_series", ["series_date"], unique=False)
-    op.create_index("ix_index_return_series_quality_status", "index_return_series", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_index_return_series_series_id", "index_return_series", ["series_id"], unique=False
+    )
+    op.create_index(
+        "ix_index_return_series_index_id", "index_return_series", ["index_id"], unique=False
+    )
+    op.create_index(
+        "ix_index_return_series_series_date", "index_return_series", ["series_date"], unique=False
+    )
+    op.create_index(
+        "ix_index_return_series_quality_status",
+        "index_return_series",
+        ["quality_status"],
+        unique=False,
+    )
 
     op.create_table(
         "benchmark_return_series",
@@ -304,12 +393,34 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("series_id", "benchmark_id", "series_date", name="_benchmark_return_series_uc"),
+        sa.UniqueConstraint(
+            "series_id", "benchmark_id", "series_date", name="_benchmark_return_series_uc"
+        ),
     )
-    op.create_index("ix_benchmark_return_series_series_id", "benchmark_return_series", ["series_id"], unique=False)
-    op.create_index("ix_benchmark_return_series_benchmark_id", "benchmark_return_series", ["benchmark_id"], unique=False)
-    op.create_index("ix_benchmark_return_series_series_date", "benchmark_return_series", ["series_date"], unique=False)
-    op.create_index("ix_benchmark_return_series_quality_status", "benchmark_return_series", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_benchmark_return_series_series_id",
+        "benchmark_return_series",
+        ["series_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_return_series_benchmark_id",
+        "benchmark_return_series",
+        ["benchmark_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_return_series_series_date",
+        "benchmark_return_series",
+        ["series_date"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_benchmark_return_series_quality_status",
+        "benchmark_return_series",
+        ["quality_status"],
+        unique=False,
+    )
 
     op.create_table(
         "risk_free_series",
@@ -339,13 +450,28 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("series_id", "risk_free_curve_id", "series_date", name="_risk_free_series_uc"),
+        sa.UniqueConstraint(
+            "series_id", "risk_free_curve_id", "series_date", name="_risk_free_series_uc"
+        ),
     )
-    op.create_index("ix_risk_free_series_series_id", "risk_free_series", ["series_id"], unique=False)
-    op.create_index("ix_risk_free_series_risk_free_curve_id", "risk_free_series", ["risk_free_curve_id"], unique=False)
-    op.create_index("ix_risk_free_series_series_date", "risk_free_series", ["series_date"], unique=False)
-    op.create_index("ix_risk_free_series_series_currency", "risk_free_series", ["series_currency"], unique=False)
-    op.create_index("ix_risk_free_series_quality_status", "risk_free_series", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_risk_free_series_series_id", "risk_free_series", ["series_id"], unique=False
+    )
+    op.create_index(
+        "ix_risk_free_series_risk_free_curve_id",
+        "risk_free_series",
+        ["risk_free_curve_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_risk_free_series_series_date", "risk_free_series", ["series_date"], unique=False
+    )
+    op.create_index(
+        "ix_risk_free_series_series_currency", "risk_free_series", ["series_currency"], unique=False
+    )
+    op.create_index(
+        "ix_risk_free_series_quality_status", "risk_free_series", ["quality_status"], unique=False
+    )
 
     op.create_table(
         "classification_taxonomy",
@@ -383,23 +509,62 @@ def upgrade() -> None:
             name="_classification_taxonomy_effective_uc",
         ),
     )
-    op.create_index("ix_classification_taxonomy_classification_set_id", "classification_taxonomy", ["classification_set_id"], unique=False)
-    op.create_index("ix_classification_taxonomy_taxonomy_scope", "classification_taxonomy", ["taxonomy_scope"], unique=False)
-    op.create_index("ix_classification_taxonomy_dimension_name", "classification_taxonomy", ["dimension_name"], unique=False)
-    op.create_index("ix_classification_taxonomy_dimension_value", "classification_taxonomy", ["dimension_value"], unique=False)
-    op.create_index("ix_classification_taxonomy_effective_from", "classification_taxonomy", ["effective_from"], unique=False)
-    op.create_index("ix_classification_taxonomy_effective_to", "classification_taxonomy", ["effective_to"], unique=False)
-    op.create_index("ix_classification_taxonomy_quality_status", "classification_taxonomy", ["quality_status"], unique=False)
+    op.create_index(
+        "ix_classification_taxonomy_classification_set_id",
+        "classification_taxonomy",
+        ["classification_set_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_classification_taxonomy_taxonomy_scope",
+        "classification_taxonomy",
+        ["taxonomy_scope"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_classification_taxonomy_dimension_name",
+        "classification_taxonomy",
+        ["dimension_name"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_classification_taxonomy_dimension_value",
+        "classification_taxonomy",
+        ["dimension_value"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_classification_taxonomy_effective_from",
+        "classification_taxonomy",
+        ["effective_from"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_classification_taxonomy_effective_to",
+        "classification_taxonomy",
+        ["effective_to"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_classification_taxonomy_quality_status",
+        "classification_taxonomy",
+        ["quality_status"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
     op.drop_index("ix_classification_taxonomy_quality_status", table_name="classification_taxonomy")
     op.drop_index("ix_classification_taxonomy_effective_to", table_name="classification_taxonomy")
     op.drop_index("ix_classification_taxonomy_effective_from", table_name="classification_taxonomy")
-    op.drop_index("ix_classification_taxonomy_dimension_value", table_name="classification_taxonomy")
+    op.drop_index(
+        "ix_classification_taxonomy_dimension_value", table_name="classification_taxonomy"
+    )
     op.drop_index("ix_classification_taxonomy_dimension_name", table_name="classification_taxonomy")
     op.drop_index("ix_classification_taxonomy_taxonomy_scope", table_name="classification_taxonomy")
-    op.drop_index("ix_classification_taxonomy_classification_set_id", table_name="classification_taxonomy")
+    op.drop_index(
+        "ix_classification_taxonomy_classification_set_id", table_name="classification_taxonomy"
+    )
     op.drop_table("classification_taxonomy")
 
     op.drop_index("ix_risk_free_series_quality_status", table_name="risk_free_series")
@@ -427,12 +592,27 @@ def downgrade() -> None:
     op.drop_index("ix_index_price_series_series_id", table_name="index_price_series")
     op.drop_table("index_price_series")
 
-    op.drop_index("ix_benchmark_composition_series_quality_status", table_name="benchmark_composition_series")
-    op.drop_index("ix_benchmark_composition_series_rebalance_event_id", table_name="benchmark_composition_series")
-    op.drop_index("ix_benchmark_composition_series_composition_effective_to", table_name="benchmark_composition_series")
-    op.drop_index("ix_benchmark_composition_series_composition_effective_from", table_name="benchmark_composition_series")
-    op.drop_index("ix_benchmark_composition_series_index_id", table_name="benchmark_composition_series")
-    op.drop_index("ix_benchmark_composition_series_benchmark_id", table_name="benchmark_composition_series")
+    op.drop_index(
+        "ix_benchmark_composition_series_quality_status", table_name="benchmark_composition_series"
+    )
+    op.drop_index(
+        "ix_benchmark_composition_series_rebalance_event_id",
+        table_name="benchmark_composition_series",
+    )
+    op.drop_index(
+        "ix_benchmark_composition_series_composition_effective_to",
+        table_name="benchmark_composition_series",
+    )
+    op.drop_index(
+        "ix_benchmark_composition_series_composition_effective_from",
+        table_name="benchmark_composition_series",
+    )
+    op.drop_index(
+        "ix_benchmark_composition_series_index_id", table_name="benchmark_composition_series"
+    )
+    op.drop_index(
+        "ix_benchmark_composition_series_benchmark_id", table_name="benchmark_composition_series"
+    )
     op.drop_table("benchmark_composition_series")
 
     op.drop_index("ix_index_definitions_quality_status", table_name="index_definitions")
@@ -449,9 +629,24 @@ def downgrade() -> None:
     op.drop_index("ix_benchmark_definitions_benchmark_id", table_name="benchmark_definitions")
     op.drop_table("benchmark_definitions")
 
-    op.drop_index("ix_portfolio_benchmark_assignments_assignment_status", table_name="portfolio_benchmark_assignments")
-    op.drop_index("ix_portfolio_benchmark_assignments_effective_to", table_name="portfolio_benchmark_assignments")
-    op.drop_index("ix_portfolio_benchmark_assignments_effective_from", table_name="portfolio_benchmark_assignments")
-    op.drop_index("ix_portfolio_benchmark_assignments_benchmark_id", table_name="portfolio_benchmark_assignments")
-    op.drop_index("ix_portfolio_benchmark_assignments_portfolio_id", table_name="portfolio_benchmark_assignments")
+    op.drop_index(
+        "ix_portfolio_benchmark_assignments_assignment_status",
+        table_name="portfolio_benchmark_assignments",
+    )
+    op.drop_index(
+        "ix_portfolio_benchmark_assignments_effective_to",
+        table_name="portfolio_benchmark_assignments",
+    )
+    op.drop_index(
+        "ix_portfolio_benchmark_assignments_effective_from",
+        table_name="portfolio_benchmark_assignments",
+    )
+    op.drop_index(
+        "ix_portfolio_benchmark_assignments_benchmark_id",
+        table_name="portfolio_benchmark_assignments",
+    )
+    op.drop_index(
+        "ix_portfolio_benchmark_assignments_portfolio_id",
+        table_name="portfolio_benchmark_assignments",
+    )
     op.drop_table("portfolio_benchmark_assignments")

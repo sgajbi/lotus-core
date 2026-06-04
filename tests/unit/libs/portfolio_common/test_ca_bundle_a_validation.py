@@ -87,6 +87,5 @@ def test_validate_ca_bundle_a_cash_consideration_rejects_link_mismatch() -> None
     )
     issues = validate_ca_bundle_a_transaction(event)
     assert any(
-        i.code == CaBundleAValidationReasonCode.INCONSISTENT_CASH_CONSIDERATION_LINK
-        for i in issues
+        i.code == CaBundleAValidationReasonCode.INCONSISTENT_CASH_CONSIDERATION_LINK for i in issues
     )

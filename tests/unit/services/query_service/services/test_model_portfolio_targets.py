@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.model_portfolio_targets import (
     build_model_portfolio_target_response,
+    resolve_model_portfolio_target_response,
 )
 
 
@@ -63,6 +65,80 @@ def test_build_model_portfolio_target_response_marks_ready_when_weights_sum_to_o
         "source_record_id": "model_sg_balanced_202603",
         "contract_version": "rfc_087_v1",
     }
+
+
+def test_resolve_model_portfolio_target_response_orchestrates_repository_reads() -> None:
+    async def run_case() -> tuple[object, list[tuple[str, dict[str, object]]]]:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class Repository:
+            async def resolve_model_portfolio_definition(self, **kwargs: object) -> SimpleNamespace:
+                calls.append(("definition", kwargs))
+                return _definition()
+
+            async def list_model_portfolio_targets(self, **kwargs: object) -> list[SimpleNamespace]:
+                calls.append(("targets", kwargs))
+                return [
+                    _target("EQ_US_AAPL", "0.6000000000"),
+                    _target("FI_US_TREASURY_10Y", "0.4000000000"),
+                ]
+
+        response = await resolve_model_portfolio_target_response(
+            repository=Repository(),
+            model_portfolio_id="MODEL_SG_BALANCED_DPM",
+            request=ModelPortfolioTargetRequest(as_of_date=date(2026, 3, 31)),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is not None
+    assert response.model_portfolio_version == "2026.03"
+    assert response.supportability.state == "READY"
+    assert calls == [
+        (
+            "definition",
+            {
+                "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                "as_of_date": date(2026, 3, 31),
+            },
+        ),
+        (
+            "targets",
+            {
+                "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                "model_portfolio_version": "2026.03",
+                "as_of_date": date(2026, 3, 31),
+                "include_inactive_targets": False,
+            },
+        ),
+    ]
+
+
+def test_resolve_model_portfolio_target_response_skips_targets_without_definition() -> None:
+    async def run_case() -> tuple[object | None, list[str]]:
+        calls: list[str] = []
+
+        class Repository:
+            async def resolve_model_portfolio_definition(self, **_: object) -> None:
+                calls.append("definition")
+                return None
+
+            async def list_model_portfolio_targets(self, **_: object) -> list[object]:
+                calls.append("targets")
+                raise AssertionError("Unexpected target read without model definition")
+
+        response = await resolve_model_portfolio_target_response(
+            repository=Repository(),
+            model_portfolio_id="MODEL_MISSING",
+            request=ModelPortfolioTargetRequest(as_of_date=date(2026, 3, 31)),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is None
+    assert calls == ["definition"]
 
 
 def test_build_model_portfolio_target_response_degrades_when_weights_miss_one() -> None:

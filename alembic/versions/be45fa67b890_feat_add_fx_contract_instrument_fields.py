@@ -5,9 +5,9 @@ Revises: ad34ef56a789
 Create Date: 2026-03-09 08:10:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "be45fa67b890"
@@ -19,14 +19,20 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("instruments", sa.Column("portfolio_id", sa.String(), nullable=True))
     op.add_column("instruments", sa.Column("trade_date", sa.Date(), nullable=True))
-    op.add_column("instruments", sa.Column("pair_base_currency", sa.String(length=3), nullable=True))
-    op.add_column("instruments", sa.Column("pair_quote_currency", sa.String(length=3), nullable=True))
+    op.add_column(
+        "instruments", sa.Column("pair_base_currency", sa.String(length=3), nullable=True)
+    )
+    op.add_column(
+        "instruments", sa.Column("pair_quote_currency", sa.String(length=3), nullable=True)
+    )
     op.add_column("instruments", sa.Column("buy_currency", sa.String(length=3), nullable=True))
     op.add_column("instruments", sa.Column("sell_currency", sa.String(length=3), nullable=True))
     op.add_column("instruments", sa.Column("buy_amount", sa.Numeric(18, 10), nullable=True))
     op.add_column("instruments", sa.Column("sell_amount", sa.Numeric(18, 10), nullable=True))
     op.add_column("instruments", sa.Column("contract_rate", sa.Numeric(18, 10), nullable=True))
-    op.create_index(op.f("ix_instruments_portfolio_id"), "instruments", ["portfolio_id"], unique=False)
+    op.create_index(
+        op.f("ix_instruments_portfolio_id"), "instruments", ["portfolio_id"], unique=False
+    )
     op.create_foreign_key(
         op.f("fk_instruments_portfolio_id_portfolios"),
         "instruments",
@@ -37,7 +43,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(op.f("fk_instruments_portfolio_id_portfolios"), "instruments", type_="foreignkey")
+    op.drop_constraint(
+        op.f("fk_instruments_portfolio_id_portfolios"), "instruments", type_="foreignkey"
+    )
     op.drop_index(op.f("ix_instruments_portfolio_id"), table_name="instruments")
     op.drop_column("instruments", "contract_rate")
     op.drop_column("instruments", "sell_amount")

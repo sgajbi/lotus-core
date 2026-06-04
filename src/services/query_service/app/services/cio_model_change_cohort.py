@@ -13,6 +13,32 @@ from .reference_data_mappers import cio_model_change_affected_mandate
 from .request_fingerprint import request_fingerprint
 
 
+async def resolve_cio_model_change_affected_cohort_response(
+    *,
+    repository: Any,
+    model_portfolio_id: str,
+    request: CioModelChangeAffectedCohortRequest,
+) -> CioModelChangeAffectedCohortResponse | None:
+    definition = await repository.resolve_model_portfolio_definition(
+        model_portfolio_id=model_portfolio_id,
+        as_of_date=request.as_of_date,
+    )
+    if definition is None:
+        return None
+
+    rows = await repository.list_model_portfolio_affected_mandates(
+        model_portfolio_id=model_portfolio_id,
+        as_of_date=request.as_of_date,
+        booking_center_code=request.booking_center_code,
+        include_inactive_mandates=request.include_inactive_mandates,
+    )
+    return build_cio_model_change_affected_cohort_response(
+        definition=definition,
+        request=request,
+        mandate_rows=rows,
+    )
+
+
 def build_cio_model_change_affected_cohort_response(
     *,
     definition: Any,

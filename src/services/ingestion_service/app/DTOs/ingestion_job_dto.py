@@ -494,7 +494,7 @@ class IngestionCapacityGroupResponse(BaseModel):
     processed_records: int = Field(
         ge=0,
         description=(
-            "Records in this group that progressed out of accepted state " "(queued or failed)."
+            "Records in this group that progressed out of accepted state (queued or failed)."
         ),
         examples=[24000],
     )

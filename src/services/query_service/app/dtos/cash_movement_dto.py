@@ -83,6 +83,7 @@ class PortfolioCashMovementSummaryResponse(SourceDataProductRuntimeMetadata):
         ...,
         description="Boundaries and supportability posture for this cash movement summary.",
         examples=[
-            "Summary aggregates latest cashflow rows only; it is not a forecast, funding recommendation, treasury instruction, or OMS acknowledgement."
+            "Summary aggregates latest cashflow rows only; it is not a forecast, funding "
+            "recommendation, treasury instruction, or OMS acknowledgement."
         ],
     )

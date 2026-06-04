@@ -8,7 +8,7 @@ import sys
 from typing import List
 
 # Ensure the script can find the portfolio-common library
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
@@ -32,6 +32,7 @@ def _flush_or_raise(kafka_producer, *, context: str) -> None:
             f"Kafka producer flush left {int(undelivered_count)} undelivered message(s) {context}."
         )
 
+
 async def main(transaction_ids: List[str]):
     """
     Main async function to orchestrate the reprocessing task.
@@ -43,10 +44,10 @@ async def main(transaction_ids: List[str]):
     # Set a correlation ID for this entire batch operation for traceability
     correlation_id = generate_correlation_id("REPROCESS_TOOL")
     token = correlation_id_var.set(correlation_id)
-    
+
     logger.info(
         f"Starting reprocessing tool for {len(transaction_ids)} transaction(s).",
-        extra={"correlation_id": correlation_id}
+        extra={"correlation_id": correlation_id},
     )
 
     kafka_producer = get_kafka_producer()
@@ -80,11 +81,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--transaction-ids",
-        nargs='+',  # accepts one or more arguments
+        nargs="+",  # accepts one or more arguments
         required=True,
-        help="A space-separated list of transaction_id values to reprocess."
+        help="A space-separated list of transaction_id values to reprocess.",
     )
-    
+
     args = parser.parse_args()
-    
+
     asyncio.run(main(transaction_ids=args.transaction_ids))

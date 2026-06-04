@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from types import SimpleNamespace
 
@@ -6,6 +7,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.instrument_eligibility import (
     build_instrument_eligibility_bulk_response,
+    resolve_instrument_eligibility_bulk_response,
 )
 
 
@@ -72,3 +74,42 @@ def test_build_instrument_eligibility_bulk_response_marks_ready_when_complete() 
         "source_system": "instrument_eligibility",
         "contract_version": "rfc_087_v1",
     }
+
+
+def test_resolve_instrument_eligibility_bulk_response_orchestrates_repository_read() -> None:
+    request = InstrumentEligibilityBulkRequest(
+        security_ids=["UNKNOWN_SEC", "EQ_US_AAPL"],
+        as_of_date=date(2026, 4, 10),
+    )
+
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def list_instrument_eligibility_profiles(
+                self,
+                **kwargs: object,
+            ) -> list[SimpleNamespace]:
+                calls.append(kwargs)
+                return [_eligibility_row()]
+
+        response = await resolve_instrument_eligibility_bulk_response(
+            repository=Repository(),
+            request=request,
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert [record.security_id for record in response.records] == [
+        "UNKNOWN_SEC",
+        "EQ_US_AAPL",
+    ]
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert calls == [
+        {
+            "security_ids": ["UNKNOWN_SEC", "EQ_US_AAPL"],
+            "as_of_date": date(2026, 4, 10),
+        }
+    ]

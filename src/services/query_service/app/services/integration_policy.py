@@ -130,6 +130,20 @@ def resolve_policy_context(tenant_id: str, consumer_system: str) -> PolicyContex
     )
 
 
+def resolve_effective_policy_response(
+    *,
+    consumer_system: str,
+    tenant_id: str,
+    include_sections: list[str] | None,
+) -> EffectiveIntegrationPolicyResponse:
+    return build_effective_policy_response(
+        consumer_system=consumer_system,
+        tenant_id=tenant_id,
+        include_sections=include_sections,
+        generated_at=datetime.now(UTC),
+    )
+
+
 def build_effective_policy_response(
     *,
     consumer_system: str,

@@ -66,12 +66,11 @@ class EnterpriseReadinessRuntime:
         return self.env_bool(name, default.strip().lower() in {"1", "true", "yes", "on"})
 
     def env_integer(self, name: str, default: int) -> int:
-        settings_attr = {
-            "ENTERPRISE_SECRET_ROTATION_DAYS": "enterprise_secret_rotation_days",
-            "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES": "enterprise_max_write_payload_bytes",
-        }.get(name)
-        if settings_attr:
-            return int(getattr(self.load_settings(), settings_attr))
+        settings = self.load_settings()
+        if name == "ENTERPRISE_SECRET_ROTATION_DAYS":
+            return int(settings.enterprise_secret_rotation_days)
+        if name == "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES":
+            return int(settings.enterprise_max_write_payload_bytes)
         return self.env_int(name, default)
 
     def load_json_map(self, name: str) -> dict[str, Any]:

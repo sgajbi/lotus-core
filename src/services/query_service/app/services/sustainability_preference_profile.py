@@ -13,6 +13,35 @@ from .reference_data_mappers import sustainability_preference_profile_entry
 from .request_fingerprint import request_fingerprint
 
 
+async def resolve_sustainability_preference_profile_response(
+    *,
+    repository: Any,
+    portfolio_id: str,
+    request: SustainabilityPreferenceProfileRequest,
+) -> SustainabilityPreferenceProfileResponse | None:
+    binding = await repository.resolve_discretionary_mandate_binding(
+        portfolio_id=portfolio_id,
+        as_of_date=request.as_of_date,
+        mandate_id=request.mandate_id,
+    )
+    if binding is None:
+        return None
+
+    rows = await repository.list_sustainability_preference_profiles(
+        portfolio_id=portfolio_id,
+        client_id=binding.client_id,
+        as_of_date=request.as_of_date,
+        mandate_id=binding.mandate_id,
+        include_inactive_preferences=request.include_inactive_preferences,
+    )
+    return build_sustainability_preference_profile_response(
+        portfolio_id=portfolio_id,
+        binding=binding,
+        request=request,
+        rows=rows,
+    )
+
+
 def build_sustainability_preference_profile_response(
     *,
     portfolio_id: str,

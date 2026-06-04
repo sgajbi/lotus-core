@@ -147,4 +147,3 @@ def test_compute_drift_analysis_skips_instrument_dimension_when_disabled():
     )
 
     assert analysis.instrument is None
-

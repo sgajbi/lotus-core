@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision: str = "d0e1f2a3b4c6"
 down_revision: Union[str, None] = "c8d9e0f1a2b3"
@@ -39,4 +38,3 @@ def downgrade() -> None:
     op.drop_index("ix_ingestion_jobs_idempotency_key_submitted_at", table_name="ingestion_jobs")
     op.drop_index("ix_ingestion_jobs_status_submitted_at", table_name="ingestion_jobs")
     op.drop_index("ix_ingestion_jobs_submitted_at", table_name="ingestion_jobs")
-

@@ -265,9 +265,7 @@ def test_cash_portfolio_flows_pipeline_persists_non_zero_positions_and_analytics
     assert as_decimal(cash_position["valuation"]["market_value"]) == expected_market_value
 
 
-def test_cash_portfolio_flows_pipeline_persists_cashflows_and_timeseries(
-    setup_mwr_data, db_engine
-):
+def test_cash_portfolio_flows_pipeline_persists_cashflows_and_timeseries(setup_mwr_data, db_engine):
     portfolio_id = setup_mwr_data["portfolio_id"]
 
     with Session(db_engine) as session:
@@ -331,10 +329,7 @@ def test_cash_portfolio_flows_pipeline_persists_cashflows_and_timeseries(
                 "security_id": setup_mwr_data["cash_security_id"],
             },
         ).fetchall()
-        assert [
-            (str(row.date), as_decimal(row.eod_market_value))
-            for row in timeseries_rows
-        ] == [
+        assert [(str(row.date), as_decimal(row.eod_market_value)) for row in timeseries_rows] == [
             ("2025-08-01", Decimal("1000")),
             ("2025-08-15", Decimal("1200")),
             ("2025-08-16", Decimal("1175")),

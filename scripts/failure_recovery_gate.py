@@ -36,7 +36,6 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
     from ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
 
 
-
 class RecoveryMode(StrEnum):
     FULLY_DRAINED = "FULLY_DRAINED"
     BOUNDED_RECOVERY = "BOUNDED_RECOVERY"
@@ -84,13 +83,11 @@ def _evaluate_recovery_result(
         )
     if backlog_age_seconds_after_recovery > 1800:
         failed_checks.append(
-            "backlog age after recovery "
-            f"{backlog_age_seconds_after_recovery:.2f}s exceeded 1800s"
+            f"backlog age after recovery {backlog_age_seconds_after_recovery:.2f}s exceeded 1800s"
         )
     if dlq_pressure_ratio_after_recovery > 5.0:
         failed_checks.append(
-            "DLQ pressure after recovery "
-            f"{dlq_pressure_ratio_after_recovery:.4f} exceeded 5.0000"
+            f"DLQ pressure after recovery {dlq_pressure_ratio_after_recovery:.4f} exceeded 5.0000"
         )
     if replay_pressure_ratio_after_recovery > 5.0:
         failed_checks.append(
@@ -318,10 +315,7 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
             f"{result.peak_backlog_jobs_during_interruption} |"
         ),
         f"| backlog_growth_jobs | {result.backlog_growth_jobs} |",
-        (
-            "| drain_seconds_to_baseline | "
-            f"{drain_to_baseline} |"
-        ),
+        (f"| drain_seconds_to_baseline | {drain_to_baseline} |"),
         f"| backlog_age_seconds_after_recovery | {result.backlog_age_seconds_after_recovery:.3f} |",
         f"| dlq_pressure_ratio_after_recovery | {result.dlq_pressure_ratio_after_recovery:.6f} |",
         (

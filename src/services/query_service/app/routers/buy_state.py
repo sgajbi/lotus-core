@@ -16,8 +16,7 @@ BUY_STATE_NOT_FOUND_RESPONSE_EXAMPLE = {
 }
 BUY_CASH_LINKAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": (
-        "BUY cash linkage not found for portfolio PORT-STATE-001 and transaction "
-        "TXN-BUY-2026-0001"
+        "BUY cash linkage not found for portfolio PORT-STATE-001 and transaction TXN-BUY-2026-0001"
     )
 }
 

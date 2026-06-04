@@ -63,9 +63,10 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
             )
         )
 
-    if not (event.economic_event_id or "").strip() or not (
-        event.linked_transaction_group_id or ""
-    ).strip():
+    if (
+        not (event.economic_event_id or "").strip()
+        or not (event.linked_transaction_group_id or "").strip()
+    ):
         issues.append(
             CaBundleAValidationIssue(
                 code=CaBundleAValidationReasonCode.MISSING_LINKAGE_IDENTIFIER,
@@ -83,8 +84,7 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
                 code=CaBundleAValidationReasonCode.MISSING_SOURCE_INSTRUMENT_ID,
                 field="source_instrument_id",
                 message=(
-                    "source_instrument_id is required for Bundle A source-out "
-                    "transaction types."
+                    "source_instrument_id is required for Bundle A source-out transaction types."
                 ),
             )
         )
@@ -95,8 +95,7 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
                 code=CaBundleAValidationReasonCode.MISSING_TARGET_INSTRUMENT_ID,
                 field="target_instrument_id",
                 message=(
-                    "target_instrument_id is required for Bundle A target-in "
-                    "transaction types."
+                    "target_instrument_id is required for Bundle A target-in transaction types."
                 ),
             )
         )

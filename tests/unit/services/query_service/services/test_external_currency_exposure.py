@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ from src.services.query_service.app.services.external_currency_exposure import (
     EXTERNAL_CURRENCY_EXPOSURE_BLOCKED_CAPABILITIES,
     EXTERNAL_CURRENCY_EXPOSURE_MISSING_FAMILIES,
     build_external_currency_exposure_response,
+    resolve_external_currency_exposure_response,
 )
 
 
@@ -66,3 +68,67 @@ def test_build_external_currency_exposure_response_fails_closed() -> None:
         "runtime_posture": "fail_closed",
         "non_claims": ",".join(EXTERNAL_CURRENCY_EXPOSURE_BLOCKED_CAPABILITIES),
     }
+
+
+def test_resolve_external_currency_exposure_response_orchestrates_binding_read() -> None:
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def resolve_discretionary_mandate_binding(
+                self,
+                **kwargs: object,
+            ) -> SimpleNamespace:
+                calls.append(kwargs)
+                return _binding()
+
+        response = await resolve_external_currency_exposure_response(
+            repository=Repository(),
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=_request(),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is not None
+    assert response.product_name == "ExternalCurrencyExposure"
+    assert response.supportability.state == "UNAVAILABLE"
+    assert calls == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": date(2026, 5, 3),
+            "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
+        }
+    ]
+
+
+def test_resolve_external_currency_exposure_response_returns_none_without_binding() -> None:
+    async def run_case() -> tuple[object, list[dict[str, object]]]:
+        calls: list[dict[str, object]] = []
+
+        class Repository:
+            async def resolve_discretionary_mandate_binding(
+                self,
+                **kwargs: object,
+            ) -> None:
+                calls.append(kwargs)
+                return None
+
+        response = await resolve_external_currency_exposure_response(
+            repository=Repository(),
+            portfolio_id="PB_MISSING",
+            request=ExternalCurrencyExposureRequest(as_of_date=date(2026, 5, 3)),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is None
+    assert calls == [
+        {
+            "portfolio_id": "PB_MISSING",
+            "as_of_date": date(2026, 5, 3),
+            "mandate_id": None,
+        }
+    ]

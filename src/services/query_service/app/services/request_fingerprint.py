@@ -1,11 +1,11 @@
-import hashlib
 import json
+from hashlib import sha256
 from typing import Any
 
 
 def request_fingerprint(payload: dict[str, Any]) -> str:
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.md5(serialized.encode("utf-8")).hexdigest()  # nosec B324
+    return sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def series_request_fingerprint(

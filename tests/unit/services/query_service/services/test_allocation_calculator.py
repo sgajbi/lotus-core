@@ -45,8 +45,7 @@ def _snapshot(security_id: str):
 def _bucket_values(result, dimension: str) -> dict[str, Decimal]:
     view = next(view for view in result.views if view.dimension == dimension)
     return {
-        bucket.dimension_value: bucket.market_value_reporting_currency
-        for bucket in view.buckets
+        bucket.dimension_value: bucket.market_value_reporting_currency for bucket in view.buckets
     }
 
 
@@ -85,9 +84,7 @@ def test_calculate_allocation_views_supports_all_reporting_dimensions() -> None:
     assert _bucket_values(result, "issuer_id") == {"ISSUER_A": Decimal("100")}
     assert _bucket_values(result, "issuer_name") == {"Issuer A": Decimal("100")}
     assert _bucket_values(result, "ultimate_parent_issuer_id") == {"PARENT_A": Decimal("100")}
-    assert _bucket_values(result, "ultimate_parent_issuer_name") == {
-        "Parent A": Decimal("100")
-    }
+    assert _bucket_values(result, "ultimate_parent_issuer_name") == {"Parent A": Decimal("100")}
 
 
 def test_calculate_allocation_views_groups_weights_and_position_counts() -> None:

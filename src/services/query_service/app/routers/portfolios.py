@@ -10,9 +10,7 @@ from ..services.portfolio_service import PortfolioService
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolios"])
 
-PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {
-    "detail": "Portfolio with id PORT-DISC-001 not found"
-}
+PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-DISC-001 not found"}
 
 
 def get_portfolio_service(

@@ -31,8 +31,10 @@ def test_instrument_ingestion_is_idempotent(e2e_api_client: E2EApiClient, clean_
 
     # ASSERT: Poll and verify only one record exists
     poll_url = f"/instruments?security_id={security_id}"
+
     def validation_func(data):
         return data.get("instruments") and len(data["instruments"]) == 1
+
     query_data = e2e_api_client.poll_for_data(poll_url, validation_func)
 
     assert query_data["instruments"][0]["name"] == "Idempotent Test Instrument"
@@ -143,8 +145,10 @@ def test_transaction_persists_after_portfolio_arrives(e2e_api_client: E2EApiClie
 
     # ASSERT: Poll for the transaction, which should now have been persisted.
     poll_url = f"/portfolios/{portfolio_id}/transactions"
+
     def validation_func(data):
         return data.get("transactions") and len(data["transactions"]) == 1
+
     query_data = e2e_api_client.poll_for_data(poll_url, validation_func)
 
     assert query_data["transactions"][0]["transaction_id"] == transaction_id

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
 from src.services.query_service.app.services.fx_conversion import CachedFxRateConverter
+from src.services.query_service.app.services.transaction_reads import RealizedTaxEvidenceRead
 from src.services.query_service.app.services.transaction_service import TransactionService
 
 pytestmark = pytest.mark.asyncio
@@ -80,6 +81,23 @@ def mock_transaction_repo() -> AsyncMock:
 
     repo.get_latest_fx_rate.side_effect = _fx_rate
     return repo
+
+
+async def test_transaction_service_initializes_dependencies_without_retained_session(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    db_session = AsyncMock(spec=AsyncSession)
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ) as repository_cls:
+        service = TransactionService(db_session)
+
+    repository_cls.assert_called_once_with(db_session)
+    assert service.repo is mock_transaction_repo
+    assert isinstance(service._fx_converter, CachedFxRateConverter)
+    assert not hasattr(service, "db")
 
 
 async def test_get_transactions(mock_transaction_repo: AsyncMock):
@@ -178,41 +196,6 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.data_quality_status == PARTIAL
         assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
         assert response_dto.correlation_id is None
-
-
-async def test_ledger_data_quality_status_classifies_complete_partial_and_empty_windows() -> None:
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=2,
-            returned_count=2,
-            skip=0,
-        )
-        == COMPLETE
-    )
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=25,
-            returned_count=10,
-            skip=0,
-        )
-        == PARTIAL
-    )
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=25,
-            returned_count=10,
-            skip=10,
-        )
-        == PARTIAL
-    )
-    assert (
-        TransactionService._ledger_data_quality_status(
-            total_count=0,
-            returned_count=0,
-            skip=0,
-        )
-        == UNKNOWN
-    )
 
 
 async def test_get_transactions_classifies_complete_window(
@@ -320,6 +303,28 @@ async def test_get_transactions_raises_when_portfolio_missing(mock_transaction_r
 
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_transactions(portfolio_id="P404", skip=0, limit=10)
+
+
+async def test_get_transactions_uses_shared_portfolio_validation(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=mock_transaction_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.ensure_portfolio_exists",
+            new_callable=AsyncMock,
+        ) as ensure_portfolio_exists,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+        await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    ensure_portfolio_exists.assert_awaited_once_with(
+        repository=mock_transaction_repo,
+        portfolio_id="P1",
+    )
 
 
 async def test_get_transactions_include_projected_skips_business_date_default(
@@ -489,29 +494,33 @@ async def test_get_transactions_applies_reporting_currency_restated_fields(
     assert mock_transaction_repo.get_latest_fx_rate.await_count == 2
 
 
-async def test_get_transactions_enriches_page_records_sequentially(
+async def test_get_transactions_delegates_page_record_mapping(
     mock_transaction_repo: AsyncMock,
 ) -> None:
-    call_order: list[str] = []
+    async def transaction_records_from_rows(**kwargs: object) -> list[TransactionRecord]:
+        assert kwargs["rows"] == mock_transaction_repo.get_transactions.return_value
+        assert kwargs["reporting_currency"] == "SGD"
+        assert kwargs["as_of_date"] == date(2025, 1, 15)
+        convert_amount = kwargs["convert_amount"]
+        assert getattr(convert_amount, "__self__", None) is service
+        assert getattr(convert_amount, "__func__", None) is TransactionService._convert_amount
+        return [
+            TransactionRecord.model_validate(row)
+            for row in mock_transaction_repo.get_transactions.return_value
+        ]
 
-    async def apply_reporting_currency_fields(
-        *,
-        record: TransactionRecord,
-        reporting_currency: str,
-        as_of_date: date,
-    ) -> None:
-        call_order.append(record.transaction_id)
-        assert reporting_currency == "SGD"
-        assert as_of_date == date(2025, 1, 15)
-
-    with patch(
-        "src.services.query_service.app.services.transaction_service.TransactionRepository",
-        return_value=mock_transaction_repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=mock_transaction_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.transaction_records_from_rows",
+            new_callable=AsyncMock,
+        ) as record_mapper,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        service._apply_reporting_currency_fields = AsyncMock(  # type: ignore[method-assign]
-            side_effect=apply_reporting_currency_fields
-        )
+        record_mapper.side_effect = transaction_records_from_rows
 
         response_dto = await service.get_transactions(
             portfolio_id="P1",
@@ -521,52 +530,7 @@ async def test_get_transactions_enriches_page_records_sequentially(
         )
 
     assert [transaction.transaction_id for transaction in response_dto.transactions] == ["T1", "T2"]
-    assert service._apply_reporting_currency_fields.await_count == 2
-    assert call_order == ["T1", "T2"]
-
-
-async def test_apply_reporting_currency_fields_converts_money_fields_sequentially() -> None:
-    service = TransactionService(AsyncMock(spec=AsyncSession))
-    record = TransactionRecord(
-        transaction_id="T1",
-        transaction_date=datetime(2025, 1, 10, tzinfo=UTC),
-        transaction_type="BUY",
-        instrument_id="I1",
-        security_id="S1",
-        quantity=Decimal("10"),
-        price=Decimal("100"),
-        gross_transaction_amount=Decimal("1000"),
-        gross_cost=Decimal("1000"),
-        trade_fee=Decimal("12.5"),
-        trade_currency="EUR",
-        currency="USD",
-    )
-    call_order: list[Decimal] = []
-
-    async def convert_amount(
-        *,
-        amount: Decimal,
-        from_currency: str,
-        to_currency: str,
-        as_of_date: date,
-    ) -> Decimal:
-        call_order.append(amount)
-        assert to_currency == "SGD"
-        assert as_of_date == date(2025, 1, 15)
-        return amount * (Decimal("2") if from_currency == "USD" else Decimal("3"))
-
-    service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
-
-    await service._apply_reporting_currency_fields(
-        record=record,
-        reporting_currency="SGD",
-        as_of_date=date(2025, 1, 15),
-    )
-
-    assert record.gross_transaction_amount_reporting_currency == Decimal("2000")
-    assert record.gross_cost_reporting_currency == Decimal("2000")
-    assert record.trade_fee_reporting_currency == Decimal("37.5")
-    assert call_order == [Decimal("1000"), Decimal("1000"), Decimal("12.5")]
+    record_mapper.assert_awaited_once()
 
 
 async def test_get_transactions_raises_when_reporting_currency_rate_missing(
@@ -590,9 +554,8 @@ async def test_get_transactions_raises_when_reporting_currency_rate_missing(
             )
 
 
-async def test_transaction_service_normalizes_fx_cache_and_identity_checks() -> None:
+async def test_transaction_service_convert_amount_delegates_to_fx_converter() -> None:
     repo = AsyncMock(spec=TransactionRepository)
-    repo.get_latest_fx_rate.return_value = Decimal("1.50")
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -606,18 +569,11 @@ async def test_transaction_service_normalizes_fx_cache_and_identity_checks() -> 
             to_currency="USD",
             as_of_date=date(2025, 1, 15),
         )
-        first_rate = await service._get_fx_rate(" eur ", " usd ", date(2025, 1, 15))
-        second_rate = await service._get_fx_rate("EUR", "USD", date(2025, 1, 15))
 
     assert isinstance(service._fx_converter, CachedFxRateConverter)
     assert same_currency == Decimal("10")
-    assert first_rate == Decimal("1.50")
-    assert second_rate == Decimal("1.50")
-    repo.get_latest_fx_rate.assert_awaited_once_with(
-        from_currency="EUR",
-        to_currency="USD",
-        as_of_date=date(2025, 1, 15),
-    )
+    assert not hasattr(service, "_get_fx_rate")
+    repo.get_latest_fx_rate.assert_not_awaited()
 
 
 async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
@@ -661,46 +617,39 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
     assert summary.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
 
 
-async def test_get_realized_tax_summary_reads_count_and_tax_evidence_sequentially() -> None:
-    call_order: list[str] = []
+async def test_get_realized_tax_summary_delegates_tax_evidence_read() -> None:
     repo = AsyncMock(spec=TransactionRepository)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
 
-    async def get_transactions_count(**_: object) -> int:
-        call_order.append("count")
-        return 2
-
-    async def list_realized_tax_evidence_transactions(**_: object) -> list[Transaction]:
-        call_order.append("tax_evidence")
-        return []
-
-    repo.get_transactions_count.side_effect = get_transactions_count
-    repo.list_realized_tax_evidence_transactions.side_effect = (
-        list_realized_tax_evidence_transactions
-    )
-
-    with patch(
-        "src.services.query_service.app.services.transaction_service.TransactionRepository",
-        return_value=repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.read_realized_tax_evidence",
+            new_callable=AsyncMock,
+            return_value=RealizedTaxEvidenceRead(
+                source_transaction_count=2,
+                tax_transactions=[],
+                latest_evidence_timestamp=None,
+            ),
+        ) as read_realized_tax_evidence,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
         summary = await service.get_realized_tax_summary(portfolio_id="P1")
 
     assert summary.source_transaction_count == 2
     assert summary.tax_evidence_transaction_count == 0
-    assert call_order == ["count", "tax_evidence"]
-    repo.get_transactions_count.assert_awaited_once_with(
-        portfolio_id="P1",
-        start_date=None,
-        end_date=None,
-        as_of_date=date(2025, 1, 15),
-    )
-    repo.list_realized_tax_evidence_transactions.assert_awaited_once_with(
-        portfolio_id="P1",
-        start_date=None,
-        end_date=None,
-        as_of_date=date(2025, 1, 15),
+    read_realized_tax_evidence.assert_awaited_once_with(
+        repository=repo,
+        ledger_filters={
+            "portfolio_id": "P1",
+            "start_date": None,
+            "end_date": None,
+            "as_of_date": date(2025, 1, 15),
+        },
     )
 
 
@@ -751,7 +700,7 @@ async def test_get_realized_tax_summary_explicit_date_skips_default_date_lookup(
     mock_transaction_repo.get_latest_business_date.assert_not_awaited()
 
 
-async def test_get_realized_tax_summary_converts_currency_totals_sequentially() -> None:
+async def test_get_realized_tax_summary_uses_reporting_currency_total_helper() -> None:
     repo = AsyncMock(spec=TransactionRepository)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
@@ -780,26 +729,18 @@ async def test_get_realized_tax_summary_converts_currency_totals_sequentially() 
             withholding_tax_amount=Decimal("5"),
         ),
     ]
-    call_order: list[str] = []
-
-    async def convert_amount(
-        *,
-        amount: Decimal,
-        from_currency: str,
-        to_currency: str,
-        as_of_date: date,
-    ) -> Decimal:
-        call_order.append(from_currency)
-        assert to_currency == "SGD"
-        assert as_of_date == date(2025, 1, 15)
-        return amount
-
-    with patch(
-        "src.services.query_service.app.services.transaction_service.TransactionRepository",
-        return_value=repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.transaction_service.TransactionRepository",
+            return_value=repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.transaction_service.realized_tax_reporting_currency_total",
+            new_callable=AsyncMock,
+            return_value=Decimal("12"),
+        ) as reporting_currency_total,
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
-        service._convert_amount = AsyncMock(side_effect=convert_amount)  # type: ignore[method-assign]
 
         summary = await service.get_realized_tax_summary(
             portfolio_id="P1",
@@ -807,8 +748,16 @@ async def test_get_realized_tax_summary_converts_currency_totals_sequentially() 
         )
 
     assert summary.reporting_currency_total_tax_amount == Decimal("12")
-    assert service._convert_amount.await_count == 2
-    assert call_order == ["EUR", "USD"]
+    reporting_currency_total.assert_awaited_once()
+    helper_kwargs = reporting_currency_total.await_args.kwargs
+    assert [total.currency for total in helper_kwargs["currency_totals"]] == ["EUR", "USD"]
+    assert helper_kwargs["reporting_currency"] == "SGD"
+    assert helper_kwargs["as_of_date"] == date(2025, 1, 15)
+    assert getattr(helper_kwargs["convert_amount"], "__self__", None) is service
+    assert (
+        getattr(helper_kwargs["convert_amount"], "__func__", None)
+        is TransactionService._convert_amount
+    )
 
 
 async def test_get_realized_tax_summary_normalizes_currency_buckets(

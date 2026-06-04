@@ -167,9 +167,7 @@ class ValuationConsumer(BaseConsumer):
                             # 4. Perform valuation if price is available
                             job_failure_reason = None
                             if price:
-                                instrument_currency = _normalize_currency_code(
-                                    instrument.currency
-                                )
+                                instrument_currency = _normalize_currency_code(instrument.currency)
                                 portfolio_currency = _normalize_currency_code(
                                     portfolio.base_currency
                                 )

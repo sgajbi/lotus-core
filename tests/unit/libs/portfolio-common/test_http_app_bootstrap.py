@@ -3,8 +3,7 @@ from portfolio_common.http_app_bootstrap import normalize_trace_id
 
 def test_normalize_trace_id_accepts_valid_hex_trace_id():
     assert (
-        normalize_trace_id("0123456789abcdef0123456789ABCDEF")
-        == "0123456789abcdef0123456789abcdef"
+        normalize_trace_id("0123456789abcdef0123456789ABCDEF") == "0123456789abcdef0123456789abcdef"
     )
 
 

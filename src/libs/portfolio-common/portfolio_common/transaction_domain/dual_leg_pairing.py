@@ -53,8 +53,7 @@ def validate_upstream_cash_leg_pairing(
             DualLegPairingIssue(
                 field="external_cash_transaction_id",
                 message=(
-                    "product leg external_cash_transaction_id must match "
-                    "cash leg transaction_id."
+                    "product leg external_cash_transaction_id must match cash leg transaction_id."
                 ),
             )
         )
@@ -96,7 +95,7 @@ def validate_upstream_cash_leg_pairing(
             DualLegPairingIssue(
                 field="linked_transaction_group_id",
                 message=(
-                    "product and cash legs must share linked_transaction_group_id " "when present."
+                    "product and cash legs must share linked_transaction_group_id when present."
                 ),
             )
         )

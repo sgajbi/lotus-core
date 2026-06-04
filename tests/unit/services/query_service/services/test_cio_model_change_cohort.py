@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
@@ -6,6 +7,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.cio_model_change_cohort import (
     build_cio_model_change_affected_cohort_response,
+    resolve_cio_model_change_affected_cohort_response,
 )
 
 
@@ -94,6 +96,79 @@ def test_build_cio_model_change_affected_cohort_response_marks_ready() -> None:
         "mandate_binding_table": "portfolio_mandate_bindings",
         "contract_version": "rfc_041_cio_model_change_cohort_v1",
     }
+
+
+def test_resolve_cio_model_change_affected_cohort_response_orchestrates_repository_reads() -> None:
+    async def run_case() -> tuple[object, list[tuple[str, dict[str, object]]]]:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class Repository:
+            async def resolve_model_portfolio_definition(self, **kwargs: object) -> SimpleNamespace:
+                calls.append(("definition", kwargs))
+                return _definition()
+
+            async def list_model_portfolio_affected_mandates(
+                self, **kwargs: object
+            ) -> list[SimpleNamespace]:
+                calls.append(("mandates", kwargs))
+                return [_mandate_row()]
+
+        response = await resolve_cio_model_change_affected_cohort_response(
+            repository=Repository(),
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            request=_request(),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is not None
+    assert response.supportability.state == "READY"
+    assert response.affected_mandates[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert calls == [
+        (
+            "definition",
+            {
+                "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+                "as_of_date": date(2026, 5, 3),
+            },
+        ),
+        (
+            "mandates",
+            {
+                "model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM",
+                "as_of_date": date(2026, 5, 3),
+                "booking_center_code": "Singapore",
+                "include_inactive_mandates": False,
+            },
+        ),
+    ]
+
+
+def test_resolve_cio_model_change_affected_cohort_response_skips_rows_without_definition() -> None:
+    async def run_case() -> tuple[object | None, list[str]]:
+        calls: list[str] = []
+
+        class Repository:
+            async def resolve_model_portfolio_definition(self, **_: object) -> None:
+                calls.append("definition")
+                return None
+
+            async def list_model_portfolio_affected_mandates(self, **_: object) -> list[object]:
+                calls.append("mandates")
+                raise AssertionError("Unexpected mandate read without model definition")
+
+        response = await resolve_cio_model_change_affected_cohort_response(
+            repository=Repository(),
+            model_portfolio_id="MODEL_MISSING",
+            request=_request(),
+        )
+        return response, calls
+
+    response, calls = asyncio.run(run_case())
+
+    assert response is None
+    assert calls == ["definition"]
 
 
 def test_build_cio_model_change_affected_cohort_response_marks_empty_missing() -> None:

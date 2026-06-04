@@ -13,7 +13,7 @@ def normalize_cash_entry_mode(mode: str | None) -> str:
     normalized = normalize_transaction_control_code(mode or AUTO_GENERATE_CASH_ENTRY_MODE)
     if normalized not in SUPPORTED_CASH_ENTRY_MODES:
         raise ValueError(
-            "Unsupported cash_entry_mode. Expected AUTO_GENERATE or " "UPSTREAM_PROVIDED."
+            "Unsupported cash_entry_mode. Expected AUTO_GENERATE or UPSTREAM_PROVIDED."
         )
     return normalized
 

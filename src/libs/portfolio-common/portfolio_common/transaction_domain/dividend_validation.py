@@ -141,8 +141,7 @@ def validate_dividend_transaction(
                 code=DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT,
                 field="settlement_cash_account_id",
                 message=(
-                    "settlement_cash_account_id is required when "
-                    "cash_entry_mode is AUTO_GENERATE."
+                    "settlement_cash_account_id is required when cash_entry_mode is AUTO_GENERATE."
                 ),
             )
         )

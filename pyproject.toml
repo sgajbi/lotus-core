@@ -9,6 +9,27 @@ version = "0.1.0"
 description = "Event-driven system for portfolio analytics."
 readme = "README.md"
 requires-python = ">=3.11"
+dependencies = [
+    "alembic==1.13.1",
+    "asyncpg==0.30.0",
+    "confluent-kafka==2.12.0",
+    "fastapi==0.129.0",
+    "httpx==0.28.1",
+    "Mako==1.3.12",
+    "openpyxl==3.1.5",
+    "prometheus-client==0.20.0",
+    "prometheus-fastapi-instrumentator==7.1.0",
+    "psycopg2-binary==2.9.10",
+    "pydantic==2.12.5",
+    "python-dateutil==2.9.0.post0",
+    "python-dotenv==1.2.2",
+    "python-json-logger==2.0.7",
+    "python-multipart==0.0.27",
+    "sqlalchemy==2.0.46",
+    "structlog==24.1.0",
+    "tenacity==8.2.3",
+    "uvicorn[standard]==0.35.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -36,7 +57,7 @@ pythonpath = [
     "src/services/timeseries_generator_service",
     "src/services/pipeline_orchestrator_service",
 ]
-addopts = "--strict-markers"
+addopts = "--strict-markers --import-mode=importlib"
 minversion = "6.0"
 markers = [
     "asyncio: mark a test as being an asyncio test",
@@ -60,4 +81,60 @@ select = ["E", "F", "I"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+    "src/services/query_service/build/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_configs = true
+no_implicit_optional = true
+exclude = [
+    "src/services/query_service/build/",
+]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+ignore-module = true
+ignore-nested-functions = true
+fail-under = 0
+exclude = ["src/services/query_service/build", "tests"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "src/services/query_service/build"]
+
+[tool.deptry]
+exclude = ["src/services/query_service/build"]
+known_first_party = ["app", "portfolio_common", "src"]
+
+[tool.deptry.package_module_name_map]
+"confluent-kafka" = ["confluent_kafka"]
+"prometheus-client" = ["prometheus_client"]
+"prometheus-fastapi-instrumentator" = ["prometheus_fastapi_instrumentator"]
+"python-dotenv" = ["dotenv"]
+"python-json-logger" = ["pythonjsonlogger"]
+"structlog" = ["structlog"]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = [
+    "alembic",
+    "asyncpg",
+    "httpx",
+    "Mako",
+    "psycopg2-binary",
+    "python-dateutil",
+    "python-multipart",
+    "structlog",
+]
 

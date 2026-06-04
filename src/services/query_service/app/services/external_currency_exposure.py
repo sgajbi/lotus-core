@@ -29,6 +29,27 @@ EXTERNAL_CURRENCY_EXPOSURE_BLOCKED_CAPABILITIES = [
 ]
 
 
+async def resolve_external_currency_exposure_response(
+    *,
+    repository: Any,
+    portfolio_id: str,
+    request: ExternalCurrencyExposureRequest,
+) -> ExternalCurrencyExposureResponse | None:
+    binding = await repository.resolve_discretionary_mandate_binding(
+        portfolio_id=portfolio_id,
+        as_of_date=request.as_of_date,
+        mandate_id=request.mandate_id,
+    )
+    if binding is None:
+        return None
+
+    return build_external_currency_exposure_response(
+        portfolio_id=portfolio_id,
+        binding=binding,
+        request=request,
+    )
+
+
 def build_external_currency_exposure_response(
     *,
     portfolio_id: str,

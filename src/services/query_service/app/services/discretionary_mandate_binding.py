@@ -14,6 +14,27 @@ from .reference_data_helpers import latest_reference_evidence_timestamp
 from .source_data_runtime import source_product_runtime_metadata
 
 
+async def resolve_discretionary_mandate_binding_response(
+    *,
+    repository: Any,
+    portfolio_id: str,
+    request: DiscretionaryMandateBindingRequest,
+) -> DiscretionaryMandateBindingResponse | None:
+    row = await repository.resolve_discretionary_mandate_binding(
+        portfolio_id=portfolio_id,
+        as_of_date=request.as_of_date,
+        mandate_id=request.mandate_id,
+        booking_center_code=request.booking_center_code,
+    )
+    if row is None:
+        return None
+
+    return build_discretionary_mandate_binding_response(
+        row=row,
+        request=request,
+    )
+
+
 def build_discretionary_mandate_binding_response(
     *,
     row: Any,

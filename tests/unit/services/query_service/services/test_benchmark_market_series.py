@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -6,10 +7,35 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
 )
 from src.services.query_service.app.services.benchmark_market_series import (
+    benchmark_market_series_currency,
+    benchmark_market_series_evidence_plan,
+    benchmark_market_series_evidence_read_factories,
+    benchmark_market_series_evidence_read_names,
     benchmark_market_series_fx_context,
+    benchmark_market_series_index_page,
+    benchmark_market_series_next_page_token_payload,
     benchmark_market_series_normalization_status,
+    benchmark_market_series_page_token,
+    benchmark_market_series_read_evidence,
+    benchmark_market_series_request_scope,
     build_benchmark_market_series_response,
+    resolve_benchmark_market_series_response,
 )
+
+
+def test_benchmark_market_series_currency_prefers_benchmark_definition() -> None:
+    assert (
+        benchmark_market_series_currency(
+            definition=SimpleNamespace(benchmark_currency="EUR"),
+            target_currency="USD",
+        )
+        == "EUR"
+    )
+
+
+def test_benchmark_market_series_currency_falls_back_to_target_or_unknown() -> None:
+    assert benchmark_market_series_currency(definition=None, target_currency="USD") == "USD"
+    assert benchmark_market_series_currency(definition=None, target_currency=None) == "UNKNOWN"
 
 
 def test_benchmark_market_series_fx_context_tracks_identity_and_missing_fx_request() -> None:
@@ -54,6 +80,482 @@ def test_benchmark_market_series_normalization_status_reflects_fx_evidence() -> 
             {date(2026, 1, 1): Decimal("1.1000")},
         )
         == "native_component_series_with_benchmark_to_target_fx_context"
+    )
+
+
+def test_benchmark_market_series_evidence_plan_tracks_requested_market_families() -> None:
+    fx_context = benchmark_market_series_fx_context(
+        benchmark_currency="EUR",
+        target_currency="USD",
+        requested_fields={"index_price", "benchmark_return", "fx_rate"},
+    )
+
+    plan = benchmark_market_series_evidence_plan(
+        requested_fields={"index_price", "benchmark_return", "fx_rate"},
+        fx_context=fx_context,
+    )
+
+    assert plan.include_index_prices
+    assert not plan.include_index_returns
+    assert plan.include_benchmark_returns
+    assert plan.include_fx_rates
+
+
+def test_benchmark_market_series_evidence_plan_suppresses_identity_fx_read() -> None:
+    fx_context = benchmark_market_series_fx_context(
+        benchmark_currency="USD",
+        target_currency="USD",
+        requested_fields={"index_return", "fx_rate"},
+    )
+
+    plan = benchmark_market_series_evidence_plan(
+        requested_fields={"index_return", "fx_rate"},
+        fx_context=fx_context,
+    )
+
+    assert not plan.include_index_prices
+    assert plan.include_index_returns
+    assert not plan.include_benchmark_returns
+    assert not plan.include_fx_rates
+
+
+def test_benchmark_market_series_evidence_read_names_preserve_repository_order() -> None:
+    fx_context = benchmark_market_series_fx_context(
+        benchmark_currency="EUR",
+        target_currency="USD",
+        requested_fields={"benchmark_return", "index_price", "index_return", "fx_rate"},
+    )
+    plan = benchmark_market_series_evidence_plan(
+        requested_fields={"benchmark_return", "index_price", "index_return", "fx_rate"},
+        fx_context=fx_context,
+    )
+
+    assert benchmark_market_series_evidence_read_names(plan) == [
+        "components",
+        "index_prices",
+        "index_returns",
+        "benchmark_returns",
+        "fx_rates",
+    ]
+
+
+def test_benchmark_market_series_read_evidence_collects_only_planned_families() -> None:
+    async def run_case() -> tuple[dict[str, str], list[str]]:
+        read_order: list[str] = []
+
+        async def read_family(name: str) -> str:
+            read_order.append(name)
+            return f"{name}-rows"
+
+        fx_context = benchmark_market_series_fx_context(
+            benchmark_currency="USD",
+            target_currency="USD",
+            requested_fields={"index_price", "fx_rate"},
+        )
+        plan = benchmark_market_series_evidence_plan(
+            requested_fields={"index_price", "fx_rate"},
+            fx_context=fx_context,
+        )
+        results = await benchmark_market_series_read_evidence(
+            evidence_plan=plan,
+            read_factories={
+                "components": lambda: read_family("components"),
+                "index_prices": lambda: read_family("index_prices"),
+                "index_returns": lambda: read_family("index_returns"),
+                "benchmark_returns": lambda: read_family("benchmark_returns"),
+                "fx_rates": lambda: read_family("fx_rates"),
+            },
+        )
+        return results, read_order
+
+    results, read_order = asyncio.run(run_case())
+
+    assert read_order == ["components", "index_prices"]
+    assert results == {
+        "components": "components-rows",
+        "index_prices": "index_prices-rows",
+    }
+
+
+def test_benchmark_market_series_evidence_read_factories_bind_repository_scope() -> None:
+    async def run_case() -> tuple[dict[str, object], list[tuple[str, dict[str, object]]]]:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class Repository:
+            async def list_benchmark_components_overlapping_window(
+                self,
+                **kwargs: object,
+            ) -> list[str]:
+                calls.append(("components", kwargs))
+                return ["component-row"]
+
+            async def list_index_price_points(self, **kwargs: object) -> list[str]:
+                calls.append(("index_prices", kwargs))
+                return ["price-row"]
+
+            async def list_index_return_points(self, **kwargs: object) -> list[str]:
+                calls.append(("index_returns", kwargs))
+                return ["return-row"]
+
+            async def list_benchmark_return_points(self, **kwargs: object) -> list[str]:
+                calls.append(("benchmark_returns", kwargs))
+                return ["benchmark-return-row"]
+
+            async def get_fx_rates(self, **kwargs: object) -> dict[date, Decimal]:
+                calls.append(("fx_rates", kwargs))
+                return {date(2026, 1, 1): Decimal("1.1000")}
+
+        request = BenchmarkMarketSeriesRequest(
+            as_of_date=date(2026, 1, 2),
+            window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+            frequency="daily",
+            target_currency="USD",
+            series_fields=["index_price", "index_return", "benchmark_return", "fx_rate"],
+        )
+        factories = benchmark_market_series_evidence_read_factories(
+            repository=Repository(),
+            benchmark_id="BMK_GLOBAL_BALANCED",
+            request=request,
+            benchmark_currency="EUR",
+            index_ids=["IDX_A", "IDX_B"],
+        )
+        results = {read_name: await read_factory() for read_name, read_factory in factories.items()}
+        return results, calls
+
+    results, calls = asyncio.run(run_case())
+
+    assert results == {
+        "components": ["component-row"],
+        "index_prices": ["price-row"],
+        "index_returns": ["return-row"],
+        "benchmark_returns": ["benchmark-return-row"],
+        "fx_rates": {date(2026, 1, 1): Decimal("1.1000")},
+    }
+    assert calls == [
+        (
+            "components",
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED",
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+                "index_ids": ["IDX_A", "IDX_B"],
+            },
+        ),
+        (
+            "index_prices",
+            {
+                "index_ids": ["IDX_A", "IDX_B"],
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+        (
+            "index_returns",
+            {
+                "index_ids": ["IDX_A", "IDX_B"],
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+        (
+            "benchmark_returns",
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED",
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+        (
+            "fx_rates",
+            {
+                "from_currency": "EUR",
+                "to_currency": "USD",
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 1, 2),
+            },
+        ),
+    ]
+
+
+def test_resolve_benchmark_market_series_response_orchestrates_repository_reads() -> None:
+    async def run_case() -> tuple[
+        object, list[tuple[str, dict[str, object]]], list[dict[str, str]]
+    ]:
+        calls: list[tuple[str, dict[str, object]]] = []
+        encoded_payloads: list[dict[str, str]] = []
+
+        class Repository:
+            async def get_benchmark_definition(
+                self,
+                benchmark_id: str,
+                as_of_date: date,
+            ) -> SimpleNamespace:
+                calls.append(
+                    (
+                        "definition",
+                        {"benchmark_id": benchmark_id, "as_of_date": as_of_date},
+                    )
+                )
+                return SimpleNamespace(benchmark_currency="EUR")
+
+            async def list_benchmark_component_index_ids_overlapping_window(
+                self,
+                **kwargs: object,
+            ) -> list[str]:
+                calls.append(("component_index_ids", kwargs))
+                return ["IDX_A", "IDX_B", "IDX_C"]
+
+            async def list_benchmark_components_overlapping_window(
+                self,
+                **kwargs: object,
+            ) -> list[SimpleNamespace]:
+                calls.append(("components", kwargs))
+                return [
+                    SimpleNamespace(
+                        index_id="IDX_A",
+                        composition_weight=Decimal("0.6000000000"),
+                        composition_effective_from=date(2026, 1, 1),
+                        composition_effective_to=None,
+                        quality_status="accepted",
+                        source_timestamp=datetime(2026, 1, 2, 8, 0, 0),
+                    )
+                ]
+
+            async def list_index_price_points(self, **kwargs: object) -> list[SimpleNamespace]:
+                calls.append(("index_prices", kwargs))
+                return [
+                    SimpleNamespace(
+                        index_id="IDX_A",
+                        series_date=date(2026, 1, 1),
+                        index_price=Decimal("100.0000000000"),
+                        series_currency="EUR",
+                        quality_status="accepted",
+                        source_timestamp=datetime(2026, 1, 2, 9, 0, 0),
+                    )
+                ]
+
+            async def list_index_return_points(self, **kwargs: object) -> list[SimpleNamespace]:
+                calls.append(("index_returns", kwargs))
+                return []
+
+            async def list_benchmark_return_points(self, **kwargs: object) -> list[SimpleNamespace]:
+                calls.append(("benchmark_returns", kwargs))
+                return []
+
+            async def get_fx_rates(self, **kwargs: object) -> dict[date, Decimal]:
+                calls.append(("fx_rates", kwargs))
+                return {date(2026, 1, 1): Decimal("1.1000")}
+
+        def encode(payload: dict[str, str]) -> str:
+            encoded_payloads.append(payload)
+            return "encoded-token"
+
+        response = await resolve_benchmark_market_series_response(
+            repository=Repository(),
+            benchmark_id="BMK_GLOBAL_BALANCED",
+            request=BenchmarkMarketSeriesRequest(
+                as_of_date=date(2026, 1, 2),
+                window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+                frequency="daily",
+                target_currency="USD",
+                series_fields=["index_price", "fx_rate"],
+                page={"page_size": 2},
+            ),
+            decode_page_token=lambda _: {},
+            encode_page_token=encode,
+        )
+        return response, calls, encoded_payloads
+
+    response, calls, encoded_payloads = asyncio.run(run_case())
+
+    assert response.benchmark_currency == "EUR"
+    assert response.page.next_page_token == "encoded-token"
+    assert response.page.returned_component_count == 2
+    assert (
+        response.normalization_status
+        == "native_component_series_with_benchmark_to_target_fx_context"
+    )
+    assert [call[0] for call in calls] == [
+        "definition",
+        "component_index_ids",
+        "components",
+        "index_prices",
+        "fx_rates",
+    ]
+    assert calls[1] == (
+        "component_index_ids",
+        {
+            "benchmark_id": "BMK_GLOBAL_BALANCED",
+            "start_date": date(2026, 1, 1),
+            "end_date": date(2026, 1, 2),
+            "after_index_id": None,
+            "limit": 3,
+        },
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": response.request_fingerprint,
+            "last_index_id": "IDX_B",
+        }
+    ]
+
+
+def test_benchmark_market_series_request_scope_binds_paging_to_request() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency="USD",
+        series_fields=["index_return", "index_price"],
+        page={"page_size": 50},
+    )
+
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={"last_index_id": "IDX_A"},
+    )
+
+    assert scope.request_fingerprint
+    assert scope.requested_fields == {"index_price", "index_return"}
+    assert scope.page_size == 50
+    assert scope.cursor_index_id == "IDX_A"
+
+
+def test_benchmark_market_series_request_scope_rejects_token_scope_mismatch() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+
+    try:
+        benchmark_market_series_request_scope(
+            benchmark_id="BMK_GLOBAL_BALANCED",
+            request=request,
+            cursor={"scope_fingerprint": "wrong-scope"},
+        )
+    except ValueError as exc:
+        assert "page token does not match request scope" in str(exc)
+    else:
+        raise AssertionError("Expected benchmark market-series token scope mismatch")
+
+
+def test_benchmark_market_series_next_page_token_payload_preserves_scope() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={},
+    )
+
+    assert benchmark_market_series_next_page_token_payload(
+        request_scope=scope,
+        has_more=True,
+        index_ids=["IDX_A", "IDX_B"],
+    ) == {
+        "scope_fingerprint": scope.request_fingerprint,
+        "last_index_id": "IDX_B",
+    }
+    assert (
+        benchmark_market_series_next_page_token_payload(
+            request_scope=scope,
+            has_more=False,
+            index_ids=["IDX_A"],
+        )
+        is None
+    )
+
+
+def test_benchmark_market_series_index_page_caps_candidate_ids() -> None:
+    page = benchmark_market_series_index_page(
+        candidate_index_ids=["IDX_A", "IDX_B", "IDX_C"],
+        page_size=2,
+    )
+
+    assert page.index_ids == ["IDX_A", "IDX_B"]
+    assert page.has_more
+
+
+def test_benchmark_market_series_index_page_marks_terminal_page() -> None:
+    page = benchmark_market_series_index_page(
+        candidate_index_ids=["IDX_A", "IDX_B"],
+        page_size=2,
+    )
+
+    assert page.index_ids == ["IDX_A", "IDX_B"]
+    assert not page.has_more
+
+
+def test_benchmark_market_series_page_token_encodes_non_empty_payload() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={},
+    )
+    encoded_payloads: list[dict[str, str]] = []
+
+    def encode(payload: dict[str, str]) -> str:
+        encoded_payloads.append(payload)
+        return "encoded-token"
+
+    assert (
+        benchmark_market_series_page_token(
+            request_scope=scope,
+            has_more=True,
+            index_ids=["IDX_A", "IDX_B"],
+            encode_page_token=encode,
+        )
+        == "encoded-token"
+    )
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": scope.request_fingerprint,
+            "last_index_id": "IDX_B",
+        }
+    ]
+
+
+def test_benchmark_market_series_page_token_suppresses_empty_payload() -> None:
+    request = BenchmarkMarketSeriesRequest(
+        as_of_date=date(2026, 1, 2),
+        window={"start_date": date(2026, 1, 1), "end_date": date(2026, 1, 2)},
+        frequency="daily",
+        target_currency=None,
+        series_fields=["index_price"],
+    )
+    scope = benchmark_market_series_request_scope(
+        benchmark_id="BMK_GLOBAL_BALANCED",
+        request=request,
+        cursor={},
+    )
+
+    def encode(_: dict[str, str]) -> str:
+        raise AssertionError("Unexpected token encoding for terminal page")
+
+    assert (
+        benchmark_market_series_page_token(
+            request_scope=scope,
+            has_more=False,
+            index_ids=["IDX_A"],
+            encode_page_token=encode,
+        )
+        is None
     )
 
 

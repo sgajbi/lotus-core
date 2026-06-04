@@ -273,8 +273,7 @@ def setup_timeseries_data(clean_db_module, e2e_api_client: E2EApiClient):
             ),
             timeout=180,
             fail_message=(
-                "Pipeline did not produce analytics position-timeseries rows for "
-                f"{valuation_date}."
+                f"Pipeline did not produce analytics position-timeseries rows for {valuation_date}."
             ),
         )
         e2e_api_client.poll_for_post_query_data(
@@ -355,10 +354,9 @@ def has_expected_positions(
     cash_row = next((row for row in positions if row.get("security_id") == cash_security_id), None)
     if stock_row is None or cash_row is None:
         return False
-    return (
-        as_decimal(stock_row["quantity"]) == Decimal("100")
-        and as_decimal(cash_row["quantity"]) == Decimal("-25")
-    )
+    return as_decimal(stock_row["quantity"]) == Decimal("100") and as_decimal(
+        cash_row["quantity"]
+    ) == Decimal("-25")
 
 
 def row_by_security_id(payload: dict, security_id: str) -> dict:
@@ -438,9 +436,10 @@ def assert_timeseries_payload(
             == expected["ending_market_value_portfolio_currency"]
         )
 
-    assert sum_portfolio_currency(rows) == expected_for_day[
-        "total_ending_market_value_portfolio_currency"
-    ]
+    assert (
+        sum_portfolio_currency(rows)
+        == expected_for_day["total_ending_market_value_portfolio_currency"]
+    )
 
 
 def has_expected_timeseries_rows(

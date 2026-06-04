@@ -60,6 +60,4 @@ def ensure_topics_exist(required_topics: List[str]):
         logger.critical(
             f"An unexpected error occurred while verifying Kafka topics: {e}", exc_info=True
         )
-        raise KafkaTopicVerificationError(
-            "Unexpected error while verifying Kafka topics."
-        ) from e
+        raise KafkaTopicVerificationError("Unexpected error while verifying Kafka topics.") from e

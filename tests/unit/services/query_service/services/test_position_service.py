@@ -11,8 +11,6 @@ from portfolio_common.database_models import (
     PositionState,
 )
 
-from src.services.query_service.app.dtos.position_dto import Position
-from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 from src.services.query_service.app.services.position_service import PositionService
 
@@ -79,6 +77,22 @@ def mock_position_repo() -> AsyncMock:
     repo.get_latest_snapshot_valuation_map_as_of_date.return_value = {}
     repo.get_latest_market_price_dates.return_value = {"S1": date(2025, 1, 1)}
     return repo
+
+
+async def test_position_service_initializes_repository_without_retained_session(
+    mock_position_repo: AsyncMock,
+) -> None:
+    db_session = AsyncMock()
+
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ) as repository_cls:
+        service = PositionService(db_session)
+
+    repository_cls.assert_called_once_with(db_session)
+    assert service.repo is mock_position_repo
+    assert not hasattr(service, "db")
 
 
 async def test_get_position_history(mock_position_repo: AsyncMock):
@@ -364,27 +378,6 @@ async def test_get_portfolio_positions_raises_when_portfolio_missing(mock_positi
 
         with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
             await service.get_portfolio_positions("P404")
-
-
-async def test_holdings_data_quality_status_does_not_infer_missing_state():
-    assert (
-        PositionService._holdings_data_quality_status(
-            positions=[
-                Position(
-                    security_id="S1",
-                    quantity=Decimal("1"),
-                    cost_basis=Decimal("10"),
-                    position_date=date(2025, 1, 1),
-                    instrument_name="Missing state",
-                    reprocessing_status=None,
-                )
-            ],
-            history_supplements=[],
-            response_as_of_date=date(2025, 1, 1),
-            latest_market_price_dates={},
-        )
-        == "UNKNOWN"
-    )
 
 
 async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cost_basis(
@@ -683,28 +676,6 @@ async def test_get_latest_positions_weight_zero_when_all_values_zero(mock_positi
         assert len(response.positions) == 1
         assert response.positions[0].weight == Decimal(0)
         assert response.positions[0].held_since_date == date(2025, 1, 1)
-
-
-async def test_weight_base_value_prefers_market_value_and_falls_back_to_cost_basis() -> None:
-    valued_position = Position(
-        security_id="S1",
-        quantity=Decimal("1"),
-        cost_basis=Decimal("75"),
-        position_date=date(2025, 1, 1),
-        instrument_name="Valued",
-        valuation=ValuationData(market_value=Decimal("100")),
-    )
-    unvalued_position = Position(
-        security_id="S2",
-        quantity=Decimal("1"),
-        cost_basis=Decimal("75"),
-        position_date=date(2025, 1, 1),
-        instrument_name="Unvalued",
-        valuation=ValuationData(market_value=None),
-    )
-
-    assert PositionService._weight_base_value(valued_position) == Decimal("100")
-    assert PositionService._weight_base_value(unvalued_position) == Decimal("75")
 
 
 async def test_get_latest_positions_uses_default_held_since_when_map_missing(

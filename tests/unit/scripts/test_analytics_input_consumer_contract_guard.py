@@ -7,6 +7,7 @@ from portfolio_common.source_data_products import (
     SOURCE_DATA_PRODUCT_CATALOG,
     SourceDataProductDefinition,
 )
+
 from scripts import analytics_input_consumer_contract_guard as guard
 
 

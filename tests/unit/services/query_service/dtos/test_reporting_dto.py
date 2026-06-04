@@ -40,6 +40,7 @@ def test_reporting_window_rejects_inverted_dates() -> None:
     with pytest.raises(ValidationError, match="start_date cannot be after end_date"):
         ReportingWindow(start_date=date(2026, 3, 27), end_date=date(2026, 1, 1))
 
+
 def test_asset_allocation_request_supports_region_and_lookthrough_mode() -> None:
     request = AssetAllocationQueryRequest(
         scope=ReportingScope(portfolio_id="P1"),
@@ -56,5 +57,3 @@ def test_portfolio_summary_request_is_single_portfolio_contract() -> None:
 
     assert request.portfolio_id == "P1"
     assert request.reporting_currency == "USD"
-
-

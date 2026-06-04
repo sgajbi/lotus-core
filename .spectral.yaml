@@ -1,0 +1,16 @@
+extends:
+  - spectral:oas
+
+rules:
+  operation-operationId:
+    severity: warn
+  operation-description:
+    severity: warn
+  operation-tags:
+    severity: warn
+  operation-summary:
+    severity: warn
+  operation-success-response:
+    severity: warn
+  oas3-api-servers:
+    severity: off

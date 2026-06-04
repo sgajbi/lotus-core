@@ -98,9 +98,7 @@ class ValuationJobRepository:
             final_stmt = stmt.on_conflict_do_update(
                 index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
                 set_=update_dict,
-                where=not_(
-                    PortfolioValuationJob.status == "PROCESSING"
-                )
+                where=not_(PortfolioValuationJob.status == "PROCESSING")
                 & not_(
                     and_(
                         PortfolioValuationJob.status.in_(("PENDING", "COMPLETE")),
@@ -205,12 +203,7 @@ class ValuationJobRepository:
     async def get_latest_epochs_for_scopes(
         self, jobs: Iterable[ValuationJobUpsert]
     ) -> dict[tuple[str, str, date], int]:
-        scopes = list(
-            {
-                (job.portfolio_id, job.security_id, job.valuation_date)
-                for job in jobs
-            }
-        )
+        scopes = list({(job.portfolio_id, job.security_id, job.valuation_date) for job in jobs})
         if not scopes:
             return {}
 

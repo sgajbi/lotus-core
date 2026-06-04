@@ -124,7 +124,7 @@ class OutboxDispatcher:
 
                     def _make_on_delivery(outbox_id: int):
                         def _cb(
-                            replayed_outbox_id: str, success: bool, error_message: Optional[str]
+                            _replayed_outbox_id: str, success: bool, error_message: Optional[str]
                         ):
                             if success:
                                 delivery_ack[outbox_id] = True

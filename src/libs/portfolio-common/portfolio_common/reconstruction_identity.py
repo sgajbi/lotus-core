@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import date
 from hashlib import sha256
 
-
 SNAPSHOT_ID_PREFIX = "pss"
 CURRENT_RESTATEMENT_VERSION = "current"
 
