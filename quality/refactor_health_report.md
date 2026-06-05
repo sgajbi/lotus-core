@@ -674,3 +674,9 @@ health before that claim is defensible.
      gross-amount policy, currency fields, date ordering, strict linkage metadata, and strict
      policy metadata. `validate_buy_transaction` improved from `C (14)` to `A (1)`, and every BUY
      validation function/class now reports A-ranked complexity.
+134. Reduced canonical DIVIDEND transaction validation complexity by extracting focused helpers for
+     transaction-type validation, settlement-date presence, zero quantity, zero price, positive
+     gross-amount policy, currency fields, date ordering, strict linkage metadata, strict policy
+     metadata, cash-entry policy, auto-generated cash-entry requirements, and upstream-provided
+     cash-entry requirements. `validate_dividend_transaction` improved from `D (21)` to `A (1)`,
+     and every DIVIDEND validation function/class now reports A-ranked complexity.

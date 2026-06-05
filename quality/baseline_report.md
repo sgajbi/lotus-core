@@ -900,3 +900,11 @@ gross-amount policy, currency fields, date ordering, strict linkage metadata, an
 metadata. `validate_buy_transaction` improved from `C (14)` to `A (1)`, every BUY validation
 function/class reports A-ranked complexity, and `buy_validation.py` remains `A (42.80)`
 maintainability.
+
+CR-978 reduced canonical DIVIDEND transaction validation complexity by extracting focused helpers
+for transaction-type validation, settlement-date presence, zero quantity, zero price, positive
+gross-amount policy, currency fields, date ordering, strict linkage metadata, strict policy
+metadata, cash-entry policy, auto-generated cash-entry requirements, and upstream-provided
+cash-entry requirements. `validate_dividend_transaction` improved from `D (21)` to `A (1)`, every
+DIVIDEND validation function/class reports A-ranked complexity, and `dividend_validation.py`
+remains `A (37.73)` maintainability.
