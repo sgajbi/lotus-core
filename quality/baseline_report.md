@@ -1060,3 +1060,8 @@ CR-1003 reduced Kafka consumer DLQ publication complexity by extracting payload,
 delivery-confirmation, and key-decoding helpers. `BaseConsumer._send_to_dlq_async` improved from
 `B (10)` to `A (5)`, the extracted DLQ publication helpers report A-ranked complexity, and
 `kafka_consumer.py` remains `A (34.02)` maintainability.
+
+CR-1004 reduced Kafka consumer shutdown complexity by extracting shutdown log-context, consumer
+wakeup, consumer close, and DLQ producer flush helpers. `BaseConsumer.shutdown` improved from
+`B (8)` to `A (3)`, tests now prove wakeup failure continuation and close failure logging, and
+`kafka_consumer.py` remains `A (31.86)` maintainability.

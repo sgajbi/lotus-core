@@ -791,3 +791,6 @@ health before that claim is defensible.
      delivery-confirmation, and key-decoding helpers. `BaseConsumer._send_to_dlq_async` improved
      from `B (10)` to `A (5)`, while preserving DLQ payload, header, flush, audit, and fatal
      failure semantics.
+160. Reduced Kafka consumer shutdown complexity by extracting shutdown log-context, consumer
+     wakeup, consumer close, and DLQ producer flush helpers. `BaseConsumer.shutdown` improved from
+     `B (8)` to `A (3)`, and tests now prove wakeup failure continuation and close failure logging.

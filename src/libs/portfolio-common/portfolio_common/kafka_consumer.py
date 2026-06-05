@@ -480,49 +480,61 @@ class BaseConsumer(ABC):
         logger.info(f"Shutting down consumer for topic '{self.topic}'...")
         self._running = False
         if self._consumer:
-            wakeup = getattr(self._consumer, "wakeup", None)
-            if callable(wakeup):
-                try:
-                    wakeup()
-                except Exception:
-                    logger.warning(
-                        "Consumer wakeup failed during shutdown.",
-                        exc_info=True,
-                        extra={
-                            "topic": self.topic,
-                            "consumer_group": self._consumer_config["group.id"],
-                        },
-                    )
-            try:
-                self._consumer.close()
-            except Exception:
-                logger.error(
-                    "Consumer close failed during shutdown.",
-                    exc_info=True,
-                    extra={
-                        "topic": self.topic,
-                        "consumer_group": self._consumer_config["group.id"],
-                    },
-                )
+            self._wakeup_consumer_for_shutdown()
+            self._close_consumer_for_shutdown()
         if self._producer:
-            try:
-                undelivered_count = self._producer.flush(timeout=5)
-                if undelivered_count:
-                    logger.error(
-                        "DLQ producer flush left undelivered messages during shutdown.",
-                        extra={
-                            "topic": self.topic,
-                            "consumer_group": self._consumer_config["group.id"],
-                            "undelivered_count": undelivered_count,
-                        },
-                    )
-            except Exception:
+            self._flush_dlq_producer_for_shutdown()
+        logger.info(f"Consumer for topic '{self.topic}' has been closed.")
+
+    def _shutdown_log_context(self) -> dict[str, str]:
+        return {
+            "topic": self.topic,
+            "consumer_group": self._consumer_config["group.id"],
+        }
+
+    def _wakeup_consumer_for_shutdown(self) -> None:
+        if self._consumer is None:
+            return
+        wakeup = getattr(self._consumer, "wakeup", None)
+        if not callable(wakeup):
+            return
+        try:
+            wakeup()
+        except Exception:
+            logger.warning(
+                "Consumer wakeup failed during shutdown.",
+                exc_info=True,
+                extra=self._shutdown_log_context(),
+            )
+
+    def _close_consumer_for_shutdown(self) -> None:
+        if self._consumer is None:
+            return
+        try:
+            self._consumer.close()
+        except Exception:
+            logger.error(
+                "Consumer close failed during shutdown.",
+                exc_info=True,
+                extra=self._shutdown_log_context(),
+            )
+
+    def _flush_dlq_producer_for_shutdown(self) -> None:
+        if self._producer is None:
+            return
+        try:
+            undelivered_count = self._producer.flush(timeout=5)
+            if undelivered_count:
                 logger.error(
-                    "DLQ producer flush failed during shutdown.",
-                    exc_info=True,
+                    "DLQ producer flush left undelivered messages during shutdown.",
                     extra={
-                        "topic": self.topic,
-                        "consumer_group": self._consumer_config["group.id"],
+                        **self._shutdown_log_context(),
+                        "undelivered_count": undelivered_count,
                     },
                 )
-        logger.info(f"Consumer for topic '{self.topic}' has been closed.")
+        except Exception:
+            logger.error(
+                "DLQ producer flush failed during shutdown.",
+                exc_info=True,
+                extra=self._shutdown_log_context(),
+            )

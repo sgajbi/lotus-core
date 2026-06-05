@@ -508,6 +508,34 @@ async def test_shutdown_wakes_consumer_before_close(
     mock_confluent_consumer.close.assert_called_once()
 
 
+async def test_shutdown_continues_to_close_when_wakeup_fails(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_confluent_consumer.wakeup.side_effect = RuntimeError("wakeup failed")
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        test_consumer.shutdown()
+
+    mock_confluent_consumer.close.assert_called_once()
+    assert "Consumer wakeup failed during shutdown." in mock_warning.call_args.args[0]
+
+
+async def test_shutdown_logs_close_failure_without_raising(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_confluent_consumer.close.side_effect = RuntimeError("close failed")
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        test_consumer.shutdown()
+
+    mock_confluent_consumer.wakeup.assert_called_once()
+    assert "Consumer close failed during shutdown." in mock_log_error.call_args.args[0]
+
+
 async def test_shutdown_logs_close_and_flush_failures_without_raising(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,
