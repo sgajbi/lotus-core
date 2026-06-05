@@ -768,3 +768,6 @@ health before that claim is defensible.
      required-topic verification, existing-topic metadata lookup, and missing-topic calculation
      helpers. `ensure_topics_exist` improved from `B (6)` to `A (3)`, and every Kafka admin helper
      function/class now reports A-ranked complexity.
+154. Reduced shared config integer environment parsing complexity by extracting safe-default,
+     environment-loading, and minimum-enforcement helpers. `_env_int` improved from `B (7)` to
+     `A (1)`, and each extracted integer parsing helper reports A-ranked complexity.

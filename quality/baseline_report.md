@@ -1027,3 +1027,8 @@ CR-997 reduced Kafka topic verification complexity by extracting admin-client co
 required-topic verification, existing-topic metadata lookup, and missing-topic calculation helpers.
 `ensure_topics_exist` improved from `B (6)` to `A (3)`, every Kafka admin helper function/class
 reports A-ranked complexity, and `kafka_admin.py` remains `A (88.15)` maintainability.
+
+CR-998 reduced shared config integer environment parsing complexity by extracting safe-default,
+environment-loading, and minimum-enforcement helpers. `_env_int` improved from `B (7)` to
+`A (1)`, each extracted integer parsing helper reports A-ranked complexity, and `config.py`
+remains `A (35.12)` maintainability.

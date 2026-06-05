@@ -24,24 +24,46 @@ class KafkaTopicDefinition:
 
 
 def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
-    try:
-        safe_default = int(default)
-    except Exception:
-        safe_default = 0
+    safe_default = _safe_int_default(default)
+    value, raw = _load_env_int_value(name, safe_default)
+    return _enforce_env_int_minimum(
+        name=name,
+        raw=raw,
+        value=value,
+        safe_default=safe_default,
+        minimum=minimum,
+    )
 
+
+def _safe_int_default(default: int) -> int:
+    try:
+        return int(default)
+    except Exception:
+        return 0
+
+
+def _load_env_int_value(name: str, safe_default: int) -> tuple[int, str | None]:
     raw = os.getenv(name)
     if raw is None:
-        value = safe_default
-    else:
-        try:
-            value = int(raw)
-        except Exception:
-            logger.warning(
-                "Invalid integer env setting; falling back to default.",
-                extra={"setting": name, "raw_value": raw, "default": safe_default},
-            )
-            value = safe_default
+        return safe_default, raw
+    try:
+        return int(raw), raw
+    except Exception:
+        logger.warning(
+            "Invalid integer env setting; falling back to default.",
+            extra={"setting": name, "raw_value": raw, "default": safe_default},
+        )
+        return safe_default, raw
 
+
+def _enforce_env_int_minimum(
+    *,
+    name: str,
+    raw: str | None,
+    value: int,
+    safe_default: int,
+    minimum: int | None,
+) -> int:
     if minimum is not None and value < minimum:
         logger.warning(
             "Out-of-range integer env setting; falling back to default.",
