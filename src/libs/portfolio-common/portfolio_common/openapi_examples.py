@@ -460,19 +460,53 @@ def _build_object_example(
     root_schema: dict[str, Any],
     seen_refs: set[str] | None,
 ) -> dict[str, Any]:
-    properties = schema_node.get("properties", {})
-    if not isinstance(properties, dict):
+    properties = _schema_properties(schema_node)
+    if properties is None:
         return {}
     example: dict[str, Any] = {}
-    required = set(schema_node.get("required", []))
+    required = _required_property_names(schema_node)
     for prop_name, prop_schema in properties.items():
-        value = build_schema_example(prop_schema, root_schema=root_schema, seen_refs=seen_refs)
-        if value is None and prop_name not in required:
+        prop_example = _build_property_schema_example(
+            prop_name,
+            prop_schema,
+            root_schema=root_schema,
+            seen_refs=seen_refs,
+        )
+        if not _should_include_property_example(prop_name, prop_example, required):
             continue
-        if value is None and isinstance(prop_schema, dict):
-            value = infer_example(prop_name, prop_schema)
-        example[prop_name] = value
+        example[prop_name] = prop_example
     return example
+
+
+def _schema_properties(schema_node: dict[str, Any]) -> dict[str, Any] | None:
+    properties = schema_node.get("properties", {})
+    return properties if isinstance(properties, dict) else None
+
+
+def _required_property_names(schema_node: dict[str, Any]) -> set[str]:
+    required = schema_node.get("required", [])
+    return set(required) if isinstance(required, list) else set()
+
+
+def _build_property_schema_example(
+    prop_name: str,
+    prop_schema: Any,
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> Any:
+    value = build_schema_example(prop_schema, root_schema=root_schema, seen_refs=seen_refs)
+    if value is None and isinstance(prop_schema, dict):
+        return infer_example(prop_name, prop_schema)
+    return value
+
+
+def _should_include_property_example(
+    prop_name: str,
+    prop_example: Any,
+    required: set[str],
+) -> bool:
+    return prop_example is not None or prop_name in required
 
 
 def _build_array_example(

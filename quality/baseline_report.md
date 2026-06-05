@@ -1113,3 +1113,8 @@ from `B (17.47)` to `B (17.91)` maintainability.
 CR-1012 reduced shared OpenAPI union example builder complexity by extracting union variant lookup,
 union-key dispatch, and non-empty allOf normalization helpers. `_build_union_example` improved from
 `B (8)` to `A (4)`, with direct allOf and oneOf tests pinning existing generated example behavior.
+
+CR-1013 reduced shared OpenAPI object example builder complexity by extracting schema-property,
+required-property, property-example, and property-inclusion helpers. `_build_object_example`
+improved from `B (7)` to `A (4)`, with direct tests pinning the existing generic fallback behavior
+for empty object properties.

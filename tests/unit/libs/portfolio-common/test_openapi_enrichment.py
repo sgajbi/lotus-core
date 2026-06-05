@@ -89,6 +89,36 @@ def test_build_schema_example_uses_first_available_one_of_variant() -> None:
     assert build_schema_example(schema, root_schema={}) == "ACTIVE"
 
 
+def test_build_schema_example_includes_optional_property_with_generic_fallback() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "required_status": {"type": "string"},
+            "optional_empty": {},
+        },
+        "required": ["required_status"],
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {
+        "required_status": "example_value",
+        "optional_empty": "value_example",
+    }
+
+
+def test_build_schema_example_uses_required_property_fallback() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "required_empty": {},
+        },
+        "required": ["required_empty"],
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {
+        "required_empty": "value_example",
+    }
+
+
 def test_enrich_openapi_schema_populates_missing_operation_docs() -> None:
     schema = {
         "paths": {
