@@ -89,6 +89,22 @@ def _cache_is_fresh(cache_state: CashflowRuleCacheState) -> bool:
     return age_seconds < CASHFLOW_RULE_CACHE_TTL_SECONDS
 
 
+def _fresh_cached_rule(
+    cache_state: Optional[CashflowRuleCacheState],
+    transaction_type_key: str,
+) -> Optional[CachedCashflowRule]:
+    if cache_state is None or not _cache_is_fresh(cache_state):
+        return None
+    return _rule_from_cache(cache_state, transaction_type_key)
+
+
+def _rule_from_cache(
+    cache_state: CashflowRuleCacheState,
+    transaction_type_key: str,
+) -> Optional[CachedCashflowRule]:
+    return cache_state.rules_by_transaction_type.get(transaction_type_key)
+
+
 class NoCashflowRuleError(ValueError):
     """Custom exception for when a rule for a transaction type is not found."""
 
@@ -259,32 +275,41 @@ class CashflowCalculatorConsumer(BaseConsumer):
         global _cashflow_rule_cache_state
 
         transaction_type_key = normalize_transaction_control_code(transaction_type)
-        cache_state = _cashflow_rule_cache_state
-        if cache_state is not None and _cache_is_fresh(cache_state):
-            rule = cache_state.rules_by_transaction_type.get(transaction_type_key)
-            if rule is not None:
-                return rule
+        rule = _fresh_cached_rule(_cashflow_rule_cache_state, transaction_type_key)
+        if rule is not None:
+            return rule
 
         lock = _get_cashflow_rule_cache_lock()
         async with lock:
-            cache_state = _cashflow_rule_cache_state
-            if cache_state is None or not _cache_is_fresh(cache_state):
-                logger.info("Cashflow rules cache miss/stale; refreshing from database.")
-                _cashflow_rule_cache_state = await self._load_cashflow_rules_cache(db_session)
-                cache_state = _cashflow_rule_cache_state
+            _cashflow_rule_cache_state = await self._fresh_or_reloaded_rule_cache(db_session)
+            rule = _rule_from_cache(_cashflow_rule_cache_state, transaction_type_key)
+            if rule is None:
+                _cashflow_rule_cache_state = await self._reload_cache_for_missing_rule(
+                    db_session,
+                    transaction_type_key,
+                )
+                rule = _rule_from_cache(_cashflow_rule_cache_state, transaction_type_key)
+            return rule
 
-            rule = cache_state.rules_by_transaction_type.get(transaction_type_key)
-            if rule is not None:
-                return rule
+    async def _fresh_or_reloaded_rule_cache(self, db_session) -> CashflowRuleCacheState:
+        cache_state = _cashflow_rule_cache_state
+        if cache_state is not None and _cache_is_fresh(cache_state):
+            return cache_state
+        logger.info("Cashflow rules cache miss/stale; refreshing from database.")
+        return await self._load_cashflow_rules_cache(db_session)
 
-            # Force one immediate refresh when a requested rule is missing.
-            # This supports near-real-time rule updates without waiting for TTL expiry.
-            logger.info(
-                "Cashflow rule '%s' not found in cache; forcing immediate refresh.",
-                transaction_type_key,
-            )
-            _cashflow_rule_cache_state = await self._load_cashflow_rules_cache(db_session)
-            return _cashflow_rule_cache_state.rules_by_transaction_type.get(transaction_type_key)
+    async def _reload_cache_for_missing_rule(
+        self,
+        db_session,
+        transaction_type_key: str,
+    ) -> CashflowRuleCacheState:
+        # Force one immediate refresh when a requested rule is missing.
+        # This supports near-real-time rule updates without waiting for TTL expiry.
+        logger.info(
+            "Cashflow rule '%s' not found in cache; forcing immediate refresh.",
+            transaction_type_key,
+        )
+        return await self._load_cashflow_rules_cache(db_session)
 
     async def process_message(self, msg: Message):
         await self._process_message_with_retry(msg)

@@ -1201,3 +1201,8 @@ claiming, transaction contract validation, non-cash lifecycle classification, re
 cashflow calculation staging, and `CashflowCalculatedEvent` construction helpers.
 `CashflowCalculatorConsumer._process_message_with_retry` improved from `D (24)` to `B (8)`, with
 all extracted helpers A-ranked by cyclomatic complexity.
+
+CR-1027 reduced cashflow calculator rule-cache lookup complexity by extracting fresh-cache lookup,
+direct cache lookup, stale/missing cache refresh, and missing-rule reload helpers.
+`CashflowCalculatorConsumer._get_rule_for_transaction` improved from `B (7)` to `A (3)`, with all
+cache lookup helpers A-ranked by cyclomatic complexity.
