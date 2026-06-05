@@ -1104,3 +1104,8 @@ string-like token checks with explicit token-rule tables and focused token-match
 `_infer_number_example` improved from `B (8)` to `A (3)`, `_infer_string_like_example` improved
 from `B (8)` to `A (4)`, and `openapi_examples.py` improved from `B (16.35)` to `B (17.47)`
 maintainability.
+
+CR-1011 reduced shared OpenAPI typed-example dispatch complexity by replacing repeated type
+branches with static and dynamic typed-example maps plus focused array, integer, and number builder
+helpers. `_typed_example` improved from `B (6)` to `A (3)`, and `openapi_examples.py` improved
+from `B (17.47)` to `B (17.91)` maintainability.

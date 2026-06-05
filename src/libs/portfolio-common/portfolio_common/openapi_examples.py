@@ -114,17 +114,34 @@ def _enum_example(prop_schema: dict[str, Any]) -> Any:
 
 def _typed_example(*, prop_name: str, key: str, prop_schema: dict[str, Any]) -> Any:
     schema_type = prop_schema.get("type")
-    if schema_type == "array":
-        return [infer_example(f"{prop_name}_item", prop_schema.get("items", {}))]
-    if schema_type == "object":
-        return {"key": "value"}
-    if schema_type == "boolean":
-        return True
-    if schema_type == "integer":
-        return _infer_integer_example(key)
-    if schema_type == "number":
-        return _infer_number_example(key)
+    if schema_type in _STATIC_TYPED_EXAMPLES:
+        return _STATIC_TYPED_EXAMPLES[schema_type]
+    if schema_type in _DYNAMIC_TYPED_EXAMPLE_BUILDERS:
+        return _DYNAMIC_TYPED_EXAMPLE_BUILDERS[schema_type](prop_name, key, prop_schema)
     return None
+
+
+def _array_example(prop_name: str, _key: str, prop_schema: dict[str, Any]) -> list[Any]:
+    return [infer_example(f"{prop_name}_item", prop_schema.get("items", {}))]
+
+
+def _integer_example(_prop_name: str, key: str, _prop_schema: dict[str, Any]) -> int:
+    return _infer_integer_example(key)
+
+
+def _number_example(_prop_name: str, key: str, _prop_schema: dict[str, Any]) -> float:
+    return _infer_number_example(key)
+
+
+_STATIC_TYPED_EXAMPLES = {
+    "object": {"key": "value"},
+    "boolean": True,
+}
+_DYNAMIC_TYPED_EXAMPLE_BUILDERS = {
+    "array": _array_example,
+    "integer": _integer_example,
+    "number": _number_example,
+}
 
 
 def _formatted_example(prop_schema: dict[str, Any]) -> str | None:
