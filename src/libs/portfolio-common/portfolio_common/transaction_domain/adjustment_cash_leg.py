@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Callable
 
 from portfolio_common.events import TransactionEvent
 
@@ -14,6 +15,8 @@ AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES = {
     "DIVIDEND",
     "INTEREST",
 }
+
+AdjustmentResolver = Callable[[TransactionEvent, Decimal], tuple[Decimal, str, str]]
 
 
 @dataclass(frozen=True)
@@ -43,56 +46,119 @@ def _resolve_adjustment_amount_and_direction(
     tx_type = normalize_transaction_control_code(event.transaction_type)
     fee = event.trade_fee or Decimal(0)
 
-    if tx_type == "BUY":
-        return event.gross_transaction_amount + fee, "OUTFLOW", "BUY_SETTLEMENT"
-    if tx_type == "SELL":
-        return event.gross_transaction_amount - fee, "INFLOW", "SELL_SETTLEMENT"
-    if tx_type == "DIVIDEND":
-        return event.gross_transaction_amount - fee, "INFLOW", "DIVIDEND_SETTLEMENT"
-    if tx_type == "INTEREST":
-        deductions = (event.withholding_tax_amount or Decimal(0)) + (
-            event.other_interest_deductions_amount or Decimal(0)
-        )
-        net_interest = event.net_interest_amount
-        if net_interest is None:
-            net_interest = event.gross_transaction_amount - deductions - fee
-        interest_direction = normalize_transaction_control_code(
-            getattr(event, "interest_direction", "INCOME")
-        )
-        direction = "OUTFLOW" if interest_direction == "EXPENSE" else "INFLOW"
-        reason = "INTEREST_CHARGE_SETTLEMENT" if direction == "OUTFLOW" else "INTEREST_SETTLEMENT"
-        return net_interest, direction, reason
+    resolver = _adjustment_resolvers().get(tx_type)
+    if resolver is not None:
+        return resolver(event, fee)
     raise AdjustmentCashLegError(
         "transaction_type",
         f"{event.transaction_type} is not eligible for auto-generated cash leg.",
     )
 
 
+def _adjustment_resolvers() -> dict[str, AdjustmentResolver]:
+    return {
+        "BUY": _resolve_buy_adjustment,
+        "SELL": _resolve_sell_adjustment,
+        "DIVIDEND": _resolve_dividend_adjustment,
+        "INTEREST": _resolve_interest_adjustment,
+    }
+
+
+def _resolve_buy_adjustment(
+    event: TransactionEvent,
+    fee: Decimal,
+) -> tuple[Decimal, str, str]:
+    return event.gross_transaction_amount + fee, "OUTFLOW", "BUY_SETTLEMENT"
+
+
+def _resolve_sell_adjustment(
+    event: TransactionEvent,
+    fee: Decimal,
+) -> tuple[Decimal, str, str]:
+    return event.gross_transaction_amount - fee, "INFLOW", "SELL_SETTLEMENT"
+
+
+def _resolve_dividend_adjustment(
+    event: TransactionEvent,
+    fee: Decimal,
+) -> tuple[Decimal, str, str]:
+    return event.gross_transaction_amount - fee, "INFLOW", "DIVIDEND_SETTLEMENT"
+
+
+def _resolve_interest_adjustment(
+    event: TransactionEvent,
+    fee: Decimal,
+) -> tuple[Decimal, str, str]:
+    net_interest = _resolve_net_interest_amount(event, fee)
+    direction = _resolve_interest_movement_direction(event)
+    reason = "INTEREST_CHARGE_SETTLEMENT" if direction == "OUTFLOW" else "INTEREST_SETTLEMENT"
+    return net_interest, direction, reason
+
+
+def _resolve_net_interest_amount(event: TransactionEvent, fee: Decimal) -> Decimal:
+    if event.net_interest_amount is not None:
+        return event.net_interest_amount
+    deductions = (event.withholding_tax_amount or Decimal(0)) + (
+        event.other_interest_deductions_amount or Decimal(0)
+    )
+    return event.gross_transaction_amount - deductions - fee
+
+
+def _resolve_interest_movement_direction(event: TransactionEvent) -> str:
+    interest_direction = normalize_transaction_control_code(
+        getattr(event, "interest_direction", "INCOME")
+    )
+    return "OUTFLOW" if interest_direction == "EXPENSE" else "INFLOW"
+
+
 def build_auto_generated_adjustment_cash_leg(event: TransactionEvent) -> TransactionEvent:
+    _require_auto_generate_cash_leg(event)
+    _resolve_cash_account_id(event)
+    cash_instrument_id = _resolve_cash_instrument_id(event)
+    amount, movement_direction, adjustment_reason = _resolve_adjustment_amount_and_direction(event)
+    tx_type = normalize_transaction_control_code(event.transaction_type)
+    economic_event_id, linked_group_id = _resolve_generated_linkage(event, tx_type)
+    return _build_adjustment_cash_leg_event(
+        event=event,
+        cash_instrument_id=cash_instrument_id,
+        amount=abs(amount),
+        movement_direction=movement_direction,
+        adjustment_reason=adjustment_reason,
+        tx_type=tx_type,
+        economic_event_id=economic_event_id,
+        linked_group_id=linked_group_id,
+    )
+
+
+def _require_auto_generate_cash_leg(event: TransactionEvent) -> None:
     if not should_auto_generate_cash_leg(event):
         raise AdjustmentCashLegError(
             "cash_entry_mode",
             "Event is not configured for AUTO_GENERATE adjustment cash-leg creation.",
         )
 
+
+def _resolve_cash_account_id(event: TransactionEvent) -> str:
     cash_account_id = (event.settlement_cash_account_id or "").strip()
-    if not cash_account_id:
-        raise AdjustmentCashLegError(
-            "settlement_cash_account_id",
-            "settlement_cash_account_id is required in AUTO_GENERATE mode.",
-        )
+    if cash_account_id:
+        return cash_account_id
+    raise AdjustmentCashLegError(
+        "settlement_cash_account_id",
+        "settlement_cash_account_id is required in AUTO_GENERATE mode.",
+    )
 
+
+def _resolve_cash_instrument_id(event: TransactionEvent) -> str:
     cash_instrument_id = event.settlement_cash_instrument_id or event.settlement_cash_account_id
-    if not cash_instrument_id:
-        raise AdjustmentCashLegError(
-            "settlement_cash_instrument_id",
-            "Unable to resolve settlement cash instrument identifier.",
-        )
+    if cash_instrument_id:
+        return str(cash_instrument_id)
+    raise AdjustmentCashLegError(
+        "settlement_cash_instrument_id",
+        "Unable to resolve settlement cash instrument identifier.",
+    )
 
-    amount, movement_direction, adjustment_reason = _resolve_adjustment_amount_and_direction(event)
-    amount = abs(amount)
 
-    tx_type = normalize_transaction_control_code(event.transaction_type)
+def _resolve_generated_linkage(event: TransactionEvent, tx_type: str) -> tuple[str, str]:
     economic_event_id = (
         event.economic_event_id or f"EVT-{tx_type}-{event.portfolio_id}-{event.transaction_id}"
     )
@@ -100,13 +166,27 @@ def build_auto_generated_adjustment_cash_leg(event: TransactionEvent) -> Transac
         event.linked_transaction_group_id
         or f"LTG-{tx_type}-{event.portfolio_id}-{event.transaction_id}"
     )
+    return economic_event_id, linked_group_id
+
+
+def _build_adjustment_cash_leg_event(
+    *,
+    event: TransactionEvent,
+    cash_instrument_id: str,
+    amount: Decimal,
+    movement_direction: str,
+    adjustment_reason: str,
+    tx_type: str,
+    economic_event_id: str,
+    linked_group_id: str,
+) -> TransactionEvent:
     settlement_dt = event.settlement_date or event.transaction_date
 
     return TransactionEvent(
         transaction_id=f"{event.transaction_id}-CASHLEG",
         portfolio_id=event.portfolio_id,
-        instrument_id=str(cash_instrument_id),
-        security_id=str(cash_instrument_id),
+        instrument_id=cash_instrument_id,
+        security_id=cash_instrument_id,
         transaction_date=settlement_dt,
         settlement_date=settlement_dt,
         transaction_type=ADJUSTMENT_TRANSACTION_TYPE,

@@ -686,3 +686,10 @@ health before that claim is defensible.
      orchestration, cash-link presence, and cash-link consistency.
      `validate_ca_bundle_a_transaction` improved from `D (22)` to `A (2)`, and every CA Bundle A
      validation function/class now reports A-ranked complexity.
+136. Reduced adjustment cash-leg helper complexity by extracting focused helpers for adjustment
+     resolver dispatch, BUY/SELL/DIVIDEND/INTEREST amount policy, net interest resolution,
+     interest movement direction, AUTO_GENERATE eligibility assertion, cash-account resolution,
+     cash-instrument resolution, generated linkage metadata, and adjustment cash-leg event
+     assembly. `_resolve_adjustment_amount_and_direction` improved from `C (11)` to `A (3)`,
+     `build_auto_generated_adjustment_cash_leg` improved from `B (9)` to `A (1)`, and every
+     adjustment cash-leg function/class now reports A-ranked complexity.
