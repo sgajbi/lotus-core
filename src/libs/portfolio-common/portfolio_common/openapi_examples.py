@@ -315,35 +315,55 @@ def build_schema_example(
     if not isinstance(schema_node, dict):
         return None
 
-    explicit_example = _explicit_schema_example(schema_node)
-    if explicit_example is not None:
-        return explicit_example
-
-    ref_example = _build_ref_example(
+    for example in _candidate_schema_examples(
         schema_node,
         root_schema=root_schema,
         seen_refs=seen_refs,
-    )
-    if ref_example is not None:
-        return ref_example
+    ):
+        if example is not None:
+            return example
+    return _fallback_schema_example(schema_node)
 
-    union_example = _build_union_example(
-        schema_node,
-        root_schema=root_schema,
-        seen_refs=seen_refs,
-    )
-    if union_example is not None:
-        return union_example
 
+def _candidate_schema_examples(
+    schema_node: dict[str, Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> tuple[Any, ...]:
+    return (
+        _explicit_schema_example(schema_node),
+        _build_ref_example(schema_node, root_schema=root_schema, seen_refs=seen_refs),
+        _build_union_example(schema_node, root_schema=root_schema, seen_refs=seen_refs),
+        _build_structured_schema_example(
+            schema_node,
+            root_schema=root_schema,
+            seen_refs=seen_refs,
+        ),
+    )
+
+
+def _build_structured_schema_example(
+    schema_node: dict[str, Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> Any:
     schema_type = schema_node.get("type")
     if schema_type == "object" or "properties" in schema_node:
         return _build_object_example(schema_node, root_schema=root_schema, seen_refs=seen_refs)
     if schema_type == "array":
         return _build_array_example(schema_node, root_schema=root_schema, seen_refs=seen_refs)
+    return None
 
+
+def _fallback_schema_example(schema_node: dict[str, Any]) -> Any:
+    return infer_example(_schema_example_property_name(schema_node), schema_node)
+
+
+def _schema_example_property_name(schema_node: dict[str, Any]) -> str:
     title = schema_node.get("title")
-    prop_name = title if isinstance(title, str) and title else "value"
-    return infer_example(prop_name, schema_node)
+    return title if isinstance(title, str) and title else "value"
 
 
 def _explicit_schema_example(schema_node: dict[str, Any]) -> Any:

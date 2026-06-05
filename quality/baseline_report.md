@@ -1118,3 +1118,8 @@ CR-1013 reduced shared OpenAPI object example builder complexity by extracting s
 required-property, property-example, and property-inclusion helpers. `_build_object_example`
 improved from `B (7)` to `A (4)`, with direct tests pinning the existing generic fallback behavior
 for empty object properties.
+
+CR-1014 reduced shared OpenAPI schema example orchestration complexity by extracting candidate
+selection, structured-schema, fallback-example, and fallback property-name helpers.
+`build_schema_example` improved from `B (10)` to `A (4)`, leaving every function in
+`openapi_examples.py` A-ranked by cyclomatic complexity.

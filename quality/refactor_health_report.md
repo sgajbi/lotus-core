@@ -833,3 +833,7 @@ health before that claim is defensible.
      required-property, property-example, and property-inclusion helpers. `_build_object_example`
      improved from `B (7)` to `A (4)`, with direct tests pinning the existing generic fallback
      behavior for empty object properties.
+170. Reduced shared OpenAPI schema example orchestration complexity by extracting candidate
+     selection, structured-schema, fallback-example, and fallback property-name helpers.
+     `build_schema_example` improved from `B (10)` to `A (4)`, leaving every function in
+     `openapi_examples.py` A-ranked by cyclomatic complexity.

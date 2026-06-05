@@ -89,6 +89,27 @@ def test_build_schema_example_uses_first_available_one_of_variant() -> None:
     assert build_schema_example(schema, root_schema={}) == "ACTIVE"
 
 
+def test_build_schema_example_prefers_explicit_example_before_structured_inference() -> None:
+    schema = {
+        "type": "object",
+        "example": {"explicit": True},
+        "properties": {"status": {"type": "string"}},
+        "required": ["status"],
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {"explicit": True}
+
+
+def test_build_schema_example_uses_title_for_primitive_fallback() -> None:
+    assert (
+        build_schema_example(
+            {"type": "string", "title": "reviewStatus", "enum": ["PENDING", "DONE"]},
+            root_schema={},
+        )
+        == "PENDING"
+    )
+
+
 def test_build_schema_example_includes_optional_property_with_generic_fallback() -> None:
     schema = {
         "type": "object",
