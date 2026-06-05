@@ -886,3 +886,10 @@ fields, date ordering, strict metadata, cash-entry policy, settlement cash-accou
 and external cash-link requirements. `validate_interest_transaction` improved from `D (29)` to
 `A (1)`, every INTEREST validation function/class reports A-ranked complexity, and
 `interest_validation.py` remains `A (33.41)` maintainability.
+
+CR-976 reduced canonical SELL transaction validation complexity by extracting focused helpers for
+transaction-type validation, settlement-date presence, positive quantity policy, positive
+gross-amount policy, currency fields, date ordering, strict linkage metadata, and strict policy
+metadata. `validate_sell_transaction` improved from `C (14)` to `A (1)`, every SELL validation
+function/class reports A-ranked complexity, and `sell_validation.py` remains `A (42.80)`
+maintainability.

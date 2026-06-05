@@ -664,3 +664,8 @@ health before that claim is defensible.
      requirements, and external cash-link requirements. `validate_interest_transaction` improved
      from `D (29)` to `A (1)`, and every INTEREST validation function/class now reports A-ranked
      complexity.
+132. Reduced canonical SELL transaction validation complexity by extracting focused helpers for
+     transaction-type validation, settlement-date presence, positive quantity policy, positive
+     gross-amount policy, currency fields, date ordering, strict linkage metadata, and strict
+     policy metadata. `validate_sell_transaction` improved from `C (14)` to `A (1)`, and every
+     SELL validation function/class now reports A-ranked complexity.
