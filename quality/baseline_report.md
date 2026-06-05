@@ -878,3 +878,11 @@ policy, strict metadata, cash settlement components, contract identifiers, swap 
 optional policy modes, and realized P&L fields. `validate_fx_transaction` improved from `E (37)`
 to `A (1)`, every FX validation function/class reports A-ranked complexity, and
 `fx_validation.py` remains `A (27.02)` maintainability.
+
+CR-975 reduced canonical INTEREST transaction validation complexity by extracting focused helpers
+for transaction-type validation, settlement-date presence, zero quantity/price policy, gross
+amount policy, interest direction, nonnegative deductions, net interest reconciliation, currency
+fields, date ordering, strict metadata, cash-entry policy, settlement cash-account requirements,
+and external cash-link requirements. `validate_interest_transaction` improved from `D (29)` to
+`A (1)`, every INTEREST validation function/class reports A-ranked complexity, and
+`interest_validation.py` remains `A (33.41)` maintainability.
