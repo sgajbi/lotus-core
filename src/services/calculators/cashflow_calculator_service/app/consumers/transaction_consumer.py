@@ -123,6 +123,18 @@ def _semantic_cashflow_event_id(event: TransactionEvent) -> str:
     return f"cashflow:{event.portfolio_id}:{event.transaction_id}:{event.epoch or 0}"
 
 
+def _message_key(msg: Message) -> str:
+    return msg.key().decode("utf-8") if msg.key() else "NoKey"
+
+
+def _message_value(msg: Message) -> str:
+    return msg.value().decode("utf-8")
+
+
+def _message_event_id(msg: Message) -> str:
+    return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+
+
 def _validated_cashflow_transaction_type(event: TransactionEvent) -> str:
     event_transaction_type = resolve_effective_processing_transaction_type(event)
     if is_ca_bundle_a_transaction_type(event_transaction_type):
@@ -316,49 +328,67 @@ class CashflowCalculatorConsumer(BaseConsumer):
 
     @retry(wait=wait_fixed(2), stop=stop_after_attempt(15), before=before_log(logger, logging.INFO))
     async def _process_message_with_retry(self, msg: Message):
-        key = msg.key().decode("utf-8") if msg.key() else "NoKey"
-        value = msg.value().decode("utf-8")
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
-
+        key = _message_key(msg)
         try:
-            event_data = json.loads(value)
-            with self._message_correlation_context(
+            await self._process_cashflow_event_data(
                 msg,
-                fallback_correlation_id=event_data.get("correlation_id"),
-            ) as correlation_id:
-                event = TransactionEvent.model_validate(event_data)
-                semantic_event_id = _semantic_cashflow_event_id(event)
+                json.loads(_message_value(msg)),
+                _message_event_id(msg),
+            )
+        except Exception as exc:
+            await self._handle_cashflow_processing_error(msg, key, exc)
 
-                async for db in get_async_db_session():
-                    await self._process_validated_cashflow_event(
-                        db,
-                        msg,
-                        event,
-                        event_id,
-                        semantic_event_id,
-                        correlation_id,
-                    )
+    async def _process_cashflow_event_data(
+        self,
+        msg: Message,
+        event_data: dict,
+        event_id: str,
+    ) -> None:
+        with self._message_correlation_context(
+            msg,
+            fallback_correlation_id=event_data.get("correlation_id"),
+        ) as correlation_id:
+            event = TransactionEvent.model_validate(event_data)
+            semantic_event_id = _semantic_cashflow_event_id(event)
 
-        except (json.JSONDecodeError, ValidationError):
+            async for db in get_async_db_session():
+                await self._process_validated_cashflow_event(
+                    db,
+                    msg,
+                    event,
+                    event_id,
+                    semantic_event_id,
+                    correlation_id,
+                )
+
+    async def _handle_cashflow_processing_error(
+        self,
+        msg: Message,
+        key: str,
+        exc: Exception,
+    ) -> None:
+        if isinstance(exc, (json.JSONDecodeError, ValidationError)):
             logger.error("Message validation failed. Sending to DLQ.", exc_info=True)
             await self._send_to_dlq_async(msg, ValueError("invalid cashflow event payload"))
-        except IntegrityError:
+            return
+        if isinstance(exc, IntegrityError):
             logger.warning("DB integrity error; will retry...", exc_info=False)
-            raise
-        except NoCashflowRuleError as e:
+            raise exc
+        if isinstance(exc, NoCashflowRuleError):
             logger.error(
-                f"Configuration error: {e}. This is a non-retryable error. Sending to DLQ."
+                f"Configuration error: {exc}. This is a non-retryable error. Sending to DLQ."
             )
-            await self._send_to_dlq_async(msg, e)
-        except LinkedCashLegError as e:
-            logger.error(f"Linked cash-leg contract error: {e}. Sending to DLQ.")
-            await self._send_to_dlq_async(msg, e)
-        except Exception as e:
-            logger.error(
-                f"Unexpected error processing message with key '{key}'. Sending to DLQ.",
-                exc_info=True,
-            )
-            await self._send_to_dlq_async(msg, e)
+            await self._send_to_dlq_async(msg, exc)
+            return
+        if isinstance(exc, LinkedCashLegError):
+            logger.error(f"Linked cash-leg contract error: {exc}. Sending to DLQ.")
+            await self._send_to_dlq_async(msg, exc)
+            return
+        logger.error(
+            f"Unexpected error processing message with key '{key}'. Sending to DLQ.",
+            exc_info=True,
+        )
+        await self._send_to_dlq_async(msg, exc)
 
     async def _process_validated_cashflow_event(
         self,

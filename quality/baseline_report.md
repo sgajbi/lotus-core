@@ -1212,3 +1212,8 @@ physical/stale-replay early-stop helpers, epoch/semantic-duplicate early-stop he
 cashflow staging or non-cash lifecycle skip helpers.
 `CashflowCalculatorConsumer._process_validated_cashflow_event` improved from `B (7)` to `A (4)`,
 with all extracted decision helpers A-ranked by cyclomatic complexity.
+
+CR-1029 reduced cashflow calculator retry/DLQ wrapper complexity by extracting message metadata,
+decoded event processing, and cashflow processing error-classification helpers.
+`CashflowCalculatorConsumer._process_message_with_retry` improved from `B (8)` to `A (2)`, leaving
+every function/class/method in `transaction_consumer.py` A-ranked by cyclomatic complexity.
