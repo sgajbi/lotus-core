@@ -747,3 +747,8 @@ health before that claim is defensible.
      pre-observation and observed-status maps plus a focused point-status helper.
      `classify_market_reference_point` improved from `B (8)` to `A (1)`, and every market
      reference quality function/class now reports A-ranked complexity.
+149. Reduced reconciliation quality classifier complexity by extracting validation helpers,
+     status-decision helpers, a run-status classification map, and small blocking/partial
+     predicates. `classify_reconciliation_status` improved from `B (9)` to `A (2)`,
+     `classify_data_quality_coverage` improved from `B (7)` to `A (1)`, and every reconciliation
+     quality function/class now reports A-ranked complexity.

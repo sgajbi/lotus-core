@@ -15,6 +15,10 @@ UNKNOWN = "UNKNOWN"
 BLOCKING_RUN_STATUSES = {"FAILED", "REQUIRES_REPLAY", "BLOCKED"}
 COMPLETE_RUN_STATUSES = {"COMPLETED", "COMPLETE"}
 RUNNING_RUN_STATUSES = {"RUNNING", "PROCESSING", "ACCEPTED", "QUEUED", "PENDING"}
+_RUN_STATUS_CLASSIFICATION_BY_STATUS = {
+    **dict.fromkeys(COMPLETE_RUN_STATUSES, COMPLETE),
+    **dict.fromkeys(RUNNING_RUN_STATUSES, PARTIAL),
+}
 
 BLOCKING_FINDING_SEVERITIES = {"ERROR", "CRITICAL", "BLOCKER"}
 NON_BLOCKING_FINDING_SEVERITIES = {"WARNING", "INFO"}
@@ -49,24 +53,42 @@ class DataQualityCoverageSignal:
 
 
 def classify_reconciliation_status(signal: ReconciliationRunSignal) -> str:
-    _require_non_negative(signal.error_count, "error_count")
-    _require_non_negative(signal.warning_count, "warning_count")
+    _validate_reconciliation_run_signal(signal)
     if not signal.has_run:
         return UNRECONCILED
-    status = _normalize_status(signal.run_status)
+    return _classify_reconciliation_run_status(
+        status=_normalize_status(signal.run_status),
+        error_count=signal.error_count,
+        warning_count=signal.warning_count,
+        is_stale=signal.is_stale,
+    )
+
+
+def _validate_reconciliation_run_signal(signal: ReconciliationRunSignal) -> None:
+    _require_non_negative(signal.error_count, "error_count")
+    _require_non_negative(signal.warning_count, "warning_count")
+
+
+def _classify_reconciliation_run_status(
+    *,
+    status: str | None,
+    error_count: int,
+    warning_count: int,
+    is_stale: bool,
+) -> str:
     if status is None:
         return UNKNOWN
-    if status in BLOCKING_RUN_STATUSES or signal.error_count > 0:
+    if _has_blocking_run_status(status=status, error_count=error_count):
         return BLOCKED
-    if signal.is_stale:
+    if is_stale:
         return STALE
-    if signal.warning_count > 0:
+    if warning_count > 0:
         return PARTIAL
-    if status in COMPLETE_RUN_STATUSES:
-        return COMPLETE
-    if status in RUNNING_RUN_STATUSES:
-        return PARTIAL
-    return UNKNOWN
+    return _RUN_STATUS_CLASSIFICATION_BY_STATUS.get(status, UNKNOWN)
+
+
+def _has_blocking_run_status(*, status: str, error_count: int) -> bool:
+    return status in BLOCKING_RUN_STATUSES or error_count > 0
 
 
 def classify_finding_status(*, severity: str, resolution_state: str = "OPEN") -> str:
@@ -82,22 +104,71 @@ def classify_finding_status(*, severity: str, resolution_state: str = "OPEN") ->
 
 
 def classify_data_quality_coverage(signal: DataQualityCoverageSignal) -> str:
+    _validate_data_quality_coverage_signal(signal)
+    return _classify_data_quality_coverage_counts(
+        required_count=signal.required_count,
+        observed_count=signal.observed_count,
+        stale_count=signal.stale_count,
+        blocking_issue_count=signal.blocking_issue_count,
+        warning_issue_count=signal.warning_issue_count,
+    )
+
+
+def _validate_data_quality_coverage_signal(signal: DataQualityCoverageSignal) -> None:
     _require_non_negative(signal.required_count, "required_count")
     _require_non_negative(signal.observed_count, "observed_count")
     _require_non_negative(signal.stale_count, "stale_count")
     _require_non_negative(signal.blocking_issue_count, "blocking_issue_count")
     _require_non_negative(signal.warning_issue_count, "warning_issue_count")
-    if signal.blocking_issue_count > 0:
+
+
+def _classify_data_quality_coverage_counts(
+    *,
+    required_count: int,
+    observed_count: int,
+    stale_count: int,
+    blocking_issue_count: int,
+    warning_issue_count: int,
+) -> str:
+    if blocking_issue_count > 0:
         return BLOCKED
-    if signal.required_count == 0:
+    return _classify_nonblocking_data_quality_coverage(
+        required_count=required_count,
+        observed_count=observed_count,
+        stale_count=stale_count,
+        warning_issue_count=warning_issue_count,
+    )
+
+
+def _classify_nonblocking_data_quality_coverage(
+    *,
+    required_count: int,
+    observed_count: int,
+    stale_count: int,
+    warning_issue_count: int,
+) -> str:
+    if required_count == 0:
         return UNKNOWN
-    if signal.observed_count == 0:
+    if observed_count == 0:
         return UNRECONCILED
-    if signal.stale_count > 0:
+    if stale_count > 0:
         return STALE
-    if signal.observed_count < signal.required_count or signal.warning_issue_count > 0:
+    if _has_partial_data_quality_coverage(
+        required_count=required_count,
+        observed_count=observed_count,
+        warning_issue_count=warning_issue_count,
+    ):
         return PARTIAL
     return COMPLETE
+
+
+def _has_partial_data_quality_coverage(
+    *,
+    required_count: int,
+    observed_count: int,
+    warning_issue_count: int,
+) -> bool:
+    return observed_count < required_count or warning_issue_count > 0
 
 
 def sort_reconciliation_breaks(

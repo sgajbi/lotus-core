@@ -999,3 +999,10 @@ pre-observation and observed-status maps plus a focused point-status helper.
 `classify_market_reference_point` improved from `B (8)` to `A (1)`, every market reference quality
 function/class reports A-ranked complexity, and `market_reference_quality.py` remains `A (36.36)`
 maintainability.
+
+CR-993 reduced reconciliation quality classifier complexity by extracting validation helpers,
+status-decision helpers, a run-status classification map, and small blocking/partial predicates.
+`classify_reconciliation_status` improved from `B (9)` to `A (2)`,
+`classify_data_quality_coverage` improved from `B (7)` to `A (1)`, every reconciliation quality
+function/class reports A-ranked complexity, and `reconciliation_quality.py` remains `A (33.27)`
+maintainability.
