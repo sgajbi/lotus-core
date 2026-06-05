@@ -931,3 +931,10 @@ transaction type, cash-leg gross amount, economic event ID, and linked transacti
 `validate_upstream_cash_leg_pairing` improved from `C (12)` to `A (1)`, every dual-leg pairing
 function/class reports A-ranked complexity, and `dual_leg_pairing.py` remains `A (56.95)`
 maintainability.
+
+CR-982 reduced FX baseline processing complexity by extracting focused helpers for decimal
+defaulting, base FX processing update assembly, realized P&L mode dispatch, zero realized P&L
+update assembly, upstream-provided realized P&L update assembly, and total P&L fallback
+resolution. `build_fx_processed_event` improved from `C (14)` to `A (2)`, every FX baseline
+processing function reports A-ranked complexity, and `fx_baseline_processing.py` remains
+`A (65.60)` maintainability.

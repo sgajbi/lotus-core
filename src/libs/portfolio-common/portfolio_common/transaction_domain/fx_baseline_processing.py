@@ -16,67 +16,74 @@ def build_fx_processed_event(event: TransactionEvent) -> TransactionEvent:
     richer realized-P&L and valuation treatment is implemented.
     """
     realized_mode = normalize_transaction_control_code(event.fx_realized_pnl_mode or "NONE")
-    update: dict[str, object] = {
+    update = _build_base_fx_processing_update(event, realized_mode)
+    update.update(_build_realized_pnl_update(event, realized_mode))
+    return event.model_copy(update=update)
+
+
+def _decimal_or_zero(value: Decimal | None) -> Decimal:
+    return value if value is not None else Decimal(0)
+
+
+def _build_base_fx_processing_update(
+    event: TransactionEvent,
+    realized_mode: str,
+) -> dict[str, object]:
+    return {
         "fx_realized_pnl_mode": realized_mode,
-        "gross_cost": event.gross_cost if event.gross_cost is not None else Decimal(0),
-        "net_cost": event.net_cost if event.net_cost is not None else Decimal(0),
-        "realized_gain_loss": (
-            event.realized_gain_loss if event.realized_gain_loss is not None else Decimal(0)
+        "gross_cost": _decimal_or_zero(event.gross_cost),
+        "net_cost": _decimal_or_zero(event.net_cost),
+        "realized_gain_loss": _decimal_or_zero(event.realized_gain_loss),
+        "net_cost_local": _decimal_or_zero(event.net_cost_local),
+        "realized_gain_loss_local": _decimal_or_zero(event.realized_gain_loss_local),
+    }
+
+
+def _build_realized_pnl_update(
+    event: TransactionEvent,
+    realized_mode: str,
+) -> dict[str, object]:
+    if realized_mode == "NONE":
+        return _build_zero_realized_pnl_update()
+    return _build_upstream_realized_pnl_update(event)
+
+
+def _build_zero_realized_pnl_update() -> dict[str, object]:
+    return {
+        "realized_capital_pnl_local": Decimal(0),
+        "realized_fx_pnl_local": Decimal(0),
+        "realized_total_pnl_local": Decimal(0),
+        "realized_capital_pnl_base": Decimal(0),
+        "realized_fx_pnl_base": Decimal(0),
+        "realized_total_pnl_base": Decimal(0),
+    }
+
+
+def _build_upstream_realized_pnl_update(event: TransactionEvent) -> dict[str, object]:
+    capital_local = _decimal_or_zero(event.realized_capital_pnl_local)
+    capital_base = _decimal_or_zero(event.realized_capital_pnl_base)
+    fx_local = _decimal_or_zero(event.realized_fx_pnl_local)
+    fx_base = _decimal_or_zero(event.realized_fx_pnl_base)
+    return {
+        "realized_capital_pnl_local": capital_local,
+        "realized_capital_pnl_base": capital_base,
+        "realized_fx_pnl_local": fx_local,
+        "realized_fx_pnl_base": fx_base,
+        "realized_total_pnl_local": _resolve_total_pnl(
+            event.realized_total_pnl_local, capital_local, fx_local
         ),
-        "net_cost_local": event.net_cost_local if event.net_cost_local is not None else Decimal(0),
-        "realized_gain_loss_local": (
-            event.realized_gain_loss_local
-            if event.realized_gain_loss_local is not None
-            else Decimal(0)
+        "realized_total_pnl_base": _resolve_total_pnl(
+            event.realized_total_pnl_base, capital_base, fx_base
         ),
     }
-    if realized_mode == "NONE":
-        update.update(
-            {
-                "realized_capital_pnl_local": Decimal(0),
-                "realized_fx_pnl_local": Decimal(0),
-                "realized_total_pnl_local": Decimal(0),
-                "realized_capital_pnl_base": Decimal(0),
-                "realized_fx_pnl_base": Decimal(0),
-                "realized_total_pnl_base": Decimal(0),
-            }
-        )
-    else:
-        capital_local = (
-            event.realized_capital_pnl_local
-            if event.realized_capital_pnl_local is not None
-            else Decimal(0)
-        )
-        capital_base = (
-            event.realized_capital_pnl_base
-            if event.realized_capital_pnl_base is not None
-            else Decimal(0)
-        )
-        fx_local = (
-            event.realized_fx_pnl_local if event.realized_fx_pnl_local is not None else Decimal(0)
-        )
-        fx_base = (
-            event.realized_fx_pnl_base if event.realized_fx_pnl_base is not None else Decimal(0)
-        )
-        update.update(
-            {
-                "realized_capital_pnl_local": capital_local,
-                "realized_capital_pnl_base": capital_base,
-                "realized_fx_pnl_local": fx_local,
-                "realized_fx_pnl_base": fx_base,
-                "realized_total_pnl_local": (
-                    event.realized_total_pnl_local
-                    if event.realized_total_pnl_local is not None
-                    else capital_local + fx_local
-                ),
-                "realized_total_pnl_base": (
-                    event.realized_total_pnl_base
-                    if event.realized_total_pnl_base is not None
-                    else capital_base + fx_base
-                ),
-            }
-        )
-    return event.model_copy(update=update)
+
+
+def _resolve_total_pnl(
+    total_pnl: Decimal | None,
+    capital_pnl: Decimal,
+    fx_pnl: Decimal,
+) -> Decimal:
+    return total_pnl if total_pnl is not None else capital_pnl + fx_pnl
 
 
 def assert_fx_processed_event_valid(

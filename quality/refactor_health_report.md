@@ -698,3 +698,8 @@ health before that claim is defensible.
      cash-leg transaction type, cash-leg gross amount, economic event ID, and linked transaction
      group ID. `validate_upstream_cash_leg_pairing` improved from `C (12)` to `A (1)`, and every
      dual-leg pairing function/class now reports A-ranked complexity.
+138. Reduced FX baseline processing complexity by extracting focused helpers for decimal
+     defaulting, base FX processing update assembly, realized P&L mode dispatch, zero realized P&L
+     update assembly, upstream-provided realized P&L update assembly, and total P&L fallback
+     resolution. `build_fx_processed_event` improved from `C (14)` to `A (2)`, and every FX
+     baseline processing function now reports A-ranked complexity.
