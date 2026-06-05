@@ -3,22 +3,10 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import (
-    Integer,
-    String,
-    and_,
-    cast,
-    column,
-    func,
-    select,
-    tuple_,
-    update,
-    values,
-)
+from sqlalchemy import and_, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
-from sqlalchemy.types import Date
 
 from .config import DEFAULT_BUSINESS_CALENDAR_CODE
 from .currency_codes import normalize_currency_code
@@ -35,6 +23,10 @@ from .database_models import (
 )
 from .identifiers import normalize_lookup_identifier
 from .utils import async_timed
+from .valuation_snapshot_contiguity import (
+    build_contiguous_snapshot_dates_stmt,
+    contiguous_snapshot_dates_by_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,143 +248,10 @@ class ValuationRepositoryBase:
         if not states:
             return {}
 
-        keys_tuple = tuple((s.portfolio_id, s.security_id, s.epoch) for s in states)
-        first_open_dates = first_open_dates or {}
-
-        first_open_dates_rows = [
-            (
-                portfolio_id,
-                security_id,
-                epoch,
-                first_open_date,
-            )
-            for (portfolio_id, security_id, epoch), first_open_date in first_open_dates.items()
-        ]
-
-        s = aliased(PositionState)
-        dps = aliased(DailyPositionSnapshot)
-        max_business_date_subq = (
-            select(func.max(BusinessDate.date))
-            .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
-            .scalar_subquery()
+        result = await self.db.execute(
+            build_contiguous_snapshot_dates_stmt(states, first_open_dates or {})
         )
-
-        expected_start_date = cast(s.watermark_date + timedelta(days=1), Date)
-        join_first_open_dates = False
-
-        if first_open_dates_rows:
-            first_open_dates_table = (
-                values(
-                    column("portfolio_id", String),
-                    column("security_id", String),
-                    column("epoch", Integer),
-                    column("first_open_date", Date),
-                    name="first_open_dates",
-                )
-                .data(first_open_dates_rows)
-                .alias("first_open_dates")
-            )
-            expected_start_date = cast(
-                func.greatest(
-                    s.watermark_date + timedelta(days=1),
-                    func.coalesce(
-                        first_open_dates_table.c.first_open_date,
-                        s.watermark_date + timedelta(days=1),
-                    ),
-                ),
-                Date,
-            )
-            join_first_open_dates = True
-            correlate_targets = (s, first_open_dates_table)
-        else:
-            correlate_targets = (s,)
-
-        date_series_subq = (
-            select(
-                func.generate_series(
-                    expected_start_date,
-                    max_business_date_subq,
-                    timedelta(days=1),
-                )
-                .cast(Date)
-                .label("expected_date")
-            )
-            .correlate(*correlate_targets)
-            .subquery("date_series")
-        )
-        latest_history_quantity_for_snapshot = (
-            select(PositionHistory.quantity)
-            .where(
-                PositionHistory.portfolio_id == dps.portfolio_id,
-                PositionHistory.security_id == dps.security_id,
-                PositionHistory.epoch == dps.epoch,
-                PositionHistory.position_date <= dps.date,
-            )
-            .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
-            .limit(1)
-            .correlate(dps)
-            .scalar_subquery()
-        )
-        snapshot_quantity_matches_history = latest_history_quantity_for_snapshot.is_(None) | (
-            dps.quantity == latest_history_quantity_for_snapshot
-        )
-
-        first_gap_subq = (
-            (
-                select(func.min(date_series_subq.c.expected_date))
-                .select_from(
-                    date_series_subq.outerjoin(
-                        dps,
-                        (dps.portfolio_id == s.portfolio_id)
-                        & (dps.security_id == s.security_id)
-                        & (dps.epoch == s.epoch)
-                        & (dps.date == date_series_subq.c.expected_date)
-                        & snapshot_quantity_matches_history,
-                    )
-                )
-                .where(dps.id.is_(None))
-            )
-            .correlate(s)
-            .scalar_subquery()
-        )
-
-        latest_snapshot_subq = (
-            (
-                select(func.max(dps.date)).where(
-                    (dps.portfolio_id == s.portfolio_id)
-                    & (dps.security_id == s.security_id)
-                    & (dps.epoch == s.epoch)
-                    & snapshot_quantity_matches_history
-                )
-            )
-            .correlate(s)
-            .scalar_subquery()
-        )
-
-        stmt = (
-            select(
-                s.portfolio_id,
-                s.security_id,
-                cast(
-                    func.coalesce(first_gap_subq - timedelta(days=1), latest_snapshot_subq), Date
-                ).label("contiguous_date"),
-            )
-            .select_from(s)
-            .where(
-                tuple_(s.portfolio_id, s.security_id, s.epoch).in_(keys_tuple),
-                latest_snapshot_subq.isnot(None),
-            )
-        )
-        if join_first_open_dates:
-            stmt = stmt.outerjoin(
-                first_open_dates_table,
-                (first_open_dates_table.c.portfolio_id == s.portfolio_id)
-                & (first_open_dates_table.c.security_id == s.security_id)
-                & (first_open_dates_table.c.epoch == s.epoch),
-            )
-
-        result = await self.db.execute(stmt)
-        return {(row.portfolio_id, row.security_id): row.contiguous_date for row in result}
+        return contiguous_snapshot_dates_by_key(result)
 
     @async_timed(repository="ValuationRepository", method="get_states_needing_backfill")
     async def get_states_needing_backfill(

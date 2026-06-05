@@ -847,3 +847,9 @@ health before that claim is defensible.
      update construction, reset update construction, and shared processing-state update predicate
      helpers. `ValuationRepositoryBase.find_and_reset_stale_jobs` improved from `C (14)` to
      `A (2)`, and all stale reset helpers now report A-ranked cyclomatic complexity.
+173. Reduced shared valuation snapshot-contiguity complexity by extracting first-open-date table
+     construction, date-series generation, history/snapshot reconciliation predicates, first-gap
+     detection, latest-snapshot fallback, optional join construction, and result mapping into
+     `valuation_snapshot_contiguity.py`. `ValuationRepositoryBase.find_contiguous_snapshot_dates`
+     improved from `B (8)` to `A (3)`, leaving every function/class/method in
+     `valuation_repository_base.py` A-ranked by cyclomatic complexity.
