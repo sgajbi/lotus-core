@@ -1012,3 +1012,8 @@ terminal-failure counting, partial-outcome detection, and valid-outcome classifi
 `classify_ingestion_outcome` improved from `B (6)` to `A (1)`, every ingestion evidence
 function/class reports A-ranked complexity, and `ingestion_evidence.py` remains `A (37.92)`
 maintainability.
+
+CR-995 reduced reconstruction identity scope payload complexity by extracting reconstruction scope
+validation and transaction-window validation helpers. `_canonical_scope_payload` improved from
+`B (7)` to `A (1)`, every reconstruction identity function/class reports A-ranked complexity, and
+`reconstruction_identity.py` remains `A (44.37)` maintainability.

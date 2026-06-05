@@ -756,3 +756,7 @@ health before that claim is defensible.
      terminal-failure counting, partial-outcome detection, and valid-outcome classification helpers.
      `classify_ingestion_outcome` improved from `B (6)` to `A (1)`, and every ingestion evidence
      function/class now reports A-ranked complexity.
+151. Reduced reconstruction identity scope payload complexity by extracting reconstruction scope
+     validation and transaction-window validation helpers. `_canonical_scope_payload` improved
+     from `B (7)` to `A (1)`, and every reconstruction identity function/class now reports
+     A-ranked complexity.

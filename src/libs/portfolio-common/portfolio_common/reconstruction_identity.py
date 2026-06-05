@@ -39,23 +39,7 @@ def build_portfolio_snapshot_id(scope: PortfolioReconstructionScope) -> str:
 
 
 def _canonical_scope_payload(scope: PortfolioReconstructionScope) -> dict[str, object]:
-    _require_text(scope.portfolio_id, "portfolio_id")
-    _require_text(scope.product, "product")
-    _require_text(scope.restatement_version, "restatement_version")
-    if scope.policy_version is not None:
-        _require_text(scope.policy_version, "policy_version")
-    _require_non_negative(scope.position_epoch, "position_epoch")
-    _require_non_negative(scope.cashflow_epoch, "cashflow_epoch")
-    if bool(scope.transaction_window_start) != bool(scope.transaction_window_end):
-        raise ValueError(
-            "transaction_window_start and transaction_window_end must be provided together"
-        )
-    if scope.transaction_window_start and scope.transaction_window_end:
-        if scope.transaction_window_start > scope.transaction_window_end:
-            raise ValueError("transaction_window_start must be on or before transaction_window_end")
-    for source_data_product in scope.source_data_products:
-        _require_text(source_data_product, "source_data_products")
-
+    _validate_reconstruction_scope(scope)
     return {
         "as_of_date": scope.as_of_date.isoformat(),
         "cashflow_epoch": scope.cashflow_epoch,
@@ -69,6 +53,29 @@ def _canonical_scope_payload(scope: PortfolioReconstructionScope) -> dict[str, o
         "transaction_window_start": _date_or_none(scope.transaction_window_start),
         "valuation_date": scope.valuation_date.isoformat(),
     }
+
+
+def _validate_reconstruction_scope(scope: PortfolioReconstructionScope) -> None:
+    _require_text(scope.portfolio_id, "portfolio_id")
+    _require_text(scope.product, "product")
+    _require_text(scope.restatement_version, "restatement_version")
+    if scope.policy_version is not None:
+        _require_text(scope.policy_version, "policy_version")
+    _require_non_negative(scope.position_epoch, "position_epoch")
+    _require_non_negative(scope.cashflow_epoch, "cashflow_epoch")
+    _validate_transaction_window(scope)
+    for source_data_product in scope.source_data_products:
+        _require_text(source_data_product, "source_data_products")
+
+
+def _validate_transaction_window(scope: PortfolioReconstructionScope) -> None:
+    if bool(scope.transaction_window_start) != bool(scope.transaction_window_end):
+        raise ValueError(
+            "transaction_window_start and transaction_window_end must be provided together"
+        )
+    if scope.transaction_window_start and scope.transaction_window_end:
+        if scope.transaction_window_start > scope.transaction_window_end:
+            raise ValueError("transaction_window_start must be on or before transaction_window_end")
 
 
 def _date_or_none(value: date | None) -> str | None:
