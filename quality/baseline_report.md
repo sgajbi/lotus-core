@@ -1017,3 +1017,8 @@ CR-995 reduced reconstruction identity scope payload complexity by extracting re
 validation and transaction-window validation helpers. `_canonical_scope_payload` improved from
 `B (7)` to `A (1)`, every reconstruction identity function/class reports A-ranked complexity, and
 `reconstruction_identity.py` remains `A (44.37)` maintainability.
+
+CR-996 reduced database URL scheme normalization complexity by extracting legacy-postgres,
+async-driver, sync-driver, and scheme-replacement helpers. `_normalize_database_url_scheme`
+improved from `B (6)` to `A (2)`, every shared DB helper function reports A-ranked complexity, and
+`db.py` remains `A (66.86)` maintainability.

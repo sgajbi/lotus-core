@@ -760,3 +760,7 @@ health before that claim is defensible.
      validation and transaction-window validation helpers. `_canonical_scope_payload` improved
      from `B (7)` to `A (1)`, and every reconstruction identity function/class now reports
      A-ranked complexity.
+152. Reduced database URL scheme normalization complexity by extracting legacy-postgres,
+     async-driver, sync-driver, and scheme-replacement helpers. `_normalize_database_url_scheme`
+     improved from `B (6)` to `A (2)`, and every shared DB helper function now reports A-ranked
+     complexity.

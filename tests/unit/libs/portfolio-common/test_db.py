@@ -88,6 +88,20 @@ def test_async_database_url_normalizes_postgres_scheme(monkeypatch):
     assert get_async_database_url() == "postgresql+asyncpg://user:pass@host:5432/dbname"
 
 
+def test_sync_database_url_removes_asyncpg_driver_scheme(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@host:5432/dbname")
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+
+    assert get_sync_database_url() == "postgresql://user:pass@host:5432/dbname"
+
+
+def test_async_database_url_preserves_asyncpg_driver_scheme(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@host:5432/dbname")
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+
+    assert get_async_database_url() == "postgresql+asyncpg://user:pass@host:5432/dbname"
+
+
 @pytest.mark.asyncio
 async def test_asyncsessionlocal_creates_async_engine_lazily(monkeypatch):
     async_calls = []
