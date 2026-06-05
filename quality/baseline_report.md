@@ -1078,3 +1078,10 @@ per-message processing, sync/async dispatch, retryable and terminal processing-e
 processing metrics helpers. `BaseConsumer.run` improved from `C (13)` to `A (5)`,
 `_process_polled_message` reports `A (4)`, direct tests now cover fatal and non-fatal consumer poll
 errors, and `kafka_consumer.py` remains `A (28.49)` maintainability.
+
+CR-1007 reduced runtime supervision failure attribution complexity by extracting completed-task
+selection, exception-task selection, cancelled-task selection, and runtime-error construction
+helpers. `wait_for_shutdown_or_task_failure` improved from `C (15)` to `A (5)`, the extracted
+failure-attribution helpers report A-ranked complexity, and `runtime_supervision.py` remains
+`A (56.39)` maintainability. `shutdown_runtime_components` remains a separate C-ranked teardown
+hotspot for a later slice.

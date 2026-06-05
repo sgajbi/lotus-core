@@ -30,33 +30,8 @@ async def wait_for_shutdown_or_task_failure(
             return None
 
         completed_tasks = [task for task in done if task is not shutdown_wait_task]
-        failed_task = next(
-            (
-                task
-                for task in completed_tasks
-                if not task.cancelled() and task.exception() is not None
-            ),
-            None,
-        )
-        if failed_task is None:
-            failed_task = next((task for task in completed_tasks if task.cancelled()), None)
-        if failed_task is None:
-            failed_task = completed_tasks[0]
-        task_name = failed_task.get_name() or "unnamed-task"
-        if failed_task.cancelled():
-            runtime_error = RuntimeError(
-                f"Critical service task '{task_name}' was cancelled unexpectedly."
-            )
-        else:
-            task_error = failed_task.exception()
-            if task_error is None:
-                runtime_error = RuntimeError(
-                    f"Critical service task '{task_name}' exited unexpectedly."
-                )
-            else:
-                runtime_error = RuntimeError(f"Critical service task '{task_name}' failed.")
-                runtime_error.__cause__ = task_error
-
+        failed_task = _select_failed_runtime_task(completed_tasks)
+        runtime_error = _runtime_error_for_failed_task(failed_task)
         logger.error("Critical runtime task failure detected; initiating shutdown.")
         shutdown_event.set()
         return runtime_error
@@ -64,6 +39,39 @@ async def wait_for_shutdown_or_task_failure(
         shutdown_wait_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await shutdown_wait_task
+
+
+def _select_failed_runtime_task(tasks: Sequence[asyncio.Task]) -> asyncio.Task:
+    exception_task = _find_exception_runtime_task(tasks)
+    if exception_task is not None:
+        return exception_task
+    cancelled_task = _find_cancelled_runtime_task(tasks)
+    if cancelled_task is not None:
+        return cancelled_task
+    return tasks[0]
+
+
+def _find_exception_runtime_task(tasks: Sequence[asyncio.Task]) -> asyncio.Task | None:
+    return next(
+        (task for task in tasks if not task.cancelled() and task.exception() is not None),
+        None,
+    )
+
+
+def _find_cancelled_runtime_task(tasks: Sequence[asyncio.Task]) -> asyncio.Task | None:
+    return next((task for task in tasks if task.cancelled()), None)
+
+
+def _runtime_error_for_failed_task(task: asyncio.Task) -> RuntimeError:
+    task_name = task.get_name() or "unnamed-task"
+    if task.cancelled():
+        return RuntimeError(f"Critical service task '{task_name}' was cancelled unexpectedly.")
+    task_error = task.exception()
+    if task_error is None:
+        return RuntimeError(f"Critical service task '{task_name}' exited unexpectedly.")
+    runtime_error = RuntimeError(f"Critical service task '{task_name}' failed.")
+    runtime_error.__cause__ = task_error
+    return runtime_error
 
 
 async def shutdown_runtime_components(

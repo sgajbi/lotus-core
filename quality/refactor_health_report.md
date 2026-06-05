@@ -802,3 +802,7 @@ health before that claim is defensible.
      per-message processing, sync/async dispatch, retryable/terminal processing-error handling,
      and processing metrics helpers. `BaseConsumer.run` improved from `C (13)` to `A (5)`, and
      `_process_polled_message` reports `A (4)` with direct fatal/non-fatal poll-error tests.
+163. Reduced runtime supervision failure attribution complexity by extracting completed-task
+     selection, exception-task selection, cancelled-task selection, and runtime-error construction
+     helpers. `wait_for_shutdown_or_task_failure` improved from `C (15)` to `A (5)`, while
+     `shutdown_runtime_components` remains a separate C-ranked teardown hotspot.
