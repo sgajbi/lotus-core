@@ -863,3 +863,9 @@ health before that claim is defensible.
      legacy percent-quote detection, and ratio-based multiplier selection helpers.
      `resolve_valuation_unit_price` improved from `B (9)` to `A (2)`, and every function in
      `valuation_prices.py` now reports A-ranked cyclomatic complexity.
+176. Reduced shared reprocessing stale-job reset complexity by extracting stale-row retrieval,
+     over-limit and retryable stale-job classification, failed update construction, reset update
+     construction, shared processing-state update predicates, failed-job marking, and
+     retryable-job reset helpers. `ReprocessingJobRepository.find_and_reset_stale_jobs` improved
+     from `B (8)` to `A (2)`, and every function/class/method in
+     `reprocessing_job_repository.py` now reports A-ranked cyclomatic complexity.

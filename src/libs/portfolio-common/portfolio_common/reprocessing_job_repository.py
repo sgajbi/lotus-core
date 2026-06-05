@@ -251,52 +251,45 @@ class ReprocessingJobRepository:
         self, timeout_minutes: int = 15, max_attempts: int = 3
     ) -> int:
         stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_jobs_stmt = select(ReprocessingJob.id, ReprocessingJob.attempt_count).where(
-            ReprocessingJob.status == "PROCESSING",
-            ReprocessingJob.updated_at < stale_cutoff,
-        )
-        stale_rows = (await self.db.execute(stale_jobs_stmt)).all()
+        stale_rows = await self._find_stale_job_rows(stale_cutoff)
         if not stale_rows:
             return 0
 
-        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
-        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
+        failed_job_ids = _over_limit_stale_job_ids(stale_rows, max_attempts)
+        reset_job_ids = _resettable_stale_job_ids(stale_rows, max_attempts)
 
-        if failed_job_ids:
-            failure_stmt = (
-                update(ReprocessingJob)
-                .where(
-                    ReprocessingJob.id.in_(failed_job_ids),
-                    ReprocessingJob.status == "PROCESSING",
-                    ReprocessingJob.updated_at < stale_cutoff,
-                )
-                .values(
-                    status="FAILED",
-                    failure_reason="Stale processing timeout exceeded max attempts",
-                    updated_at=func.now(),
-                )
-                .execution_options(synchronize_session=False)
-            )
-            await self.db.execute(failure_stmt)
-            logger.warning(
-                "Marked stale reprocessing jobs as FAILED after max attempts.",
-                extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
-            )
+        await self._mark_over_limit_stale_jobs_failed(
+            failed_job_ids,
+            stale_cutoff,
+            max_attempts,
+        )
+        return await self._reset_retryable_stale_jobs(reset_job_ids, stale_cutoff)
 
+    async def _find_stale_job_rows(self, stale_cutoff: datetime) -> list[Any]:
+        return (await self.db.execute(_stale_reprocessing_jobs_stmt(stale_cutoff))).all()
+
+    async def _mark_over_limit_stale_jobs_failed(
+        self,
+        failed_job_ids: list[int],
+        stale_cutoff: datetime,
+        max_attempts: int,
+    ) -> None:
+        if not failed_job_ids:
+            return
+        await self.db.execute(_failed_stale_jobs_update_stmt(failed_job_ids, stale_cutoff))
+        logger.warning(
+            "Marked stale reprocessing jobs as FAILED after max attempts.",
+            extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+        )
+
+    async def _reset_retryable_stale_jobs(
+        self,
+        reset_job_ids: list[int],
+        stale_cutoff: datetime,
+    ) -> int:
         if not reset_job_ids:
             return 0
-
-        stmt = (
-            update(ReprocessingJob)
-            .where(
-                ReprocessingJob.id.in_(reset_job_ids),
-                ReprocessingJob.status == "PROCESSING",
-                ReprocessingJob.updated_at < stale_cutoff,
-            )
-            .values(status="PENDING", updated_at=func.now())
-            .execution_options(synchronize_session=False)
-        )
-        result = await self.db.execute(stmt)
+        result = await self.db.execute(_reset_stale_jobs_update_stmt(reset_job_ids, stale_cutoff))
         return result.rowcount
 
     @async_timed(repository="ReprocessingJobRepository", method="get_queue_stats")
@@ -336,3 +329,46 @@ class ReprocessingJobRepository:
         )
         result = await self.db.execute(stmt)
         return result.rowcount == 1
+
+
+def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
+    return [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+
+
+def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
+    return [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+
+def _stale_reprocessing_jobs_stmt(stale_cutoff: datetime):
+    return select(ReprocessingJob.id, ReprocessingJob.attempt_count).where(
+        ReprocessingJob.status == "PROCESSING",
+        ReprocessingJob.updated_at < stale_cutoff,
+    )
+
+
+def _failed_stale_jobs_update_stmt(failed_job_ids: list[int], stale_cutoff: datetime):
+    return (
+        _stale_jobs_update_stmt(failed_job_ids, stale_cutoff)
+        .values(
+            status="FAILED",
+            failure_reason="Stale processing timeout exceeded max attempts",
+            updated_at=func.now(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _reset_stale_jobs_update_stmt(reset_job_ids: list[int], stale_cutoff: datetime):
+    return (
+        _stale_jobs_update_stmt(reset_job_ids, stale_cutoff)
+        .values(status="PENDING", updated_at=func.now())
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _stale_jobs_update_stmt(job_ids: list[int], stale_cutoff: datetime):
+    return update(ReprocessingJob).where(
+        ReprocessingJob.id.in_(job_ids),
+        ReprocessingJob.status == "PROCESSING",
+        ReprocessingJob.updated_at < stale_cutoff,
+    )
