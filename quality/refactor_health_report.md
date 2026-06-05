@@ -752,3 +752,7 @@ health before that claim is defensible.
      predicates. `classify_reconciliation_status` improved from `B (9)` to `A (2)`,
      `classify_data_quality_coverage` improved from `B (7)` to `A (1)`, and every reconciliation
      quality function/class now reports A-ranked complexity.
+150. Reduced ingestion outcome classifier complexity by extracting count validation,
+     terminal-failure counting, partial-outcome detection, and valid-outcome classification helpers.
+     `classify_ingestion_outcome` improved from `B (6)` to `A (1)`, and every ingestion evidence
+     function/class now reports A-ranked complexity.

@@ -1006,3 +1006,9 @@ status-decision helpers, a run-status classification map, and small blocking/par
 `classify_data_quality_coverage` improved from `B (7)` to `A (1)`, every reconciliation quality
 function/class reports A-ranked complexity, and `reconciliation_quality.py` remains `A (33.27)`
 maintainability.
+
+CR-994 reduced ingestion outcome classifier complexity by extracting count validation,
+terminal-failure counting, partial-outcome detection, and valid-outcome classification helpers.
+`classify_ingestion_outcome` improved from `B (6)` to `A (1)`, every ingestion evidence
+function/class reports A-ranked complexity, and `ingestion_evidence.py` remains `A (37.92)`
+maintainability.
