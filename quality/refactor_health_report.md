@@ -798,3 +798,7 @@ health before that claim is defensible.
      commit, successful-DLQ-publication commit, DLQ-publication-failure logging, and message
      log-context helpers. `BaseConsumer.run` improved from `C (18)` to `C (13)`; the remaining
      C-ranked run-loop orchestration is tracked for a separate slice.
+162. Reduced Kafka consumer run-loop orchestration complexity by extracting poll-error handling,
+     per-message processing, sync/async dispatch, retryable/terminal processing-error handling,
+     and processing metrics helpers. `BaseConsumer.run` improved from `C (13)` to `A (5)`, and
+     `_process_polled_message` reports `A (4)` with direct fatal/non-fatal poll-error tests.

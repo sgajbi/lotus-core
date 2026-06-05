@@ -373,66 +373,102 @@ class BaseConsumer(ABC):
 
             if msg is None:
                 continue
-            if msg.error():
-                if msg.error().fatal():
-                    logger.error(
-                        f"Fatal consumer error on topic {self.topic}: "
-                        f"{msg.error()}. Shutting down.",
-                        exc_info=True,
-                    )
+            if self._should_skip_polled_message(msg):
+                if not self._running:
                     break
-                else:
-                    logger.warning(
-                        f"Non-fatal consumer error on topic {self.topic}: {msg.error()}."
-                    )
-                    continue
+                continue
 
-            token = None
-            start_time = time.monotonic()
-            processed_successfully = False
-            try:
-                corr_id = self._resolve_message_correlation_id(msg)
-                token = correlation_id_var.set(corr_id)
-
-                if inspect.iscoroutinefunction(self.process_message):
-                    await self.process_message(msg)
-                else:
-                    await loop.run_in_executor(None, functools.partial(self.process_message, msg))
-
-            except RetryableConsumerError as e:
-                # For transient errors, we log and do NOT commit, allowing Kafka to redeliver.
-                logger.warning(
-                    f"Retryable error occurred: {e}. Offset will not be committed.", exc_info=False
-                )
-
-            except Exception as e:
-                # For terminal errors (poison pills), we send to DLQ and then commit.
-                logger.error(
-                    f"Terminal error processing message for topic {self.topic}: {e}", exc_info=True
-                )
-                dlq_succeeded = await self._send_to_dlq_async(msg, e)
-                if dlq_succeeded:
-                    self._commit_after_dlq_publication(msg)
-                else:
-                    self._log_dlq_publication_failed(msg)
-            else:
-                processed_successfully = self._commit_after_successful_processing(msg)
-
-            finally:
-                duration = time.monotonic() - start_time
-                if self._metrics:
-                    labels = {
-                        "topic": self.topic,
-                        "consumer_group": self._consumer_config["group.id"],
-                    }
-                    self._metrics["latency"].labels(**labels).observe(duration)
-                    if processed_successfully:
-                        self._metrics["processed"].labels(**labels).inc()
-
-                if token:
-                    correlation_id_var.reset(token)
+            await self._process_polled_message(msg, loop)
 
         self.shutdown()
+
+    async def _process_polled_message(
+        self,
+        msg: Message,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        token = None
+        start_time = time.monotonic()
+        processed_successfully = False
+        try:
+            corr_id = self._resolve_message_correlation_id(msg)
+            token = correlation_id_var.set(corr_id)
+
+            await self._dispatch_message_for_processing(msg, loop)
+            processed_successfully = self._commit_after_successful_processing(msg)
+
+        except RetryableConsumerError as e:
+            # For transient errors, we log and do NOT commit, allowing Kafka to redeliver.
+            self._log_retryable_processing_error(e)
+
+        except Exception as e:
+            # For terminal errors (poison pills), we send to DLQ and then commit.
+            await self._handle_terminal_processing_error(msg, e)
+
+        finally:
+            self._record_processing_metrics(start_time, processed_successfully)
+            if token:
+                correlation_id_var.reset(token)
+
+    def _should_skip_polled_message(self, msg: Message) -> bool:
+        error = msg.error()
+        if not error:
+            return False
+        if error.fatal():
+            self._handle_fatal_consumer_error(error)
+        else:
+            self._handle_nonfatal_consumer_error(error)
+        return True
+
+    def _handle_fatal_consumer_error(self, error: object) -> None:
+        logger.error(
+            f"Fatal consumer error on topic {self.topic}: {error}. Shutting down.",
+            exc_info=True,
+        )
+        self._running = False
+
+    def _handle_nonfatal_consumer_error(self, error: object) -> None:
+        logger.warning(f"Non-fatal consumer error on topic {self.topic}: {error}.")
+
+    async def _dispatch_message_for_processing(
+        self,
+        msg: Message,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        if inspect.iscoroutinefunction(self.process_message):
+            await self.process_message(msg)
+            return
+        await loop.run_in_executor(None, functools.partial(self.process_message, msg))
+
+    def _log_retryable_processing_error(self, error: RetryableConsumerError) -> None:
+        logger.warning(
+            f"Retryable error occurred: {error}. Offset will not be committed.",
+            exc_info=False,
+        )
+
+    async def _handle_terminal_processing_error(self, msg: Message, error: Exception) -> None:
+        logger.error(
+            f"Terminal error processing message for topic {self.topic}: {error}", exc_info=True
+        )
+        dlq_succeeded = await self._send_to_dlq_async(msg, error)
+        if dlq_succeeded:
+            self._commit_after_dlq_publication(msg)
+        else:
+            self._log_dlq_publication_failed(msg)
+
+    def _record_processing_metrics(self, start_time: float, processed_successfully: bool) -> None:
+        if not self._metrics:
+            return
+        labels = self._metric_labels()
+        self._metrics["latency"].labels(**labels).observe(time.monotonic() - start_time)
+        if processed_successfully:
+            self._metrics["processed"].labels(**labels).inc()
+
+    def _metric_labels(self) -> dict[str, str]:
+        return {
+            "topic": self.topic,
+            "consumer_group": self._consumer_config["group.id"],
+        }
 
     def _commit_after_dlq_publication(self, msg: Message) -> None:
         try:

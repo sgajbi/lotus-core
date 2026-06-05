@@ -203,6 +203,45 @@ async def test_run_loop_commit_failure_does_not_send_to_dlq(
     assert "Offset commit failed after successful processing" in mock_warning.call_args.args[0]
 
 
+async def test_run_loop_fatal_consumer_error_stops_without_processing(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_error = MagicMock()
+    mock_error.fatal.return_value = True
+    mock_msg = create_mock_message("key-fatal", {"data": "value-fatal"}, error=mock_error)
+    mock_confluent_consumer.poll.return_value = mock_msg
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_not_awaited()
+    mock_confluent_consumer.commit.assert_not_called()
+    assert "Fatal consumer error" in mock_log_error.call_args.args[0]
+
+
+async def test_run_loop_nonfatal_consumer_error_skips_message(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_error = MagicMock()
+    mock_error.fatal.return_value = False
+    error_msg = create_mock_message("key-warning", {"data": "value-warning"}, error=mock_error)
+    valid_msg = create_mock_message("key-after-warning", {"data": "value-after-warning"})
+    mock_confluent_consumer.poll.side_effect = [error_msg, valid_msg]
+
+    async def stop_loop_after_processing(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = stop_loop_after_processing
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(valid_msg)
+    mock_confluent_consumer.commit.assert_called_once_with(message=valid_msg, asynchronous=False)
+    warning_messages = [call.args[0] for call in mock_warning.call_args_list]
+    assert any("Non-fatal consumer error" in message for message in warning_messages)
+
+
 async def test_dlq_payload_is_correct(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):

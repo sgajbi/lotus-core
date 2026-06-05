@@ -1072,3 +1072,9 @@ and message log-context helpers. `BaseConsumer.run` improved from `C (18)` to `C
 extracted commit-policy helpers report A-ranked complexity, and `kafka_consumer.py` remains
 `A (31.23)` maintainability. The run loop remains a C-ranked orchestration hotspot for a separate
 follow-up slice.
+
+CR-1006 reduced Kafka consumer run-loop orchestration complexity by extracting poll-error handling,
+per-message processing, sync/async dispatch, retryable and terminal processing-error handling, and
+processing metrics helpers. `BaseConsumer.run` improved from `C (13)` to `A (5)`,
+`_process_polled_message` reports `A (4)`, direct tests now cover fatal and non-fatal consumer poll
+errors, and `kafka_consumer.py` remains `A (28.49)` maintainability.
