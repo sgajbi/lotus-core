@@ -924,3 +924,10 @@ resolution, generated linkage metadata, and adjustment cash-leg event assembly.
 `build_auto_generated_adjustment_cash_leg` improved from `B (9)` to `A (1)`, every adjustment
 cash-leg function/class reports A-ranked complexity, and `adjustment_cash_leg.py` remains
 `A (37.29)` maintainability.
+
+CR-981 reduced upstream cash-leg pairing validation complexity by extracting focused helpers for
+product-leg cash-entry mode, portfolio matching, external cash transaction ID matching, cash-leg
+transaction type, cash-leg gross amount, economic event ID, and linked transaction group ID.
+`validate_upstream_cash_leg_pairing` improved from `C (12)` to `A (1)`, every dual-leg pairing
+function/class reports A-ranked complexity, and `dual_leg_pairing.py` remains `A (56.95)`
+maintainability.

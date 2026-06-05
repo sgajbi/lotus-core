@@ -693,3 +693,8 @@ health before that claim is defensible.
      assembly. `_resolve_adjustment_amount_and_direction` improved from `C (11)` to `A (3)`,
      `build_auto_generated_adjustment_cash_leg` improved from `B (9)` to `A (1)`, and every
      adjustment cash-leg function/class now reports A-ranked complexity.
+137. Reduced upstream cash-leg pairing validation complexity by extracting focused helpers for
+     product-leg cash-entry mode, portfolio matching, external cash transaction ID matching,
+     cash-leg transaction type, cash-leg gross amount, economic event ID, and linked transaction
+     group ID. `validate_upstream_cash_leg_pairing` improved from `C (12)` to `A (1)`, and every
+     dual-leg pairing function/class now reports A-ranked complexity.
