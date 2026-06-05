@@ -963,3 +963,9 @@ transaction eligibility, SELL linkage ID resolution, SELL policy ID resolution, 
 selection, and SELL metadata update assembly. `enrich_sell_transaction_metadata` improved from
 `B (7)` to `A (2)`, every SELL linkage function reports A-ranked complexity, and
 `sell_linkage.py` remains `A (67.86)` maintainability.
+
+CR-987 reduced INTEREST linkage enrichment complexity by extracting focused helpers for INTEREST
+transaction eligibility, INTEREST linkage ID resolution, INTEREST policy ID resolution, and
+INTEREST metadata update assembly. `enrich_interest_transaction_metadata` improved from `B (6)` to
+`A (2)`, every INTEREST linkage function reports A-ranked complexity, and `interest_linkage.py`
+remains `A (71.82)` maintainability.

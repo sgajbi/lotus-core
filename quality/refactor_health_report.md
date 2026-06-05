@@ -722,3 +722,7 @@ health before that claim is defensible.
      eligibility, SELL linkage ID resolution, SELL policy ID resolution, cost-basis policy
      selection, and SELL metadata update assembly. `enrich_sell_transaction_metadata` improved
      from `B (7)` to `A (2)`, and every SELL linkage function now reports A-ranked complexity.
+143. Reduced INTEREST linkage enrichment complexity by extracting focused helpers for INTEREST
+     transaction eligibility, INTEREST linkage ID resolution, INTEREST policy ID resolution, and
+     INTEREST metadata update assembly. `enrich_interest_transaction_metadata` improved from
+     `B (6)` to `A (2)`, and every INTEREST linkage function now reports A-ranked complexity.
