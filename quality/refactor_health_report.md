@@ -816,3 +816,8 @@ health before that claim is defensible.
      description predicate/formatter helpers. `infer_example` improved from `C (11)` to `A (3)`,
      `infer_description` improved from `C (14)` to `A (2)`, and direct tests now pin example and
      description precedence.
+166. Reduced shared OpenAPI example classifier complexity by replacing repeated numeric and
+     string-like token checks with explicit token-rule tables and focused token-matching helpers.
+     `_infer_number_example` improved from `B (8)` to `A (3)`, `_infer_string_like_example`
+     improved from `B (8)` to `A (4)`, and `openapi_examples.py` improved from `B (16.35)` to
+     `B (17.47)` maintainability.

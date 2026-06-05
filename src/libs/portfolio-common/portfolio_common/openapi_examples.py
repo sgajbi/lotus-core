@@ -62,6 +62,18 @@ _EXAMPLE_BY_KEY = {
 
 _DATE_EXAMPLE = "2026-02-27"
 _DATE_TIME_EXAMPLE = "2026-02-27T10:30:00Z"
+_NUMBER_EXAMPLE_RULES = (
+    (("weight",), 0.125),
+    (("price", "rate"), 1.2345),
+    (("quantity",), 100.0),
+    (("pnl", "amount", "value"), 125000.5),
+)
+_STRING_LIKE_EXAMPLE_RULES = (
+    (("currency",), "USD"),
+    (("date",), _DATE_EXAMPLE),
+    (("time", "timestamp"), _DATE_TIME_EXAMPLE),
+    (("status",), "ACTIVE"),
+)
 
 
 def to_snake_case(value: str) -> str:
@@ -133,32 +145,40 @@ def _infer_integer_example(key: str) -> int:
 
 
 def _infer_number_example(key: str) -> float:
-    if "weight" in key:
-        return 0.125
-    if "price" in key or "rate" in key:
-        return 1.2345
-    if "quantity" in key:
-        return 100.0
-    if "pnl" in key or "amount" in key or "value" in key:
-        return 125000.5
+    for tokens, example in _NUMBER_EXAMPLE_RULES:
+        if _key_contains_any(key, tokens):
+            return example
     return 10.5
 
 
 def _infer_string_like_example(*, key: str, schema_type: object) -> str:
-    if key.endswith("_id"):
-        entity = key[: -len("_id")]
-        return f"{entity.upper()}_001"
-    if "currency" in key:
-        return "USD"
-    if "date" in key:
-        return _DATE_EXAMPLE
-    if "time" in key or "timestamp" in key:
-        return _DATE_TIME_EXAMPLE
-    if "status" in key:
-        return "ACTIVE"
+    identifier_example = _identifier_string_example(key)
+    if identifier_example is not None:
+        return identifier_example
+    pattern_example = _string_pattern_example(key)
+    if pattern_example is not None:
+        return pattern_example
     if schema_type == "string":
         return f"example_{key}"
     return f"{key}_example"
+
+
+def _identifier_string_example(key: str) -> str | None:
+    if key.endswith("_id"):
+        entity = key[: -len("_id")]
+        return f"{entity.upper()}_001"
+    return None
+
+
+def _string_pattern_example(key: str) -> str | None:
+    for tokens, example in _STRING_LIKE_EXAMPLE_RULES:
+        if _key_contains_any(key, tokens):
+            return example
+    return None
+
+
+def _key_contains_any(key: str, tokens: tuple[str, ...]) -> bool:
+    return any(token in key for token in tokens)
 
 
 def infer_description(model_name: str, prop_name: str, prop_schema: dict[str, Any]) -> str:
