@@ -1065,3 +1065,10 @@ CR-1004 reduced Kafka consumer shutdown complexity by extracting shutdown log-co
 wakeup, consumer close, and DLQ producer flush helpers. `BaseConsumer.shutdown` improved from
 `B (8)` to `A (3)`, tests now prove wakeup failure continuation and close failure logging, and
 `kafka_consumer.py` remains `A (31.86)` maintainability.
+
+CR-1005 reduced Kafka consumer run-loop commit policy complexity by extracting
+successful-processing commit, successful-DLQ-publication commit, DLQ-publication-failure logging,
+and message log-context helpers. `BaseConsumer.run` improved from `C (18)` to `C (13)`, the
+extracted commit-policy helpers report A-ranked complexity, and `kafka_consumer.py` remains
+`A (31.23)` maintainability. The run loop remains a C-ranked orchestration hotspot for a separate
+follow-up slice.

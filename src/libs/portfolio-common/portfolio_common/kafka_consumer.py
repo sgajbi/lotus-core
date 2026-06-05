@@ -412,52 +412,11 @@ class BaseConsumer(ABC):
                 )
                 dlq_succeeded = await self._send_to_dlq_async(msg, e)
                 if dlq_succeeded:
-                    try:
-                        self._consumer.commit(message=msg, asynchronous=False)
-                    except Exception as commit_error:
-                        logger.warning(
-                            (
-                                "Offset commit failed after successful DLQ publication; "
-                                "offset will not be committed so Kafka can redeliver."
-                            ),
-                            exc_info=True,
-                            extra={
-                                "topic": self.topic,
-                                "consumer_group": self._consumer_config["group.id"],
-                                "message_key": msg.key().decode("utf-8") if msg.key() else None,
-                                "commit_error": str(commit_error),
-                            },
-                        )
+                    self._commit_after_dlq_publication(msg)
                 else:
-                    logger.warning(
-                        (
-                            "DLQ publication failed; offset will not be committed "
-                            "so Kafka can redeliver."
-                        ),
-                        extra={
-                            "topic": self.topic,
-                            "consumer_group": self._consumer_config["group.id"],
-                            "message_key": msg.key().decode("utf-8") if msg.key() else None,
-                        },
-                    )
+                    self._log_dlq_publication_failed(msg)
             else:
-                try:
-                    self._consumer.commit(message=msg, asynchronous=False)
-                    processed_successfully = True
-                except Exception as e:
-                    logger.warning(
-                        (
-                            "Offset commit failed after successful processing; "
-                            "offset will not be committed so Kafka can redeliver."
-                        ),
-                        exc_info=True,
-                        extra={
-                            "topic": self.topic,
-                            "consumer_group": self._consumer_config["group.id"],
-                            "message_key": msg.key().decode("utf-8") if msg.key() else None,
-                            "commit_error": str(e),
-                        },
-                    )
+                processed_successfully = self._commit_after_successful_processing(msg)
 
             finally:
                 duration = time.monotonic() - start_time
@@ -474,6 +433,53 @@ class BaseConsumer(ABC):
                     correlation_id_var.reset(token)
 
         self.shutdown()
+
+    def _commit_after_dlq_publication(self, msg: Message) -> None:
+        try:
+            self._consumer.commit(message=msg, asynchronous=False)
+        except Exception as commit_error:
+            logger.warning(
+                (
+                    "Offset commit failed after successful DLQ publication; "
+                    "offset will not be committed so Kafka can redeliver."
+                ),
+                exc_info=True,
+                extra=self._commit_failure_log_context(msg, commit_error),
+            )
+
+    def _commit_after_successful_processing(self, msg: Message) -> bool:
+        try:
+            self._consumer.commit(message=msg, asynchronous=False)
+            return True
+        except Exception as commit_error:
+            logger.warning(
+                (
+                    "Offset commit failed after successful processing; "
+                    "offset will not be committed so Kafka can redeliver."
+                ),
+                exc_info=True,
+                extra=self._commit_failure_log_context(msg, commit_error),
+            )
+            return False
+
+    def _log_dlq_publication_failed(self, msg: Message) -> None:
+        logger.warning(
+            "DLQ publication failed; offset will not be committed so Kafka can redeliver.",
+            extra=self._message_log_context(msg),
+        )
+
+    def _commit_failure_log_context(self, msg: Message, error: Exception) -> dict[str, str | None]:
+        return {
+            **self._message_log_context(msg),
+            "commit_error": str(error),
+        }
+
+    def _message_log_context(self, msg: Message) -> dict[str, str | None]:
+        return {
+            "topic": self.topic,
+            "consumer_group": self._consumer_config["group.id"],
+            "message_key": self._message_key_text(msg),
+        }
 
     def shutdown(self):
         """Gracefully shuts down the consumer."""
