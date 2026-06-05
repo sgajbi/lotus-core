@@ -1174,3 +1174,9 @@ delivery failure handling, delivery success handling, delivery log context, mess
 representation, and guarded delivery-callback notification helpers. `KafkaProducer.publish_message`
 improved from `B (6)` to `A (3)`, and every function/class/method in `kafka_utils.py` now reports
 A-ranked cyclomatic complexity.
+
+CR-1023 reduced shared valuation job upsert complexity by extracting eligible job filtering,
+upsert execution, insert value construction, conflict update values, conflict update predicates,
+and staged upsert logging helpers. `ValuationJobRepository.upsert_jobs` improved from `B (7)` to
+`A (4)`, and every function/class/method in `valuation_job_repository.py` now reports A-ranked
+cyclomatic complexity.
