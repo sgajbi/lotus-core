@@ -825,3 +825,7 @@ health before that claim is defensible.
      with static and dynamic typed-example maps plus focused array, integer, and number builder
      helpers. `_typed_example` improved from `B (6)` to `A (3)`, and `openapi_examples.py`
      improved from `B (17.47)` to `B (17.91)` maintainability.
+168. Reduced shared OpenAPI union example builder complexity by extracting union variant lookup,
+     union-key dispatch, and non-empty allOf normalization helpers. `_build_union_example`
+     improved from `B (8)` to `A (4)`, with direct allOf and oneOf tests pinning existing
+     generated example behavior.

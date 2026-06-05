@@ -74,6 +74,7 @@ _STRING_LIKE_EXAMPLE_RULES = (
     (("time", "timestamp"), _DATE_TIME_EXAMPLE),
     (("status",), "ACTIVE"),
 )
+_UNION_KEYS = ("allOf", "oneOf", "anyOf")
 
 
 def to_snake_case(value: str) -> str:
@@ -382,22 +383,48 @@ def _build_union_example(
     root_schema: dict[str, Any],
     seen_refs: set[str] | None,
 ) -> Any:
-    for union_key in ("allOf", "oneOf", "anyOf"):
-        variants = schema_node.get(union_key)
-        if not isinstance(variants, list) or not variants:
+    for union_key in _UNION_KEYS:
+        variants = _union_variants(schema_node, union_key)
+        if variants is None:
             continue
-        value = _build_all_of_example(variants, root_schema=root_schema, seen_refs=seen_refs)
-        if union_key == "allOf" and value:
+        value = _build_union_key_example(
+            union_key,
+            variants,
+            root_schema=root_schema,
+            seen_refs=seen_refs,
+        )
+        if value is not None:
             return value
-        if union_key != "allOf":
-            value = _first_available_variant_example(
-                variants,
-                root_schema=root_schema,
-                seen_refs=seen_refs,
-            )
-            if value is not None:
-                return value
     return None
+
+
+def _union_variants(schema_node: dict[str, Any], union_key: str) -> list[Any] | None:
+    variants = schema_node.get(union_key)
+    if isinstance(variants, list) and variants:
+        return variants
+    return None
+
+
+def _build_union_key_example(
+    union_key: str,
+    variants: list[Any],
+    *,
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None,
+) -> Any:
+    if union_key == "allOf":
+        return _non_empty_mapping_example(
+            _build_all_of_example(variants, root_schema=root_schema, seen_refs=seen_refs)
+        )
+    return _first_available_variant_example(
+        variants,
+        root_schema=root_schema,
+        seen_refs=seen_refs,
+    )
+
+
+def _non_empty_mapping_example(value: dict[str, Any]) -> dict[str, Any] | None:
+    return value if value else None
 
 
 def _build_all_of_example(

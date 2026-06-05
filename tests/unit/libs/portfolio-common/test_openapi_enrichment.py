@@ -1,5 +1,5 @@
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
-from portfolio_common.openapi_examples import infer_description, infer_example
+from portfolio_common.openapi_examples import build_schema_example, infer_description, infer_example
 
 
 def test_infer_example_preserves_ordered_fallback_policy() -> None:
@@ -54,6 +54,39 @@ def test_infer_description_preserves_domain_rule_precedence() -> None:
     assert infer_description("PositionRecord", "lifecycleStatus", {"type": "string"}) == (
         "Current status for lifecycle status."
     )
+
+
+def test_build_schema_example_merges_all_of_object_variants() -> None:
+    schema = {
+        "allOf": [
+            {
+                "type": "object",
+                "properties": {"portfolio_id": {"type": "string"}},
+                "required": ["portfolio_id"],
+            },
+            {
+                "type": "object",
+                "properties": {"business_date": {"type": "string", "format": "date"}},
+                "required": ["business_date"],
+            },
+        ]
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {
+        "portfolio_id": "example_value",
+        "business_date": "2026-02-27",
+    }
+
+
+def test_build_schema_example_uses_first_available_one_of_variant() -> None:
+    schema = {
+        "oneOf": [
+            {"type": "string", "title": "status", "enum": ["PENDING", "DONE"]},
+            {"type": "integer", "title": "version"},
+        ]
+    }
+
+    assert build_schema_example(schema, root_schema={}) == "ACTIVE"
 
 
 def test_enrich_openapi_schema_populates_missing_operation_docs() -> None:
