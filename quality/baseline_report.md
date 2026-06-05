@@ -1227,3 +1227,8 @@ CR-1031 reduced cashflow sign-dispatch complexity by replacing direct classifica
 with an explicit sign-factor map and focused classification sign helper. `_signed_cashflow_amount`
 improved from `B (7)` to `A (4)`, leaving every function/class/method in `cashflow_logic.py`
 A-ranked by cyclomatic complexity.
+
+CR-1032 reduced cost calculator consumer process-message complexity by extracting message
+metadata, valid cost-event processing, process-message error classification, and process-message
+failure metric helpers. `CostCalculatorConsumer.process_message` improved from `C (11)` to
+`A (2)`, and `consumer.py` remains A-ranked maintainability at `A (22.35)`.

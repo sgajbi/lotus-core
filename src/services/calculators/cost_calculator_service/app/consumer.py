@@ -75,6 +75,14 @@ def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
     return amount
 
 
+def _message_value(msg: Message) -> str:
+    return msg.value().decode("utf-8")
+
+
+def _message_event_id(msg: Message) -> str:
+    return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+
+
 class FxRateNotFoundError(Exception):
     """Raised when a required FX rate is not yet available in the database."""
 
@@ -625,98 +633,115 @@ class CostCalculatorConsumer(BaseConsumer):
         reraise=True,
     )
     async def process_message(self, msg: Message):
-        value = msg.value().decode("utf-8")
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
         event = None
 
         try:
-            data = json.loads(value)
+            data = json.loads(_message_value(msg))
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=data.get("correlation_id"),
             ) as correlation_id:
                 event = TransactionEvent.model_validate(data)
+                await self._process_valid_cost_event(
+                    event=event,
+                    event_id=_message_event_id(msg),
+                    correlation_id=correlation_id,
+                )
 
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        repo = CostCalculatorRepository(db)
-                        idempotency_repo = IdempotencyRepository(db)
-                        outbox_repo = OutboxRepository(db)
+        except Exception as exc:
+            await self._handle_process_message_error(msg, event, exc)
 
-                        if not await idempotency_repo.claim_event_processing(
-                            event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
-                        ):
-                            logger.warning("Event already processed. Skipping.")
-                            return
+    async def _process_valid_cost_event(
+        self,
+        *,
+        event: TransactionEvent,
+        event_id: str,
+        correlation_id: str,
+    ) -> None:
+        async for db in get_async_db_session():
+            async with db.begin():
+                repo = CostCalculatorRepository(db)
+                idempotency_repo = IdempotencyRepository(db)
+                outbox_repo = OutboxRepository(db)
 
-                        portfolio = await repo.get_portfolio(event.portfolio_id)
-                        if not portfolio:
-                            raise PortfolioNotFoundError(
-                                f"Portfolio {event.portfolio_id} not found. Retrying..."
-                            )
-                        instrument = await repo.get_instrument(event.security_id)
+                if not await idempotency_repo.claim_event_processing(
+                    event_id,
+                    event.portfolio_id,
+                    SERVICE_NAME,
+                    correlation_id,
+                ):
+                    logger.warning("Event already processed. Skipping.")
+                    return
 
-                        (
-                            event,
-                            event_transaction_type,
-                            cost_basis_method,
-                        ) = await self._prepare_transaction_event(event, portfolio)
-                        (
-                            events_to_publish,
-                            instrument_events_to_publish,
-                        ) = await self._build_events_to_publish(
-                            event=event,
-                            event_transaction_type=event_transaction_type,
-                            portfolio=portfolio,
-                            instrument=instrument,
-                            repo=repo,
-                            cost_basis_method=cost_basis_method,
-                        )
-                        emitted_events = await self._build_emitted_transaction_events(
-                            events_to_publish=events_to_publish,
-                            repo=repo,
-                        )
-                        await self._publish_transaction_events(
-                            original_event=event,
-                            emitted_events=emitted_events,
-                            outbox_repo=outbox_repo,
-                            correlation_id=correlation_id,
-                        )
-                        await self._publish_instrument_events(
-                            instrument_events=instrument_events_to_publish,
-                            outbox_repo=outbox_repo,
-                            correlation_id=correlation_id,
-                        )
+                portfolio = await repo.get_portfolio(event.portfolio_id)
+                if not portfolio:
+                    raise PortfolioNotFoundError(
+                        f"Portfolio {event.portfolio_id} not found. Retrying..."
+                    )
+                instrument = await repo.get_instrument(event.security_id)
 
-        except (json.JSONDecodeError, ValidationError) as e:
-            logger.error(f"Invalid TransactionEvent; sending to DLQ. Error: {e}", exc_info=True)
+                (
+                    event,
+                    event_transaction_type,
+                    cost_basis_method,
+                ) = await self._prepare_transaction_event(event, portfolio)
+                (
+                    events_to_publish,
+                    instrument_events_to_publish,
+                ) = await self._build_events_to_publish(
+                    event=event,
+                    event_transaction_type=event_transaction_type,
+                    portfolio=portfolio,
+                    instrument=instrument,
+                    repo=repo,
+                    cost_basis_method=cost_basis_method,
+                )
+                emitted_events = await self._build_emitted_transaction_events(
+                    events_to_publish=events_to_publish,
+                    repo=repo,
+                )
+                await self._publish_transaction_events(
+                    original_event=event,
+                    emitted_events=emitted_events,
+                    outbox_repo=outbox_repo,
+                    correlation_id=correlation_id,
+                )
+                await self._publish_instrument_events(
+                    instrument_events=instrument_events_to_publish,
+                    outbox_repo=outbox_repo,
+                    correlation_id=correlation_id,
+                )
+
+    async def _handle_process_message_error(
+        self,
+        msg: Message,
+        event: TransactionEvent | None,
+        exc: Exception,
+    ) -> None:
+        if isinstance(exc, (json.JSONDecodeError, ValidationError)):
+            logger.error(f"Invalid TransactionEvent; sending to DLQ. Error: {exc}", exc_info=True)
             await self._send_to_dlq_async(msg, ValueError("invalid payload"))
-        except (FxRateNotFoundError, UpstreamCashLegUnavailableError) as e:
-            # Missing FX is a temporal dependency issue. Defer the message so Kafka can redeliver
-            # after additional FX events are persisted instead of DLQing the transaction.
-            BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
-            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
-                SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
+            return
+        if isinstance(exc, (FxRateNotFoundError, UpstreamCashLegUnavailableError)):
+            self._record_process_message_failure(event, "retryable_error")
             logger.warning(
                 "FX dependency not available yet; deferring message without DLQ.", exc_info=True
             )
-            raise RetryableConsumerError(str(e))
-        except (DBAPIError, IntegrityError, PortfolioNotFoundError):
-            BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
-            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
-                SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
+            raise RetryableConsumerError(str(exc))
+        if isinstance(exc, (DBAPIError, IntegrityError, PortfolioNotFoundError)):
+            self._record_process_message_failure(event, "retryable_error")
             logger.warning("DB or data availability error; will retry...", exc_info=True)
-            raise
-        except Exception as e:
-            BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "failed").inc()
-            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
-                SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "failed").inc()
-            transaction_id = getattr(event, "transaction_id", "UNKNOWN")
-            logger.error(
-                f"Unexpected error processing transaction {transaction_id}. Sending to DLQ.",
-                exc_info=True,
-            )
-            await self._send_to_dlq_async(msg, e)
+            raise exc
+        self._record_process_message_failure(event, "failed")
+        transaction_id = getattr(event, "transaction_id", "UNKNOWN")
+        logger.error(
+            f"Unexpected error processing transaction {transaction_id}. Sending to DLQ.",
+            exc_info=True,
+        )
+        await self._send_to_dlq_async(msg, exc)
+
+    @staticmethod
+    def _record_process_message_failure(event: TransactionEvent | None, status: str) -> None:
+        BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", status).inc()
+        if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
+            SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", status).inc()
