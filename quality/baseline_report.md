@@ -1044,3 +1044,9 @@ group override loading, group sanitization, and group-context helpers.
 `get_kafka_consumer_runtime_overrides` improved from `B (7)` to `A (1)`, the extracted runtime
 override loading helpers report A-ranked complexity, and `config.py` remains `A (33.36)`
 maintainability.
+
+CR-1001 reduced Kafka consumer DLQ reason classification complexity by replacing repeated branch
+token checks with explicit ordered token groups and focused matching helpers.
+`classify_dlq_reason_code` improved from `C (12)` to `A (5)`, direct taxonomy tests now cover
+validation, data-integrity, timeout, authorization, and unclassified outcomes, and
+`kafka_consumer.py` remains `A (38.68)` maintainability.

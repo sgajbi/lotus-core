@@ -28,23 +28,11 @@ DLQ_REASON_CODE_DATA_INTEGRITY = "DATA_INTEGRITY_ERROR"
 DLQ_REASON_CODE_DOWNSTREAM_TIMEOUT = "DOWNSTREAM_TIMEOUT"
 DLQ_REASON_CODE_AUTHORIZATION = "AUTHORIZATION_ERROR"
 DLQ_REASON_CODE_UNCLASSIFIED = "UNCLASSIFIED_PROCESSING_ERROR"
-
-
-def classify_dlq_reason_code(error: Exception) -> str:
-    """
-    Maps terminal consumer exceptions into a deterministic reason-code taxonomy.
-    """
-    error_name = error.__class__.__name__.lower()
-    error_text = str(error).lower()
-    combined = f"{error_name}:{error_text}"
-
-    if "json" in combined and any(
-        token in combined for token in ("decode", "deserialize", "parsing")
-    ):
-        return DLQ_REASON_CODE_DESERIALIZATION
-    if any(
-        token in combined
-        for token in (
+_DLQ_DESERIALIZATION_TOKENS = ("decode", "deserialize", "parsing")
+_DLQ_REASON_TOKEN_GROUPS = (
+    (
+        DLQ_REASON_CODE_VALIDATION,
+        (
             "validation",
             "missing",
             "required",
@@ -53,22 +41,44 @@ def classify_dlq_reason_code(error: Exception) -> str:
             "keyerror",
             "valueerror",
             "typeerror",
-        )
-    ):
-        return DLQ_REASON_CODE_VALIDATION
-    if any(
-        token in combined
-        for token in ("integrity", "foreign key", "constraint", "unique violation", "duplicate key")
-    ):
-        return DLQ_REASON_CODE_DATA_INTEGRITY
-    if any(token in combined for token in ("timeout", "timed out", "deadline exceeded")):
-        return DLQ_REASON_CODE_DOWNSTREAM_TIMEOUT
-    if any(
-        token in combined
-        for token in ("permission", "forbidden", "unauthorized", "access denied", "auth")
-    ):
-        return DLQ_REASON_CODE_AUTHORIZATION
+        ),
+    ),
+    (
+        DLQ_REASON_CODE_DATA_INTEGRITY,
+        ("integrity", "foreign key", "constraint", "unique violation", "duplicate key"),
+    ),
+    (
+        DLQ_REASON_CODE_DOWNSTREAM_TIMEOUT,
+        ("timeout", "timed out", "deadline exceeded"),
+    ),
+    (
+        DLQ_REASON_CODE_AUTHORIZATION,
+        ("permission", "forbidden", "unauthorized", "access denied", "auth"),
+    ),
+)
+
+
+def classify_dlq_reason_code(error: Exception) -> str:
+    """
+    Maps terminal consumer exceptions into a deterministic reason-code taxonomy.
+    """
+    combined = _combined_error_text(error)
+    if "json" in combined and _contains_any_token(combined, _DLQ_DESERIALIZATION_TOKENS):
+        return DLQ_REASON_CODE_DESERIALIZATION
+    for reason_code, tokens in _DLQ_REASON_TOKEN_GROUPS:
+        if _contains_any_token(combined, tokens):
+            return reason_code
     return DLQ_REASON_CODE_UNCLASSIFIED
+
+
+def _combined_error_text(error: Exception) -> str:
+    error_name = error.__class__.__name__.lower()
+    error_text = str(error).lower()
+    return f"{error_name}:{error_text}"
+
+
+def _contains_any_token(text: str, tokens: tuple[str, ...]) -> bool:
+    return any(token in text for token in tokens)
 
 
 class BaseConsumer(ABC):

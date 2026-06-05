@@ -321,6 +321,20 @@ async def test_classify_dlq_reason_code_timeout():
     )
 
 
+@pytest.mark.parametrize(
+    ("error", "expected_reason_code"),
+    [
+        (ValueError("required portfolio_id is missing"), "VALIDATION_ERROR"),
+        (RuntimeError("foreign key constraint failed"), "DATA_INTEGRITY_ERROR"),
+        (TimeoutError("deadline exceeded while calling downstream"), "DOWNSTREAM_TIMEOUT"),
+        (PermissionError("access denied by policy"), "AUTHORIZATION_ERROR"),
+        (RuntimeError("worker stopped unexpectedly"), "UNCLASSIFIED_PROCESSING_ERROR"),
+    ],
+)
+async def test_classify_dlq_reason_code_taxonomy(error, expected_reason_code):
+    assert classify_dlq_reason_code(error) == expected_reason_code
+
+
 async def test_consumer_applies_runtime_overrides(monkeypatch):
     monkeypatch.setenv(
         "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",

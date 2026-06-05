@@ -779,3 +779,7 @@ health before that claim is defensible.
      group override loading, group sanitization, and group-context helpers.
      `get_kafka_consumer_runtime_overrides` improved from `B (7)` to `A (1)`, while preserving the
      final merged heartbeat/session relationship validation boundary.
+157. Reduced Kafka consumer DLQ reason classification complexity by replacing repeated branch
+     token checks with explicit ordered token groups and focused matching helpers.
+     `classify_dlq_reason_code` improved from `C (12)` to `A (5)`, and direct taxonomy tests now
+     cover validation, data-integrity, timeout, authorization, and unclassified outcomes.
