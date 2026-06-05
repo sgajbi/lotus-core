@@ -969,3 +969,9 @@ transaction eligibility, INTEREST linkage ID resolution, INTEREST policy ID reso
 INTEREST metadata update assembly. `enrich_interest_transaction_metadata` improved from `B (6)` to
 `A (2)`, every INTEREST linkage function reports A-ranked complexity, and `interest_linkage.py`
 remains `A (71.82)` maintainability.
+
+CR-988 reduced DIVIDEND linkage enrichment complexity by extracting focused helpers for DIVIDEND
+transaction eligibility, DIVIDEND linkage ID resolution, DIVIDEND policy ID resolution, and
+DIVIDEND metadata update assembly. `enrich_dividend_transaction_metadata` improved from `B (6)` to
+`A (2)`, every DIVIDEND linkage function reports A-ranked complexity, and `dividend_linkage.py`
+remains `A (71.82)` maintainability.

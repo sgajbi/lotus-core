@@ -726,3 +726,7 @@ health before that claim is defensible.
      transaction eligibility, INTEREST linkage ID resolution, INTEREST policy ID resolution, and
      INTEREST metadata update assembly. `enrich_interest_transaction_metadata` improved from
      `B (6)` to `A (2)`, and every INTEREST linkage function now reports A-ranked complexity.
+144. Reduced DIVIDEND linkage enrichment complexity by extracting focused helpers for DIVIDEND
+     transaction eligibility, DIVIDEND linkage ID resolution, DIVIDEND policy ID resolution, and
+     DIVIDEND metadata update assembly. `enrich_dividend_transaction_metadata` improved from
+     `B (6)` to `A (2)`, and every DIVIDEND linkage function now reports A-ranked complexity.
