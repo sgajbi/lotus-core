@@ -19,6 +19,22 @@ Status: Initial scorecard baseline on 2026-06-02.
 | OpenAPI governance | Existing OpenAPI quality and API vocabulary gates promoted into the quality-baseline API governance job after CR-868 | Keep API governance regression-free while spectral remains report-only until a stable generated-spec artifact exists |
 | Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |
 
+## Before/After PR Scorecard
+
+This table summarizes the evidence the final PR must carry forward. It is intentionally limited to
+measured or explicitly documented improvement so the PR can distinguish completed hardening from
+remaining merge-gate risk.
+
+| Area | Baseline / Risk Before This Branch | Current Evidence After CR-969 | Remaining PR Risk |
+| --- | --- | --- | --- |
+| Code health | Quality foundation existed, but the refactor started with broad format/lint/collection debt and active source maintainability hotspots to measure and reduce. | Ruff lint and format gates pass; complexity and maintainability gates pass; active non-generated C-ranked source hotspot list is clear; current measured source hotspots are `reference_data_dto.py` `B (9.31)` and `ingestion_job_service.py` `B (16.96)`. | Keep generated `query_service/build` copies tracked separately and prevent source hotspot regression before PR. |
+| Architecture and modularity | Large services, repositories, and DTO modules carried concentrated logic and weak reviewability across analytics, core snapshot, operations, reference data, and ingestion surfaces. | Focused helper/module extractions moved query, DTO-family, analytics export, core snapshot, operations, and ingestion logic into A-ranked modules; `ingestion_job_service.py` is reduced to `B (16.96)` with no remaining B-ranked service methods. | Final PR narrative must explain the architectural pattern and remaining generated-surface debt without claiming complete platform-wide modularity. |
+| OpenAPI and API governance | API governance needed to remain measurable and CI-visible while refactoring preserved behavior. | `make openapi-gate`, `make api-vocabulary-gate`, `make no-alias-gate`, and `make monetary-float-guard` pass in the current evidence snapshot. | Spectral remains report-only until the generated-spec artifact and quality contract are stable enough for enforcement. |
+| Tests and coverage | Full all-suite collection was blocked by governed mixed-runtime constraints, and coverage evidence needed a runtime-separated gate rather than an unbounded local rerun. | `make warning-gate` passes with 2,918 unit tests, 9 deselected, and 0 warnings; `make coverage-gate` passes with 98% combined unit + integration-lite coverage after 2,918 unit tests and 121 integration-lite tests. | Keep runtime-separated test lanes as PR truth; do not represent the mixed-runtime collection guard as a full all-suite pass. |
+| Security and dependency hygiene | Security posture needed measurable gates beyond source-only linting and report-only dependency checks. | `make quality-bandit-gate` passes with 0 Bandit issues across `src`; `make quality-deptry-source-gate` passes; `make security-audit` passes with dependency consistency clean and no known vulnerabilities, with 2 governed ignores. | PR should list the governed pip-audit ignores explicitly and keep dependency-audit evidence current on the final commit. |
+| Observability and operations | Ingestion and operational diagnostics had concentrated logic that was harder to test, review, and support. | CR-953 through CR-969 extracted focused ingestion status, SLO, backlog, capacity, reprocessing, replay audit, consumer-lag, health-summary, and idempotency diagnostics helpers with direct tests for representative operational behavior. | Runtime-level observability claims still need to stay scoped to diagnostics modularity unless additional service bring-up evidence is captured. |
+| Documentation and CI measurement | The branch needed baseline measurement, incremental evidence, and a reviewable trail rather than cosmetic cleanup claims. | The quality scorecard, refactor report, baseline evidence, and CR-849 through CR-969 ledger entries record measurable gate and maintainability movement; GitHub `Remote Feature Lane` passed for `76fd8619`. | The final PR must refresh this row after the latest GitHub run on the final pushed commit is green. |
+
 ## Current PR Evidence Snapshot
 
 Local evidence captured on 2026-06-05 after CR-969:
