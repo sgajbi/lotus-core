@@ -775,3 +775,7 @@ health before that claim is defensible.
      integer parsing, positive-integer enforcement, and `auto.offset.reset` normalization helpers.
      `_coerce_consumer_config_value` improved from `C (16)` to `A (4)`, and each extracted
      consumer coercion helper reports A-ranked complexity.
+156. Reduced Kafka consumer runtime override loading complexity by extracting defaults loading,
+     group override loading, group sanitization, and group-context helpers.
+     `get_kafka_consumer_runtime_overrides` improved from `B (7)` to `A (1)`, while preserving the
+     final merged heartbeat/session relationship validation boundary.

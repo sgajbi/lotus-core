@@ -1038,3 +1038,9 @@ coercion, integer parsing, positive-integer enforcement, and `auto.offset.reset`
 helpers. `_coerce_consumer_config_value` improved from `C (16)` to `A (4)`, each extracted
 consumer coercion helper reports A-ranked complexity, and `config.py` remains `A (34.38)`
 maintainability.
+
+CR-1000 reduced Kafka consumer runtime override loading complexity by extracting defaults loading,
+group override loading, group sanitization, and group-context helpers.
+`get_kafka_consumer_runtime_overrides` improved from `B (7)` to `A (1)`, the extracted runtime
+override loading helpers report A-ranked complexity, and `config.py` remains `A (33.36)`
+maintainability.
