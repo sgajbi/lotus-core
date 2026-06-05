@@ -23,6 +23,10 @@ from .utils import async_timed
 
 logger = logging.getLogger(__name__)
 
+POSITION_TIMESERIES_IDENTITY_COLUMNS = ("portfolio_id", "security_id", "date", "epoch")
+PORTFOLIO_TIMESERIES_IDENTITY_COLUMNS = ("portfolio_id", "date", "epoch")
+TIMESERIES_AUDIT_COLUMNS = ("created_at", "updated_at")
+
 
 class TimeseriesRepositoryBase:
     """Shared repository logic for timeseries worker and portfolio aggregation services."""
@@ -55,25 +59,7 @@ class TimeseriesRepositoryBase:
     @async_timed(repository="TimeseriesRepository", method="upsert_position_timeseries")
     async def upsert_position_timeseries(self, timeseries_record: PositionTimeseries):
         try:
-            insert_dict = {
-                c.name: getattr(timeseries_record, c.name)
-                for c in timeseries_record.__table__.columns
-                if c.name not in ["created_at", "updated_at"]
-            }
-            update_dict = {
-                k: v
-                for k, v in insert_dict.items()
-                if k not in ["portfolio_id", "security_id", "date", "epoch"]
-            }
-            update_dict["updated_at"] = func.now()
-
-            stmt = pg_insert(PositionTimeseries).values(**insert_dict)
-            final_stmt = stmt.on_conflict_do_update(
-                index_elements=["portfolio_id", "security_id", "date", "epoch"],
-                set_=update_dict,
-            )
-
-            await self.db.execute(final_stmt)
+            await self.db.execute(_position_timeseries_upsert_stmt(timeseries_record))
             logger.info(
                 "Staged upsert for position time series for %s on %s",
                 timeseries_record.security_id,
@@ -86,23 +72,7 @@ class TimeseriesRepositoryBase:
     @async_timed(repository="TimeseriesRepository", method="upsert_portfolio_timeseries")
     async def upsert_portfolio_timeseries(self, timeseries_record: PortfolioTimeseries):
         try:
-            insert_dict = {
-                c.name: getattr(timeseries_record, c.name)
-                for c in timeseries_record.__table__.columns
-                if c.name not in ["created_at", "updated_at"]
-            }
-            update_dict = {
-                k: v for k, v in insert_dict.items() if k not in ["portfolio_id", "date", "epoch"]
-            }
-            update_dict["updated_at"] = func.now()
-
-            stmt = pg_insert(PortfolioTimeseries).values(**insert_dict)
-            final_stmt = stmt.on_conflict_do_update(
-                index_elements=["portfolio_id", "date", "epoch"],
-                set_=update_dict,
-            )
-
-            await self.db.execute(final_stmt)
+            await self.db.execute(_portfolio_timeseries_upsert_stmt(timeseries_record))
             logger.info(
                 "Staged upsert for portfolio time series for %s on %s",
                 timeseries_record.portfolio_id,
@@ -655,3 +625,50 @@ def _stale_aggregation_jobs_update_stmt(job_ids: list[int], stale_threshold: dat
         PortfolioAggregationJob.status == "PROCESSING",
         PortfolioAggregationJob.updated_at < stale_threshold,
     )
+
+
+def _position_timeseries_upsert_stmt(timeseries_record: PositionTimeseries):
+    return _timeseries_upsert_stmt(
+        PositionTimeseries,
+        timeseries_record,
+        POSITION_TIMESERIES_IDENTITY_COLUMNS,
+    )
+
+
+def _portfolio_timeseries_upsert_stmt(timeseries_record: PortfolioTimeseries):
+    return _timeseries_upsert_stmt(
+        PortfolioTimeseries,
+        timeseries_record,
+        PORTFOLIO_TIMESERIES_IDENTITY_COLUMNS,
+    )
+
+
+def _timeseries_upsert_stmt(model: Any, timeseries_record: Any, identity_columns: tuple[str, ...]):
+    insert_values = _timeseries_insert_values(timeseries_record)
+    return (
+        pg_insert(model)
+        .values(**insert_values)
+        .on_conflict_do_update(
+            index_elements=list(identity_columns),
+            set_=_timeseries_update_values(insert_values, identity_columns),
+        )
+    )
+
+
+def _timeseries_insert_values(timeseries_record: Any) -> dict[str, Any]:
+    return {
+        column.name: getattr(timeseries_record, column.name)
+        for column in timeseries_record.__table__.columns
+        if column.name not in TIMESERIES_AUDIT_COLUMNS
+    }
+
+
+def _timeseries_update_values(
+    insert_values: dict[str, Any],
+    identity_columns: tuple[str, ...],
+) -> dict[str, Any]:
+    update_values = {
+        name: value for name, value in insert_values.items() if name not in identity_columns
+    }
+    update_values["updated_at"] = func.now()
+    return update_values

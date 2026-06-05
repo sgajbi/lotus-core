@@ -891,3 +891,9 @@ health before that claim is defensible.
      retryable-job reset helpers. `TimeseriesRepositoryBase.find_and_reset_stale_jobs` improved
      from `B (9)` to `A (2)`, and every stale aggregation job reset helper now reports A-ranked
      cyclomatic complexity.
+181. Reduced shared position and portfolio timeseries upsert complexity by extracting
+     statement-specific helpers, shared insert-value extraction, shared conflict-update value
+     construction, and shared PostgreSQL conflict-update assembly. `upsert_position_timeseries`
+     and `upsert_portfolio_timeseries` both improved from `B (6)` to `A (2)`, and every
+     function/class/method in `timeseries_repository_base.py` now reports A-ranked cyclomatic
+     complexity.
