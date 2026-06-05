@@ -787,3 +787,7 @@ health before that claim is defensible.
      fallback selection helpers. `BaseConsumer._message_correlation_context` improved from
      `B (7)` to `A (3)`, and direct tests now prove existing-context preservation,
      header-before-fallback precedence, and explicit fallback preference.
+159. Reduced Kafka consumer DLQ publication complexity by extracting payload, header, publish,
+     delivery-confirmation, and key-decoding helpers. `BaseConsumer._send_to_dlq_async` improved
+     from `B (10)` to `A (5)`, while preserving DLQ payload, header, flush, audit, and fatal
+     failure semantics.

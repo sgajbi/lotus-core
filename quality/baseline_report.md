@@ -1055,3 +1055,8 @@ CR-1002 reduced Kafka consumer message-correlation context complexity by extract
 fallback selection helpers. `BaseConsumer._message_correlation_context` improved from `B (7)` to
 `A (3)`, direct tests now prove existing-context preservation, header-before-fallback precedence,
 and explicit fallback preference, and `kafka_consumer.py` remains `A (37.37)` maintainability.
+
+CR-1003 reduced Kafka consumer DLQ publication complexity by extracting payload, header, publish,
+delivery-confirmation, and key-decoding helpers. `BaseConsumer._send_to_dlq_async` improved from
+`B (10)` to `A (5)`, the extracted DLQ publication helpers report A-ranked complexity, and
+`kafka_consumer.py` remains `A (34.02)` maintainability.

@@ -242,33 +242,15 @@ class BaseConsumer(ABC):
         try:
             correlation_id = normalize_lineage_value(correlation_id_var.get())
             error_reason_code = classify_dlq_reason_code(error)
-
-            dlq_payload = {
-                "correlation_id": correlation_id,
-                "original_topic": msg.topic(),
-                "original_key": msg.key().decode("utf-8") if msg.key() else None,
-                "original_value": msg.value().decode("utf-8"),
-                "error_timestamp": datetime.now(timezone.utc).isoformat(),
-                "error_reason_code": error_reason_code,
-                "error_reason": str(error),
-                "error_traceback": traceback.format_exc(),
-            }
-
-            dlq_headers = msg.headers() or []
-            if correlation_id:
-                dlq_headers.append(("correlation_id", correlation_id.encode("utf-8")))
-
-            self._producer.publish_message(
-                topic=self.dlq_topic,
-                key=msg.key().decode("utf-8") if msg.key() else "NoKey",
-                value=dlq_payload,
-                headers=dlq_headers,
+            dlq_payload = self._build_dlq_payload(
+                msg,
+                error,
+                error_reason_code=error_reason_code,
+                correlation_id=correlation_id,
             )
-            undelivered_count = self._producer.flush(timeout=5)
-            if undelivered_count:
-                raise RuntimeError(
-                    "DLQ delivery confirmation timed out before Kafka acknowledged the message."
-                )
+            dlq_headers = self._build_dlq_headers(msg, correlation_id=correlation_id)
+            self._publish_dlq_message(msg, payload=dlq_payload, headers=dlq_headers)
+            self._confirm_dlq_delivery()
             await self._record_consumer_dlq_event(
                 msg=msg,
                 error=error,
@@ -282,6 +264,65 @@ class BaseConsumer(ABC):
         except Exception as e:
             logger.error(f"FATAL: Could not send message to DLQ. Error: {e}", exc_info=True)
             return False
+
+    def _build_dlq_payload(
+        self,
+        msg: Message,
+        error: Exception,
+        *,
+        error_reason_code: str,
+        correlation_id: str | None,
+    ) -> dict[str, object]:
+        return {
+            "correlation_id": correlation_id,
+            "original_topic": msg.topic(),
+            "original_key": self._message_key_text(msg),
+            "original_value": msg.value().decode("utf-8"),
+            "error_timestamp": datetime.now(timezone.utc).isoformat(),
+            "error_reason_code": error_reason_code,
+            "error_reason": str(error),
+            "error_traceback": traceback.format_exc(),
+        }
+
+    def _build_dlq_headers(
+        self,
+        msg: Message,
+        *,
+        correlation_id: str | None,
+    ) -> list[tuple[str, bytes]]:
+        dlq_headers = msg.headers() or []
+        if correlation_id:
+            dlq_headers.append(("correlation_id", correlation_id.encode("utf-8")))
+        return dlq_headers
+
+    def _publish_dlq_message(
+        self,
+        msg: Message,
+        *,
+        payload: dict[str, object],
+        headers: list[tuple[str, bytes]],
+    ) -> None:
+        if self._producer is None or self.dlq_topic is None:
+            raise RuntimeError("DLQ producer is unavailable.")
+        self._producer.publish_message(
+            topic=self.dlq_topic,
+            key=self._message_key_text(msg) or "NoKey",
+            value=payload,
+            headers=headers,
+        )
+
+    def _confirm_dlq_delivery(self) -> None:
+        if self._producer is None:
+            raise RuntimeError("DLQ producer is unavailable.")
+        undelivered_count = self._producer.flush(timeout=5)
+        if undelivered_count:
+            raise RuntimeError(
+                "DLQ delivery confirmation timed out before Kafka acknowledged the message."
+            )
+
+    def _message_key_text(self, msg: Message) -> str | None:
+        key = msg.key()
+        return key.decode("utf-8") if key else None
 
     async def _record_consumer_dlq_event(
         self,
