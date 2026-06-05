@@ -718,3 +718,7 @@ health before that claim is defensible.
      eligibility, BUY linkage ID resolution, BUY policy ID resolution, and BUY metadata update
      assembly. `enrich_buy_transaction_metadata` improved from `B (6)` to `A (2)`, and every BUY
      linkage function now reports A-ranked complexity.
+142. Reduced SELL linkage enrichment complexity by extracting focused helpers for SELL transaction
+     eligibility, SELL linkage ID resolution, SELL policy ID resolution, cost-basis policy
+     selection, and SELL metadata update assembly. `enrich_sell_transaction_metadata` improved
+     from `B (7)` to `A (2)`, and every SELL linkage function now reports A-ranked complexity.
