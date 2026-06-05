@@ -917,3 +917,7 @@ health before that claim is defensible.
      `CashflowCalculatorConsumer._process_message_with_retry` improved from `B (8)` to `A (2)`,
      leaving every function/class/method in `transaction_consumer.py` A-ranked by cyclomatic
      complexity.
+186. Reduced cashflow calculation complexity by extracting base amount, interest amount,
+     classification/direction sign, interest sign, adjustment sign, and transfer sign helpers.
+     `CashflowLogic.calculate` improved from `C (18)` to `A (2)`, and `cashflow_logic.py`
+     remains A-ranked maintainability at `A (52.17)`.

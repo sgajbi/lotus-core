@@ -42,6 +42,12 @@ TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
     "RIGHTS_SELL",
     "RIGHTS_EXPIRE",
 }
+POSITIVE_CASHFLOW_CLASSIFICATIONS = {
+    CashflowClassification.FX_BUY,
+    CashflowClassification.INVESTMENT_INFLOW,
+    CashflowClassification.INCOME,
+    CashflowClassification.CASHFLOW_IN,
+}
 
 
 def _normalize_code(value: object, default: str = "") -> str:
@@ -54,6 +60,73 @@ def _resolve_cashflow_trade_fee(transaction: TransactionEvent) -> Decimal:
         {field: getattr(transaction, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
     )
     return trade_fee or Decimal(0)
+
+
+def _base_cashflow_amount(transaction: TransactionEvent, transaction_type: str) -> Decimal:
+    trade_fee = _resolve_cashflow_trade_fee(transaction)
+    if transaction_type == "INTEREST":
+        return _interest_cashflow_amount(transaction, trade_fee)
+    if transaction_type in {"BUY", "FEE"}:
+        return transaction.gross_transaction_amount + trade_fee
+    return transaction.gross_transaction_amount - trade_fee
+
+
+def _interest_cashflow_amount(transaction: TransactionEvent, trade_fee: Decimal) -> Decimal:
+    deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
+        transaction.other_interest_deductions_amount or Decimal(0)
+    )
+    if transaction.net_interest_amount is not None:
+        return transaction.net_interest_amount
+    return transaction.gross_transaction_amount - deductions - trade_fee
+
+
+def _signed_cashflow_amount(
+    transaction: TransactionEvent,
+    rule: "CashflowRuleView",
+    transaction_type: str,
+    amount: Decimal,
+) -> Decimal:
+    if transaction_type == "INTEREST":
+        return _signed_interest_amount(transaction, amount)
+    if rule.classification == CashflowClassification.FX_BUY:
+        return abs(amount)
+    if rule.classification == CashflowClassification.FX_SELL:
+        return -abs(amount)
+    if transaction_type == "ADJUSTMENT":
+        return _signed_adjustment_amount(transaction, amount)
+    if rule.classification in POSITIVE_CASHFLOW_CLASSIFICATIONS:
+        return abs(amount)
+    if rule.classification == CashflowClassification.TRANSFER:
+        return _signed_transfer_amount(transaction, transaction_type, amount)
+    return -abs(amount)
+
+
+def _signed_interest_amount(transaction: TransactionEvent, amount: Decimal) -> Decimal:
+    interest_direction = _normalize_code(
+        getattr(transaction, "interest_direction", None),
+        default="INCOME",
+    )
+    return -abs(amount) if interest_direction == "EXPENSE" else abs(amount)
+
+
+def _signed_adjustment_amount(transaction: TransactionEvent, amount: Decimal) -> Decimal:
+    movement_direction = _normalize_code(
+        getattr(transaction, "movement_direction", None),
+        default="INFLOW",
+    )
+    return abs(amount) if movement_direction == "INFLOW" else -abs(amount)
+
+
+def _signed_transfer_amount(
+    transaction: TransactionEvent,
+    transaction_type: str,
+    amount: Decimal,
+) -> Decimal:
+    if transaction_type in TRANSFER_INFLOW_TRANSACTION_TYPES:
+        return abs(amount)
+    if transaction_type in TRANSFER_OUTFLOW_TRANSACTION_TYPES:
+        return -abs(amount)
+    return abs(amount) if transaction.quantity > 0 else -abs(amount)
 
 
 class CashflowLogic:
@@ -69,64 +142,13 @@ class CashflowLogic:
         """
         Applies the calculation rule to a transaction to generate a cashflow.
         """
-        amount = Decimal(0)
         transaction_type = _normalize_code(transaction.transaction_type)
-        interest_direction = _normalize_code(
-            getattr(transaction, "interest_direction", None),
-            default="INCOME",
+        amount = _signed_cashflow_amount(
+            transaction,
+            rule,
+            transaction_type,
+            _base_cashflow_amount(transaction, transaction_type),
         )
-        trade_fee = _resolve_cashflow_trade_fee(transaction)
-
-        # For NET, we adjust the gross amount by the fee and honor net-settled
-        # interest when withholding/deductions are provided.
-        if transaction_type == "INTEREST":
-            deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
-                transaction.other_interest_deductions_amount or Decimal(0)
-            )
-            amount = transaction.net_interest_amount
-            if amount is None:
-                amount = transaction.gross_transaction_amount - deductions - trade_fee
-        elif transaction_type in {"BUY", "FEE"}:
-            amount = transaction.gross_transaction_amount + trade_fee
-        else:  # SELL, DIVIDEND, INTEREST, etc.
-            amount = transaction.gross_transaction_amount - trade_fee
-
-        # Convention: Inflows to the portfolio are positive, outflows are negative.
-        positive_classifications = [
-            CashflowClassification.FX_BUY,
-            CashflowClassification.INVESTMENT_INFLOW,  # From a SELL
-            CashflowClassification.INCOME,  # From DIVIDEND, INTEREST
-            CashflowClassification.CASHFLOW_IN,  # From DEPOSIT
-        ]
-
-        # INTEREST direction baseline: default INCOME (inflow), EXPENSE (outflow).
-        if transaction_type == "INTEREST":
-            if interest_direction == "EXPENSE":
-                amount = -abs(amount)
-            else:
-                amount = abs(amount)
-        elif rule.classification == CashflowClassification.FX_BUY:
-            amount = abs(amount)
-        elif rule.classification == CashflowClassification.FX_SELL:
-            amount = -abs(amount)
-        elif transaction_type == "ADJUSTMENT":
-            movement_direction = _normalize_code(
-                getattr(transaction, "movement_direction", None),
-                default="INFLOW",
-            )
-            amount = abs(amount) if movement_direction == "INFLOW" else -abs(amount)
-        elif rule.classification in positive_classifications:
-            amount = abs(amount)
-        elif rule.classification == CashflowClassification.TRANSFER:
-            if transaction_type in TRANSFER_INFLOW_TRANSACTION_TYPES:
-                amount = abs(amount)
-            elif transaction_type in TRANSFER_OUTFLOW_TRANSACTION_TYPES:
-                amount = -abs(amount)
-            else:
-                amount = abs(amount) if transaction.quantity > 0 else -abs(amount)
-        else:
-            # All other classifications are outflows (INVESTMENT_OUTFLOW, EXPENSE, CASHFLOW_OUT)
-            amount = -abs(amount)
 
         # Create the Cashflow database object
         cashflow = Cashflow(
