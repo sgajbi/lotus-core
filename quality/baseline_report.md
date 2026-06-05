@@ -1129,3 +1129,9 @@ ordered-query, fetch, no-match logging, correlation-header, publish, publish-fai
 verification helpers. `ReprocessingRepository.reprocess_transactions_by_ids` improved from
 `C (11)` to `A (4)`, leaving every function/class/method in `reprocessing_repository.py` A-ranked
 by cyclomatic complexity.
+
+CR-1016 reduced shared valuation stale-job reset complexity by extracting stale-row retrieval,
+stale-row grouping, stale-job ID classification, superseded update construction, failed update
+construction, reset update construction, and shared processing-state update predicate helpers.
+`ValuationRepositoryBase.find_and_reset_stale_jobs` improved from `C (14)` to `A (2)`, and all
+stale reset helpers now report A-ranked cyclomatic complexity.
