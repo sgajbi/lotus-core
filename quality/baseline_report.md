@@ -938,3 +938,9 @@ update assembly, upstream-provided realized P&L update assembly, and total P&L f
 resolution. `build_fx_processed_event` improved from `C (14)` to `A (2)`, every FX baseline
 processing function reports A-ranked complexity, and `fx_baseline_processing.py` remains
 `A (65.60)` maintainability.
+
+CR-983 reduced FX contract instrument construction complexity by extracting focused helpers for
+FX contract ID resolution, contract currency normalization, pair label resolution, display-name
+construction, and final `InstrumentEvent` assembly. `build_fx_contract_instrument_event` improved
+from `C (13)` to `A (5)`, every FX contract instrument function reports A-ranked complexity, and
+`fx_contract_instrument.py` remains `A (51.08)` maintainability.

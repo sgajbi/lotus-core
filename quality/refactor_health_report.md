@@ -703,3 +703,8 @@ health before that claim is defensible.
      update assembly, upstream-provided realized P&L update assembly, and total P&L fallback
      resolution. `build_fx_processed_event` improved from `C (14)` to `A (2)`, and every FX
      baseline processing function now reports A-ranked complexity.
+139. Reduced FX contract instrument construction complexity by extracting focused helpers for FX
+     contract ID resolution, contract currency normalization, pair label resolution, display-name
+     construction, and final `InstrumentEvent` assembly. `build_fx_contract_instrument_event`
+     improved from `C (13)` to `A (5)`, and every FX contract instrument function now reports
+     A-ranked complexity.
