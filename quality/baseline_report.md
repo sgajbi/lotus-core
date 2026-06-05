@@ -1142,3 +1142,9 @@ latest-snapshot fallback, optional join construction, and result mapping into
 `valuation_snapshot_contiguity.py`. `ValuationRepositoryBase.find_contiguous_snapshot_dates`
 improved from `B (8)` to `A (3)`, leaving every function/class/method in
 `valuation_repository_base.py` A-ranked by cyclomatic complexity.
+
+CR-1018 reduced shared OpenAPI enrichment complexity by extracting path-operation discovery,
+HTTP-operation classification, parameter example eligibility, explicit schema-example extraction,
+media-content example eligibility, error response detection, and error response-code
+classification helpers. Every function in `openapi_enrichment.py` now reports A-ranked
+cyclomatic complexity.

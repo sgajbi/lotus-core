@@ -20,11 +20,22 @@ _HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 def _iter_operations(schema: dict[str, Any]):
     paths = schema.get("paths", {})
     for path, methods in paths.items():
-        if not isinstance(methods, dict):
-            continue
-        for method, operation in methods.items():
-            if method.lower() in _HTTP_METHODS and isinstance(operation, dict):
-                yield path, method, operation
+        for method, operation in _path_operations(methods):
+            yield path, method, operation
+
+
+def _path_operations(methods: Any):
+    if not isinstance(methods, dict):
+        return
+    for method, operation in methods.items():
+        if _is_http_operation(method, operation):
+            yield method, operation
+
+
+def _is_http_operation(method: Any, operation: Any) -> bool:
+    return (
+        isinstance(method, str) and method.lower() in _HTTP_METHODS and isinstance(operation, dict)
+    )
 
 
 def _ensure_parameter_examples(schema: dict[str, Any]) -> None:
@@ -37,20 +48,32 @@ def _ensure_parameter_examples(schema: dict[str, Any]) -> None:
 
 def _ensure_parameter_example(parameter: dict[str, Any]) -> None:
     param_schema = parameter.get("schema")
-    if not isinstance(param_schema, dict):
+    if not _should_add_parameter_example(parameter, param_schema):
         return
-    if "example" in parameter or "examples" in parameter:
-        return
-    if "example" in param_schema:
-        parameter["example"] = deepcopy(param_schema["example"])
-        return
-    examples = param_schema.get("examples")
-    if isinstance(examples, list) and examples:
-        parameter["example"] = deepcopy(examples[0])
+    explicit_example = _explicit_parameter_schema_example(param_schema)
+    if explicit_example is not None:
+        parameter["example"] = explicit_example
         return
     name = parameter.get("name")
     if isinstance(name, str):
         parameter["example"] = infer_example(name, param_schema)
+
+
+def _should_add_parameter_example(parameter: dict[str, Any], param_schema: Any) -> bool:
+    return (
+        isinstance(param_schema, dict)
+        and "example" not in parameter
+        and "examples" not in parameter
+    )
+
+
+def _explicit_parameter_schema_example(param_schema: dict[str, Any]) -> Any:
+    if "example" in param_schema:
+        return deepcopy(param_schema["example"])
+    examples = param_schema.get("examples")
+    if isinstance(examples, list) and examples:
+        return deepcopy(examples[0])
+    return None
 
 
 def _ensure_operation_examples(schema: dict[str, Any]) -> None:
@@ -100,15 +123,20 @@ def _ensure_media_content_example(
     media_content: Any,
     root_schema: dict[str, Any],
 ) -> None:
-    if not isinstance(media_content, dict):
-        return
-    if "json" not in media_type:
-        return
-    if "example" in media_content or "examples" in media_content:
+    if not _should_add_media_content_example(media_type, media_content):
         return
     example = build_schema_example(media_content.get("schema"), root_schema=root_schema)
     if example is not None:
         media_content["example"] = example
+
+
+def _should_add_media_content_example(media_type: str, media_content: Any) -> bool:
+    return (
+        isinstance(media_content, dict)
+        and "json" in media_type
+        and "example" not in media_content
+        and "examples" not in media_content
+    )
 
 
 def _ensure_operation_documentation(schema: dict[str, Any], service_name: str) -> None:
@@ -135,13 +163,20 @@ def _ensure_default_error_response(operation: dict[str, Any]) -> None:
     responses = operation.get("responses")
     if not isinstance(responses, dict):
         return
-    has_error = any(
-        code.startswith("4") or code.startswith("5") or code == "default" for code in responses
-    )
-    if not has_error:
+    if not _has_error_response(responses):
         responses["default"] = {
             "description": "Unexpected error response.",
         }
+
+
+def _has_error_response(responses: dict[str, Any]) -> bool:
+    return any(_is_error_response_code(code) for code in responses)
+
+
+def _is_error_response_code(code: Any) -> bool:
+    return isinstance(code, str) and (
+        code.startswith("4") or code.startswith("5") or code == "default"
+    )
 
 
 def _ensure_schema_documentation(schema: dict[str, Any]) -> None:
