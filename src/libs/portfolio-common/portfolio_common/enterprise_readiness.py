@@ -88,35 +88,46 @@ class EnterpriseReadinessRuntime:
 
     def validate_enterprise_runtime_config(self) -> list[str]:
         issues: list[str] = []
-        if not self.enterprise_policy_version().strip():
-            issues.append("missing_policy_version")
-
-        rotation_days = self.env_integer("ENTERPRISE_SECRET_ROTATION_DAYS", 90)
-        if rotation_days <= 0 or rotation_days > 90:
-            issues.append("secret_rotation_days_out_of_range")
-
-        max_write_payload_bytes = self.env_integer("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576)
-        if max_write_payload_bytes <= 0:
-            issues.append("max_write_payload_bytes_out_of_range")
-
-        if (
-            self.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false")
-            or self.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false")
-        ) and not self.load_settings().enterprise_primary_key_id.strip():
-            issues.append("missing_primary_key_id")
-        if (
-            self.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false")
-            and (
-                self.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false")
-                or self.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false")
-            )
-            and not self.load_capability_rules()
-        ):
-            issues.append("missing_capability_rules")
+        _append_issue_if(
+            issues,
+            "missing_policy_version",
+            not self.enterprise_policy_version().strip(),
+        )
+        _append_issue_if(
+            issues,
+            "secret_rotation_days_out_of_range",
+            not _valid_secret_rotation_days(
+                self.env_integer("ENTERPRISE_SECRET_ROTATION_DAYS", 90)
+            ),
+        )
+        _append_issue_if(
+            issues,
+            "max_write_payload_bytes_out_of_range",
+            self.env_integer("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576) <= 0,
+        )
+        authz_enabled = self._authz_enforcement_enabled()
+        _append_issue_if(
+            issues,
+            "missing_primary_key_id",
+            authz_enabled and not self.load_settings().enterprise_primary_key_id.strip(),
+        )
+        _append_issue_if(
+            issues,
+            "missing_capability_rules",
+            self._requires_capability_rules(authz_enabled) and not self.load_capability_rules(),
+        )
 
         if issues and self.env_enabled("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", "false"):
             raise RuntimeError(f"enterprise_runtime_config_invalid:{','.join(issues)}")
         return issues
+
+    def _authz_enforcement_enabled(self) -> bool:
+        return self.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false") or self.env_enabled(
+            "ENTERPRISE_ENFORCE_READ_AUTHZ", "false"
+        )
+
+    def _requires_capability_rules(self, authz_enabled: bool) -> bool:
+        return self.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false") and authz_enabled
 
     def load_feature_flags(self) -> dict[str, dict[str, dict[str, bool]]]:
         return self.load_json_map("ENTERPRISE_FEATURE_FLAGS_JSON")
@@ -137,19 +148,12 @@ class EnterpriseReadinessRuntime:
 
     def is_feature_enabled(self, feature_key: str, tenant_id: str, role: str) -> bool:
         flags = self.load_feature_flags()
-        feature = flags.get(feature_key, {})
-        if not isinstance(feature, dict):
-            return False
-        tenant = feature.get(tenant_id, {})
-        if not isinstance(tenant, dict):
-            return False
-        if isinstance(tenant.get(role), bool):
-            return tenant[role]
-        if isinstance(tenant.get("*"), bool):
-            return tenant["*"]
-        global_entry = feature.get("*", {})
-        if not isinstance(global_entry, dict):
-            return False
+        feature = _dict_value(flags, feature_key)
+        tenant = _dict_value(feature, tenant_id)
+        tenant_override = _feature_flag_value(tenant, role)
+        if tenant_override is not None:
+            return tenant_override
+        global_entry = _dict_value(feature, "*")
         global_default = global_entry.get("*")
         return bool(global_default) if isinstance(global_default, bool) else False
 
@@ -163,8 +167,27 @@ class EnterpriseReadinessRuntime:
     ) -> tuple[bool, str | None]:
         normalized_method = method.strip().upper()
         required_capability = self.required_capability(normalized_method, path)
+        if not self._request_requires_authorization(normalized_method, required_capability):
+            return True, None
+
+        normalized_headers = _normalize_headers(headers)
+        missing_headers = _missing_required_headers(normalized_headers)
+        if missing_headers:
+            return False, f"missing_headers:{','.join(missing_headers)}"
+
+        if not _has_service_identity(normalized_headers):
+            return False, "missing_service_identity"
+
+        return self._authorize_required_capability(required_capability, normalized_headers)
+
+    def _request_requires_authorization(
+        self,
+        normalized_method: str,
+        required_capability: str | None,
+    ) -> bool:
         requires_write_authz = normalized_method in WRITE_METHODS and self.env_enabled(
-            "ENTERPRISE_ENFORCE_AUTHZ", "false"
+            "ENTERPRISE_ENFORCE_AUTHZ",
+            "false",
         )
         requires_read_authz = (
             normalized_method in READ_AUTHZ_METHODS or required_capability is not None
@@ -172,27 +195,19 @@ class EnterpriseReadinessRuntime:
             "ENTERPRISE_ENFORCE_READ_AUTHZ",
             "false",
         )
-        if not (requires_write_authz or requires_read_authz):
-            return True, None
+        return requires_write_authz or requires_read_authz
 
-        normalized = {str(k).lower(): str(v).strip() for k, v in headers.items()}
-        missing = sorted(header for header in REQUIRED_HEADERS if not normalized.get(header))
-        if missing:
-            return False, f"missing_headers:{','.join(missing)}"
-
-        if not (normalized.get("x-service-identity") or normalized.get("authorization")):
-            return False, "missing_service_identity"
-
+    def _authorize_required_capability(
+        self,
+        required_capability: str | None,
+        normalized_headers: dict[str, str],
+    ) -> tuple[bool, str | None]:
         if not required_capability and self.env_enabled(
             "ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false"
         ):
             return False, "missing_capability_rule"
         if required_capability:
-            capabilities = {
-                part.strip()
-                for part in normalized.get("x-capabilities", "").split(",")
-                if part.strip()
-            }
+            capabilities = _capabilities_from_headers(normalized_headers)
             if required_capability not in capabilities:
                 return False, f"missing_capability:{required_capability}"
 
@@ -236,57 +251,128 @@ class EnterpriseReadinessRuntime:
 
 def redact_sensitive(value: Any) -> Any:
     if isinstance(value, dict):
-        result: dict[str, Any] = {}
-        for key, item in value.items():
-            if key.lower() in REDACT_FIELDS:
-                result[key] = "***REDACTED***"
-            else:
-                result[key] = redact_sensitive(item)
-        return result
+        return _redact_dict(value)
     if isinstance(value, list):
         return [redact_sensitive(item) for item in value]
     return value
+
+
+def _redact_dict(value: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, item in value.items():
+        result[key] = "***REDACTED***" if key.lower() in REDACT_FIELDS else redact_sensitive(item)
+    return result
+
+
+def _dict_value(value: dict[str, Any], key: str) -> dict[str, Any]:
+    item = value.get(key, {})
+    return item if isinstance(item, dict) else {}
+
+
+def _feature_flag_value(tenant_flags: dict[str, Any], role: str) -> bool | None:
+    role_value = tenant_flags.get(role)
+    if isinstance(role_value, bool):
+        return role_value
+    wildcard_value = tenant_flags.get("*")
+    return wildcard_value if isinstance(wildcard_value, bool) else None
+
+
+def _append_issue_if(issues: list[str], issue: str, condition: bool) -> None:
+    if condition:
+        issues.append(issue)
+
+
+def _valid_secret_rotation_days(rotation_days: int) -> bool:
+    return 0 < rotation_days <= 90
+
+
+def _normalize_headers(headers: dict[str, str]) -> dict[str, str]:
+    return {str(key).lower(): str(value).strip() for key, value in headers.items()}
+
+
+def _missing_required_headers(normalized_headers: dict[str, str]) -> list[str]:
+    return sorted(header for header in REQUIRED_HEADERS if not normalized_headers.get(header))
+
+
+def _has_service_identity(normalized_headers: dict[str, str]) -> bool:
+    return bool(
+        normalized_headers.get("x-service-identity") or normalized_headers.get("authorization")
+    )
+
+
+def _capabilities_from_headers(normalized_headers: dict[str, str]) -> set[str]:
+    return {
+        part.strip()
+        for part in normalized_headers.get("x-capabilities", "").split(",")
+        if part.strip()
+    }
 
 
 def _path_matches_rule(path: str, rule_path: str) -> bool:
     normalized_rule = rule_path.rstrip("/")
     if not normalized_rule or normalized_rule == "/":
         return True
-    if "{" in normalized_rule and "}" in normalized_rule:
+    if _is_path_template(normalized_rule):
         return _path_template_matches(path, normalized_rule)
     return path == normalized_rule or path.startswith(f"{normalized_rule}/")
 
 
 def _normalize_capability_rule(key: Any, capability: Any) -> tuple[str, str] | None:
-    if not isinstance(key, str) or not isinstance(capability, str):
+    if not _capability_rule_input_is_text(key, capability):
         return None
-    parts = key.strip().split(maxsplit=1)
-    if len(parts) != 2:
+    parsed_key = _parse_capability_rule_key(key)
+    if parsed_key is None:
         return None
-    method, path = parts[0].upper(), parts[1].strip()
+    method, path = parsed_key
     normalized_capability = capability.strip()
-    if (
-        method not in CAPABILITY_RULE_METHODS
-        or not path.startswith("/")
-        or not normalized_capability
-    ):
+    if not _valid_capability_rule(method, path, normalized_capability):
         return None
     return f"{method} {path.rstrip('/') or '/'}", normalized_capability
 
 
+def _capability_rule_input_is_text(key: Any, capability: Any) -> bool:
+    return isinstance(key, str) and isinstance(capability, str)
+
+
+def _parse_capability_rule_key(key: str) -> tuple[str, str] | None:
+    parts = key.strip().split(maxsplit=1)
+    if len(parts) != 2:
+        return None
+    method, path = parts[0].upper(), parts[1].strip()
+    return method, path
+
+
+def _valid_capability_rule(method: str, path: str, capability: str) -> bool:
+    return method in CAPABILITY_RULE_METHODS and path.startswith("/") and bool(capability)
+
+
+def _is_path_template(rule_path: str) -> bool:
+    return "{" in rule_path and "}" in rule_path
+
+
 def _path_template_matches(path: str, rule_path: str) -> bool:
-    path_segments = [segment for segment in path.rstrip("/").split("/") if segment]
-    rule_segments = [segment for segment in rule_path.rstrip("/").split("/") if segment]
+    path_segments = _path_segments(path)
+    rule_segments = _path_segments(rule_path)
     if len(path_segments) < len(rule_segments):
         return False
     for path_segment, rule_segment in zip(path_segments, rule_segments):
-        if rule_segment.startswith("{") and rule_segment.endswith("}"):
-            if not path_segment:
-                return False
-            continue
-        if path_segment != rule_segment:
+        if not _path_segment_matches_rule(path_segment, rule_segment):
             return False
     return True
+
+
+def _path_segments(path: str) -> list[str]:
+    return [segment for segment in path.rstrip("/").split("/") if segment]
+
+
+def _path_segment_matches_rule(path_segment: str, rule_segment: str) -> bool:
+    if _is_template_segment(rule_segment):
+        return bool(path_segment)
+    return path_segment == rule_segment
+
+
+def _is_template_segment(rule_segment: str) -> bool:
+    return rule_segment.startswith("{") and rule_segment.endswith("}")
 
 
 def _rules_by_specificity(rules: dict[str, str]) -> list[tuple[str, str]]:

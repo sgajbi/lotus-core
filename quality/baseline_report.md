@@ -862,3 +862,11 @@ creation, event headers, event payloads, and callback-less failure accounting.
 `OutboxDispatcher._process_batch_sync` improved from `E (33)` to `A (2)`, all dispatcher methods
 and outbox helper functions report A-ranked complexity, and `outbox_dispatcher.py` remains
 `A (40.41)` maintainability.
+
+CR-973 reduced enterprise readiness runtime policy complexity by extracting focused helpers for
+runtime issue collection, secret-rotation validation, authorization enablement, capability-rule
+requirements, header normalization, required-header checks, service identity checks, capability
+parsing, feature-flag lookup, redaction, capability-rule normalization, and path-template matching.
+`validate_enterprise_runtime_config` improved from `C (14)` to `A (5)`, `authorize_request`
+improved from `C (18)` to `A (4)`, and every enterprise readiness function/class/method now
+reports A-ranked complexity.
