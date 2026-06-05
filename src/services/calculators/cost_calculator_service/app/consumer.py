@@ -75,6 +75,46 @@ def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
     return amount
 
 
+FEE_COMPONENT_FIELDS = ("brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees")
+
+
+def _pop_fee_components(event_dict: dict[str, Any]) -> dict[str, object]:
+    return {field_name: event_dict.pop(field_name, None) for field_name in FEE_COMPONENT_FIELDS}
+
+
+def _has_fee_components(fee_components: dict[str, object]) -> bool:
+    return any(value is not None for value in fee_components.values())
+
+
+def _normalize_fee_components(fee_components: dict[str, object]) -> dict[str, Decimal]:
+    return {
+        field_name: _normalize_fee_amount(value, field_name=field_name)
+        for field_name, value in fee_components.items()
+    }
+
+
+def _apply_engine_fee_fields(
+    *,
+    event_dict: dict[str, Any],
+    resolved_trade_fee: Decimal,
+    normalized_components: dict[str, Decimal],
+    has_fee_components: bool,
+) -> None:
+    if has_fee_components:
+        event_dict["fees"] = {
+            field_name: str(amount) for field_name, amount in normalized_components.items()
+        }
+        event_dict["trade_fee"] = str(resolved_trade_fee)
+        return
+
+    if resolved_trade_fee and resolved_trade_fee > 0:
+        event_dict["fees"] = {"brokerage": str(resolved_trade_fee)}
+        event_dict["trade_fee"] = str(resolved_trade_fee)
+        return
+
+    event_dict["trade_fee"] = "0"
+
+
 def _message_value(msg: Message) -> str:
     return msg.value().decode("utf-8")
 
@@ -156,36 +196,19 @@ class CostCalculatorConsumer(BaseConsumer):
             event_dict.pop("trade_fee", "0"),
             field_name="trade_fee",
         )
-        brokerage = event_dict.pop("brokerage", None)
-        stamp_duty = event_dict.pop("stamp_duty", None)
-        exchange_fee = event_dict.pop("exchange_fee", None)
-        gst = event_dict.pop("gst", None)
-        other_fees = event_dict.pop("other_fees", None)
-
-        fee_components = {
-            "brokerage": brokerage,
-            "stamp_duty": stamp_duty,
-            "exchange_fee": exchange_fee,
-            "gst": gst,
-            "other_fees": other_fees,
-        }
-        normalized_components = {
-            key: _normalize_fee_amount(value, field_name=key)
-            for key, value in fee_components.items()
-        }
+        fee_components = _pop_fee_components(event_dict)
+        has_fee_components = _has_fee_components(fee_components)
+        normalized_components = _normalize_fee_components(fee_components)
         resolved_trade_fee = resolve_transaction_trade_fee(
             trade_fee,
-            normalized_components if any(v is not None for v in fee_components.values()) else {},
+            normalized_components if has_fee_components else {},
         )
-        if any(v is not None for v in fee_components.values()):
-            normalized = {key: str(value) for key, value in normalized_components.items()}
-            event_dict["fees"] = normalized
-            event_dict["trade_fee"] = str(resolved_trade_fee)
-        elif resolved_trade_fee and resolved_trade_fee > 0:
-            event_dict["fees"] = {"brokerage": str(resolved_trade_fee)}
-            event_dict["trade_fee"] = str(resolved_trade_fee)
-        else:
-            event_dict["trade_fee"] = "0"
+        _apply_engine_fee_fields(
+            event_dict=event_dict,
+            resolved_trade_fee=resolved_trade_fee,
+            normalized_components=normalized_components,
+            has_fee_components=has_fee_components,
+        )
 
         return event_dict
 

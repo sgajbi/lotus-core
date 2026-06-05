@@ -929,3 +929,7 @@ health before that claim is defensible.
      valid cost-event processing, process-message error classification, and process-message
      failure metric helpers. `CostCalculatorConsumer.process_message` improved from `C (11)` to
      `A (2)`, and `consumer.py` remains A-ranked maintainability at `A (22.35)`.
+189. Reduced cost calculator consumer fee-transformation complexity by extracting fee-component
+     removal, explicit component detection, component normalization, and engine fee-field
+     application helpers. `CostCalculatorConsumer._transform_event_for_engine` improved from
+     `B (9)` to `A (2)`, and `consumer.py` remains A-ranked maintainability at `A (22.19)`.
