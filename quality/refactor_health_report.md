@@ -669,3 +669,8 @@ health before that claim is defensible.
      gross-amount policy, currency fields, date ordering, strict linkage metadata, and strict
      policy metadata. `validate_sell_transaction` improved from `C (14)` to `A (1)`, and every
      SELL validation function/class now reports A-ranked complexity.
+133. Reduced canonical BUY transaction validation complexity by extracting focused helpers for
+     transaction-type validation, settlement-date presence, positive quantity policy, positive
+     gross-amount policy, currency fields, date ordering, strict linkage metadata, and strict
+     policy metadata. `validate_buy_transaction` improved from `C (14)` to `A (1)`, and every BUY
+     validation function/class now reports A-ranked complexity.

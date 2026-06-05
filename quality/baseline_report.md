@@ -893,3 +893,10 @@ gross-amount policy, currency fields, date ordering, strict linkage metadata, an
 metadata. `validate_sell_transaction` improved from `C (14)` to `A (1)`, every SELL validation
 function/class reports A-ranked complexity, and `sell_validation.py` remains `A (42.80)`
 maintainability.
+
+CR-977 reduced canonical BUY transaction validation complexity by extracting focused helpers for
+transaction-type validation, settlement-date presence, positive quantity policy, positive
+gross-amount policy, currency fields, date ordering, strict linkage metadata, and strict policy
+metadata. `validate_buy_transaction` improved from `C (14)` to `A (1)`, every BUY validation
+function/class reports A-ranked complexity, and `buy_validation.py` remains `A (42.80)`
+maintainability.

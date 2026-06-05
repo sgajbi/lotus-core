@@ -24,7 +24,20 @@ def validate_buy_transaction(
     txn: BuyCanonicalTransaction, *, strict_metadata: bool = False
 ) -> list[BuyValidationIssue]:
     issues: list[BuyValidationIssue] = []
+    _validate_buy_transaction_type(issues, txn)
+    _validate_settlement_date_presence(issues, txn)
+    _validate_positive_quantity(issues, txn)
+    _validate_positive_gross_amount(issues, txn)
+    _validate_currency_fields(issues, txn)
+    _validate_date_order(issues, txn)
+    _validate_strict_metadata(issues, txn, strict_metadata=strict_metadata)
+    return issues
 
+
+def _validate_buy_transaction_type(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
     if normalize_transaction_control_code(txn.transaction_type) != "BUY":
         issues.append(
             BuyValidationIssue(
@@ -34,6 +47,11 @@ def validate_buy_transaction(
             )
         )
 
+
+def _validate_settlement_date_presence(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
     if txn.settlement_date is None:
         issues.append(
             BuyValidationIssue(
@@ -43,6 +61,11 @@ def validate_buy_transaction(
             )
         )
 
+
+def _validate_positive_quantity(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
     if txn.quantity <= 0:
         issues.append(
             BuyValidationIssue(
@@ -52,6 +75,11 @@ def validate_buy_transaction(
             )
         )
 
+
+def _validate_positive_gross_amount(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
     if txn.gross_transaction_amount <= 0:
         issues.append(
             BuyValidationIssue(
@@ -61,6 +89,11 @@ def validate_buy_transaction(
             )
         )
 
+
+def _validate_currency_fields(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
     if not txn.trade_currency:
         issues.append(
             BuyValidationIssue(
@@ -79,6 +112,11 @@ def validate_buy_transaction(
             )
         )
 
+
+def _validate_date_order(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
     if txn.settlement_date is not None and txn.transaction_date > txn.settlement_date:
         issues.append(
             BuyValidationIssue(
@@ -88,29 +126,47 @@ def validate_buy_transaction(
             )
         )
 
+
+def _validate_strict_metadata(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+    *,
+    strict_metadata: bool,
+) -> None:
     if strict_metadata:
-        if not txn.economic_event_id or not txn.linked_transaction_group_id:
-            issues.append(
-                BuyValidationIssue(
-                    code=BuyValidationReasonCode.MISSING_LINKAGE_IDENTIFIER,
-                    field="economic_event_id",
-                    message=(
-                        "economic_event_id and linked_transaction_group_id are required "
-                        "under strict metadata validation."
-                    ),
-                )
-            )
+        _validate_strict_linkage_metadata(issues, txn)
+        _validate_strict_policy_metadata(issues, txn)
 
-        if not txn.calculation_policy_id or not txn.calculation_policy_version:
-            issues.append(
-                BuyValidationIssue(
-                    code=BuyValidationReasonCode.MISSING_POLICY_METADATA,
-                    field="calculation_policy_id",
-                    message=(
-                        "calculation_policy_id and calculation_policy_version are required "
-                        "under strict metadata validation."
-                    ),
-                )
-            )
 
-    return issues
+def _validate_strict_linkage_metadata(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
+    if not txn.economic_event_id or not txn.linked_transaction_group_id:
+        issues.append(
+            BuyValidationIssue(
+                code=BuyValidationReasonCode.MISSING_LINKAGE_IDENTIFIER,
+                field="economic_event_id",
+                message=(
+                    "economic_event_id and linked_transaction_group_id are required "
+                    "under strict metadata validation."
+                ),
+            )
+        )
+
+
+def _validate_strict_policy_metadata(
+    issues: list[BuyValidationIssue],
+    txn: BuyCanonicalTransaction,
+) -> None:
+    if not txn.calculation_policy_id or not txn.calculation_policy_version:
+        issues.append(
+            BuyValidationIssue(
+                code=BuyValidationReasonCode.MISSING_POLICY_METADATA,
+                field="calculation_policy_id",
+                message=(
+                    "calculation_policy_id and calculation_policy_version are required "
+                    "under strict metadata validation."
+                ),
+            )
+        )
