@@ -528,28 +528,27 @@ class CostCalculatorConsumer(BaseConsumer):
         repo: CostCalculatorRepository,
         reconciled_bundle_groups: set[tuple[str, str]],
     ) -> None:
-        if not is_ca_bundle_a_transaction_type(processed_event.transaction_type):
+        group_key = self._bundle_a_reconciliation_key(processed_event)
+        if group_key is None:
             return
-        linked_group = (processed_event.linked_transaction_group_id or "").strip()
-        parent_ref = (processed_event.parent_event_reference or "").strip()
-        if not linked_group or not parent_ref:
-            return
-        group_key = (linked_group, parent_ref)
         if group_key in reconciled_bundle_groups:
             return
 
-        group_txns = await repo.get_bundle_a_group_transactions(
-            portfolio_id=processed_event.portfolio_id,
-            linked_transaction_group_id=linked_group,
-            parent_event_reference=parent_ref,
+        linked_group, parent_ref = group_key
+        group_events = await self._load_bundle_a_group_events(
+            processed_event=processed_event,
+            repo=repo,
+            linked_group=linked_group,
+            parent_ref=parent_ref,
         )
-        group_events = [TransactionEvent.model_validate(t) for t in group_txns]
         reconciliation = evaluate_ca_bundle_a_reconciliation(
             group_events,
             basis_tolerance=DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
         )
-        available_ids = {event.transaction_id for event in group_events}
-        missing_dependencies = find_missing_ca_bundle_a_dependencies(processed_event, available_ids)
+        missing_dependencies = self._bundle_a_missing_dependencies(
+            processed_event=processed_event,
+            group_events=group_events,
+        )
         self._log_bundle_a_reconciliation(
             processed_event=processed_event,
             linked_group=linked_group,
@@ -558,6 +557,49 @@ class CostCalculatorConsumer(BaseConsumer):
             missing_dependencies=missing_dependencies,
         )
         reconciled_bundle_groups.add(group_key)
+
+    @staticmethod
+    def _bundle_a_reconciliation_key(processed_event: TransactionEvent) -> tuple[str, str] | None:
+        if not is_ca_bundle_a_transaction_type(processed_event.transaction_type):
+            return None
+        return CostCalculatorConsumer._complete_bundle_a_reconciliation_key(
+            linked_group=(processed_event.linked_transaction_group_id or "").strip(),
+            parent_ref=(processed_event.parent_event_reference or "").strip(),
+        )
+
+    @staticmethod
+    def _complete_bundle_a_reconciliation_key(
+        *,
+        linked_group: str,
+        parent_ref: str,
+    ) -> tuple[str, str] | None:
+        if linked_group and parent_ref:
+            return linked_group, parent_ref
+        return None
+
+    @staticmethod
+    async def _load_bundle_a_group_events(
+        *,
+        processed_event: TransactionEvent,
+        repo: CostCalculatorRepository,
+        linked_group: str,
+        parent_ref: str,
+    ) -> list[TransactionEvent]:
+        group_txns = await repo.get_bundle_a_group_transactions(
+            portfolio_id=processed_event.portfolio_id,
+            linked_transaction_group_id=linked_group,
+            parent_event_reference=parent_ref,
+        )
+        return [TransactionEvent.model_validate(transaction) for transaction in group_txns]
+
+    @staticmethod
+    def _bundle_a_missing_dependencies(
+        *,
+        processed_event: TransactionEvent,
+        group_events: list[TransactionEvent],
+    ) -> list[str]:
+        available_ids = {event.transaction_id for event in group_events}
+        return find_missing_ca_bundle_a_dependencies(processed_event, available_ids)
 
     @staticmethod
     def _log_bundle_a_reconciliation(

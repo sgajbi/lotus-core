@@ -1196,3 +1196,14 @@ async def test_consumer_runs_bundle_a_reconciliation_diagnostics(
         parent_event_reference="CA-PARENT-DEM-01",
     )
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_bundle_a_reconciliation_key_skips_non_bundle_a_events(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+):
+    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
+    event.linked_transaction_group_id = "LTG-NON-CA"
+    event.parent_event_reference = "PARENT-NON-CA"
+
+    assert cost_calculator_consumer._bundle_a_reconciliation_key(event) is None

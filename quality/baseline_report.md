@@ -1237,3 +1237,9 @@ CR-1033 reduced cost calculator consumer fee-transformation complexity by extrac
 fee-component removal, explicit component detection, component normalization, and engine fee-field
 application helpers. `CostCalculatorConsumer._transform_event_for_engine` improved from `B (9)` to
 `A (2)`, and `consumer.py` remains A-ranked maintainability at `A (22.19)`.
+
+CR-1034 reduced cost calculator consumer Bundle A reconciliation diagnostics complexity by
+extracting reconciliation-key resolution, complete key validation, Bundle A group event loading, and
+missing dependency calculation helpers.
+`CostCalculatorConsumer._record_bundle_a_reconciliation_diagnostics` improved from `B (9)` to
+`A (3)`, and `consumer.py` remains A-ranked maintainability at `A (20.93)`.
