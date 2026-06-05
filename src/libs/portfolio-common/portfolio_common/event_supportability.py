@@ -27,6 +27,25 @@ INGESTION_EVIDENCE_BUNDLE = "IngestionEvidenceBundle"
 RECONCILIATION_EVIDENCE_BUNDLE = "ReconciliationEvidenceBundle"
 DATA_QUALITY_COVERAGE_REPORT = "DataQualityCoverageReport"
 
+SUPPORTED_EVENT_FAMILIES = frozenset(
+    {
+        SOURCE_INGESTION_EVENT,
+        DOMAIN_STATE_EVENT,
+        PIPELINE_STAGE_EVENT,
+        RECONCILIATION_CONTROL_EVENT,
+        SUPPORTABILITY_RECOVERY_EVENT,
+    }
+)
+SUPPORTED_EVENT_DIRECTIONS = frozenset({INBOUND_EVENT, OUTBOUND_EVENT, INTERNAL_EVENT})
+SUPPORTED_SURFACE_ROUTE_FAMILIES = frozenset({CONTROL_PLANE_AND_POLICY, CONTROL_EXECUTION})
+SUPPORTED_EVIDENCE_BUNDLES = frozenset(
+    {
+        INGESTION_EVIDENCE_BUNDLE,
+        RECONCILIATION_EVIDENCE_BUNDLE,
+        DATA_QUALITY_COVERAGE_REPORT,
+    }
+)
+
 
 @dataclass(frozen=True)
 class EventFamilyDefinition:
@@ -522,139 +541,224 @@ def validate_event_supportability_catalog(
     direct_kafka_topics: tuple[DirectKafkaTopicDefinition, ...] = DIRECT_KAFKA_TOPIC_DEFINITIONS,
     available_schema_models: Iterable[str] | None = None,
 ) -> None:
-    supported_families = {
-        SOURCE_INGESTION_EVENT,
-        DOMAIN_STATE_EVENT,
-        PIPELINE_STAGE_EVENT,
-        RECONCILIATION_CONTROL_EVENT,
-        SUPPORTABILITY_RECOVERY_EVENT,
-    }
-    supported_directions = {INBOUND_EVENT, OUTBOUND_EVENT, INTERNAL_EVENT}
-    supported_surface_route_families = {CONTROL_PLANE_AND_POLICY, CONTROL_EXECUTION}
-    supported_evidence = {
-        INGESTION_EVIDENCE_BUNDLE,
-        RECONCILIATION_EVIDENCE_BUNDLE,
-        DATA_QUALITY_COVERAGE_REPORT,
-    }
     source_data_product_names = {
         product.product_name.upper(): product.product_name
         for product in SOURCE_DATA_PRODUCT_CATALOG
     }
-    available_models = (
-        {
-            _normalize_required_text(model, "available_schema_models")
-            for model in available_schema_models
-        }
-        if available_schema_models is not None
-        else None
-    )
+    available_models = _normalize_available_schema_models(available_schema_models)
 
     event_names: set[str] = set()
     for definition in event_definitions:
-        event_type = _normalize_required_text(definition.event_type, "event_type")
-        if event_type in event_names:
-            raise ValueError(f"Duplicate event family definition: {definition.event_type}")
-        event_names.add(event_type)
-        schema_model = _normalize_required_text(definition.schema_model, "schema_model")
-        _require_allowed(definition.family, "family", supported_families)
-        _require_allowed(definition.direction, "direction", supported_directions)
-        _normalize_required_text(definition.aggregate_type, "aggregate_type")
-        _normalize_required_text(definition.topic, "topic")
-        _normalize_required_text(definition.producer_service, "producer_service")
-        if definition.runtime_active and not definition.consumer_services:
-            raise ValueError(f"{definition.event_type} must define at least one consumer service")
-        for consumer_service in definition.consumer_services:
-            _normalize_required_text(consumer_service, "consumer_services")
-        if not definition.idempotency_required:
-            raise ValueError(f"{definition.event_type} must require idempotency")
-        if not definition.correlation_required:
-            raise ValueError(f"{definition.event_type} must require correlation")
-        if not definition.schema_version_required:
-            raise ValueError(f"{definition.event_type} must require schema versioning")
-        if not definition.source_data_products and not definition.supportability_evidence:
-            raise ValueError(
-                f"{definition.event_type} must link to source-data products or evidence"
-            )
-        for evidence_bundle in definition.supportability_evidence:
-            _require_allowed(evidence_bundle, "supportability_evidence", supported_evidence)
-        for product_name in definition.source_data_products:
-            normalized_product_name = _normalize_required_text(product_name, "source_data_products")
-            if normalized_product_name not in source_data_product_names:
-                raise ValueError(
-                    f"{definition.event_type} references unknown source-data product: "
-                    f"{product_name}"
-                )
-        if available_models is not None and schema_model not in available_models:
-            raise ValueError(
-                f"{definition.event_type} references missing schema model: "
-                f"{definition.schema_model}"
-            )
+        _validate_event_definition(
+            definition,
+            event_names=event_names,
+            source_data_product_names=source_data_product_names,
+            available_models=available_models,
+        )
 
     surface_names: set[str] = set()
     for surface in supportability_surfaces:
-        surface_name = _normalize_required_text(surface.name, "name")
-        if surface_name in surface_names:
-            raise ValueError(f"Duplicate supportability surface: {surface.name}")
-        surface_names.add(surface_name)
-        _normalize_required_text(surface.service_name, "service_name")
-        _require_allowed(surface.route_family, "route_family", supported_surface_route_families)
-        _require_allowed(surface.evidence_bundle, "evidence_bundle", supported_evidence)
-        evidence_profile = get_source_data_security_profile(surface.evidence_bundle)
-        if not evidence_profile.operator_only:
-            raise ValueError(
-                f"{surface.name} evidence bundle must use an operator-only security profile"
-            )
-        if not surface.operator_only:
-            raise ValueError(f"{surface.name} must be operator-only")
-        if not surface.diagnostics:
-            raise ValueError(f"{surface.name} must define diagnostics")
-        for diagnostic in surface.diagnostics:
-            _normalize_required_text(diagnostic, "diagnostics")
+        _validate_supportability_surface(surface, surface_names=surface_names)
 
     direct_topic_names: set[str] = set()
     for topic_definition in direct_kafka_topics:
-        name = _normalize_required_text(topic_definition.name, "name")
-        if name in direct_topic_names:
-            raise ValueError(f"Duplicate direct Kafka topic definition: {topic_definition.name}")
-        direct_topic_names.add(name)
-        _normalize_required_text(topic_definition.topic, "topic")
-        _normalize_required_text(topic_definition.semantic_type, "semantic_type")
-        _normalize_required_text(topic_definition.producer_service, "producer_service")
-        _normalize_required_text(topic_definition.payload_contract, "payload_contract")
-        if not topic_definition.consumer_services:
-            raise ValueError(f"{topic_definition.name} must define at least one consumer service")
-        for consumer_service in topic_definition.consumer_services:
-            _normalize_required_text(consumer_service, "consumer_services")
-        if not topic_definition.idempotency_header_supported:
-            raise ValueError(f"{topic_definition.name} must support idempotency headers")
-        if not topic_definition.correlation_header_supported:
-            raise ValueError(f"{topic_definition.name} must support correlation headers")
-        if (
-            not topic_definition.source_data_products
-            and not topic_definition.supportability_evidence
-        ):
-            raise ValueError(
-                f"{topic_definition.name} must link to source-data products or evidence"
-            )
-        for evidence_bundle in topic_definition.supportability_evidence:
-            _require_allowed(evidence_bundle, "supportability_evidence", supported_evidence)
-        for product_name in topic_definition.source_data_products:
-            normalized_product_name = _normalize_required_text(product_name, "source_data_products")
-            if normalized_product_name not in source_data_product_names:
-                raise ValueError(
-                    f"{topic_definition.name} references unknown source-data product: "
-                    f"{product_name}"
-                )
-        if (
-            available_models is not None
-            and not topic_definition.payload_contract.endswith("_command")
-            and _normalize_required_text(topic_definition.payload_contract, "payload_contract")
-            not in available_models
-        ):
-            raise ValueError(
-                f"{topic_definition.name} references missing payload contract: "
-                f"{topic_definition.payload_contract}"
-            )
+        _validate_direct_kafka_topic(
+            topic_definition,
+            direct_topic_names=direct_topic_names,
+            source_data_product_names=source_data_product_names,
+            available_models=available_models,
+        )
+
+
+def _normalize_available_schema_models(
+    available_schema_models: Iterable[str] | None,
+) -> set[str] | None:
+    if available_schema_models is None:
+        return None
+    return {
+        _normalize_required_text(model, "available_schema_models")
+        for model in available_schema_models
+    }
+
+
+def _record_unique_name(
+    seen_names: set[str],
+    name: str,
+    field_name: str,
+    duplicate_message: str,
+) -> str:
+    normalized_name = _normalize_required_text(name, field_name)
+    if normalized_name in seen_names:
+        raise ValueError(duplicate_message)
+    seen_names.add(normalized_name)
+    return normalized_name
+
+
+def _validate_event_definition(
+    definition: EventFamilyDefinition,
+    *,
+    event_names: set[str],
+    source_data_product_names: dict[str, str],
+    available_models: set[str] | None,
+) -> None:
+    _record_unique_name(
+        event_names,
+        definition.event_type,
+        "event_type",
+        f"Duplicate event family definition: {definition.event_type}",
+    )
+    schema_model = _normalize_required_text(definition.schema_model, "schema_model")
+    _require_allowed(definition.family, "family", SUPPORTED_EVENT_FAMILIES)
+    _require_allowed(definition.direction, "direction", SUPPORTED_EVENT_DIRECTIONS)
+    _normalize_required_text(definition.aggregate_type, "aggregate_type")
+    _normalize_required_text(definition.topic, "topic")
+    _normalize_required_text(definition.producer_service, "producer_service")
+    _require_consumers_when_active(
+        definition.event_type,
+        definition.consumer_services,
+        runtime_active=definition.runtime_active,
+    )
+    _require_event_governance_flags(definition)
+    _require_source_or_evidence_link(
+        definition.event_type,
+        source_data_products=definition.source_data_products,
+        supportability_evidence=definition.supportability_evidence,
+    )
+    _validate_evidence_bundles(definition.supportability_evidence)
+    _validate_source_data_products(
+        definition.event_type,
+        definition.source_data_products,
+        source_data_product_names,
+    )
+    if available_models is not None and schema_model not in available_models:
+        raise ValueError(
+            f"{definition.event_type} references missing schema model: {definition.schema_model}"
+        )
+
+
+def _require_consumers_when_active(
+    event_type: str,
+    consumer_services: tuple[str, ...],
+    *,
+    runtime_active: bool = True,
+) -> None:
+    if runtime_active and not consumer_services:
+        raise ValueError(f"{event_type} must define at least one consumer service")
+    for consumer_service in consumer_services:
+        _normalize_required_text(consumer_service, "consumer_services")
+
+
+def _require_event_governance_flags(definition: EventFamilyDefinition) -> None:
+    if not definition.idempotency_required:
+        raise ValueError(f"{definition.event_type} must require idempotency")
+    if not definition.correlation_required:
+        raise ValueError(f"{definition.event_type} must require correlation")
+    if not definition.schema_version_required:
+        raise ValueError(f"{definition.event_type} must require schema versioning")
+
+
+def _require_source_or_evidence_link(
+    owner_name: str,
+    *,
+    source_data_products: tuple[str, ...],
+    supportability_evidence: tuple[str, ...],
+) -> None:
+    if not source_data_products and not supportability_evidence:
+        raise ValueError(f"{owner_name} must link to source-data products or evidence")
+
+
+def _validate_evidence_bundles(evidence_bundles: tuple[str, ...]) -> None:
+    for evidence_bundle in evidence_bundles:
+        _require_allowed(evidence_bundle, "supportability_evidence", SUPPORTED_EVIDENCE_BUNDLES)
+
+
+def _validate_source_data_products(
+    owner_name: str,
+    source_data_products: tuple[str, ...],
+    source_data_product_names: dict[str, str],
+) -> None:
+    for product_name in source_data_products:
+        normalized_product_name = _normalize_required_text(product_name, "source_data_products")
+        if normalized_product_name not in source_data_product_names:
+            raise ValueError(f"{owner_name} references unknown source-data product: {product_name}")
+
+
+def _validate_supportability_surface(
+    surface: SupportabilitySurfaceDefinition,
+    *,
+    surface_names: set[str],
+) -> None:
+    _record_unique_name(
+        surface_names,
+        surface.name,
+        "name",
+        f"Duplicate supportability surface: {surface.name}",
+    )
+    _normalize_required_text(surface.service_name, "service_name")
+    _require_allowed(surface.route_family, "route_family", SUPPORTED_SURFACE_ROUTE_FAMILIES)
+    _require_allowed(surface.evidence_bundle, "evidence_bundle", SUPPORTED_EVIDENCE_BUNDLES)
+    evidence_profile = get_source_data_security_profile(surface.evidence_bundle)
+    if not evidence_profile.operator_only:
+        raise ValueError(
+            f"{surface.name} evidence bundle must use an operator-only security profile"
+        )
+    if not surface.operator_only:
+        raise ValueError(f"{surface.name} must be operator-only")
+    if not surface.diagnostics:
+        raise ValueError(f"{surface.name} must define diagnostics")
+    for diagnostic in surface.diagnostics:
+        _normalize_required_text(diagnostic, "diagnostics")
+
+
+def _validate_direct_kafka_topic(
+    topic_definition: DirectKafkaTopicDefinition,
+    *,
+    direct_topic_names: set[str],
+    source_data_product_names: dict[str, str],
+    available_models: set[str] | None,
+) -> None:
+    _record_unique_name(
+        direct_topic_names,
+        topic_definition.name,
+        "name",
+        f"Duplicate direct Kafka topic definition: {topic_definition.name}",
+    )
+    payload_contract = _normalize_required_text(
+        topic_definition.payload_contract,
+        "payload_contract",
+    )
+    _normalize_required_text(topic_definition.topic, "topic")
+    _normalize_required_text(topic_definition.semantic_type, "semantic_type")
+    _normalize_required_text(topic_definition.producer_service, "producer_service")
+    _require_consumers_when_active(topic_definition.name, topic_definition.consumer_services)
+    _require_direct_topic_headers(topic_definition)
+    _require_source_or_evidence_link(
+        topic_definition.name,
+        source_data_products=topic_definition.source_data_products,
+        supportability_evidence=topic_definition.supportability_evidence,
+    )
+    _validate_evidence_bundles(topic_definition.supportability_evidence)
+    _validate_source_data_products(
+        topic_definition.name,
+        topic_definition.source_data_products,
+        source_data_product_names,
+    )
+    if (
+        available_models is not None
+        and not topic_definition.payload_contract.endswith("_command")
+        and payload_contract not in available_models
+    ):
+        raise ValueError(
+            f"{topic_definition.name} references missing payload contract: "
+            f"{topic_definition.payload_contract}"
+        )
+
+
+def _require_direct_topic_headers(topic_definition: DirectKafkaTopicDefinition) -> None:
+    if not topic_definition.idempotency_header_supported:
+        raise ValueError(f"{topic_definition.name} must support idempotency headers")
+    if not topic_definition.correlation_header_supported:
+        raise ValueError(f"{topic_definition.name} must support correlation headers")
 
 
 def _require_allowed(value: str, field_name: str, allowed: set[str]) -> None:

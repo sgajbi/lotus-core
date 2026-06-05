@@ -627,3 +627,9 @@ health before that claim is defensible.
      to `A (1)`, while the helper module reports `A (59.15)` maintainability.
      `ingestion_job_service.py` shrank from 1,045 SLOC to 990 SLOC and improved from `B (15.15)`
      to `B (16.96)`, leaving no B-ranked methods in the service.
+126. Reduced shared event supportability catalog validation complexity by extracting focused
+     validators for schema models, unique names, event definitions, governance flags,
+     source/evidence links, evidence bundles, source-data products, supportability surfaces,
+     direct Kafka topics, and direct-topic headers. `validate_event_supportability_catalog`
+     improved from `E (39)` to `A (5)`, all extracted helper functions are A-ranked, and
+     `event_supportability.py` remains `A (26.87)` maintainability.
