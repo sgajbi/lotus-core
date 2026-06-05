@@ -1206,3 +1206,9 @@ CR-1027 reduced cashflow calculator rule-cache lookup complexity by extracting f
 direct cache lookup, stale/missing cache refresh, and missing-rule reload helpers.
 `CashflowCalculatorConsumer._get_rule_for_transaction` improved from `B (7)` to `A (3)`, with all
 cache lookup helpers A-ranked by cyclomatic complexity.
+
+CR-1028 reduced cashflow calculator validated-event processing complexity by extracting
+physical/stale-replay early-stop helpers, epoch/semantic-duplicate early-stop helpers, and
+cashflow staging or non-cash lifecycle skip helpers.
+`CashflowCalculatorConsumer._process_validated_cashflow_event` improved from `B (7)` to `A (4)`,
+with all extracted decision helpers A-ranked by cyclomatic complexity.

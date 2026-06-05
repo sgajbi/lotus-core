@@ -375,25 +375,21 @@ class CashflowCalculatorConsumer(BaseConsumer):
             cashflow_repo = CashflowRepository(db)
             outbox_repo = OutboxRepository(db)
 
-            if not await self._claim_physical_event(
+            if await self._stop_after_physical_or_stale_replay(
+                db,
+                tx,
+                cashflow_repo,
                 idempotency_repo,
                 event,
                 event_id,
                 correlation_id,
+                msg.topic(),
             ):
-                await tx.rollback()
                 return
 
-            if await self._should_skip_stale_replay_event(cashflow_repo, event, msg.topic()):
-                await db.commit()
-                return
-
-            fencer = EpochFencer(db, service_name=SERVICE_NAME)
-            if not await fencer.check(event):
-                await tx.rollback()
-                return
-
-            if not await self._claim_semantic_event(
+            if await self._stop_after_fence_or_semantic_duplicate(
+                db,
+                tx,
                 idempotency_repo,
                 event,
                 event_id,
@@ -401,26 +397,91 @@ class CashflowCalculatorConsumer(BaseConsumer):
                 correlation_id,
                 msg.topic(),
             ):
-                await db.commit()
                 return
 
-            event_transaction_type = _validated_cashflow_transaction_type(event)
-            if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
-                await db.commit()
-                return
-
-            rule = await self._required_rule_for_transaction(db, event_transaction_type)
-            await _stage_cashflow_calculation(
+            await self._stage_or_skip_cashflow_calculation(
+                db,
                 cashflow_repo,
                 outbox_repo,
                 event,
-                rule,
                 correlation_id,
             )
-            await db.commit()
         except Exception:
             await tx.rollback()
             raise
+
+    async def _stop_after_physical_or_stale_replay(
+        self,
+        db,
+        tx,
+        cashflow_repo: CashflowRepository,
+        idempotency_repo: IdempotencyRepository,
+        event: TransactionEvent,
+        event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> bool:
+        if not await self._claim_physical_event(
+            idempotency_repo,
+            event,
+            event_id,
+            correlation_id,
+        ):
+            await tx.rollback()
+            return True
+        if await self._should_skip_stale_replay_event(cashflow_repo, event, topic):
+            await db.commit()
+            return True
+        return False
+
+    async def _stop_after_fence_or_semantic_duplicate(
+        self,
+        db,
+        tx,
+        idempotency_repo: IdempotencyRepository,
+        event: TransactionEvent,
+        event_id: str,
+        semantic_event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> bool:
+        fencer = EpochFencer(db, service_name=SERVICE_NAME)
+        if not await fencer.check(event):
+            await tx.rollback()
+            return True
+        if not await self._claim_semantic_event(
+            idempotency_repo,
+            event,
+            event_id,
+            semantic_event_id,
+            correlation_id,
+            topic,
+        ):
+            await db.commit()
+            return True
+        return False
+
+    async def _stage_or_skip_cashflow_calculation(
+        self,
+        db,
+        cashflow_repo: CashflowRepository,
+        outbox_repo: OutboxRepository,
+        event: TransactionEvent,
+        correlation_id: str,
+    ) -> None:
+        event_transaction_type = _validated_cashflow_transaction_type(event)
+        if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
+            await db.commit()
+            return
+        rule = await self._required_rule_for_transaction(db, event_transaction_type)
+        await _stage_cashflow_calculation(
+            cashflow_repo,
+            outbox_repo,
+            event,
+            rule,
+            correlation_id,
+        )
+        await db.commit()
 
     async def _claim_physical_event(
         self,
