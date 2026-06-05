@@ -764,3 +764,7 @@ health before that claim is defensible.
      async-driver, sync-driver, and scheme-replacement helpers. `_normalize_database_url_scheme`
      improved from `B (6)` to `A (2)`, and every shared DB helper function now reports A-ranked
      complexity.
+153. Reduced Kafka topic verification complexity by extracting admin-client construction,
+     required-topic verification, existing-topic metadata lookup, and missing-topic calculation
+     helpers. `ensure_topics_exist` improved from `B (6)` to `A (3)`, and every Kafka admin helper
+     function/class now reports A-ranked complexity.

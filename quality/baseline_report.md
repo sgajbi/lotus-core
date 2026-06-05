@@ -1022,3 +1022,8 @@ CR-996 reduced database URL scheme normalization complexity by extracting legacy
 async-driver, sync-driver, and scheme-replacement helpers. `_normalize_database_url_scheme`
 improved from `B (6)` to `A (2)`, every shared DB helper function reports A-ranked complexity, and
 `db.py` remains `A (66.86)` maintainability.
+
+CR-997 reduced Kafka topic verification complexity by extracting admin-client construction,
+required-topic verification, existing-topic metadata lookup, and missing-topic calculation helpers.
+`ensure_topics_exist` improved from `B (6)` to `A (3)`, every Kafka admin helper function/class
+reports A-ranked complexity, and `kafka_admin.py` remains `A (88.15)` maintainability.
