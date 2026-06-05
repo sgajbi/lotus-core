@@ -271,6 +271,71 @@ async def test_dlq_omits_unset_correlation_header(
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
+async def test_message_correlation_context_keeps_existing_context(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-context",
+        {"data": "value-context"},
+        headers=[("correlation_id", b"corr-header")],
+    )
+
+    token = correlation_id_var.set("corr-current")
+    try:
+        with test_consumer._message_correlation_context(
+            mock_msg,
+            fallback_correlation_id="corr-fallback",
+            prefer_fallback=True,
+        ) as correlation_id:
+            assert correlation_id == "corr-current"
+            assert correlation_id_var.get() == "corr-current"
+    finally:
+        correlation_id_var.reset(token)
+
+
+async def test_message_correlation_context_uses_header_before_fallback(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-header",
+        {"data": "value-header"},
+        headers=[("correlation_id", b"corr-header")],
+    )
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        with test_consumer._message_correlation_context(
+            mock_msg,
+            fallback_correlation_id="corr-fallback",
+        ) as correlation_id:
+            assert correlation_id == "corr-header"
+            assert correlation_id_var.get() == "corr-header"
+    finally:
+        correlation_id_var.reset(token)
+
+
+async def test_message_correlation_context_can_prefer_fallback(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-fallback",
+        {"data": "value-fallback"},
+        headers=[("correlation_id", b"corr-header")],
+    )
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        with test_consumer._message_correlation_context(
+            mock_msg,
+            fallback_correlation_id="corr-fallback",
+            prefer_fallback=True,
+        ) as correlation_id:
+            assert correlation_id == "corr-fallback"
+            assert correlation_id_var.get() == "corr-fallback"
+    finally:
+        correlation_id_var.reset(token)
+
+
 async def test_dlq_flush_timeout_does_not_record_event(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):

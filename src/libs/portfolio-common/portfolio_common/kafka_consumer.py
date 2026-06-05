@@ -178,17 +178,13 @@ class BaseConsumer(ABC):
         """
         current = correlation_id_var.get()
         token = None
-        resolved = current
+        resolved = self._resolve_context_correlation_id(
+            msg,
+            current,
+            fallback_correlation_id=fallback_correlation_id,
+            prefer_fallback=prefer_fallback,
+        )
         if normalize_lineage_value(current) is None:
-            header_correlation_id = self._get_message_header_correlation_id(msg)
-            if prefer_fallback and fallback_correlation_id:
-                resolved = fallback_correlation_id
-            elif header_correlation_id:
-                resolved = header_correlation_id
-            elif fallback_correlation_id:
-                resolved = fallback_correlation_id
-            else:
-                resolved = self._resolve_message_correlation_id(msg)
             token = correlation_id_var.set(resolved)
 
         try:
@@ -196,6 +192,40 @@ class BaseConsumer(ABC):
         finally:
             if token is not None:
                 correlation_id_var.reset(token)
+
+    def _resolve_context_correlation_id(
+        self,
+        msg: Message,
+        current: str,
+        *,
+        fallback_correlation_id: Optional[str],
+        prefer_fallback: bool,
+    ) -> str:
+        if normalize_lineage_value(current) is not None:
+            return current
+        header_correlation_id = self._get_message_header_correlation_id(msg)
+        return self._select_context_correlation_id(
+            msg,
+            header_correlation_id=header_correlation_id,
+            fallback_correlation_id=fallback_correlation_id,
+            prefer_fallback=prefer_fallback,
+        )
+
+    def _select_context_correlation_id(
+        self,
+        msg: Message,
+        *,
+        header_correlation_id: Optional[str],
+        fallback_correlation_id: Optional[str],
+        prefer_fallback: bool,
+    ) -> str:
+        if prefer_fallback and fallback_correlation_id:
+            return fallback_correlation_id
+        if header_correlation_id:
+            return header_correlation_id
+        if fallback_correlation_id:
+            return fallback_correlation_id
+        return self._resolve_message_correlation_id(msg)
 
     async def _send_to_dlq_async(self, msg: Message, error: Exception) -> bool:
         """

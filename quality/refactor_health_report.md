@@ -783,3 +783,7 @@ health before that claim is defensible.
      token checks with explicit ordered token groups and focused matching helpers.
      `classify_dlq_reason_code` improved from `C (12)` to `A (5)`, and direct taxonomy tests now
      cover validation, data-integrity, timeout, authorization, and unclassified outcomes.
+158. Reduced Kafka consumer message-correlation context complexity by extracting current/header/
+     fallback selection helpers. `BaseConsumer._message_correlation_context` improved from
+     `B (7)` to `A (3)`, and direct tests now prove existing-context preservation,
+     header-before-fallback precedence, and explicit fallback preference.
