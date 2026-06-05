@@ -58,6 +58,7 @@ from .ingestion_backlog_breakdown import (
     empty_backlog_breakdown_response,
 )
 from .ingestion_consumer_lag import load_consumer_lag_response
+from .ingestion_health_summary import load_health_summary_response
 from .ingestion_job_listing import (
     IngestionJobListFilters,
     build_cursor_lookup_statement,
@@ -444,41 +445,8 @@ class IngestionJobService:
         return []
 
     async def get_health_summary(self) -> IngestionHealthSummaryResponse:
-        async for db in get_async_db_session():
-            row = (
-                await db.execute(
-                    select(
-                        func.count(DBIngestionJob.id),
-                        func.sum(case((DBIngestionJob.status == "accepted", 1), else_=0)),
-                        func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)),
-                        func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)),
-                    )
-                )
-            ).one()
-            total_jobs = int(row[0] or 0)
-            accepted_jobs = int(row[1] or 0)
-            queued_jobs = int(row[2] or 0)
-            failed_jobs = int(row[3] or 0)
-            oldest_backlog_job_id = await db.scalar(
-                select(DBIngestionJob.job_id)
-                .where(DBIngestionJob.status.in_(("accepted", "queued")))
-                .order_by(DBIngestionJob.submitted_at.asc(), DBIngestionJob.id.asc())
-                .limit(1)
-            )
-            return IngestionHealthSummaryResponse(
-                total_jobs=total_jobs,
-                accepted_jobs=accepted_jobs,
-                queued_jobs=queued_jobs,
-                failed_jobs=failed_jobs,
-                backlog_jobs=accepted_jobs + queued_jobs,
-                oldest_backlog_job_id=oldest_backlog_job_id,
-            )
-        return IngestionHealthSummaryResponse(
-            total_jobs=0,
-            accepted_jobs=0,
-            queued_jobs=0,
-            failed_jobs=0,
-            backlog_jobs=0,
+        return await load_health_summary_response(
+            session_factory=get_async_db_session,
         )
 
     async def get_slo_status(

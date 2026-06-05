@@ -444,6 +444,37 @@ async def test_get_consumer_lag_classifies_dlq_pressure(
     assert [group.lag_severity for group in response.groups] == ["high", "medium", "low"]
 
 
+async def test_get_health_summary_maps_counts_and_oldest_backlog(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FakeResult:
+        def one(self):
+            return (10, 3, 2, 1)
+
+    class _FakeSession:
+        async def execute(self, _stmt):
+            return _FakeResult()
+
+        async def scalar(self, _stmt):
+            return "job_oldest"
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    response = await service.get_health_summary()
+
+    assert response.total_jobs == 10
+    assert response.accepted_jobs == 3
+    assert response.queued_jobs == 2
+    assert response.failed_jobs == 1
+    assert response.backlog_jobs == 5
+    assert response.oldest_backlog_job_id == "job_oldest"
+
+
 async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_metric(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,

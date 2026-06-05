@@ -827,3 +827,9 @@ classification, backlog summary stitching, and response assembly into `ingestion
 `get_consumer_lag` improved from `B (6)` to `A (1)`, while the helper module reports
 `A (55.85)` maintainability. `ingestion_job_service.py` shrank from 1,116 SLOC to 1,077 SLOC and
 improved from `B (12.63)` to `B (13.77)`.
+
+CR-968 reduced ingestion health-summary coupling by extracting aggregate counts, oldest-backlog
+lookup, backlog total calculation, and response assembly into `ingestion_health_summary.py`.
+`get_health_summary` improved from `B (6)` to `A (1)`, while the helper module reports
+`A (60.46)` maintainability. `ingestion_job_service.py` shrank from 1,077 SLOC to 1,045 SLOC and
+improved from `B (13.77)` to `B (15.15)`.
