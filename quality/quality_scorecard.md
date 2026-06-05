@@ -21,11 +21,12 @@ Status: Initial scorecard baseline on 2026-06-02.
 
 ## Current PR Evidence Snapshot
 
-Local evidence captured on 2026-06-05 after CR-964:
+Local evidence captured on 2026-06-05 after CR-969:
 
 - `make quality-ruff-gate` => passed
-- `make quality-ruff-format-gate` => passed; 1,151 files already formatted
-- `make quality-bandit-gate` => passed; Bandit reported 0 issues across `src`
+- `make quality-ruff-format-gate` => passed; 1,156 files already formatted
+- `make quality-bandit-gate` => passed; Bandit reported 0 issues across `src` and scanned
+  116,177 lines of code
 - `make quality-import-boundary-gate` => passed; 2 import-linter contracts kept
 - `make quality-vulture-source-gate` => passed
 - `make quality-deptry-source-gate` => passed; no dependency issues found
@@ -33,7 +34,10 @@ Local evidence captured on 2026-06-05 after CR-964:
 - `make api-vocabulary-gate` => passed
 - `make typecheck` => passed; 48 source files checked
 - `make no-alias-gate` => passed
-- `make warning-gate` => passed; 2,914 unit tests, 9 deselected, 0 warnings
+- `make monetary-float-guard` => passed; 2 findings, 17 allowlisted
+- `make quality-complexity-gate` => passed
+- `make quality-maintainability-gate` => passed; no source modules exceed C rank
+- `make warning-gate` => passed; 2,918 unit tests, 9 deselected, 0 warnings
 - Current measured source hotspots: `reference_data_dto.py` `B (9.31)` and
   `ingestion_job_service.py` `B (16.96)`; active non-generated C-ranked source hotspot list is
   clear.
