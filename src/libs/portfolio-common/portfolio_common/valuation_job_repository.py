@@ -66,70 +66,21 @@ class ValuationJobRepository:
 
         try:
             latest_epochs_by_scope = await self.get_latest_epochs_for_scopes(normalized_jobs)
-            eligible_jobs = [
-                job
-                for job in normalized_jobs
-                if not self._is_stale_job(job, latest_epochs_by_scope)
-            ]
+            eligible_jobs = self._eligible_jobs(normalized_jobs, latest_epochs_by_scope)
 
             if not eligible_jobs:
                 return 0
 
-            stmt = pg_insert(PortfolioValuationJob).values(
-                [
-                    {
-                        "portfolio_id": job.portfolio_id,
-                        "security_id": job.security_id,
-                        "valuation_date": job.valuation_date,
-                        "epoch": job.epoch,
-                        "status": "PENDING",
-                        "correlation_id": job.correlation_id,
-                    }
-                    for job in eligible_jobs
-                ]
-            )
-
-            update_dict = {
-                "status": "PENDING",
-                "correlation_id": stmt.excluded.correlation_id,
-                "updated_at": func.now(),
-            }
-
-            final_stmt = stmt.on_conflict_do_update(
-                index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
-                set_=update_dict,
-                where=not_(PortfolioValuationJob.status == "PROCESSING")
-                & not_(
-                    and_(
-                        PortfolioValuationJob.status.in_(("PENDING", "COMPLETE")),
-                        PortfolioValuationJob.correlation_id.is_not_distinct_from(
-                            stmt.excluded.correlation_id
-                        ),
-                    )
-                ),
-            )
-
-            result = await self.db.execute(
-                final_stmt.returning(
-                    PortfolioValuationJob.portfolio_id,
-                    PortfolioValuationJob.security_id,
-                    PortfolioValuationJob.valuation_date,
-                    PortfolioValuationJob.epoch,
-                )
-            )
-            staged_count = len(result.all())
+            staged_count = await self._execute_upsert_jobs(eligible_jobs)
             superseded_count = await self._skip_superseded_pending_jobs(
                 normalized_jobs=normalized_jobs,
                 latest_epochs_by_scope=latest_epochs_by_scope,
             )
-            logger.debug(
-                "Staged valuation job upserts",
-                extra={
-                    "requested_count": len(normalized_jobs),
-                    "eligible_count": len(eligible_jobs),
-                    "staged_count": staged_count,
-                    "superseded_count": superseded_count,
-                },
+            _log_staged_job_upsert(
+                requested_count=len(normalized_jobs),
+                eligible_count=len(eligible_jobs),
+                staged_count=staged_count,
+                superseded_count=superseded_count,
             )
             return staged_count
         except Exception:
@@ -141,6 +92,26 @@ class ValuationJobRepository:
                 exc_info=True,
             )
             raise
+
+    def _eligible_jobs(
+        self,
+        normalized_jobs: list[ValuationJobUpsert],
+        latest_epochs_by_scope: dict[tuple[str, str, date], int],
+    ) -> list[ValuationJobUpsert]:
+        return [
+            job for job in normalized_jobs if not self._is_stale_job(job, latest_epochs_by_scope)
+        ]
+
+    async def _execute_upsert_jobs(self, eligible_jobs: list[ValuationJobUpsert]) -> int:
+        result = await self.db.execute(
+            _valuation_job_upsert_stmt(eligible_jobs).returning(
+                PortfolioValuationJob.portfolio_id,
+                PortfolioValuationJob.security_id,
+                PortfolioValuationJob.valuation_date,
+                PortfolioValuationJob.epoch,
+            )
+        )
+        return len(result.all())
 
     def _normalize_jobs(self, jobs: Iterable[ValuationJobUpsert]) -> list[ValuationJobUpsert]:
         normalized_by_scope: dict[tuple[str, str, date, int], ValuationJobUpsert] = {}
@@ -273,3 +244,63 @@ class ValuationJobRepository:
             result = await self.db.execute(stmt)
             skipped_count += len(result.fetchall())
         return skipped_count
+
+
+def _valuation_job_upsert_stmt(eligible_jobs: list[ValuationJobUpsert]):
+    stmt = pg_insert(PortfolioValuationJob).values(_valuation_job_insert_values(eligible_jobs))
+    return stmt.on_conflict_do_update(
+        index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
+        set_=_valuation_job_update_values(stmt),
+        where=_valuation_job_conflict_update_predicate(stmt),
+    )
+
+
+def _valuation_job_insert_values(
+    eligible_jobs: list[ValuationJobUpsert],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "portfolio_id": job.portfolio_id,
+            "security_id": job.security_id,
+            "valuation_date": job.valuation_date,
+            "epoch": job.epoch,
+            "status": "PENDING",
+            "correlation_id": job.correlation_id,
+        }
+        for job in eligible_jobs
+    ]
+
+
+def _valuation_job_update_values(stmt) -> dict[str, object]:
+    return {
+        "status": "PENDING",
+        "correlation_id": stmt.excluded.correlation_id,
+        "updated_at": func.now(),
+    }
+
+
+def _valuation_job_conflict_update_predicate(stmt):
+    return not_(PortfolioValuationJob.status == "PROCESSING") & not_(
+        and_(
+            PortfolioValuationJob.status.in_(("PENDING", "COMPLETE")),
+            PortfolioValuationJob.correlation_id.is_not_distinct_from(stmt.excluded.correlation_id),
+        )
+    )
+
+
+def _log_staged_job_upsert(
+    *,
+    requested_count: int,
+    eligible_count: int,
+    staged_count: int,
+    superseded_count: int,
+) -> None:
+    logger.debug(
+        "Staged valuation job upserts",
+        extra={
+            "requested_count": requested_count,
+            "eligible_count": eligible_count,
+            "staged_count": staged_count,
+            "superseded_count": superseded_count,
+        },
+    )

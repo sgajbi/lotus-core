@@ -24,24 +24,46 @@ class KafkaTopicDefinition:
 
 
 def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
-    try:
-        safe_default = int(default)
-    except Exception:
-        safe_default = 0
+    safe_default = _safe_int_default(default)
+    value, raw = _load_env_int_value(name, safe_default)
+    return _enforce_env_int_minimum(
+        name=name,
+        raw=raw,
+        value=value,
+        safe_default=safe_default,
+        minimum=minimum,
+    )
 
+
+def _safe_int_default(default: int) -> int:
+    try:
+        return int(default)
+    except Exception:
+        return 0
+
+
+def _load_env_int_value(name: str, safe_default: int) -> tuple[int, str | None]:
     raw = os.getenv(name)
     if raw is None:
-        value = safe_default
-    else:
-        try:
-            value = int(raw)
-        except Exception:
-            logger.warning(
-                "Invalid integer env setting; falling back to default.",
-                extra={"setting": name, "raw_value": raw, "default": safe_default},
-            )
-            value = safe_default
+        return safe_default, raw
+    try:
+        return int(raw), raw
+    except Exception:
+        logger.warning(
+            "Invalid integer env setting; falling back to default.",
+            extra={"setting": name, "raw_value": raw, "default": safe_default},
+        )
+        return safe_default, raw
 
+
+def _enforce_env_int_minimum(
+    *,
+    name: str,
+    raw: str | None,
+    value: int,
+    safe_default: int,
+    minimum: int | None,
+) -> int:
     if minimum is not None and value < minimum:
         logger.warning(
             "Out-of-range integer env setting; falling back to default.",
@@ -394,6 +416,8 @@ _CONSUMER_ALLOWED_TYPES: dict[str, type] = {
     "queued.max.messages.kbytes": int,
 }
 _AUTO_OFFSET_RESET_ALLOWED_VALUES = {"earliest", "latest", "error"}
+_CONSUMER_DEFAULTS_ENV = "LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON"
+_CONSUMER_GROUP_OVERRIDES_ENV = "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON"
 _POSITIVE_INT_CONSUMER_KEYS = {
     "session.timeout.ms",
     "heartbeat.interval.ms",
@@ -409,40 +433,63 @@ _POSITIVE_INT_CONSUMER_KEYS = {
 def _coerce_consumer_config_value(key: str, value: object) -> object:
     expected = _CONSUMER_ALLOWED_TYPES[key]
     if expected is bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"1", "true", "yes", "on"}:
-                return True
-            if normalized in {"0", "false", "no", "off"}:
-                return False
-        raise ValueError(f"Expected bool for '{key}', got {value!r}")
+        return _coerce_consumer_bool_value(key, value)
     if expected is int:
-        if isinstance(value, bool):
-            raise ValueError(f"Expected int for '{key}', got {value!r}")
-        if isinstance(value, int):
-            coerced = value
-        elif isinstance(value, str):
-            coerced = int(value.strip())
-        else:
-            raise ValueError(f"Expected int for '{key}', got {value!r}")
-        if key in _POSITIVE_INT_CONSUMER_KEYS and coerced <= 0:
-            raise ValueError(f"Expected positive int for '{key}', got {value!r}")
-        return coerced
+        return _coerce_consumer_int_value(key, value)
     if expected is str:
-        if isinstance(value, str):
-            if key == "auto.offset.reset":
-                normalized = value.strip().lower()
-                if normalized not in _AUTO_OFFSET_RESET_ALLOWED_VALUES:
-                    raise ValueError(
-                        "Expected one of "
-                        f"{sorted(_AUTO_OFFSET_RESET_ALLOWED_VALUES)} for '{key}', got {value!r}"
-                    )
-                return normalized
-            return value
-        raise ValueError(f"Expected str for '{key}', got {value!r}")
+        return _coerce_consumer_str_value(key, value)
     return value
+
+
+def _coerce_consumer_bool_value(key: str, value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"Expected bool for '{key}', got {value!r}")
+
+
+def _coerce_consumer_int_value(key: str, value: object) -> int:
+    coerced = _parse_consumer_int_value(key, value)
+    _require_positive_consumer_int_value(key, value, coerced)
+    return coerced
+
+
+def _parse_consumer_int_value(key: str, value: object) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"Expected int for '{key}', got {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value.strip())
+    raise ValueError(f"Expected int for '{key}', got {value!r}")
+
+
+def _require_positive_consumer_int_value(key: str, value: object, coerced: int) -> None:
+    if key in _POSITIVE_INT_CONSUMER_KEYS and coerced <= 0:
+        raise ValueError(f"Expected positive int for '{key}', got {value!r}")
+
+
+def _coerce_consumer_str_value(key: str, value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"Expected str for '{key}', got {value!r}")
+    if key == "auto.offset.reset":
+        return _normalize_auto_offset_reset_value(key, value)
+    return value
+
+
+def _normalize_auto_offset_reset_value(key: str, value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in _AUTO_OFFSET_RESET_ALLOWED_VALUES:
+        raise ValueError(
+            "Expected one of "
+            f"{sorted(_AUTO_OFFSET_RESET_ALLOWED_VALUES)} for '{key}', got {value!r}"
+        )
+    return normalized
 
 
 def _sanitize_consumer_override_map(raw: object, *, context: str) -> dict[str, object]:
@@ -496,48 +543,56 @@ def get_kafka_consumer_runtime_overrides(group_id: str) -> dict[str, object]:
     - LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON: map keyed by group_id
     """
     merged: dict[str, object] = {}
-
-    defaults_raw = os.getenv("LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON", "").strip()
-    if defaults_raw:
-        try:
-            defaults = json.loads(defaults_raw)
-            merged.update(
-                _validate_consumer_override_relationships(
-                    _sanitize_consumer_override_map(
-                        defaults, context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON"
-                    ),
-                    context="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
-                )
-            )
-        except Exception as exc:
-            logger.warning("Invalid consumer defaults JSON; ignoring.", extra={"error": str(exc)})
-
-    group_raw = os.getenv("LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON", "").strip()
-    if group_raw:
-        try:
-            parsed = json.loads(group_raw)
-            if isinstance(parsed, dict):
-                group_cfg = parsed.get(group_id)
-                if group_cfg is not None:
-                    merged.update(
-                        _validate_consumer_override_relationships(
-                            _sanitize_consumer_override_map(
-                                group_cfg,
-                                context=(
-                                    f"LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON[{group_id}]"
-                                ),
-                            ),
-                            context=(f"LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON[{group_id}]"),
-                        )
-                    )
-            else:
-                logger.warning("Group overrides JSON must be an object; ignoring.")
-        except Exception as exc:
-            logger.warning(
-                "Invalid consumer group overrides JSON; ignoring.", extra={"error": str(exc)}
-            )
-
+    merged.update(_load_consumer_defaults_overrides())
+    merged.update(_load_consumer_group_overrides(group_id))
     return _validate_consumer_override_relationships(
         merged,
         context=f"merged Kafka consumer runtime overrides for group '{group_id}'",
     )
+
+
+def _load_consumer_defaults_overrides() -> dict[str, object]:
+    defaults_raw = os.getenv(_CONSUMER_DEFAULTS_ENV, "").strip()
+    if not defaults_raw:
+        return {}
+    try:
+        defaults = json.loads(defaults_raw)
+        return _validate_consumer_override_relationships(
+            _sanitize_consumer_override_map(defaults, context=_CONSUMER_DEFAULTS_ENV),
+            context=_CONSUMER_DEFAULTS_ENV,
+        )
+    except Exception as exc:
+        logger.warning("Invalid consumer defaults JSON; ignoring.", extra={"error": str(exc)})
+        return {}
+
+
+def _load_consumer_group_overrides(group_id: str) -> dict[str, object]:
+    group_raw = os.getenv(_CONSUMER_GROUP_OVERRIDES_ENV, "").strip()
+    if not group_raw:
+        return {}
+    try:
+        parsed = json.loads(group_raw)
+    except Exception as exc:
+        logger.warning(
+            "Invalid consumer group overrides JSON; ignoring.", extra={"error": str(exc)}
+        )
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning("Group overrides JSON must be an object; ignoring.")
+        return {}
+    group_cfg = parsed.get(group_id)
+    if group_cfg is None:
+        return {}
+    return _sanitize_consumer_group_overrides(group_id, group_cfg)
+
+
+def _sanitize_consumer_group_overrides(group_id: str, group_cfg: object) -> dict[str, object]:
+    context = _consumer_group_override_context(group_id)
+    return _validate_consumer_override_relationships(
+        _sanitize_consumer_override_map(group_cfg, context=context),
+        context=context,
+    )
+
+
+def _consumer_group_override_context(group_id: str) -> str:
+    return f"{_CONSUMER_GROUP_OVERRIDES_ENV}[{group_id}]"

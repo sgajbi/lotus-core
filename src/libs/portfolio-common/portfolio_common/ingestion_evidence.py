@@ -48,20 +48,49 @@ def build_source_batch_fingerprint(scope: SourceBatchIdentityScope) -> str:
 
 
 def classify_ingestion_outcome(counts: IngestionOutcomeCounts) -> str:
+    _validate_ingestion_outcome_counts(counts)
+    terminal_failures = _terminal_failure_count(counts)
+    return _classify_valid_ingestion_outcome(
+        accepted_count=counts.accepted_count,
+        rejected_count=counts.rejected_count,
+        quarantined_count=counts.quarantined_count,
+        terminal_failures=terminal_failures,
+    )
+
+
+def _validate_ingestion_outcome_counts(counts: IngestionOutcomeCounts) -> None:
     _require_non_negative(counts.accepted_count, "accepted_count")
     _require_non_negative(counts.rejected_count, "rejected_count")
     _require_non_negative(counts.quarantined_count, "quarantined_count")
 
-    terminal_failures = counts.rejected_count + counts.quarantined_count
-    if counts.accepted_count > 0 and terminal_failures > 0:
+
+def _terminal_failure_count(counts: IngestionOutcomeCounts) -> int:
+    return counts.rejected_count + counts.quarantined_count
+
+
+def _classify_valid_ingestion_outcome(
+    *,
+    accepted_count: int,
+    rejected_count: int,
+    quarantined_count: int,
+    terminal_failures: int,
+) -> str:
+    if _has_partial_ingestion_outcome(
+        accepted_count=accepted_count,
+        terminal_failures=terminal_failures,
+    ):
         return PARTIALLY_ACCEPTED
-    if counts.accepted_count > 0:
+    if accepted_count > 0:
         return ACCEPTED
-    if counts.quarantined_count > 0:
+    if quarantined_count > 0:
         return QUARANTINED
-    if counts.rejected_count > 0:
+    if rejected_count > 0:
         return REJECTED
     return EMPTY
+
+
+def _has_partial_ingestion_outcome(*, accepted_count: int, terminal_failures: int) -> bool:
+    return accepted_count > 0 and terminal_failures > 0
 
 
 def _canonical_batch_payload(scope: SourceBatchIdentityScope) -> dict[str, object]:

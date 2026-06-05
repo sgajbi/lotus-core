@@ -1,23 +1,12 @@
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import (
-    Integer,
-    String,
-    and_,
-    cast,
-    column,
-    func,
-    select,
-    tuple_,
-    update,
-    values,
-)
+from sqlalchemy import and_, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
-from sqlalchemy.types import Date
 
 from .config import DEFAULT_BUSINESS_CALENDAR_CODE
 from .currency_codes import normalize_currency_code
@@ -34,6 +23,10 @@ from .database_models import (
 )
 from .identifiers import normalize_lookup_identifier
 from .utils import async_timed
+from .valuation_snapshot_contiguity import (
+    build_contiguous_snapshot_dates_stmt,
+    contiguous_snapshot_dates_by_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -255,143 +248,10 @@ class ValuationRepositoryBase:
         if not states:
             return {}
 
-        keys_tuple = tuple((s.portfolio_id, s.security_id, s.epoch) for s in states)
-        first_open_dates = first_open_dates or {}
-
-        first_open_dates_rows = [
-            (
-                portfolio_id,
-                security_id,
-                epoch,
-                first_open_date,
-            )
-            for (portfolio_id, security_id, epoch), first_open_date in first_open_dates.items()
-        ]
-
-        s = aliased(PositionState)
-        dps = aliased(DailyPositionSnapshot)
-        max_business_date_subq = (
-            select(func.max(BusinessDate.date))
-            .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
-            .scalar_subquery()
+        result = await self.db.execute(
+            build_contiguous_snapshot_dates_stmt(states, first_open_dates or {})
         )
-
-        expected_start_date = cast(s.watermark_date + timedelta(days=1), Date)
-        join_first_open_dates = False
-
-        if first_open_dates_rows:
-            first_open_dates_table = (
-                values(
-                    column("portfolio_id", String),
-                    column("security_id", String),
-                    column("epoch", Integer),
-                    column("first_open_date", Date),
-                    name="first_open_dates",
-                )
-                .data(first_open_dates_rows)
-                .alias("first_open_dates")
-            )
-            expected_start_date = cast(
-                func.greatest(
-                    s.watermark_date + timedelta(days=1),
-                    func.coalesce(
-                        first_open_dates_table.c.first_open_date,
-                        s.watermark_date + timedelta(days=1),
-                    ),
-                ),
-                Date,
-            )
-            join_first_open_dates = True
-            correlate_targets = (s, first_open_dates_table)
-        else:
-            correlate_targets = (s,)
-
-        date_series_subq = (
-            select(
-                func.generate_series(
-                    expected_start_date,
-                    max_business_date_subq,
-                    timedelta(days=1),
-                )
-                .cast(Date)
-                .label("expected_date")
-            )
-            .correlate(*correlate_targets)
-            .subquery("date_series")
-        )
-        latest_history_quantity_for_snapshot = (
-            select(PositionHistory.quantity)
-            .where(
-                PositionHistory.portfolio_id == dps.portfolio_id,
-                PositionHistory.security_id == dps.security_id,
-                PositionHistory.epoch == dps.epoch,
-                PositionHistory.position_date <= dps.date,
-            )
-            .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
-            .limit(1)
-            .correlate(dps)
-            .scalar_subquery()
-        )
-        snapshot_quantity_matches_history = latest_history_quantity_for_snapshot.is_(None) | (
-            dps.quantity == latest_history_quantity_for_snapshot
-        )
-
-        first_gap_subq = (
-            (
-                select(func.min(date_series_subq.c.expected_date))
-                .select_from(
-                    date_series_subq.outerjoin(
-                        dps,
-                        (dps.portfolio_id == s.portfolio_id)
-                        & (dps.security_id == s.security_id)
-                        & (dps.epoch == s.epoch)
-                        & (dps.date == date_series_subq.c.expected_date)
-                        & snapshot_quantity_matches_history,
-                    )
-                )
-                .where(dps.id.is_(None))
-            )
-            .correlate(s)
-            .scalar_subquery()
-        )
-
-        latest_snapshot_subq = (
-            (
-                select(func.max(dps.date)).where(
-                    (dps.portfolio_id == s.portfolio_id)
-                    & (dps.security_id == s.security_id)
-                    & (dps.epoch == s.epoch)
-                    & snapshot_quantity_matches_history
-                )
-            )
-            .correlate(s)
-            .scalar_subquery()
-        )
-
-        stmt = (
-            select(
-                s.portfolio_id,
-                s.security_id,
-                cast(
-                    func.coalesce(first_gap_subq - timedelta(days=1), latest_snapshot_subq), Date
-                ).label("contiguous_date"),
-            )
-            .select_from(s)
-            .where(
-                tuple_(s.portfolio_id, s.security_id, s.epoch).in_(keys_tuple),
-                latest_snapshot_subq.isnot(None),
-            )
-        )
-        if join_first_open_dates:
-            stmt = stmt.outerjoin(
-                first_open_dates_table,
-                (first_open_dates_table.c.portfolio_id == s.portfolio_id)
-                & (first_open_dates_table.c.security_id == s.security_id)
-                & (first_open_dates_table.c.epoch == s.epoch),
-            )
-
-        result = await self.db.execute(stmt)
-        return {(row.portfolio_id, row.security_id): row.contiguous_date for row in result}
+        return contiguous_snapshot_dates_by_key(result)
 
     @async_timed(repository="ValuationRepository", method="get_states_needing_backfill")
     async def get_states_needing_backfill(
@@ -652,89 +512,70 @@ class ValuationRepositoryBase:
         self, timeout_minutes: int = 15, max_attempts: int = 3
     ) -> int:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        newer_epoch = aliased(PortfolioValuationJob)
-        stale_jobs_stmt = select(
-            PortfolioValuationJob.id,
-            PortfolioValuationJob.attempt_count,
-            self._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label("has_newer_epoch"),
-        ).where(
-            PortfolioValuationJob.status == "PROCESSING",
-            PortfolioValuationJob.updated_at < stale_threshold,
-        )
-        stale_rows = (await self.db.execute(stale_jobs_stmt)).all()
+        stale_rows = await self._find_stale_job_rows(stale_threshold)
         if not stale_rows:
             return 0
 
-        superseded_job_ids = [
-            row.id for row in stale_rows if getattr(row, "has_newer_epoch", False)
-        ]
-        remaining_rows = [row for row in stale_rows if row.id not in superseded_job_ids]
-        failed_job_ids = [row.id for row in remaining_rows if row.attempt_count >= max_attempts]
-        reset_job_ids = [row.id for row in remaining_rows if row.attempt_count < max_attempts]
-
-        if superseded_job_ids:
-            superseded_stmt = (
-                update(PortfolioValuationJob)
-                .where(
-                    PortfolioValuationJob.id.in_(superseded_job_ids),
-                    PortfolioValuationJob.status == "PROCESSING",
-                    PortfolioValuationJob.updated_at < stale_threshold,
-                )
-                .values(
-                    status="SKIPPED_SUPERSEDED",
-                    failure_reason="Superseded by newer valuation epoch.",
-                    updated_at=func.now(),
-                )
-                .execution_options(synchronize_session=False)
-            )
-            await self.db.execute(superseded_stmt)
-            logger.warning(
-                "Marked stale superseded valuation jobs as SKIPPED_SUPERSEDED.",
-                extra={"job_ids": superseded_job_ids},
-            )
-
-        if failed_job_ids:
-            failure_stmt = (
-                update(PortfolioValuationJob)
-                .where(
-                    PortfolioValuationJob.id.in_(failed_job_ids),
-                    PortfolioValuationJob.status == "PROCESSING",
-                    PortfolioValuationJob.updated_at < stale_threshold,
-                )
-                .values(
-                    status="FAILED",
-                    failure_reason="Stale processing timeout exceeded max attempts",
-                    updated_at=func.now(),
-                )
-                .execution_options(synchronize_session=False)
-            )
-            await self.db.execute(failure_stmt)
-            logger.warning(
-                "Marked stale valuation jobs as FAILED after max attempts.",
-                extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
-            )
-
-        if not reset_job_ids:
-            return 0
-
-        stmt = (
-            update(PortfolioValuationJob)
-            .where(
-                PortfolioValuationJob.id.in_(reset_job_ids),
-                PortfolioValuationJob.status == "PROCESSING",
-                PortfolioValuationJob.updated_at < stale_threshold,
-            )
-            .values(
-                status="PENDING",
-                updated_at=func.now(),
-            )
-            .returning(PortfolioValuationJob.id)
+        stale_job_groups = _classify_stale_valuation_jobs(stale_rows, max_attempts)
+        await self._mark_superseded_stale_jobs(
+            stale_job_groups.superseded_job_ids,
+            stale_threshold,
+        )
+        await self._mark_over_limit_stale_jobs_failed(
+            stale_job_groups.failed_job_ids,
+            stale_threshold,
+            max_attempts,
+        )
+        return await self._reset_retryable_stale_jobs(
+            stale_job_groups.reset_job_ids,
+            stale_threshold,
         )
 
-        result = await self.db.execute(stmt)
+    async def _find_stale_job_rows(self, stale_threshold: datetime) -> list[Any]:
+        result = await self.db.execute(_stale_valuation_jobs_stmt(stale_threshold, self))
+        return result.all()
+
+    async def _mark_superseded_stale_jobs(
+        self,
+        superseded_job_ids: list[int],
+        stale_threshold: datetime,
+    ) -> None:
+        if not superseded_job_ids:
+            return
+        await self.db.execute(
+            _superseded_stale_jobs_update_stmt(superseded_job_ids, stale_threshold)
+        )
+        logger.warning(
+            "Marked stale superseded valuation jobs as SKIPPED_SUPERSEDED.",
+            extra={"job_ids": superseded_job_ids},
+        )
+
+    async def _mark_over_limit_stale_jobs_failed(
+        self,
+        failed_job_ids: list[int],
+        stale_threshold: datetime,
+        max_attempts: int,
+    ) -> None:
+        if not failed_job_ids:
+            return
+        await self.db.execute(_failed_stale_jobs_update_stmt(failed_job_ids, stale_threshold))
+        logger.warning(
+            "Marked stale valuation jobs as FAILED after max attempts.",
+            extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
+        )
+
+    async def _reset_retryable_stale_jobs(
+        self,
+        reset_job_ids: list[int],
+        stale_threshold: datetime,
+    ) -> int:
+        if not reset_job_ids:
+            return 0
+        result = await self.db.execute(
+            _reset_stale_jobs_update_stmt(reset_job_ids, stale_threshold)
+        )
         reset_ids = result.fetchall()
         reset_count = len(reset_ids)
-
         if reset_count > 0:
             logger.warning(
                 "Reset %s stale valuation jobs from 'PROCESSING' to 'PENDING'.",
@@ -814,3 +655,107 @@ class ValuationRepositoryBase:
         return {
             (row.portfolio_id, row.security_id, row.epoch): row.first_open_date for row in result
         }
+
+
+@dataclass(frozen=True)
+class _StaleValuationJobGroups:
+    superseded_job_ids: list[int]
+    failed_job_ids: list[int]
+    reset_job_ids: list[int]
+
+
+def _classify_stale_valuation_jobs(
+    stale_rows: list[Any],
+    max_attempts: int,
+) -> _StaleValuationJobGroups:
+    superseded_job_ids = _superseded_stale_job_ids(stale_rows)
+    retryable_rows = _retryable_stale_rows(stale_rows, superseded_job_ids)
+    return _StaleValuationJobGroups(
+        superseded_job_ids=superseded_job_ids,
+        failed_job_ids=_over_limit_stale_job_ids(retryable_rows, max_attempts),
+        reset_job_ids=_resettable_stale_job_ids(retryable_rows, max_attempts),
+    )
+
+
+def _superseded_stale_job_ids(stale_rows: list[Any]) -> list[int]:
+    return [row.id for row in stale_rows if _has_newer_epoch(row)]
+
+
+def _retryable_stale_rows(stale_rows: list[Any], superseded_job_ids: list[int]) -> list[Any]:
+    return [row for row in stale_rows if row.id not in superseded_job_ids]
+
+
+def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
+    return [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+
+
+def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
+    return [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+
+def _has_newer_epoch(stale_row: Any) -> bool:
+    return bool(getattr(stale_row, "has_newer_epoch", False))
+
+
+def _stale_valuation_jobs_stmt(stale_threshold: datetime, repository: ValuationRepositoryBase):
+    newer_epoch = aliased(PortfolioValuationJob)
+    return select(
+        PortfolioValuationJob.id,
+        PortfolioValuationJob.attempt_count,
+        repository._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label("has_newer_epoch"),
+    ).where(
+        PortfolioValuationJob.status == "PROCESSING",
+        PortfolioValuationJob.updated_at < stale_threshold,
+    )
+
+
+def _superseded_stale_jobs_update_stmt(
+    superseded_job_ids: list[int],
+    stale_threshold: datetime,
+):
+    return (
+        _stale_jobs_update_stmt(superseded_job_ids, stale_threshold)
+        .values(
+            status="SKIPPED_SUPERSEDED",
+            failure_reason="Superseded by newer valuation epoch.",
+            updated_at=func.now(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _failed_stale_jobs_update_stmt(
+    failed_job_ids: list[int],
+    stale_threshold: datetime,
+):
+    return (
+        _stale_jobs_update_stmt(failed_job_ids, stale_threshold)
+        .values(
+            status="FAILED",
+            failure_reason="Stale processing timeout exceeded max attempts",
+            updated_at=func.now(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _reset_stale_jobs_update_stmt(
+    reset_job_ids: list[int],
+    stale_threshold: datetime,
+):
+    return (
+        _stale_jobs_update_stmt(reset_job_ids, stale_threshold)
+        .values(
+            status="PENDING",
+            updated_at=func.now(),
+        )
+        .returning(PortfolioValuationJob.id)
+    )
+
+
+def _stale_jobs_update_stmt(job_ids: list[int], stale_threshold: datetime):
+    return update(PortfolioValuationJob).where(
+        PortfolioValuationJob.id.in_(job_ids),
+        PortfolioValuationJob.status == "PROCESSING",
+        PortfolioValuationJob.updated_at < stale_threshold,
+    )

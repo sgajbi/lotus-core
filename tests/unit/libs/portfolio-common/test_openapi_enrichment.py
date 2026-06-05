@@ -1,4 +1,143 @@
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
+from portfolio_common.openapi_examples import build_schema_example, infer_description, infer_example
+
+
+def test_infer_example_preserves_ordered_fallback_policy() -> None:
+    assert infer_example("portfolioId", {"type": "string"}) == "DEMO_DPM_EUR_001"
+    assert infer_example("status", {"enum": ["BLOCKED", "ACTIVE"]}) == "ACTIVE"
+    assert infer_example("reviewStatus", {"enum": ["BLOCKED", "ACTIVE"]}) == "BLOCKED"
+    assert infer_example("tags", {"type": "array", "items": {"type": "string"}}) == [
+        "example_tags_item"
+    ]
+    assert infer_example("isActive", {"type": "boolean"}) is True
+    assert infer_example("ttlHours", {"type": "integer"}) == 24
+    assert infer_example("targetWeight", {"type": "number"}) == 0.125
+    assert infer_example("effectiveDate", {"type": "string", "format": "date"}) == "2026-02-27"
+    assert (
+        infer_example("completedAt", {"type": "string", "format": "date-time"})
+        == "2026-02-27T10:30:00Z"
+    )
+
+
+def test_infer_description_preserves_domain_rule_precedence() -> None:
+    assert infer_description("PositionRecord", "portfolioId", {"type": "string"}) == (
+        "Unique portfolio identifier."
+    )
+    assert (
+        infer_description(
+            "PositionRecord",
+            "asOfDate",
+            {"type": "string", "format": "date"},
+        )
+        == "Business date for as of date."
+    )
+    assert (
+        infer_description(
+            "PositionRecord",
+            "updatedAt",
+            {"type": "string", "format": "date-time"},
+        )
+        == "Timestamp for updated at."
+    )
+    assert infer_description("PositionRecord", "baseCurrency", {"type": "string"}) == (
+        "ISO currency code for base currency."
+    )
+    assert infer_description("PositionRecord", "marketValue", {"type": "number"}) == (
+        "Monetary value for market value."
+    )
+    assert infer_description("PositionRecord", "quantity", {"type": "number"}) == (
+        "Quantity value for quantity."
+    )
+    assert infer_description("PositionRecord", "price", {"type": "number"}) == (
+        "Rate/price value for price."
+    )
+    assert infer_description("PositionRecord", "lifecycleStatus", {"type": "string"}) == (
+        "Current status for lifecycle status."
+    )
+
+
+def test_build_schema_example_merges_all_of_object_variants() -> None:
+    schema = {
+        "allOf": [
+            {
+                "type": "object",
+                "properties": {"portfolio_id": {"type": "string"}},
+                "required": ["portfolio_id"],
+            },
+            {
+                "type": "object",
+                "properties": {"business_date": {"type": "string", "format": "date"}},
+                "required": ["business_date"],
+            },
+        ]
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {
+        "portfolio_id": "example_value",
+        "business_date": "2026-02-27",
+    }
+
+
+def test_build_schema_example_uses_first_available_one_of_variant() -> None:
+    schema = {
+        "oneOf": [
+            {"type": "string", "title": "status", "enum": ["PENDING", "DONE"]},
+            {"type": "integer", "title": "version"},
+        ]
+    }
+
+    assert build_schema_example(schema, root_schema={}) == "ACTIVE"
+
+
+def test_build_schema_example_prefers_explicit_example_before_structured_inference() -> None:
+    schema = {
+        "type": "object",
+        "example": {"explicit": True},
+        "properties": {"status": {"type": "string"}},
+        "required": ["status"],
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {"explicit": True}
+
+
+def test_build_schema_example_uses_title_for_primitive_fallback() -> None:
+    assert (
+        build_schema_example(
+            {"type": "string", "title": "reviewStatus", "enum": ["PENDING", "DONE"]},
+            root_schema={},
+        )
+        == "PENDING"
+    )
+
+
+def test_build_schema_example_includes_optional_property_with_generic_fallback() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "required_status": {"type": "string"},
+            "optional_empty": {},
+        },
+        "required": ["required_status"],
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {
+        "required_status": "example_value",
+        "optional_empty": "value_example",
+    }
+
+
+def test_build_schema_example_uses_required_property_fallback() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "required_empty": {},
+        },
+        "required": ["required_empty"],
+    }
+
+    assert build_schema_example(schema, root_schema={}) == {
+        "required_empty": "value_example",
+    }
 
 
 def test_enrich_openapi_schema_populates_missing_operation_docs() -> None:

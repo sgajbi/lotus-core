@@ -31,6 +31,15 @@ def test_resolve_valuation_unit_price_preserves_bond_price_already_in_unit_terms
     ) == Decimal("1013.5")
 
 
+def test_resolve_valuation_unit_price_preserves_zero_quantity_bond_price():
+    assert resolve_valuation_unit_price(
+        market_price=Decimal("101.35"),
+        quantity=Decimal("0"),
+        cost_basis_local=Decimal("178704"),
+        product_type="bond",
+    ) == Decimal("101.35")
+
+
 def test_resolve_valuation_unit_price_accepts_stringable_numeric_inputs():
     assert resolve_valuation_unit_price(
         market_price="101.35",

@@ -203,6 +203,45 @@ async def test_run_loop_commit_failure_does_not_send_to_dlq(
     assert "Offset commit failed after successful processing" in mock_warning.call_args.args[0]
 
 
+async def test_run_loop_fatal_consumer_error_stops_without_processing(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_error = MagicMock()
+    mock_error.fatal.return_value = True
+    mock_msg = create_mock_message("key-fatal", {"data": "value-fatal"}, error=mock_error)
+    mock_confluent_consumer.poll.return_value = mock_msg
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_not_awaited()
+    mock_confluent_consumer.commit.assert_not_called()
+    assert "Fatal consumer error" in mock_log_error.call_args.args[0]
+
+
+async def test_run_loop_nonfatal_consumer_error_skips_message(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_error = MagicMock()
+    mock_error.fatal.return_value = False
+    error_msg = create_mock_message("key-warning", {"data": "value-warning"}, error=mock_error)
+    valid_msg = create_mock_message("key-after-warning", {"data": "value-after-warning"})
+    mock_confluent_consumer.poll.side_effect = [error_msg, valid_msg]
+
+    async def stop_loop_after_processing(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = stop_loop_after_processing
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(valid_msg)
+    mock_confluent_consumer.commit.assert_called_once_with(message=valid_msg, asynchronous=False)
+    warning_messages = [call.args[0] for call in mock_warning.call_args_list]
+    assert any("Non-fatal consumer error" in message for message in warning_messages)
+
+
 async def test_dlq_payload_is_correct(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -271,6 +310,71 @@ async def test_dlq_omits_unset_correlation_header(
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
+async def test_message_correlation_context_keeps_existing_context(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-context",
+        {"data": "value-context"},
+        headers=[("correlation_id", b"corr-header")],
+    )
+
+    token = correlation_id_var.set("corr-current")
+    try:
+        with test_consumer._message_correlation_context(
+            mock_msg,
+            fallback_correlation_id="corr-fallback",
+            prefer_fallback=True,
+        ) as correlation_id:
+            assert correlation_id == "corr-current"
+            assert correlation_id_var.get() == "corr-current"
+    finally:
+        correlation_id_var.reset(token)
+
+
+async def test_message_correlation_context_uses_header_before_fallback(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-header",
+        {"data": "value-header"},
+        headers=[("correlation_id", b"corr-header")],
+    )
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        with test_consumer._message_correlation_context(
+            mock_msg,
+            fallback_correlation_id="corr-fallback",
+        ) as correlation_id:
+            assert correlation_id == "corr-header"
+            assert correlation_id_var.get() == "corr-header"
+    finally:
+        correlation_id_var.reset(token)
+
+
+async def test_message_correlation_context_can_prefer_fallback(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-fallback",
+        {"data": "value-fallback"},
+        headers=[("correlation_id", b"corr-header")],
+    )
+
+    token = correlation_id_var.set("<not-set>")
+    try:
+        with test_consumer._message_correlation_context(
+            mock_msg,
+            fallback_correlation_id="corr-fallback",
+            prefer_fallback=True,
+        ) as correlation_id:
+            assert correlation_id == "corr-fallback"
+            assert correlation_id_var.get() == "corr-fallback"
+    finally:
+        correlation_id_var.reset(token)
+
+
 async def test_dlq_flush_timeout_does_not_record_event(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -319,6 +423,20 @@ async def test_classify_dlq_reason_code_timeout():
         classify_dlq_reason_code(RuntimeError("downstream timeout while reading response"))
         == "DOWNSTREAM_TIMEOUT"
     )
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_reason_code"),
+    [
+        (ValueError("required portfolio_id is missing"), "VALIDATION_ERROR"),
+        (RuntimeError("foreign key constraint failed"), "DATA_INTEGRITY_ERROR"),
+        (TimeoutError("deadline exceeded while calling downstream"), "DOWNSTREAM_TIMEOUT"),
+        (PermissionError("access denied by policy"), "AUTHORIZATION_ERROR"),
+        (RuntimeError("worker stopped unexpectedly"), "UNCLASSIFIED_PROCESSING_ERROR"),
+    ],
+)
+async def test_classify_dlq_reason_code_taxonomy(error, expected_reason_code):
+    assert classify_dlq_reason_code(error) == expected_reason_code
 
 
 async def test_consumer_applies_runtime_overrides(monkeypatch):
@@ -427,6 +545,34 @@ async def test_shutdown_wakes_consumer_before_close(
 
     mock_confluent_consumer.wakeup.assert_called_once()
     mock_confluent_consumer.close.assert_called_once()
+
+
+async def test_shutdown_continues_to_close_when_wakeup_fails(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_confluent_consumer.wakeup.side_effect = RuntimeError("wakeup failed")
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
+        test_consumer.shutdown()
+
+    mock_confluent_consumer.close.assert_called_once()
+    assert "Consumer wakeup failed during shutdown." in mock_warning.call_args.args[0]
+
+
+async def test_shutdown_logs_close_failure_without_raising(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_confluent_consumer.close.side_effect = RuntimeError("close failed")
+
+    with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
+        test_consumer.shutdown()
+
+    mock_confluent_consumer.wakeup.assert_called_once()
+    assert "Consumer close failed during shutdown." in mock_log_error.call_args.args[0]
 
 
 async def test_shutdown_logs_close_and_flush_failures_without_raising(

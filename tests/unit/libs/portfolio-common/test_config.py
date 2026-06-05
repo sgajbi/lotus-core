@@ -1,6 +1,7 @@
 import importlib
 import logging
 
+import pytest
 from portfolio_common.config import (
     _coerce_consumer_config_value,
     _env_bool,
@@ -40,6 +41,15 @@ def test_rejects_boolean_for_integer_consumer_setting():
 
 def test_accepts_integer_string_for_integer_consumer_setting():
     assert _coerce_consumer_config_value("max.poll.interval.ms", "180000") == 180000
+
+
+def test_accepts_boolean_string_for_boolean_consumer_setting():
+    assert _coerce_consumer_config_value("enable.auto.commit", "off") is False
+
+
+def test_rejects_non_string_consumer_string_setting():
+    with pytest.raises(ValueError, match="Expected str"):
+        _coerce_consumer_config_value("auto.offset.reset", 123)
 
 
 def test_env_int_falls_back_for_invalid_value(caplog, monkeypatch):

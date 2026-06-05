@@ -19,6 +19,8 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
 )
+from src.services.query_service.app.services.analytics_export_jobs import analytics_export_jsonable
+from src.services.query_service.app.services.analytics_quality import timeseries_data_quality_status
 from src.services.query_service.app.services.analytics_timeseries_service import (
     AnalyticsInputError,
     AnalyticsTimeseriesService,
@@ -1107,7 +1109,7 @@ def test_position_cash_flows_for_keys_preserves_non_position_amounts() -> None:
 
 def test_timeseries_data_quality_status_classifies_empty_and_missing_windows() -> None:
     assert (
-        AnalyticsTimeseriesService._timeseries_data_quality_status(  # pylint: disable=protected-access
+        timeseries_data_quality_status(
             required_count=0,
             observed_count=0,
             stale_count=0,
@@ -1115,7 +1117,7 @@ def test_timeseries_data_quality_status_classifies_empty_and_missing_windows() -
         == "UNKNOWN"
     )
     assert (
-        AnalyticsTimeseriesService._timeseries_data_quality_status(  # pylint: disable=protected-access
+        timeseries_data_quality_status(
             required_count=3,
             observed_count=2,
             stale_count=0,
@@ -3050,8 +3052,7 @@ async def test_get_export_result_ndjson_gzip() -> None:
 
 
 def test_jsonable_converts_decimal_and_date() -> None:
-    service = make_service()
-    converted = service._jsonable(  # pylint: disable=protected-access
+    converted = analytics_export_jsonable(
         {"amount": Decimal("1.23"), "as_of_date": date(2025, 1, 1), "nested": [Decimal("2.00")]}
     )
     assert converted == {

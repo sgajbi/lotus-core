@@ -75,6 +75,54 @@ def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
     return amount
 
 
+FEE_COMPONENT_FIELDS = ("brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees")
+
+
+def _pop_fee_components(event_dict: dict[str, Any]) -> dict[str, object]:
+    return {field_name: event_dict.pop(field_name, None) for field_name in FEE_COMPONENT_FIELDS}
+
+
+def _has_fee_components(fee_components: dict[str, object]) -> bool:
+    return any(value is not None for value in fee_components.values())
+
+
+def _normalize_fee_components(fee_components: dict[str, object]) -> dict[str, Decimal]:
+    return {
+        field_name: _normalize_fee_amount(value, field_name=field_name)
+        for field_name, value in fee_components.items()
+    }
+
+
+def _apply_engine_fee_fields(
+    *,
+    event_dict: dict[str, Any],
+    resolved_trade_fee: Decimal,
+    normalized_components: dict[str, Decimal],
+    has_fee_components: bool,
+) -> None:
+    if has_fee_components:
+        event_dict["fees"] = {
+            field_name: str(amount) for field_name, amount in normalized_components.items()
+        }
+        event_dict["trade_fee"] = str(resolved_trade_fee)
+        return
+
+    if resolved_trade_fee and resolved_trade_fee > 0:
+        event_dict["fees"] = {"brokerage": str(resolved_trade_fee)}
+        event_dict["trade_fee"] = str(resolved_trade_fee)
+        return
+
+    event_dict["trade_fee"] = "0"
+
+
+def _message_value(msg: Message) -> str:
+    return msg.value().decode("utf-8")
+
+
+def _message_event_id(msg: Message) -> str:
+    return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+
+
 class FxRateNotFoundError(Exception):
     """Raised when a required FX rate is not yet available in the database."""
 
@@ -148,36 +196,19 @@ class CostCalculatorConsumer(BaseConsumer):
             event_dict.pop("trade_fee", "0"),
             field_name="trade_fee",
         )
-        brokerage = event_dict.pop("brokerage", None)
-        stamp_duty = event_dict.pop("stamp_duty", None)
-        exchange_fee = event_dict.pop("exchange_fee", None)
-        gst = event_dict.pop("gst", None)
-        other_fees = event_dict.pop("other_fees", None)
-
-        fee_components = {
-            "brokerage": brokerage,
-            "stamp_duty": stamp_duty,
-            "exchange_fee": exchange_fee,
-            "gst": gst,
-            "other_fees": other_fees,
-        }
-        normalized_components = {
-            key: _normalize_fee_amount(value, field_name=key)
-            for key, value in fee_components.items()
-        }
+        fee_components = _pop_fee_components(event_dict)
+        has_fee_components = _has_fee_components(fee_components)
+        normalized_components = _normalize_fee_components(fee_components)
         resolved_trade_fee = resolve_transaction_trade_fee(
             trade_fee,
-            normalized_components if any(v is not None for v in fee_components.values()) else {},
+            normalized_components if has_fee_components else {},
         )
-        if any(v is not None for v in fee_components.values()):
-            normalized = {key: str(value) for key, value in normalized_components.items()}
-            event_dict["fees"] = normalized
-            event_dict["trade_fee"] = str(resolved_trade_fee)
-        elif resolved_trade_fee and resolved_trade_fee > 0:
-            event_dict["fees"] = {"brokerage": str(resolved_trade_fee)}
-            event_dict["trade_fee"] = str(resolved_trade_fee)
-        else:
-            event_dict["trade_fee"] = "0"
+        _apply_engine_fee_fields(
+            event_dict=event_dict,
+            resolved_trade_fee=resolved_trade_fee,
+            normalized_components=normalized_components,
+            has_fee_components=has_fee_components,
+        )
 
         return event_dict
 
@@ -497,28 +528,27 @@ class CostCalculatorConsumer(BaseConsumer):
         repo: CostCalculatorRepository,
         reconciled_bundle_groups: set[tuple[str, str]],
     ) -> None:
-        if not is_ca_bundle_a_transaction_type(processed_event.transaction_type):
+        group_key = self._bundle_a_reconciliation_key(processed_event)
+        if group_key is None:
             return
-        linked_group = (processed_event.linked_transaction_group_id or "").strip()
-        parent_ref = (processed_event.parent_event_reference or "").strip()
-        if not linked_group or not parent_ref:
-            return
-        group_key = (linked_group, parent_ref)
         if group_key in reconciled_bundle_groups:
             return
 
-        group_txns = await repo.get_bundle_a_group_transactions(
-            portfolio_id=processed_event.portfolio_id,
-            linked_transaction_group_id=linked_group,
-            parent_event_reference=parent_ref,
+        linked_group, parent_ref = group_key
+        group_events = await self._load_bundle_a_group_events(
+            processed_event=processed_event,
+            repo=repo,
+            linked_group=linked_group,
+            parent_ref=parent_ref,
         )
-        group_events = [TransactionEvent.model_validate(t) for t in group_txns]
         reconciliation = evaluate_ca_bundle_a_reconciliation(
             group_events,
             basis_tolerance=DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
         )
-        available_ids = {event.transaction_id for event in group_events}
-        missing_dependencies = find_missing_ca_bundle_a_dependencies(processed_event, available_ids)
+        missing_dependencies = self._bundle_a_missing_dependencies(
+            processed_event=processed_event,
+            group_events=group_events,
+        )
         self._log_bundle_a_reconciliation(
             processed_event=processed_event,
             linked_group=linked_group,
@@ -527,6 +557,49 @@ class CostCalculatorConsumer(BaseConsumer):
             missing_dependencies=missing_dependencies,
         )
         reconciled_bundle_groups.add(group_key)
+
+    @staticmethod
+    def _bundle_a_reconciliation_key(processed_event: TransactionEvent) -> tuple[str, str] | None:
+        if not is_ca_bundle_a_transaction_type(processed_event.transaction_type):
+            return None
+        return CostCalculatorConsumer._complete_bundle_a_reconciliation_key(
+            linked_group=(processed_event.linked_transaction_group_id or "").strip(),
+            parent_ref=(processed_event.parent_event_reference or "").strip(),
+        )
+
+    @staticmethod
+    def _complete_bundle_a_reconciliation_key(
+        *,
+        linked_group: str,
+        parent_ref: str,
+    ) -> tuple[str, str] | None:
+        if linked_group and parent_ref:
+            return linked_group, parent_ref
+        return None
+
+    @staticmethod
+    async def _load_bundle_a_group_events(
+        *,
+        processed_event: TransactionEvent,
+        repo: CostCalculatorRepository,
+        linked_group: str,
+        parent_ref: str,
+    ) -> list[TransactionEvent]:
+        group_txns = await repo.get_bundle_a_group_transactions(
+            portfolio_id=processed_event.portfolio_id,
+            linked_transaction_group_id=linked_group,
+            parent_event_reference=parent_ref,
+        )
+        return [TransactionEvent.model_validate(transaction) for transaction in group_txns]
+
+    @staticmethod
+    def _bundle_a_missing_dependencies(
+        *,
+        processed_event: TransactionEvent,
+        group_events: list[TransactionEvent],
+    ) -> list[str]:
+        available_ids = {event.transaction_id for event in group_events}
+        return find_missing_ca_bundle_a_dependencies(processed_event, available_ids)
 
     @staticmethod
     def _log_bundle_a_reconciliation(
@@ -625,98 +698,115 @@ class CostCalculatorConsumer(BaseConsumer):
         reraise=True,
     )
     async def process_message(self, msg: Message):
-        value = msg.value().decode("utf-8")
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
         event = None
 
         try:
-            data = json.loads(value)
+            data = json.loads(_message_value(msg))
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=data.get("correlation_id"),
             ) as correlation_id:
                 event = TransactionEvent.model_validate(data)
+                await self._process_valid_cost_event(
+                    event=event,
+                    event_id=_message_event_id(msg),
+                    correlation_id=correlation_id,
+                )
 
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        repo = CostCalculatorRepository(db)
-                        idempotency_repo = IdempotencyRepository(db)
-                        outbox_repo = OutboxRepository(db)
+        except Exception as exc:
+            await self._handle_process_message_error(msg, event, exc)
 
-                        if not await idempotency_repo.claim_event_processing(
-                            event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
-                        ):
-                            logger.warning("Event already processed. Skipping.")
-                            return
+    async def _process_valid_cost_event(
+        self,
+        *,
+        event: TransactionEvent,
+        event_id: str,
+        correlation_id: str,
+    ) -> None:
+        async for db in get_async_db_session():
+            async with db.begin():
+                repo = CostCalculatorRepository(db)
+                idempotency_repo = IdempotencyRepository(db)
+                outbox_repo = OutboxRepository(db)
 
-                        portfolio = await repo.get_portfolio(event.portfolio_id)
-                        if not portfolio:
-                            raise PortfolioNotFoundError(
-                                f"Portfolio {event.portfolio_id} not found. Retrying..."
-                            )
-                        instrument = await repo.get_instrument(event.security_id)
+                if not await idempotency_repo.claim_event_processing(
+                    event_id,
+                    event.portfolio_id,
+                    SERVICE_NAME,
+                    correlation_id,
+                ):
+                    logger.warning("Event already processed. Skipping.")
+                    return
 
-                        (
-                            event,
-                            event_transaction_type,
-                            cost_basis_method,
-                        ) = await self._prepare_transaction_event(event, portfolio)
-                        (
-                            events_to_publish,
-                            instrument_events_to_publish,
-                        ) = await self._build_events_to_publish(
-                            event=event,
-                            event_transaction_type=event_transaction_type,
-                            portfolio=portfolio,
-                            instrument=instrument,
-                            repo=repo,
-                            cost_basis_method=cost_basis_method,
-                        )
-                        emitted_events = await self._build_emitted_transaction_events(
-                            events_to_publish=events_to_publish,
-                            repo=repo,
-                        )
-                        await self._publish_transaction_events(
-                            original_event=event,
-                            emitted_events=emitted_events,
-                            outbox_repo=outbox_repo,
-                            correlation_id=correlation_id,
-                        )
-                        await self._publish_instrument_events(
-                            instrument_events=instrument_events_to_publish,
-                            outbox_repo=outbox_repo,
-                            correlation_id=correlation_id,
-                        )
+                portfolio = await repo.get_portfolio(event.portfolio_id)
+                if not portfolio:
+                    raise PortfolioNotFoundError(
+                        f"Portfolio {event.portfolio_id} not found. Retrying..."
+                    )
+                instrument = await repo.get_instrument(event.security_id)
 
-        except (json.JSONDecodeError, ValidationError) as e:
-            logger.error(f"Invalid TransactionEvent; sending to DLQ. Error: {e}", exc_info=True)
+                (
+                    event,
+                    event_transaction_type,
+                    cost_basis_method,
+                ) = await self._prepare_transaction_event(event, portfolio)
+                (
+                    events_to_publish,
+                    instrument_events_to_publish,
+                ) = await self._build_events_to_publish(
+                    event=event,
+                    event_transaction_type=event_transaction_type,
+                    portfolio=portfolio,
+                    instrument=instrument,
+                    repo=repo,
+                    cost_basis_method=cost_basis_method,
+                )
+                emitted_events = await self._build_emitted_transaction_events(
+                    events_to_publish=events_to_publish,
+                    repo=repo,
+                )
+                await self._publish_transaction_events(
+                    original_event=event,
+                    emitted_events=emitted_events,
+                    outbox_repo=outbox_repo,
+                    correlation_id=correlation_id,
+                )
+                await self._publish_instrument_events(
+                    instrument_events=instrument_events_to_publish,
+                    outbox_repo=outbox_repo,
+                    correlation_id=correlation_id,
+                )
+
+    async def _handle_process_message_error(
+        self,
+        msg: Message,
+        event: TransactionEvent | None,
+        exc: Exception,
+    ) -> None:
+        if isinstance(exc, (json.JSONDecodeError, ValidationError)):
+            logger.error(f"Invalid TransactionEvent; sending to DLQ. Error: {exc}", exc_info=True)
             await self._send_to_dlq_async(msg, ValueError("invalid payload"))
-        except (FxRateNotFoundError, UpstreamCashLegUnavailableError) as e:
-            # Missing FX is a temporal dependency issue. Defer the message so Kafka can redeliver
-            # after additional FX events are persisted instead of DLQing the transaction.
-            BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
-            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
-                SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
+            return
+        if isinstance(exc, (FxRateNotFoundError, UpstreamCashLegUnavailableError)):
+            self._record_process_message_failure(event, "retryable_error")
             logger.warning(
                 "FX dependency not available yet; deferring message without DLQ.", exc_info=True
             )
-            raise RetryableConsumerError(str(e))
-        except (DBAPIError, IntegrityError, PortfolioNotFoundError):
-            BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
-            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
-                SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "retryable_error").inc()
+            raise RetryableConsumerError(str(exc))
+        if isinstance(exc, (DBAPIError, IntegrityError, PortfolioNotFoundError)):
+            self._record_process_message_failure(event, "retryable_error")
             logger.warning("DB or data availability error; will retry...", exc_info=True)
-            raise
-        except Exception as e:
-            BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", "failed").inc()
-            if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
-                SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", "failed").inc()
-            transaction_id = getattr(event, "transaction_id", "UNKNOWN")
-            logger.error(
-                f"Unexpected error processing transaction {transaction_id}. Sending to DLQ.",
-                exc_info=True,
-            )
-            await self._send_to_dlq_async(msg, e)
+            raise exc
+        self._record_process_message_failure(event, "failed")
+        transaction_id = getattr(event, "transaction_id", "UNKNOWN")
+        logger.error(
+            f"Unexpected error processing transaction {transaction_id}. Sending to DLQ.",
+            exc_info=True,
+        )
+        await self._send_to_dlq_async(msg, exc)
+
+    @staticmethod
+    def _record_process_message_failure(event: TransactionEvent | None, status: str) -> None:
+        BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", status).inc()
+        if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
+            SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", status).inc()

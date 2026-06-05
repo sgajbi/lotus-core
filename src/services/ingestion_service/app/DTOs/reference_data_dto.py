@@ -4,11 +4,29 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from portfolio_common.currency_codes import (
-    normalize_currency_code,
-    normalize_optional_currency_code,
-)
+from portfolio_common.currency_codes import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator, model_validator
+
+from . import reference_data_client_preference_dto as _client_preference_dto
+from . import reference_data_instrument_eligibility_dto as _instrument_eligibility_dto
+from . import reference_data_tax_dto as _tax_dto
+
+ClientRestrictionProfileIngestionRequest = (
+    _client_preference_dto.ClientRestrictionProfileIngestionRequest
+)
+ClientRestrictionProfileRecord = _client_preference_dto.ClientRestrictionProfileRecord
+SustainabilityPreferenceProfileIngestionRequest = (
+    _client_preference_dto.SustainabilityPreferenceProfileIngestionRequest
+)
+SustainabilityPreferenceProfileRecord = _client_preference_dto.SustainabilityPreferenceProfileRecord
+ClientTaxProfileIngestionRequest = _tax_dto.ClientTaxProfileIngestionRequest
+ClientTaxProfileRecord = _tax_dto.ClientTaxProfileRecord
+ClientTaxRuleSetIngestionRequest = _tax_dto.ClientTaxRuleSetIngestionRequest
+ClientTaxRuleSetRecord = _tax_dto.ClientTaxRuleSetRecord
+InstrumentEligibilityProfileIngestionRequest = (
+    _instrument_eligibility_dto.InstrumentEligibilityProfileIngestionRequest
+)
+InstrumentEligibilityProfileRecord = _instrument_eligibility_dto.InstrumentEligibilityProfileRecord
 
 
 class PortfolioBenchmarkAssignmentRecord(BaseModel):
@@ -190,215 +208,6 @@ class DiscretionaryMandateBindingRecord(BaseModel):
     model_config = ConfigDict()
 
 
-class ClientRestrictionProfileRecord(BaseModel):
-    client_id: str = Field(..., description="Client identifier bound to the restriction profile.")
-    portfolio_id: str = Field(..., description="Portfolio identifier for the restriction profile.")
-    mandate_id: str | None = Field(
-        None, description="Mandate identifier when the restriction is mandate-specific."
-    )
-    restriction_scope: Literal[
-        "client", "mandate", "instrument", "issuer", "country", "asset_class"
-    ] = Field(..., description="Bounded restriction scope.")
-    restriction_code: str = Field(
-        ..., description="Machine-readable restriction code.", examples=["NO_PRIVATE_CREDIT_BUY"]
-    )
-    restriction_status: Literal["active", "inactive", "suspended"] = Field(
-        "active", description="Restriction lifecycle status."
-    )
-    restriction_source: str = Field(
-        ..., description="Source channel that captured the restriction."
-    )
-    applies_to_buy: bool = Field(True, description="Whether the restriction applies to buys.")
-    applies_to_sell: bool = Field(False, description="Whether the restriction applies to sells.")
-    instrument_ids: list[str] = Field(default_factory=list)
-    asset_classes: list[str] = Field(default_factory=list)
-    issuer_ids: list[str] = Field(default_factory=list)
-    country_codes: list[str] = Field(default_factory=list)
-    effective_from: date = Field(..., description="Restriction effective start date.")
-    effective_to: date | None = Field(None, description="Restriction effective end date.")
-    restriction_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
-
-    @model_validator(mode="after")
-    def validate_effective_window(self) -> "ClientRestrictionProfileRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        scoped_values = (
-            self.instrument_ids or self.asset_classes or self.issuer_ids or self.country_codes
-        )
-        if self.restriction_scope not in {"client", "mandate"} and not scoped_values:
-            raise ValueError("scoped restrictions must include at least one scoped identifier")
-        return self
-
-    model_config = ConfigDict()
-
-
-class SustainabilityPreferenceProfileRecord(BaseModel):
-    client_id: str = Field(..., description="Client identifier bound to the preference profile.")
-    portfolio_id: str = Field(..., description="Portfolio identifier for the preference profile.")
-    mandate_id: str | None = Field(
-        None, description="Mandate identifier when the preference is mandate-specific."
-    )
-    preference_framework: str = Field(
-        ..., description="Framework or policy vocabulary for the preference."
-    )
-    preference_code: str = Field(
-        ..., description="Machine-readable sustainability preference code."
-    )
-    preference_status: Literal["active", "inactive", "suspended"] = Field(
-        "active", description="Preference lifecycle status."
-    )
-    preference_source: str = Field(..., description="Source channel that captured the preference.")
-    minimum_allocation: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(None)
-    maximum_allocation: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(None)
-    applies_to_asset_classes: list[str] = Field(default_factory=list)
-    exclusion_codes: list[str] = Field(default_factory=list)
-    positive_tilt_codes: list[str] = Field(default_factory=list)
-    effective_from: date = Field(..., description="Preference effective start date.")
-    effective_to: date | None = Field(None, description="Preference effective end date.")
-    preference_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
-
-    @model_validator(mode="after")
-    def validate_profile(self) -> "SustainabilityPreferenceProfileRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        if (
-            self.minimum_allocation is not None
-            and self.maximum_allocation is not None
-            and self.minimum_allocation > self.maximum_allocation
-        ):
-            raise ValueError("minimum_allocation must be less than or equal to maximum_allocation")
-        if not (
-            self.exclusion_codes or self.positive_tilt_codes or self.minimum_allocation is not None
-        ):
-            raise ValueError(
-                "sustainability preference must include an exclusion, tilt, or allocation bound"
-            )
-        return self
-
-    model_config = ConfigDict()
-
-
-class ClientTaxProfileRecord(BaseModel):
-    client_id: str = Field(..., description="Client identifier bound to the tax profile.")
-    portfolio_id: str = Field(..., description="Portfolio identifier for the tax profile.")
-    mandate_id: str | None = Field(
-        None, description="Mandate identifier when the profile is mandate-specific."
-    )
-    tax_profile_id: str = Field(..., description="Source-owned tax profile identifier.")
-    tax_residency_country: str = Field(
-        ..., description="Client tax-residency country from the source system."
-    )
-    booking_tax_jurisdiction: str = Field(
-        ..., description="Booking-center tax jurisdiction from the source system."
-    )
-    tax_status: Literal["TAXABLE", "TAX_EXEMPT", "WITHHOLDING_EXEMPT", "UNKNOWN"] = Field(
-        ..., description="Bounded tax status from the source system."
-    )
-    profile_status: Literal["active", "inactive", "suspended"] = Field(
-        "active", description="Tax profile lifecycle status."
-    )
-    withholding_tax_rate: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(
-        None, description="Reference withholding rate ratio when supplied by the source."
-    )
-    capital_gains_tax_applicable: bool = Field(False)
-    income_tax_applicable: bool = Field(False)
-    treaty_codes: list[str] = Field(default_factory=list)
-    eligible_account_types: list[str] = Field(default_factory=list)
-    effective_from: date = Field(..., description="Tax profile effective start date.")
-    effective_to: date | None = Field(None, description="Tax profile effective end date.")
-    profile_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
-
-    @model_validator(mode="after")
-    def validate_profile(self) -> "ClientTaxProfileRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        if self.tax_status == "UNKNOWN" and (
-            self.withholding_tax_rate is not None
-            or self.capital_gains_tax_applicable
-            or self.income_tax_applicable
-            or self.treaty_codes
-        ):
-            raise ValueError("UNKNOWN tax_status cannot carry applicable tax detail")
-        return self
-
-    model_config = ConfigDict()
-
-
-class ClientTaxRuleSetRecord(BaseModel):
-    client_id: str = Field(..., description="Client identifier bound to the tax rule set.")
-    portfolio_id: str = Field(..., description="Portfolio identifier for the tax rule set.")
-    mandate_id: str | None = Field(
-        None, description="Mandate identifier when the rule is mandate-specific."
-    )
-    rule_set_id: str = Field(..., description="Source-owned tax rule-set identifier.")
-    tax_year: int = Field(..., ge=1900, le=2100, description="Tax year for the rule reference.")
-    jurisdiction_code: str = Field(..., description="Tax jurisdiction code for the rule.")
-    rule_code: str = Field(..., description="Machine-readable tax rule code.")
-    rule_category: Literal[
-        "WITHHOLDING", "CAPITAL_GAINS", "INCOME", "TRANSACTION_TAX", "REPORTING", "OTHER"
-    ] = Field(..., description="Bounded tax rule category.")
-    rule_status: Literal["active", "inactive", "suspended"] = Field(
-        "active", description="Rule lifecycle status."
-    )
-    rule_source: str = Field(..., description="Source channel that published the rule.")
-    applies_to_asset_classes: list[str] = Field(default_factory=list)
-    applies_to_security_ids: list[str] = Field(default_factory=list)
-    applies_to_income_types: list[str] = Field(default_factory=list)
-    rate: condecimal(ge=Decimal(0), le=Decimal(1)) | None = Field(None)
-    threshold_amount: condecimal(ge=Decimal(0)) | None = Field(None)
-    threshold_currency: str | None = Field(
-        None,
-        description=(
-            "Canonical three-letter currency for the threshold amount when the tax rule "
-            "contains monetary threshold evidence."
-        ),
-    )
-    effective_from: date = Field(..., description="Tax rule effective start date.")
-    effective_to: date | None = Field(None, description="Tax rule effective end date.")
-    rule_version: int = Field(1, ge=1)
-    source_system: str | None = Field(None)
-    source_record_id: str | None = Field(None)
-    observed_at: datetime | None = Field(None)
-    quality_status: str = Field("accepted")
-
-    @field_validator("threshold_currency", mode="before")
-    @classmethod
-    def _normalize_threshold_currency(cls, value: object) -> str | None:
-        return normalize_optional_currency_code(value)
-
-    @model_validator(mode="after")
-    def validate_rule(self) -> "ClientTaxRuleSetRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        if self.threshold_amount is not None and not self.threshold_currency:
-            raise ValueError("threshold_currency is required when threshold_amount is supplied")
-        if self.threshold_currency and self.threshold_amount is None:
-            raise ValueError("threshold_amount is required when threshold_currency is supplied")
-        if not (
-            self.applies_to_asset_classes
-            or self.applies_to_security_ids
-            or self.applies_to_income_types
-            or self.rate is not None
-            or self.threshold_amount is not None
-        ):
-            raise ValueError("tax rule set records must carry bounded rule evidence")
-        return self
-
-    model_config = ConfigDict()
-
-
 class ClientIncomeNeedsScheduleRecord(BaseModel):
     client_id: str = Field(..., description="Client identifier bound to the income-needs schedule.")
     portfolio_id: str = Field(..., description="Portfolio identifier for the schedule.")
@@ -529,93 +338,6 @@ class PlannedWithdrawalScheduleRecord(BaseModel):
     @classmethod
     def _normalize_currency(cls, value: object) -> str:
         return normalize_currency_code(value)
-
-    model_config = ConfigDict()
-
-
-class InstrumentEligibilityProfileRecord(BaseModel):
-    security_id: str = Field(
-        ..., description="Canonical instrument/security identifier.", examples=["AAPL"]
-    )
-    eligibility_status: Literal["APPROVED", "RESTRICTED", "SELL_ONLY", "BANNED", "UNKNOWN"] = Field(
-        ..., description="DPM eligibility status for this instrument.", examples=["APPROVED"]
-    )
-    product_shelf_status: Literal["APPROVED", "RESTRICTED", "SELL_ONLY", "BANNED", "SUSPENDED"] = (
-        Field(..., description="Product shelf status used by DPM execution.", examples=["APPROVED"])
-    )
-    buy_allowed: bool = Field(
-        ..., description="Whether DPM may create buy orders for this instrument.", examples=[True]
-    )
-    sell_allowed: bool = Field(
-        ..., description="Whether DPM may create sell orders for this instrument.", examples=[True]
-    )
-    restriction_reason_codes: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Bounded restriction codes. Sensitive free-text rationale is not returned by the "
-            "DPM API."
-        ),
-        examples=[["PRIVATE_ASSET_REVIEW"]],
-    )
-    restriction_rationale: str | None = Field(
-        None,
-        description="Operator-only source rationale retained for audit; not exposed downstream.",
-        examples=["Investment office review required before new buys."],
-    )
-    settlement_days: int = Field(
-        ..., description="Expected settlement cycle in business days.", ge=0, examples=[2]
-    )
-    settlement_calendar_id: str = Field(
-        ..., description="Settlement calendar identifier.", examples=["US_NYSE"]
-    )
-    liquidity_tier: Literal["L1", "L2", "L3", "L4", "L5"] | None = Field(
-        None, description="Liquidity tier used by DPM controls.", examples=["L1"]
-    )
-    issuer_id: str | None = Field(None, description="Direct issuer identifier.", examples=["APPLE"])
-    issuer_name: str | None = Field(
-        None, description="Direct issuer name.", examples=["Apple Inc."]
-    )
-    ultimate_parent_issuer_id: str | None = Field(
-        None, description="Ultimate parent issuer identifier.", examples=["APPLE_PARENT"]
-    )
-    ultimate_parent_issuer_name: str | None = Field(
-        None, description="Ultimate parent issuer name.", examples=["Apple Inc."]
-    )
-    asset_class: str | None = Field(None, description="Asset class label.", examples=["Equity"])
-    country_of_risk: str | None = Field(None, description="Country of risk.", examples=["US"])
-    effective_from: date = Field(
-        ..., description="Eligibility effective start date.", examples=["2026-04-01"]
-    )
-    effective_to: date | None = Field(
-        None, description="Eligibility effective end date, null when open-ended.", examples=None
-    )
-    eligibility_version: int = Field(
-        1, description="Eligibility version used for effective-date tie-breaks.", ge=1
-    )
-    source_system: str | None = Field(
-        None, description="Upstream shelf/compliance source system.", examples=["product_shelf"]
-    )
-    source_record_id: str | None = Field(
-        None, description="Source record identifier for replay.", examples=["AAPL-elig-20260401"]
-    )
-    observed_at: datetime | None = Field(
-        None, description="Timestamp when the source observed or published this profile."
-    )
-    quality_status: str = Field(
-        "accepted",
-        description="Data quality status for the eligibility profile.",
-        examples=["accepted"],
-    )
-
-    @model_validator(mode="after")
-    def validate_effective_window(self) -> "InstrumentEligibilityProfileRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        if self.product_shelf_status in {"BANNED", "SUSPENDED"} and self.buy_allowed:
-            raise ValueError("buy_allowed must be false for banned or suspended instruments")
-        if self.product_shelf_status == "BANNED" and self.sell_allowed:
-            raise ValueError("sell_allowed must be false for banned instruments")
-        return self
 
     model_config = ConfigDict()
 
@@ -1330,117 +1052,6 @@ class DiscretionaryMandateBindingIngestionRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class ClientRestrictionProfileIngestionRequest(BaseModel):
-    restriction_profiles: list[ClientRestrictionProfileRecord] = Field(
-        ...,
-        description="Effective-dated client restriction profile records to ingest or upsert.",
-        min_length=1,
-    )
-
-    @model_validator(mode="after")
-    def validate_profile_uniqueness(self) -> "ClientRestrictionProfileIngestionRequest":
-        keys = [
-            (
-                profile.client_id,
-                profile.portfolio_id,
-                profile.restriction_code,
-                profile.effective_from,
-                profile.restriction_version,
-            )
-            for profile in self.restriction_profiles
-        ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("restriction_profiles contains duplicate effective records")
-        return self
-
-    model_config = ConfigDict()
-
-
-class SustainabilityPreferenceProfileIngestionRequest(BaseModel):
-    sustainability_preferences: list[SustainabilityPreferenceProfileRecord] = Field(
-        ...,
-        description=(
-            "Effective-dated sustainability preference profile records to ingest or upsert."
-        ),
-        min_length=1,
-    )
-
-    @model_validator(mode="after")
-    def validate_preference_uniqueness(
-        self,
-    ) -> "SustainabilityPreferenceProfileIngestionRequest":
-        keys = [
-            (
-                profile.client_id,
-                profile.portfolio_id,
-                profile.preference_framework,
-                profile.preference_code,
-                profile.effective_from,
-                profile.preference_version,
-            )
-            for profile in self.sustainability_preferences
-        ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("sustainability_preferences contains duplicate effective records")
-        return self
-
-    model_config = ConfigDict()
-
-
-class ClientTaxProfileIngestionRequest(BaseModel):
-    tax_profiles: list[ClientTaxProfileRecord] = Field(
-        ...,
-        description="Effective-dated client tax profile records to ingest or upsert.",
-        min_length=1,
-    )
-
-    @model_validator(mode="after")
-    def validate_profile_uniqueness(self) -> "ClientTaxProfileIngestionRequest":
-        keys = [
-            (
-                profile.client_id,
-                profile.portfolio_id,
-                profile.tax_profile_id,
-                profile.effective_from,
-                profile.profile_version,
-            )
-            for profile in self.tax_profiles
-        ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("tax_profiles contains duplicate effective records")
-        return self
-
-    model_config = ConfigDict()
-
-
-class ClientTaxRuleSetIngestionRequest(BaseModel):
-    tax_rule_sets: list[ClientTaxRuleSetRecord] = Field(
-        ...,
-        description="Effective-dated client tax rule-set records to ingest or upsert.",
-        min_length=1,
-    )
-
-    @model_validator(mode="after")
-    def validate_rule_uniqueness(self) -> "ClientTaxRuleSetIngestionRequest":
-        keys = [
-            (
-                rule.client_id,
-                rule.portfolio_id,
-                rule.rule_set_id,
-                rule.jurisdiction_code,
-                rule.rule_code,
-                rule.effective_from,
-                rule.rule_version,
-            )
-            for rule in self.tax_rule_sets
-        ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("tax_rule_sets contains duplicate effective records")
-        return self
-
-    model_config = ConfigDict()
-
-
 class ClientIncomeNeedsScheduleIngestionRequest(BaseModel):
     income_needs_schedules: list[ClientIncomeNeedsScheduleRecord] = Field(
         ...,
@@ -1512,26 +1123,6 @@ class PlannedWithdrawalScheduleIngestionRequest(BaseModel):
         ]
         if len(keys) != len(set(keys)):
             raise ValueError("planned_withdrawal_schedules contains duplicate effective records")
-        return self
-
-    model_config = ConfigDict()
-
-
-class InstrumentEligibilityProfileIngestionRequest(BaseModel):
-    eligibility_profiles: list[InstrumentEligibilityProfileRecord] = Field(
-        ...,
-        description="Effective-dated instrument eligibility profiles to ingest or upsert.",
-        min_length=1,
-    )
-
-    @model_validator(mode="after")
-    def validate_profile_uniqueness(self) -> "InstrumentEligibilityProfileIngestionRequest":
-        keys = [
-            (profile.security_id, profile.effective_from, profile.eligibility_version)
-            for profile in self.eligibility_profiles
-        ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("eligibility_profiles contains duplicate effective records")
         return self
 
     model_config = ConfigDict()

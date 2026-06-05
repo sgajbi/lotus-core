@@ -30,7 +30,22 @@ def validate_dividend_transaction(
     txn: DividendCanonicalTransaction, *, strict_metadata: bool = False
 ) -> list[DividendValidationIssue]:
     issues: list[DividendValidationIssue] = []
+    _validate_dividend_transaction_type(issues, txn)
+    _validate_settlement_date_presence(issues, txn)
+    _validate_zero_quantity(issues, txn)
+    _validate_zero_price(issues, txn)
+    _validate_positive_gross_amount(issues, txn)
+    _validate_currency_fields(issues, txn)
+    _validate_date_order(issues, txn)
+    _validate_strict_metadata(issues, txn, strict_metadata=strict_metadata)
+    _validate_cash_entry_policy(issues, txn)
+    return issues
 
+
+def _validate_dividend_transaction_type(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     if normalize_transaction_control_code(txn.transaction_type) != "DIVIDEND":
         issues.append(
             DividendValidationIssue(
@@ -40,6 +55,11 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_settlement_date_presence(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     if txn.settlement_date is None:
         issues.append(
             DividendValidationIssue(
@@ -49,6 +69,11 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_zero_quantity(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     if txn.quantity != Decimal(0):
         issues.append(
             DividendValidationIssue(
@@ -58,6 +83,11 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_zero_price(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     if txn.price != Decimal(0):
         issues.append(
             DividendValidationIssue(
@@ -67,6 +97,11 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_positive_gross_amount(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     if txn.gross_transaction_amount <= 0:
         issues.append(
             DividendValidationIssue(
@@ -76,6 +111,11 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_currency_fields(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     if not txn.trade_currency:
         issues.append(
             DividendValidationIssue(
@@ -94,6 +134,11 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_date_order(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     if txn.settlement_date is not None and txn.transaction_date > txn.settlement_date:
         issues.append(
             DividendValidationIssue(
@@ -103,34 +148,70 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_strict_metadata(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+    *,
+    strict_metadata: bool,
+) -> None:
     if strict_metadata:
-        if not txn.economic_event_id or not txn.linked_transaction_group_id:
-            issues.append(
-                DividendValidationIssue(
-                    code=DividendValidationReasonCode.MISSING_LINKAGE_IDENTIFIER,
-                    field="economic_event_id",
-                    message=(
-                        "economic_event_id and linked_transaction_group_id are required "
-                        "under strict metadata validation."
-                    ),
-                )
-            )
+        _validate_strict_linkage_metadata(issues, txn)
+        _validate_strict_policy_metadata(issues, txn)
 
-        if not txn.calculation_policy_id or not txn.calculation_policy_version:
-            issues.append(
-                DividendValidationIssue(
-                    code=DividendValidationReasonCode.MISSING_POLICY_METADATA,
-                    field="calculation_policy_id",
-                    message=(
-                        "calculation_policy_id and calculation_policy_version are required "
-                        "under strict metadata validation."
-                    ),
-                )
-            )
 
+def _validate_strict_linkage_metadata(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
+    if not txn.economic_event_id or not txn.linked_transaction_group_id:
+        issues.append(
+            DividendValidationIssue(
+                code=DividendValidationReasonCode.MISSING_LINKAGE_IDENTIFIER,
+                field="economic_event_id",
+                message=(
+                    "economic_event_id and linked_transaction_group_id are required "
+                    "under strict metadata validation."
+                ),
+            )
+        )
+
+
+def _validate_strict_policy_metadata(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
+    if not txn.calculation_policy_id or not txn.calculation_policy_version:
+        issues.append(
+            DividendValidationIssue(
+                code=DividendValidationReasonCode.MISSING_POLICY_METADATA,
+                field="calculation_policy_id",
+                message=(
+                    "calculation_policy_id and calculation_policy_version are required "
+                    "under strict metadata validation."
+                ),
+            )
+        )
+
+
+def _validate_cash_entry_policy(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+) -> None:
     cash_entry_mode = normalize_cash_entry_mode(txn.cash_entry_mode)
     has_explicit_cash_entry_mode = txn.cash_entry_mode is not None
+    _validate_auto_generated_cash_entry(issues, txn, has_explicit_cash_entry_mode, cash_entry_mode)
+    _validate_upstream_provided_cash_entry(
+        issues, txn, has_explicit_cash_entry_mode, cash_entry_mode
+    )
 
+
+def _validate_auto_generated_cash_entry(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+    has_explicit_cash_entry_mode: bool,
+    cash_entry_mode: str,
+) -> None:
     if (
         has_explicit_cash_entry_mode
         and cash_entry_mode == AUTO_GENERATE_CASH_ENTRY_MODE
@@ -146,6 +227,13 @@ def validate_dividend_transaction(
             )
         )
 
+
+def _validate_upstream_provided_cash_entry(
+    issues: list[DividendValidationIssue],
+    txn: DividendCanonicalTransaction,
+    has_explicit_cash_entry_mode: bool,
+    cash_entry_mode: str,
+) -> None:
     if has_explicit_cash_entry_mode and is_upstream_provided_cash_entry_mode(cash_entry_mode):
         if not txn.external_cash_transaction_id:
             issues.append(
@@ -158,5 +246,3 @@ def validate_dividend_transaction(
                     ),
                 )
             )
-
-    return issues

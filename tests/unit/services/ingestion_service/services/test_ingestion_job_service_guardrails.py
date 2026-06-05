@@ -413,6 +413,97 @@ async def test_get_reprocessing_queue_health_aggregates_by_job_type(
     assert response.queues[0].oldest_pending_age_seconds > 0
 
 
+async def test_get_consumer_lag_classifies_dlq_pressure(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    now = datetime.now(UTC)
+
+    class _FakeSession:
+        async def execute(self, _stmt):
+            return [
+                ("consumer-a", "topic-a", 25, now),
+                ("consumer-b", "topic-b", 5, now - timedelta(seconds=10)),
+                ("consumer-c", "topic-c", 1, now - timedelta(seconds=20)),
+            ]
+
+    async def _mock_get_health_summary():
+        return SimpleNamespace(backlog_jobs=7)
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+    monkeypatch.setattr(service, "get_health_summary", _mock_get_health_summary)
+
+    response = await service.get_consumer_lag(lookback_minutes=30, limit=3)
+
+    assert response.backlog_jobs == 7
+    assert response.total_groups == 3
+    assert [group.lag_severity for group in response.groups] == ["high", "medium", "low"]
+
+
+async def test_get_health_summary_maps_counts_and_oldest_backlog(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FakeResult:
+        def one(self):
+            return (10, 3, 2, 1)
+
+    class _FakeSession:
+        async def execute(self, _stmt):
+            return _FakeResult()
+
+        async def scalar(self, _stmt):
+            return "job_oldest"
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    response = await service.get_health_summary()
+
+    assert response.total_jobs == 10
+    assert response.accepted_jobs == 3
+    assert response.queued_jobs == 2
+    assert response.failed_jobs == 1
+    assert response.backlog_jobs == 5
+    assert response.oldest_backlog_job_id == "job_oldest"
+
+
+async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    now = datetime.now(UTC)
+
+    class _FakeSession:
+        async def execute(self, _stmt):
+            return [
+                ("key_shared", 3, 2, ["positions", "transactions"], now, now),
+                ("key_single", 1, 1, ["transactions"], now, now),
+            ]
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    response = await service.get_idempotency_diagnostics(lookback_minutes=60, limit=2)
+
+    assert response.total_keys == 2
+    assert response.collisions == 1
+    assert response.keys[0].idempotency_key == "key_shared"
+    assert response.keys[0].collision_detected is True
+    assert response.keys[0].endpoints == ["positions", "transactions"]
+    assert response.keys[1].collision_detected is False
+
+
 async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_metric(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
@@ -530,6 +621,68 @@ async def test_record_consumer_dlq_replay_audit_increments_failure_metric(
         replay_status="failed",
     ).calls == [1]
     assert duplicate_counter.handles == {}
+
+
+async def test_list_replay_audits_maps_ordered_rows(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    now = datetime.now(UTC)
+
+    class _FakeScalarResult:
+        def all(self):
+            return [
+                SimpleNamespace(
+                    replay_id="replay_2",
+                    recovery_path="consumer_dlq_replay",
+                    event_id="event_2",
+                    replay_fingerprint="fp_2",
+                    correlation_id="corr-2",
+                    job_id="job_2",
+                    endpoint="/ingest/positions",
+                    replay_status="failed",
+                    dry_run=False,
+                    replay_reason="publish failed",
+                    requested_by="ops-token",
+                    requested_at=now,
+                    completed_at=now,
+                ),
+                SimpleNamespace(
+                    replay_id="replay_1",
+                    recovery_path="consumer_dlq_replay",
+                    event_id="event_1",
+                    replay_fingerprint="fp_1",
+                    correlation_id="corr-1",
+                    job_id="job_1",
+                    endpoint="/ingest/transactions",
+                    replay_status="dry_run",
+                    dry_run=True,
+                    replay_reason="incident review",
+                    requested_by="ops-token",
+                    requested_at=now - timedelta(minutes=1),
+                    completed_at=now - timedelta(minutes=1),
+                ),
+            ]
+
+    class _FakeSession:
+        async def scalars(self, _stmt):
+            return _FakeScalarResult()
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    audits = await service.list_replay_audits(
+        limit=2,
+        recovery_path="consumer_dlq_replay",
+        replay_status="failed",
+    )
+
+    assert [audit.replay_id for audit in audits] == ["replay_2", "replay_1"]
+    assert audits[0].dry_run is False
+    assert audits[1].dry_run is True
 
 
 async def test_record_consumer_dlq_replay_audit_increments_bookkeeping_failure_metric(

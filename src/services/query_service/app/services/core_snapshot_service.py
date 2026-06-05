@@ -34,7 +34,8 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.position_repository import PositionRepository
 from ..repositories.price_repository import MarketPriceRepository
 from ..repositories.simulation_repository import SimulationRepository
-from .control_code_normalization import normalize_control_code
+from .core_snapshot_baseline_metadata import baseline_freshness_metadata
+from .core_snapshot_baseline_positions import baseline_position_entries
 from .core_snapshot_calculations import (
     assign_baseline_weights,
     assign_projected_weights,
@@ -42,11 +43,20 @@ from .core_snapshot_calculations import (
     total_market_value_baseline,
     total_market_value_projected,
 )
-from .decimal_amounts import decimal_or_none, decimal_or_zero
-from .position_flow_effects import transaction_quantity_effect_decimal
+from .core_snapshot_instrument_enrichment import (
+    instrument_enrichment_records,
+    requested_instrument_security_ids,
+)
+from .core_snapshot_projected_positions import (
+    apply_baseline_projected_values,
+    apply_projected_position_changes,
+    baseline_projected_positions,
+    filtered_projected_positions,
+    missing_projected_security_ids,
+    new_projected_position,
+)
+from .decimal_amounts import decimal_or_none
 from .request_fingerprint import request_fingerprint
-
-CASH_ASSET_CLASS = "CASH"
 
 
 class CoreSnapshotBadRequestError(ValueError):
@@ -63,10 +73,6 @@ class CoreSnapshotConflictError(ValueError):
 
 class CoreSnapshotUnavailableSectionError(ValueError):
     pass
-
-
-def _is_cash_asset_class(value: Any) -> bool:
-    return normalize_control_code(value) == CASH_ASSET_CLASS
 
 
 @dataclass
@@ -588,23 +594,16 @@ class CoreSnapshotService:
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
         )
-        baseline: dict[str, dict[str, Any]] = {}
-        for row, instrument, _state in baseline_rows.rows:
-            entry = self._baseline_position_entry(
-                row=row,
-                instrument=instrument,
-                use_snapshot=baseline_rows.use_snapshot,
-                reporting_fx=reporting_fx,
-                include_cash=include_cash,
-                include_zero=include_zero,
-            )
-            if entry is None:
-                continue
-            baseline[entry["security_id"]] = entry
-
+        baseline = baseline_position_entries(
+            rows=baseline_rows.rows,
+            use_snapshot=baseline_rows.use_snapshot,
+            reporting_fx=reporting_fx,
+            include_cash=include_cash,
+            include_zero=include_zero,
+        )
         total_base = total_market_value_baseline(baseline)
         assign_baseline_weights(baseline, total_base)
-        return dict(sorted(baseline.items(), key=lambda item: item[0])), self._baseline_freshness(
+        return baseline, baseline_freshness_metadata(
             rows=baseline_rows.rows,
             use_snapshot=baseline_rows.use_snapshot,
             has_baseline=bool(baseline),
@@ -628,183 +627,6 @@ class CoreSnapshotService:
         )
         return _BaselinePositionRows(rows=history_rows, use_snapshot=False)
 
-    def _baseline_position_entry(
-        self,
-        *,
-        row: Any,
-        instrument: Any,
-        use_snapshot: bool,
-        reporting_fx: Decimal,
-        include_cash: bool,
-        include_zero: bool,
-    ) -> dict[str, Any] | None:
-        quantity = decimal_or_zero(row.quantity)
-        if self._skip_baseline_position(
-            quantity=quantity,
-            instrument=instrument,
-            include_cash=include_cash,
-            include_zero=include_zero,
-        ):
-            return None
-        security_id = normalize_security_id(row.security_id)
-        if not security_id:
-            return None
-        market_value_base, market_value_local = self._baseline_market_values(
-            row=row,
-            use_snapshot=use_snapshot,
-            reporting_fx=reporting_fx,
-        )
-        return self._baseline_position_payload(
-            security_id=security_id,
-            quantity=quantity,
-            market_value_base=market_value_base,
-            market_value_local=market_value_local,
-            instrument=instrument,
-        )
-
-    @staticmethod
-    def _skip_baseline_position(
-        *,
-        quantity: Decimal,
-        instrument: Any,
-        include_cash: bool,
-        include_zero: bool,
-    ) -> bool:
-        if not include_zero and quantity == Decimal(0):
-            return True
-        return (
-            not include_cash
-            and instrument is not None
-            and _is_cash_asset_class(instrument.asset_class)
-        )
-
-    @staticmethod
-    def _baseline_market_values(
-        *,
-        row: Any,
-        use_snapshot: bool,
-        reporting_fx: Decimal,
-    ) -> tuple[Decimal | None, Decimal | None]:
-        if use_snapshot:
-            market_value_base_raw = decimal_or_none(row.market_value)
-            market_value_local = decimal_or_none(row.market_value_local)
-        else:
-            market_value_base_raw = decimal_or_none(row.cost_basis)
-            market_value_local = decimal_or_none(row.cost_basis_local)
-        market_value_base = (
-            market_value_base_raw * reporting_fx if market_value_base_raw is not None else None
-        )
-        return market_value_base, market_value_local
-
-    @staticmethod
-    def _baseline_position_payload(
-        *,
-        security_id: str,
-        quantity: Decimal,
-        market_value_base: Decimal | None,
-        market_value_local: Decimal | None,
-        instrument: Any,
-    ) -> dict[str, Any]:
-        payload = {
-            "security_id": security_id,
-            "quantity": quantity,
-            "market_value_base": market_value_base,
-            "market_value_local": market_value_local,
-        }
-        if instrument is None:
-            payload.update(CoreSnapshotService._missing_instrument_payload(security_id))
-        else:
-            payload.update(CoreSnapshotService._baseline_instrument_payload(instrument))
-        return payload
-
-    @staticmethod
-    def _missing_instrument_payload(security_id: str) -> dict[str, Any]:
-        return {
-            "currency": None,
-            "instrument_name": security_id,
-            "asset_class": None,
-            "sector": None,
-            "country_of_risk": None,
-            "isin": None,
-            "issuer_id": None,
-            "issuer_name": None,
-            "ultimate_parent_issuer_id": None,
-            "ultimate_parent_issuer_name": None,
-            "liquidity_tier": None,
-        }
-
-    @staticmethod
-    def _baseline_instrument_payload(instrument: Any) -> dict[str, Any]:
-        return {
-            "currency": instrument.currency,
-            "instrument_name": instrument.name,
-            "asset_class": instrument.asset_class,
-            "sector": instrument.sector,
-            "country_of_risk": instrument.country_of_risk,
-            "isin": instrument.isin,
-            "issuer_id": instrument.issuer_id,
-            "issuer_name": instrument.issuer_name,
-            "ultimate_parent_issuer_id": instrument.ultimate_parent_issuer_id,
-            "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
-            "liquidity_tier": instrument.liquidity_tier,
-        }
-
-    def _baseline_freshness(
-        self,
-        *,
-        rows: list[Any],
-        use_snapshot: bool,
-        has_baseline: bool,
-    ) -> CoreSnapshotFreshnessMetadata:
-        if not use_snapshot:
-            return CoreSnapshotFreshnessMetadata(
-                freshness_status="HISTORICAL_FALLBACK",
-                baseline_source="position_history",
-                snapshot_timestamp=None,
-                snapshot_epoch=None,
-                fallback_reason="NO_CURRENT_POSITION_STATE_ROWS",
-            )
-        return CoreSnapshotFreshnessMetadata(
-            freshness_status="CURRENT_SNAPSHOT",
-            baseline_source="position_state",
-            snapshot_timestamp=self._latest_snapshot_timestamp(rows),
-            snapshot_epoch=self._baseline_snapshot_epoch(rows=rows, has_baseline=has_baseline),
-            fallback_reason=None,
-        )
-
-    def _baseline_snapshot_epoch(
-        self,
-        *,
-        rows: list[Any],
-        has_baseline: bool,
-    ) -> int | None:
-        if not has_baseline:
-            return None
-        return self._single_resolved_epoch(rows)
-
-    @staticmethod
-    def _latest_snapshot_timestamp(rows: list[Any]) -> datetime | None:
-        timestamps: list[datetime] = []
-        for row, _instrument, state in rows:
-            for candidate in (
-                getattr(row, "updated_at", None),
-                getattr(row, "created_at", None),
-                getattr(state, "updated_at", None),
-                getattr(state, "created_at", None),
-            ):
-                if isinstance(candidate, datetime):
-                    timestamps.append(candidate)
-        return max(timestamps) if timestamps else None
-
-    @staticmethod
-    def _single_resolved_epoch(rows: list[Any]) -> int | None:
-        epochs = {
-            int(state.epoch)
-            for _row, _instrument, state in rows
-            if getattr(state, "epoch", None) is not None
-        }
-        return next(iter(epochs)) if len(epochs) == 1 else None
-
     async def _resolve_projected_positions(
         self,
         session_id: str,
@@ -815,14 +637,11 @@ class CoreSnapshotService:
         include_zero: bool,
         include_cash: bool,
     ) -> dict[str, dict[str, Any]]:
-        projected: dict[str, dict[str, Any]] = {
-            key: self._baseline_projected_position(value)
-            for key, value in baseline_positions.items()
-        }
+        projected = baseline_projected_positions(baseline_positions)
 
         normalized_changes = await self._normalized_simulation_changes(session_id)
         await self._seed_missing_projected_instruments(projected, normalized_changes)
-        self._apply_projected_position_changes(projected, normalized_changes)
+        apply_projected_position_changes(projected, normalized_changes)
         await self._value_projected_positions(
             projected=projected,
             as_of_date=as_of_date,
@@ -831,19 +650,13 @@ class CoreSnapshotService:
             include_cash=include_cash,
             include_zero=include_zero,
         )
-        filtered = self._filtered_projected_positions(
+        filtered = filtered_projected_positions(
             projected,
             include_cash=include_cash,
             include_zero=include_zero,
         )
 
         return dict(sorted(filtered.items(), key=lambda item: item[0]))
-
-    @staticmethod
-    def _baseline_projected_position(value: dict[str, Any]) -> dict[str, Any]:
-        projected_value = dict(value)
-        projected_value["baseline_quantity"] = projected_value["quantity"]
-        return projected_value
 
     async def _normalized_simulation_changes(self, session_id: str) -> list[tuple[str, Any]]:
         changes = await self.simulation_repo.get_changes(session_id)
@@ -863,23 +676,15 @@ class CoreSnapshotService:
         projected: dict[str, dict[str, Any]],
         normalized_changes: list[tuple[str, Any]],
     ) -> None:
-        missing_security_ids = self._missing_projected_security_ids(projected, normalized_changes)
+        missing_security_ids = missing_projected_security_ids(projected, normalized_changes)
         if not missing_security_ids:
             return
         instrument_map = await self._projected_instrument_map(missing_security_ids)
         for security_id in missing_security_ids:
-            projected[security_id] = self._new_projected_position(
+            projected[security_id] = new_projected_position(
                 security_id,
                 self._required_projected_instrument(security_id, instrument_map),
             )
-
-    @staticmethod
-    def _missing_projected_security_ids(
-        projected: dict[str, dict[str, Any]],
-        normalized_changes: list[tuple[str, Any]],
-    ) -> list[str]:
-        changed_security_ids = {security_id for security_id, _change in normalized_changes}
-        return [sid for sid in changed_security_ids if sid not in projected]
 
     async def _projected_instrument_map(self, security_ids: list[str]) -> dict[str, Any]:
         instruments = await self.instrument_repo.get_by_security_ids(security_ids)
@@ -901,36 +706,6 @@ class CoreSnapshotService:
             )
         return instrument
 
-    @staticmethod
-    def _new_projected_position(security_id: str, instrument: Any) -> dict[str, Any]:
-        return {
-            "security_id": security_id,
-            "quantity": Decimal(0),
-            "baseline_quantity": Decimal(0),
-            "market_value_base": Decimal(0),
-            "market_value_local": Decimal(0),
-            "currency": instrument.currency,
-            "instrument_name": instrument.name,
-            "asset_class": instrument.asset_class,
-            "sector": instrument.sector,
-            "country_of_risk": instrument.country_of_risk,
-            "isin": instrument.isin,
-            "issuer_id": instrument.issuer_id,
-            "issuer_name": instrument.issuer_name,
-            "ultimate_parent_issuer_id": instrument.ultimate_parent_issuer_id,
-            "ultimate_parent_issuer_name": instrument.ultimate_parent_issuer_name,
-            "liquidity_tier": instrument.liquidity_tier,
-        }
-
-    def _apply_projected_position_changes(
-        self,
-        projected: dict[str, dict[str, Any]],
-        normalized_changes: list[tuple[str, Any]],
-    ) -> None:
-        for security_id, change in normalized_changes:
-            entry = projected[security_id]
-            entry["quantity"] = entry["quantity"] + self._change_quantity_effect(change)
-
     async def _value_projected_positions(
         self,
         *,
@@ -941,7 +716,7 @@ class CoreSnapshotService:
         include_cash: bool,
         include_zero: bool,
     ) -> None:
-        price_required = self._apply_baseline_projected_values(
+        price_required = apply_baseline_projected_values(
             projected,
             include_cash=include_cash,
             include_zero=include_zero,
@@ -954,41 +729,6 @@ class CoreSnapshotService:
                 portfolio_base_currency=portfolio_base_currency,
                 portfolio_to_reporting_fx=portfolio_to_reporting_fx,
             )
-
-    def _apply_baseline_projected_values(
-        self,
-        projected: dict[str, dict[str, Any]],
-        *,
-        include_cash: bool,
-        include_zero: bool,
-    ) -> dict[str, tuple[dict[str, Any], Decimal]]:
-        price_required: dict[str, tuple[dict[str, Any], Decimal]] = {}
-        for security_id, entry in projected.items():
-            if self._skip_projected_position(
-                entry, include_cash=include_cash, include_zero=include_zero
-            ):
-                continue
-            if self._apply_baseline_projected_value(entry):
-                continue
-            quantity = entry["quantity"]
-            if quantity <= 0:
-                entry["market_value_base"] = Decimal(0)
-                entry["market_value_local"] = Decimal(0)
-                continue
-            price_required[security_id] = (entry, quantity)
-        return price_required
-
-    @staticmethod
-    def _apply_baseline_projected_value(entry: dict[str, Any]) -> bool:
-        baseline_qty = entry["baseline_quantity"]
-        if baseline_qty <= 0 or entry.get("market_value_base") is None:
-            return False
-        unit_base = entry["market_value_base"] / baseline_qty
-        entry["market_value_base"] = unit_base * entry["quantity"]
-        if entry.get("market_value_local") is not None:
-            unit_local = entry["market_value_local"] / baseline_qty
-            entry["market_value_local"] = unit_local * entry["quantity"]
-        return True
 
     async def _apply_priced_projected_values(
         self,
@@ -1072,86 +812,16 @@ class CoreSnapshotService:
             )
         return market_to_portfolio_fx
 
-    def _filtered_projected_positions(
-        self,
-        projected: dict[str, dict[str, Any]],
-        *,
-        include_cash: bool,
-        include_zero: bool,
-    ) -> dict[str, dict[str, Any]]:
-        return {
-            key: value
-            for key, value in projected.items()
-            if not self._skip_projected_position(
-                value,
-                include_cash=include_cash,
-                include_zero=include_zero,
-            )
-        }
-
-    @staticmethod
-    def _skip_projected_position(
-        entry: dict[str, Any],
-        *,
-        include_cash: bool,
-        include_zero: bool,
-    ) -> bool:
-        if not include_cash and _is_cash_asset_class(entry.get("asset_class")):
-            return True
-        return not include_zero and entry["quantity"] == Decimal(0)
-
-    @staticmethod
-    def _change_quantity_effect(change) -> Decimal:
-        effect = transaction_quantity_effect_decimal(
-            transaction_type=getattr(change, "transaction_type", None),
-            quantity=getattr(change, "quantity", None),
-            amount=getattr(change, "amount", None),
-        )
-        return effect
-
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
     ) -> list[InstrumentEnrichmentRecord]:
-        requested_ids = self._requested_instrument_security_ids(security_ids)
-        by_security_id = await self._instrument_enrichment_map(requested_ids)
-        return [
-            self._instrument_enrichment_record(
-                security_id=security_id,
-                instrument=by_security_id.get(security_id),
-            )
-            for security_id in requested_ids
-        ]
-
-    @staticmethod
-    def _requested_instrument_security_ids(security_ids: list[str]) -> list[str]:
-        requested_ids = [value.strip() for value in security_ids if value and value.strip()]
+        requested_ids = requested_instrument_security_ids(security_ids)
         if not requested_ids:
             raise CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
-        return requested_ids
-
-    async def _instrument_enrichment_map(self, security_ids: list[str]) -> dict[str, Any]:
-        instruments = await self.instrument_repo.get_by_security_ids(security_ids)
-        return {
-            security_id: item
-            for item in instruments
-            if (security_id := normalize_security_id(item.security_id))
-        }
-
-    @staticmethod
-    def _instrument_enrichment_record(
-        *,
-        security_id: str,
-        instrument: Any,
-    ) -> InstrumentEnrichmentRecord:
-        if instrument is None:
-            return InstrumentEnrichmentRecord(security_id=security_id)
-        return InstrumentEnrichmentRecord(
-            security_id=security_id,
-            issuer_id=instrument.issuer_id,
-            issuer_name=instrument.issuer_name,
-            ultimate_parent_issuer_id=instrument.ultimate_parent_issuer_id,
-            ultimate_parent_issuer_name=instrument.ultimate_parent_issuer_name,
-            liquidity_tier=instrument.liquidity_tier,
+        instruments = await self.instrument_repo.get_by_security_ids(requested_ids)
+        return instrument_enrichment_records(
+            requested_ids=requested_ids,
+            instruments=instruments,
         )
 
     async def _get_fx_rate_or_raise(

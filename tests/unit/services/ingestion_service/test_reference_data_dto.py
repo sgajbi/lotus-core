@@ -572,6 +572,11 @@ def test_client_tax_rule_set_validates_threshold_pair_and_substance() -> None:
     with pytest.raises(ValidationError, match="threshold_currency is required"):
         ClientTaxRuleSetRecord.model_validate(_tax_rule_set(threshold_amount="250000.0000"))
 
+    with pytest.raises(ValidationError, match="threshold_amount is required"):
+        ClientTaxRuleSetRecord.model_validate(
+            _tax_rule_set(threshold_amount=None, threshold_currency="SGD")
+        )
+
     with pytest.raises(ValidationError, match="bounded rule evidence"):
         ClientTaxRuleSetRecord.model_validate(
             _tax_rule_set(
@@ -582,6 +587,13 @@ def test_client_tax_rule_set_validates_threshold_pair_and_substance() -> None:
                 threshold_amount=None,
                 threshold_currency=None,
             )
+        )
+
+
+def test_client_tax_rule_set_validates_effective_window() -> None:
+    with pytest.raises(ValidationError, match="effective_to must be on or after"):
+        ClientTaxRuleSetRecord.model_validate(
+            _tax_rule_set(effective_from="2026-04-10", effective_to="2026-04-01")
         )
 
 

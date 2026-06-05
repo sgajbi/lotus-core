@@ -7,21 +7,38 @@ from sqlalchemy.orm import sessionmaker
 
 from .config import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_USER
 
+_LEGACY_POSTGRES_SCHEME = "postgres://"
+_SYNC_POSTGRES_SCHEME = "postgresql://"
+_ASYNC_POSTGRES_SCHEME = "postgresql+asyncpg://"
+
 
 def _normalize_database_url_scheme(url: str, *, async_mode: bool) -> str:
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://") :]
-
+    normalized_url = _normalize_legacy_postgres_scheme(url)
     if async_mode:
-        if url.startswith("postgresql+asyncpg://"):
-            return url
-        if url.startswith("postgresql://"):
-            return "postgresql+asyncpg://" + url[len("postgresql://") :]
-        return url
+        return _normalize_async_database_url_scheme(normalized_url)
+    return _normalize_sync_database_url_scheme(normalized_url)
 
-    if url.startswith("postgresql+asyncpg://"):
-        return "postgresql://" + url[len("postgresql+asyncpg://") :]
+
+def _normalize_legacy_postgres_scheme(url: str) -> str:
+    if url.startswith(_LEGACY_POSTGRES_SCHEME):
+        return _replace_database_url_scheme(url, _LEGACY_POSTGRES_SCHEME, _SYNC_POSTGRES_SCHEME)
     return url
+
+
+def _normalize_async_database_url_scheme(url: str) -> str:
+    if url.startswith(_SYNC_POSTGRES_SCHEME):
+        return _replace_database_url_scheme(url, _SYNC_POSTGRES_SCHEME, _ASYNC_POSTGRES_SCHEME)
+    return url
+
+
+def _normalize_sync_database_url_scheme(url: str) -> str:
+    if url.startswith(_ASYNC_POSTGRES_SCHEME):
+        return _replace_database_url_scheme(url, _ASYNC_POSTGRES_SCHEME, _SYNC_POSTGRES_SCHEME)
+    return url
+
+
+def _replace_database_url_scheme(url: str, source_scheme: str, target_scheme: str) -> str:
+    return target_scheme + url[len(source_scheme) :]
 
 
 def get_sync_database_url():

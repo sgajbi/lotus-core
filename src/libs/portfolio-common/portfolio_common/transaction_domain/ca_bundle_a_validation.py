@@ -41,19 +41,40 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
     issues: list[CaBundleAValidationIssue] = []
     transaction_type = normalize_ca_bundle_a_transaction_type(event.transaction_type)
 
-    if transaction_type not in CA_BUNDLE_A_TRANSACTION_TYPES:
-        issues.append(
-            CaBundleAValidationIssue(
-                code=CaBundleAValidationReasonCode.INVALID_TRANSACTION_TYPE,
-                field="transaction_type",
-                message=(
-                    "transaction_type must be one of "
-                    "SPIN_OFF, SPIN_IN, DEMERGER_OUT, DEMERGER_IN, CASH_CONSIDERATION."
-                ),
-            )
-        )
+    if _validate_transaction_type(issues, transaction_type):
         return issues
 
+    _validate_parent_event_reference(issues, event)
+    _validate_linkage_identifiers(issues, event)
+    _validate_source_instrument(issues, event, transaction_type)
+    _validate_target_instrument(issues, event, transaction_type)
+    _validate_cash_consideration_links(issues, event, transaction_type)
+    return issues
+
+
+def _validate_transaction_type(
+    issues: list[CaBundleAValidationIssue],
+    transaction_type: str,
+) -> bool:
+    if transaction_type in CA_BUNDLE_A_TRANSACTION_TYPES:
+        return False
+    issues.append(
+        CaBundleAValidationIssue(
+            code=CaBundleAValidationReasonCode.INVALID_TRANSACTION_TYPE,
+            field="transaction_type",
+            message=(
+                "transaction_type must be one of "
+                "SPIN_OFF, SPIN_IN, DEMERGER_OUT, DEMERGER_IN, CASH_CONSIDERATION."
+            ),
+        )
+    )
+    return True
+
+
+def _validate_parent_event_reference(
+    issues: list[CaBundleAValidationIssue],
+    event: TransactionEvent,
+) -> None:
     if not (event.parent_event_reference or "").strip():
         issues.append(
             CaBundleAValidationIssue(
@@ -63,6 +84,11 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
             )
         )
 
+
+def _validate_linkage_identifiers(
+    issues: list[CaBundleAValidationIssue],
+    event: TransactionEvent,
+) -> None:
     if (
         not (event.economic_event_id or "").strip()
         or not (event.linked_transaction_group_id or "").strip()
@@ -78,6 +104,12 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
             )
         )
 
+
+def _validate_source_instrument(
+    issues: list[CaBundleAValidationIssue],
+    event: TransactionEvent,
+    transaction_type: str,
+) -> None:
     if transaction_type in CA_BUNDLE_A_OUT_TYPES and not (event.source_instrument_id or "").strip():
         issues.append(
             CaBundleAValidationIssue(
@@ -89,6 +121,12 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
             )
         )
 
+
+def _validate_target_instrument(
+    issues: list[CaBundleAValidationIssue],
+    event: TransactionEvent,
+    transaction_type: str,
+) -> None:
     if transaction_type in CA_BUNDLE_A_IN_TYPES and not (event.target_instrument_id or "").strip():
         issues.append(
             CaBundleAValidationIssue(
@@ -100,37 +138,61 @@ def validate_ca_bundle_a_transaction(event: TransactionEvent) -> list[CaBundleAV
             )
         )
 
+
+def _validate_cash_consideration_links(
+    issues: list[CaBundleAValidationIssue],
+    event: TransactionEvent,
+    transaction_type: str,
+) -> None:
     if transaction_type == CASH_CONSIDERATION_TRANSACTION_TYPE:
         linked_cash_transaction_id = (event.linked_cash_transaction_id or "").strip()
         external_cash_transaction_id = (event.external_cash_transaction_id or "").strip()
-        if not linked_cash_transaction_id and not external_cash_transaction_id:
-            issues.append(
-                CaBundleAValidationIssue(
-                    code=CaBundleAValidationReasonCode.MISSING_CASH_CONSIDERATION_LINK,
-                    field="linked_cash_transaction_id",
-                    message=(
-                        "CASH_CONSIDERATION requires linked cash-leg reference via "
-                        "linked_cash_transaction_id or external_cash_transaction_id."
-                    ),
-                )
-            )
-        if (
-            linked_cash_transaction_id
-            and external_cash_transaction_id
-            and linked_cash_transaction_id != external_cash_transaction_id
-        ):
-            issues.append(
-                CaBundleAValidationIssue(
-                    code=CaBundleAValidationReasonCode.INCONSISTENT_CASH_CONSIDERATION_LINK,
-                    field="linked_cash_transaction_id",
-                    message=(
-                        "linked_cash_transaction_id and external_cash_transaction_id must match "
-                        "when both are provided on CASH_CONSIDERATION."
-                    ),
-                )
-            )
+        _validate_cash_consideration_link_presence(
+            issues, linked_cash_transaction_id, external_cash_transaction_id
+        )
+        _validate_cash_consideration_link_consistency(
+            issues, linked_cash_transaction_id, external_cash_transaction_id
+        )
 
-    return issues
+
+def _validate_cash_consideration_link_presence(
+    issues: list[CaBundleAValidationIssue],
+    linked_cash_transaction_id: str,
+    external_cash_transaction_id: str,
+) -> None:
+    if not linked_cash_transaction_id and not external_cash_transaction_id:
+        issues.append(
+            CaBundleAValidationIssue(
+                code=CaBundleAValidationReasonCode.MISSING_CASH_CONSIDERATION_LINK,
+                field="linked_cash_transaction_id",
+                message=(
+                    "CASH_CONSIDERATION requires linked cash-leg reference via "
+                    "linked_cash_transaction_id or external_cash_transaction_id."
+                ),
+            )
+        )
+
+
+def _validate_cash_consideration_link_consistency(
+    issues: list[CaBundleAValidationIssue],
+    linked_cash_transaction_id: str,
+    external_cash_transaction_id: str,
+) -> None:
+    if (
+        linked_cash_transaction_id
+        and external_cash_transaction_id
+        and linked_cash_transaction_id != external_cash_transaction_id
+    ):
+        issues.append(
+            CaBundleAValidationIssue(
+                code=CaBundleAValidationReasonCode.INCONSISTENT_CASH_CONSIDERATION_LINK,
+                field="linked_cash_transaction_id",
+                message=(
+                    "linked_cash_transaction_id and external_cash_transaction_id must match "
+                    "when both are provided on CASH_CONSIDERATION."
+                ),
+            )
+        )
 
 
 def assert_ca_bundle_a_transaction_valid(event: TransactionEvent) -> None:
