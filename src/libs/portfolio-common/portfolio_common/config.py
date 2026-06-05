@@ -431,40 +431,63 @@ _POSITIVE_INT_CONSUMER_KEYS = {
 def _coerce_consumer_config_value(key: str, value: object) -> object:
     expected = _CONSUMER_ALLOWED_TYPES[key]
     if expected is bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"1", "true", "yes", "on"}:
-                return True
-            if normalized in {"0", "false", "no", "off"}:
-                return False
-        raise ValueError(f"Expected bool for '{key}', got {value!r}")
+        return _coerce_consumer_bool_value(key, value)
     if expected is int:
-        if isinstance(value, bool):
-            raise ValueError(f"Expected int for '{key}', got {value!r}")
-        if isinstance(value, int):
-            coerced = value
-        elif isinstance(value, str):
-            coerced = int(value.strip())
-        else:
-            raise ValueError(f"Expected int for '{key}', got {value!r}")
-        if key in _POSITIVE_INT_CONSUMER_KEYS and coerced <= 0:
-            raise ValueError(f"Expected positive int for '{key}', got {value!r}")
-        return coerced
+        return _coerce_consumer_int_value(key, value)
     if expected is str:
-        if isinstance(value, str):
-            if key == "auto.offset.reset":
-                normalized = value.strip().lower()
-                if normalized not in _AUTO_OFFSET_RESET_ALLOWED_VALUES:
-                    raise ValueError(
-                        "Expected one of "
-                        f"{sorted(_AUTO_OFFSET_RESET_ALLOWED_VALUES)} for '{key}', got {value!r}"
-                    )
-                return normalized
-            return value
-        raise ValueError(f"Expected str for '{key}', got {value!r}")
+        return _coerce_consumer_str_value(key, value)
     return value
+
+
+def _coerce_consumer_bool_value(key: str, value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"Expected bool for '{key}', got {value!r}")
+
+
+def _coerce_consumer_int_value(key: str, value: object) -> int:
+    coerced = _parse_consumer_int_value(key, value)
+    _require_positive_consumer_int_value(key, value, coerced)
+    return coerced
+
+
+def _parse_consumer_int_value(key: str, value: object) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"Expected int for '{key}', got {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value.strip())
+    raise ValueError(f"Expected int for '{key}', got {value!r}")
+
+
+def _require_positive_consumer_int_value(key: str, value: object, coerced: int) -> None:
+    if key in _POSITIVE_INT_CONSUMER_KEYS and coerced <= 0:
+        raise ValueError(f"Expected positive int for '{key}', got {value!r}")
+
+
+def _coerce_consumer_str_value(key: str, value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"Expected str for '{key}', got {value!r}")
+    if key == "auto.offset.reset":
+        return _normalize_auto_offset_reset_value(key, value)
+    return value
+
+
+def _normalize_auto_offset_reset_value(key: str, value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in _AUTO_OFFSET_RESET_ALLOWED_VALUES:
+        raise ValueError(
+            "Expected one of "
+            f"{sorted(_AUTO_OFFSET_RESET_ALLOWED_VALUES)} for '{key}', got {value!r}"
+        )
+    return normalized
 
 
 def _sanitize_consumer_override_map(raw: object, *, context: str) -> dict[str, object]:

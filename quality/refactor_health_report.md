@@ -771,3 +771,7 @@ health before that claim is defensible.
 154. Reduced shared config integer environment parsing complexity by extracting safe-default,
      environment-loading, and minimum-enforcement helpers. `_env_int` improved from `B (7)` to
      `A (1)`, and each extracted integer parsing helper reports A-ranked complexity.
+155. Reduced Kafka consumer config value coercion complexity by extracting type-specific coercion,
+     integer parsing, positive-integer enforcement, and `auto.offset.reset` normalization helpers.
+     `_coerce_consumer_config_value` improved from `C (16)` to `A (4)`, and each extracted
+     consumer coercion helper reports A-ranked complexity.

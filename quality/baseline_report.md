@@ -1032,3 +1032,9 @@ CR-998 reduced shared config integer environment parsing complexity by extractin
 environment-loading, and minimum-enforcement helpers. `_env_int` improved from `B (7)` to
 `A (1)`, each extracted integer parsing helper reports A-ranked complexity, and `config.py`
 remains `A (35.12)` maintainability.
+
+CR-999 reduced Kafka consumer config value coercion complexity by extracting type-specific
+coercion, integer parsing, positive-integer enforcement, and `auto.offset.reset` normalization
+helpers. `_coerce_consumer_config_value` improved from `C (16)` to `A (4)`, each extracted
+consumer coercion helper reports A-ranked complexity, and `config.py` remains `A (34.38)`
+maintainability.
