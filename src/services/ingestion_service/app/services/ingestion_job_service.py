@@ -35,7 +35,6 @@ from ..DTOs.ingestion_job_dto import (
     IngestionConsumerLagResponse,
     IngestionErrorBudgetStatusResponse,
     IngestionHealthSummaryResponse,
-    IngestionIdempotencyDiagnosticItemResponse,
     IngestionIdempotencyDiagnosticsResponse,
     IngestionJobFailureResponse,
     IngestionJobRecordStatusResponse,
@@ -59,6 +58,7 @@ from .ingestion_backlog_breakdown import (
 )
 from .ingestion_consumer_lag import load_consumer_lag_response
 from .ingestion_health_summary import load_health_summary_response
+from .ingestion_idempotency_diagnostics import load_idempotency_diagnostics_response
 from .ingestion_job_listing import (
     IngestionJobListFilters,
     build_cursor_lookup_statement,
@@ -918,66 +918,10 @@ class IngestionJobService:
         lookback_minutes: int = 1440,
         limit: int = 200,
     ) -> IngestionIdempotencyDiagnosticsResponse:
-        async for db in get_async_db_session():
-            since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            items: list[IngestionIdempotencyDiagnosticItemResponse] = []
-            rows = await db.execute(
-                select(
-                    DBIngestionJob.idempotency_key,
-                    func.count(DBIngestionJob.id).label("usage_count"),
-                    func.count(func.distinct(DBIngestionJob.endpoint)).label("endpoint_count"),
-                    func.array_agg(func.distinct(DBIngestionJob.endpoint)).label("endpoints"),
-                    func.min(DBIngestionJob.submitted_at).label("first_seen_at"),
-                    func.max(DBIngestionJob.submitted_at).label("last_seen_at"),
-                )
-                .where(
-                    and_(
-                        DBIngestionJob.submitted_at >= since,
-                        DBIngestionJob.idempotency_key.is_not(None),
-                    )
-                )
-                .group_by(DBIngestionJob.idempotency_key)
-                .order_by(desc("usage_count"))
-                .limit(limit)
-            )
-            collisions = 0
-            for (
-                key,
-                usage_count_raw,
-                endpoint_count_raw,
-                endpoints_raw,
-                first_seen_at,
-                last_seen_at,
-            ) in rows:
-                usage_count = int(usage_count_raw or 0)
-                endpoint_count = int(endpoint_count_raw or 0)
-                endpoints = sorted(list(endpoints_raw or []))
-                collision_detected = endpoint_count > 1
-                if collision_detected:
-                    collisions += 1
-                items.append(
-                    IngestionIdempotencyDiagnosticItemResponse(
-                        idempotency_key=key,
-                        usage_count=usage_count,
-                        endpoint_count=endpoint_count,
-                        endpoints=endpoints,
-                        first_seen_at=first_seen_at,
-                        last_seen_at=last_seen_at,
-                        collision_detected=collision_detected,
-                    )
-                )
-
-            return IngestionIdempotencyDiagnosticsResponse(
-                lookback_minutes=lookback_minutes,
-                total_keys=len(items),
-                collisions=collisions,
-                keys=items,
-            )
-        return IngestionIdempotencyDiagnosticsResponse(
+        return await load_idempotency_diagnostics_response(
             lookback_minutes=lookback_minutes,
-            total_keys=0,
-            collisions=0,
-            keys=[],
+            limit=limit,
+            session_factory=get_async_db_session,
         )
 
     async def get_error_budget_status(

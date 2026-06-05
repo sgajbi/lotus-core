@@ -621,3 +621,9 @@ health before that claim is defensible.
      `get_health_summary` improved from `B (6)` to `A (1)`, while the helper module reports
      `A (60.46)` maintainability. `ingestion_job_service.py` shrank from 1,077 SLOC to 1,045 SLOC
      and improved from `B (13.77)` to `B (15.15)`.
+125. Reduced ingestion idempotency-diagnostics coupling by extracting aggregate loading, endpoint
+     normalization, collision detection, and response assembly into
+     `ingestion_idempotency_diagnostics.py`. `get_idempotency_diagnostics` improved from `B (7)`
+     to `A (1)`, while the helper module reports `A (59.15)` maintainability.
+     `ingestion_job_service.py` shrank from 1,045 SLOC to 990 SLOC and improved from `B (15.15)`
+     to `B (16.96)`, leaving no B-ranked methods in the service.

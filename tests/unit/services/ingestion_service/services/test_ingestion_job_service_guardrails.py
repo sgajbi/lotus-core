@@ -475,6 +475,35 @@ async def test_get_health_summary_maps_counts_and_oldest_backlog(
     assert response.oldest_backlog_job_id == "job_oldest"
 
 
+async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    now = datetime.now(UTC)
+
+    class _FakeSession:
+        async def execute(self, _stmt):
+            return [
+                ("key_shared", 3, 2, ["positions", "transactions"], now, now),
+                ("key_single", 1, 1, ["transactions"], now, now),
+            ]
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    response = await service.get_idempotency_diagnostics(lookback_minutes=60, limit=2)
+
+    assert response.total_keys == 2
+    assert response.collisions == 1
+    assert response.keys[0].idempotency_key == "key_shared"
+    assert response.keys[0].collision_detected is True
+    assert response.keys[0].endpoints == ["positions", "transactions"]
+    assert response.keys[1].collision_detected is False
+
+
 async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_metric(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
