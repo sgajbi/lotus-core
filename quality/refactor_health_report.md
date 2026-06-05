@@ -858,3 +858,8 @@ health before that claim is defensible.
      extraction, media-content example eligibility, error response detection, and error
      response-code classification helpers. Every function in `openapi_enrichment.py` now reports
      A-ranked cyclomatic complexity.
+175. Reduced shared valuation price policy complexity by extracting bond percent-quote
+     normalization eligibility, product-type normalization, percent-quote multiplier selection,
+     legacy percent-quote detection, and ratio-based multiplier selection helpers.
+     `resolve_valuation_unit_price` improved from `B (9)` to `A (2)`, and every function in
+     `valuation_prices.py` now reports A-ranked cyclomatic complexity.
