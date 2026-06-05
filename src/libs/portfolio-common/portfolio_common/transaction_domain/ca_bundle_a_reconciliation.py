@@ -31,6 +31,15 @@ class CaBundleAReconciliationResult:
     basis_tolerance: Decimal
 
 
+@dataclass
+class _CaBundleAReconciliationAccumulator:
+    source_leg_count: int = 0
+    target_leg_count: int = 0
+    cash_consideration_count: int = 0
+    source_basis_out_local: Decimal = Decimal(0)
+    target_basis_in_local: Decimal = Decimal(0)
+
+
 def _source_basis_out_local(event: TransactionEvent) -> Decimal:
     if event.net_cost_local is not None:
         return abs(event.net_cost_local)
@@ -48,42 +57,67 @@ def evaluate_ca_bundle_a_reconciliation(
     *,
     basis_tolerance: Decimal = DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
 ) -> CaBundleAReconciliationResult:
-    source_leg_count = 0
-    target_leg_count = 0
-    cash_consideration_count = 0
-    source_basis_out_local = Decimal(0)
-    target_basis_in_local = Decimal(0)
-
+    accumulator = _CaBundleAReconciliationAccumulator()
     for event in events:
-        transaction_type = normalize_ca_bundle_a_transaction_type(event.transaction_type)
-        if transaction_type in CA_BUNDLE_A_OUT_TYPES:
-            source_leg_count += 1
-            source_basis_out_local += _source_basis_out_local(event)
-        elif transaction_type in CA_BUNDLE_A_IN_TYPES:
-            target_leg_count += 1
-            target_basis_in_local += _target_basis_in_local(event)
-        elif transaction_type == CASH_CONSIDERATION_TRANSACTION_TYPE:
-            cash_consideration_count += 1
+        _accumulate_reconciliation_event(accumulator, event)
 
-    net_basis_delta_local = target_basis_in_local - source_basis_out_local
-
-    if source_leg_count == 0 or target_leg_count == 0:
-        status = "insufficient_legs"
-    elif abs(net_basis_delta_local) <= basis_tolerance:
-        status = "balanced"
-    else:
-        status = "basis_mismatch"
-
+    net_basis_delta_local = accumulator.target_basis_in_local - accumulator.source_basis_out_local
     return CaBundleAReconciliationResult(
-        status=status,
-        source_leg_count=source_leg_count,
-        target_leg_count=target_leg_count,
-        cash_consideration_count=cash_consideration_count,
-        source_basis_out_local=source_basis_out_local,
-        target_basis_in_local=target_basis_in_local,
+        status=_resolve_reconciliation_status(
+            accumulator=accumulator,
+            net_basis_delta_local=net_basis_delta_local,
+            basis_tolerance=basis_tolerance,
+        ),
+        source_leg_count=accumulator.source_leg_count,
+        target_leg_count=accumulator.target_leg_count,
+        cash_consideration_count=accumulator.cash_consideration_count,
+        source_basis_out_local=accumulator.source_basis_out_local,
+        target_basis_in_local=accumulator.target_basis_in_local,
         net_basis_delta_local=net_basis_delta_local,
         basis_tolerance=basis_tolerance,
     )
+
+
+def _accumulate_reconciliation_event(
+    accumulator: _CaBundleAReconciliationAccumulator,
+    event: TransactionEvent,
+) -> None:
+    transaction_type = normalize_ca_bundle_a_transaction_type(event.transaction_type)
+    if transaction_type in CA_BUNDLE_A_OUT_TYPES:
+        _accumulate_source_leg(accumulator, event)
+    elif transaction_type in CA_BUNDLE_A_IN_TYPES:
+        _accumulate_target_leg(accumulator, event)
+    elif transaction_type == CASH_CONSIDERATION_TRANSACTION_TYPE:
+        accumulator.cash_consideration_count += 1
+
+
+def _accumulate_source_leg(
+    accumulator: _CaBundleAReconciliationAccumulator,
+    event: TransactionEvent,
+) -> None:
+    accumulator.source_leg_count += 1
+    accumulator.source_basis_out_local += _source_basis_out_local(event)
+
+
+def _accumulate_target_leg(
+    accumulator: _CaBundleAReconciliationAccumulator,
+    event: TransactionEvent,
+) -> None:
+    accumulator.target_leg_count += 1
+    accumulator.target_basis_in_local += _target_basis_in_local(event)
+
+
+def _resolve_reconciliation_status(
+    *,
+    accumulator: _CaBundleAReconciliationAccumulator,
+    net_basis_delta_local: Decimal,
+    basis_tolerance: Decimal,
+) -> str:
+    if accumulator.source_leg_count == 0 or accumulator.target_leg_count == 0:
+        return "insufficient_legs"
+    if abs(net_basis_delta_local) <= basis_tolerance:
+        return "balanced"
+    return "basis_mismatch"
 
 
 def find_missing_ca_bundle_a_dependencies(

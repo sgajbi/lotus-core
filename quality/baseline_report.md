@@ -975,3 +975,9 @@ transaction eligibility, DIVIDEND linkage ID resolution, DIVIDEND policy ID reso
 DIVIDEND metadata update assembly. `enrich_dividend_transaction_metadata` improved from `B (6)` to
 `A (2)`, every DIVIDEND linkage function reports A-ranked complexity, and `dividend_linkage.py`
 remains `A (71.82)` maintainability.
+
+CR-989 reduced CA Bundle A reconciliation complexity by extracting a focused reconciliation
+accumulator plus helpers for event accumulation, source-leg accumulation, target-leg accumulation,
+and reconciliation status resolution. `evaluate_ca_bundle_a_reconciliation` improved from
+`B (8)` to `A (2)`, every CA Bundle A reconciliation function/class reports A-ranked complexity,
+and `ca_bundle_a_reconciliation.py` remains `A (39.54)` maintainability.

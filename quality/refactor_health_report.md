@@ -730,3 +730,8 @@ health before that claim is defensible.
      transaction eligibility, DIVIDEND linkage ID resolution, DIVIDEND policy ID resolution, and
      DIVIDEND metadata update assembly. `enrich_dividend_transaction_metadata` improved from
      `B (6)` to `A (2)`, and every DIVIDEND linkage function now reports A-ranked complexity.
+145. Reduced CA Bundle A reconciliation complexity by extracting a focused reconciliation
+     accumulator plus helpers for event accumulation, source-leg accumulation, target-leg
+     accumulation, and reconciliation status resolution. `evaluate_ca_bundle_a_reconciliation`
+     improved from `B (8)` to `A (2)`, and every CA Bundle A reconciliation function/class now
+     reports A-ranked complexity.
