@@ -1,6 +1,6 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -432,55 +432,49 @@ class TimeseriesRepositoryBase:
         self, timeout_minutes: int = 15, max_attempts: int = 3
     ) -> int:
         stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_jobs_stmt = select(
-            PortfolioAggregationJob.id,
-            PortfolioAggregationJob.attempt_count,
-        ).where(
-            PortfolioAggregationJob.status == "PROCESSING",
-            PortfolioAggregationJob.updated_at < stale_threshold,
-        )
-        stale_rows = (await self.db.execute(stale_jobs_stmt)).all()
+        stale_rows = await self._find_stale_aggregation_job_rows(stale_threshold)
         if not stale_rows:
             return 0
 
-        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
-        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
+        failed_job_ids = _over_limit_stale_aggregation_job_ids(stale_rows, max_attempts)
+        reset_job_ids = _resettable_stale_aggregation_job_ids(stale_rows, max_attempts)
 
-        if failed_job_ids:
-            failure_stmt = (
-                update(PortfolioAggregationJob)
-                .where(
-                    PortfolioAggregationJob.id.in_(failed_job_ids),
-                    PortfolioAggregationJob.status == "PROCESSING",
-                    PortfolioAggregationJob.updated_at < stale_threshold,
-                )
-                .values(
-                    status="FAILED",
-                    failure_reason="Stale processing timeout exceeded max attempts",
-                    updated_at=func.now(),
-                )
-                .execution_options(synchronize_session=False)
-            )
-            await self.db.execute(failure_stmt)
-            logger.warning(
-                "Marked stale aggregation jobs as FAILED after max attempts.",
-                extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
-            )
+        await self._mark_over_limit_stale_aggregation_jobs_failed(
+            failed_job_ids,
+            stale_threshold,
+            max_attempts,
+        )
+        return await self._reset_retryable_stale_aggregation_jobs(reset_job_ids, stale_threshold)
 
-        if not reset_job_ids:
-            return 0
+    async def _find_stale_aggregation_job_rows(self, stale_threshold: datetime) -> list[Any]:
+        return (await self.db.execute(_stale_aggregation_jobs_stmt(stale_threshold))).all()
 
-        stmt = (
-            update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.id.in_(reset_job_ids),
-                PortfolioAggregationJob.status == "PROCESSING",
-                PortfolioAggregationJob.updated_at < stale_threshold,
-            )
-            .values(status="PENDING", updated_at=func.now())
+    async def _mark_over_limit_stale_aggregation_jobs_failed(
+        self,
+        failed_job_ids: list[int],
+        stale_threshold: datetime,
+        max_attempts: int,
+    ) -> None:
+        if not failed_job_ids:
+            return
+        await self.db.execute(
+            _failed_stale_aggregation_jobs_update_stmt(failed_job_ids, stale_threshold)
+        )
+        logger.warning(
+            "Marked stale aggregation jobs as FAILED after max attempts.",
+            extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
         )
 
-        result = await self.db.execute(stmt)
+    async def _reset_retryable_stale_aggregation_jobs(
+        self,
+        reset_job_ids: list[int],
+        stale_threshold: datetime,
+    ) -> int:
+        if not reset_job_ids:
+            return 0
+        result = await self.db.execute(
+            _reset_stale_aggregation_jobs_update_stmt(reset_job_ids, stale_threshold)
+        )
         reset_count = result.rowcount
         if reset_count > 0:
             logger.warning(
@@ -610,3 +604,54 @@ class TimeseriesRepositoryBase:
         for cashflow in result.scalars().all():
             grouped.setdefault(cashflow.cashflow_date, []).append(cashflow)
         return grouped
+
+
+def _over_limit_stale_aggregation_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
+    return [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+
+
+def _resettable_stale_aggregation_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
+    return [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+
+def _stale_aggregation_jobs_stmt(stale_threshold: datetime):
+    return select(
+        PortfolioAggregationJob.id,
+        PortfolioAggregationJob.attempt_count,
+    ).where(
+        PortfolioAggregationJob.status == "PROCESSING",
+        PortfolioAggregationJob.updated_at < stale_threshold,
+    )
+
+
+def _failed_stale_aggregation_jobs_update_stmt(
+    failed_job_ids: list[int],
+    stale_threshold: datetime,
+):
+    return (
+        _stale_aggregation_jobs_update_stmt(failed_job_ids, stale_threshold)
+        .values(
+            status="FAILED",
+            failure_reason="Stale processing timeout exceeded max attempts",
+            updated_at=func.now(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _reset_stale_aggregation_jobs_update_stmt(
+    reset_job_ids: list[int],
+    stale_threshold: datetime,
+):
+    return _stale_aggregation_jobs_update_stmt(reset_job_ids, stale_threshold).values(
+        status="PENDING",
+        updated_at=func.now(),
+    )
+
+
+def _stale_aggregation_jobs_update_stmt(job_ids: list[int], stale_threshold: datetime):
+    return update(PortfolioAggregationJob).where(
+        PortfolioAggregationJob.id.in_(job_ids),
+        PortfolioAggregationJob.status == "PROCESSING",
+        PortfolioAggregationJob.updated_at < stale_threshold,
+    )
