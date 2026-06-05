@@ -1092,3 +1092,9 @@ task-name extraction, pending-task cancellation, and teardown error logging help
 `shutdown_runtime_components` improved from `C (18)` to `A (1)`, every function in
 `runtime_supervision.py` now reports A-ranked cyclomatic complexity, and the module remains
 `A (51.77)` maintainability.
+
+CR-1009 reduced shared OpenAPI inference policy complexity by extracting known-key examples, enum
+examples, typed examples, formatted examples, rule-based description selection, and description
+predicate/formatter helpers. `infer_example` improved from `C (11)` to `A (3)`,
+`infer_description` improved from `C (14)` to `A (2)`, and direct OpenAPI enrichment tests now pin
+example and description precedence.

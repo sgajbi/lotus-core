@@ -60,6 +60,9 @@ _EXAMPLE_BY_KEY = {
     "trace_id": "5f475bcbfb2c4fb68b1b6a2ed2d1c216",
 }
 
+_DATE_EXAMPLE = "2026-02-27"
+_DATE_TIME_EXAMPLE = "2026-02-27T10:30:00Z"
+
 
 def to_snake_case(value: str) -> str:
     transformed = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", value)
@@ -73,18 +76,34 @@ def humanize(key: str) -> str:
 
 def infer_example(prop_name: str, prop_schema: dict[str, Any]) -> Any:
     key = to_snake_case(prop_name)
-    if key in _EXAMPLE_BY_KEY:
-        return _EXAMPLE_BY_KEY[key]
+    schema_type = prop_schema.get("type")
+    for example in (
+        _known_key_example(key),
+        _enum_example(prop_schema),
+        _typed_example(prop_name=prop_name, key=key, prop_schema=prop_schema),
+        _formatted_example(prop_schema),
+    ):
+        if example is not None:
+            return example
 
+    return _infer_string_like_example(key=key, schema_type=schema_type)
+
+
+def _known_key_example(key: str) -> Any:
+    return _EXAMPLE_BY_KEY.get(key)
+
+
+def _enum_example(prop_schema: dict[str, Any]) -> Any:
     enum_values = prop_schema.get("enum")
     if isinstance(enum_values, list) and enum_values:
         return enum_values[0]
+    return None
 
+
+def _typed_example(*, prop_name: str, key: str, prop_schema: dict[str, Any]) -> Any:
     schema_type = prop_schema.get("type")
-    schema_format = prop_schema.get("format")
     if schema_type == "array":
-        item_schema = prop_schema.get("items", {})
-        return [infer_example(f"{prop_name}_item", item_schema)]
+        return [infer_example(f"{prop_name}_item", prop_schema.get("items", {}))]
     if schema_type == "object":
         return {"key": "value"}
     if schema_type == "boolean":
@@ -93,13 +112,16 @@ def infer_example(prop_name: str, prop_schema: dict[str, Any]) -> Any:
         return _infer_integer_example(key)
     if schema_type == "number":
         return _infer_number_example(key)
+    return None
 
+
+def _formatted_example(prop_schema: dict[str, Any]) -> str | None:
+    schema_format = prop_schema.get("format")
     if schema_format == "date":
-        return "2026-02-27"
+        return _DATE_EXAMPLE
     if schema_format == "date-time":
-        return "2026-02-27T10:30:00Z"
-
-    return _infer_string_like_example(key=key, schema_type=schema_type)
+        return _DATE_TIME_EXAMPLE
+    return None
 
 
 def _infer_integer_example(key: str) -> int:
@@ -129,9 +151,9 @@ def _infer_string_like_example(*, key: str, schema_type: object) -> str:
     if "currency" in key:
         return "USD"
     if "date" in key:
-        return "2026-02-27"
+        return _DATE_EXAMPLE
     if "time" in key or "timestamp" in key:
-        return "2026-02-27T10:30:00Z"
+        return _DATE_TIME_EXAMPLE
     if "status" in key:
         return "ACTIVE"
     if schema_type == "string":
@@ -142,24 +164,97 @@ def _infer_string_like_example(*, key: str, schema_type: object) -> str:
 def infer_description(model_name: str, prop_name: str, prop_schema: dict[str, Any]) -> str:
     key = to_snake_case(prop_name)
     text = humanize(prop_name)
-    if key.endswith("_id"):
-        entity = key[: -len("_id")].replace("_", " ")
-        return f"Unique {entity} identifier."
-    if "date" in key and prop_schema.get("format") == "date":
-        return f"Business date for {text}."
-    if "time" in key or prop_schema.get("format") == "date-time":
-        return f"Timestamp for {text}."
-    if "currency" in key:
-        return f"ISO currency code for {text}."
-    if "amount" in key or "value" in key or "pnl" in key:
-        return f"Monetary value for {text}."
-    if "quantity" in key:
-        return f"Quantity value for {text}."
-    if "rate" in key or "price" in key:
-        return f"Rate/price value for {text}."
-    if "status" in key:
-        return f"Current status for {text}."
+    description = _rule_based_description(key=key, text=text, prop_schema=prop_schema)
+    if description is not None:
+        return description
     return f"{humanize(model_name)} field: {text}."
+
+
+def _rule_based_description(
+    *,
+    key: str,
+    text: str,
+    prop_schema: dict[str, Any],
+) -> str | None:
+    description_rules = (
+        (_is_identifier_field, _identifier_description),
+        (_is_business_date_field, _business_date_description),
+        (_is_timestamp_field, _timestamp_description),
+        (_is_currency_field, _currency_description),
+        (_is_monetary_field, _monetary_description),
+        (_is_quantity_field, _quantity_description),
+        (_is_rate_or_price_field, _rate_or_price_description),
+        (_is_status_field, _status_description),
+    )
+    for predicate, describe in description_rules:
+        if predicate(key, prop_schema):
+            return describe(key, text)
+    return None
+
+
+def _is_identifier_field(key: str, _prop_schema: dict[str, Any]) -> bool:
+    return key.endswith("_id")
+
+
+def _identifier_description(key: str, _text: str) -> str:
+    entity = key[: -len("_id")].replace("_", " ")
+    return f"Unique {entity} identifier."
+
+
+def _is_business_date_field(key: str, prop_schema: dict[str, Any]) -> bool:
+    return "date" in key and prop_schema.get("format") == "date"
+
+
+def _business_date_description(_key: str, text: str) -> str:
+    return f"Business date for {text}."
+
+
+def _is_timestamp_field(key: str, prop_schema: dict[str, Any]) -> bool:
+    return "time" in key or prop_schema.get("format") == "date-time"
+
+
+def _timestamp_description(_key: str, text: str) -> str:
+    return f"Timestamp for {text}."
+
+
+def _is_currency_field(key: str, _prop_schema: dict[str, Any]) -> bool:
+    return "currency" in key
+
+
+def _currency_description(_key: str, text: str) -> str:
+    return f"ISO currency code for {text}."
+
+
+def _is_monetary_field(key: str, _prop_schema: dict[str, Any]) -> bool:
+    return "amount" in key or "value" in key or "pnl" in key
+
+
+def _monetary_description(_key: str, text: str) -> str:
+    return f"Monetary value for {text}."
+
+
+def _is_quantity_field(key: str, _prop_schema: dict[str, Any]) -> bool:
+    return "quantity" in key
+
+
+def _quantity_description(_key: str, text: str) -> str:
+    return f"Quantity value for {text}."
+
+
+def _is_rate_or_price_field(key: str, _prop_schema: dict[str, Any]) -> bool:
+    return "rate" in key or "price" in key
+
+
+def _rate_or_price_description(_key: str, text: str) -> str:
+    return f"Rate/price value for {text}."
+
+
+def _is_status_field(key: str, _prop_schema: dict[str, Any]) -> bool:
+    return "status" in key
+
+
+def _status_description(_key: str, text: str) -> str:
+    return f"Current status for {text}."
 
 
 def resolve_ref_schema(root_schema: dict[str, Any], ref: str) -> dict[str, Any]:

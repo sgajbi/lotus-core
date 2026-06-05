@@ -1,4 +1,59 @@
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
+from portfolio_common.openapi_examples import infer_description, infer_example
+
+
+def test_infer_example_preserves_ordered_fallback_policy() -> None:
+    assert infer_example("portfolioId", {"type": "string"}) == "DEMO_DPM_EUR_001"
+    assert infer_example("status", {"enum": ["BLOCKED", "ACTIVE"]}) == "ACTIVE"
+    assert infer_example("reviewStatus", {"enum": ["BLOCKED", "ACTIVE"]}) == "BLOCKED"
+    assert infer_example("tags", {"type": "array", "items": {"type": "string"}}) == [
+        "example_tags_item"
+    ]
+    assert infer_example("isActive", {"type": "boolean"}) is True
+    assert infer_example("ttlHours", {"type": "integer"}) == 24
+    assert infer_example("targetWeight", {"type": "number"}) == 0.125
+    assert infer_example("effectiveDate", {"type": "string", "format": "date"}) == "2026-02-27"
+    assert (
+        infer_example("completedAt", {"type": "string", "format": "date-time"})
+        == "2026-02-27T10:30:00Z"
+    )
+
+
+def test_infer_description_preserves_domain_rule_precedence() -> None:
+    assert infer_description("PositionRecord", "portfolioId", {"type": "string"}) == (
+        "Unique portfolio identifier."
+    )
+    assert (
+        infer_description(
+            "PositionRecord",
+            "asOfDate",
+            {"type": "string", "format": "date"},
+        )
+        == "Business date for as of date."
+    )
+    assert (
+        infer_description(
+            "PositionRecord",
+            "updatedAt",
+            {"type": "string", "format": "date-time"},
+        )
+        == "Timestamp for updated at."
+    )
+    assert infer_description("PositionRecord", "baseCurrency", {"type": "string"}) == (
+        "ISO currency code for base currency."
+    )
+    assert infer_description("PositionRecord", "marketValue", {"type": "number"}) == (
+        "Monetary value for market value."
+    )
+    assert infer_description("PositionRecord", "quantity", {"type": "number"}) == (
+        "Quantity value for quantity."
+    )
+    assert infer_description("PositionRecord", "price", {"type": "number"}) == (
+        "Rate/price value for price."
+    )
+    assert infer_description("PositionRecord", "lifecycleStatus", {"type": "string"}) == (
+        "Current status for lifecycle status."
+    )
 
 
 def test_enrich_openapi_schema_populates_missing_operation_docs() -> None:
