@@ -952,3 +952,8 @@ processing mode update fields. `enrich_fx_transaction_metadata` improved from `B
 `_resolve_fx_contract_id` improved from `B (6)` to `A (4)`, and
 `_resolve_contract_lifecycle_transaction_ids` improved from `B (7)` to `A (3)`. Every FX linkage
 function reports A-ranked complexity, and `fx_linkage.py` remains `A (42.62)` maintainability.
+
+CR-985 reduced BUY linkage enrichment complexity by extracting focused helpers for BUY transaction
+eligibility, BUY linkage ID resolution, BUY policy ID resolution, and BUY metadata update
+assembly. `enrich_buy_transaction_metadata` improved from `B (6)` to `A (2)`, every BUY linkage
+function reports A-ranked complexity, and `buy_linkage.py` remains `A (73.51)` maintainability.

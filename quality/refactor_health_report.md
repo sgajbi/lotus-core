@@ -714,3 +714,7 @@ health before that claim is defensible.
      and FX processing mode update fields. `enrich_fx_transaction_metadata` improved from `B (7)`
      to `A (2)`, `_resolve_fx_contract_id` improved from `B (6)` to `A (4)`, and
      `_resolve_contract_lifecycle_transaction_ids` improved from `B (7)` to `A (3)`.
+141. Reduced BUY linkage enrichment complexity by extracting focused helpers for BUY transaction
+     eligibility, BUY linkage ID resolution, BUY policy ID resolution, and BUY metadata update
+     assembly. `enrich_buy_transaction_metadata` improved from `B (6)` to `A (2)`, and every BUY
+     linkage function now reports A-ranked complexity.
