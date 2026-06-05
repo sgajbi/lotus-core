@@ -42,11 +42,12 @@ TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
     "RIGHTS_SELL",
     "RIGHTS_EXPIRE",
 }
-POSITIVE_CASHFLOW_CLASSIFICATIONS = {
-    CashflowClassification.FX_BUY,
-    CashflowClassification.INVESTMENT_INFLOW,
-    CashflowClassification.INCOME,
-    CashflowClassification.CASHFLOW_IN,
+CLASSIFICATION_SIGN_FACTORS = {
+    CashflowClassification.FX_BUY: 1,
+    CashflowClassification.FX_SELL: -1,
+    CashflowClassification.INVESTMENT_INFLOW: 1,
+    CashflowClassification.INCOME: 1,
+    CashflowClassification.CASHFLOW_IN: 1,
 }
 
 
@@ -88,17 +89,16 @@ def _signed_cashflow_amount(
 ) -> Decimal:
     if transaction_type == "INTEREST":
         return _signed_interest_amount(transaction, amount)
-    if rule.classification == CashflowClassification.FX_BUY:
-        return abs(amount)
-    if rule.classification == CashflowClassification.FX_SELL:
-        return -abs(amount)
     if transaction_type == "ADJUSTMENT":
         return _signed_adjustment_amount(transaction, amount)
-    if rule.classification in POSITIVE_CASHFLOW_CLASSIFICATIONS:
-        return abs(amount)
     if rule.classification == CashflowClassification.TRANSFER:
         return _signed_transfer_amount(transaction, transaction_type, amount)
-    return -abs(amount)
+    return _signed_by_classification(rule.classification, amount)
+
+
+def _signed_by_classification(classification: str, amount: Decimal) -> Decimal:
+    sign_factor = CLASSIFICATION_SIGN_FACTORS.get(classification, -1)
+    return abs(amount) if sign_factor > 0 else -abs(amount)
 
 
 def _signed_interest_amount(transaction: TransactionEvent, amount: Decimal) -> Decimal:

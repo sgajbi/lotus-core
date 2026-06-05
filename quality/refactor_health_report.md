@@ -921,3 +921,7 @@ health before that claim is defensible.
      classification/direction sign, interest sign, adjustment sign, and transfer sign helpers.
      `CashflowLogic.calculate` improved from `C (18)` to `A (2)`, and `cashflow_logic.py`
      remains A-ranked maintainability at `A (52.17)`.
+187. Reduced cashflow sign-dispatch complexity by replacing direct classification sign branches
+     with an explicit sign-factor map and focused classification sign helper.
+     `_signed_cashflow_amount` improved from `B (7)` to `A (4)`, leaving every
+     function/class/method in `cashflow_logic.py` A-ranked by cyclomatic complexity.
