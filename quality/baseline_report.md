@@ -870,3 +870,11 @@ parsing, feature-flag lookup, redaction, capability-rule normalization, and path
 `validate_enterprise_runtime_config` improved from `C (14)` to `A (5)`, `authorize_request`
 improved from `C (18)` to `A (4)`, and every enterprise readiness function/class/method now
 reports A-ranked complexity.
+
+CR-974 reduced canonical FX transaction validation complexity by extracting focused helpers for
+normalized control codes, control-code validation, component identity, zero quantity/price policy,
+settlement-date policy, currency-pair policy, quote convention policy, positive amount/rate
+policy, strict metadata, cash settlement components, contract identifiers, swap structure,
+optional policy modes, and realized P&L fields. `validate_fx_transaction` improved from `E (37)`
+to `A (1)`, every FX validation function/class reports A-ranked complexity, and
+`fx_validation.py` remains `A (27.02)` maintainability.

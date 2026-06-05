@@ -651,3 +651,9 @@ health before that claim is defensible.
      capability-rule normalization, and path-template matching. `validate_enterprise_runtime_config`
      improved from `C (14)` to `A (5)`, `authorize_request` improved from `C (18)` to `A (4)`,
      and every enterprise readiness function/class/method now reports A-ranked complexity.
+130. Reduced canonical FX transaction validation complexity by extracting focused helpers for
+     normalized control codes, control-code validation, component identity, zero quantity/price
+     policy, settlement dates, currency pairs, quote convention, positive amount/rate checks,
+     strict metadata, cash settlement components, contract identifiers, swap structure, optional
+     policy modes, and realized P&L fields. `validate_fx_transaction` improved from `E (37)` to
+     `A (1)`, and every FX validation function/class now reports A-ranked complexity.
