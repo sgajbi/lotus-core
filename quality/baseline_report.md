@@ -981,3 +981,9 @@ accumulator plus helpers for event accumulation, source-leg accumulation, target
 and reconciliation status resolution. `evaluate_ca_bundle_a_reconciliation` improved from
 `B (8)` to `A (2)`, every CA Bundle A reconciliation function/class reports A-ranked complexity,
 and `ca_bundle_a_reconciliation.py` remains `A (39.54)` maintainability.
+
+CR-990 reduced CA Bundle A dependency ordering complexity by replacing repeated source-out,
+target-in, cash-consideration, rights-stage, and refund rank branches with explicit rank-type sets
+and a deterministic dependency-rank lookup. `ca_bundle_a_dependency_rank` improved from `B (8)` to
+`A (1)`, every CA Bundle A ordering function reports A-ranked complexity, and
+`ca_bundle_a_ordering.py` remains `A (89.61)` maintainability.

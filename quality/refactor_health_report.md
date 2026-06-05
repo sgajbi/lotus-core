@@ -735,3 +735,7 @@ health before that claim is defensible.
      accumulation, and reconciliation status resolution. `evaluate_ca_bundle_a_reconciliation`
      improved from `B (8)` to `A (2)`, and every CA Bundle A reconciliation function/class now
      reports A-ranked complexity.
+146. Reduced CA Bundle A dependency ordering complexity by replacing repeated rank branches with
+     explicit rank-type sets and a deterministic dependency-rank lookup. `ca_bundle_a_dependency_rank`
+     improved from `B (8)` to `A (1)`, and every CA Bundle A ordering function now reports
+     A-ranked complexity.
