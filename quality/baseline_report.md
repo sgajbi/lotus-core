@@ -993,3 +993,9 @@ classification branches with a typed static semantics map and a focused transfer
 `classify_analytics_cash_flow` improved from `B (10)` to `A (3)`, every analytics cashflow
 semantics function reports A-ranked complexity, and `analytics_cashflow_semantics.py` remains
 `A (74.86)` maintainability.
+
+CR-992 reduced market reference point classifier complexity by extracting explicit
+pre-observation and observed-status maps plus a focused point-status helper.
+`classify_market_reference_point` improved from `B (8)` to `A (1)`, every market reference quality
+function/class reports A-ranked complexity, and `market_reference_quality.py` remains `A (36.36)`
+maintainability.

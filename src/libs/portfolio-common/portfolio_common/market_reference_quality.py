@@ -19,6 +19,14 @@ ACCEPTED_QUALITY_STATUSES = {"ACCEPTED"}
 PARTIAL_QUALITY_STATUSES = {"ESTIMATED", "PROVISIONAL", "WARNING"}
 STALE_QUALITY_STATUSES = {"STALE"}
 BLOCKING_QUALITY_STATUSES = {"REJECTED", "QUARANTINED", "INVALID", "BLOCKED"}
+_PRE_OBSERVATION_POINT_CLASSIFICATION_BY_STATUS = {
+    **dict.fromkeys(BLOCKING_QUALITY_STATUSES, BLOCKED),
+    **dict.fromkeys(STALE_QUALITY_STATUSES, STALE),
+}
+_OBSERVED_POINT_CLASSIFICATION_BY_STATUS = {
+    **dict.fromkeys(PARTIAL_QUALITY_STATUSES, PARTIAL),
+    **dict.fromkeys(ACCEPTED_QUALITY_STATUSES, COMPLETE),
+}
 
 
 @dataclass(frozen=True)
@@ -71,19 +79,31 @@ def classify_market_reference_point(signal: MarketReferencePointSignal) -> str:
         )
     )
     quality_status = _normalize_optional_text(signal.quality_status)
+    return _classify_market_reference_point_status(
+        quality_status=quality_status,
+        is_stale=signal.is_stale,
+        has_observation=observed_at is not None,
+    )
+
+
+def _classify_market_reference_point_status(
+    *,
+    quality_status: str | None,
+    is_stale: bool,
+    has_observation: bool,
+) -> str:
     if quality_status is None:
         return UNKNOWN
-    if quality_status in BLOCKING_QUALITY_STATUSES:
-        return BLOCKED
-    if signal.is_stale or quality_status in STALE_QUALITY_STATUSES:
+    pre_observation_classification = _PRE_OBSERVATION_POINT_CLASSIFICATION_BY_STATUS.get(
+        quality_status
+    )
+    if pre_observation_classification is not None:
+        return pre_observation_classification
+    if is_stale:
         return STALE
-    if observed_at is None:
+    if not has_observation:
         return UNKNOWN
-    if quality_status in PARTIAL_QUALITY_STATUSES:
-        return PARTIAL
-    if quality_status in ACCEPTED_QUALITY_STATUSES:
-        return COMPLETE
-    return UNKNOWN
+    return _OBSERVED_POINT_CLASSIFICATION_BY_STATUS.get(quality_status, UNKNOWN)
 
 
 def classify_market_reference_coverage(signal: MarketReferenceCoverageSignal) -> str:

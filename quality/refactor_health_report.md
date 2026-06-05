@@ -743,3 +743,7 @@ health before that claim is defensible.
      classification branches with a typed static semantics map and a focused transfer-flow helper.
      `classify_analytics_cash_flow` improved from `B (10)` to `A (3)`, and every analytics
      cashflow semantics function now reports A-ranked complexity.
+148. Reduced market reference point classifier complexity by extracting explicit
+     pre-observation and observed-status maps plus a focused point-status helper.
+     `classify_market_reference_point` improved from `B (8)` to `A (1)`, and every market
+     reference quality function/class now reports A-ranked complexity.
