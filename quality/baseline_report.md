@@ -1085,3 +1085,10 @@ helpers. `wait_for_shutdown_or_task_failure` improved from `C (15)` to `A (5)`, 
 failure-attribution helpers report A-ranked complexity, and `runtime_supervision.py` remains
 `A (56.39)` maintainability. `shutdown_runtime_components` remains a separate C-ranked teardown
 hotspot for a later slice.
+
+CR-1008 reduced runtime supervision teardown complexity by extracting consumer shutdown,
+stop-callback execution, server exit signaling, runtime-task awaiting, timeout logging, timed-out
+task-name extraction, pending-task cancellation, and teardown error logging helpers.
+`shutdown_runtime_components` improved from `C (18)` to `A (1)`, every function in
+`runtime_supervision.py` now reports A-ranked cyclomatic complexity, and the module remains
+`A (51.77)` maintainability.

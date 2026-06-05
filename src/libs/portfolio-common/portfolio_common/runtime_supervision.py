@@ -90,51 +90,105 @@ async def shutdown_runtime_components(
     then the embedded web server is asked to exit, and finally all runtime tasks
     are awaited with `return_exceptions=True` to guarantee bounded shutdown.
     """
+    _shutdown_consumers(consumers, logger)
+    _run_stop_callbacks(stop_callbacks, logger)
+    _signal_server_exit(server)
+    await _await_runtime_tasks(tasks, shutdown_timeout_seconds, logger)
+
+
+def _shutdown_consumers(consumers: Sequence[object], logger) -> None:
     for consumer in consumers:
-        shutdown = getattr(consumer, "shutdown", None)
-        if callable(shutdown):
-            try:
-                shutdown()
-            except Exception:
-                if logger is not None:
-                    logger.error(
-                        "Consumer shutdown callback failed during runtime teardown.",
-                        exc_info=True,
-                    )
+        _shutdown_consumer(consumer, logger)
 
+
+def _shutdown_consumer(consumer: object, logger) -> None:
+    shutdown = getattr(consumer, "shutdown", None)
+    if not callable(shutdown):
+        return
+    try:
+        shutdown()
+    except Exception:
+        _log_runtime_teardown_error(
+            logger,
+            "Consumer shutdown callback failed during runtime teardown.",
+        )
+
+
+def _run_stop_callbacks(stop_callbacks: Sequence[Callable[[], object]], logger) -> None:
     for stop_callback in stop_callbacks:
-        try:
-            stop_callback()
-        except Exception:
-            if logger is not None:
-                logger.error(
-                    "Runtime stop callback failed during teardown.",
-                    exc_info=True,
-                )
+        _run_stop_callback(stop_callback, logger)
 
+
+def _run_stop_callback(stop_callback: Callable[[], object], logger) -> None:
+    try:
+        stop_callback()
+    except Exception:
+        _log_runtime_teardown_error(
+            logger,
+            "Runtime stop callback failed during teardown.",
+        )
+
+
+def _signal_server_exit(server) -> None:
     if server is not None:
         server.should_exit = True
 
+
+async def _await_runtime_tasks(
+    tasks: Sequence[asyncio.Task],
+    shutdown_timeout_seconds: float,
+    logger,
+) -> None:
     if not tasks:
         return
 
     try:
-        await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),
-            timeout=shutdown_timeout_seconds,
-        )
+        await _gather_runtime_tasks(tasks, shutdown_timeout_seconds)
     except asyncio.TimeoutError:
-        timed_out_task_names = [
-            task.get_name() or "unnamed-task"
-            for task in tasks
-            if not task.done() or task.cancelled()
-        ]
-        if logger is not None:
-            logger.error(
-                "Runtime teardown timed out; force-cancelling remaining tasks.",
-                extra={"timed_out_tasks": timed_out_task_names},
-            )
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await _cancel_timed_out_runtime_tasks(tasks, logger)
+
+
+async def _gather_runtime_tasks(
+    tasks: Sequence[asyncio.Task],
+    shutdown_timeout_seconds: float,
+) -> None:
+    await asyncio.wait_for(
+        asyncio.gather(*tasks, return_exceptions=True),
+        timeout=shutdown_timeout_seconds,
+    )
+
+
+async def _cancel_timed_out_runtime_tasks(
+    tasks: Sequence[asyncio.Task],
+    logger,
+) -> None:
+    _log_runtime_teardown_timeout(logger, _timed_out_task_names(tasks))
+    _cancel_pending_runtime_tasks(tasks)
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _log_runtime_teardown_timeout(logger, timed_out_task_names: list[str]) -> None:
+    if logger is None:
+        return
+    logger.error(
+        "Runtime teardown timed out; force-cancelling remaining tasks.",
+        extra={"timed_out_tasks": timed_out_task_names},
+    )
+
+
+def _timed_out_task_names(tasks: Sequence[asyncio.Task]) -> list[str]:
+    return [
+        task.get_name() or "unnamed-task" for task in tasks if not task.done() or task.cancelled()
+    ]
+
+
+def _cancel_pending_runtime_tasks(tasks: Sequence[asyncio.Task]) -> None:
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+
+
+def _log_runtime_teardown_error(logger, message: str) -> None:
+    if logger is None:
+        return
+    logger.error(message, exc_info=True)

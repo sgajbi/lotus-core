@@ -806,3 +806,8 @@ health before that claim is defensible.
      selection, exception-task selection, cancelled-task selection, and runtime-error construction
      helpers. `wait_for_shutdown_or_task_failure` improved from `C (15)` to `A (5)`, while
      `shutdown_runtime_components` remains a separate C-ranked teardown hotspot.
+164. Reduced runtime supervision teardown complexity by extracting consumer shutdown,
+     stop-callback execution, server exit signaling, runtime-task awaiting, timeout logging,
+     timed-out task-name extraction, pending-task cancellation, and teardown error logging helpers.
+     `shutdown_runtime_components` improved from `C (18)` to `A (1)`, and every function in
+     `runtime_supervision.py` now reports A-ranked cyclomatic complexity.
