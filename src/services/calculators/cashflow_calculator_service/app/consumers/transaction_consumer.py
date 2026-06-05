@@ -107,6 +107,124 @@ def _semantic_cashflow_event_id(event: TransactionEvent) -> str:
     return f"cashflow:{event.portfolio_id}:{event.transaction_id}:{event.epoch or 0}"
 
 
+def _validated_cashflow_transaction_type(event: TransactionEvent) -> str:
+    event_transaction_type = resolve_effective_processing_transaction_type(event)
+    if is_ca_bundle_a_transaction_type(event_transaction_type):
+        assert_ca_bundle_a_transaction_valid(event)
+    assert_portfolio_flow_cash_entry_mode_allowed(event)
+    _assert_linked_cash_leg_contract(event)
+    return event_transaction_type
+
+
+def _assert_linked_cash_leg_contract(event: TransactionEvent) -> None:
+    normalized_mode = (
+        normalize_cash_entry_mode(event.cash_entry_mode)
+        if event.cash_entry_mode is not None
+        else None
+    )
+    has_linked_cash_leg = bool((event.external_cash_transaction_id or "").strip())
+    if normalized_mode == "UPSTREAM_PROVIDED" and not has_linked_cash_leg:
+        raise LinkedCashLegError(
+            "UPSTREAM_PROVIDED product leg requires external_cash_transaction_id."
+        )
+
+
+def _is_non_cashflow_lifecycle_event(
+    event: TransactionEvent,
+    event_transaction_type: str,
+) -> bool:
+    if event_transaction_type not in NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES:
+        return False
+    logger.info(
+        "Skipping cashflow creation for non-cash FX contract lifecycle event.",
+        extra={
+            "transaction_id": event.transaction_id,
+            "transaction_type": event.transaction_type,
+            "effective_processing_type": event_transaction_type,
+            "component_type": event.component_type,
+            "fx_contract_id": event.fx_contract_id,
+        },
+    )
+    return True
+
+
+def _log_stale_replay_cashflow_skip(
+    event: TransactionEvent,
+    topic: str,
+    portfolio_exists: bool,
+    transaction_exists: bool,
+) -> None:
+    logger.warning(
+        "Skipping stale replay cashflow event because canonical state has already been removed.",
+        extra={
+            "transaction_id": event.transaction_id,
+            "portfolio_id": event.portfolio_id,
+            "security_id": event.security_id,
+            "epoch": event.epoch or 0,
+            "portfolio_exists": portfolio_exists,
+            "transaction_exists": transaction_exists,
+            "topic": topic,
+        },
+    )
+
+
+def _log_semantic_cashflow_duplicate(
+    event: TransactionEvent,
+    event_id: str,
+    semantic_event_id: str,
+    topic: str,
+) -> None:
+    logger.info(
+        "Semantic cashflow event already processed. Skipping duplicate cross-topic publication.",
+        extra={
+            "transaction_id": event.transaction_id,
+            "portfolio_id": event.portfolio_id,
+            "epoch": event.epoch or 0,
+            "event_id": event_id,
+            "semantic_event_id": semantic_event_id,
+            "topic": topic,
+        },
+    )
+
+
+async def _stage_cashflow_calculation(
+    cashflow_repo: CashflowRepository,
+    outbox_repo: OutboxRepository,
+    event: TransactionEvent,
+    rule: CachedCashflowRule,
+    correlation_id: str,
+) -> None:
+    cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
+    saved = await cashflow_repo.create_cashflow(cashflow_to_save)
+    completion_evt = _cashflow_calculated_event_from_saved_cashflow(saved)
+    await outbox_repo.create_outbox_event(
+        aggregate_type="Cashflow",
+        aggregate_id=str(saved.portfolio_id),
+        event_type="CashflowCalculated",
+        topic=KAFKA_CASHFLOWS_CALCULATED_TOPIC,
+        payload=completion_evt.model_dump(mode="json"),
+        correlation_id=correlation_id,
+    )
+
+
+def _cashflow_calculated_event_from_saved_cashflow(saved) -> CashflowCalculatedEvent:
+    return CashflowCalculatedEvent(
+        cashflow_id=saved.id,
+        transaction_id=saved.transaction_id,
+        portfolio_id=saved.portfolio_id,
+        security_id=saved.security_id,
+        cashflow_date=saved.cashflow_date,
+        amount=saved.amount,
+        currency=saved.currency,
+        classification=saved.classification,
+        timing=saved.timing,
+        is_position_flow=saved.is_position_flow,
+        is_portfolio_flow=saved.is_portfolio_flow,
+        calculation_type=saved.calculation_type,
+        epoch=saved.epoch,
+    )
+
+
 class CashflowCalculatorConsumer(BaseConsumer):
     """
     Consumes raw transaction completion events, calculates the corresponding
@@ -187,147 +305,14 @@ class CashflowCalculatorConsumer(BaseConsumer):
                 semantic_event_id = _semantic_cashflow_event_id(event)
 
                 async for db in get_async_db_session():
-                    tx = await db.begin()
-                    try:
-                        idempotency_repo = IdempotencyRepository(db)
-                        cashflow_repo = CashflowRepository(db)
-                        outbox_repo = OutboxRepository(db)
-
-                        if not await idempotency_repo.claim_event_processing(
-                            event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
-                        ):
-                            logger.warning(f"Event {event_id} already processed. Skipping.")
-                            await tx.rollback()
-                            return
-
-                        if msg.topic() == KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC:
-                            portfolio_exists = await cashflow_repo.portfolio_exists(
-                                event.portfolio_id
-                            )
-                            transaction_exists = await cashflow_repo.transaction_exists(
-                                event.transaction_id,
-                                portfolio_id=event.portfolio_id,
-                            )
-                            if not portfolio_exists or not transaction_exists:
-                                logger.warning(
-                                    "Skipping stale replay cashflow event because canonical state "
-                                    "has already been removed.",
-                                    extra={
-                                        "transaction_id": event.transaction_id,
-                                        "portfolio_id": event.portfolio_id,
-                                        "security_id": event.security_id,
-                                        "epoch": event.epoch or 0,
-                                        "portfolio_exists": portfolio_exists,
-                                        "transaction_exists": transaction_exists,
-                                        "topic": msg.topic(),
-                                    },
-                                )
-                                await db.commit()
-                                return
-
-                        fencer = EpochFencer(db, service_name=SERVICE_NAME)
-                        if not await fencer.check(event):
-                            await tx.rollback()
-                            return
-
-                        if not await idempotency_repo.claim_event_processing(
-                            semantic_event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
-                        ):
-                            logger.info(
-                                "Semantic cashflow event already processed. Skipping duplicate "
-                                "cross-topic publication.",
-                                extra={
-                                    "transaction_id": event.transaction_id,
-                                    "portfolio_id": event.portfolio_id,
-                                    "epoch": event.epoch or 0,
-                                    "event_id": event_id,
-                                    "semantic_event_id": semantic_event_id,
-                                    "topic": msg.topic(),
-                                },
-                            )
-                            await db.commit()
-                            return
-
-                        event_transaction_type = resolve_effective_processing_transaction_type(
-                            event
-                        )
-                        if is_ca_bundle_a_transaction_type(event_transaction_type):
-                            assert_ca_bundle_a_transaction_valid(event)
-                        assert_portfolio_flow_cash_entry_mode_allowed(event)
-                        normalized_mode = (
-                            normalize_cash_entry_mode(event.cash_entry_mode)
-                            if event.cash_entry_mode is not None
-                            else None
-                        )
-                        has_linked_cash_leg = bool(
-                            (event.external_cash_transaction_id or "").strip()
-                        )
-                        if normalized_mode == "UPSTREAM_PROVIDED" and not has_linked_cash_leg:
-                            raise LinkedCashLegError(
-                                "UPSTREAM_PROVIDED product leg requires "
-                                "external_cash_transaction_id."
-                            )
-                        if event_transaction_type in NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES:
-                            logger.info(
-                                "Skipping cashflow creation for non-cash FX contract lifecycle "
-                                "event.",
-                                extra={
-                                    "transaction_id": event.transaction_id,
-                                    "transaction_type": event.transaction_type,
-                                    "effective_processing_type": event_transaction_type,
-                                    "component_type": event.component_type,
-                                    "fx_contract_id": event.fx_contract_id,
-                                },
-                            )
-                            await db.commit()
-                            return
-
-                        rule = await self._get_rule_for_transaction(db, event_transaction_type)
-                        if not rule:
-                            raise NoCashflowRuleError(
-                                "No cashflow rule found for transaction type "
-                                f"'{event_transaction_type}'. "
-                                "Message will be sent to DLQ."
-                            )
-
-                        cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
-                        saved = await cashflow_repo.create_cashflow(cashflow_to_save)
-
-                        completion_evt = CashflowCalculatedEvent(
-                            cashflow_id=saved.id,
-                            transaction_id=saved.transaction_id,
-                            portfolio_id=saved.portfolio_id,
-                            security_id=saved.security_id,
-                            cashflow_date=saved.cashflow_date,
-                            amount=saved.amount,
-                            currency=saved.currency,
-                            classification=saved.classification,
-                            timing=saved.timing,
-                            is_position_flow=saved.is_position_flow,
-                            is_portfolio_flow=saved.is_portfolio_flow,
-                            calculation_type=saved.calculation_type,
-                            epoch=saved.epoch,
-                        )
-
-                        await outbox_repo.create_outbox_event(
-                            aggregate_type="Cashflow",
-                            aggregate_id=str(saved.portfolio_id),
-                            event_type="CashflowCalculated",
-                            topic=KAFKA_CASHFLOWS_CALCULATED_TOPIC,
-                            payload=completion_evt.model_dump(mode="json"),
-                            correlation_id=correlation_id,
-                        )
-                        await db.commit()
-
-                    except Exception:
-                        await tx.rollback()
-                        raise
+                    await self._process_validated_cashflow_event(
+                        db,
+                        msg,
+                        event,
+                        event_id,
+                        semantic_event_id,
+                        correlation_id,
+                    )
 
         except (json.JSONDecodeError, ValidationError):
             logger.error("Message validation failed. Sending to DLQ.", exc_info=True)
@@ -349,3 +334,132 @@ class CashflowCalculatorConsumer(BaseConsumer):
                 exc_info=True,
             )
             await self._send_to_dlq_async(msg, e)
+
+    async def _process_validated_cashflow_event(
+        self,
+        db,
+        msg: Message,
+        event: TransactionEvent,
+        event_id: str,
+        semantic_event_id: str,
+        correlation_id: str,
+    ) -> None:
+        tx = await db.begin()
+        try:
+            idempotency_repo = IdempotencyRepository(db)
+            cashflow_repo = CashflowRepository(db)
+            outbox_repo = OutboxRepository(db)
+
+            if not await self._claim_physical_event(
+                idempotency_repo,
+                event,
+                event_id,
+                correlation_id,
+            ):
+                await tx.rollback()
+                return
+
+            if await self._should_skip_stale_replay_event(cashflow_repo, event, msg.topic()):
+                await db.commit()
+                return
+
+            fencer = EpochFencer(db, service_name=SERVICE_NAME)
+            if not await fencer.check(event):
+                await tx.rollback()
+                return
+
+            if not await self._claim_semantic_event(
+                idempotency_repo,
+                event,
+                event_id,
+                semantic_event_id,
+                correlation_id,
+                msg.topic(),
+            ):
+                await db.commit()
+                return
+
+            event_transaction_type = _validated_cashflow_transaction_type(event)
+            if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
+                await db.commit()
+                return
+
+            rule = await self._required_rule_for_transaction(db, event_transaction_type)
+            await _stage_cashflow_calculation(
+                cashflow_repo,
+                outbox_repo,
+                event,
+                rule,
+                correlation_id,
+            )
+            await db.commit()
+        except Exception:
+            await tx.rollback()
+            raise
+
+    async def _claim_physical_event(
+        self,
+        idempotency_repo: IdempotencyRepository,
+        event: TransactionEvent,
+        event_id: str,
+        correlation_id: str,
+    ) -> bool:
+        claimed = await idempotency_repo.claim_event_processing(
+            event_id,
+            event.portfolio_id,
+            SERVICE_NAME,
+            correlation_id,
+        )
+        if not claimed:
+            logger.warning(f"Event {event_id} already processed. Skipping.")
+        return claimed
+
+    async def _should_skip_stale_replay_event(
+        self,
+        cashflow_repo: CashflowRepository,
+        event: TransactionEvent,
+        topic: str,
+    ) -> bool:
+        if topic != KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC:
+            return False
+        portfolio_exists = await cashflow_repo.portfolio_exists(event.portfolio_id)
+        transaction_exists = await cashflow_repo.transaction_exists(
+            event.transaction_id,
+            portfolio_id=event.portfolio_id,
+        )
+        if portfolio_exists and transaction_exists:
+            return False
+        _log_stale_replay_cashflow_skip(event, topic, portfolio_exists, transaction_exists)
+        return True
+
+    async def _claim_semantic_event(
+        self,
+        idempotency_repo: IdempotencyRepository,
+        event: TransactionEvent,
+        event_id: str,
+        semantic_event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> bool:
+        claimed = await idempotency_repo.claim_event_processing(
+            semantic_event_id,
+            event.portfolio_id,
+            SERVICE_NAME,
+            correlation_id,
+        )
+        if not claimed:
+            _log_semantic_cashflow_duplicate(event, event_id, semantic_event_id, topic)
+        return claimed
+
+    async def _required_rule_for_transaction(
+        self,
+        db,
+        event_transaction_type: str,
+    ) -> CachedCashflowRule:
+        rule = await self._get_rule_for_transaction(db, event_transaction_type)
+        if rule:
+            return rule
+        raise NoCashflowRuleError(
+            "No cashflow rule found for transaction type "
+            f"'{event_transaction_type}'. Message will be sent to DLQ."
+        )

@@ -1194,3 +1194,10 @@ construction, and shared PostgreSQL conflict-update assembly. `upsert_position_t
 `upsert_portfolio_timeseries` both improved from `B (6)` to `A (2)`, and every
 function/class/method in `timeseries_repository_base.py` now reports A-ranked cyclomatic
 complexity.
+
+CR-1026 reduced cashflow calculator consumer orchestration complexity by extracting
+transaction-scoped processing, idempotency claim helpers, stale replay detection, semantic duplicate
+claiming, transaction contract validation, non-cash lifecycle classification, required rule lookup,
+cashflow calculation staging, and `CashflowCalculatedEvent` construction helpers.
+`CashflowCalculatorConsumer._process_message_with_retry` improved from `D (24)` to `B (8)`, with
+all extracted helpers A-ranked by cyclomatic complexity.
