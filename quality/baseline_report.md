@@ -1167,3 +1167,10 @@ fee-component presence detection, component totaling, component validation, and 
 non-negative amount enforcement helpers. `resolve_transaction_trade_fee` improved from `B (7)` to
 `A (2)`, and every function in `transaction_fee_components.py` now reports A-ranked cyclomatic
 complexity.
+
+CR-1022 reduced shared Kafka producer publish complexity by extracting publish-header
+construction, key encoding, delivery-report callback construction, outbox-id extraction/decoding,
+delivery failure handling, delivery success handling, delivery log context, message-key
+representation, and guarded delivery-callback notification helpers. `KafkaProducer.publish_message`
+improved from `B (6)` to `A (3)`, and every function/class/method in `kafka_utils.py` now reports
+A-ranked cyclomatic complexity.

@@ -76,61 +76,14 @@ class KafkaProducer:
 
         try:
             json_value = json.dumps(value, default=str)
-
-            # Ensure headers list
-            headers = headers[:] if headers else []
-            if outbox_id:
-                headers.append(("outbox_id", outbox_id.encode("utf-8")))
-
-            def delivery_report(err, msg):
-                _oid = outbox_id
-                if _oid is None:
-                    try:
-                        hdrs = dict(msg.headers() or [])
-                        raw = hdrs.get("outbox_id")
-                        if isinstance(raw, (bytes, bytearray)):
-                            _oid = raw.decode("utf-8")
-                        elif isinstance(raw, str):
-                            _oid = raw
-                    except Exception:
-                        _oid = None
-
-                if err is not None:
-                    logger.error(
-                        f"Message delivery failed for topic {msg.topic()} key {msg.key()}: {err}"
-                    )
-                    if on_delivery:
-                        try:
-                            on_delivery(_oid, False, str(err))
-                        except Exception:
-                            logger.exception(
-                                "on_delivery callback raised an exception (failure path)."
-                            )
-                else:
-                    log_extra = {
-                        "topic": msg.topic(),
-                        "partition": msg.partition(),
-                        "offset": msg.offset(),
-                    }
-                    try:
-                        key_repr = msg.key().decode("utf-8") if msg.key() else ""
-                    except Exception:
-                        key_repr = "<binary>"
-                    logger.info(f"Message delivered with key '{key_repr}'", extra=log_extra)
-                    if on_delivery:
-                        try:
-                            on_delivery(_oid, True, None)
-                        except Exception:
-                            logger.exception(
-                                "on_delivery callback raised an exception (success path)."
-                            )
+            publish_headers = _publish_headers(headers, outbox_id)
 
             self.producer.produce(
                 topic,
-                key=key.encode("utf-8") if isinstance(key, str) else key,
+                key=_encoded_kafka_key(key),
                 value=json_value.encode("utf-8"),
-                headers=headers,
-                callback=delivery_report,
+                headers=publish_headers,
+                callback=_delivery_report_callback(outbox_id, on_delivery),
             )
             self.producer.poll(0)
         except Exception as e:
@@ -176,3 +129,112 @@ def reset_kafka_producer(*, timeout: int = 10) -> None:
             _kafka_producer_instance.close(timeout=timeout)
         finally:
             _kafka_producer_instance = None
+
+
+def _publish_headers(
+    headers: Optional[List[Tuple[str, bytes]]],
+    outbox_id: Optional[str],
+) -> List[Tuple[str, bytes]]:
+    publish_headers = headers[:] if headers else []
+    if outbox_id:
+        publish_headers.append(("outbox_id", outbox_id.encode("utf-8")))
+    return publish_headers
+
+
+def _encoded_kafka_key(key: object):
+    return key.encode("utf-8") if isinstance(key, str) else key
+
+
+def _delivery_report_callback(
+    outbox_id: Optional[str],
+    on_delivery: Optional[Callable[[str, bool, Optional[str]], None]],
+):
+    def delivery_report(err, msg):
+        resolved_outbox_id = outbox_id or _outbox_id_from_message_headers(msg)
+        if err is not None:
+            _handle_delivery_failure(err, msg, resolved_outbox_id, on_delivery)
+            return
+        _handle_delivery_success(msg, resolved_outbox_id, on_delivery)
+
+    return delivery_report
+
+
+def _outbox_id_from_message_headers(msg) -> Optional[str]:
+    try:
+        raw = dict(msg.headers() or []).get("outbox_id")
+    except Exception:
+        return None
+    return _decoded_outbox_id(raw)
+
+
+def _decoded_outbox_id(raw: object) -> Optional[str]:
+    if isinstance(raw, (bytes, bytearray)):
+        return raw.decode("utf-8")
+    if isinstance(raw, str):
+        return raw
+    return None
+
+
+def _handle_delivery_failure(
+    err,
+    msg,
+    outbox_id: Optional[str],
+    on_delivery: Optional[Callable[[str, bool, Optional[str]], None]],
+) -> None:
+    logger.error(f"Message delivery failed for topic {msg.topic()} key {msg.key()}: {err}")
+    _notify_delivery_callback(
+        on_delivery,
+        outbox_id,
+        success=False,
+        error_message=str(err),
+        failure_log_message="on_delivery callback raised an exception (failure path).",
+    )
+
+
+def _handle_delivery_success(
+    msg,
+    outbox_id: Optional[str],
+    on_delivery: Optional[Callable[[str, bool, Optional[str]], None]],
+) -> None:
+    logger.info(
+        f"Message delivered with key '{_message_key_repr(msg)}'",
+        extra=_delivery_log_extra(msg),
+    )
+    _notify_delivery_callback(
+        on_delivery,
+        outbox_id,
+        success=True,
+        error_message=None,
+        failure_log_message="on_delivery callback raised an exception (success path).",
+    )
+
+
+def _delivery_log_extra(msg) -> Dict[str, Any]:
+    return {
+        "topic": msg.topic(),
+        "partition": msg.partition(),
+        "offset": msg.offset(),
+    }
+
+
+def _message_key_repr(msg) -> str:
+    try:
+        return msg.key().decode("utf-8") if msg.key() else ""
+    except Exception:
+        return "<binary>"
+
+
+def _notify_delivery_callback(
+    on_delivery: Optional[Callable[[Optional[str], bool, Optional[str]], None]],
+    outbox_id: Optional[str],
+    *,
+    success: bool,
+    error_message: Optional[str],
+    failure_log_message: str,
+) -> None:
+    if not on_delivery:
+        return
+    try:
+        on_delivery(outbox_id, success, error_message)
+    except Exception:
+        logger.exception(failure_log_message)
