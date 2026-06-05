@@ -633,3 +633,9 @@ health before that claim is defensible.
      direct Kafka topics, and direct-topic headers. `validate_event_supportability_catalog`
      improved from `E (39)` to `A (5)`, all extracted helper functions are A-ranked, and
      `event_supportability.py` remains `A (26.87)` maintainability.
+127. Reduced source-data security profile validation complexity by extracting focused validators
+     for profile names, classification allowlists, scope requirements, operator-only policy, audit
+     mapping, retention mapping, route-family compatibility, PII-field checks, and catalog
+     coverage. `_validate_source_data_security_profiles` improved from `D (25)` to `A (4)`, all
+     touched helper functions are A-ranked, and `source_data_security.py` remains `A (29.23)`
+     maintainability.

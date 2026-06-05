@@ -49,6 +49,22 @@ SENSITIVITY_RETENTION_REQUIREMENT = {
     REFERENCE_INTERNAL: RETAIN_FOR_SOURCE_AUDIT,
     INTERNAL_OPERATIONAL: RETAIN_FOR_OPERATIONAL_AUDIT,
 }
+SUPPORTED_ACCESS_CLASSIFICATIONS = frozenset(
+    {BUSINESS_CONSUMER_ACCESS, OPERATOR_ACCESS, SYSTEM_ACCESS}
+)
+SUPPORTED_SENSITIVITY_CLASSIFICATIONS = frozenset(
+    {CLIENT_CONFIDENTIAL, CLIENT_SENSITIVE, INTERNAL_OPERATIONAL, REFERENCE_INTERNAL}
+)
+SUPPORTED_RETENTION_REQUIREMENTS = frozenset(
+    {
+        RETAIN_FOR_CLIENT_RECORD,
+        RETAIN_FOR_SOURCE_AUDIT,
+        RETAIN_FOR_OPERATIONAL_AUDIT,
+    }
+)
+SUPPORTED_AUDIT_REQUIREMENTS = frozenset(
+    {AUDIT_READ_AND_EXPORT, AUDIT_OPERATOR_ACCESS, AUDIT_SYSTEM_ACCESS}
+)
 
 
 @dataclass(frozen=True)
@@ -554,89 +570,148 @@ def _validate_source_data_security_profiles(
     profile_product_names: dict[str, str] = {}
     profile_names: set[str] = set()
     for profile in profiles:
-        product_name = _normalize_required_text(profile.product_name, "product_name")
-        if product_name in profile_names:
-            raise ValueError(f"Duplicate source-data security profile: {profile.product_name}")
-        profile_names.add(product_name)
-        profile_product_names[product_name] = profile.product_name
-        _require_allowed(
-            profile.access_classification,
-            "access_classification",
-            {BUSINESS_CONSUMER_ACCESS, OPERATOR_ACCESS, SYSTEM_ACCESS},
-        )
-        _require_allowed(
-            profile.sensitivity_classification,
-            "sensitivity_classification",
-            {
-                CLIENT_CONFIDENTIAL,
-                CLIENT_SENSITIVE,
-                INTERNAL_OPERATIONAL,
-                REFERENCE_INTERNAL,
-            },
-        )
-        _require_allowed(
-            profile.retention_requirement,
-            "retention_requirement",
-            {
-                RETAIN_FOR_CLIENT_RECORD,
-                RETAIN_FOR_SOURCE_AUDIT,
-                RETAIN_FOR_OPERATIONAL_AUDIT,
-            },
-        )
-        _require_allowed(
-            profile.audit_requirement,
-            "audit_requirement",
-            {AUDIT_READ_AND_EXPORT, AUDIT_OPERATOR_ACCESS, AUDIT_SYSTEM_ACCESS},
-        )
-        if not profile.tenant_required:
-            raise ValueError(f"{profile.product_name} must require tenant scoping")
-        if not profile.entitlement_required:
-            raise ValueError(f"{profile.product_name} must require entitlement scoping")
+        product_name = _record_profile_name(profile, profile_names, profile_product_names)
         catalog_product = catalog_products.get(product_name)
-        if profile.operator_only and profile.access_classification != OPERATOR_ACCESS:
-            raise ValueError(f"{profile.product_name} operator_only requires operator access")
-        if profile.operator_only:
-            if catalog_product and catalog_product.route_family != CONTROL_PLANE_AND_POLICY:
-                raise ValueError(
-                    f"{profile.product_name} operator_only requires control-plane route family"
-                )
-        if profile.audit_requirement == AUDIT_OPERATOR_ACCESS and not profile.operator_only:
-            raise ValueError(f"{profile.product_name} operator audit requires operator_only")
-        expected_audit_requirement = ACCESS_CLASSIFICATION_AUDIT_REQUIREMENT[
-            profile.access_classification
-        ]
-        if profile.audit_requirement != expected_audit_requirement:
-            raise ValueError(
-                f"{profile.product_name} audit_requirement {profile.audit_requirement} "
-                f"is not valid for access_classification {profile.access_classification}"
-            )
-        expected_retention_requirement = SENSITIVITY_RETENTION_REQUIREMENT[
-            profile.sensitivity_classification
-        ]
-        if profile.retention_requirement != expected_retention_requirement:
-            raise ValueError(
-                f"{profile.product_name} retention_requirement "
-                f"{profile.retention_requirement} is not valid for sensitivity_classification "
-                f"{profile.sensitivity_classification}"
-            )
-        if catalog_product:
-            allowed_route_families = ACCESS_CLASSIFICATION_ROUTE_FAMILIES[
-                profile.access_classification
-            ]
-            if catalog_product.route_family not in allowed_route_families:
-                raise ValueError(
-                    f"{profile.product_name} access_classification "
-                    f"{profile.access_classification} is not valid for route family "
-                    f"{catalog_product.route_family}"
-                )
-        if (
-            profile.sensitivity_classification in {CLIENT_CONFIDENTIAL, CLIENT_SENSITIVE}
-            and not profile.pii_fields
-        ):
-            raise ValueError(f"{profile.product_name} requires pii_fields for client sensitivity")
-        for pii_field in profile.pii_fields:
-            _normalize_required_text(pii_field, "pii_fields")
+        _validate_profile_classifications(profile)
+        _validate_profile_scope_requirements(profile)
+        _validate_operator_profile(profile, catalog_product)
+        _validate_profile_audit_requirement(profile)
+        _validate_profile_retention_requirement(profile)
+        _validate_profile_route_family(profile, catalog_product)
+        _validate_profile_pii_fields(profile)
 
+    _validate_profile_catalog_coverage(
+        catalog_product_names=catalog_product_names,
+        profile_names=profile_names,
+        profile_product_names=profile_product_names,
+    )
+
+
+def _record_profile_name(
+    profile: SourceDataSecurityProfile,
+    profile_names: set[str],
+    profile_product_names: dict[str, str],
+) -> str:
+    product_name = _normalize_required_text(profile.product_name, "product_name")
+    if product_name in profile_names:
+        raise ValueError(f"Duplicate source-data security profile: {profile.product_name}")
+    profile_names.add(product_name)
+    profile_product_names[product_name] = profile.product_name
+    return product_name
+
+
+def _validate_profile_classifications(profile: SourceDataSecurityProfile) -> None:
+    _require_allowed(
+        profile.access_classification,
+        "access_classification",
+        SUPPORTED_ACCESS_CLASSIFICATIONS,
+    )
+    _require_allowed(
+        profile.sensitivity_classification,
+        "sensitivity_classification",
+        SUPPORTED_SENSITIVITY_CLASSIFICATIONS,
+    )
+    _require_allowed(
+        profile.retention_requirement,
+        "retention_requirement",
+        SUPPORTED_RETENTION_REQUIREMENTS,
+    )
+    _require_allowed(
+        profile.audit_requirement,
+        "audit_requirement",
+        SUPPORTED_AUDIT_REQUIREMENTS,
+    )
+
+
+def _validate_profile_scope_requirements(profile: SourceDataSecurityProfile) -> None:
+    if not profile.tenant_required:
+        raise ValueError(f"{profile.product_name} must require tenant scoping")
+    if not profile.entitlement_required:
+        raise ValueError(f"{profile.product_name} must require entitlement scoping")
+
+
+def _validate_operator_profile(
+    profile: SourceDataSecurityProfile,
+    catalog_product: SourceDataProductDefinition | None,
+) -> None:
+    _validate_operator_access(profile)
+    _validate_operator_route_family(profile, catalog_product)
+
+
+def _validate_operator_access(profile: SourceDataSecurityProfile) -> None:
+    if profile.operator_only and profile.access_classification != OPERATOR_ACCESS:
+        raise ValueError(f"{profile.product_name} operator_only requires operator access")
+
+
+def _validate_operator_route_family(
+    profile: SourceDataSecurityProfile,
+    catalog_product: SourceDataProductDefinition | None,
+) -> None:
+    if (
+        profile.operator_only
+        and catalog_product
+        and catalog_product.route_family != CONTROL_PLANE_AND_POLICY
+    ):
+        raise ValueError(
+            f"{profile.product_name} operator_only requires control-plane route family"
+        )
+
+
+def _validate_profile_audit_requirement(profile: SourceDataSecurityProfile) -> None:
+    if profile.audit_requirement == AUDIT_OPERATOR_ACCESS and not profile.operator_only:
+        raise ValueError(f"{profile.product_name} operator audit requires operator_only")
+    expected_audit_requirement = ACCESS_CLASSIFICATION_AUDIT_REQUIREMENT[
+        profile.access_classification
+    ]
+    if profile.audit_requirement != expected_audit_requirement:
+        raise ValueError(
+            f"{profile.product_name} audit_requirement {profile.audit_requirement} "
+            f"is not valid for access_classification {profile.access_classification}"
+        )
+
+
+def _validate_profile_retention_requirement(profile: SourceDataSecurityProfile) -> None:
+    expected_retention_requirement = SENSITIVITY_RETENTION_REQUIREMENT[
+        profile.sensitivity_classification
+    ]
+    if profile.retention_requirement != expected_retention_requirement:
+        raise ValueError(
+            f"{profile.product_name} retention_requirement "
+            f"{profile.retention_requirement} is not valid for sensitivity_classification "
+            f"{profile.sensitivity_classification}"
+        )
+
+
+def _validate_profile_route_family(
+    profile: SourceDataSecurityProfile,
+    catalog_product: SourceDataProductDefinition | None,
+) -> None:
+    if not catalog_product:
+        return
+    allowed_route_families = ACCESS_CLASSIFICATION_ROUTE_FAMILIES[profile.access_classification]
+    if catalog_product.route_family not in allowed_route_families:
+        raise ValueError(
+            f"{profile.product_name} access_classification {profile.access_classification} "
+            f"is not valid for route family {catalog_product.route_family}"
+        )
+
+
+def _validate_profile_pii_fields(profile: SourceDataSecurityProfile) -> None:
+    if (
+        profile.sensitivity_classification in {CLIENT_CONFIDENTIAL, CLIENT_SENSITIVE}
+        and not profile.pii_fields
+    ):
+        raise ValueError(f"{profile.product_name} requires pii_fields for client sensitivity")
+    for pii_field in profile.pii_fields:
+        _normalize_required_text(pii_field, "pii_fields")
+
+
+def _validate_profile_catalog_coverage(
+    *,
+    catalog_product_names: dict[str, str],
+    profile_names: set[str],
+    profile_product_names: dict[str, str],
+) -> None:
     normalized_product_names = set(catalog_product_names)
     missing_profiles = [
         catalog_product_names[name] for name in sorted(normalized_product_names - profile_names)
@@ -650,7 +725,7 @@ def _validate_source_data_security_profiles(
         raise ValueError("Unknown source-data security profile(s): " + ", ".join(extra_profiles))
 
 
-def _require_allowed(value: str, field_name: str, allowed: set[str]) -> None:
+def _require_allowed(value: str, field_name: str, allowed: frozenset[str]) -> None:
     normalized = _normalize_required_text(value, field_name)
     if normalized not in {item.upper() for item in allowed}:
         raise ValueError(f"{field_name} has unsupported value: {value}")

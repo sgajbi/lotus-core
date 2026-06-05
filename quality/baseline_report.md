@@ -847,3 +847,10 @@ source/evidence links, evidence bundles, source-data products, supportability su
 Kafka topics, and direct-topic headers. `validate_event_supportability_catalog` improved from
 `E (39)` to `A (5)`, all extracted helper functions report A-ranked complexity, and
 `event_supportability.py` remains `A (26.87)` maintainability.
+
+CR-971 reduced source-data security profile validation complexity by extracting focused validators
+for profile-name recording, classification allowlists, tenant and entitlement scope requirements,
+operator-only policy, audit mapping, retention mapping, route-family compatibility, PII-field
+checks, and catalog coverage. `_validate_source_data_security_profiles` improved from `D (25)` to
+`A (4)`, all touched helper functions report A-ranked complexity, and `source_data_security.py`
+remains `A (29.23)` maintainability.
