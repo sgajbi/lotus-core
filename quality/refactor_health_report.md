@@ -708,3 +708,9 @@ health before that claim is defensible.
      construction, and final `InstrumentEvent` assembly. `build_fx_contract_instrument_event`
      improved from `C (13)` to `A (5)`, and every FX contract instrument function now reports
      A-ranked complexity.
+140. Reduced FX linkage enrichment complexity by extracting focused helpers for contract ID
+     decision predicates, open/close lifecycle transaction IDs, FX metadata update assembly, core
+     linkage update fields, contract linkage update fields, instrument lifecycle update fields,
+     and FX processing mode update fields. `enrich_fx_transaction_metadata` improved from `B (7)`
+     to `A (2)`, `_resolve_fx_contract_id` improved from `B (6)` to `A (4)`, and
+     `_resolve_contract_lifecycle_transaction_ids` improved from `B (7)` to `A (3)`.

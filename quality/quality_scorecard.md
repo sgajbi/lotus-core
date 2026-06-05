@@ -25,19 +25,19 @@ This table summarizes the evidence the final PR must carry forward. It is intent
 measured or explicitly documented improvement so the PR can distinguish completed hardening from
 remaining merge-gate risk.
 
-| Area | Baseline / Risk Before This Branch | Current Evidence After CR-983 | Remaining PR Risk |
+| Area | Baseline / Risk Before This Branch | Current Evidence After CR-984 | Remaining PR Risk |
 | --- | --- | --- | --- |
-| Code health | Quality foundation existed, but the refactor started with broad format/lint/collection debt and active source maintainability hotspots to measure and reduce. | Ruff lint and format gates pass; complexity and maintainability gates pass; active non-generated C-ranked source hotspot list is clear; current measured source hotspots are `reference_data_dto.py` `B (9.31)` and `ingestion_job_service.py` `B (16.96)`; CR-974 reduced the canonical FX validator from `E (37)` to `A (1)`; CR-975 reduced the canonical INTEREST validator from `D (29)` to `A (1)`; CR-976 reduced the canonical SELL validator from `C (14)` to `A (1)`; CR-977 reduced the canonical BUY validator from `C (14)` to `A (1)`; CR-978 reduced the canonical DIVIDEND validator from `D (21)` to `A (1)`; CR-979 reduced the CA Bundle A validator from `D (22)` to `A (2)`; CR-980 reduced adjustment cash-leg resolution from `C (11)` to `A (3)` and cash-leg construction from `B (9)` to `A (1)`; CR-981 reduced upstream cash-leg pairing validation from `C (12)` to `A (1)`; CR-982 reduced FX baseline processing from `C (14)` to `A (2)`; CR-983 reduced FX contract instrument construction from `C (13)` to `A (5)`. | Keep generated `query_service/build` copies tracked separately and prevent source hotspot regression before PR. |
+| Code health | Quality foundation existed, but the refactor started with broad format/lint/collection debt and active source maintainability hotspots to measure and reduce. | Ruff lint and format gates pass; complexity and maintainability gates pass; active non-generated C-ranked source hotspot list is clear; current measured source hotspots are `reference_data_dto.py` `B (9.31)` and `ingestion_job_service.py` `B (16.96)`; CR-974 reduced the canonical FX validator from `E (37)` to `A (1)`; CR-975 reduced the canonical INTEREST validator from `D (29)` to `A (1)`; CR-976 reduced the canonical SELL validator from `C (14)` to `A (1)`; CR-977 reduced the canonical BUY validator from `C (14)` to `A (1)`; CR-978 reduced the canonical DIVIDEND validator from `D (21)` to `A (1)`; CR-979 reduced the CA Bundle A validator from `D (22)` to `A (2)`; CR-980 reduced adjustment cash-leg resolution from `C (11)` to `A (3)` and cash-leg construction from `B (9)` to `A (1)`; CR-981 reduced upstream cash-leg pairing validation from `C (12)` to `A (1)`; CR-982 reduced FX baseline processing from `C (14)` to `A (2)`; CR-983 reduced FX contract instrument construction from `C (13)` to `A (5)`; CR-984 leaves the FX linkage module fully A-ranked by complexity. | Keep generated `query_service/build` copies tracked separately and prevent source hotspot regression before PR. |
 | Architecture and modularity | Large services, repositories, and DTO modules carried concentrated logic and weak reviewability across analytics, core snapshot, operations, reference data, and ingestion surfaces. | Focused helper/module extractions moved query, DTO-family, analytics export, core snapshot, operations, and ingestion logic into A-ranked modules; `ingestion_job_service.py` is reduced to `B (16.96)` with no remaining B-ranked service methods. | Final PR narrative must explain the architectural pattern and remaining generated-surface debt without claiming complete platform-wide modularity. |
 | OpenAPI and API governance | API governance needed to remain measurable and CI-visible while refactoring preserved behavior. | `make openapi-gate`, `make api-vocabulary-gate`, `make no-alias-gate`, and `make monetary-float-guard` pass in the current evidence snapshot. | Spectral remains report-only until the generated-spec artifact and quality contract are stable enough for enforcement. |
 | Tests and coverage | Full all-suite collection was blocked by governed mixed-runtime constraints, and coverage evidence needed a runtime-separated gate rather than an unbounded local rerun. | `make warning-gate` passes with 2,918 unit tests, 9 deselected, and 0 warnings; `make coverage-gate` passes with 98% combined unit + integration-lite coverage after 2,918 unit tests and 121 integration-lite tests. | Keep runtime-separated test lanes as PR truth; do not represent the mixed-runtime collection guard as a full all-suite pass. |
 | Security and dependency hygiene | Security posture needed measurable gates beyond source-only linting and report-only dependency checks. | `make quality-bandit-gate` passes with 0 Bandit issues across `src`; `make quality-deptry-source-gate` passes; `make security-audit` passes with dependency consistency clean and no known vulnerabilities, with 2 governed ignores; CR-971 reduced source-data security profile validation from `D (25)` to `A (4)`; CR-973 leaves enterprise readiness policy fully A-ranked by complexity. | PR should list the governed pip-audit ignores explicitly and keep dependency-audit evidence current on the final commit. |
 | Observability and operations | Ingestion and operational diagnostics had concentrated logic that was harder to test, review, and support. | CR-953 through CR-969 extracted focused ingestion status, SLO, backlog, capacity, reprocessing, replay audit, consumer-lag, health-summary, and idempotency diagnostics helpers with direct tests for representative operational behavior; CR-972 reduced shared outbox dispatcher batch orchestration from `E (33)` to `A (2)` while preserving metrics and delivery accounting. | Runtime-level observability claims still need to stay scoped to diagnostics modularity and outbox helper refactoring unless additional service bring-up evidence is captured. |
-| Documentation and CI measurement | The branch needed baseline measurement, incremental evidence, and a reviewable trail rather than cosmetic cleanup claims. | The quality scorecard, refactor report, baseline evidence, and CR-849 through CR-983 ledger entries record measurable gate and maintainability movement; GitHub `Remote Feature Lane` passed for `352ae0fa`. | The final PR must refresh this row after the latest GitHub run on the final pushed commit is green. |
+| Documentation and CI measurement | The branch needed baseline measurement, incremental evidence, and a reviewable trail rather than cosmetic cleanup claims. | The quality scorecard, refactor report, baseline evidence, and CR-849 through CR-984 ledger entries record measurable gate and maintainability movement; GitHub `Remote Feature Lane` passed for `352ae0fa`. | The final PR must refresh this row after the latest GitHub run on the final pushed commit is green. |
 
 ## Current PR Evidence Snapshot
 
-Local evidence captured on 2026-06-05 after CR-983:
+Local evidence captured on 2026-06-05 after CR-984:
 
 - `make quality-ruff-gate` => passed
 - `make quality-ruff-format-gate` => passed; 1,156 files already formatted
@@ -107,6 +107,10 @@ Local evidence captured on 2026-06-05 after CR-983:
 - CR-983 focused evidence: FX contract-instrument/baseline/validation/linkage tests passed with
   24 tests; scoped Ruff lint and format checks passed; `build_fx_contract_instrument_event`
   improved from `C (13)` to `A (5)` and all FX contract instrument functions are A-ranked.
+- CR-984 focused evidence: FX linkage/validation/contract-instrument/baseline tests passed with
+  24 tests; scoped Ruff lint and format checks passed; `enrich_fx_transaction_metadata` improved
+  from `B (7)` to `A (2)`, `_resolve_fx_contract_id` improved from `B (6)` to `A (4)`, and
+  `_resolve_contract_lifecycle_transaction_ids` improved from `B (7)` to `A (3)`.
 
 ## Incremental Maintainability Updates
 
@@ -232,3 +236,8 @@ Local evidence captured on 2026-06-05 after CR-983:
 - CR-983 split FX contract instrument construction into focused helper validators, reducing
   `build_fx_contract_instrument_event` from `C (13)` to `A (5)` while leaving the full FX contract
   instrument module A-ranked by cyclomatic complexity and `A (51.08)` maintainability.
+- CR-984 split FX linkage enrichment into focused helper validators, reducing
+  `enrich_fx_transaction_metadata` from `B (7)` to `A (2)`, `_resolve_fx_contract_id` from
+  `B (6)` to `A (4)`, and `_resolve_contract_lifecycle_transaction_ids` from `B (7)` to `A (3)`
+  while leaving the full FX linkage module A-ranked by cyclomatic complexity and `A (42.62)`
+  maintainability.

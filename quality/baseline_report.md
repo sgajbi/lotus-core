@@ -944,3 +944,11 @@ FX contract ID resolution, contract currency normalization, pair label resolutio
 construction, and final `InstrumentEvent` assembly. `build_fx_contract_instrument_event` improved
 from `C (13)` to `A (5)`, every FX contract instrument function reports A-ranked complexity, and
 `fx_contract_instrument.py` remains `A (51.08)` maintainability.
+
+CR-984 reduced FX linkage enrichment complexity by extracting focused helpers for contract ID
+decision predicates, open/close lifecycle transaction IDs, FX metadata update assembly, core
+linkage update fields, contract linkage update fields, instrument lifecycle update fields, and FX
+processing mode update fields. `enrich_fx_transaction_metadata` improved from `B (7)` to `A (2)`,
+`_resolve_fx_contract_id` improved from `B (6)` to `A (4)`, and
+`_resolve_contract_lifecycle_transaction_ids` improved from `B (7)` to `A (3)`. Every FX linkage
+function reports A-ranked complexity, and `fx_linkage.py` remains `A (42.62)` maintainability.
