@@ -854,3 +854,11 @@ operator-only policy, audit mapping, retention mapping, route-family compatibili
 checks, and catalog coverage. `_validate_source_data_security_profiles` improved from `D (25)` to
 `A (4)`, all touched helper functions report A-ranked complexity, and `source_data_security.py`
 remains `A (29.23)` maintainability.
+
+CR-972 reduced shared outbox dispatcher batch orchestration complexity by extracting focused
+helpers for event publishing, flush-result accounting, delivery-result classification, success
+persistence, retryable failure persistence, terminal failure persistence, delivery callback
+creation, event headers, event payloads, and callback-less failure accounting.
+`OutboxDispatcher._process_batch_sync` improved from `E (33)` to `A (2)`, all dispatcher methods
+and outbox helper functions report A-ranked complexity, and `outbox_dispatcher.py` remains
+`A (40.41)` maintainability.

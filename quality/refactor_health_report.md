@@ -639,3 +639,9 @@ health before that claim is defensible.
      coverage. `_validate_source_data_security_profiles` improved from `D (25)` to `A (4)`, all
      touched helper functions are A-ranked, and `source_data_security.py` remains `A (29.23)`
      maintainability.
+128. Reduced shared outbox dispatcher batch orchestration complexity by extracting focused helpers
+     for publish handling, flush-result accounting, delivery classification, success persistence,
+     retryable failure persistence, terminal failure persistence, callbacks, event headers, event
+     payloads, and callback-less failure accounting. `_process_batch_sync` improved from `E (33)`
+     to `A (2)`, all dispatcher methods and outbox helper functions are A-ranked, and
+     `outbox_dispatcher.py` remains `A (40.41)` maintainability.

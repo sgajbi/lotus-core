@@ -122,142 +122,182 @@ class OutboxDispatcher:
                     delivery_ack: Dict[int, bool] = {}
                     delivery_errs: Dict[int, str] = {}
 
-                    def _make_on_delivery(outbox_id: int):
-                        def _cb(
-                            _replayed_outbox_id: str, success: bool, error_message: Optional[str]
-                        ):
-                            if success:
-                                delivery_ack[outbox_id] = True
-                            else:
-                                delivery_ack[outbox_id] = False
-                                delivery_errs[outbox_id] = str(error_message)
+                    self._publish_events(events_to_process, delivery_ack, delivery_errs)
+                    self._flush_delivery_results(events_to_process, delivery_ack, delivery_errs)
+                    self._persist_delivery_results(
+                        db,
+                        events_to_process,
+                        delivery_ack,
+                        delivery_errs,
+                    )
 
-                        return _cb
+    def _publish_events(
+        self,
+        events_to_process: List[OutboxEvent],
+        delivery_ack: Dict[int, bool],
+        delivery_errs: Dict[int, str],
+    ) -> None:
+        for event in events_to_process:
+            try:
+                self._producer.publish_message(
+                    topic=event.topic,
+                    key=event.aggregate_id,
+                    value=_event_payload(event),
+                    headers=_event_headers(event),
+                    outbox_id=str(event.id),
+                    on_delivery=_make_on_delivery(event.id, delivery_ack, delivery_errs),
+                )
+            except Exception as e:
+                delivery_ack[event.id] = False
+                delivery_errs[event.id] = str(e)
+                logger.error(
+                    "OutboxDispatcher: Synchronous Kafka publish failed.",
+                    exc_info=True,
+                    extra={"outbox_id": event.id, "topic": event.topic},
+                )
 
-                    for event in events_to_process:
-                        headers = []
-                        if event.correlation_id:
-                            headers.append(("correlation_id", event.correlation_id.encode("utf-8")))
+    def _flush_delivery_results(
+        self,
+        events_to_process: List[OutboxEvent],
+        delivery_ack: Dict[int, bool],
+        delivery_errs: Dict[int, str],
+    ) -> None:
+        try:
+            undelivered_count = self._producer.flush(timeout=10)
+            logger.info(f"OutboxDispatcher: Flush complete for {len(events_to_process)} events.")
+            if undelivered_count:
+                _mark_callbackless_events_failed(
+                    events_to_process,
+                    delivery_ack,
+                    delivery_errs,
+                    reason="Kafka flush timed out before delivery callback.",
+                )
+        except Exception as e:
+            logger.error("OutboxDispatcher: Kafka flush failed.", exc_info=True)
+            _mark_callbackless_events_failed(
+                events_to_process,
+                delivery_ack,
+                delivery_errs,
+                reason=str(e),
+            )
 
-                        payload_obj = (
-                            event.payload
-                            if isinstance(event.payload, dict)
-                            else json.loads(event.payload)
-                        )
+    def _persist_delivery_results(
+        self,
+        db,
+        events_to_process: List[OutboxEvent],
+        delivery_ack: Dict[int, bool],
+        delivery_errs: Dict[int, str],
+    ) -> None:
+        success_ids, retryable_failure_ids, terminal_failure_ids = self._classify_delivery_results(
+            events_to_process, delivery_ack
+        )
+        self._mark_successes(db, events_to_process, success_ids)
+        self._mark_retryable_failures(
+            db,
+            events_to_process,
+            retryable_failure_ids,
+            delivery_errs,
+        )
+        self._mark_terminal_failures(
+            db,
+            events_to_process,
+            terminal_failure_ids,
+            delivery_errs,
+        )
 
-                        try:
-                            self._producer.publish_message(
-                                topic=event.topic,
-                                key=event.aggregate_id,
-                                value=payload_obj,
-                                headers=headers,
-                                outbox_id=str(event.id),
-                                on_delivery=_make_on_delivery(event.id),
-                            )
-                        except Exception as e:
-                            delivery_ack[event.id] = False
-                            delivery_errs[event.id] = str(e)
-                            logger.error(
-                                "OutboxDispatcher: Synchronous Kafka publish failed.",
-                                exc_info=True,
-                                extra={"outbox_id": event.id, "topic": event.topic},
-                            )
+    def _classify_delivery_results(
+        self,
+        events_to_process: List[OutboxEvent],
+        delivery_ack: Dict[int, bool],
+    ) -> tuple[list[int], list[int], list[int]]:
+        success_ids = _delivery_ids_by_outcome(delivery_ack, successful=True)
+        failure_ids = _delivery_ids_by_outcome(delivery_ack, successful=False)
+        terminal_failure_ids = [
+            event.id
+            for event in events_to_process
+            if event.id in failure_ids and (event.retry_count or 0) + 1 >= self._max_retries
+        ]
+        retryable_failure_ids = _retryable_failure_ids(failure_ids, terminal_failure_ids)
+        return success_ids, retryable_failure_ids, terminal_failure_ids
 
-                    try:
-                        undelivered_count = self._producer.flush(timeout=10)
-                        logger.info(
-                            f"OutboxDispatcher: Flush complete for {len(events_to_process)} events."
-                        )
-                        if undelivered_count:
-                            for event in events_to_process:
-                                if event.id not in delivery_ack:
-                                    delivery_ack[event.id] = False
-                                    delivery_errs[event.id] = (
-                                        "Kafka flush timed out before delivery callback."
-                                    )
-                    except Exception as e:
-                        logger.error("OutboxDispatcher: Kafka flush failed.", exc_info=True)
-                        for event in events_to_process:
-                            if event.id not in delivery_ack:
-                                delivery_ack[event.id] = False
-                                delivery_errs[event.id] = str(e)
+    def _mark_successes(
+        self,
+        db,
+        events_to_process: List[OutboxEvent],
+        success_ids: list[int],
+    ) -> None:
+        if not success_ids:
+            return
+        db.execute(
+            update(OutboxEvent)
+            .where(OutboxEvent.id.in_(success_ids))
+            .values(status="PROCESSED", processed_at=datetime.now(timezone.utc))
+        )
+        for event in events_to_process:
+            if event.id in success_ids:
+                observe_outbox_published(event.aggregate_type, event.topic)
+        logger.info(f"OutboxDispatcher: Marked {len(success_ids)} events as PROCESSED in DB.")
 
-                    success_ids = [oid for oid, ok in delivery_ack.items() if ok]
-                    failure_ids = [oid for oid, ok in delivery_ack.items() if not ok]
-                    terminal_failure_ids = [
-                        e.id
-                        for e in events_to_process
-                        if e.id in failure_ids and (e.retry_count or 0) + 1 >= self._max_retries
-                    ]
-                    retryable_failure_ids = [
-                        failure_id
-                        for failure_id in failure_ids
-                        if failure_id not in terminal_failure_ids
-                    ]
+    def _mark_retryable_failures(
+        self,
+        db,
+        events_to_process: List[OutboxEvent],
+        retryable_failure_ids: list[int],
+        delivery_errs: Dict[int, str],
+    ) -> None:
+        if not retryable_failure_ids:
+            return
+        db.execute(
+            update(OutboxEvent)
+            .where(OutboxEvent.id.in_(retryable_failure_ids))
+            .values(
+                # Use COALESCE to treat NULL as 0 before incrementing
+                retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
+                last_attempted_at=datetime.now(timezone.utc),
+            )
+        )
+        for event in events_to_process:
+            if event.id in retryable_failure_ids:
+                observe_outbox_failed(event.aggregate_type, event.topic)
+                observe_outbox_retried(event.aggregate_type, event.topic)
+        for failure_id in retryable_failure_ids:
+            reason = delivery_errs.get(failure_id, "unknown error")
+            logger.warning(
+                "OutboxDispatcher: Kafka delivery failed; will retry later.",
+                extra={"outbox_id": failure_id, "reason": reason},
+            )
 
-                    if success_ids:
-                        db.execute(
-                            update(OutboxEvent)
-                            .where(OutboxEvent.id.in_(success_ids))
-                            .values(status="PROCESSED", processed_at=datetime.now(timezone.utc))
-                        )
-                        for e in events_to_process:
-                            if e.id in success_ids:
-                                observe_outbox_published(e.aggregate_type, e.topic)
-                        logger.info(
-                            "OutboxDispatcher: Marked "
-                            f"{len(success_ids)} events as PROCESSED in DB."
-                        )
-
-                    if retryable_failure_ids:
-                        db.execute(
-                            update(OutboxEvent)
-                            .where(OutboxEvent.id.in_(retryable_failure_ids))
-                            .values(
-                                # Use COALESCE to treat NULL as 0 before incrementing
-                                retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
-                                last_attempted_at=datetime.now(timezone.utc),
-                            )
-                        )
-                        for e in events_to_process:
-                            if e.id in retryable_failure_ids:
-                                observe_outbox_failed(e.aggregate_type, e.topic)
-                                observe_outbox_retried(e.aggregate_type, e.topic)
-
-                        for fid in retryable_failure_ids:
-                            reason = delivery_errs.get(fid, "unknown error")
-                            logger.warning(
-                                "OutboxDispatcher: Kafka delivery failed; will retry later.",
-                                extra={"outbox_id": fid, "reason": reason},
-                            )
-
-                    if terminal_failure_ids:
-                        db.execute(
-                            update(OutboxEvent)
-                            .where(OutboxEvent.id.in_(terminal_failure_ids))
-                            .values(
-                                status=TERMINAL_FAILURE_STATUS,
-                                retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
-                                last_attempted_at=datetime.now(timezone.utc),
-                            )
-                        )
-                        for e in events_to_process:
-                            if e.id in terminal_failure_ids:
-                                observe_outbox_failed(e.aggregate_type, e.topic)
-
-                        for fid in terminal_failure_ids:
-                            reason = delivery_errs.get(fid, "unknown error")
-                            logger.error(
-                                (
-                                    "OutboxDispatcher: Kafka delivery reached terminal "
-                                    "failure threshold."
-                                ),
-                                extra={
-                                    "outbox_id": fid,
-                                    "reason": reason,
-                                    "max_retries": self._max_retries,
-                                },
-                            )
+    def _mark_terminal_failures(
+        self,
+        db,
+        events_to_process: List[OutboxEvent],
+        terminal_failure_ids: list[int],
+        delivery_errs: Dict[int, str],
+    ) -> None:
+        if not terminal_failure_ids:
+            return
+        db.execute(
+            update(OutboxEvent)
+            .where(OutboxEvent.id.in_(terminal_failure_ids))
+            .values(
+                status=TERMINAL_FAILURE_STATUS,
+                retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
+                last_attempted_at=datetime.now(timezone.utc),
+            )
+        )
+        for event in events_to_process:
+            if event.id in terminal_failure_ids:
+                observe_outbox_failed(event.aggregate_type, event.topic)
+        for failure_id in terminal_failure_ids:
+            reason = delivery_errs.get(failure_id, "unknown error")
+            logger.error(
+                "OutboxDispatcher: Kafka delivery reached terminal failure threshold.",
+                extra={
+                    "outbox_id": failure_id,
+                    "reason": reason,
+                    "max_retries": self._max_retries,
+                },
+            )
 
     async def run(self):
         logger.info(f"Outbox dispatcher started. Polling every {self._poll_interval} seconds.")
@@ -277,3 +317,52 @@ class OutboxDispatcher:
                 break
 
         logger.info("Outbox dispatcher has stopped.")
+
+
+def _make_on_delivery(
+    outbox_id: int,
+    delivery_ack: Dict[int, bool],
+    delivery_errs: Dict[int, str],
+):
+    def _cb(_replayed_outbox_id: str, success: bool, error_message: Optional[str]):
+        if success:
+            delivery_ack[outbox_id] = True
+        else:
+            delivery_ack[outbox_id] = False
+            delivery_errs[outbox_id] = str(error_message)
+
+    return _cb
+
+
+def _delivery_ids_by_outcome(delivery_ack: Dict[int, bool], *, successful: bool) -> list[int]:
+    return [outbox_id for outbox_id, ok in delivery_ack.items() if ok is successful]
+
+
+def _retryable_failure_ids(failure_ids: list[int], terminal_failure_ids: list[int]) -> list[int]:
+    terminal_failure_id_set = set(terminal_failure_ids)
+    return [failure_id for failure_id in failure_ids if failure_id not in terminal_failure_id_set]
+
+
+def _event_headers(event: OutboxEvent) -> list[tuple[str, bytes]]:
+    if not event.correlation_id:
+        return []
+    return [("correlation_id", event.correlation_id.encode("utf-8"))]
+
+
+def _event_payload(event: OutboxEvent):
+    if isinstance(event.payload, dict):
+        return event.payload
+    return json.loads(event.payload)
+
+
+def _mark_callbackless_events_failed(
+    events_to_process: List[OutboxEvent],
+    delivery_ack: Dict[int, bool],
+    delivery_errs: Dict[int, str],
+    *,
+    reason: str,
+) -> None:
+    for event in events_to_process:
+        if event.id not in delivery_ack:
+            delivery_ack[event.id] = False
+            delivery_errs[event.id] = reason
