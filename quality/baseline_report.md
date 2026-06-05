@@ -1123,3 +1123,9 @@ CR-1014 reduced shared OpenAPI schema example orchestration complexity by extrac
 selection, structured-schema, fallback-example, and fallback property-name helpers.
 `build_schema_example` improved from `B (10)` to `A (4)`, leaving every function in
 `openapi_examples.py` A-ranked by cyclomatic complexity.
+
+CR-1015 reduced shared reprocessing replay orchestration complexity by extracting ordered-id,
+ordered-query, fetch, no-match logging, correlation-header, publish, publish-failure, and flush
+verification helpers. `ReprocessingRepository.reprocess_transactions_by_ids` improved from
+`C (11)` to `A (4)`, leaving every function/class/method in `reprocessing_repository.py` A-ranked
+by cyclomatic complexity.
