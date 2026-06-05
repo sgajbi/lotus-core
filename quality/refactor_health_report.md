@@ -680,3 +680,9 @@ health before that claim is defensible.
      metadata, cash-entry policy, auto-generated cash-entry requirements, and upstream-provided
      cash-entry requirements. `validate_dividend_transaction` improved from `D (21)` to `A (1)`,
      and every DIVIDEND validation function/class now reports A-ranked complexity.
+135. Reduced CA Bundle A transaction validation complexity by extracting focused helpers for
+     transaction-type validation, parent event reference validation, linkage identifier validation,
+     source instrument validation, target instrument validation, cash-consideration link
+     orchestration, cash-link presence, and cash-link consistency.
+     `validate_ca_bundle_a_transaction` improved from `D (22)` to `A (2)`, and every CA Bundle A
+     validation function/class now reports A-ranked complexity.

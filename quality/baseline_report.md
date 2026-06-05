@@ -908,3 +908,10 @@ metadata, cash-entry policy, auto-generated cash-entry requirements, and upstrea
 cash-entry requirements. `validate_dividend_transaction` improved from `D (21)` to `A (1)`, every
 DIVIDEND validation function/class reports A-ranked complexity, and `dividend_validation.py`
 remains `A (37.73)` maintainability.
+
+CR-979 reduced CA Bundle A transaction validation complexity by extracting focused helpers for
+transaction-type validation, parent event reference validation, linkage identifier validation,
+source instrument validation, target instrument validation, cash-consideration link orchestration,
+cash-link presence, and cash-link consistency. `validate_ca_bundle_a_transaction` improved from
+`D (22)` to `A (2)`, every CA Bundle A validation function/class reports A-ranked complexity, and
+`ca_bundle_a_validation.py` remains `A (38.16)` maintainability.
