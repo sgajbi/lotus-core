@@ -815,3 +815,9 @@ queue response assembly into `ingestion_reprocessing_queue_health.py`.
 `get_reprocessing_queue_health` improved from `B (7)` to `A (1)`, while the helper module reports
 `A (51.01)` maintainability. `ingestion_job_service.py` shrank from 1,200 SLOC to 1,137 SLOC and
 improved from `B (9.82)` to `B (11.79)`.
+
+CR-966 reduced ingestion replay-audit list coupling by extracting optional filter construction,
+bounded ordering, database reads, and DTO mapping into `ingestion_replay_audits.py`.
+`list_replay_audits` improved from `B (7)` to `A (1)`, while the helper module reports
+`A (72.80)` maintainability. `ingestion_job_service.py` shrank from 1,137 SLOC to 1,116 SLOC and
+improved from `B (11.79)` to `B (12.63)`.

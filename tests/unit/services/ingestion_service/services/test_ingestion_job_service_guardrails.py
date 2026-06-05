@@ -532,6 +532,68 @@ async def test_record_consumer_dlq_replay_audit_increments_failure_metric(
     assert duplicate_counter.handles == {}
 
 
+async def test_list_replay_audits_maps_ordered_rows(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    now = datetime.now(UTC)
+
+    class _FakeScalarResult:
+        def all(self):
+            return [
+                SimpleNamespace(
+                    replay_id="replay_2",
+                    recovery_path="consumer_dlq_replay",
+                    event_id="event_2",
+                    replay_fingerprint="fp_2",
+                    correlation_id="corr-2",
+                    job_id="job_2",
+                    endpoint="/ingest/positions",
+                    replay_status="failed",
+                    dry_run=False,
+                    replay_reason="publish failed",
+                    requested_by="ops-token",
+                    requested_at=now,
+                    completed_at=now,
+                ),
+                SimpleNamespace(
+                    replay_id="replay_1",
+                    recovery_path="consumer_dlq_replay",
+                    event_id="event_1",
+                    replay_fingerprint="fp_1",
+                    correlation_id="corr-1",
+                    job_id="job_1",
+                    endpoint="/ingest/transactions",
+                    replay_status="dry_run",
+                    dry_run=True,
+                    replay_reason="incident review",
+                    requested_by="ops-token",
+                    requested_at=now - timedelta(minutes=1),
+                    completed_at=now - timedelta(minutes=1),
+                ),
+            ]
+
+    class _FakeSession:
+        async def scalars(self, _stmt):
+            return _FakeScalarResult()
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    audits = await service.list_replay_audits(
+        limit=2,
+        recovery_path="consumer_dlq_replay",
+        replay_status="failed",
+    )
+
+    assert [audit.replay_id for audit in audits] == ["replay_2", "replay_1"]
+    assert audits[0].dry_run is False
+    assert audits[1].dry_run is True
+
+
 async def test_record_consumer_dlq_replay_audit_increments_bookkeeping_failure_metric(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
