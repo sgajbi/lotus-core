@@ -39,20 +39,36 @@ def resolve_transaction_trade_fee(
     trade_fee: Decimal | None,
     fee_components: Mapping[str, object],
 ) -> Decimal | None:
-    if trade_fee is not None:
-        normalized_trade_fee = _optional_fee_amount(trade_fee, field_name="trade_fee")
-        if normalized_trade_fee < 0:
-            raise ValueError("trade_fee must be greater than or equal to zero.")
-    else:
-        normalized_trade_fee = None
-
-    if not any(value is not None for value in fee_components.values()):
+    normalized_trade_fee = _validated_optional_fee_amount(trade_fee, field_name="trade_fee")
+    if not _has_fee_components(fee_components):
         return normalized_trade_fee
+    return _total_fee_component_amount(fee_components)
 
-    normalized_components: list[Decimal] = []
-    for field_name, value in fee_components.items():
-        amount = _fee_component_amount(value, field_name=field_name)
-        if amount < 0:
-            raise ValueError(f"{field_name} must be greater than or equal to zero.")
-        normalized_components.append(amount)
-    return sum(normalized_components)
+
+def _validated_optional_fee_amount(value: object, *, field_name: str) -> Decimal | None:
+    normalized_amount = _optional_fee_amount(value, field_name=field_name)
+    if normalized_amount is not None:
+        _ensure_non_negative_fee_amount(normalized_amount, field_name=field_name)
+    return normalized_amount
+
+
+def _has_fee_components(fee_components: Mapping[str, object]) -> bool:
+    return any(value is not None for value in fee_components.values())
+
+
+def _total_fee_component_amount(fee_components: Mapping[str, object]) -> Decimal:
+    return sum(
+        _validated_fee_component_amount(value, field_name=field_name)
+        for field_name, value in fee_components.items()
+    )
+
+
+def _validated_fee_component_amount(value: object, *, field_name: str) -> Decimal:
+    amount = _fee_component_amount(value, field_name=field_name)
+    _ensure_non_negative_fee_amount(amount, field_name=field_name)
+    return amount
+
+
+def _ensure_non_negative_fee_amount(amount: Decimal, *, field_name: str) -> None:
+    if amount < 0:
+        raise ValueError(f"{field_name} must be greater than or equal to zero.")

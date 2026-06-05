@@ -29,6 +29,14 @@ def test_resolve_transaction_trade_fee_rejects_negative_amounts() -> None:
         )
 
 
+def test_resolve_transaction_trade_fee_rejects_negative_explicit_fee() -> None:
+    with pytest.raises(ValueError, match="trade_fee must be greater than or equal to zero"):
+        resolve_transaction_trade_fee(
+            trade_fee=Decimal("-0.01"),
+            fee_components={},
+        )
+
+
 def test_resolve_transaction_trade_fee_rejects_invalid_amounts() -> None:
     with pytest.raises(ValueError, match="brokerage must be numeric"):
         resolve_transaction_trade_fee(

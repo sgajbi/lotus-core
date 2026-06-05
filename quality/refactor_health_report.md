@@ -869,3 +869,8 @@ health before that claim is defensible.
      retryable-job reset helpers. `ReprocessingJobRepository.find_and_reset_stale_jobs` improved
      from `B (8)` to `A (2)`, and every function/class/method in
      `reprocessing_job_repository.py` now reports A-ranked cyclomatic complexity.
+177. Reduced shared transaction fee policy complexity by extracting optional fee validation,
+     fee-component presence detection, component totaling, component validation, and shared
+     non-negative amount enforcement helpers. `resolve_transaction_trade_fee` improved from
+     `B (7)` to `A (2)`, and every function in `transaction_fee_components.py` now reports
+     A-ranked cyclomatic complexity.
