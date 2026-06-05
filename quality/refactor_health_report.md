@@ -611,3 +611,8 @@ health before that claim is defensible.
      `list_replay_audits` improved from `B (7)` to `A (1)`, while the helper module reports
      `A (72.80)` maintainability. `ingestion_job_service.py` shrank from 1,137 SLOC to 1,116 SLOC
      and improved from `B (11.79)` to `B (12.63)`.
+123. Reduced ingestion consumer-lag coupling by extracting DLQ aggregate loading, lag severity
+     classification, backlog summary stitching, and response assembly into `ingestion_consumer_lag.py`.
+     `get_consumer_lag` improved from `B (6)` to `A (1)`, while the helper module reports
+     `A (55.85)` maintainability. `ingestion_job_service.py` shrank from 1,116 SLOC to 1,077 SLOC
+     and improved from `B (12.63)` to `B (13.77)`.

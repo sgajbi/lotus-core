@@ -32,7 +32,6 @@ from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
     IngestionBacklogBreakdownResponse,
     IngestionCapacityStatusResponse,
-    IngestionConsumerLagGroupResponse,
     IngestionConsumerLagResponse,
     IngestionErrorBudgetStatusResponse,
     IngestionHealthSummaryResponse,
@@ -58,6 +57,7 @@ from .ingestion_backlog_breakdown import (
     build_backlog_breakdown_response,
     empty_backlog_breakdown_response,
 )
+from .ingestion_consumer_lag import load_consumer_lag_response
 from .ingestion_job_listing import (
     IngestionJobListFilters,
     build_cursor_lookup_statement,
@@ -908,51 +908,11 @@ class IngestionJobService:
         lookback_minutes: int = 60,
         limit: int = 100,
     ) -> IngestionConsumerLagResponse:
-        async for db in get_async_db_session():
-            since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            groups: list[IngestionConsumerLagGroupResponse] = []
-            rows = await db.execute(
-                select(
-                    DBConsumerDlqEvent.consumer_group,
-                    DBConsumerDlqEvent.original_topic,
-                    func.count(DBConsumerDlqEvent.id).label("dlq_events"),
-                    func.max(DBConsumerDlqEvent.observed_at).label("last_observed_at"),
-                )
-                .where(DBConsumerDlqEvent.observed_at >= since)
-                .group_by(DBConsumerDlqEvent.consumer_group, DBConsumerDlqEvent.original_topic)
-                .order_by(desc("dlq_events"), desc("last_observed_at"))
-                .limit(limit)
-            )
-            for consumer_group, original_topic, dlq_events_raw, last_observed_at in rows:
-                dlq_events = int(dlq_events_raw or 0)
-                if dlq_events >= 20:
-                    severity = "high"
-                elif dlq_events >= 5:
-                    severity = "medium"
-                else:
-                    severity = "low"
-                groups.append(
-                    IngestionConsumerLagGroupResponse(
-                        consumer_group=consumer_group,
-                        original_topic=original_topic,
-                        dlq_events=dlq_events,
-                        last_observed_at=last_observed_at,
-                        lag_severity=severity,  # type: ignore[arg-type]
-                    )
-                )
-            backlog = await self.get_health_summary()
-            return IngestionConsumerLagResponse(
-                lookback_minutes=lookback_minutes,
-                backlog_jobs=backlog.backlog_jobs,
-                total_groups=len(groups),
-                groups=groups,
-            )
-
-        return IngestionConsumerLagResponse(
+        return await load_consumer_lag_response(
             lookback_minutes=lookback_minutes,
-            backlog_jobs=0,
-            total_groups=0,
-            groups=[],
+            limit=limit,
+            session_factory=get_async_db_session,
+            health_summary_loader=self.get_health_summary,
         )
 
     async def get_job_record_status(self, job_id: str) -> IngestionJobRecordStatusResponse | None:

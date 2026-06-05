@@ -413,6 +413,37 @@ async def test_get_reprocessing_queue_health_aggregates_by_job_type(
     assert response.queues[0].oldest_pending_age_seconds > 0
 
 
+async def test_get_consumer_lag_classifies_dlq_pressure(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    now = datetime.now(UTC)
+
+    class _FakeSession:
+        async def execute(self, _stmt):
+            return [
+                ("consumer-a", "topic-a", 25, now),
+                ("consumer-b", "topic-b", 5, now - timedelta(seconds=10)),
+                ("consumer-c", "topic-c", 1, now - timedelta(seconds=20)),
+            ]
+
+    async def _mock_get_health_summary():
+        return SimpleNamespace(backlog_jobs=7)
+
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+    monkeypatch.setattr(service, "get_health_summary", _mock_get_health_summary)
+
+    response = await service.get_consumer_lag(lookback_minutes=30, limit=3)
+
+    assert response.backlog_jobs == 7
+    assert response.total_groups == 3
+    assert [group.lag_severity for group in response.groups] == ["high", "medium", "low"]
+
+
 async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_metric(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
