@@ -739,3 +739,7 @@ health before that claim is defensible.
      explicit rank-type sets and a deterministic dependency-rank lookup. `ca_bundle_a_dependency_rank`
      improved from `B (8)` to `A (1)`, and every CA Bundle A ordering function now reports
      A-ranked complexity.
+147. Reduced analytics cashflow semantics classifier complexity by replacing repeated fixed
+     classification branches with a typed static semantics map and a focused transfer-flow helper.
+     `classify_analytics_cash_flow` improved from `B (10)` to `A (3)`, and every analytics
+     cashflow semantics function now reports A-ranked complexity.

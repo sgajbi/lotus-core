@@ -987,3 +987,9 @@ target-in, cash-consideration, rights-stage, and refund rank branches with expli
 and a deterministic dependency-rank lookup. `ca_bundle_a_dependency_rank` improved from `B (8)` to
 `A (1)`, every CA Bundle A ordering function reports A-ranked complexity, and
 `ca_bundle_a_ordering.py` remains `A (89.61)` maintainability.
+
+CR-991 reduced analytics cashflow semantics classifier complexity by replacing repeated fixed
+classification branches with a typed static semantics map and a focused transfer-flow helper.
+`classify_analytics_cash_flow` improved from `B (10)` to `A (3)`, every analytics cashflow
+semantics function reports A-ranked complexity, and `analytics_cashflow_semantics.py` remains
+`A (74.86)` maintainability.

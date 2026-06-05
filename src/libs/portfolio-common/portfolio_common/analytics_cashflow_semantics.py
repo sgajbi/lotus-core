@@ -13,6 +13,18 @@ AnalyticsCashFlowType = Literal[
 ]
 AnalyticsFlowScope = Literal["external", "internal", "operational"]
 
+_STATIC_CASH_FLOW_SEMANTICS: dict[str, tuple[AnalyticsCashFlowType, AnalyticsFlowScope]] = {
+    "CASHFLOW_IN": ("external_flow", "external"),
+    "CASHFLOW_OUT": ("external_flow", "external"),
+    "INVESTMENT_OUTFLOW": ("internal_trade_flow", "internal"),
+    "INVESTMENT_INFLOW": ("internal_trade_flow", "internal"),
+    "FX_BUY": ("internal_trade_flow", "internal"),
+    "FX_SELL": ("internal_trade_flow", "internal"),
+    "INTERNAL": ("internal_trade_flow", "internal"),
+    "INCOME": ("income", "operational"),
+    "EXPENSE": ("fee", "operational"),
+}
+
 
 def normalize_cashflow_timing(timing: str | None) -> str:
     return str(timing or "").strip().upper()
@@ -39,27 +51,19 @@ def classify_analytics_cash_flow(
     Map canonical cashflow classifications into analytics-facing semantics.
     """
     classification = str(classification or "").strip().upper()
-    if classification in {"CASHFLOW_IN", "CASHFLOW_OUT"}:
-        return ("external_flow", "external")
-
-    if classification in {
-        "INVESTMENT_OUTFLOW",
-        "INVESTMENT_INFLOW",
-        "FX_BUY",
-        "FX_SELL",
-        "INTERNAL",
-    }:
-        return ("internal_trade_flow", "internal")
-
     if classification == "TRANSFER":
-        if is_position_flow and not is_portfolio_flow:
-            return ("internal_trade_flow", "internal")
-        return ("transfer", "external" if is_portfolio_flow else "internal")
+        return _classify_transfer_cash_flow(
+            is_position_flow=is_position_flow,
+            is_portfolio_flow=is_portfolio_flow,
+        )
+    return _STATIC_CASH_FLOW_SEMANTICS.get(classification, ("other", "operational"))
 
-    if classification == "INCOME":
-        return ("income", "operational")
 
-    if classification == "EXPENSE":
-        return ("fee", "operational")
-
-    return ("other", "operational")
+def _classify_transfer_cash_flow(
+    *,
+    is_position_flow: bool,
+    is_portfolio_flow: bool,
+) -> tuple[AnalyticsCashFlowType, AnalyticsFlowScope]:
+    if is_position_flow and not is_portfolio_flow:
+        return ("internal_trade_flow", "internal")
+    return ("transfer", "external" if is_portfolio_flow else "internal")
