@@ -21,9 +21,16 @@
     {
       "path": "src/services/ingestion_service/app/DTOs/reference_data_dto.py",
       "field": "source_timestamp",
-      "expectedCount": 7,
+      "expectedCount": 0,
       "ownerSlice": "Slice 7",
-      "reason": "Existing reference-data ingestion DTO fields preserved in the aggregate module. New source-observation fields must use observed_at."
+      "reason": "Legacy reference-data ingestion DTO fields have been moved into focused DTO-family modules. New source-observation fields must use observed_at."
+    },
+    {
+      "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_dto.py",
+      "field": "source_timestamp",
+      "expectedCount": 7,
+      "ownerSlice": "Slice 7 / CR-1037",
+      "reason": "Existing benchmark, index, benchmark-return, and risk-free ingestion DTO fields moved from reference_data_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
     },
     {
       "path": "src/services/ingestion_service/app/DTOs/reference_data_support_dto.py",

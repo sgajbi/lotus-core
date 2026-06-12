@@ -952,3 +952,10 @@ health before that claim is defensible.
      The temporal vocabulary allowlist now records the moved legacy `source_timestamp` field with
      CR-1036 rationale so the guard preserves behavior without allowing new source-observation
      terminology drift.
+193. Reduced reference-data DTO module size by extracting benchmark, benchmark-composition, index,
+     index-price, index-return, benchmark-return, and risk-free records plus their ingestion
+     request wrappers into `reference_data_benchmark_dto.py`. The aggregate DTO module improved
+     from `B (14.29)` to `A (21.98)`, the extracted benchmark module reports `A (30.27)`, and
+     focused DTO plus ingestion OpenAPI contract tests prove public imports and schema component
+     names remain compatible. The temporal vocabulary allowlist now records the moved legacy
+     `source_timestamp` fields with CR-1037 rationale.
