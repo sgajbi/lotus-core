@@ -1006,3 +1006,13 @@ health before that claim is defensible.
      `A (100.00)` and shrank from 249 SLOC to 38 SLOC, the extracted lifecycle module reports
      `A (46.58)`, and focused guardrail tests plus ingestion and event-replay OpenAPI contract
      tests prove response behavior and schema component names remain compatible.
+201. Reduced the transaction DTO module hotspot by extracting the canonical transaction record into
+     `transaction_model_dto.py` and the ingestion request envelope into
+     `transaction_ingestion_request_dto.py` while preserving the public `transaction_dto.py` import
+     surface. The aggregate transaction DTO module improved from 678 SLOC to a 4-SLOC
+     compatibility facade at `A (100.00)`, the extracted transaction model reports `A (42.85)`,
+     the request-envelope module reports `A (100.00)`, and the moved transaction model is now
+     directly clean under scoped mypy by replacing `condecimal(...)` annotations with explicit
+     constrained `Annotated[Decimal, Field(...)]` aliases. Focused transaction model,
+     transaction-spec characterization, and ingestion OpenAPI contract tests prove validation
+     behavior, public imports, and schema component names remain compatible.
