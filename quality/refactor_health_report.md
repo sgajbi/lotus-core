@@ -1124,3 +1124,10 @@ health before that claim is defensible.
      A-ranked cyclomatic complexity. Focused reference-data DTO plus ingestion OpenAPI contract
      tests prove validation behavior, schema component names, public imports, and route shape
      remain compatible.
+212. Reduced the client tax rule-set DTO evidence validator by extracting bounded-evidence
+     detection into a named predicate while preserving the public `ClientTaxRuleSetRecord`
+     contract and validation error text. `_validate_tax_rule_evidence` improved from `B (6)` to
+     `A (2)`, `reference_data_tax_rule_set_dto.py` improved from `A (37.58)` to `A (38.36)`,
+     and every function/class/method in the module now reports A-ranked cyclomatic complexity.
+     Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
+     schema component names, public imports, and route shape remain compatible.

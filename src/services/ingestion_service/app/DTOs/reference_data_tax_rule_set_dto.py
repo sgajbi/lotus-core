@@ -31,6 +31,25 @@ def _validate_tax_rule_threshold_pair(
         raise ValueError("threshold_amount is required when threshold_currency is supplied")
 
 
+def _tax_rule_has_bounded_evidence(
+    *,
+    applies_to_asset_classes: list[str],
+    applies_to_security_ids: list[str],
+    applies_to_income_types: list[str],
+    rate: Decimal | None,
+    threshold_amount: Decimal | None,
+) -> bool:
+    return any(
+        (
+            applies_to_asset_classes,
+            applies_to_security_ids,
+            applies_to_income_types,
+            rate is not None,
+            threshold_amount is not None,
+        )
+    )
+
+
 def _validate_tax_rule_evidence(
     *,
     applies_to_asset_classes: list[str],
@@ -39,12 +58,12 @@ def _validate_tax_rule_evidence(
     rate: Decimal | None,
     threshold_amount: Decimal | None,
 ) -> None:
-    if (
-        applies_to_asset_classes
-        or applies_to_security_ids
-        or applies_to_income_types
-        or rate is not None
-        or threshold_amount is not None
+    if _tax_rule_has_bounded_evidence(
+        applies_to_asset_classes=applies_to_asset_classes,
+        applies_to_security_ids=applies_to_security_ids,
+        applies_to_income_types=applies_to_income_types,
+        rate=rate,
+        threshold_amount=threshold_amount,
     ):
         return
     raise ValueError("tax rule set records must carry bounded rule evidence")
