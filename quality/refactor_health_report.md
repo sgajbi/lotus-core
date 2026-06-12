@@ -1058,3 +1058,14 @@ health before that claim is defensible.
      annotations are now directly clean under scoped mypy, and focused reference-data DTO plus
      ingestion OpenAPI contract tests prove validation behavior, schema component names, and
      public imports remain compatible.
+206. Reduced the reference-data cashflow planning DTO module hotspot by extracting client
+     income-needs contracts into `reference_data_income_needs_dto.py`, liquidity reserve
+     requirement contracts into `reference_data_liquidity_reserve_dto.py`, and planned withdrawal
+     contracts into `reference_data_planned_withdrawal_dto.py` while preserving the public
+     `reference_data_cashflow_planning_dto.py` and `reference_data_dto.py` import surfaces. The
+     aggregate cashflow-planning DTO module improved from `A (31.18)` and 190 SLOC to a pure
+     compatibility facade at `A (100.00)` and 15 SLOC, the extracted income-needs module reports
+     `A (45.42)`, the liquidity-reserve module reports `A (45.44)`, and the planned-withdrawal
+     module reports `A (49.30)`. Focused reference-data DTO plus ingestion OpenAPI contract tests
+     prove validation behavior, currency normalization, schema component names, and public imports
+     remain compatible.
