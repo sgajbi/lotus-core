@@ -1016,3 +1016,15 @@ health before that claim is defensible.
      constrained `Annotated[Decimal, Field(...)]` aliases. Focused transaction model,
      transaction-spec characterization, and ingestion OpenAPI contract tests prove validation
      behavior, public imports, and schema component names remain compatible.
+202. Reduced the benchmark/reference-data DTO module hotspot by extracting benchmark definition,
+     composition, and benchmark-return records into `reference_data_benchmark_records_dto.py` and
+     index definition, index price/return, and risk-free series records into
+     `reference_data_index_series_dto.py` while preserving the public
+     `reference_data_benchmark_dto.py` import surface. The aggregate benchmark DTO module improved
+     from `A (30.27)` and 444 SLOC to a pure compatibility facade at `A (100.00)` and 16 SLOC,
+     the extracted benchmark-record module reports `A (40.91)`, and the extracted index/risk-free
+     series module reports `A (37.52)`. Focused reference-data DTO, benchmark/index/risk-free
+     router, and ingestion OpenAPI contract tests prove validation behavior, route behavior, public
+     imports, and schema component names remain compatible. The temporal vocabulary allowlist now
+     records the moved legacy `source_timestamp` fields with CR-1046 rationale so the guard remains
+     strict for new source-observation field names.
