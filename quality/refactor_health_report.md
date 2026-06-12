@@ -977,3 +977,10 @@ health before that claim is defensible.
      module improved from `A (28.88)` to a pure compatibility facade at `A (100.00)`, the
      extracted cashflow-planning module reports `A (31.18)`, and focused DTO plus ingestion
      OpenAPI contract tests prove public imports and schema component names remain compatible.
+197. Reduced the ingestion-job DTO module size by extracting capacity diagnostics and backlog
+     breakdown response DTOs into `ingestion_job_capacity_dto.py` while preserving the public
+     `ingestion_job_dto.py` import surface. The aggregate ingestion-job DTO module improved from
+     `A (25.62)` to `A (27.87)` and shrank from 1,120 SLOC to 936 SLOC, the extracted operations
+     diagnostics module reports `A (50.80)`, and focused capacity/backlog service tests plus the
+     ingestion OpenAPI contract tests prove response behavior and schema component names remain
+     compatible.
