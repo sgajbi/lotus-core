@@ -999,3 +999,10 @@ health before that claim is defensible.
      diagnostics module reports `A (37.66)`, and focused guardrail tests plus ingestion and
      event-replay OpenAPI contract tests prove response behavior and schema component names remain
      compatible.
+200. Completed the ingestion-job DTO compatibility-facade split by extracting job lifecycle,
+     failure, record-status, and idempotency diagnostic DTOs into `ingestion_job_lifecycle_dto.py`
+     while preserving the public `ingestion_job_dto.py` import surface. The aggregate
+     ingestion-job DTO module improved from `A (44.17)` to a pure compatibility facade at
+     `A (100.00)` and shrank from 249 SLOC to 38 SLOC, the extracted lifecycle module reports
+     `A (46.58)`, and focused guardrail tests plus ingestion and event-replay OpenAPI contract
+     tests prove response behavior and schema component names remain compatible.
