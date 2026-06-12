@@ -959,3 +959,9 @@ health before that claim is defensible.
      focused DTO plus ingestion OpenAPI contract tests prove public imports and schema component
      names remain compatible. The temporal vocabulary allowlist now records the moved legacy
      `source_timestamp` fields with CR-1037 rationale.
+194. Reduced reference-data DTO module size by extracting discretionary mandate binding and
+     portfolio benchmark assignment records plus their ingestion request wrappers into
+     `reference_data_mandate_dto.py`. The aggregate DTO module improved from `A (21.98)` to
+     `A (27.76)`, the extracted mandate module reports `A (39.16)`, and focused DTO plus
+     ingestion OpenAPI contract tests prove public imports and schema component names remain
+     compatible.
