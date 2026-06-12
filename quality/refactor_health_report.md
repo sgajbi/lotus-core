@@ -1185,3 +1185,11 @@ health before that claim is defensible.
      benchmark market-series tests prove page-scoped metadata, component points, FX normalization
      status, evidence timestamps, data-quality status, quality summary, and next-page token
      behavior remain compatible.
+220. Reduced cash-balance account record composition complexity by extracting master-row indexing,
+     fallback cash-account ID resolution, master/fallback record input construction, instrument
+     naming, account-currency, and account-ID helpers while preserving the public
+     `CashBalancesResponse` contract. `CashBalanceResolver.build_cash_account_balance_records`
+     improved from `D (22)` to `A (2)`, and every function in `cash_balance_service.py` now reports
+     A-ranked cyclomatic complexity. Focused cash-balance tests prove holdings-as-of metadata,
+     master cash-account rows, fallback identifiers, normalized master joins, zero-balance
+     accounts, sequential FX conversions, and sorting behavior remain compatible.

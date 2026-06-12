@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, cast
 
 from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,98 +83,26 @@ class CashBalanceResolver:
         resolved_as_of_date: date,
         reporting_currency: str,
     ) -> list[CashAccountBalanceRecord]:
-        cash_security_ids = [
-            security_id
-            for row in cash_rows
-            if (security_id := normalize_security_id(row.snapshot.security_id))
-        ]
         master_rows = await self.repo.list_cash_account_masters(
             portfolio_id=portfolio.portfolio_id,
             as_of_date=resolved_as_of_date,
         )
-        master_by_security_id = {
-            security_id: row
-            for row in master_rows
-            if (security_id := normalize_security_id(row.security_id))
-        }
-        fallback_security_ids = [
-            security_id
-            for security_id in dict.fromkeys(cash_security_ids)
-            if security_id not in master_by_security_id
-        ]
-        fallback_cash_account_id_rows = (
-            await self.repo.get_latest_cash_account_ids(
-                portfolio_id=portfolio.portfolio_id,
-                cash_security_ids=fallback_security_ids,
-                as_of_date=resolved_as_of_date,
-            )
-            if fallback_security_ids
-            else {}
+        master_by_security_id = _master_rows_by_security_id(master_rows)
+        fallback_cash_account_ids = await self._fallback_cash_account_ids(
+            portfolio_id=portfolio.portfolio_id,
+            cash_rows=cash_rows,
+            master_by_security_id=master_by_security_id,
+            resolved_as_of_date=resolved_as_of_date,
         )
-        fallback_cash_account_ids = {
-            normalize_security_id(security_id): cash_account_id
-            for security_id, cash_account_id in fallback_cash_account_id_rows.items()
-        }
-        snapshot_by_security_id = {
-            security_id: row
-            for row in cash_rows
-            if (security_id := normalize_security_id(row.snapshot.security_id))
-        }
-
-        record_inputs: list[dict[str, Any]] = []
-        emitted_cash_account_ids: set[str] = set()
-
-        for master_row in master_rows:
-            security_id = normalize_security_id(master_row.security_id)
-            snapshot_row = snapshot_by_security_id.get(security_id)
-            record_inputs.append(
-                {
-                    "portfolio": portfolio,
-                    "snapshot_row": snapshot_row,
-                    "resolved_as_of_date": resolved_as_of_date,
-                    "reporting_currency": reporting_currency,
-                    "cash_account_id": master_row.cash_account_id,
-                    "security_id": security_id,
-                    "instrument_name": (
-                        snapshot_row.instrument.name
-                        if snapshot_row and snapshot_row.instrument
-                        else master_row.display_name
-                    ),
-                    "account_currency": master_row.account_currency,
-                }
-            )
-            emitted_cash_account_ids.add(master_row.cash_account_id)
-
-        for cash_row in cash_rows:
-            security_id = normalize_security_id(cash_row.snapshot.security_id)
-            master_row = master_by_security_id.get(security_id)
-            fallback_cash_account_id = (
-                master_row.cash_account_id
-                if master_row is not None
-                else fallback_cash_account_ids.get(security_id) or security_id
-            )
-            if fallback_cash_account_id in emitted_cash_account_ids:
-                continue
-            record_inputs.append(
-                {
-                    "portfolio": portfolio,
-                    "snapshot_row": cash_row,
-                    "resolved_as_of_date": resolved_as_of_date,
-                    "reporting_currency": reporting_currency,
-                    "cash_account_id": fallback_cash_account_id,
-                    "security_id": security_id,
-                    "instrument_name": (
-                        cash_row.instrument.name if cash_row.instrument is not None else security_id
-                    ),
-                    "account_currency": (
-                        cash_row.instrument.currency
-                        if cash_row.instrument and cash_row.instrument.currency
-                        else portfolio.base_currency
-                    ),
-                }
-            )
-            emitted_cash_account_ids.add(fallback_cash_account_id)
-
+        record_inputs = _cash_account_record_inputs(
+            portfolio=portfolio,
+            master_rows=master_rows,
+            master_by_security_id=master_by_security_id,
+            cash_rows=cash_rows,
+            fallback_cash_account_ids=fallback_cash_account_ids,
+            resolved_as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
         account_records = [
             await self._build_cash_account_balance_record(**record_input)
             for record_input in record_inputs
@@ -182,6 +110,27 @@ class CashBalanceResolver:
 
         account_records.sort(key=lambda row: (row.account_currency, row.cash_account_id))
         return account_records
+
+    async def _fallback_cash_account_ids(
+        self,
+        *,
+        portfolio_id: str,
+        cash_rows: list[Any],
+        master_by_security_id: dict[str, Any],
+        resolved_as_of_date: date,
+    ) -> dict[str, str]:
+        fallback_security_ids = _fallback_security_ids(
+            cash_rows=cash_rows,
+            master_by_security_id=master_by_security_id,
+        )
+        if not fallback_security_ids:
+            return {}
+        fallback_rows = await self.repo.get_latest_cash_account_ids(
+            portfolio_id=portfolio_id,
+            cash_security_ids=fallback_security_ids,
+            as_of_date=resolved_as_of_date,
+        )
+        return _normalized_cash_account_ids(fallback_rows)
 
     async def _build_cash_account_balance_record(
         self,
@@ -238,8 +187,221 @@ class CashBalanceResolver:
         account_records: list[CashAccountBalanceRecord],
     ) -> str:
         if not account_records:
-            return UNKNOWN
-        return COMPLETE if cash_rows else UNKNOWN
+            return cast(str, UNKNOWN)
+        return cast(str, COMPLETE if cash_rows else UNKNOWN)
+
+
+def _cash_security_ids(cash_rows: list[Any]) -> list[str]:
+    return [
+        security_id
+        for row in cash_rows
+        if (security_id := normalize_security_id(row.snapshot.security_id))
+    ]
+
+
+def _master_rows_by_security_id(master_rows: list[Any]) -> dict[str, Any]:
+    return {
+        security_id: row
+        for row in master_rows
+        if (security_id := normalize_security_id(row.security_id))
+    }
+
+
+def _fallback_security_ids(
+    *,
+    cash_rows: list[Any],
+    master_by_security_id: dict[str, Any],
+) -> list[str]:
+    return [
+        security_id
+        for security_id in dict.fromkeys(_cash_security_ids(cash_rows))
+        if security_id not in master_by_security_id
+    ]
+
+
+def _normalized_cash_account_ids(cash_account_id_rows: dict[str, str]) -> dict[str, str]:
+    normalized_rows: dict[str, str] = {}
+    for security_id, cash_account_id in cash_account_id_rows.items():
+        normalized_security_id = normalize_security_id(security_id)
+        if normalized_security_id:
+            normalized_rows[normalized_security_id] = cash_account_id
+    return normalized_rows
+
+
+def _snapshot_rows_by_security_id(cash_rows: list[Any]) -> dict[str, Any]:
+    return {
+        security_id: row
+        for row in cash_rows
+        if (security_id := normalize_security_id(row.snapshot.security_id))
+    }
+
+
+def _master_record_input(
+    *,
+    portfolio: Any,
+    master_row: Any,
+    snapshot_row: Any | None,
+    resolved_as_of_date: date,
+    reporting_currency: str,
+) -> dict[str, Any]:
+    security_id = normalize_security_id(master_row.security_id)
+    return {
+        "portfolio": portfolio,
+        "snapshot_row": snapshot_row,
+        "resolved_as_of_date": resolved_as_of_date,
+        "reporting_currency": reporting_currency,
+        "cash_account_id": master_row.cash_account_id,
+        "security_id": security_id,
+        "instrument_name": _master_instrument_name(
+            master_row=master_row,
+            snapshot_row=snapshot_row,
+        ),
+        "account_currency": master_row.account_currency,
+    }
+
+
+def _master_instrument_name(*, master_row: Any, snapshot_row: Any | None) -> str:
+    if snapshot_row and snapshot_row.instrument:
+        return cast(str, snapshot_row.instrument.name)
+    return cast(str, master_row.display_name)
+
+
+def _cash_row_record_input(
+    *,
+    portfolio: Any,
+    cash_row: Any,
+    cash_account_id: str,
+    security_id: str,
+    resolved_as_of_date: date,
+    reporting_currency: str,
+) -> dict[str, Any]:
+    return {
+        "portfolio": portfolio,
+        "snapshot_row": cash_row,
+        "resolved_as_of_date": resolved_as_of_date,
+        "reporting_currency": reporting_currency,
+        "cash_account_id": cash_account_id,
+        "security_id": security_id,
+        "instrument_name": _cash_row_instrument_name(
+            cash_row=cash_row,
+            security_id=security_id,
+        ),
+        "account_currency": _cash_row_account_currency(
+            cash_row=cash_row,
+            portfolio=portfolio,
+        ),
+    }
+
+
+def _cash_row_instrument_name(*, cash_row: Any, security_id: str) -> str:
+    if cash_row.instrument is not None:
+        return cast(str, cash_row.instrument.name)
+    return security_id
+
+
+def _cash_row_account_currency(*, cash_row: Any, portfolio: Any) -> str:
+    if cash_row.instrument and cash_row.instrument.currency:
+        return cast(str, cash_row.instrument.currency)
+    return cast(str, portfolio.base_currency)
+
+
+def _cash_row_account_id(
+    *,
+    security_id: str,
+    master_by_security_id: dict[str, Any],
+    fallback_cash_account_ids: dict[str, str],
+) -> str:
+    master_row = master_by_security_id.get(security_id)
+    if master_row is not None:
+        return cast(str, master_row.cash_account_id)
+    return fallback_cash_account_ids.get(security_id) or security_id
+
+
+def _cash_account_record_inputs(
+    *,
+    portfolio: Any,
+    master_rows: list[Any],
+    master_by_security_id: dict[str, Any],
+    cash_rows: list[Any],
+    fallback_cash_account_ids: dict[str, str],
+    resolved_as_of_date: date,
+    reporting_currency: str,
+) -> list[dict[str, Any]]:
+    snapshot_by_security_id = _snapshot_rows_by_security_id(cash_rows)
+    record_inputs = _master_record_inputs(
+        portfolio=portfolio,
+        master_rows=master_rows,
+        snapshot_by_security_id=snapshot_by_security_id,
+        resolved_as_of_date=resolved_as_of_date,
+        reporting_currency=reporting_currency,
+    )
+    emitted_cash_account_ids = {record_input["cash_account_id"] for record_input in record_inputs}
+    record_inputs.extend(
+        _fallback_record_inputs(
+            portfolio=portfolio,
+            cash_rows=cash_rows,
+            master_by_security_id=master_by_security_id,
+            fallback_cash_account_ids=fallback_cash_account_ids,
+            emitted_cash_account_ids=emitted_cash_account_ids,
+            resolved_as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
+    )
+    return record_inputs
+
+
+def _master_record_inputs(
+    *,
+    portfolio: Any,
+    master_rows: list[Any],
+    snapshot_by_security_id: dict[str, Any],
+    resolved_as_of_date: date,
+    reporting_currency: str,
+) -> list[dict[str, Any]]:
+    return [
+        _master_record_input(
+            portfolio=portfolio,
+            master_row=master_row,
+            snapshot_row=snapshot_by_security_id.get(normalize_security_id(master_row.security_id)),
+            resolved_as_of_date=resolved_as_of_date,
+            reporting_currency=reporting_currency,
+        )
+        for master_row in master_rows
+    ]
+
+
+def _fallback_record_inputs(
+    *,
+    portfolio: Any,
+    cash_rows: list[Any],
+    master_by_security_id: dict[str, Any],
+    fallback_cash_account_ids: dict[str, str],
+    emitted_cash_account_ids: set[str],
+    resolved_as_of_date: date,
+    reporting_currency: str,
+) -> list[dict[str, Any]]:
+    record_inputs: list[dict[str, Any]] = []
+    for cash_row in cash_rows:
+        security_id = normalize_security_id(cash_row.snapshot.security_id)
+        cash_account_id = _cash_row_account_id(
+            security_id=security_id,
+            master_by_security_id=master_by_security_id,
+            fallback_cash_account_ids=fallback_cash_account_ids,
+        )
+        if cash_account_id in emitted_cash_account_ids:
+            continue
+        record_inputs.append(
+            _cash_row_record_input(
+                portfolio=portfolio,
+                cash_row=cash_row,
+                cash_account_id=cash_account_id,
+                security_id=security_id,
+                resolved_as_of_date=resolved_as_of_date,
+                reporting_currency=reporting_currency,
+            )
+        )
+        emitted_cash_account_ids.add(cash_account_id)
+    return record_inputs
 
 
 class CashBalanceService:
@@ -287,11 +449,14 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        return await self._fx_converter.convert_amount(
-            amount=amount,
-            from_currency=from_currency,
-            to_currency=to_currency,
-            as_of_date=as_of_date,
+        return cast(
+            Decimal,
+            await self._fx_converter.convert_amount(
+                amount=amount,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                as_of_date=as_of_date,
+            ),
         )
 
     async def _get_fx_rate(
@@ -300,4 +465,7 @@ class CashBalanceService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        return await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date)
+        return cast(
+            Decimal,
+            await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date),
+        )
