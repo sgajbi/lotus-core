@@ -1103,3 +1103,16 @@ health before that claim is defensible.
      remain compatible. The temporal vocabulary allowlist now records the moved legacy
      `source_timestamp` fields with CR-1053 rationale so the guard remains strict for new
      source-observation field names.
+210. Reduced the reference-data benchmark-record DTO module hotspot by extracting benchmark
+     definition contracts into `reference_data_benchmark_definition_dto.py`, benchmark composition
+     contracts into `reference_data_benchmark_composition_dto.py`, and benchmark return-series
+     contracts into `reference_data_benchmark_return_series_dto.py` while preserving the public
+     `reference_data_benchmark_records_dto.py`, `reference_data_benchmark_dto.py`, and
+     `reference_data_dto.py` import surfaces. The aggregate benchmark-record DTO module improved
+     from `A (40.91)` and 207 SLOC to a pure compatibility facade at `A (100.00)` and 13 SLOC,
+     the extracted benchmark-definition module reports `A (50.64)`, the benchmark-composition
+     module reports `A (56.85)`, and the benchmark-return-series module reports `A (56.48)`.
+     Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
+     currency normalization, schema component names, and public imports remain compatible. The
+     temporal vocabulary allowlist now records the moved legacy `source_timestamp` fields with
+     CR-1054 rationale so the guard remains strict for new source-observation field names.

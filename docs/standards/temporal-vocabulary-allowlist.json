@@ -35,9 +35,30 @@
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_records_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 3,
-            "ownerSlice": "Slice 7 / CR-1046",
-            "reason": "Existing benchmark definition, composition, and benchmark-return ingestion DTO fields moved from reference_data_benchmark_dto.py during benchmark-record DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1046 / CR-1054",
+            "reason": "Legacy benchmark definition, composition, and benchmark-return ingestion DTO fields have been moved into focused DTO-family modules. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_definition_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1054",
+            "reason": "Existing benchmark definition ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_composition_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1054",
+            "reason": "Existing benchmark composition ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_return_series_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1054",
+            "reason": "Existing benchmark return-series ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_index_series_dto.py",
