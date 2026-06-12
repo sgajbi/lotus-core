@@ -1177,3 +1177,11 @@ health before that claim is defensible.
      overview builder and operations-service tests prove backlog age, control status, latest
      reconciliation, blocking finding, nullable control, generated-date fallback, and
      publish-allowed behavior remain compatible.
+219. Reduced benchmark market-series response composition complexity by extracting row-indexing,
+     component point, component series, returned-evidence, evidence-count, quality-summary, and
+     page-metadata helpers while preserving the public `BenchmarkMarketSeriesResponse` contract.
+     `build_benchmark_market_series_response` improved from `D (23)` to `A (1)`, and every
+     function in `benchmark_market_series.py` now reports A-ranked cyclomatic complexity. Focused
+     benchmark market-series tests prove page-scoped metadata, component points, FX normalization
+     status, evidence timestamps, data-quality status, quality summary, and next-page token
+     behavior remain compatible.

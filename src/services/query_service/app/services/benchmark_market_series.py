@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.market_reference_quality import quality_status_summary_key
 
@@ -58,13 +58,23 @@ class BenchmarkMarketSeriesIndexPage:
     has_more: bool
 
 
+@dataclass(frozen=True)
+class BenchmarkMarketSeriesRows:
+    components: list[Any]
+    prices_by_index_date: dict[tuple[str, date], Any]
+    returns_by_index_date: dict[tuple[str, date], Any]
+    benchmark_return_by_date: dict[date, Any]
+    component_segments_by_index: dict[str, list[Any]]
+    all_dates: list[date]
+
+
 def benchmark_market_series_currency(
     *,
     definition: Any | None,
     target_currency: str | None,
 ) -> str:
     if definition is not None:
-        return definition.benchmark_currency
+        return cast(str, definition.benchmark_currency)
     return target_currency or "UNKNOWN"
 
 
@@ -345,6 +355,186 @@ def benchmark_market_series_normalization_status(
     return "native_component_series_with_missing_benchmark_to_target_fx_context"
 
 
+def _benchmark_market_series_rows(
+    *,
+    component_rows: list[Any],
+    index_prices: list[Any],
+    index_returns: list[Any],
+    benchmark_returns: list[Any],
+    fx_rates: dict[date, Decimal],
+    window: IntegrationWindow,
+) -> BenchmarkMarketSeriesRows:
+    components = resolve_component_window_rows(
+        component_rows,
+        start_date=window.start_date,
+        end_date=window.end_date,
+    )
+    return BenchmarkMarketSeriesRows(
+        components=components,
+        prices_by_index_date=_rows_by_index_date(index_prices),
+        returns_by_index_date=_rows_by_index_date(index_returns),
+        benchmark_return_by_date=_rows_by_series_date(benchmark_returns),
+        component_segments_by_index=_component_segments_by_index(components),
+        all_dates=_market_series_dates(
+            index_prices=index_prices,
+            index_returns=index_returns,
+            benchmark_returns=benchmark_returns,
+            fx_rates=fx_rates,
+        ),
+    )
+
+
+def _rows_by_index_date(rows: list[Any]) -> dict[tuple[str, date], Any]:
+    return {(row.index_id, row.series_date): row for row in rows}
+
+
+def _rows_by_series_date(rows: list[Any]) -> dict[date, Any]:
+    return {row.series_date: row for row in rows}
+
+
+def _component_segments_by_index(components: list[Any]) -> dict[str, list[Any]]:
+    component_segments_by_index: dict[str, list[Any]] = {}
+    for row in components:
+        component_segments_by_index.setdefault(row.index_id, []).append(row)
+    return component_segments_by_index
+
+
+def _market_series_dates(
+    *,
+    index_prices: list[Any],
+    index_returns: list[Any],
+    benchmark_returns: list[Any],
+    fx_rates: dict[date, Decimal],
+) -> list[date]:
+    return sorted(
+        {row.series_date for row in index_prices + index_returns + benchmark_returns}
+        | set(fx_rates.keys())
+    )
+
+
+def _component_weight_for_date(
+    *,
+    segments: list[Any],
+    current_date: date,
+) -> Decimal | None:
+    for segment in segments:
+        if segment.composition_effective_from <= current_date and (
+            segment.composition_effective_to is None
+            or segment.composition_effective_to >= current_date
+        ):
+            return cast(Decimal, as_decimal(segment.composition_weight))
+    return None
+
+
+def _benchmark_market_series_points(
+    *,
+    index_id: str,
+    market_rows: BenchmarkMarketSeriesRows,
+    requested_fields: set[str],
+    fx_rates: dict[date, Decimal],
+) -> list[Any]:
+    points = []
+    component_segments = market_rows.component_segments_by_index.get(index_id, [])
+    for current_date in market_rows.all_dates:
+        points.append(
+            benchmark_market_series_point(
+                series_date=current_date,
+                requested_fields=requested_fields,
+                price_row=market_rows.prices_by_index_date.get((index_id, current_date)),
+                return_row=market_rows.returns_by_index_date.get((index_id, current_date)),
+                benchmark_return_row=market_rows.benchmark_return_by_date.get(current_date),
+                component_weight=_component_weight_for_date(
+                    segments=component_segments,
+                    current_date=current_date,
+                ),
+                fx_rate=fx_rates.get(current_date),
+            )
+        )
+    return points
+
+
+def _benchmark_component_series(
+    *,
+    index_ids: list[str],
+    requested_fields: set[str],
+    market_rows: BenchmarkMarketSeriesRows,
+    fx_rates: dict[date, Decimal],
+    page_size: int,
+) -> list[Any]:
+    component_series_all = [
+        benchmark_component_series_response(
+            index_id=index_id,
+            points=_benchmark_market_series_points(
+                index_id=index_id,
+                market_rows=market_rows,
+                requested_fields=requested_fields,
+                fx_rates=fx_rates,
+            ),
+        )
+        for index_id in sorted(index_ids)
+    ]
+    return component_series_all[:page_size]
+
+
+def _returned_evidence_rows(
+    *,
+    component_series: list[Any],
+    market_rows: BenchmarkMarketSeriesRows,
+    index_prices: list[Any],
+    index_returns: list[Any],
+    benchmark_returns: list[Any],
+) -> list[Any]:
+    returned_index_ids = _returned_index_ids(component_series)
+    returned_index_prices = _rows_for_index_ids(index_prices, returned_index_ids)
+    returned_index_returns = _rows_for_index_ids(index_returns, returned_index_ids)
+    returned_components = _rows_for_index_ids(market_rows.components, returned_index_ids)
+    return returned_components + returned_index_prices + returned_index_returns + benchmark_returns
+
+
+def _returned_index_ids(component_series: list[Any]) -> set[str]:
+    return {series.index_id for series in component_series}
+
+
+def _rows_for_index_ids(rows: list[Any], index_ids: set[str]) -> list[Any]:
+    return [row for row in rows if row.index_id in index_ids]
+
+
+def _required_evidence_count(
+    *,
+    returned_evidence_rows: list[Any],
+    has_more: bool,
+) -> int:
+    if has_more:
+        return len(returned_evidence_rows) + 1
+    return len(returned_evidence_rows)
+
+
+def _quality_status_summary(component_series: list[Any]) -> dict[str, int]:
+    quality_status_summary: dict[str, int] = {}
+    for component in component_series:
+        for point in component.points:
+            if point.quality_status:
+                summary_key = quality_status_summary_key(point.quality_status)
+                quality_status_summary[summary_key] = quality_status_summary.get(summary_key, 0) + 1
+    return quality_status_summary
+
+
+def _benchmark_market_series_page_metadata(
+    *,
+    page_size: int,
+    component_series: list[Any],
+    request_scope_fingerprint: str,
+    next_page_token: str | None,
+) -> ReferencePageMetadata:
+    return ReferencePageMetadata(
+        page_size=page_size,
+        sort_key="index_id:asc",
+        returned_component_count=len(component_series),
+        request_scope_fingerprint=request_scope_fingerprint,
+        next_page_token=next_page_token,
+    )
+
+
 def build_benchmark_market_series_response(
     *,
     benchmark_id: str,
@@ -363,71 +553,28 @@ def build_benchmark_market_series_response(
     fx_context: BenchmarkMarketSeriesFxContext,
 ) -> BenchmarkMarketSeriesResponse:
     requested_fields = set(request.series_fields)
-    components = resolve_component_window_rows(
-        component_rows,
-        start_date=request.window.start_date,
-        end_date=request.window.end_date,
+    market_rows = _benchmark_market_series_rows(
+        component_rows=component_rows,
+        index_prices=index_prices,
+        index_returns=index_returns,
+        benchmark_returns=benchmark_returns,
+        fx_rates=fx_rates,
+        window=request.window,
     )
-
-    prices_by_index_date = {(row.index_id, row.series_date): row for row in index_prices}
-    returns_by_index_date = {(row.index_id, row.series_date): row for row in index_returns}
-    benchmark_return_by_date = {row.series_date: row for row in benchmark_returns}
-    component_segments_by_index: dict[str, list[Any]] = {}
-    for row in components:
-        component_segments_by_index.setdefault(row.index_id, []).append(row)
-
-    all_dates = sorted(
-        {row.series_date for row in index_prices + index_returns + benchmark_returns}
-        | set(fx_rates.keys())
+    component_series = _benchmark_component_series(
+        index_ids=index_ids,
+        requested_fields=requested_fields,
+        market_rows=market_rows,
+        fx_rates=fx_rates,
+        page_size=page_size,
     )
-    component_series_all = []
-    for index_id in sorted(index_ids):
-        points = []
-        for current_date in all_dates:
-            price_row = prices_by_index_date.get((index_id, current_date))
-            return_row = returns_by_index_date.get((index_id, current_date))
-            benchmark_return_row = benchmark_return_by_date.get(current_date)
-            component_weight = None
-            for segment in component_segments_by_index.get(index_id, []):
-                if segment.composition_effective_from <= current_date and (
-                    segment.composition_effective_to is None
-                    or segment.composition_effective_to >= current_date
-                ):
-                    component_weight = as_decimal(segment.composition_weight)
-                    break
-            points.append(
-                benchmark_market_series_point(
-                    series_date=current_date,
-                    requested_fields=requested_fields,
-                    price_row=price_row,
-                    return_row=return_row,
-                    benchmark_return_row=benchmark_return_row,
-                    component_weight=component_weight,
-                    fx_rate=fx_rates.get(current_date),
-                )
-            )
-        component_series_all.append(
-            benchmark_component_series_response(index_id=index_id, points=points)
-        )
-
-    component_series = component_series_all[:page_size]
-    returned_index_ids = {series.index_id for series in component_series}
-    returned_index_prices = [row for row in index_prices if row.index_id in returned_index_ids]
-    returned_index_returns = [row for row in index_returns if row.index_id in returned_index_ids]
-    returned_components = [row for row in components if row.index_id in returned_index_ids]
-    returned_evidence_rows = (
-        returned_components + returned_index_prices + returned_index_returns + benchmark_returns
+    returned_evidence_rows = _returned_evidence_rows(
+        component_series=component_series,
+        market_rows=market_rows,
+        index_prices=index_prices,
+        index_returns=index_returns,
+        benchmark_returns=benchmark_returns,
     )
-    required_evidence_count = (
-        len(returned_evidence_rows) + 1 if has_more else len(returned_evidence_rows)
-    )
-
-    quality_status_summary: dict[str, int] = {}
-    for component in component_series:
-        for point in component.points:
-            if point.quality_status:
-                summary_key = quality_status_summary_key(point.quality_status)
-                quality_status_summary[summary_key] = quality_status_summary.get(summary_key, 0) + 1
 
     return BenchmarkMarketSeriesResponse(
         benchmark_id=benchmark_id,
@@ -440,7 +587,7 @@ def build_benchmark_market_series_response(
         ),
         frequency=request.frequency,
         component_series=component_series,
-        quality_status_summary=quality_status_summary,
+        quality_status_summary=_quality_status_summary(component_series),
         fx_context_source_currency=fx_context.source_currency,
         fx_context_target_currency=fx_context.target_currency,
         normalization_policy="native_component_series_downstream_normalization_required",
@@ -450,10 +597,9 @@ def build_benchmark_market_series_response(
         ),
         component_metadata_policy="targeted_index_catalog_lookup_required_for_component_metadata",
         request_fingerprint=request_scope_fingerprint,
-        page=ReferencePageMetadata(
+        page=_benchmark_market_series_page_metadata(
             page_size=page_size,
-            sort_key="index_id:asc",
-            returned_component_count=len(component_series),
+            component_series=component_series,
             request_scope_fingerprint=request_scope_fingerprint,
             next_page_token=next_page_token,
         ),
@@ -466,7 +612,10 @@ def build_benchmark_market_series_response(
             request.as_of_date,
             data_quality_status=market_reference_data_quality_status(
                 returned_evidence_rows,
-                required_count=required_evidence_count,
+                required_count=_required_evidence_count(
+                    returned_evidence_rows=returned_evidence_rows,
+                    has_more=has_more,
+                ),
             ),
             latest_evidence_timestamp=latest_reference_evidence_timestamp(returned_evidence_rows),
         ),
