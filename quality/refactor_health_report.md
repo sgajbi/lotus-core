@@ -1047,3 +1047,14 @@ health before that claim is defensible.
      reports `A (37.58)`. The moved constrained decimal annotations are now directly clean under
      scoped mypy, and focused reference-data DTO plus ingestion OpenAPI contract tests prove
      validation behavior, schema component names, and public imports remain compatible.
+205. Reduced the reference-data client preference DTO module hotspot by extracting client
+     restriction profile contracts into `reference_data_client_restriction_dto.py` and
+     sustainability preference profile contracts into `reference_data_sustainability_preference_dto.py`
+     while preserving the public `reference_data_client_preference_dto.py` and
+     `reference_data_dto.py` import surfaces. The aggregate client-preference DTO module improved
+     from `A (32.04)` and 142 SLOC to a pure compatibility facade at `A (100.00)` and 10 SLOC,
+     the extracted client-restriction module reports `A (42.42)`, and the extracted
+     sustainability-preference module reports `A (40.79)`. The moved allocation-bound decimal
+     annotations are now directly clean under scoped mypy, and focused reference-data DTO plus
+     ingestion OpenAPI contract tests prove validation behavior, schema component names, and
+     public imports remain compatible.
