@@ -1028,3 +1028,13 @@ health before that claim is defensible.
      imports, and schema component names remain compatible. The temporal vocabulary allowlist now
      records the moved legacy `source_timestamp` fields with CR-1046 rationale so the guard remains
      strict for new source-observation field names.
+203. Reduced the ingestion operations DTO module hotspot by extracting health, SLO, operating-band,
+     policy, and error-budget response contracts into `ingestion_job_observability_dto.py` and
+     reprocessing queue, stalled-job, retry, and ops-mode contracts into
+     `ingestion_job_control_dto.py` while preserving the public
+     `ingestion_job_operations_dto.py` and `ingestion_job_dto.py` import surfaces. The aggregate
+     operations DTO module improved from `A (37.66)` and 498 SLOC to a pure compatibility facade at
+     `A (100.00)` and 15 SLOC, the extracted observability module reports `A (49.01)`, and the
+     extracted control module reports `A (47.35)`. Focused event-replay OpenAPI contract,
+     ingestion guardrail, and operating-band tests prove schema component names, public imports,
+     and representative operations behavior remain compatible.
