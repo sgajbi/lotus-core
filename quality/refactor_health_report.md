@@ -1138,3 +1138,11 @@ health before that claim is defensible.
      `A (42.63)`, and every function/class/method in the module now reports A-ranked cyclomatic
      complexity. Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation
      behavior, schema component names, public imports, and route shape remain compatible.
+214. Reduced the client restriction DTO scoped-value validator by extracting scope-policy and
+     scoped-value detection into named predicates while preserving the public
+     `ClientRestrictionProfileRecord` contract and validation error text.
+     `_validate_scoped_restriction_values` improved from `B (6)` to `A (3)`,
+     `reference_data_client_restriction_dto.py` improved from `A (42.42)` to `A (43.00)`, and
+     every function/class/method in the module now reports A-ranked cyclomatic complexity.
+     Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
+     schema component names, public imports, and route shape remain compatible.

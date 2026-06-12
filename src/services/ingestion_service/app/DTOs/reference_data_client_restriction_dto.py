@@ -92,6 +92,24 @@ def _validate_scoped_restriction_values(
     issuer_ids: list[str],
     country_codes: list[str],
 ) -> None:
-    scoped_values = instrument_ids or asset_classes or issuer_ids or country_codes
-    if restriction_scope not in {"client", "mandate"} and not scoped_values:
+    if _restriction_scope_requires_values(restriction_scope) and not _has_scoped_values(
+        instrument_ids=instrument_ids,
+        asset_classes=asset_classes,
+        issuer_ids=issuer_ids,
+        country_codes=country_codes,
+    ):
         raise ValueError("scoped restrictions must include at least one scoped identifier")
+
+
+def _restriction_scope_requires_values(restriction_scope: str) -> bool:
+    return restriction_scope not in {"client", "mandate"}
+
+
+def _has_scoped_values(
+    *,
+    instrument_ids: list[str],
+    asset_classes: list[str],
+    issuer_ids: list[str],
+    country_codes: list[str],
+) -> bool:
+    return any((instrument_ids, asset_classes, issuer_ids, country_codes))
