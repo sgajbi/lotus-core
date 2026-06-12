@@ -21,9 +21,16 @@
     {
       "path": "src/services/ingestion_service/app/DTOs/reference_data_dto.py",
       "field": "source_timestamp",
-      "expectedCount": 8,
+      "expectedCount": 7,
       "ownerSlice": "Slice 7",
-      "reason": "Existing reference-data ingestion DTO fields. New source-observation fields must use observed_at."
+      "reason": "Existing reference-data ingestion DTO fields preserved in the aggregate module. New source-observation fields must use observed_at."
+    },
+    {
+      "path": "src/services/ingestion_service/app/DTOs/reference_data_support_dto.py",
+      "field": "source_timestamp",
+      "expectedCount": 1,
+      "ownerSlice": "Slice 7 / CR-1036",
+      "reason": "Existing classification taxonomy ingestion DTO field moved from reference_data_dto.py during support-reference DTO modularization. New source-observation fields must use observed_at."
     },
     {
       "path": "src/services/query_service/app/dtos/reference_integration_dto.py",

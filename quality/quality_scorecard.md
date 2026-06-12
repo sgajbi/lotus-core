@@ -63,10 +63,10 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `ingestion_job_service.py` `B (16.96)`; active non-generated C-ranked source hotspot list is
   clear.
 - CR-1036 focused evidence: reference-data DTO tests passed with 35 tests; scoped Ruff lint,
-  format, and support-module mypy checks passed; `reference_data_dto.py` improved from
-  `B (12.49)` to `B (14.29)`, `reference_data_support_dto.py` reports `A (43.83)`, and the
-  aggregate DTO module shrank from 1,119 SLOC to 947 SLOC while preserving public imports and
-  ingestion request behavior.
+  format, support-module mypy, temporal-vocabulary guard, temporal guard unit tests, and
+  `make lint` passed; `reference_data_dto.py` improved from `B (12.49)` to `B (14.29)`,
+  `reference_data_support_dto.py` reports `A (43.83)`, and the aggregate DTO module shrank from
+  1,119 SLOC to 947 SLOC while preserving public imports and ingestion request behavior.
 - CR-1035 focused evidence: reference-data DTO tests passed with 35 tests; scoped Ruff lint,
   format, and extracted-module mypy checks passed; `reference_data_dto.py` improved from
   `B (9.31)` to `B (12.49)`, `reference_data_model_portfolio_dto.py` reports `A (41.43)`,

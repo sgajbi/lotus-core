@@ -949,3 +949,6 @@ health before that claim is defensible.
      wrappers into `reference_data_support_dto.py`. The aggregate DTO module improved from
      `B (12.49)` to `B (14.29)`, the extracted support module reports `A (43.83)`, and the
      public `reference_data_dto.py` import surface remains compatible for routers and tests.
+     The temporal vocabulary allowlist now records the moved legacy `source_timestamp` field with
+     CR-1036 rationale so the guard preserves behavior without allowing new source-observation
+     terminology drift.
