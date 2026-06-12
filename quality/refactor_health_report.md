@@ -1161,3 +1161,11 @@ health before that claim is defensible.
      `portfolio_readiness_builder.py` now reports A-ranked cyclomatic complexity. Focused builder
      and operations-service tests prove readiness buckets, blocking reasons, missing-FX payloads,
      bounded supportability metric labels, and response fields remain compatible.
+217. Reduced integration capability policy composition complexity by extracting explicit feature
+     default, tenant-override, input-mode, workflow, and response-assembly helpers while preserving
+     the public `IntegrationCapabilitiesResponse` contract. `CapabilitiesService.get_integration_capabilities`
+     improved from `D (29)` to `A (1)`, `CapabilitiesService` improved from `C (11)` to `A (4)`,
+     and every function in `capabilities_service.py` now reports A-ranked cyclomatic complexity.
+     Focused capability-service tests prove default flags, environment overrides, tenant policy
+     overrides, invalid override handling, ecosystem consumers, workflow required features,
+     as-of-date fallback, and lazy DB engine posture remain compatible.
