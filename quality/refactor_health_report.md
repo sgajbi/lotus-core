@@ -1193,3 +1193,11 @@ health before that claim is defensible.
      A-ranked cyclomatic complexity. Focused cash-balance tests prove holdings-as-of metadata,
      master cash-account rows, fallback identifiers, normalized master joins, zero-balance
      accounts, sequential FX conversions, and sorting behavior remain compatible.
+221. Reduced latest cash-account ID repository complexity by extracting settlement-cash security
+     normalization, ranked transaction subquery construction, latest-ID statement assembly, and
+     result mapping helpers while preserving the public `ReportingRepository` behavior.
+     `ReportingRepository.get_latest_cash_account_ids` improved from `B (7)` to `A (2)`, and every
+     function in `reporting_repository.py` now reports A-ranked cyclomatic complexity. Focused
+     reporting repository and cash-balance tests prove normalized security matching, latest
+     transaction ranking, non-null cash-account filtering, and fallback account mapping behavior
+     remain compatible.

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Any, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
@@ -40,6 +41,70 @@ class InstrumentLookthroughComponentRow:
     component_instrument: Instrument | None
 
 
+def _normalized_cash_security_ids(cash_security_ids: list[str]) -> list[str]:
+    return [
+        security_id for value in cash_security_ids if (security_id := normalize_security_id(value))
+    ]
+
+
+def _cash_security_id_expr() -> Any:
+    return func.trim(Transaction.settlement_cash_instrument_id)
+
+
+def _latest_cash_account_id_ranked_subquery(
+    *,
+    portfolio_id: str,
+    cash_security_ids: list[str],
+    as_of_date: date,
+) -> Any:
+    cash_security_id = _cash_security_id_expr()
+    return (
+        select(
+            cash_security_id.label("cash_security_id"),
+            Transaction.settlement_cash_account_id.label("cash_account_id"),
+            func.row_number()
+            .over(
+                partition_by=cash_security_id,
+                order_by=(Transaction.transaction_date.desc(), Transaction.id.desc()),
+            )
+            .label("rn"),
+        )
+        .where(
+            Transaction.portfolio_id == portfolio_id,
+            cash_security_id.in_(cash_security_ids),
+            Transaction.settlement_cash_account_id.is_not(None),
+            Transaction.transaction_date < start_of_next_day(as_of_date),
+        )
+        .subquery()
+    )
+
+
+def _latest_cash_account_id_statement(
+    *,
+    portfolio_id: str,
+    cash_security_ids: list[str],
+    as_of_date: date,
+) -> Any:
+    ranked_txn_subq = _latest_cash_account_id_ranked_subquery(
+        portfolio_id=portfolio_id,
+        cash_security_ids=cash_security_ids,
+        as_of_date=as_of_date,
+    )
+    return select(
+        ranked_txn_subq.c.cash_security_id,
+        ranked_txn_subq.c.cash_account_id,
+    ).where(ranked_txn_subq.c.rn == 1)
+
+
+def _cash_account_id_mapping(rows: list[Any]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for security_id, cash_account_id in rows:
+        normalized_security_id = normalize_security_id(security_id)
+        if normalized_security_id:
+            mapping[normalized_security_id] = str(cash_account_id)
+    return mapping
+
+
 class ReportingRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -48,11 +113,11 @@ class ReportingRepository:
         stmt = select(func.max(BusinessDate.date)).where(
             BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def get_portfolio_by_id(self, portfolio_id: str) -> Portfolio | None:
         stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(Portfolio | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def list_portfolios(
         self,
@@ -209,7 +274,7 @@ class ReportingRepository:
             .order_by(FxRate.rate_date.desc())
             .limit(1)
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(Decimal | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def get_latest_cash_account_ids(
         self,
@@ -218,47 +283,17 @@ class ReportingRepository:
         cash_security_ids: list[str],
         as_of_date: date,
     ) -> dict[str, str]:
-        if not cash_security_ids:
-            return {}
-
-        normalized_cash_security_ids = [
-            security_id
-            for value in cash_security_ids
-            if (security_id := normalize_security_id(value))
-        ]
+        normalized_cash_security_ids = _normalized_cash_security_ids(cash_security_ids)
         if not normalized_cash_security_ids:
             return {}
 
-        cash_security_id = func.trim(Transaction.settlement_cash_instrument_id)
-        ranked_txn_subq = (
-            select(
-                cash_security_id.label("cash_security_id"),
-                Transaction.settlement_cash_account_id.label("cash_account_id"),
-                func.row_number()
-                .over(
-                    partition_by=cash_security_id,
-                    order_by=(Transaction.transaction_date.desc(), Transaction.id.desc()),
-                )
-                .label("rn"),
-            )
-            .where(
-                Transaction.portfolio_id == portfolio_id,
-                cash_security_id.in_(normalized_cash_security_ids),
-                Transaction.settlement_cash_account_id.is_not(None),
-                Transaction.transaction_date < start_of_next_day(as_of_date),
-            )
-            .subquery()
+        stmt = _latest_cash_account_id_statement(
+            portfolio_id=portfolio_id,
+            cash_security_ids=normalized_cash_security_ids,
+            as_of_date=as_of_date,
         )
-        stmt = select(
-            ranked_txn_subq.c.cash_security_id,
-            ranked_txn_subq.c.cash_account_id,
-        ).where(ranked_txn_subq.c.rn == 1)
         rows = (await self.db.execute(stmt)).all()
-        return {
-            normalize_security_id(security_id): str(cash_account_id)
-            for security_id, cash_account_id in rows
-            if normalize_security_id(security_id)
-        }
+        return _cash_account_id_mapping(rows)
 
     async def list_cash_account_masters(
         self,
