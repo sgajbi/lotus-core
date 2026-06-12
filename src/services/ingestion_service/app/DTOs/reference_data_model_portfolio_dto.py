@@ -180,3 +180,67 @@ class ModelPortfolioTargetRecord(BaseModel):
         return self
 
     model_config = ConfigDict()
+
+
+class ModelPortfolioDefinitionIngestionRequest(BaseModel):
+    model_portfolios: list[ModelPortfolioDefinitionRecord] = Field(
+        ...,
+        description="Model portfolio definition records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "display_name": "Singapore Balanced DPM Model",
+                    "base_currency": "SGD",
+                    "risk_profile": "balanced",
+                    "mandate_type": "discretionary",
+                    "rebalance_frequency": "monthly",
+                    "approval_status": "approved",
+                    "effective_from": "2026-03-25",
+                }
+            ]
+        ],
+    )
+
+    model_config = ConfigDict()
+
+
+class ModelPortfolioTargetIngestionRequest(BaseModel):
+    model_portfolio_targets: list[ModelPortfolioTargetRecord] = Field(
+        ...,
+        description="Model portfolio target records to ingest or upsert.",
+        min_length=1,
+        examples=[
+            [
+                {
+                    "model_portfolio_id": "MODEL_SG_BALANCED_DPM",
+                    "model_portfolio_version": "2026.03",
+                    "instrument_id": "EQ_US_AAPL",
+                    "target_weight": "0.1200000000",
+                    "min_weight": "0.0800000000",
+                    "max_weight": "0.1600000000",
+                    "target_status": "active",
+                    "effective_from": "2026-03-25",
+                }
+            ]
+        ],
+    )
+
+    @model_validator(mode="after")
+    def validate_target_uniqueness(self) -> "ModelPortfolioTargetIngestionRequest":
+        keys = [
+            (
+                target.model_portfolio_id,
+                target.model_portfolio_version,
+                target.instrument_id,
+                target.effective_from,
+            )
+            for target in self.model_portfolio_targets
+        ]
+        if len(keys) != len(set(keys)):
+            raise ValueError("model_portfolio_targets contains duplicate target records")
+        return self
+
+    model_config = ConfigDict()

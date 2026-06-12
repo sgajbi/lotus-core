@@ -965,3 +965,9 @@ health before that claim is defensible.
      `A (27.76)`, the extracted mandate module reports `A (39.16)`, and focused DTO plus
      ingestion OpenAPI contract tests prove public imports and schema component names remain
      compatible.
+195. Reduced the reference-data DTO compatibility facade by moving model-portfolio definition and
+     target ingestion request wrappers into `reference_data_model_portfolio_dto.py`, beside the
+     model-portfolio records they wrap. The aggregate DTO module improved from `A (27.76)` to
+     `A (28.88)`, the model-portfolio module remains A-ranked at `A (39.13)`, and focused DTO plus
+     ingestion OpenAPI contract tests prove public imports and schema component names remain
+     compatible.
