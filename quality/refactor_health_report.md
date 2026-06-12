@@ -1078,3 +1078,13 @@ health before that claim is defensible.
      reports `A (42.80)`, and the extracted portfolio-benchmark-assignment module reports
      `A (57.85)`. Focused reference-data DTO plus ingestion OpenAPI contract tests prove
      validation behavior, schema component names, and public imports remain compatible.
+208. Reduced the reference-data model portfolio DTO module hotspot by extracting model portfolio
+     definition contracts into `reference_data_model_portfolio_definition_dto.py` and model
+     portfolio target contracts into `reference_data_model_portfolio_target_dto.py` while
+     preserving the public `reference_data_model_portfolio_dto.py` and `reference_data_dto.py`
+     import surfaces. The aggregate model-portfolio DTO module improved from `A (39.13)` and
+     229 SLOC to a pure compatibility facade at `A (100.00)` and 6 SLOC, the extracted
+     model-portfolio-definition module reports `A (52.32)`, and the extracted
+     model-portfolio-target module reports `A (46.09)`. Focused reference-data DTO plus ingestion
+     OpenAPI contract tests prove validation behavior, base-currency normalization, schema
+     component names, and public imports remain compatible.
