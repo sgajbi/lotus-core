@@ -1069,3 +1069,12 @@ health before that claim is defensible.
      module reports `A (49.30)`. Focused reference-data DTO plus ingestion OpenAPI contract tests
      prove validation behavior, currency normalization, schema component names, and public imports
      remain compatible.
+207. Reduced the reference-data mandate DTO module hotspot by extracting discretionary mandate
+     binding contracts into `reference_data_discretionary_mandate_dto.py` and portfolio benchmark
+     assignment contracts into `reference_data_portfolio_benchmark_assignment_dto.py` while
+     preserving the public `reference_data_mandate_dto.py` and `reference_data_dto.py` import
+     surfaces. The aggregate mandate DTO module improved from `A (39.16)` and 240 SLOC to a pure
+     compatibility facade at `A (100.00)` and 10 SLOC, the extracted discretionary-mandate module
+     reports `A (42.80)`, and the extracted portfolio-benchmark-assignment module reports
+     `A (57.85)`. Focused reference-data DTO plus ingestion OpenAPI contract tests prove
+     validation behavior, schema component names, and public imports remain compatible.
