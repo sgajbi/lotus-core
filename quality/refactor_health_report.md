@@ -1038,3 +1038,12 @@ health before that claim is defensible.
      extracted control module reports `A (47.35)`. Focused event-replay OpenAPI contract,
      ingestion guardrail, and operating-band tests prove schema component names, public imports,
      and representative operations behavior remain compatible.
+204. Reduced the reference-data tax DTO module hotspot by extracting client tax profile contracts
+     into `reference_data_tax_profile_dto.py` and client tax rule-set contracts into
+     `reference_data_tax_rule_set_dto.py` while preserving the public `reference_data_tax_dto.py`
+     and `reference_data_dto.py` import surfaces. The aggregate tax DTO module improved from
+     `A (29.60)` and 190 SLOC to a pure compatibility facade at `A (100.00)` and 6 SLOC, the
+     extracted tax-profile module reports `A (41.82)`, and the extracted tax-rule-set module
+     reports `A (37.58)`. The moved constrained decimal annotations are now directly clean under
+     scoped mypy, and focused reference-data DTO plus ingestion OpenAPI contract tests prove
+     validation behavior, schema component names, and public imports remain compatible.
