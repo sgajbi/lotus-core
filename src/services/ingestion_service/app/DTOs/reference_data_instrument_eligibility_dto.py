@@ -5,6 +5,23 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+_BUY_BLOCKING_SHELF_STATUSES = {"BANNED", "SUSPENDED"}
+
+
+def _validate_effective_window(effective_from: date, effective_to: date | None) -> None:
+    if effective_to is not None and effective_to < effective_from:
+        raise ValueError("effective_to must be on or after effective_from")
+
+
+def _validate_buy_permission(product_shelf_status: str, buy_allowed: bool) -> None:
+    if product_shelf_status in _BUY_BLOCKING_SHELF_STATUSES and buy_allowed:
+        raise ValueError("buy_allowed must be false for banned or suspended instruments")
+
+
+def _validate_sell_permission(product_shelf_status: str, sell_allowed: bool) -> None:
+    if product_shelf_status == "BANNED" and sell_allowed:
+        raise ValueError("sell_allowed must be false for banned instruments")
+
 
 class InstrumentEligibilityProfileRecord(BaseModel):
     security_id: str = Field(
@@ -82,12 +99,9 @@ class InstrumentEligibilityProfileRecord(BaseModel):
 
     @model_validator(mode="after")
     def validate_effective_window(self) -> "InstrumentEligibilityProfileRecord":
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to must be on or after effective_from")
-        if self.product_shelf_status in {"BANNED", "SUSPENDED"} and self.buy_allowed:
-            raise ValueError("buy_allowed must be false for banned or suspended instruments")
-        if self.product_shelf_status == "BANNED" and self.sell_allowed:
-            raise ValueError("sell_allowed must be false for banned instruments")
+        _validate_effective_window(self.effective_from, self.effective_to)
+        _validate_buy_permission(self.product_shelf_status, self.buy_allowed)
+        _validate_sell_permission(self.product_shelf_status, self.sell_allowed)
         return self
 
     model_config = ConfigDict()

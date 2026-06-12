@@ -1116,3 +1116,11 @@ health before that claim is defensible.
      currency normalization, schema component names, and public imports remain compatible. The
      temporal vocabulary allowlist now records the moved legacy `source_timestamp` fields with
      CR-1054 rationale so the guard remains strict for new source-observation field names.
+211. Reduced the DPM instrument eligibility DTO validation hotspot by extracting effective-window,
+     buy-permission, and sell-permission checks into named helpers while preserving the public
+     `InstrumentEligibilityProfileRecord` and ingestion request contract. The record class improved
+     from `B (8)` to `A (2)`, the model validator improved from `B (7)` to `A (1)`, and every
+     function/class/method in `reference_data_instrument_eligibility_dto.py` now reports
+     A-ranked cyclomatic complexity. Focused reference-data DTO plus ingestion OpenAPI contract
+     tests prove validation behavior, schema component names, public imports, and route shape
+     remain compatible.
