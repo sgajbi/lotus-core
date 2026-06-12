@@ -1169,3 +1169,11 @@ health before that claim is defensible.
      Focused capability-service tests prove default flags, environment overrides, tenant policy
      overrides, invalid override handling, ecosystem consumers, workflow required features,
      as-of-date fallback, and lazy DB engine posture remain compatible.
+218. Reduced support overview response composition complexity by extracting explicit reprocessing,
+     valuation, aggregation, analytics-export, portfolio-evidence, control-stage, reconciliation,
+     and response-assembly helpers while preserving the public `SupportOverviewResponse` contract.
+     `build_support_overview_response` improved from `D (23)` to `A (1)`, and every function in
+     `support_overview_builder.py` now reports A-ranked cyclomatic complexity. Focused support
+     overview builder and operations-service tests prove backlog age, control status, latest
+     reconciliation, blocking finding, nullable control, generated-date fallback, and
+     publish-allowed behavior remain compatible.
