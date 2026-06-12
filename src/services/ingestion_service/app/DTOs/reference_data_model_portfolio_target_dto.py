@@ -82,13 +82,26 @@ class ModelPortfolioTargetRecord(BaseModel):
 
     @model_validator(mode="after")
     def validate_bands(self) -> "ModelPortfolioTargetRecord":
-        if self.min_weight is not None and self.min_weight > self.target_weight:
-            raise ValueError("min_weight must be less than or equal to target_weight")
-        if self.max_weight is not None and self.max_weight < self.target_weight:
-            raise ValueError("max_weight must be greater than or equal to target_weight")
+        _validate_target_band_order(
+            target_weight=self.target_weight,
+            min_weight=self.min_weight,
+            max_weight=self.max_weight,
+        )
         return self
 
     model_config = ConfigDict()
+
+
+def _validate_target_band_order(
+    *,
+    target_weight: Decimal,
+    min_weight: Decimal | None,
+    max_weight: Decimal | None,
+) -> None:
+    if min_weight is not None and min_weight > target_weight:
+        raise ValueError("min_weight must be less than or equal to target_weight")
+    if max_weight is not None and max_weight < target_weight:
+        raise ValueError("max_weight must be greater than or equal to target_weight")
 
 
 class ModelPortfolioTargetIngestionRequest(BaseModel):

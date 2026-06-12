@@ -1146,3 +1146,10 @@ health before that claim is defensible.
      every function/class/method in the module now reports A-ranked cyclomatic complexity.
      Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
      schema component names, public imports, and route shape remain compatible.
+215. Reduced the model portfolio target DTO band-order validation boundary by extracting the
+     target/min/max band policy into `_validate_target_band_order` while preserving the public
+     `ModelPortfolioTargetRecord` contract and validation error text. `ModelPortfolioTargetRecord`
+     improved from `B (6)` to `A (2)`, `validate_bands` improved from `A (5)` to `A (1)`, and
+     every DTO class now reports A-ranked cyclomatic complexity. Focused reference-data DTO plus
+     ingestion OpenAPI contract tests prove validation behavior, schema component names, public
+     imports, and route shape remain compatible.
