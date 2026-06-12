@@ -991,3 +991,11 @@ health before that claim is defensible.
      extracted replay diagnostics module reports `A (43.08)`, and focused DLQ/replay guardrail
      tests plus event-replay OpenAPI contract tests prove response behavior and schema component
      names remain compatible.
+199. Reduced the ingestion-job DTO module size by extracting ingestion health, SLO, operating
+     band, operating policy, reprocessing queue, stalled-job, retry, ops-mode, and error-budget
+     DTOs into `ingestion_job_operations_dto.py` while preserving the public
+     `ingestion_job_dto.py` import surface. The aggregate ingestion-job DTO module improved from
+     `A (32.33)` to `A (44.17)` and shrank from 730 SLOC to 249 SLOC, the extracted operations
+     diagnostics module reports `A (37.66)`, and focused guardrail tests plus ingestion and
+     event-replay OpenAPI contract tests prove response behavior and schema component names remain
+     compatible.
