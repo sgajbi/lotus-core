@@ -1153,3 +1153,11 @@ health before that claim is defensible.
      every DTO class now reports A-ranked cyclomatic complexity. Focused reference-data DTO plus
      ingestion OpenAPI contract tests prove validation behavior, schema component names, public
      imports, and route shape remain compatible.
+216. Reduced portfolio readiness supportability composition complexity by extracting explicit
+     reason-family, bucket-construction, supportability-state, freshness, blocking-reason, and
+     missing-FX payload helpers while preserving the public `PortfolioReadinessResponse` contract.
+     `build_portfolio_readiness_response` improved from `D (23)` to `A (1)`,
+     `_portfolio_supportability_summary` improved from `B (7)` to `A (2)`, and every function in
+     `portfolio_readiness_builder.py` now reports A-ranked cyclomatic complexity. Focused builder
+     and operations-service tests prove readiness buckets, blocking reasons, missing-FX payloads,
+     bounded supportability metric labels, and response fields remain compatible.

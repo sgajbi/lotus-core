@@ -31,6 +31,22 @@ class PortfolioReadinessSnapshot:
     missing_fx_summary: RepositoryMissingHistoricalFxDependencySummary
 
 
+@dataclass(frozen=True)
+class _PortfolioReadinessReasons:
+    holdings: list[PortfolioReadinessReason]
+    pricing: list[PortfolioReadinessReason]
+    transactions: list[PortfolioReadinessReason]
+    reporting: list[PortfolioReadinessReason]
+
+
+@dataclass(frozen=True)
+class _PortfolioReadinessBuckets:
+    holdings: PortfolioReadinessBucket
+    pricing: PortfolioReadinessBucket
+    transactions: PortfolioReadinessBucket
+    reporting: PortfolioReadinessBucket
+
+
 def _reason(
     *,
     code: str,
@@ -60,6 +76,34 @@ def _bucket_status(reasons: list[PortfolioReadinessReason], has_activity: bool) 
     return "READY"
 
 
+def _supportability_state_reason(
+    *,
+    total_domains: int,
+    no_activity_domains: int,
+    blocked_domains: int,
+    pending_domains: int,
+) -> tuple[str, str]:
+    if no_activity_domains == total_domains:
+        return "empty", "portfolio_supportability_empty"
+    if blocked_domains > 0:
+        return "degraded", "portfolio_supportability_blocked"
+    if pending_domains > 0:
+        return "degraded", "portfolio_supportability_pending"
+    return "ready", "portfolio_supportability_ready"
+
+
+def _supportability_freshness_bucket(
+    *,
+    resolved_as_of_date: date | None,
+    generated_at_utc: datetime,
+) -> str:
+    if resolved_as_of_date is None:
+        return "unknown"
+    if resolved_as_of_date >= generated_at_utc.date() - timedelta(days=1):
+        return "current"
+    return "stale"
+
+
 def _portfolio_supportability_summary(
     *,
     buckets: list[PortfolioReadinessBucket],
@@ -72,25 +116,16 @@ def _portfolio_supportability_summary(
     blocked_domains = statuses.count("BLOCKED")
     no_activity_domains = statuses.count("NO_ACTIVITY")
 
-    if no_activity_domains == len(statuses):
-        state = "empty"
-        reason = "portfolio_supportability_empty"
-    elif blocked_domains > 0:
-        state = "degraded"
-        reason = "portfolio_supportability_blocked"
-    elif pending_domains > 0:
-        state = "degraded"
-        reason = "portfolio_supportability_pending"
-    else:
-        state = "ready"
-        reason = "portfolio_supportability_ready"
-
-    if resolved_as_of_date is None:
-        freshness_bucket = "unknown"
-    elif resolved_as_of_date >= generated_at_utc.date() - timedelta(days=1):
-        freshness_bucket = "current"
-    else:
-        freshness_bucket = "stale"
+    state, reason = _supportability_state_reason(
+        total_domains=len(statuses),
+        no_activity_domains=no_activity_domains,
+        blocked_domains=blocked_domains,
+        pending_domains=pending_domains,
+    )
+    freshness_bucket = _supportability_freshness_bucket(
+        resolved_as_of_date=resolved_as_of_date,
+        generated_at_utc=generated_at_utc,
+    )
 
     observe_portfolio_supportability(state, reason, freshness_bucket)
     return PortfolioSupportabilitySummary(
@@ -130,57 +165,56 @@ def _build_missing_fx_reason(
     )
 
 
-def build_portfolio_readiness_response(
-    snapshot: PortfolioReadinessSnapshot,
-) -> PortfolioReadinessResponse:
-    support_overview = snapshot.support_overview
-    snapshot_coverage = snapshot.snapshot_coverage
-    missing_fx_summary = snapshot.missing_fx_summary
-    latest_booked_transaction_date = snapshot.latest_booked_transaction_date
-    latest_booked_position_snapshot_date = snapshot.latest_booked_position_snapshot_date
-
-    has_activity = (
-        latest_booked_transaction_date is not None
-        or latest_booked_position_snapshot_date is not None
+def _has_portfolio_activity(snapshot: PortfolioReadinessSnapshot) -> bool:
+    return (
+        snapshot.latest_booked_transaction_date is not None
+        or snapshot.latest_booked_position_snapshot_date is not None
     )
 
-    holdings_reasons: list[PortfolioReadinessReason] = []
-    pricing_reasons: list[PortfolioReadinessReason] = []
-    transaction_reasons: list[PortfolioReadinessReason] = []
-    reporting_reasons: list[PortfolioReadinessReason] = []
 
-    if missing_fx_summary.missing_count > 0:
-        transaction_reasons.append(
-            _build_missing_fx_reason(domain="transactions", fx_summary=missing_fx_summary)
-        )
-        pricing_reasons.append(
-            _build_missing_fx_reason(domain="pricing", fx_summary=missing_fx_summary)
-        )
-        reporting_reasons.append(
-            _build_missing_fx_reason(domain="reporting", fx_summary=missing_fx_summary)
-        )
-        holdings_reasons.append(
-            _build_missing_fx_reason(domain="holdings", fx_summary=missing_fx_summary)
-        )
+def _missing_fx_reasons(
+    missing_fx_summary: RepositoryMissingHistoricalFxDependencySummary,
+) -> dict[str, PortfolioReadinessReason]:
+    if missing_fx_summary.missing_count <= 0:
+        return {}
+    return {
+        domain: _build_missing_fx_reason(domain=domain, fx_summary=missing_fx_summary)
+        for domain in ("transactions", "pricing", "reporting", "holdings")
+    }
 
-    if latest_booked_transaction_date is not None and (
-        latest_booked_position_snapshot_date is None
-        or latest_booked_position_snapshot_date < latest_booked_transaction_date
-    ):
-        holdings_reasons.append(
-            _reason(
-                code="SNAPSHOT_BEHIND_TRANSACTION_LEDGER",
-                domain="holdings",
-                severity="WARNING",
-                message=(
-                    "Current-epoch position snapshots lag the booked transaction ledger "
-                    "for the resolved as-of date."
-                ),
-            )
-        )
 
-    if support_overview.position_snapshot_history_mismatch_count > 0:
-        holdings_reasons.append(
+def _snapshot_lag_reason(
+    snapshot: PortfolioReadinessSnapshot,
+) -> PortfolioReadinessReason | None:
+    latest_transaction_date = snapshot.latest_booked_transaction_date
+    latest_snapshot_date = snapshot.latest_booked_position_snapshot_date
+    if latest_transaction_date is None:
+        return None
+    if latest_snapshot_date is not None and latest_snapshot_date >= latest_transaction_date:
+        return None
+    return _reason(
+        code="SNAPSHOT_BEHIND_TRANSACTION_LEDGER",
+        domain="holdings",
+        severity="WARNING",
+        message=(
+            "Current-epoch position snapshots lag the booked transaction ledger "
+            "for the resolved as-of date."
+        ),
+    )
+
+
+def _holdings_reasons(
+    *,
+    snapshot: PortfolioReadinessSnapshot,
+    missing_fx_reasons: dict[str, PortfolioReadinessReason],
+) -> list[PortfolioReadinessReason]:
+    reasons = []
+    if missing_fx_reason := missing_fx_reasons.get("holdings"):
+        reasons.append(missing_fx_reason)
+    if snapshot_lag_reason := _snapshot_lag_reason(snapshot):
+        reasons.append(snapshot_lag_reason)
+    if snapshot.support_overview.position_snapshot_history_mismatch_count > 0:
+        reasons.append(
             _reason(
                 code="POSITION_HISTORY_SNAPSHOT_GAP",
                 domain="holdings",
@@ -191,9 +225,8 @@ def build_portfolio_readiness_response(
                 ),
             )
         )
-
-    if support_overview.active_reprocessing_keys > 0:
-        holdings_reasons.append(
+    if snapshot.support_overview.active_reprocessing_keys > 0:
+        reasons.append(
             _reason(
                 code="REPROCESSING_KEYS_ACTIVE",
                 domain="holdings",
@@ -204,9 +237,15 @@ def build_portfolio_readiness_response(
                 ),
             )
         )
+    return reasons
 
+
+def _valuation_job_reasons(
+    support_overview: SupportOverviewResponse,
+) -> list[PortfolioReadinessReason]:
+    reasons = []
     if support_overview.failed_valuation_jobs > 0:
-        pricing_reasons.append(
+        reasons.append(
             _reason(
                 code="VALUATION_JOBS_FAILED",
                 domain="pricing",
@@ -215,7 +254,7 @@ def build_portfolio_readiness_response(
             )
         )
     if support_overview.stale_processing_valuation_jobs > 0:
-        pricing_reasons.append(
+        reasons.append(
             _reason(
                 code="VALUATION_JOBS_STALE",
                 domain="pricing",
@@ -223,33 +262,70 @@ def build_portfolio_readiness_response(
                 message="One or more valuation jobs are stale in PROCESSING state.",
             )
         )
-    if (
-        support_overview.pending_valuation_jobs > 0
-        or support_overview.processing_valuation_jobs > 0
-    ):
-        pricing_reasons.append(
-            _reason(
-                code="VALUATION_BACKLOG_OPEN",
-                domain="pricing",
-                severity="WARNING",
-                message="Valuation work is still open for this portfolio.",
-            )
-        )
-    if snapshot_coverage.unvalued_positions > 0:
-        pricing_reasons.append(
-            _reason(
-                code="UNVALUED_POSITIONS_REMAIN",
-                domain="pricing",
-                severity="WARNING",
-                message=(
-                    "One or more current-epoch positions remain unvalued on the latest "
-                    "booked snapshot date."
-                ),
-            )
-        )
+    return reasons
 
+
+def _valuation_backlog_reason(
+    support_overview: SupportOverviewResponse,
+) -> PortfolioReadinessReason | None:
+    if support_overview.pending_valuation_jobs <= 0 and not (
+        support_overview.processing_valuation_jobs
+    ):
+        return None
+    return _reason(
+        code="VALUATION_BACKLOG_OPEN",
+        domain="pricing",
+        severity="WARNING",
+        message="Valuation work is still open for this portfolio.",
+    )
+
+
+def _unvalued_positions_reason(
+    snapshot_coverage: SnapshotValuationCoverageSummary,
+) -> PortfolioReadinessReason | None:
+    if snapshot_coverage.unvalued_positions <= 0:
+        return None
+    return _reason(
+        code="UNVALUED_POSITIONS_REMAIN",
+        domain="pricing",
+        severity="WARNING",
+        message=(
+            "One or more current-epoch positions remain unvalued on the latest "
+            "booked snapshot date."
+        ),
+    )
+
+
+def _pricing_reasons(
+    *,
+    snapshot: PortfolioReadinessSnapshot,
+    missing_fx_reasons: dict[str, PortfolioReadinessReason],
+) -> list[PortfolioReadinessReason]:
+    reasons = []
+    if missing_fx_reason := missing_fx_reasons.get("pricing"):
+        reasons.append(missing_fx_reason)
+    reasons.extend(_valuation_job_reasons(snapshot.support_overview))
+    if backlog_reason := _valuation_backlog_reason(snapshot.support_overview):
+        reasons.append(backlog_reason)
+    if unvalued_reason := _unvalued_positions_reason(snapshot.snapshot_coverage):
+        reasons.append(unvalued_reason)
+    return reasons
+
+
+def _transaction_reasons(
+    missing_fx_reasons: dict[str, PortfolioReadinessReason],
+) -> list[PortfolioReadinessReason]:
+    if missing_fx_reason := missing_fx_reasons.get("transactions"):
+        return [missing_fx_reason]
+    return []
+
+
+def _reporting_control_reasons(
+    support_overview: SupportOverviewResponse,
+) -> list[PortfolioReadinessReason]:
+    reasons = []
     if support_overview.controls_blocking:
-        reporting_reasons.append(
+        reasons.append(
             _reason(
                 code="REPORTING_PUBLICATION_BLOCKED",
                 domain="reporting",
@@ -261,7 +337,7 @@ def build_portfolio_readiness_response(
             )
         )
     if support_overview.failed_aggregation_jobs > 0:
-        reporting_reasons.append(
+        reasons.append(
             _reason(
                 code="AGGREGATION_JOBS_FAILED",
                 domain="reporting",
@@ -269,22 +345,35 @@ def build_portfolio_readiness_response(
                 message="One or more aggregation jobs are in FAILED terminal state.",
             )
         )
+    return reasons
+
+
+def _reporting_backlog_reason(
+    support_overview: SupportOverviewResponse,
+) -> PortfolioReadinessReason | None:
     if (
         support_overview.pending_aggregation_jobs > 0
         or support_overview.processing_aggregation_jobs > 0
         or support_overview.stale_processing_aggregation_jobs > 0
     ):
-        reporting_reasons.append(
-            _reason(
-                code="AGGREGATION_BACKLOG_OPEN",
-                domain="reporting",
-                severity="WARNING",
-                message="Aggregation work is still open for this portfolio.",
-            )
+        return _reason(
+            code="AGGREGATION_BACKLOG_OPEN",
+            domain="reporting",
+            severity="WARNING",
+            message="Aggregation work is still open for this portfolio.",
         )
+    return None
 
+
+def _reporting_dependency_reasons(
+    *,
+    has_activity: bool,
+    holdings_reasons: list[PortfolioReadinessReason],
+    pricing_reasons: list[PortfolioReadinessReason],
+) -> list[PortfolioReadinessReason]:
+    reasons = []
     if has_activity and holdings_reasons:
-        reporting_reasons.append(
+        reasons.append(
             _reason(
                 code="HOLDINGS_COVERAGE_NOT_READY",
                 domain="reporting",
@@ -293,7 +382,7 @@ def build_portfolio_readiness_response(
             )
         )
     if has_activity and pricing_reasons:
-        reporting_reasons.append(
+        reasons.append(
             _reason(
                 code="PRICING_COVERAGE_NOT_READY",
                 domain="reporting",
@@ -301,28 +390,133 @@ def build_portfolio_readiness_response(
                 message="Pricing coverage is not yet fully ready for reporting consumption.",
             )
         )
+    return reasons
 
+
+def _reporting_reasons(
+    *,
+    snapshot: PortfolioReadinessSnapshot,
+    has_activity: bool,
+    holdings_reasons: list[PortfolioReadinessReason],
+    pricing_reasons: list[PortfolioReadinessReason],
+    missing_fx_reasons: dict[str, PortfolioReadinessReason],
+) -> list[PortfolioReadinessReason]:
+    reasons = []
+    if missing_fx_reason := missing_fx_reasons.get("reporting"):
+        reasons.append(missing_fx_reason)
+    reasons.extend(_reporting_control_reasons(snapshot.support_overview))
+    if backlog_reason := _reporting_backlog_reason(snapshot.support_overview):
+        reasons.append(backlog_reason)
+    reasons.extend(
+        _reporting_dependency_reasons(
+            has_activity=has_activity,
+            holdings_reasons=holdings_reasons,
+            pricing_reasons=pricing_reasons,
+        )
+    )
+    return reasons
+
+
+def _portfolio_readiness_reasons(
+    snapshot: PortfolioReadinessSnapshot,
+    *,
+    has_activity: bool,
+) -> _PortfolioReadinessReasons:
+    missing_fx_reasons = _missing_fx_reasons(snapshot.missing_fx_summary)
+    holdings = _holdings_reasons(snapshot=snapshot, missing_fx_reasons=missing_fx_reasons)
+    pricing = _pricing_reasons(snapshot=snapshot, missing_fx_reasons=missing_fx_reasons)
+    return _PortfolioReadinessReasons(
+        holdings=holdings,
+        pricing=pricing,
+        transactions=_transaction_reasons(missing_fx_reasons),
+        reporting=_reporting_reasons(
+            snapshot=snapshot,
+            has_activity=has_activity,
+            holdings_reasons=holdings,
+            pricing_reasons=pricing,
+            missing_fx_reasons=missing_fx_reasons,
+        ),
+    )
+
+
+def _portfolio_readiness_buckets(
+    *,
+    reasons: _PortfolioReadinessReasons,
+    has_activity: bool,
+    has_transactions: bool,
+) -> _PortfolioReadinessBuckets:
     holdings = PortfolioReadinessBucket(
-        status=_bucket_status(holdings_reasons, has_activity),
-        reasons=holdings_reasons,
+        status=_bucket_status(reasons.holdings, has_activity),
+        reasons=reasons.holdings,
     )
     pricing = PortfolioReadinessBucket(
-        status=_bucket_status(pricing_reasons, has_activity),
-        reasons=pricing_reasons,
+        status=_bucket_status(reasons.pricing, has_activity),
+        reasons=reasons.pricing,
     )
     transactions = PortfolioReadinessBucket(
-        status=_bucket_status(
-            transaction_reasons,
-            latest_booked_transaction_date is not None,
-        ),
-        reasons=transaction_reasons,
+        status=_bucket_status(reasons.transactions, has_transactions),
+        reasons=reasons.transactions,
     )
     reporting = PortfolioReadinessBucket(
-        status=_bucket_status(reporting_reasons, has_activity),
-        reasons=reporting_reasons,
+        status=_bucket_status(reasons.reporting, has_activity),
+        reasons=reasons.reporting,
+    )
+    return _PortfolioReadinessBuckets(
+        holdings=holdings,
+        pricing=pricing,
+        transactions=transactions,
+        reporting=reporting,
+    )
+
+
+def _blocking_reasons_from_groups(
+    reasons: _PortfolioReadinessReasons,
+) -> list[PortfolioReadinessReason]:
+    return (
+        _blocking_reasons(reasons.holdings)
+        + _blocking_reasons(reasons.pricing)
+        + _blocking_reasons(reasons.transactions)
+        + _blocking_reasons(reasons.reporting)
+    )
+
+
+def _missing_historical_fx_dependencies_payload(
+    missing_fx_summary: RepositoryMissingHistoricalFxDependencySummary,
+) -> dict[str, object]:
+    return {
+        "missing_count": missing_fx_summary.missing_count,
+        "earliest_transaction_date": missing_fx_summary.earliest_transaction_date,
+        "latest_transaction_date": missing_fx_summary.latest_transaction_date,
+        "sample_records": [
+            {
+                "transaction_id": record.transaction_id,
+                "security_id": record.security_id,
+                "transaction_date": record.transaction_date,
+                "trade_currency": record.trade_currency,
+                "portfolio_currency": record.portfolio_currency,
+            }
+            for record in missing_fx_summary.sample_records
+        ],
+    }
+
+
+def build_portfolio_readiness_response(
+    snapshot: PortfolioReadinessSnapshot,
+) -> PortfolioReadinessResponse:
+    has_activity = _has_portfolio_activity(snapshot)
+    reasons = _portfolio_readiness_reasons(snapshot, has_activity=has_activity)
+    buckets = _portfolio_readiness_buckets(
+        reasons=reasons,
+        has_activity=has_activity,
+        has_transactions=snapshot.latest_booked_transaction_date is not None,
     )
     supportability = _portfolio_supportability_summary(
-        buckets=[holdings, pricing, transactions, reporting],
+        buckets=[
+            buckets.holdings,
+            buckets.pricing,
+            buckets.transactions,
+            buckets.reporting,
+        ],
         resolved_as_of_date=snapshot.resolved_as_of_date,
         generated_at_utc=snapshot.generated_at_utc,
     )
@@ -332,41 +526,24 @@ def build_portfolio_readiness_response(
         requested_as_of_date=snapshot.requested_as_of_date,
         resolved_as_of_date=snapshot.resolved_as_of_date,
         generated_at_utc=snapshot.generated_at_utc,
-        holdings=holdings,
-        pricing=pricing,
-        transactions=transactions,
-        reporting=reporting,
-        blocking_reasons=(
-            _blocking_reasons(holdings_reasons)
-            + _blocking_reasons(pricing_reasons)
-            + _blocking_reasons(transaction_reasons)
-            + _blocking_reasons(reporting_reasons)
-        ),
+        holdings=buckets.holdings,
+        pricing=buckets.pricing,
+        transactions=buckets.transactions,
+        reporting=buckets.reporting,
+        blocking_reasons=_blocking_reasons_from_groups(reasons),
         supportability=supportability,
-        latest_booked_transaction_date=latest_booked_transaction_date,
-        latest_booked_position_snapshot_date=latest_booked_position_snapshot_date,
-        current_epoch=support_overview.current_epoch,
+        latest_booked_transaction_date=snapshot.latest_booked_transaction_date,
+        latest_booked_position_snapshot_date=snapshot.latest_booked_position_snapshot_date,
+        current_epoch=snapshot.support_overview.current_epoch,
         position_snapshot_history_mismatch_count=(
-            support_overview.position_snapshot_history_mismatch_count
+            snapshot.support_overview.position_snapshot_history_mismatch_count
         ),
-        snapshot_valuation_total_positions=snapshot_coverage.total_positions,
-        snapshot_valuation_valued_positions=snapshot_coverage.valued_positions,
-        snapshot_valuation_unvalued_positions=snapshot_coverage.unvalued_positions,
-        controls_status=support_overview.controls_status,
-        publish_allowed=support_overview.publish_allowed,
-        missing_historical_fx_dependencies={
-            "missing_count": missing_fx_summary.missing_count,
-            "earliest_transaction_date": missing_fx_summary.earliest_transaction_date,
-            "latest_transaction_date": missing_fx_summary.latest_transaction_date,
-            "sample_records": [
-                {
-                    "transaction_id": record.transaction_id,
-                    "security_id": record.security_id,
-                    "transaction_date": record.transaction_date,
-                    "trade_currency": record.trade_currency,
-                    "portfolio_currency": record.portfolio_currency,
-                }
-                for record in missing_fx_summary.sample_records
-            ],
-        },
+        snapshot_valuation_total_positions=snapshot.snapshot_coverage.total_positions,
+        snapshot_valuation_valued_positions=snapshot.snapshot_coverage.valued_positions,
+        snapshot_valuation_unvalued_positions=snapshot.snapshot_coverage.unvalued_positions,
+        controls_status=snapshot.support_overview.controls_status,
+        publish_allowed=snapshot.support_overview.publish_allowed,
+        missing_historical_fx_dependencies=_missing_historical_fx_dependencies_payload(
+            snapshot.missing_fx_summary
+        ),
     )
