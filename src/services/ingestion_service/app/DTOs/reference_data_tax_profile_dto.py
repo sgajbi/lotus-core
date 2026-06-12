@@ -26,14 +26,30 @@ def _validate_unknown_tax_status_detail(
     income_tax_applicable: bool,
     treaty_codes: list[str],
 ) -> None:
-    has_tax_detail = (
-        withholding_tax_rate is not None
-        or capital_gains_tax_applicable
-        or income_tax_applicable
-        or treaty_codes
-    )
-    if tax_status == "UNKNOWN" and has_tax_detail:
+    if tax_status == "UNKNOWN" and _tax_profile_has_applicable_detail(
+        withholding_tax_rate=withholding_tax_rate,
+        capital_gains_tax_applicable=capital_gains_tax_applicable,
+        income_tax_applicable=income_tax_applicable,
+        treaty_codes=treaty_codes,
+    ):
         raise ValueError("UNKNOWN tax_status cannot carry applicable tax detail")
+
+
+def _tax_profile_has_applicable_detail(
+    *,
+    withholding_tax_rate: Decimal | None,
+    capital_gains_tax_applicable: bool,
+    income_tax_applicable: bool,
+    treaty_codes: list[str],
+) -> bool:
+    return any(
+        (
+            withholding_tax_rate is not None,
+            capital_gains_tax_applicable,
+            income_tax_applicable,
+            treaty_codes,
+        )
+    )
 
 
 class ClientTaxProfileRecord(BaseModel):

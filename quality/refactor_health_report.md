@@ -1131,3 +1131,10 @@ health before that claim is defensible.
      and every function/class/method in the module now reports A-ranked cyclomatic complexity.
      Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
      schema component names, public imports, and route shape remain compatible.
+213. Reduced the client tax profile DTO unknown-status validator by extracting applicable-tax-detail
+     detection into a named predicate while preserving the public `ClientTaxProfileRecord`
+     contract and validation error text. `_validate_unknown_tax_status_detail` improved from
+     `B (6)` to `A (3)`, `reference_data_tax_profile_dto.py` improved from `A (41.82)` to
+     `A (42.63)`, and every function/class/method in the module now reports A-ranked cyclomatic
+     complexity. Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation
+     behavior, schema component names, public imports, and route shape remain compatible.
