@@ -971,3 +971,9 @@ health before that claim is defensible.
      `A (28.88)`, the model-portfolio module remains A-ranked at `A (39.13)`, and focused DTO plus
      ingestion OpenAPI contract tests prove public imports and schema component names remain
      compatible.
+196. Reduced the reference-data DTO compatibility facade by extracting client income-needs
+     schedule, liquidity reserve requirement, and planned withdrawal schedule records plus their
+     ingestion request wrappers into `reference_data_cashflow_planning_dto.py`. The aggregate DTO
+     module improved from `A (28.88)` to a pure compatibility facade at `A (100.00)`, the
+     extracted cashflow-planning module reports `A (31.18)`, and focused DTO plus ingestion
+     OpenAPI contract tests prove public imports and schema component names remain compatible.
