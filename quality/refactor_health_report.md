@@ -938,3 +938,9 @@ health before that claim is defensible.
      missing dependency calculation helpers.
      `CostCalculatorConsumer._record_bundle_a_reconciliation_diagnostics` improved from `B (9)`
      to `A (3)`, and `consumer.py` remains A-ranked maintainability at `A (20.93)`.
+191. Reduced reference-data DTO module size by extracting model-portfolio definition and target
+     DTOs into `reference_data_model_portfolio_dto.py` while preserving the public
+     `reference_data_dto.py` import surface. The aggregate DTO module improved from `B (9.31)` to
+     `B (12.49)`, the extracted module reports `A (41.43)`, and an unreachable
+     model-portfolio target band-order validation branch was removed because the target-bound
+     checks already classify every invalid min/max ordering.
