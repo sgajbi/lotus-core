@@ -1088,3 +1088,18 @@ health before that claim is defensible.
      model-portfolio-target module reports `A (46.09)`. Focused reference-data DTO plus ingestion
      OpenAPI contract tests prove validation behavior, base-currency normalization, schema
      component names, and public imports remain compatible.
+209. Reduced the reference-data index/risk-free series DTO module hotspot by extracting index
+     definition contracts into `reference_data_index_definition_dto.py`, index price-series
+     contracts into `reference_data_index_price_series_dto.py`, index return-series contracts into
+     `reference_data_index_return_series_dto.py`, and risk-free series contracts into
+     `reference_data_risk_free_series_dto.py` while preserving the public
+     `reference_data_index_series_dto.py`, `reference_data_benchmark_dto.py`, and
+     `reference_data_dto.py` import surfaces. The aggregate index-series DTO module improved from
+     `A (37.52)` and 243 SLOC to a pure compatibility facade at `A (100.00)` and 12 SLOC, the
+     extracted index-definition module reports `A (51.44)`, the index-price-series module reports
+     `A (56.99)`, the index-return-series module reports `A (56.48)`, and the risk-free-series
+     module reports `A (54.44)`. Focused reference-data DTO plus ingestion OpenAPI contract tests
+     prove validation behavior, currency normalization, schema component names, and public imports
+     remain compatible. The temporal vocabulary allowlist now records the moved legacy
+     `source_timestamp` fields with CR-1053 rationale so the guard remains strict for new
+     source-observation field names.
