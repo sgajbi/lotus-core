@@ -944,3 +944,8 @@ health before that claim is defensible.
      `B (12.49)`, the extracted module reports `A (41.43)`, and an unreachable
      model-portfolio target band-order validation branch was removed because the target-bound
      checks already classify every invalid min/max ordering.
+192. Reduced reference-data DTO module size again by extracting classification taxonomy,
+     cash-account master, and instrument look-through component DTOs plus their ingestion request
+     wrappers into `reference_data_support_dto.py`. The aggregate DTO module improved from
+     `B (12.49)` to `B (14.29)`, the extracted support module reports `A (43.83)`, and the
+     public `reference_data_dto.py` import surface remains compatible for routers and tests.
