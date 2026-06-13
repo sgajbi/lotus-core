@@ -1221,3 +1221,10 @@ health before that claim is defensible.
      reference-data helper and integration-service tests prove observed, source, assignment,
      updated, and created timestamp handling, multi-row-group max timestamp behavior, and
      missing/non-datetime filtering remain compatible.
+225. Reduced benchmark market-series point mapping complexity by extracting metadata precedence,
+     requested row-decimal normalization, and requested optional-value selection helpers while
+     preserving the public `benchmark_market_series_point` mapper. `benchmark_market_series_point`
+     improved from `C (19)` to `A (1)`, and every function in `reference_data_mappers.py` now
+     reports A-ranked cyclomatic complexity. Focused reference-data mapper and benchmark
+     market-series tests prove selected-field suppression, price-row metadata precedence, decimal
+     normalization, component weight, and FX-rate behavior remain compatible.

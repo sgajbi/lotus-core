@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from ..dtos.reference_integration_dto import (
     BenchmarkComponentResponse,
@@ -340,37 +340,67 @@ def benchmark_market_series_point(
     component_weight: Decimal | None,
     fx_rate: Decimal | None,
 ) -> SeriesPoint:
-    quality_status = (
-        (price_row and price_row.quality_status)
-        or (return_row and return_row.quality_status)
-        or (benchmark_return_row and benchmark_return_row.quality_status)
-    )
     return SeriesPoint(
         series_date=series_date,
-        series_currency=(
-            (price_row and price_row.series_currency)
-            or (return_row and return_row.series_currency)
-            or (benchmark_return_row and benchmark_return_row.series_currency)
+        series_currency=_first_market_series_value(
+            "series_currency",
+            price_row,
+            return_row,
+            benchmark_return_row,
         ),
-        index_price=(
-            as_decimal(price_row.index_price)
-            if price_row and "index_price" in requested_fields
-            else None
+        index_price=_requested_row_decimal(
+            requested_fields,
+            "index_price",
+            price_row,
+            "index_price",
         ),
-        index_return=(
-            as_decimal(return_row.index_return)
-            if return_row and "index_return" in requested_fields
-            else None
+        index_return=_requested_row_decimal(
+            requested_fields,
+            "index_return",
+            return_row,
+            "index_return",
         ),
-        benchmark_return=(
-            as_decimal(benchmark_return_row.benchmark_return)
-            if benchmark_return_row and "benchmark_return" in requested_fields
-            else None
+        benchmark_return=_requested_row_decimal(
+            requested_fields,
+            "benchmark_return",
+            benchmark_return_row,
+            "benchmark_return",
         ),
-        component_weight=component_weight if "component_weight" in requested_fields else None,
-        fx_rate=fx_rate if "fx_rate" in requested_fields else None,
-        quality_status=quality_status,
+        component_weight=_requested_value(requested_fields, "component_weight", component_weight),
+        fx_rate=_requested_value(requested_fields, "fx_rate", fx_rate),
+        quality_status=_first_market_series_value(
+            "quality_status",
+            price_row,
+            return_row,
+            benchmark_return_row,
+        ),
     )
+
+
+def _first_market_series_value(field_name: str, *rows: Any | None) -> Any | None:
+    for row in rows:
+        if row is not None and (value := getattr(row, field_name, None)):
+            return value
+    return None
+
+
+def _requested_row_decimal(
+    requested_fields: set[str],
+    response_field: str,
+    row: Any | None,
+    row_field: str,
+) -> Decimal | None:
+    if row is None or response_field not in requested_fields:
+        return None
+    return cast(Decimal, as_decimal(getattr(row, row_field)))
+
+
+def _requested_value(
+    requested_fields: set[str],
+    response_field: str,
+    value: Decimal | None,
+) -> Decimal | None:
+    return value if response_field in requested_fields else None
 
 
 def benchmark_component_series_response(

@@ -416,6 +416,65 @@ def test_benchmark_market_series_point_maps_selected_fields() -> None:
     assert component.points[0].quality_status == "accepted"
 
 
+def test_benchmark_market_series_point_omits_unrequested_fields() -> None:
+    point = benchmark_market_series_point(
+        series_date=date(2026, 1, 2),
+        requested_fields={"index_return"},
+        price_row=SimpleNamespace(
+            index_price="4567.1234000000",
+            series_currency="USD",
+            quality_status="accepted",
+        ),
+        return_row=SimpleNamespace(
+            index_return="0.0023000000",
+            series_currency="USD",
+            quality_status="accepted",
+        ),
+        benchmark_return_row=SimpleNamespace(
+            benchmark_return="0.0019000000",
+            series_currency="USD",
+            quality_status="accepted",
+        ),
+        component_weight=Decimal("0.6000000000"),
+        fx_rate=Decimal("1.3456000000"),
+    )
+
+    assert point.series_currency == "USD"
+    assert point.index_price is None
+    assert point.index_return == Decimal("0.0023000000")
+    assert point.benchmark_return is None
+    assert point.component_weight is None
+    assert point.fx_rate is None
+    assert point.quality_status == "accepted"
+
+
+def test_benchmark_market_series_point_uses_price_row_precedence_for_metadata() -> None:
+    point = benchmark_market_series_point(
+        series_date=date(2026, 1, 2),
+        requested_fields=set(),
+        price_row=SimpleNamespace(
+            index_price="4567.1234000000",
+            series_currency="USD",
+            quality_status="accepted",
+        ),
+        return_row=SimpleNamespace(
+            index_return="0.0023000000",
+            series_currency="EUR",
+            quality_status="estimated",
+        ),
+        benchmark_return_row=SimpleNamespace(
+            benchmark_return="0.0019000000",
+            series_currency="GBP",
+            quality_status="blocked",
+        ),
+        component_weight=None,
+        fx_rate=None,
+    )
+
+    assert point.series_currency == "USD"
+    assert point.quality_status == "accepted"
+
+
 def test_client_tax_entries_map_source_data_rows() -> None:
     tax_profile = client_tax_profile_entry(
         SimpleNamespace(
