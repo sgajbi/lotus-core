@@ -1363,3 +1363,11 @@ health before that claim is defensible.
      FX fallback behavior, and `PositionSummary` shape. `ValuationService.value_position`
      improved from `C (13)` to `A (4)`, `ValuationService` improved from `C (14)` to `A (5)`,
      and the same 17 focused tests, scoped Ruff lint/format checks, and Radon measurements passed.
+242. Fix-forwarded the Main Releasability run `27464050698` MWR E2E failure by making cash
+     expense cost semantics explicit before downstream position and timeseries workers consume
+     persisted transaction events. The cost engine now recognizes `TAX` as a governed transaction
+     type and routes cash-instrument `FEE` and `TAX` rows through the existing cash-outflow
+     strategy, preserving negative booked cost semantics and avoiding strict lot consumption for
+     cash expenses. Focused cost-engine tests passed with 52 tests, position-calculator tests
+     passed with 46 tests, and scoped Ruff lint passed. Docker-backed proof of the exact MWR E2E
+     regression is deferred to GitHub CI because local Docker Desktop is unavailable.

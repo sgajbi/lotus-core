@@ -579,6 +579,7 @@ class CostCalculator:
             TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
             TransactionType.ADJUSTMENT: DefaultStrategy(),
             TransactionType.FEE: DefaultStrategy(),
+            TransactionType.TAX: DefaultStrategy(),
             TransactionType.OTHER: DefaultStrategy(),
         }
         self._default_strategy = DefaultStrategy()
@@ -641,6 +642,8 @@ class CostCalculator:
             if transaction_type in {
                 TransactionType.SELL,
                 TransactionType.WITHDRAWAL,
+                TransactionType.FEE,
+                TransactionType.TAX,
                 TransactionType.TRANSFER_OUT,
                 TransactionType.MERGER_OUT,
                 TransactionType.EXCHANGE_OUT,

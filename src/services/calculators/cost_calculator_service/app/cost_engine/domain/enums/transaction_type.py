@@ -18,6 +18,7 @@ class TransactionType(str, Enum):
     DEPOSIT = "DEPOSIT"
     WITHDRAWAL = "WITHDRAWAL"
     FEE = "FEE"
+    TAX = "TAX"
     TRANSFER_IN = "TRANSFER_IN"
     TRANSFER_OUT = "TRANSFER_OUT"
     MERGER_OUT = "MERGER_OUT"

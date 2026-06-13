@@ -1065,6 +1065,35 @@ def test_cash_withdrawal_detection_normalizes_source_vocabulary(
     assert withdrawal_transaction.net_cost_local == Decimal("-500")
 
 
+@pytest.mark.parametrize("transaction_type", ["FEE", "TAX"])
+def test_cash_expense_flows_use_cash_outflow_strategy(
+    cost_calculator, mock_disposition_engine, transaction_type
+):
+    expense_transaction = Transaction(
+        transaction_id=f"{transaction_type}_CASH_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type=transaction_type,
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("1"),
+        price=Decimal("25"),
+        gross_transaction_amount=Decimal("25"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
+    )
+
+    cost_calculator.calculate_transaction_costs(expense_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert expense_transaction.realized_gain_loss is None
+    assert expense_transaction.net_cost == Decimal("-25.0")
+    assert expense_transaction.net_cost_local == Decimal("-25")
+
+
 def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
