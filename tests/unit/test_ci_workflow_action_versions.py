@@ -54,3 +54,10 @@ def test_workflows_opt_into_node24_action_runtime() -> None:
     ]
 
     assert missing_opt_in == []
+
+
+def test_pr_auto_merge_does_not_probe_branch_protection_with_github_token() -> None:
+    workflow_text = Path(".github/workflows/pr-auto-merge.yml").read_text(encoding="utf-8")
+
+    assert "/branches/main/protection" not in workflow_text
+    assert "administration:" not in workflow_text

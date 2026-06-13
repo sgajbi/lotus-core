@@ -1094,6 +1094,35 @@ def test_cash_expense_flows_use_cash_outflow_strategy(
     assert expense_transaction.net_cost_local == Decimal("-25")
 
 
+def test_non_cash_tax_is_rejected_without_positive_default_cost(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    tax_transaction = Transaction(
+        transaction_id="TAX_NON_CASH_01",
+        portfolio_id="P1",
+        instrument_id="AAPL",
+        security_id="AAPL",
+        transaction_type="TAX",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("1"),
+        price=Decimal("25"),
+        gross_transaction_amount=Decimal("25"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        product_type="Equity",
+        asset_class="Equity",
+    )
+
+    cost_calculator.calculate_transaction_costs(tax_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert error_reporter.has_errors_for("TAX_NON_CASH_01")
+    assert "cash instrument outflow" in error_reporter.get_errors()[0].error_reason
+    assert tax_transaction.net_cost is None
+    assert tax_transaction.net_cost_local is None
+
+
 def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
     cost_calculator, mock_disposition_engine, error_reporter
 ):

@@ -519,6 +519,19 @@ class DefaultStrategy:
         transaction.net_cost = transaction.net_cost_local * fx_rate
 
 
+class UnsupportedTaxStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        error_reporter.add_error(
+            transaction.transaction_id,
+            "TAX must be represented as a cash instrument outflow.",
+        )
+
+
 class FxPendingStrategy:
     def calculate_costs(
         self,
@@ -579,7 +592,7 @@ class CostCalculator:
             TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
             TransactionType.ADJUSTMENT: DefaultStrategy(),
             TransactionType.FEE: DefaultStrategy(),
-            TransactionType.TAX: DefaultStrategy(),
+            TransactionType.TAX: UnsupportedTaxStrategy(),
             TransactionType.OTHER: DefaultStrategy(),
         }
         self._default_strategy = DefaultStrategy()
