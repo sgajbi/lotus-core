@@ -71,6 +71,23 @@ def _position_basis_matches(snapshot_row: Any, history_row: Any) -> bool:
     )
 
 
+def _fallback_unrealized_amount(
+    *,
+    fallback_valuation: dict[str, Any],
+    unrealized_field: str,
+    market_value_field: str,
+    cost_basis: Any,
+) -> Decimal | None:
+    unrealized_amount = fallback_valuation.get(unrealized_field)
+    if unrealized_amount is not None:
+        return unrealized_amount
+    market_value = _nullable_decimal_value(fallback_valuation.get(market_value_field))
+    cost_basis_value = _nullable_decimal_value(cost_basis)
+    if market_value is None or cost_basis_value is None:
+        return None
+    return market_value - cost_basis_value
+
+
 def merge_snapshot_and_history_position_rows(
     *,
     snapshot_results: list[tuple[Any, Any, Any]],
@@ -120,9 +137,19 @@ def position_valuation_data(
         return ValuationData(
             market_price=fallback_valuation.get("market_price"),
             market_value=fallback_valuation.get("market_value"),
-            unrealized_gain_loss=fallback_valuation.get("unrealized_gain_loss"),
+            unrealized_gain_loss=_fallback_unrealized_amount(
+                fallback_valuation=fallback_valuation,
+                unrealized_field="unrealized_gain_loss",
+                market_value_field="market_value",
+                cost_basis=position_row.cost_basis,
+            ),
             market_value_local=fallback_valuation.get("market_value_local"),
-            unrealized_gain_loss_local=fallback_valuation.get("unrealized_gain_loss_local"),
+            unrealized_gain_loss_local=_fallback_unrealized_amount(
+                fallback_valuation=fallback_valuation,
+                unrealized_field="unrealized_gain_loss_local",
+                market_value_field="market_value_local",
+                cost_basis=position_row.cost_basis_local,
+            ),
         )
     # Maintain valuation continuity while snapshot backfill catches up.
     return ValuationData(
