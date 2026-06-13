@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.market_reference_quality import (
     BLOCKING_QUALITY_STATUSES,
@@ -31,25 +31,43 @@ def latest_reference_evidence_timestamp(*row_groups: list[Any]) -> datetime | No
 def market_reference_data_quality_status(rows: list[Any], required_count: int) -> str:
     if required_count <= 0:
         return "UNKNOWN"
-    quality_statuses = [
+    quality_statuses = _quality_statuses(rows)
+    if not quality_statuses:
+        return "UNKNOWN"
+    return cast(
+        str,
+        classify_market_reference_coverage(
+            _market_reference_coverage_signal(
+                required_count=required_count,
+                quality_statuses=quality_statuses,
+            )
+        ),
+    )
+
+
+def _quality_statuses(rows: list[Any]) -> list[str]:
+    return [
         str(status).strip().upper()
         for row in rows
         if (status := getattr(row, "quality_status", None)) is not None
     ]
-    if not quality_statuses:
-        return "UNKNOWN"
-    return classify_market_reference_coverage(
-        MarketReferenceCoverageSignal(
-            required_count=required_count,
-            observed_count=len(quality_statuses),
-            stale_count=sum(1 for status in quality_statuses if status in STALE_QUALITY_STATUSES),
-            estimated_count=sum(
-                1 for status in quality_statuses if status in PARTIAL_QUALITY_STATUSES
-            ),
-            blocking_count=sum(
-                1 for status in quality_statuses if status in BLOCKING_QUALITY_STATUSES
-            ),
-        )
+
+
+def _status_count(quality_statuses: list[str], status_family: set[str]) -> int:
+    return sum(1 for status in quality_statuses if status in status_family)
+
+
+def _market_reference_coverage_signal(
+    *,
+    required_count: int,
+    quality_statuses: list[str],
+) -> MarketReferenceCoverageSignal:
+    return MarketReferenceCoverageSignal(
+        required_count=required_count,
+        observed_count=len(quality_statuses),
+        stale_count=_status_count(quality_statuses, STALE_QUALITY_STATUSES),
+        estimated_count=_status_count(quality_statuses, PARTIAL_QUALITY_STATUSES),
+        blocking_count=_status_count(quality_statuses, BLOCKING_QUALITY_STATUSES),
     )
 
 

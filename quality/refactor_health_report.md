@@ -1201,3 +1201,9 @@ health before that claim is defensible.
      reporting repository and cash-balance tests prove normalized security matching, latest
      transaction ranking, non-null cash-account filtering, and fallback account mapping behavior
      remain compatible.
+222. Reduced market-reference data-quality classification complexity by extracting quality-status
+     normalization, status-family counting, and coverage-signal construction while preserving the
+     public `market_reference_data_quality_status` helper and shared market-reference quality
+     classifier. `market_reference_data_quality_status` improved from `C (11)` to `A (3)`.
+     Focused reference-data helper and integration-service tests prove accepted, estimated,
+     blocked, stale, missing-status, and required-count behavior remain compatible.
