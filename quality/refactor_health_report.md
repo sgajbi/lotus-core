@@ -1438,6 +1438,6 @@ health before that claim is defensible.
      could still return missing fallback unrealized P&L when snapshot market values were present.
      HoldingsAsOf fallback valuation now derives missing base and local unrealized amounts from
      market value minus authoritative history cost basis when both inputs exist. Focused latency and
-     holdings unit tests passed with 45 tests; scoped Ruff lint and format checks passed locally.
-     Docker-backed latency and E2E proof is deferred to GitHub CI because local Docker Desktop is
-     unavailable.
+     holdings unit tests passed with 45 tests; scoped Ruff lint and format checks passed locally;
+     Remote Feature Lane run `27477365942` passed. Docker-backed latency and E2E proof is deferred
+     to PR Merge Gate/Main Releasability because local Docker Desktop is unavailable.
