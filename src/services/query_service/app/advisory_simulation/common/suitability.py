@@ -19,6 +19,10 @@ _HIGH = "HIGH"
 _MEDIUM = "MEDIUM"
 _LOW = "LOW"
 _EPSILON = Decimal("0.0000001")
+_PRESENCE_GOVERNANCE_ISSUE_IDS = {
+    "BANNED": "SUIT_GOVERNANCE_BANNED",
+    "SUSPENDED": "SUIT_GOVERNANCE_SUSPENDED",
+}
 
 
 @dataclass(frozen=True)
@@ -232,69 +236,151 @@ def _governance_issue_for_instrument(
     options: EngineOptions,
 ) -> Optional[_IssueCandidate]:
     status = shelf_entry.status
-    issue_key = f"GOVERNANCE|{instrument_id}|{status}"
+    return _first_issue(
+        _governance_presence_issue(
+            instrument_id=instrument_id,
+            status=status,
+            after_weight=after_weight,
+        ),
+        _sell_only_increase_issue(
+            instrument_id=instrument_id,
+            status=status,
+            before_weight=before_weight,
+            after_weight=after_weight,
+        ),
+        _restricted_increase_issue(
+            instrument_id=instrument_id,
+            status=status,
+            before_weight=before_weight,
+            after_weight=after_weight,
+            allow_restricted=options.allow_restricted,
+        ),
+    )
 
-    if status == "BANNED" and after_weight > _EPSILON:
-        return _IssueCandidate(
-            issue_key=issue_key,
-            issue_id="SUIT_GOVERNANCE_BANNED",
-            dimension="GOVERNANCE",
-            severity=_HIGH,
-            summary=f"BANNED instrument {instrument_id} is present in the portfolio.",
-            details={
-                "instrument_id": instrument_id,
-                "shelf_status": status,
-                "measured": str(after_weight),
-            },
-        )
 
-    if status == "SUSPENDED" and after_weight > _EPSILON:
-        return _IssueCandidate(
-            issue_key=issue_key,
-            issue_id="SUIT_GOVERNANCE_SUSPENDED",
-            dimension="GOVERNANCE",
-            severity=_HIGH,
-            summary=f"SUSPENDED instrument {instrument_id} is present in the portfolio.",
-            details={
-                "instrument_id": instrument_id,
-                "shelf_status": status,
-                "measured": str(after_weight),
-            },
-        )
+def _first_issue(*issues: Optional[_IssueCandidate]) -> Optional[_IssueCandidate]:
+    return next((issue for issue in issues if issue is not None), None)
 
-    if status == "SELL_ONLY" and after_weight > before_weight + _EPSILON:
+
+def _governance_issue_key(instrument_id: str, status: str) -> str:
+    return f"GOVERNANCE|{instrument_id}|{status}"
+
+
+def _governance_presence_issue(
+    *,
+    instrument_id: str,
+    status: str,
+    after_weight: Decimal,
+) -> Optional[_IssueCandidate]:
+    issue_id = _PRESENCE_GOVERNANCE_ISSUE_IDS.get(status)
+    if issue_id is None or after_weight <= _EPSILON:
+        return None
+    return _IssueCandidate(
+        issue_key=_governance_issue_key(instrument_id, status),
+        issue_id=issue_id,
+        dimension="GOVERNANCE",
+        severity=_HIGH,
+        summary=f"{status} instrument {instrument_id} is present in the portfolio.",
+        details={
+            "instrument_id": instrument_id,
+            "shelf_status": status,
+            "measured": str(after_weight),
+        },
+    )
+
+
+def _sell_only_increase_issue(
+    *,
+    instrument_id: str,
+    status: str,
+    before_weight: Decimal,
+    after_weight: Decimal,
+) -> Optional[_IssueCandidate]:
+    if status != "SELL_ONLY" or after_weight <= before_weight + _EPSILON:
+        return None
+    return _IssueCandidate(
+        issue_key=_governance_issue_key(instrument_id, status),
+        issue_id="SUIT_GOVERNANCE_SELL_ONLY_INCREASE",
+        dimension="GOVERNANCE",
+        severity=_HIGH,
+        summary=f"SELL_ONLY instrument {instrument_id} increased in proposed state.",
+        details={
+            "instrument_id": instrument_id,
+            "shelf_status": status,
+            "measured_before": str(before_weight),
+            "measured_after": str(after_weight),
+        },
+    )
+
+
+def _restricted_increase_issue(
+    *,
+    instrument_id: str,
+    status: str,
+    before_weight: Decimal,
+    after_weight: Decimal,
+    allow_restricted: bool,
+) -> Optional[_IssueCandidate]:
+    if status != "RESTRICTED" or after_weight <= before_weight + _EPSILON:
+        return None
+    allowed_severity = _MEDIUM if allow_restricted else _HIGH
+    return _IssueCandidate(
+        issue_key=_governance_issue_key(instrument_id, status),
+        issue_id="SUIT_GOVERNANCE_RESTRICTED_INCREASE",
+        dimension="GOVERNANCE",
+        severity=allowed_severity,
+        summary=(
+            f"RESTRICTED instrument {instrument_id} increased in proposed state"
+            if not allow_restricted
+            else f"RESTRICTED instrument {instrument_id} increased under allow_restricted"
+        ),
+        details={
+            "instrument_id": instrument_id,
+            "shelf_status": status,
+            "allow_restricted": str(allow_restricted).lower(),
+            "measured_before": str(before_weight),
+            "measured_after": str(after_weight),
+        },
+    )
+
+
+def _governance_trade_attempt_issue(
+    *,
+    instrument_id: str,
+    shelf_entry: ShelfEntry,
+    before_weights: Dict[str, Decimal],
+    after_weights: Dict[str, Decimal],
+    options: EngineOptions,
+) -> Optional[_IssueCandidate]:
+    if shelf_entry.status == "SELL_ONLY":
         return _IssueCandidate(
-            issue_key=issue_key,
+            issue_key=_governance_issue_key(instrument_id, shelf_entry.status),
             issue_id="SUIT_GOVERNANCE_SELL_ONLY_INCREASE",
             dimension="GOVERNANCE",
             severity=_HIGH,
-            summary=f"SELL_ONLY instrument {instrument_id} increased in proposed state.",
+            summary=f"Proposal BUY attempts to increase SELL_ONLY instrument {instrument_id}.",
             details={
                 "instrument_id": instrument_id,
-                "shelf_status": status,
-                "measured_before": str(before_weight),
-                "measured_after": str(after_weight),
+                "shelf_status": shelf_entry.status,
+                "measured_before": str(before_weights.get(instrument_id, Decimal("0"))),
+                "measured_after": str(after_weights.get(instrument_id, Decimal("0"))),
             },
         )
 
-    if status == "RESTRICTED" and after_weight > before_weight + _EPSILON:
+    if shelf_entry.status == "RESTRICTED":
         allowed_severity = _MEDIUM if options.allow_restricted else _HIGH
         return _IssueCandidate(
-            issue_key=issue_key,
+            issue_key=_governance_issue_key(instrument_id, shelf_entry.status),
             issue_id="SUIT_GOVERNANCE_RESTRICTED_INCREASE",
             dimension="GOVERNANCE",
             severity=allowed_severity,
-            summary=(
-                f"RESTRICTED instrument {instrument_id} increased in proposed state"
-                if not options.allow_restricted
-                else f"RESTRICTED instrument {instrument_id} increased under allow_restricted"
-            ),
+            summary=f"Proposal BUY attempts to increase RESTRICTED instrument {instrument_id}.",
             details={
                 "instrument_id": instrument_id,
-                "shelf_status": status,
+                "shelf_status": shelf_entry.status,
                 "allow_restricted": str(options.allow_restricted).lower(),
-                "measured_before": str(before_weight),
-                "measured_after": str(after_weight),
+                "measured_before": str(before_weights.get(instrument_id, Decimal("0"))),
+                "measured_after": str(after_weights.get(instrument_id, Decimal("0"))),
             },
         )
 
@@ -434,37 +520,15 @@ def _append_governance_trade_attempt_issues(
         shelf_entry = shelf_by_instrument.get(instrument_id)
         if shelf_entry is None:
             continue
-        issue_key = f"GOVERNANCE|{instrument_id}|{shelf_entry.status}"
-        if shelf_entry.status == "SELL_ONLY":
-            after_issues[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_GOVERNANCE_SELL_ONLY_INCREASE",
-                dimension="GOVERNANCE",
-                severity=_HIGH,
-                summary=f"Proposal BUY attempts to increase SELL_ONLY instrument {instrument_id}.",
-                details={
-                    "instrument_id": instrument_id,
-                    "shelf_status": shelf_entry.status,
-                    "measured_before": str(before_weights.get(instrument_id, Decimal("0"))),
-                    "measured_after": str(after_weights.get(instrument_id, Decimal("0"))),
-                },
-            )
-        if shelf_entry.status == "RESTRICTED":
-            allowed_severity = _MEDIUM if options.allow_restricted else _HIGH
-            after_issues[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_GOVERNANCE_RESTRICTED_INCREASE",
-                dimension="GOVERNANCE",
-                severity=allowed_severity,
-                summary=f"Proposal BUY attempts to increase RESTRICTED instrument {instrument_id}.",
-                details={
-                    "instrument_id": instrument_id,
-                    "shelf_status": shelf_entry.status,
-                    "allow_restricted": str(options.allow_restricted).lower(),
-                    "measured_before": str(before_weights.get(instrument_id, Decimal("0"))),
-                    "measured_after": str(after_weights.get(instrument_id, Decimal("0"))),
-                },
-            )
+        issue = _governance_trade_attempt_issue(
+            instrument_id=instrument_id,
+            shelf_entry=shelf_entry,
+            before_weights=before_weights,
+            after_weights=after_weights,
+            options=options,
+        )
+        if issue is not None:
+            after_issues[issue.issue_key] = issue
 
 
 def _build_suitability_issue(
@@ -485,6 +549,35 @@ def _build_suitability_issue(
     )
 
 
+def _status_change_for_issue(
+    *,
+    issue_key: str,
+    before_issues: Dict[str, _IssueCandidate],
+    after_issues: Dict[str, _IssueCandidate],
+) -> Optional[str]:
+    in_before = issue_key in before_issues
+    in_after = issue_key in after_issues
+    if in_after and not in_before:
+        return "NEW"
+    if in_before and in_after:
+        return "PERSISTENT"
+    if in_before:
+        return "RESOLVED"
+    return None
+
+
+def _candidate_for_status(
+    *,
+    issue_key: str,
+    status_change: str,
+    before_issues: Dict[str, _IssueCandidate],
+    after_issues: Dict[str, _IssueCandidate],
+) -> _IssueCandidate:
+    if status_change == "RESOLVED":
+        return before_issues[issue_key]
+    return after_issues[issue_key]
+
+
 def _classify_issues(
     *,
     before_issues: Dict[str, _IssueCandidate],
@@ -495,33 +588,25 @@ def _classify_issues(
     issues: list[SuitabilityIssue] = []
 
     for issue_key in issue_keys:
-        in_before = issue_key in before_issues
-        in_after = issue_key in after_issues
-
-        if in_after and not in_before:
-            issues.append(
-                _build_suitability_issue(
-                    status_change="NEW",
-                    candidate=after_issues[issue_key],
-                    evidence=evidence,
-                )
+        status_change = _status_change_for_issue(
+            issue_key=issue_key,
+            before_issues=before_issues,
+            after_issues=after_issues,
+        )
+        if status_change is None:
+            continue
+        issues.append(
+            _build_suitability_issue(
+                status_change=status_change,
+                candidate=_candidate_for_status(
+                    issue_key=issue_key,
+                    status_change=status_change,
+                    before_issues=before_issues,
+                    after_issues=after_issues,
+                ),
+                evidence=evidence,
             )
-        elif in_before and in_after:
-            issues.append(
-                _build_suitability_issue(
-                    status_change="PERSISTENT",
-                    candidate=after_issues[issue_key],
-                    evidence=evidence,
-                )
-            )
-        elif in_before:
-            issues.append(
-                _build_suitability_issue(
-                    status_change="RESOLVED",
-                    candidate=before_issues[issue_key],
-                    evidence=evidence,
-                )
-            )
+        )
 
     issues.sort(
         key=lambda issue: (
@@ -535,13 +620,57 @@ def _classify_issues(
     return issues
 
 
+def _new_issues(issues: Iterable[SuitabilityIssue]) -> list[SuitabilityIssue]:
+    return [issue for issue in issues if issue.status_change == "NEW"]
+
+
 def _recommended_gate(issues: Iterable[SuitabilityIssue]) -> str:
-    new_issues = [issue for issue in issues if issue.status_change == "NEW"]
-    if any(issue.severity == _HIGH for issue in new_issues):
+    new_issue_list = _new_issues(issues)
+    if any(issue.severity == _HIGH for issue in new_issue_list):
         return "COMPLIANCE_REVIEW"
-    if any(issue.severity == _MEDIUM for issue in new_issues):
+    if any(issue.severity == _MEDIUM for issue in new_issue_list):
         return "RISK_REVIEW"
     return "NONE"
+
+
+def _suitability_evidence(
+    *,
+    evidence_as_of: Optional[str],
+    portfolio_snapshot_id: str,
+    market_data_snapshot_id: str,
+) -> SuitabilityEvidence:
+    return SuitabilityEvidence(
+        as_of=evidence_as_of or market_data_snapshot_id,
+        snapshot_ids=SuitabilityEvidenceSnapshotIds(
+            portfolio_snapshot_id=portfolio_snapshot_id,
+            market_data_snapshot_id=market_data_snapshot_id,
+        ),
+    )
+
+
+def _issues_with_status(
+    issues: Iterable[SuitabilityIssue],
+    status_change: str,
+) -> list[SuitabilityIssue]:
+    return [issue for issue in issues if issue.status_change == status_change]
+
+
+def _highest_new_severity(new_issues: Iterable[SuitabilityIssue]) -> Optional[str]:
+    severities = {issue.severity for issue in new_issues}
+    for severity in (_HIGH, _MEDIUM, _LOW):
+        if severity in severities:
+            return severity
+    return None
+
+
+def _suitability_summary(issues: list[SuitabilityIssue]) -> SuitabilitySummary:
+    new_issues = _issues_with_status(issues, "NEW")
+    return SuitabilitySummary(
+        new_count=len(new_issues),
+        resolved_count=len(_issues_with_status(issues, "RESOLVED")),
+        persistent_count=len(_issues_with_status(issues, "PERSISTENT")),
+        highest_severity_new=_highest_new_severity(new_issues),
+    )
 
 
 def compute_suitability_result(
@@ -577,38 +706,19 @@ def compute_suitability_result(
         options=options,
     )
 
-    evidence = SuitabilityEvidence(
-        as_of=evidence_as_of or market_data_snapshot_id,
-        snapshot_ids=SuitabilityEvidenceSnapshotIds(
-            portfolio_snapshot_id=portfolio_snapshot_id,
-            market_data_snapshot_id=market_data_snapshot_id,
-        ),
+    evidence = _suitability_evidence(
+        evidence_as_of=evidence_as_of,
+        portfolio_snapshot_id=portfolio_snapshot_id,
+        market_data_snapshot_id=market_data_snapshot_id,
     )
-
     issues = _classify_issues(
         before_issues=before_issues,
         after_issues=after_issues,
         evidence=evidence,
     )
 
-    new_issues = [issue for issue in issues if issue.status_change == "NEW"]
-    resolved_issues = [issue for issue in issues if issue.status_change == "RESOLVED"]
-    persistent_issues = [issue for issue in issues if issue.status_change == "PERSISTENT"]
-    highest_severity_new = None
-    if any(issue.severity == _HIGH for issue in new_issues):
-        highest_severity_new = _HIGH
-    elif any(issue.severity == _MEDIUM for issue in new_issues):
-        highest_severity_new = _MEDIUM
-    elif any(issue.severity == _LOW for issue in new_issues):
-        highest_severity_new = _LOW
-
     return SuitabilityResult(
-        summary=SuitabilitySummary(
-            new_count=len(new_issues),
-            resolved_count=len(resolved_issues),
-            persistent_count=len(persistent_issues),
-            highest_severity_new=highest_severity_new,
-        ),
+        summary=_suitability_summary(issues),
         issues=issues,
         recommended_gate=_recommended_gate(issues),
     )

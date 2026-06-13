@@ -1311,3 +1311,14 @@ health before that claim is defensible.
      so deprecated `actions/cache@v4`, `actions/upload-artifact@v4`,
      `actions/download-artifact@v4`, and `docker/setup-buildx-action@v3` pins cannot silently
      return in those release workflows.
+236. Reduced advisory simulation suitability result and governance issue composition complexity by
+     extracting status-change classification, candidate selection, evidence construction, summary
+     aggregation, highest-severity selection, and governance issue builders while preserving issue
+     keys, severity policy, ordering, evidence wiring, and recommended-gate behavior.
+     `compute_suitability_result` improved from `C (16)` to `A (3)`,
+     `_governance_issue_for_instrument` improved from `C (11)` to `A (1)`, and
+     `suitability.py` remains a B-ranked maintainability module at `B (18.34)`. Focused
+     suitability scanner and advisory proposal simulation tests prove resolved, persistent, new
+     issuer breach, sell-only, restricted, banned, suspended, liquidity, missing-shelf,
+     missing-enrichment, cash-band, low-severity, and proposal-level suitability behavior remains
+     compatible.
