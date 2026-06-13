@@ -1262,3 +1262,12 @@ health before that claim is defensible.
      `A (29.73)` maintainability. Focused simulation service tests prove session lookup, baseline
      read ordering, snapshot/history fallback, normalized security IDs, new-security projection,
      non-positive filtering, sorted response rows, and projected-summary behavior remain compatible.
+230. Reduced upload ingestion commit and XLSX parsing complexity by extracting row key/value
+     normalization, XLSX header/record/data helpers, commit validation guardrails, entity publish
+     dispatch, typed publish helpers, and commit response construction while preserving the public
+     upload preview and commit contracts. `UploadIngestionService.commit_upload` improved from
+     `D (23)` to `A (1)`, `_parse_xlsx` improved from `C (12)` to `A (4)`, every function in
+     `upload_ingestion_service.py` now reports A-ranked cyclomatic complexity, and the module
+     reports `A (25.69)` maintainability. Focused upload ingestion service tests prove CSV/XLSX
+     preview, partial-upload rejection, partial commit, empty-file rejection, publish routing,
+     published/skipped row counts, and response shape remain compatible.
