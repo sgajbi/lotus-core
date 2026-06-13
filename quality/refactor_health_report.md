@@ -1429,3 +1429,15 @@ health before that claim is defensible.
      offsetting. Focused HoldingsAsOf merge, repository SQL-shape, and position-calculator tests
      passed locally; scoped Ruff lint/format checks and `git diff --check` passed locally.
      Docker-backed E2E proof is deferred to GitHub CI because local Docker Desktop is unavailable.
+249. Fix-forwarded the Main Releasability run `27476338028` Latency Gate and E2E Full failures.
+     The latency artifact showed `support_overview` was functionally healthy but measured during
+     active demo-data bootstrap ingestion, breaching p95 at `452.66ms` against the `320ms` budget.
+     Compose-backed latency profiling now waits for the `demo_data_loader` one-shot service to exit
+     successfully before resolving runtime IDs and starting measurements, keeping budgets unchanged.
+     The E2E dual-currency holdings failure showed that CR-1092 corrected history cost basis but
+     could still return missing fallback unrealized P&L when snapshot market values were present.
+     HoldingsAsOf fallback valuation now derives missing base and local unrealized amounts from
+     market value minus authoritative history cost basis when both inputs exist. Focused latency and
+     holdings unit tests passed with 45 tests; scoped Ruff lint and format checks passed locally.
+     Docker-backed latency and E2E proof is deferred to GitHub CI because local Docker Desktop is
+     unavailable.
