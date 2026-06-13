@@ -1245,3 +1245,11 @@ health before that claim is defensible.
      repository orchestration, missing portfolio errors, partial-page degradation, complete
      ready-page status, missing requested-security reporting, empty portfolio unavailability,
      lineage, and runtime metadata behavior remain compatible.
+228. Reduced market-data coverage response composition complexity by extracting price/fx coverage
+     record mapping, missing/stale evidence classification, batch supportability, data-quality
+     status, and lineage helpers while preserving the public `MarketDataCoverageWindowResponse`
+     contract. `build_market_data_coverage_response` improved from `C (18)` to `A (1)`, every
+     function in `market_data_coverage.py` now reports A-ranked cyclomatic complexity, and the
+     module reports `A (38.12)` maintainability. Focused market-data coverage tests prove read
+     scope normalization, repository orchestration, ready evidence, stale/missing price and FX
+     supportability, resolved counts, lineage, and runtime metadata behavior remain compatible.

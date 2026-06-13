@@ -225,3 +225,35 @@ def test_market_data_coverage_response_classifies_stale_and_missing_evidence(
     assert response.supportability.missing_currency_pairs == expected_missing_pairs
     assert response.supportability.stale_currency_pairs == expected_stale_pairs
     assert response.data_quality_status == "PARTIAL"
+
+
+def test_market_data_coverage_response_reports_price_side_supportability_lists() -> None:
+    request = MarketDataCoverageRequest(
+        as_of_date=date(2026, 4, 10),
+        instrument_ids=["EQ_US_AAPL", "FI_US_TREASURY_10Y"],
+        currency_pairs=[],
+        max_staleness_days=5,
+    )
+    read_scope = market_data_coverage_read_scope(request)
+
+    response = build_market_data_coverage_response(
+        request=request,
+        read_scope=read_scope,
+        price_rows=[
+            SimpleNamespace(
+                security_id="EQ_US_AAPL",
+                price_date=date(2026, 4, 1),
+                price=Decimal("187.1200000000"),
+                currency="USD",
+            )
+        ],
+        fx_rows=[],
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "MARKET_DATA_MISSING"
+    assert response.supportability.requested_price_count == 2
+    assert response.supportability.resolved_price_count == 1
+    assert response.supportability.missing_instrument_ids == ["FI_US_TREASURY_10Y"]
+    assert response.supportability.stale_instrument_ids == ["EQ_US_AAPL"]
+    assert response.data_quality_status == "PARTIAL"

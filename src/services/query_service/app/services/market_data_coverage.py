@@ -7,6 +7,8 @@ from ..dtos.reference_integration_dto import (
     MarketDataCoverageRequest,
     MarketDataCoverageSupportability,
     MarketDataCoverageWindowResponse,
+    MarketDataFxCoverageRecord,
+    MarketDataPriceCoverageRecord,
 )
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
@@ -27,6 +29,19 @@ class MarketDataCoverageReadScope:
     valuation_currency: str | None
     fx_pairs: list[tuple[str, str]]
     unique_fx_pairs: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class _MarketDataCoverageRecords:
+    price_coverage: list[MarketDataPriceCoverageRecord]
+    fx_coverage: list[MarketDataFxCoverageRecord]
+    missing_instrument_ids: list[str]
+    stale_instrument_ids: list[str]
+    missing_currency_pairs: list[str]
+    stale_currency_pairs: list[str]
+
+
+_MarketDataSupportabilityState = Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"]
 
 
 def market_data_coverage_read_scope(
@@ -79,9 +94,69 @@ def build_market_data_coverage_response(
     price_rows: list[Any],
     fx_rows: list[Any],
 ) -> MarketDataCoverageWindowResponse:
-    price_by_instrument = {normalize_security_id(row.security_id): row for row in price_rows}
-    fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
+    coverage_records = _market_data_coverage_records(
+        request=request,
+        read_scope=read_scope,
+        price_rows=price_rows,
+        fx_rows=fx_rows,
+    )
+    supportability_state = _market_data_supportability_state(coverage_records)
 
+    return MarketDataCoverageWindowResponse(
+        as_of_date=request.as_of_date,
+        valuation_currency=read_scope.valuation_currency,
+        price_coverage=coverage_records.price_coverage,
+        fx_coverage=coverage_records.fx_coverage,
+        supportability=_market_data_supportability(
+            read_scope=read_scope,
+            coverage_records=coverage_records,
+            state=supportability_state,
+        ),
+        lineage=_market_data_coverage_lineage(),
+        **source_product_runtime_metadata_without_as_of_date(
+            request.as_of_date,
+            data_quality_status=_market_data_quality_status(supportability_state),
+            latest_evidence_timestamp=latest_reference_evidence_timestamp(price_rows, fx_rows),
+        ),
+    )
+
+
+def _market_data_coverage_records(
+    *,
+    request: MarketDataCoverageRequest,
+    read_scope: MarketDataCoverageReadScope,
+    price_rows: list[Any],
+    fx_rows: list[Any],
+) -> _MarketDataCoverageRecords:
+    price_coverage, missing_instrument_ids, stale_instrument_ids = (
+        _market_data_price_coverage_records(
+            request=request,
+            read_scope=read_scope,
+            price_rows=price_rows,
+        )
+    )
+    fx_coverage, missing_currency_pairs, stale_currency_pairs = _market_data_fx_coverage_records(
+        request=request,
+        read_scope=read_scope,
+        fx_rows=fx_rows,
+    )
+    return _MarketDataCoverageRecords(
+        price_coverage=price_coverage,
+        fx_coverage=fx_coverage,
+        missing_instrument_ids=missing_instrument_ids,
+        stale_instrument_ids=stale_instrument_ids,
+        missing_currency_pairs=missing_currency_pairs,
+        stale_currency_pairs=stale_currency_pairs,
+    )
+
+
+def _market_data_price_coverage_records(
+    *,
+    request: MarketDataCoverageRequest,
+    read_scope: MarketDataCoverageReadScope,
+    price_rows: list[Any],
+) -> tuple[list[MarketDataPriceCoverageRecord], list[str], list[str]]:
+    price_by_instrument = {normalize_security_id(row.security_id): row for row in price_rows}
     price_coverage = []
     missing_instrument_ids: list[str] = []
     stale_instrument_ids: list[str] = []
@@ -101,7 +176,16 @@ def build_market_data_coverage_response(
         if coverage_record.quality_status == "STALE":
             stale_instrument_ids.append(instrument_id)
         price_coverage.append(coverage_record)
+    return price_coverage, missing_instrument_ids, stale_instrument_ids
 
+
+def _market_data_fx_coverage_records(
+    *,
+    request: MarketDataCoverageRequest,
+    read_scope: MarketDataCoverageReadScope,
+    fx_rows: list[Any],
+) -> tuple[list[MarketDataFxCoverageRecord], list[str], list[str]]:
+    fx_by_pair = {(row.from_currency, row.to_currency): row for row in fx_rows}
     fx_coverage = []
     missing_currency_pairs: list[str] = []
     stale_currency_pairs: list[str] = []
@@ -128,40 +212,56 @@ def build_market_data_coverage_response(
         if coverage_record.quality_status == "STALE":
             stale_currency_pairs.append(pair_label)
         fx_coverage.append(coverage_record)
+    return fx_coverage, missing_currency_pairs, stale_currency_pairs
 
-    supportability_state: Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"] = "READY"
-    supportability_reason = "MARKET_DATA_READY"
-    if missing_instrument_ids or missing_currency_pairs:
-        supportability_state = "INCOMPLETE"
-        supportability_reason = "MARKET_DATA_MISSING"
-    elif stale_instrument_ids or stale_currency_pairs:
-        supportability_state = "DEGRADED"
-        supportability_reason = "MARKET_DATA_STALE"
 
-    return MarketDataCoverageWindowResponse(
-        as_of_date=request.as_of_date,
-        valuation_currency=read_scope.valuation_currency,
-        price_coverage=price_coverage,
-        fx_coverage=fx_coverage,
-        supportability=MarketDataCoverageSupportability(
-            state=supportability_state,
-            reason=supportability_reason,
-            requested_price_count=len(read_scope.instrument_ids),
-            resolved_price_count=sum(1 for record in price_coverage if record.found),
-            requested_fx_count=len(read_scope.fx_pairs),
-            resolved_fx_count=sum(1 for record in fx_coverage if record.found),
-            missing_instrument_ids=missing_instrument_ids,
-            stale_instrument_ids=stale_instrument_ids,
-            missing_currency_pairs=missing_currency_pairs,
-            stale_currency_pairs=stale_currency_pairs,
-        ),
-        lineage={
-            "source_system": "market_prices+fx_rates",
-            "contract_version": "rfc_087_v1",
-        },
-        **source_product_runtime_metadata_without_as_of_date(
-            request.as_of_date,
-            data_quality_status=("COMPLETE" if supportability_state == "READY" else "PARTIAL"),
-            latest_evidence_timestamp=latest_reference_evidence_timestamp(price_rows, fx_rows),
-        ),
+def _market_data_supportability_state(
+    coverage_records: _MarketDataCoverageRecords,
+) -> _MarketDataSupportabilityState:
+    if coverage_records.missing_instrument_ids or coverage_records.missing_currency_pairs:
+        return "INCOMPLETE"
+    if coverage_records.stale_instrument_ids or coverage_records.stale_currency_pairs:
+        return "DEGRADED"
+    return "READY"
+
+
+def _market_data_supportability_reason(
+    state: _MarketDataSupportabilityState,
+) -> str:
+    return {
+        "READY": "MARKET_DATA_READY",
+        "DEGRADED": "MARKET_DATA_STALE",
+        "INCOMPLETE": "MARKET_DATA_MISSING",
+        "UNAVAILABLE": "MARKET_DATA_MISSING",
+    }[state]
+
+
+def _market_data_supportability(
+    *,
+    read_scope: MarketDataCoverageReadScope,
+    coverage_records: _MarketDataCoverageRecords,
+    state: _MarketDataSupportabilityState,
+) -> MarketDataCoverageSupportability:
+    return MarketDataCoverageSupportability(
+        state=state,
+        reason=_market_data_supportability_reason(state),
+        requested_price_count=len(read_scope.instrument_ids),
+        resolved_price_count=sum(1 for record in coverage_records.price_coverage if record.found),
+        requested_fx_count=len(read_scope.fx_pairs),
+        resolved_fx_count=sum(1 for record in coverage_records.fx_coverage if record.found),
+        missing_instrument_ids=coverage_records.missing_instrument_ids,
+        stale_instrument_ids=coverage_records.stale_instrument_ids,
+        missing_currency_pairs=coverage_records.missing_currency_pairs,
+        stale_currency_pairs=coverage_records.stale_currency_pairs,
     )
+
+
+def _market_data_quality_status(state: _MarketDataSupportabilityState) -> str:
+    return "COMPLETE" if state == "READY" else "PARTIAL"
+
+
+def _market_data_coverage_lineage() -> dict[str, str]:
+    return {
+        "source_system": "market_prices+fx_rates",
+        "contract_version": "rfc_087_v1",
+    }
