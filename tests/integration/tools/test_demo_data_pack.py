@@ -50,6 +50,7 @@ def test_build_demo_bundle_supports_latency_focused_portfolio_scope():
         "SEC_ETF_WORLD_USD",
         "SEC_SAP_DE",
     }
+    assert latency_bundle["benchmark_assignments"] == []
     assert {item["from_currency"] for item in latency_bundle["fx_rates"]} == {"EUR", "USD"}
     assert {item["to_currency"] for item in latency_bundle["fx_rates"]} == {"EUR", "USD"}
 

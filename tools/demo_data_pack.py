@@ -1340,6 +1340,8 @@ def build_demo_bundle(
                 {"from_currency": from_ccy, "to_currency": to_ccy, "rate_date": d, "rate": rate}
             )
     benchmark_reference = _build_benchmark_reference_data(dates=dates, start_date=start_date)
+    if portfolio_ids is not None and DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID not in set(portfolio_ids):
+        benchmark_reference = {**benchmark_reference, "benchmark_assignments": []}
     risk_free_reference = build_risk_free_reference_data(
         start_date=start_date,
         end_date=end_date,
@@ -1400,6 +1402,9 @@ def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any])
         ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
     for endpoint, payload in reference_payloads:
+        if all(isinstance(value, list) and not value for value in payload.values()):
+            LOGGER.info("Skipped empty reference payload for %s.", endpoint)
+            continue
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
 
 

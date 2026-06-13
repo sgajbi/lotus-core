@@ -1483,3 +1483,10 @@ health before that claim is defensible.
      `DEMO_DPM_EUR_001` while app-local defaults continue to seed the full demo pack. Focused
      demo-data, compose-contract, and workflow-governance tests passed with 22 tests; scoped Ruff
      format and lint checks passed. Fresh PR Merge Gate proof is required before merge.
+255. Fix-forwarded PR Merge Gate run `27482056426` Latency Gate benchmark assignment FK failure.
+     The focused seed applied correctly (`1` portfolio, `7` transactions, `789` market prices,
+     `526` FX rates), but reference ingestion still posted a benchmark assignment for the unseeded
+     `DEMO_ADV_USD_001` portfolio and hit the portfolio benchmark assignment foreign-key
+     constraint. Focused demo seeds now omit out-of-scope benchmark assignments and skip empty
+     reference payload posts, preserving benchmark catalog/reference data without violating the
+     selected portfolio scope. Fresh PR Merge Gate proof is required before merge.

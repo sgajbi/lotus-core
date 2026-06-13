@@ -39,7 +39,9 @@ remaining merge-gate risk.
 CR-1094 update: PR Merge Gate run `27481208159` passed every job except Latency Gate, which still
 timed out waiting for the full five-portfolio demo seed. The latency gate now uses a validated
 `DEMO_DATA_PACK_PORTFOLIO_IDS=DEMO_DPM_EUR_001` profile, with focused local test/lint evidence,
-but a fresh PR Merge Gate is still required before merge.
+and run `27482056426` proved the focused profile applied before failing on an out-of-scope
+benchmark assignment FK. Focused seeds now omit benchmark assignments for unseeded portfolios, but
+a fresh PR Merge Gate is still required before merge.
 
 ## Current PR Evidence Snapshot
 
