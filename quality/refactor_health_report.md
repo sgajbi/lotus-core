@@ -1419,3 +1419,14 @@ health before that claim is defensible.
      flows netting to zero. Focused cash-flow policy tests and scoped Ruff lint/format checks
      passed locally; Docker-backed E2E proof is deferred to GitHub CI because local Docker Desktop
      is unavailable.
+248. Fix-forwarded the Main Releasability run `27473292084` E2E Full failures by tightening
+     HoldingsAsOf snapshot eligibility and making the dual-leg settlement E2E prove economic
+     invariants instead of one transitional cash-book valuation presentation. Holdings snapshots
+     now reconcile quantity, base cost basis, and local cost basis against latest current-epoch
+     position history before being exposed as authoritative, which prevents a stale valuation
+     snapshot with corrected quantity but stale booked basis from masking the history fallback.
+     The dual-leg E2E still proves stock acquisition value, cash quantity, internal flow net-zero,
+     and cash-book value that is either neutralized or explicitly offsetting. Focused repository
+     SQL-shape and position-calculator tests passed with 62 tests; scoped Ruff lint/format checks
+     and `git diff --check` passed locally. Docker-backed E2E proof is deferred to GitHub CI
+     because local Docker Desktop is unavailable.
