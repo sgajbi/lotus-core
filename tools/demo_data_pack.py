@@ -1387,6 +1387,10 @@ def _all_demo_portfolios_exist(query_base_url: str) -> bool:
     return all(_portfolio_exists(query_base_url, item.portfolio_id) for item in DEMO_EXPECTATIONS)
 
 
+def _format_verification_state(state: dict[str, Any]) -> str:
+    return ", ".join(f"{key}={value}" for key, value in state.items())
+
+
 def _verify_portfolio(
     query_base_url: str,
     expected: PortfolioExpectation,
@@ -1394,6 +1398,10 @@ def _verify_portfolio(
     poll_interval_seconds: int,
 ) -> dict[str, Any]:
     deadline = time.time() + wait_seconds
+    last_observed: dict[str, Any] = {
+        "portfolio_id": expected.portfolio_id,
+        "status": "not_observed",
+    }
     while time.time() < deadline:
         try:
             _, pos_payload = _request_json(
@@ -1402,7 +1410,12 @@ def _verify_portfolio(
             _, tx_payload = _request_json(
                 "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/transactions?limit=200"
             )
-        except RuntimeError:
+        except RuntimeError as exc:
+            last_observed = {
+                "portfolio_id": expected.portfolio_id,
+                "status": "connection_error",
+                "error": str(exc),
+            }
             time.sleep(poll_interval_seconds)
             continue
         positions = pos_payload.get("positions") or []
@@ -1414,20 +1427,41 @@ def _verify_portfolio(
         ]
         total_transactions = int(tx_payload.get("total", 0))
         all_quantities_match = True
+        quantity_checks: list[str] = []
         for security_id, expected_quantity in expected.expected_terminal_quantities:
-            _, history_payload = _request_json(
-                "GET",
-                f"{query_base_url}/portfolios/{expected.portfolio_id}/position-history?security_id={security_id}",
-            )
+            try:
+                _, history_payload = _request_json(
+                    "GET",
+                    f"{query_base_url}/portfolios/{expected.portfolio_id}/position-history?security_id={security_id}",
+                )
+            except RuntimeError as exc:
+                quantity_checks.append(f"{security_id}:error={exc}")
+                all_quantities_match = False
+                break
             history_rows = history_payload.get("positions") or []
             if not history_rows:
+                quantity_checks.append(f"{security_id}:missing_history")
                 all_quantities_match = False
                 break
             latest_row = max(history_rows, key=lambda row: row.get("position_date") or "")
             actual_quantity = float(latest_row.get("quantity", 0.0))
             if abs(actual_quantity - expected_quantity) > 1e-6:
+                quantity_checks.append(
+                    f"{security_id}:actual={actual_quantity:g}:expected={expected_quantity:g}"
+                )
                 all_quantities_match = False
                 break
+            quantity_checks.append(f"{security_id}:matched")
+        last_observed = {
+            "portfolio_id": expected.portfolio_id,
+            "positions": len(positions),
+            "min_positions": expected.min_positions,
+            "valued_positions": len(valued),
+            "min_valued_positions": expected.min_valued_positions,
+            "transactions": total_transactions,
+            "min_transactions": expected.min_transactions,
+            "quantity_checks": ";".join(quantity_checks),
+        }
         if (
             len(positions) >= expected.min_positions
             and len(valued) >= expected.min_valued_positions
@@ -1442,7 +1476,10 @@ def _verify_portfolio(
                 "validated_holdings": len(expected.expected_terminal_quantities),
             }
         time.sleep(poll_interval_seconds)
-    raise TimeoutError(f"Timed out verifying portfolio outputs for {expected.portfolio_id}.")
+    raise TimeoutError(
+        "Timed out verifying portfolio outputs for "
+        f"{expected.portfolio_id}; last_observed=({_format_verification_state(last_observed)})."
+    )
 
 
 def _verify_benchmark_reference(

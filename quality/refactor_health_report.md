@@ -1448,3 +1448,11 @@ health before that claim is defensible.
      `LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS` value to the latency profiler, giving CI enough
      bootstrap time while keeping the endpoint p95 budgets unchanged. Fresh PR Merge Gate proof is
      required before merge.
+251. Fix-forwarded PR Merge Gate run `27478449844` Latency Gate demo verification timeout.
+     The longer seed-completion wait allowed `demo_data_loader` to reach its own verifier, but the
+     one-shot loader exited with status `1` after timing out on `DEMO_INCOME_CHF_001` output
+     verification. The app-local compose contract now makes demo-data verification wait and poll
+     intervals environment-driven with a `900` second default for CI, and the verifier timeout now
+     reports last-observed positions, valued positions, transaction counts, and terminal quantity
+     checks. Focused demo-data and compose-contract tests passed with 12 tests; scoped Ruff lint and
+     format checks passed locally. Fresh PR Merge Gate proof is required before merge.

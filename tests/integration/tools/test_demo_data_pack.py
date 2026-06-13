@@ -99,6 +99,52 @@ def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
     assert set(seen) == {item.portfolio_id for item in demo_data_pack.DEMO_EXPECTATIONS}
 
 
+def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
+    expected = demo_data_pack.PortfolioExpectation(
+        "DEMO_TEST_001",
+        2,
+        1,
+        3,
+        (("SEC_TEST", 10.0),),
+    )
+    time_values = iter([0.0, 0.0, 2.0])
+
+    def fake_time() -> float:
+        return next(time_values)
+
+    def fake_request_json(method: str, url: str, **_kwargs):
+        assert method == "GET"
+        if url.endswith("/positions"):
+            return 200, {
+                "positions": [{"security_id": "SEC_TEST", "valuation": {"market_value": "100.00"}}]
+            }
+        if url.endswith("/transactions?limit=200"):
+            return 200, {"total": 1}
+        if url.endswith("position-history?security_id=SEC_TEST"):
+            return 200, {"positions": [{"position_date": "2026-06-12", "quantity": "9"}]}
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr(demo_data_pack.time, "time", fake_time)
+    monkeypatch.setattr(demo_data_pack.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    with pytest.raises(TimeoutError) as exc_info:
+        demo_data_pack._verify_portfolio(
+            "http://query",
+            expected,
+            wait_seconds=1,
+            poll_interval_seconds=0,
+        )
+
+    message = str(exc_info.value)
+    assert "DEMO_TEST_001" in message
+    assert "positions=1" in message
+    assert "min_positions=2" in message
+    assert "transactions=1" in message
+    assert "min_transactions=3" in message
+    assert "SEC_TEST:actual=9:expected=10" in message
+
+
 def test_request_json_treats_remote_disconnect_as_retryable_connection_error(monkeypatch):
     def disconnecting_urlopen(*_args, **_kwargs):
         raise http.client.RemoteDisconnected("closed without response")

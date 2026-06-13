@@ -57,7 +57,15 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
     assert "--ingestion-base-url http://ingestion_service:8000" in command
     assert "--query-base-url http://query_service:8001" in command
     assert "--query-control-plane-base-url http://query_control_plane_service:8002" in command
+    assert "--wait-seconds $$DEMO_DATA_PACK_WAIT_SECONDS" in command
+    assert "--poll-interval-seconds $$DEMO_DATA_PACK_POLL_INTERVAL_SECONDS" in command
     assert "depends_on" not in demo_loader["environment"]
+    assert demo_loader["environment"]["DEMO_DATA_PACK_WAIT_SECONDS"] == (
+        "${DEMO_DATA_PACK_WAIT_SECONDS:-900}"
+    )
+    assert demo_loader["environment"]["DEMO_DATA_PACK_POLL_INTERVAL_SECONDS"] == (
+        "${DEMO_DATA_PACK_POLL_INTERVAL_SECONDS:-3}"
+    )
     assert sorted(depends_on) == [
         "ingestion_service",
         "persistence_service",

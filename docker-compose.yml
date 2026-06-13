@@ -568,6 +568,8 @@ services:
     hostname: demo_data_loader
     environment:
       DEMO_DATA_PACK_ENABLED: ${DEMO_DATA_PACK_ENABLED:-true}
+      DEMO_DATA_PACK_WAIT_SECONDS: ${DEMO_DATA_PACK_WAIT_SECONDS:-900}
+      DEMO_DATA_PACK_POLL_INTERVAL_SECONDS: ${DEMO_DATA_PACK_POLL_INTERVAL_SECONDS:-3}
     depends_on:
       ingestion_service:
         condition: service_healthy
@@ -598,8 +600,8 @@ services:
       --query-base-url http://query_service:8001
       --query-control-plane-base-url http://query_control_plane_service:8002
       --force-ingest
-      --wait-seconds 420
-      --poll-interval-seconds 3
+      --wait-seconds $$DEMO_DATA_PACK_WAIT_SECONDS
+      --poll-interval-seconds $$DEMO_DATA_PACK_POLL_INTERVAL_SECONDS
       "
     restart: "no"
     networks:
