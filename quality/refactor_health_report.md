@@ -1383,3 +1383,13 @@ health before that claim is defensible.
      branch protection and required checks. Workflow YAML parsing passed for all workflows,
      `tests/unit/test_ci_workflow_action_versions.py` passed with 4 tests, and `git diff --check`
      passed.
+244. Fix-forwarded the Main Releasability run `27468473911` Integration Full failure where
+     `test_dispatcher_respects_batch_size` expected the injected mock producer to publish ten
+     outbox rows but observed zero. The failed log also showed a real Kafka producer attempting
+     localhost broker connections, exposing that manifest-declared `db_direct` suites were still
+     starting the full live-worker stack. `integration-lite`, `integration-all`, `ops-contract`,
+     and all transaction contract suites now use DB-only Docker composition, matching the test
+     manifest runtime-mode contract and preventing live workers from racing direct database
+     integration tests. Focused suite-composition tests passed with 17 tests, scoped Ruff lint and
+     format checks passed, and Docker-backed proof of the exact Integration Full correction is
+     deferred to GitHub CI because local Docker Desktop is unavailable.
