@@ -102,3 +102,74 @@ def test_resolve_component_window_rows_infers_superseded_effective_end_dates() -
         (date(2026, 1, 1), date(2026, 1, 31)),
         (date(2026, 2, 1), None),
     ]
+
+
+def test_resolve_component_window_rows_preserves_earlier_explicit_end_date() -> None:
+    rows = [
+        SimpleNamespace(
+            index_id="IDX_A",
+            composition_weight=Decimal("0.60"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=date(2026, 1, 20),
+            rebalance_event_id="REB_001",
+            quality_status="accepted",
+            source_timestamp=datetime(2026, 1, 1, 8, tzinfo=UTC),
+            updated_at=datetime(2026, 1, 1, 9, tzinfo=UTC),
+        ),
+        SimpleNamespace(
+            index_id="IDX_A",
+            composition_weight=Decimal("0.55"),
+            composition_effective_from=date(2026, 2, 1),
+            composition_effective_to=None,
+            quality_status="accepted",
+        ),
+    ]
+
+    resolved_rows = resolve_component_window_rows(
+        rows,
+        start_date=date(2026, 1, 15),
+        end_date=date(2026, 2, 15),
+    )
+
+    assert [
+        (row.composition_effective_from, row.composition_effective_to) for row in resolved_rows
+    ] == [
+        (date(2026, 1, 1), date(2026, 1, 20)),
+        (date(2026, 2, 1), None),
+    ]
+    assert resolved_rows[0].rebalance_event_id == "REB_001"
+    assert resolved_rows[0].source_timestamp == datetime(2026, 1, 1, 8, tzinfo=UTC)
+    assert resolved_rows[0].updated_at == datetime(2026, 1, 1, 9, tzinfo=UTC)
+
+
+def test_resolve_component_window_rows_filters_non_overlapping_windows() -> None:
+    rows = [
+        SimpleNamespace(
+            index_id="IDX_A",
+            composition_weight=Decimal("0.60"),
+            composition_effective_from=date(2026, 1, 1),
+            composition_effective_to=date(2026, 1, 15),
+        ),
+        SimpleNamespace(
+            index_id="IDX_A",
+            composition_weight=Decimal("0.55"),
+            composition_effective_from=date(2026, 2, 1),
+            composition_effective_to=date(2026, 2, 28),
+        ),
+        SimpleNamespace(
+            index_id="IDX_B",
+            composition_weight=Decimal("1.00"),
+            composition_effective_from=date(2026, 4, 1),
+            composition_effective_to=None,
+        ),
+    ]
+
+    resolved_rows = resolve_component_window_rows(
+        rows,
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 3, 31),
+    )
+
+    assert [(row.index_id, row.composition_effective_from) for row in resolved_rows] == [
+        ("IDX_A", date(2026, 2, 1)),
+    ]

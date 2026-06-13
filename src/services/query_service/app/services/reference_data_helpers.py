@@ -100,47 +100,80 @@ def resolve_component_window_rows(
     start_date: date,
     end_date: date,
 ) -> list[Any]:
-    rows_by_index: dict[str, list[Any]] = {}
-    for row in rows:
-        rows_by_index.setdefault(row.index_id, []).append(row)
-
     resolved_rows: list[Any] = []
-    for index_id, index_rows in rows_by_index.items():
-        sorted_rows = sorted(
-            index_rows,
-            key=lambda item: item.composition_effective_from,
-        )
+    for index_id, index_rows in _component_rows_by_index(rows).items():
+        sorted_rows = _sort_component_rows(index_rows)
         for position, row in enumerate(sorted_rows):
-            next_start = (
-                sorted_rows[position + 1].composition_effective_from
-                if position + 1 < len(sorted_rows)
-                else None
+            resolved_end = _component_window_end(
+                row,
+                next_row=_next_component_row(sorted_rows, position),
             )
-            resolved_end = row.composition_effective_to
-            if next_start is not None:
-                inferred_end = next_start - timedelta(days=1)
-                if resolved_end is None or resolved_end >= next_start:
-                    resolved_end = inferred_end
-                else:
-                    resolved_end = min(resolved_end, inferred_end)
-            if row.composition_effective_from > end_date:
+            if not _component_window_overlaps(
+                row,
+                resolved_end=resolved_end,
+                start_date=start_date,
+                end_date=end_date,
+            ):
                 continue
-            if resolved_end is not None and resolved_end < start_date:
-                continue
-            resolved_rows.append(
-                SimpleNamespace(
-                    index_id=index_id,
-                    composition_weight=row.composition_weight,
-                    composition_effective_from=row.composition_effective_from,
-                    composition_effective_to=resolved_end,
-                    rebalance_event_id=getattr(row, "rebalance_event_id", None),
-                    quality_status=getattr(row, "quality_status", None),
-                    source_timestamp=getattr(row, "source_timestamp", None),
-                    observed_at=getattr(row, "observed_at", None),
-                    updated_at=getattr(row, "updated_at", None),
-                )
-            )
+            resolved_rows.append(_resolved_component_window_row(index_id, row, resolved_end))
     return sorted(
         resolved_rows,
         key=lambda item: (item.composition_effective_from, item.index_id),
+    )
+
+
+def _component_rows_by_index(rows: list[Any]) -> dict[str, list[Any]]:
+    rows_by_index: dict[str, list[Any]] = {}
+    for row in rows:
+        rows_by_index.setdefault(row.index_id, []).append(row)
+    return rows_by_index
+
+
+def _sort_component_rows(rows: list[Any]) -> list[Any]:
+    return sorted(
+        rows,
+        key=lambda item: item.composition_effective_from,
+    )
+
+
+def _next_component_row(sorted_rows: list[Any], position: int) -> Any | None:
+    next_position = position + 1
+    return sorted_rows[next_position] if next_position < len(sorted_rows) else None
+
+
+def _component_window_end(row: Any, *, next_row: Any | None) -> date | None:
+    resolved_end = cast(date | None, row.composition_effective_to)
+    if next_row is None:
+        return resolved_end
+
+    next_start = cast(date, next_row.composition_effective_from)
+    inferred_end = next_start - timedelta(days=1)
+    if resolved_end is None or resolved_end >= next_start:
+        return inferred_end
+    return min(resolved_end, inferred_end)
+
+
+def _component_window_overlaps(
+    row: Any,
+    *,
+    resolved_end: date | None,
+    start_date: date,
+    end_date: date,
+) -> bool:
+    if row.composition_effective_from > end_date:
+        return False
+    return resolved_end is None or resolved_end >= start_date
+
+
+def _resolved_component_window_row(index_id: str, row: Any, resolved_end: date | None) -> Any:
+    return SimpleNamespace(
+        index_id=index_id,
+        composition_weight=row.composition_weight,
+        composition_effective_from=row.composition_effective_from,
+        composition_effective_to=resolved_end,
+        rebalance_event_id=getattr(row, "rebalance_event_id", None),
+        quality_status=getattr(row, "quality_status", None),
+        source_timestamp=getattr(row, "source_timestamp", None),
+        observed_at=getattr(row, "observed_at", None),
+        updated_at=getattr(row, "updated_at", None),
     )

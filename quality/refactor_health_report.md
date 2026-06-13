@@ -1207,3 +1207,10 @@ health before that claim is defensible.
      classifier. `market_reference_data_quality_status` improved from `C (11)` to `A (3)`.
      Focused reference-data helper and integration-service tests prove accepted, estimated,
      blocked, stale, missing-status, and required-count behavior remain compatible.
+223. Reduced benchmark component-window resolution complexity by extracting component grouping,
+     effective-date ordering, supersession end-date inference, overlap filtering, and row
+     projection helpers while preserving the public `resolve_component_window_rows` helper.
+     `resolve_component_window_rows` improved from `C (11)` to `A (4)`, and the module remains
+     A-ranked maintainability. Focused reference-data helper and integration-service tests prove
+     inferred superseded end dates, earlier explicit end dates, non-overlapping window filtering,
+     returned metadata fields, and result ordering remain compatible.
