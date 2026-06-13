@@ -1094,6 +1094,33 @@ def test_cash_expense_flows_use_cash_outflow_strategy(
     assert expense_transaction.net_cost_local == Decimal("-25")
 
 
+def test_cash_fee_outflow_includes_fee_components(cost_calculator, mock_disposition_engine):
+    fee_transaction = Transaction(
+        transaction_id="FEE_CASH_COMPONENTS_01",
+        portfolio_id="P1",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="FEE",
+        transaction_date=datetime(2023, 2, 20),
+        quantity=Decimal("1"),
+        price=Decimal("25"),
+        gross_transaction_amount=Decimal("25"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        product_type="Cash",
+        asset_class="Cash",
+        fees=Fees(brokerage=Decimal("1.50"), other_fees=Decimal("0.25")),
+    )
+
+    cost_calculator.calculate_transaction_costs(fee_transaction)
+
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    assert fee_transaction.realized_gain_loss is None
+    assert fee_transaction.net_cost == Decimal("-26.750")
+    assert fee_transaction.net_cost_local == Decimal("-26.75")
+
+
 def test_non_cash_tax_is_rejected_without_positive_default_cost(
     cost_calculator, mock_disposition_engine, error_reporter
 ):

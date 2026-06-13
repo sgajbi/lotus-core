@@ -85,6 +85,14 @@ def _cash_movement_amount(transaction: Transaction) -> Decimal:
     return abs(movement_amount)
 
 
+def _cash_outflow_book_cost(transaction: Transaction) -> Decimal:
+    cash_amount = _cash_movement_amount(transaction)
+    if _normalize_code(transaction.transaction_type) != TransactionType.FEE.value:
+        return cash_amount
+    total_fees = transaction.fees.total_fees if transaction.fees else Decimal(0)
+    return cash_amount + total_fees
+
+
 def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
     if value is None or (isinstance(value, str) and not value.strip()):
         return Decimal(0)
@@ -267,7 +275,7 @@ class CashOutflowStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        cash_amount_local = _cash_movement_amount(transaction)
+        cash_amount_local = _cash_outflow_book_cost(transaction)
         fx_rate = transaction.transaction_fx_rate or Decimal(1)
         transaction.net_cost_local = -cash_amount_local
         transaction.net_cost = transaction.net_cost_local * fx_rate
