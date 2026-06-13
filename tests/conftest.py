@@ -18,6 +18,7 @@ from tests.test_support.docker_stack import (
     compose_up,
     resolve_compose_file,
     should_build_images,
+    wait_for_compose_service_success,
     wait_for_http_health,
     wait_for_kafka_metadata,
     wait_for_migration_runner,
@@ -65,7 +66,6 @@ def _env_bool(name: str, default: bool = False) -> bool:
 DB_ONLY_SCOPES = {
     "unit-db",
     "integration-lite",
-    "integration-all",
     "ops-contract",
     "transaction-buy-contract",
     "transaction-sell-contract",
@@ -73,6 +73,10 @@ DB_ONLY_SCOPES = {
     "transaction-interest-contract",
     "transaction-fx-contract",
     "transaction-portfolio-flow-bundle-contract",
+}
+
+DB_PLUS_KAFKA_SCOPES = {
+    "integration-all",
 }
 
 FULL_STACK_SERVICES = [
@@ -102,10 +106,20 @@ DB_ONLY_SERVICES = [
     "migration-runner",
 ]
 
+DB_PLUS_KAFKA_SERVICES = [
+    "zookeeper",
+    "kafka",
+    "kafka-topic-creator",
+    "postgres",
+    "migration-runner",
+]
+
 
 def _test_services_for_scope(scope: str) -> list[str]:
     if scope in DB_ONLY_SCOPES:
         return list(DB_ONLY_SERVICES)
+    if scope in DB_PLUS_KAFKA_SCOPES:
+        return list(DB_PLUS_KAFKA_SERVICES)
     return list(FULL_STACK_SERVICES)
 
 
@@ -186,6 +200,15 @@ def docker_services(request):  # noqa: ARG001
             emit_test_output(
                 f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---"
             )
+        if "kafka-topic-creator" in test_services:
+            emit_test_output("\n--- Waiting for Kafka topic creation to complete ---")
+            wait_for_compose_service_success(
+                compose_file,
+                "kafka-topic-creator",
+                timeout_seconds=health_timeout,
+                poll_seconds=2,
+            )
+            emit_test_output("--- Kafka topic creation completed successfully ---")
 
         # Manual polling for service health
         health_targets = {
