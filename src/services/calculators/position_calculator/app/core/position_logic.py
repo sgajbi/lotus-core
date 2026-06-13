@@ -2,7 +2,7 @@
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import List
+from typing import Callable, List
 
 from portfolio_common.config import KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC
 from portfolio_common.database_models import PositionHistory
@@ -24,10 +24,52 @@ logger = logging.getLogger(__name__)
 
 CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
+CASH_POSITION_DELTA_TRANSACTION_TYPES = (
+    CASH_POSITION_INFLOW_TRANSACTION_TYPES
+    | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
+    | {"ADJUSTMENT", "FX_CASH_SETTLEMENT_BUY", "FX_CASH_SETTLEMENT_SELL"}
+)
+POSITION_TRANSFER_TRANSACTION_TYPES = {
+    "TRANSFER_IN",
+    "TRANSFER_OUT",
+    "MERGER_IN",
+    "MERGER_OUT",
+    "EXCHANGE_IN",
+    "EXCHANGE_OUT",
+    "REPLACEMENT_IN",
+    "REPLACEMENT_OUT",
+    "SPIN_IN",
+    "DEMERGER_IN",
+    "RIGHTS_ALLOCATE",
+    "RIGHTS_SHARE_DELIVERY",
+    "RIGHTS_SUBSCRIBE",
+    "RIGHTS_OVERSUBSCRIBE",
+    "RIGHTS_SELL",
+    "RIGHTS_EXPIRE",
+}
+POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES = {
+    "TRANSFER_IN",
+    "MERGER_IN",
+    "EXCHANGE_IN",
+    "REPLACEMENT_IN",
+    "RIGHTS_ALLOCATE",
+    "RIGHTS_SHARE_DELIVERY",
+}
+SAME_INSTRUMENT_CORPORATE_ACTION_TYPES = {
+    "SPLIT",
+    "REVERSE_SPLIT",
+    "CONSOLIDATION",
+    "BONUS_ISSUE",
+    "STOCK_DIVIDEND",
+}
+SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES = {"REVERSE_SPLIT", "CONSOLIDATION"}
 
 
 def _normalize_position_code(value: object) -> str:
     return str(value or "").strip().upper()
+
+
+_PositionUpdateHandler = Callable[[PositionStateDTO, TransactionEvent, str], PositionStateDTO]
 
 
 class PositionCalculator:
@@ -217,163 +259,221 @@ class PositionCalculator:
     def calculate_next_position(
         current_state: PositionStateDTO, transaction: TransactionEvent
     ) -> PositionStateDTO:
-        quantity = current_state.quantity
-        cost_basis = current_state.cost_basis
-        cost_basis_local = current_state.cost_basis_local
         txn_type = resolve_effective_processing_transaction_type(transaction)
+        handler = PositionCalculator._position_update_handler(txn_type)
+        next_state = (
+            handler(current_state, transaction, txn_type)
+            if handler is not None
+            else PositionCalculator._unchanged_position_state(current_state, txn_type)
+        )
+        return PositionCalculator._zeroed_cost_basis_when_flat(next_state)
 
+    @staticmethod
+    def _position_update_handler(txn_type: str) -> _PositionUpdateHandler | None:
         if txn_type == "BUY":
-            quantity += transaction.quantity
-            if transaction.net_cost is not None:
-                cost_basis += transaction.net_cost
-            if transaction.net_cost_local is not None:
-                cost_basis_local += transaction.net_cost_local
+            return PositionCalculator._buy_position_state
 
         elif txn_type in {"SELL", "CASH_IN_LIEU"}:
-            quantity -= transaction.quantity
+            return PositionCalculator._sell_position_state
 
-            if transaction.net_cost is not None:
-                cost_basis += transaction.net_cost
-            if transaction.net_cost_local is not None:
-                cost_basis_local += transaction.net_cost_local
+        elif txn_type in CASH_POSITION_DELTA_TRANSACTION_TYPES:
+            return PositionCalculator._cash_delta_position_state
 
-        elif txn_type in (
-            CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
-        ):
-            (
-                quantity_delta,
-                cost_basis_delta,
-                cost_basis_local_delta,
-            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
-            quantity += quantity_delta
-            cost_basis += cost_basis_delta
-            cost_basis_local += cost_basis_local_delta
+        elif txn_type in POSITION_TRANSFER_TRANSACTION_TYPES:
+            return PositionCalculator._transfer_position_state
 
-        elif txn_type in [
-            "TRANSFER_IN",
-            "TRANSFER_OUT",
-            "MERGER_IN",
-            "MERGER_OUT",
-            "EXCHANGE_IN",
-            "EXCHANGE_OUT",
-            "REPLACEMENT_IN",
-            "REPLACEMENT_OUT",
-            "SPIN_IN",
-            "DEMERGER_IN",
-            "RIGHTS_ALLOCATE",
-            "RIGHTS_SHARE_DELIVERY",
-            "RIGHTS_SUBSCRIBE",
-            "RIGHTS_OVERSUBSCRIBE",
-            "RIGHTS_SELL",
-            "RIGHTS_EXPIRE",
-        ]:
-            transfer_quantity = transaction.quantity
-            if transfer_quantity > 0:
-                inflow_types = {
-                    "TRANSFER_IN",
-                    "MERGER_IN",
-                    "EXCHANGE_IN",
-                    "REPLACEMENT_IN",
-                    "RIGHTS_ALLOCATE",
-                    "RIGHTS_SHARE_DELIVERY",
-                }
-                transfer_sign = Decimal(1) if txn_type in inflow_types else Decimal(-1)
-                quantity += transfer_sign * transfer_quantity
-
-                if transaction.net_cost is not None:
-                    cost_basis += transaction.net_cost
-                elif txn_type in inflow_types:
-                    cost_basis += transaction.gross_transaction_amount
-                else:
-                    cost_basis -= transaction.gross_transaction_amount
-
-                if transaction.net_cost_local is not None:
-                    cost_basis_local += transaction.net_cost_local
-                elif txn_type in inflow_types:
-                    cost_basis_local += transaction.gross_transaction_amount
-                else:
-                    cost_basis_local -= transaction.gross_transaction_amount
-            else:
-                logger.debug(
-                    "[CalculateNext] Txn type %s with zero transfer quantity treated as "
-                    "cash-only transfer and does not change security position quantity/cost.",
-                    txn_type,
-                )
-
-        elif txn_type in {
-            "SPLIT",
-            "REVERSE_SPLIT",
-            "CONSOLIDATION",
-            "BONUS_ISSUE",
-            "STOCK_DIVIDEND",
-        }:
-            # Same-instrument corporate actions: quantity changes, basis is preserved.
-            quantity_delta_sign = (
-                Decimal(-1) if txn_type in {"REVERSE_SPLIT", "CONSOLIDATION"} else Decimal(1)
-            )
-            quantity += quantity_delta_sign * transaction.quantity
+        elif txn_type in SAME_INSTRUMENT_CORPORATE_ACTION_TYPES:
+            return PositionCalculator._same_instrument_action_state
 
         elif txn_type in {"SPIN_OFF", "DEMERGER_OUT"}:
-            if transaction.quantity > Decimal(0):
-                quantity -= transaction.quantity
-
-            if transaction.net_cost is not None:
-                cost_basis += transaction.net_cost
-            else:
-                cost_basis -= transaction.gross_transaction_amount
-
-            if transaction.net_cost_local is not None:
-                cost_basis_local += transaction.net_cost_local
-            else:
-                cost_basis_local -= transaction.gross_transaction_amount
-
-        elif txn_type == "ADJUSTMENT":
-            (
-                quantity_delta,
-                cost_basis_delta,
-                cost_basis_local_delta,
-            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
-            quantity += quantity_delta
-            cost_basis += cost_basis_delta
-            cost_basis_local += cost_basis_local_delta
-
-        elif txn_type == "FX_CASH_SETTLEMENT_BUY":
-            (
-                quantity_delta,
-                cost_basis_delta,
-                cost_basis_local_delta,
-            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
-            quantity += quantity_delta
-            cost_basis += cost_basis_delta
-            cost_basis_local += cost_basis_local_delta
-
-        elif txn_type == "FX_CASH_SETTLEMENT_SELL":
-            (
-                quantity_delta,
-                cost_basis_delta,
-                cost_basis_local_delta,
-            ) = PositionCalculator._cash_position_deltas(transaction, txn_type)
-            quantity += quantity_delta
-            cost_basis += cost_basis_delta
-            cost_basis_local += cost_basis_local_delta
+            return PositionCalculator._spin_off_position_state
 
         elif txn_type == "FX_CONTRACT_OPEN":
-            quantity += Decimal(1)
+            return PositionCalculator._fx_contract_open_position_state
 
         elif txn_type == "FX_CONTRACT_CLOSE":
-            quantity -= Decimal(1)
+            return PositionCalculator._fx_contract_close_position_state
 
-        else:
-            logger.debug(
-                f"[CalculateNext] Txn type {txn_type} does not affect position quantity/cost."
-            )
+        return None
 
-        if quantity.is_zero():
-            cost_basis = Decimal(0)
-            cost_basis_local = Decimal(0)
+    @staticmethod
+    def _unchanged_position_state(
+        current_state: PositionStateDTO, txn_type: str
+    ) -> PositionStateDTO:
+        logger.debug(f"[CalculateNext] Txn type {txn_type} does not affect position quantity/cost.")
+        return current_state
 
+    @staticmethod
+    def _position_state(
+        quantity: Decimal, cost_basis: Decimal, cost_basis_local: Decimal
+    ) -> PositionStateDTO:
         return PositionStateDTO(
-            quantity=quantity, cost_basis=cost_basis, cost_basis_local=cost_basis_local
+            quantity=quantity,
+            cost_basis=cost_basis,
+            cost_basis_local=cost_basis_local,
+        )
+
+    @staticmethod
+    def _buy_position_state(
+        current_state: PositionStateDTO, transaction: TransactionEvent, _txn_type: str
+    ) -> PositionStateDTO:
+        return PositionCalculator._position_state(
+            quantity=current_state.quantity + transaction.quantity,
+            cost_basis=PositionCalculator._cost_basis_with_optional_net_cost(
+                current_state.cost_basis, transaction.net_cost
+            ),
+            cost_basis_local=PositionCalculator._cost_basis_with_optional_net_cost(
+                current_state.cost_basis_local, transaction.net_cost_local
+            ),
+        )
+
+    @staticmethod
+    def _sell_position_state(
+        current_state: PositionStateDTO, transaction: TransactionEvent, _txn_type: str
+    ) -> PositionStateDTO:
+        return PositionCalculator._position_state(
+            quantity=current_state.quantity - transaction.quantity,
+            cost_basis=PositionCalculator._cost_basis_with_optional_net_cost(
+                current_state.cost_basis, transaction.net_cost
+            ),
+            cost_basis_local=PositionCalculator._cost_basis_with_optional_net_cost(
+                current_state.cost_basis_local, transaction.net_cost_local
+            ),
+        )
+
+    @staticmethod
+    def _cost_basis_with_optional_net_cost(
+        current_cost_basis: Decimal, net_cost: Decimal | None
+    ) -> Decimal:
+        return current_cost_basis + net_cost if net_cost is not None else current_cost_basis
+
+    @staticmethod
+    def _cash_delta_position_state(
+        current_state: PositionStateDTO, transaction: TransactionEvent, txn_type: str
+    ) -> PositionStateDTO:
+        quantity_delta, cost_basis_delta, cost_basis_local_delta = (
+            PositionCalculator._cash_position_deltas(transaction, txn_type)
+        )
+        return PositionCalculator._position_state(
+            quantity=current_state.quantity + quantity_delta,
+            cost_basis=current_state.cost_basis + cost_basis_delta,
+            cost_basis_local=current_state.cost_basis_local + cost_basis_local_delta,
+        )
+
+    @staticmethod
+    def _transfer_position_state(
+        current_state: PositionStateDTO, transaction: TransactionEvent, txn_type: str
+    ) -> PositionStateDTO:
+        transfer_quantity = transaction.quantity
+        if transfer_quantity <= Decimal(0):
+            logger.debug(
+                "[CalculateNext] Txn type %s with zero transfer quantity treated as "
+                "cash-only transfer and does not change security position quantity/cost.",
+                txn_type,
+            )
+            return current_state
+
+        is_inflow = txn_type in POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES
+        transfer_sign = Decimal(1) if is_inflow else Decimal(-1)
+        return PositionCalculator._position_state(
+            quantity=current_state.quantity + (transfer_sign * transfer_quantity),
+            cost_basis=PositionCalculator._transfer_cost_basis(
+                current_state.cost_basis,
+                transaction.net_cost,
+                transaction.gross_transaction_amount,
+                is_inflow,
+            ),
+            cost_basis_local=PositionCalculator._transfer_cost_basis(
+                current_state.cost_basis_local,
+                transaction.net_cost_local,
+                transaction.gross_transaction_amount,
+                is_inflow,
+            ),
+        )
+
+    @staticmethod
+    def _transfer_cost_basis(
+        current_cost_basis: Decimal,
+        net_cost: Decimal | None,
+        gross_transaction_amount: Decimal,
+        is_inflow: bool,
+    ) -> Decimal:
+        if net_cost is not None:
+            return current_cost_basis + net_cost
+        if is_inflow:
+            return current_cost_basis + gross_transaction_amount
+        return current_cost_basis - gross_transaction_amount
+
+    @staticmethod
+    def _same_instrument_action_state(
+        current_state: PositionStateDTO, transaction: TransactionEvent, txn_type: str
+    ) -> PositionStateDTO:
+        quantity_delta_sign = (
+            Decimal(-1) if txn_type in SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES else Decimal(1)
+        )
+        return PositionCalculator._quantity_delta_position_state(
+            current_state, quantity_delta_sign * transaction.quantity
+        )
+
+    @staticmethod
+    def _spin_off_position_state(
+        current_state: PositionStateDTO, transaction: TransactionEvent, _txn_type: str
+    ) -> PositionStateDTO:
+        quantity_delta = -transaction.quantity if transaction.quantity > Decimal(0) else Decimal(0)
+        return PositionCalculator._position_state(
+            quantity=current_state.quantity + quantity_delta,
+            cost_basis=PositionCalculator._spin_off_cost_basis(
+                current_state.cost_basis,
+                transaction.net_cost,
+                transaction.gross_transaction_amount,
+            ),
+            cost_basis_local=PositionCalculator._spin_off_cost_basis(
+                current_state.cost_basis_local,
+                transaction.net_cost_local,
+                transaction.gross_transaction_amount,
+            ),
+        )
+
+    @staticmethod
+    def _spin_off_cost_basis(
+        current_cost_basis: Decimal,
+        net_cost: Decimal | None,
+        gross_transaction_amount: Decimal,
+    ) -> Decimal:
+        if net_cost is not None:
+            return current_cost_basis + net_cost
+        return current_cost_basis - gross_transaction_amount
+
+    @staticmethod
+    def _quantity_delta_position_state(
+        current_state: PositionStateDTO, quantity_delta: Decimal
+    ) -> PositionStateDTO:
+        return PositionCalculator._position_state(
+            quantity=current_state.quantity + quantity_delta,
+            cost_basis=current_state.cost_basis,
+            cost_basis_local=current_state.cost_basis_local,
+        )
+
+    @staticmethod
+    def _fx_contract_open_position_state(
+        current_state: PositionStateDTO, _transaction: TransactionEvent, _txn_type: str
+    ) -> PositionStateDTO:
+        return PositionCalculator._quantity_delta_position_state(current_state, Decimal(1))
+
+    @staticmethod
+    def _fx_contract_close_position_state(
+        current_state: PositionStateDTO, _transaction: TransactionEvent, _txn_type: str
+    ) -> PositionStateDTO:
+        return PositionCalculator._quantity_delta_position_state(current_state, Decimal(-1))
+
+    @staticmethod
+    def _zeroed_cost_basis_when_flat(current_state: PositionStateDTO) -> PositionStateDTO:
+        if not current_state.quantity.is_zero():
+            return current_state
+        return PositionCalculator._position_state(
+            quantity=current_state.quantity,
+            cost_basis=Decimal(0),
+            cost_basis_local=Decimal(0),
         )
 
     @staticmethod
@@ -432,10 +532,10 @@ class PositionCalculator:
     def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
         if value is None or (isinstance(value, str) and not value.strip()):
             return Decimal(0)
-        return required_decimal(value, field_name=field_name)
+        return Decimal(required_decimal(value, field_name=field_name))
 
     @staticmethod
     def _optional_decimal(value: object, *, field_name: str) -> Decimal | None:
         if value is None:
             return None
-        return required_decimal(value, field_name=field_name)
+        return Decimal(required_decimal(value, field_name=field_name))

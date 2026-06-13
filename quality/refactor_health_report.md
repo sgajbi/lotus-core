@@ -1271,3 +1271,14 @@ health before that claim is defensible.
      reports `A (25.69)` maintainability. Focused upload ingestion service tests prove CSV/XLSX
      preview, partial-upload rejection, partial commit, empty-file rejection, publish routing,
      published/skipped row counts, and response shape remain compatible.
+231. Reduced position next-state calculation complexity by extracting explicit transaction-family
+     constants, update-handler selection, BUY/SELL cost-basis helpers, cash-position delta
+     application, transfer cost-basis policy, same-instrument corporate-action quantity policy,
+     spin-off basis handling, FX contract lifecycle quantity helpers, and flat-position cost-basis
+     cleanup while preserving the public `calculate_next_position` contract.
+     `PositionCalculator.calculate_next_position` improved from `D (27)` to `A (2)`, and
+     `position_logic.py` reports `A (24.96)` maintainability. Focused position calculator and
+     transaction-spec characterization tests prove BUY/SELL net-cost behavior, cash-flow and
+     adjustment direction behavior, FX cash settlement, FX contract lifecycle, transfer and
+     corporate-action quantity updates, spin-off basis handling, and flat-position cost-basis reset
+     remain compatible.
