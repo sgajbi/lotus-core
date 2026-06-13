@@ -1368,11 +1368,12 @@ health before that claim is defensible.
      persisted transaction events. The cost engine now recognizes `TAX` as a governed transaction
      type, routes cash-instrument `FEE` and `TAX` rows through the existing cash-outflow strategy,
      rejects non-cash `TAX` rows instead of silently applying positive default cost, and includes
-     explicit fee components in cash `FEE` booked outflow cost to match cashflow semantics. This
+     explicit fee components in cash `FEE` booked outflow cost plus position quantity movement to
+     match cashflow semantics. This
      preserves negative booked cost semantics and avoids strict lot consumption for cash expenses.
      The transaction-type coverage fixture now generates `TAX` with the cash security so E2E
      coverage exercises the supported cash-tax path. Focused cost-engine tests passed with 54
-     tests, position-calculator tests passed with 46 tests, the transaction-type coverage dry-run
+     tests, position-calculator tests passed with 47 tests, the transaction-type coverage dry-run
      test passed, and scoped Ruff lint passed. Docker-backed proof of the exact MWR E2E regression
      is deferred to GitHub CI because local Docker Desktop is unavailable.
 243. Fix-forwarded PR auto-merge governance after PR #403 exposed that the required

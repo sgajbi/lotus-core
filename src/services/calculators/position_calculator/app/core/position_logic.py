@@ -488,6 +488,13 @@ class PositionCalculator:
             field_name="quantity",
         )
         magnitude = abs(gross_amount if not gross_amount.is_zero() else quantity_amount)
+        if txn_type == "FEE":
+            net_cost_local = PositionCalculator._optional_decimal(
+                transaction.net_cost_local,
+                field_name="net_cost_local",
+            )
+            if net_cost_local is not None and not net_cost_local.is_zero():
+                magnitude = abs(net_cost_local)
         if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {
             "ADJUSTMENT",
             "FX_CASH_SETTLEMENT_BUY",
