@@ -64,10 +64,15 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 DB_ONLY_SCOPES = {
     "unit-db",
+    "integration-lite",
+    "integration-all",
+    "ops-contract",
     "transaction-buy-contract",
+    "transaction-sell-contract",
     "transaction-dividend-contract",
     "transaction-interest-contract",
     "transaction-fx-contract",
+    "transaction-portfolio-flow-bundle-contract",
 }
 
 FULL_STACK_SERVICES = [
