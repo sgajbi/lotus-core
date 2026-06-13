@@ -180,11 +180,28 @@ def wait_for_migration_runner(
     poll_seconds: int = 2,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> None:
+    wait_for_compose_service_success(
+        compose_file,
+        "migration-runner",
+        timeout_seconds=timeout_seconds,
+        poll_seconds=poll_seconds,
+        runner=runner,
+    )
+
+
+def wait_for_compose_service_success(
+    compose_file: str,
+    service_name: str,
+    *,
+    timeout_seconds: int = 120,
+    poll_seconds: int = 2,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> None:
     ensure_docker_engine_available(runner)
     start = time.time()
     while time.time() - start < timeout_seconds:
         result = runner(
-            [*_compose_base_args(compose_file), "ps", "--status=exited", "-q", "migration-runner"],
+            [*_compose_base_args(compose_file), "ps", "--status=exited", "-q", service_name],
             capture_output=True,
             text=True,
             check=True,
@@ -204,23 +221,23 @@ def wait_for_migration_runner(
             return
 
         logs_result = runner(
-            [*_compose_base_args(compose_file), "logs", "migration-runner"],
+            [*_compose_base_args(compose_file), "logs", service_name],
             capture_output=True,
             text=True,
             check=False,
         )
         raise DockerStackError(
-            "migration-runner exited with non-zero status:\n" + logs_result.stdout
+            f"{service_name} exited with non-zero status:\n" + logs_result.stdout
         )
 
     logs_result = runner(
-        [*_compose_base_args(compose_file), "logs", "migration-runner"],
+        [*_compose_base_args(compose_file), "logs", service_name],
         capture_output=True,
         text=True,
         check=False,
     )
     raise DockerStackError(
-        f"migration-runner did not complete within {timeout_seconds}s:\n{logs_result.stdout}"
+        f"{service_name} did not complete within {timeout_seconds}s:\n{logs_result.stdout}"
     )
 
 

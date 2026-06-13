@@ -18,6 +18,7 @@ from tests.test_support.docker_stack import (
     compose_up,
     resolve_compose_file,
     should_build_images,
+    wait_for_compose_service_success,
     wait_for_http_health,
     wait_for_kafka_metadata,
     wait_for_migration_runner,
@@ -199,6 +200,15 @@ def docker_services(request):  # noqa: ARG001
             emit_test_output(
                 f"--- Kafka is metadata-ready at {os.environ['KAFKA_BOOTSTRAP_SERVERS']} ---"
             )
+        if "kafka-topic-creator" in test_services:
+            emit_test_output("\n--- Waiting for Kafka topic creation to complete ---")
+            wait_for_compose_service_success(
+                compose_file,
+                "kafka-topic-creator",
+                timeout_seconds=health_timeout,
+                poll_seconds=2,
+            )
+            emit_test_output("--- Kafka topic creation completed successfully ---")
 
         # Manual polling for service health
         health_targets = {

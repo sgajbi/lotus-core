@@ -1404,3 +1404,9 @@ health before that claim is defensible.
      live workers. Focused suite-composition tests passed with 18 tests, scoped Ruff lint and
      format checks passed, and Docker-backed proof of the exact Kafka integration correction is
      deferred to GitHub CI because local Docker Desktop is unavailable.
+246. Fixed the `integration-all` DB-plus-Kafka runtime profile race found by PR #405 review by
+     waiting for the `kafka-topic-creator` one-shot compose service to exit successfully before
+     yielding `docker_services`. The wait is implemented through a shared
+     `wait_for_compose_service_success` helper that also backs `wait_for_migration_runner`, and the
+     focused suite-composition/support tests passed with 31 tests plus scoped Ruff lint and format
+     checks.

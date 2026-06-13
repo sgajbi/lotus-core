@@ -12,6 +12,7 @@ from tests.test_support.docker_stack import (
     ensure_docker_engine_available,
     ensure_required_images_available,
     should_build_images,
+    wait_for_compose_service_success,
     wait_for_http_health,
     wait_for_kafka_metadata,
     wait_for_migration_runner,
@@ -211,6 +212,50 @@ def test_wait_for_migration_runner_success() -> None:
         poll_seconds=0,
         runner=runner,
     )
+
+
+def test_wait_for_compose_service_success_accepts_zero_exit() -> None:
+    responses = iter(
+        [
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+            SimpleNamespace(stdout="topic_creator_123\n"),
+            SimpleNamespace(stdout="0\n"),
+        ]
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        return next(responses)
+
+    wait_for_compose_service_success(
+        "docker-compose.yml",
+        "kafka-topic-creator",
+        timeout_seconds=1,
+        poll_seconds=0,
+        runner=runner,
+    )
+
+
+def test_wait_for_compose_service_success_raises_with_logs_on_non_zero_exit() -> None:
+    responses = iter(
+        [
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+            SimpleNamespace(stdout="topic_creator_123\n"),
+            SimpleNamespace(stdout="1\n"),
+            SimpleNamespace(stdout="topic creation failed\n"),
+        ]
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        return next(responses)
+
+    with pytest.raises(DockerStackError, match="kafka-topic-creator exited"):
+        wait_for_compose_service_success(
+            "docker-compose.yml",
+            "kafka-topic-creator",
+            timeout_seconds=1,
+            poll_seconds=0,
+            runner=runner,
+        )
 
 
 def test_wait_for_http_health_raises_after_timeout() -> None:
