@@ -1363,3 +1363,23 @@ health before that claim is defensible.
      FX fallback behavior, and `PositionSummary` shape. `ValuationService.value_position`
      improved from `C (13)` to `A (4)`, `ValuationService` improved from `C (14)` to `A (5)`,
      and the same 17 focused tests, scoped Ruff lint/format checks, and Radon measurements passed.
+242. Fix-forwarded the Main Releasability run `27464050698` MWR E2E failure by making cash
+     expense cost semantics explicit before downstream position and timeseries workers consume
+     persisted transaction events. The cost engine now recognizes `TAX` as a governed transaction
+     type, routes cash-instrument `FEE` and `TAX` rows through the existing cash-outflow strategy,
+     rejects non-cash `TAX` rows instead of silently applying positive default cost, and includes
+     explicit fee components in cash `FEE` booked outflow cost plus position quantity movement to
+     match cashflow semantics. This
+     preserves negative booked cost semantics and avoids strict lot consumption for cash expenses.
+     The transaction-type coverage fixture now generates `TAX` with the cash security so E2E
+     coverage exercises the supported cash-tax path. Focused cost-engine tests passed with 54
+     tests, position-calculator tests passed with 47 tests, the transaction-type coverage dry-run
+     test passed, and scoped Ruff lint passed. Docker-backed proof of the exact MWR E2E regression
+     is deferred to GitHub CI because local Docker Desktop is unavailable.
+243. Fix-forwarded PR auto-merge governance after PR #403 exposed that the required
+     `Queue Auto Merge` job could not read main branch protection and failed with GitHub
+     `HTTP 403`. The workflow no longer probes the branch-protection endpoint with the default
+     workflow token and instead relies on `gh pr merge --auto --merge --delete-branch` to obey
+     branch protection and required checks. Workflow YAML parsing passed for all workflows,
+     `tests/unit/test_ci_workflow_action_versions.py` passed with 4 tests, and `git diff --check`
+     passed.

@@ -779,6 +779,35 @@ def test_cash_portfolio_flows_treat_zero_booked_cost_as_amount_fallback(
     assert next_state.cost_basis_local == expected_cost
 
 
+def test_cash_fee_uses_fee_inclusive_booked_local_cost_for_quantity_delta() -> None:
+    initial_state = PositionStateDTO(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("100"),
+    )
+    event = TransactionEvent(
+        transaction_id="FEE_CASH_BOOKED_COMPONENTS_01",
+        transaction_type="FEE",
+        quantity=Decimal("0"),
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime.now(),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("25"),
+        trade_currency="USD",
+        currency="USD",
+        net_cost=Decimal("-26.75"),
+        net_cost_local=Decimal("-26.75"),
+    )
+
+    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+
+    assert next_state.quantity == Decimal("73.25")
+    assert next_state.cost_basis == Decimal("73.25")
+    assert next_state.cost_basis_local == Decimal("73.25")
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "quantity", "expected_quantity", "expected_cost"),
     [

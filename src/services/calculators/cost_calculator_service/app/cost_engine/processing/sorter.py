@@ -90,7 +90,7 @@ def _cash_dependency_rank(txn: Transaction) -> int:
 
     if component_type == "FX_CASH_SETTLEMENT_SELL":
         return 2
-    if transaction_type in {"SELL", "WITHDRAWAL", "FEE", "TRANSFER_OUT"}:
+    if transaction_type in {"SELL", "WITHDRAWAL", "FEE", "TAX", "TRANSFER_OUT"}:
         return 2
 
     return 1
