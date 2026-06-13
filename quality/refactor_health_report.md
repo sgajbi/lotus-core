@@ -1228,3 +1228,11 @@ health before that claim is defensible.
      reports A-ranked cyclomatic complexity. Focused reference-data mapper and benchmark
      market-series tests prove selected-field suppression, price-row metadata precedence, decimal
      normalization, component weight, and FX-rate behavior remain compatible.
+226. Reduced discretionary mandate binding response composition complexity by extracting
+     supportability, review-schedule, rebalance-band, and lineage assembly helpers while preserving
+     the public `DiscretionaryMandateBindingResponse` contract. `build_discretionary_mandate_binding_response`
+     improved from `C (17)` to `A (2)`, the extracted review supportability helper reports
+     `B (7)`, and the module reports `A (40.24)` maintainability. Focused discretionary mandate
+     binding tests prove ready responses, repository orchestration, absent rows, policy-pack
+     hiding, inactive authority, missing policy-pack priority, missing review data, overdue-review
+     degradation, sparse rebalance bands, lineage, and runtime metadata behavior remain compatible.

@@ -191,6 +191,20 @@ def test_build_discretionary_mandate_binding_response_flags_missing_policy_pack(
     assert response.supportability.missing_data_families == ["policy_pack"]
 
 
+def test_build_discretionary_mandate_binding_response_preserves_policy_pack_priority() -> None:
+    response = build_discretionary_mandate_binding_response(
+        row=_binding_row(discretionary_authority_status="suspended", policy_pack_id=None),
+        request=_request(include_policy_pack=True),
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "MANDATE_POLICY_PACK_MISSING"
+    assert response.supportability.missing_data_families == [
+        "active_discretionary_authority",
+        "policy_pack",
+    ]
+
+
 def test_build_discretionary_mandate_binding_response_flags_missing_review_data() -> None:
     response = build_discretionary_mandate_binding_response(
         row=_binding_row(mandate_objective=None, review_cadence=None, next_review_due_date=None),
