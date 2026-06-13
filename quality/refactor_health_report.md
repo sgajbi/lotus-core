@@ -1410,3 +1410,12 @@ health before that claim is defensible.
      `wait_for_compose_service_success` helper that also backs `wait_for_migration_runner`, and the
      focused suite-composition/support tests passed with 31 tests plus scoped Ruff lint and format
      checks.
+247. Fix-forwarded the Main Releasability run `27471662345` E2E Full failure where the
+     dual-leg upstream-provided settlement position-timeseries test still expected the cash-book
+     settlement leg to carry `-1000` beginning and ending market value. Existing analytics
+     cash-flow policy neutralizes internal cash-book settlement market value while preserving the
+     cash quantity and internal settlement flow. The E2E proof now asserts the stock acquisition
+     value, neutralized cash-book market value, `-1000` cash quantity, and stock/cash internal
+     flows netting to zero. Focused cash-flow policy tests and scoped Ruff lint/format checks
+     passed locally; Docker-backed E2E proof is deferred to GitHub CI because local Docker Desktop
+     is unavailable.
