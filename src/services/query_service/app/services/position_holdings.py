@@ -57,21 +57,47 @@ def fallback_valuation_security_ids(
     )
 
 
+def _nullable_decimal_value(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    return Decimal(str(value))
+
+
+def _position_basis_matches(snapshot_row: Any, history_row: Any) -> bool:
+    return _nullable_decimal_value(snapshot_row.cost_basis) == _nullable_decimal_value(
+        history_row.cost_basis
+    ) and _nullable_decimal_value(snapshot_row.cost_basis_local) == _nullable_decimal_value(
+        history_row.cost_basis_local
+    )
+
+
 def merge_snapshot_and_history_position_rows(
     *,
     snapshot_results: list[tuple[Any, Any, Any]],
     history_results: list[tuple[Any, Any, Any]],
 ) -> tuple[list[tuple[Any, Any, Any]], list[tuple[Any, Any, Any]], set[str]]:
-    snapshot_results_by_security = {
+    history_results_by_security = {
         normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)
-        for position_row, instrument, pos_state in snapshot_results
-    }
-    merged_results = list(snapshot_results_by_security.values())
-    history_supplements = [
-        (position_row, instrument, pos_state)
         for position_row, instrument, pos_state in history_results
-        if normalize_security_id(position_row.security_id) not in snapshot_results_by_security
-    ]
+    }
+    snapshot_results_by_security: dict[str, tuple[Any, Any, Any]] = {}
+    history_supplements_by_security: dict[str, tuple[Any, Any, Any]] = {}
+    for snapshot_row, instrument, pos_state in snapshot_results:
+        security_id = normalize_security_id(snapshot_row.security_id)
+        history_result = history_results_by_security.get(security_id)
+        if history_result is not None and not _position_basis_matches(
+            snapshot_row, history_result[0]
+        ):
+            history_supplements_by_security[security_id] = history_result
+            continue
+        snapshot_results_by_security[security_id] = (snapshot_row, instrument, pos_state)
+
+    for security_id, history_result in history_results_by_security.items():
+        if security_id not in snapshot_results_by_security:
+            history_supplements_by_security.setdefault(security_id, history_result)
+
+    merged_results = list(snapshot_results_by_security.values())
+    history_supplements = list(history_supplements_by_security.values())
     merged_results.extend(history_supplements)
     return merged_results, history_supplements, set(snapshot_results_by_security.keys())
 
