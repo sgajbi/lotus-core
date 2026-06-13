@@ -1350,3 +1350,16 @@ health before that claim is defensible.
      count/window gate while allowing the intentional anti-exists predicates, `make warning-gate`
      passed locally with 2,958 tests, 10 deselected, and 0 warnings, and Remote Feature Lane run
      `27460894329` passed for `84857360`.
+240. Reduced advisory simulation valuation state assembly complexity by extracting position
+     summary resolution, base-value totaling, cash value conversion, allocation metadata,
+     position/cash allocation rows, instrument metrics, and attribute metrics while preserving the
+     public `build_simulated_state` input and `SimulatedState` output contracts.
+     `build_simulated_state` improved from `D (21)` to `A (2)`, and focused advisory valuation
+     plus advisory simulation service tests passed with 17 tests. Scoped Ruff lint/format checks
+     and Radon complexity/maintainability measurements passed.
+241. Reduced advisory simulation position valuation policy complexity by extracting price lookup,
+     price-currency context, trust-snapshot value resolution, and calculated market-value
+     resolution while preserving trusted base-currency authority behavior, calculated valuation,
+     FX fallback behavior, and `PositionSummary` shape. `ValuationService.value_position`
+     improved from `C (13)` to `A (4)`, `ValuationService` improved from `C (14)` to `A (5)`,
+     and the same 17 focused tests, scoped Ruff lint/format checks, and Radon measurements passed.
