@@ -3,7 +3,7 @@ import logging
 from datetime import date
 from typing import Any, Dict, List, Tuple
 
-from sqlalchemy import Date, Integer, String, column, func, select, tuple_, update, values
+from sqlalchemy import Date, Integer, String, case, column, func, select, tuple_, update, values
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,29 +138,51 @@ class PositionStateRepository:
 
     @async_timed(repository="PositionStateRepository", method="update_watermarks_if_older")
     async def update_watermarks_if_older(
-        self, keys: List[Tuple[str, str]], new_watermark_date: date
+        self,
+        keys: List[Tuple[str, str]],
+        new_watermark_date: date,
+        *,
+        touch_if_already_lagging: bool = False,
     ) -> int:
         """
         For a given list of (portfolio_id, security_id) keys, updates the
         watermark_date only if the new date is older than the existing one.
+        When touch_if_already_lagging is enabled, matching keys are marked
+        REPROCESSING and updated_at is advanced even if their watermark is already
+        older. This preserves the earliest dirty date while giving the valuation
+        scheduler a fresh correlation for corrected position-history writes.
         Returns the number of rows that were updated.
         """
         if not keys:
             return 0
 
+        watermark_value = (
+            case(
+                (
+                    PositionState.watermark_date > new_watermark_date,
+                    new_watermark_date,
+                ),
+                else_=PositionState.watermark_date,
+            )
+            if touch_if_already_lagging
+            else new_watermark_date
+        )
+
         stmt = (
             update(PositionState)
             .where(
                 tuple_(PositionState.portfolio_id, PositionState.security_id).in_(keys),
-                PositionState.watermark_date > new_watermark_date,
             )
             .values(
-                watermark_date=new_watermark_date,
+                watermark_date=watermark_value,
                 status="REPROCESSING",  # A watermark reset always implies reprocessing is needed
                 updated_at=func.now(),
             )
             .returning(PositionState.portfolio_id)
         )
+        if not touch_if_already_lagging:
+            stmt = stmt.where(PositionState.watermark_date > new_watermark_date)
+
         result = await self.db.execute(stmt)
         updated_rows = result.fetchall()
         return len(updated_rows)

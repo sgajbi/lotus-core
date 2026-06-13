@@ -1322,3 +1322,11 @@ health before that claim is defensible.
      issuer breach, sell-only, restricted, banned, suspended, liquidity, missing-shelf,
      missing-enrichment, cash-band, low-severity, and proposal-level suitability behavior remains
      compatible.
+237. Hardened current-epoch position-history correction signaling after Main Releasability exposed
+     stale cash position-timeseries values in the MWR E2E pipeline. Position-history writes now
+     opt into touching already-lagging `position_state` rows: the earliest dirty watermark is
+     preserved, status remains `REPROCESSING`, and `updated_at` advances so the valuation scheduler
+     builds a fresh correlation and can re-arm completed valuation jobs for corrected snapshots.
+     Focused non-Docker position-calculator tests passed with 46 tests, scoped Ruff lint and format
+     checks passed, and Docker-backed repository/E2E proof is deferred to GitHub CI because the
+     local Docker engine is unavailable in this workspace.
