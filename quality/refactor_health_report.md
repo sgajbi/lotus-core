@@ -1441,3 +1441,10 @@ health before that claim is defensible.
      holdings unit tests passed with 45 tests; scoped Ruff lint and format checks passed locally;
      Remote Feature Lane run `27477365942` passed. Docker-backed latency and E2E proof is deferred
      to PR Merge Gate/Main Releasability because local Docker Desktop is unavailable.
+250. Fix-forwarded PR Merge Gate run `27477746565` Latency Gate seed-readiness timeout.
+     The gate passed all other PR Merge Gate jobs but timed out before latency measurement because
+     `demo_data_loader` was still running after the initial five-minute seed-completion wait.
+     `make test-latency-gate` now passes an explicit
+     `LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS` value to the latency profiler, giving CI enough
+     bootstrap time while keeping the endpoint p95 budgets unchanged. Fresh PR Merge Gate proof is
+     required before merge.
