@@ -1456,3 +1456,12 @@ health before that claim is defensible.
      reports last-observed positions, valued positions, transaction counts, and terminal quantity
      checks. Focused demo-data and compose-contract tests passed with 12 tests; scoped Ruff lint and
      format checks passed locally. Fresh PR Merge Gate proof is required before merge.
+252. Fix-forwarded PR Merge Gate run `27479265925` Latency Gate demo seed duration.
+     The gate passed every other PR Merge Gate job, including Docker Smoke, E2E Smoke, and the fast
+     performance gate. Latency still failed before measurement because the full three-year demo pack
+     kept `demo_data_loader` running beyond the total `900` second pre-measurement wait while
+     workers processed unrelated historical valuation backfill for later demo portfolios. The demo
+     pack now supports a bounded `--history-days` window, compose passes the setting through, and
+     PR Merge Gate/Main Releasability latency jobs use a one-year history profile while preserving
+     the richer three-year default for app-local demo usage. Fresh PR Merge Gate proof is required
+     before merge.

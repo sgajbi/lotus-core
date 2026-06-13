@@ -56,6 +56,12 @@ def test_workflows_opt_into_node24_action_runtime() -> None:
     assert missing_opt_in == []
 
 
+def test_runtime_latency_gates_use_bounded_demo_seed_history() -> None:
+    for workflow_path in GOVERNED_RUNTIME_WORKFLOWS:
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        assert 'DEMO_DATA_PACK_HISTORY_DAYS: "365"' in workflow_text
+
+
 def test_pr_auto_merge_does_not_probe_branch_protection_with_github_token() -> None:
     workflow_text = Path(".github/workflows/pr-auto-merge.yml").read_text(encoding="utf-8")
 

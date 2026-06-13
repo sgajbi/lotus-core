@@ -21,6 +21,23 @@ def test_build_demo_bundle_contains_multi_product_coverage():
     assert {"DEPOSIT", "BUY", "SELL", "DIVIDEND", "FEE"}.issubset(tx_types)
 
 
+def test_build_demo_bundle_supports_bounded_ci_history_window():
+    full_bundle = demo_data_pack.build_demo_bundle()
+    ci_bundle = demo_data_pack.build_demo_bundle(history_days=365)
+
+    assert len(ci_bundle["portfolios"]) == len(full_bundle["portfolios"])
+    assert len(ci_bundle["transactions"]) == len(full_bundle["transactions"])
+    assert len(ci_bundle["market_prices"]) < len(full_bundle["market_prices"])
+    assert len(ci_bundle["fx_rates"]) < len(full_bundle["fx_rates"])
+    assert len(ci_bundle["business_dates"]) >= 250
+    assert ci_bundle["as_of_date"] == full_bundle["as_of_date"]
+
+
+def test_build_demo_bundle_rejects_too_short_history_window():
+    with pytest.raises(ValueError, match="history_days must be at least 365"):
+        demo_data_pack.build_demo_bundle(history_days=364)
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 

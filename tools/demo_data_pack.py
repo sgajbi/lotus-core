@@ -451,8 +451,10 @@ def build_risk_free_reference_data(
     return {"risk_free_series": risk_free_series}
 
 
-def build_demo_bundle() -> dict[str, Any]:
-    start_date = date.today() - timedelta(days=365 * 3)
+def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
+    if history_days < 365:
+        raise ValueError("Demo data history_days must be at least 365.")
+    start_date = date.today() - timedelta(days=history_days)
     end_date = date.today()
     dates = _business_dates(start_date, end_date)
     as_of = end_date.isoformat()
@@ -1550,6 +1552,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query-control-plane-base-url", default="http://localhost:8202")
     parser.add_argument("--wait-seconds", type=int, default=300)
     parser.add_argument("--poll-interval-seconds", type=int, default=3)
+    parser.add_argument(
+        "--history-days",
+        type=int,
+        default=365 * 3,
+        help=(
+            "Calendar-day lookback window used to generate demo market, FX, benchmark, "
+            "and risk-free history. The default preserves the rich app-local demo pack; "
+            "CI latency gates may use a smaller one-year window to reduce unrelated backfill."
+        ),
+    )
     parser.add_argument("--verify-only", action="store_true")
     parser.add_argument("--ingest-only", action="store_true")
     parser.add_argument("--force-ingest", action="store_true")
@@ -1572,7 +1584,7 @@ def main() -> int:
         args.wait_seconds,
         args.poll_interval_seconds,
     )
-    demo_bundle = build_demo_bundle()
+    demo_bundle = build_demo_bundle(history_days=args.history_days)
     if not args.verify_only:
         if args.force_ingest or not _all_demo_portfolios_exist(query_base_url):
             payload = _build_portfolio_bundle_payload(demo_bundle)
