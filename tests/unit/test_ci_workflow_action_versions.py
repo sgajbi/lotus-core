@@ -5,6 +5,8 @@ GOVERNED_RUNTIME_WORKFLOWS = (
     Path(".github/workflows/main-releasability.yml"),
 )
 
+ALL_WORKFLOWS = tuple(Path(".github/workflows").glob("*.yml"))
+
 NODE20_DEPRECATED_ACTION_PINS = (
     "actions/cache@v4",
     "actions/upload-artifact@v4",
@@ -41,3 +43,14 @@ def test_runtime_workflows_use_current_action_pins_for_cache_artifacts_and_build
     assert "actions/download-artifact@v5" in Path(
         ".github/workflows/main-releasability.yml"
     ).read_text(encoding="utf-8")
+
+
+def test_workflows_opt_into_node24_action_runtime() -> None:
+    missing_opt_in = [
+        str(workflow_path)
+        for workflow_path in ALL_WORKFLOWS
+        if 'FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"'
+        not in workflow_path.read_text(encoding="utf-8")
+    ]
+
+    assert missing_opt_in == []

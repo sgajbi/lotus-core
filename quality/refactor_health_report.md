@@ -1330,3 +1330,10 @@ health before that claim is defensible.
      Focused non-Docker position-calculator tests passed with 46 tests, scoped Ruff lint and format
      checks passed, and Docker-backed repository/E2E proof is deferred to GitHub CI because the
      local Docker engine is unavailable in this workspace.
+238. Added explicit GitHub Actions Node 24 runtime opt-in across all workflows by setting
+     `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` at workflow scope. The workflow action-version
+     test now enforces the opt-in for every workflow in addition to rejecting deprecated Node 20
+     action pins in governed runtime workflows. Workflow YAML parsing passed for 5 workflows,
+     `tests/unit/test_ci_workflow_action_versions.py` passed with 3 tests, and scoped Ruff lint and
+     format checks passed; GitHub CI remains the source of truth for whether upstream actions still
+     emit Node 20 target metadata warnings.
