@@ -73,7 +73,10 @@ async def test_get_latest_positions_by_portfolio(
     assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled_query
     assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled_query
     assert "daily_position_snapshots.cost_basis = anon_2.cost_basis" in compiled_query
-    assert "daily_position_snapshots.cost_basis_local = anon_2.cost_basis_local" in compiled_query
+    assert (
+        "daily_position_snapshots.cost_basis_local IS NOT DISTINCT FROM anon_2.cost_basis_local"
+        in compiled_query
+    )
     # Assert that it ranks reconciled snapshots by business date and id per security.
     assert (
         "row_number() OVER (PARTITION BY daily_position_snapshots.portfolio_id, "
@@ -351,7 +354,10 @@ async def test_get_latest_positions_by_portfolio_as_of_date_builds_expected_quer
     assert "daily_position_snapshots.epoch = anon_2.epoch" in compiled_query
     assert "daily_position_snapshots.quantity = anon_2.quantity" in compiled_query
     assert "daily_position_snapshots.cost_basis = anon_2.cost_basis" in compiled_query
-    assert "daily_position_snapshots.cost_basis_local = anon_2.cost_basis_local" in compiled_query
+    assert (
+        "daily_position_snapshots.cost_basis_local IS NOT DISTINCT FROM anon_2.cost_basis_local"
+        in compiled_query
+    )
     assert "daily_position_snapshots.quantity != 0" in compiled_query
 
 

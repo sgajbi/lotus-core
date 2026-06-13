@@ -249,8 +249,9 @@ class PositionRepository:
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
                     DailyPositionSnapshot.cost_basis == latest_history_subq.c.cost_basis,
-                    DailyPositionSnapshot.cost_basis_local
-                    == latest_history_subq.c.cost_basis_local,
+                    DailyPositionSnapshot.cost_basis_local.is_not_distinct_from(
+                        latest_history_subq.c.cost_basis_local
+                    ),
                 ),
             )
             .where(
@@ -375,8 +376,9 @@ class PositionRepository:
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
                     DailyPositionSnapshot.cost_basis == latest_history_subq.c.cost_basis,
-                    DailyPositionSnapshot.cost_basis_local
-                    == latest_history_subq.c.cost_basis_local,
+                    DailyPositionSnapshot.cost_basis_local.is_not_distinct_from(
+                        latest_history_subq.c.cost_basis_local
+                    ),
                 ),
             )
             .where(
