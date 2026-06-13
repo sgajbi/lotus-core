@@ -1236,3 +1236,12 @@ health before that claim is defensible.
      binding tests prove ready responses, repository orchestration, absent rows, policy-pack
      hiding, inactive authority, missing policy-pack priority, missing review data, overdue-review
      degradation, sparse rebalance bands, lineage, and runtime metadata behavior remain compatible.
+227. Reduced portfolio tax-lot window response composition complexity by extracting lot mapping,
+     missing-security detection, supportability/data-quality policy, page metadata, and lineage
+     helpers while preserving the public `PortfolioTaxLotWindowResponse` contract.
+     `build_portfolio_tax_lot_window_response` improved from `C (15)` to `A (2)`, the extracted
+     supportability-state helper reports `B (6)`, and the module reports `A (35.88)`
+     maintainability. Focused portfolio tax-lot window tests prove page-token scope binding,
+     repository orchestration, missing portfolio errors, partial-page degradation, complete
+     ready-page status, missing requested-security reporting, empty portfolio unavailability,
+     lineage, and runtime metadata behavior remain compatible.

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
@@ -22,6 +22,15 @@ from .source_data_runtime import source_product_runtime_metadata_without_as_of_d
 class PortfolioTaxLotWindowRequestScope:
     request_fingerprint: str
     after_sort_key: tuple[date, str] | None
+
+
+_TaxLotSupportabilityState = Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"]
+
+
+@dataclass(frozen=True)
+class _PortfolioTaxLotSupportabilityContext:
+    supportability: PortfolioTaxLotWindowSupportability
+    data_quality_status: str
 
 
 def portfolio_tax_lot_after_sort_key(cursor: Mapping[str, Any]) -> tuple[date, str] | None:
@@ -145,68 +154,138 @@ def build_portfolio_tax_lot_window_response(
     has_more: bool,
     next_page_token: str | None,
 ) -> PortfolioTaxLotWindowResponse:
-    lots = [
-        portfolio_tax_lot_record(lot, local_currency=local_currency)
-        for lot, local_currency in page_rows
-    ]
-
-    requested_security_ids = {
-        normalize_security_id(security_id) for security_id in request.security_ids or []
-    }
-    returned_security_ids = {normalize_security_id(lot.security_id) for lot in lots}
-    missing_security_ids = (
-        [] if has_more else sorted(requested_security_ids - returned_security_ids)
-    )
-
-    supportability_state = "READY"
-    supportability_reason = "TAX_LOTS_READY"
-    if not lots and not request.security_ids:
-        supportability_state = "UNAVAILABLE"
-        supportability_reason = "TAX_LOTS_EMPTY"
-    elif has_more:
-        supportability_state = "DEGRADED"
-        supportability_reason = "TAX_LOTS_PAGE_PARTIAL"
-    elif request.security_ids and missing_security_ids:
-        supportability_state = "INCOMPLETE"
-        supportability_reason = "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
-
-    data_quality_status = (
-        "COMPLETE"
-        if supportability_state == "READY"
-        else "MISSING"
-        if supportability_state == "UNAVAILABLE"
-        else "PARTIAL"
+    lots = _portfolio_tax_lot_records(page_rows)
+    supportability_context = _portfolio_tax_lot_supportability_context(
+        request=request,
+        lots=lots,
+        has_more=has_more,
     )
 
     return PortfolioTaxLotWindowResponse(
         portfolio_id=portfolio_id,
         as_of_date=request.as_of_date,
         lots=lots,
-        page=ReferencePageMetadata(
-            page_size=request.page.page_size,
-            sort_key="acquisition_date:asc,lot_id:asc",
-            returned_component_count=len(lots),
+        page=_portfolio_tax_lot_page_metadata(
+            request=request,
+            lots=lots,
             request_scope_fingerprint=request_scope_fingerprint,
             next_page_token=next_page_token,
         ),
-        supportability=PortfolioTaxLotWindowSupportability(
-            state=supportability_state,
-            reason=supportability_reason,
-            requested_security_count=(
-                len(request.security_ids) if request.security_ids is not None else None
-            ),
-            returned_lot_count=len(lots),
-            missing_security_ids=missing_security_ids,
-        ),
-        lineage={
-            "source_system": "position_lot_state",
-            "contract_version": "rfc_087_v1",
-        },
+        supportability=supportability_context.supportability,
+        lineage=_portfolio_tax_lot_lineage(),
         **source_product_runtime_metadata_without_as_of_date(
             request.as_of_date,
-            data_quality_status=data_quality_status,
+            data_quality_status=supportability_context.data_quality_status,
             latest_evidence_timestamp=latest_reference_evidence_timestamp(
                 [lot for lot, _ in page_rows]
             ),
         ),
     )
+
+
+def _portfolio_tax_lot_records(page_rows: list[tuple[Any, str | None]]) -> list[Any]:
+    return [
+        portfolio_tax_lot_record(lot, local_currency=local_currency)
+        for lot, local_currency in page_rows
+    ]
+
+
+def _portfolio_tax_lot_supportability_context(
+    *,
+    request: PortfolioTaxLotWindowRequest,
+    lots: list[Any],
+    has_more: bool,
+) -> _PortfolioTaxLotSupportabilityContext:
+    missing_security_ids = _missing_tax_lot_security_ids(
+        request=request,
+        lots=lots,
+        has_more=has_more,
+    )
+    state, reason = _portfolio_tax_lot_supportability_state(
+        request=request,
+        lots=lots,
+        has_more=has_more,
+        missing_security_ids=missing_security_ids,
+    )
+    return _PortfolioTaxLotSupportabilityContext(
+        supportability=PortfolioTaxLotWindowSupportability(
+            state=state,
+            reason=reason,
+            requested_security_count=_requested_tax_lot_security_count(request),
+            returned_lot_count=len(lots),
+            missing_security_ids=missing_security_ids,
+        ),
+        data_quality_status=_portfolio_tax_lot_data_quality_status(state),
+    )
+
+
+def _missing_tax_lot_security_ids(
+    *,
+    request: PortfolioTaxLotWindowRequest,
+    lots: list[Any],
+    has_more: bool,
+) -> list[str]:
+    if has_more:
+        return []
+    requested_security_ids = {
+        normalize_security_id(security_id) for security_id in request.security_ids or []
+    }
+    returned_security_ids = {normalize_security_id(lot.security_id) for lot in lots}
+    return sorted(requested_security_ids - returned_security_ids)
+
+
+def _portfolio_tax_lot_supportability_state(
+    *,
+    request: PortfolioTaxLotWindowRequest,
+    lots: list[Any],
+    has_more: bool,
+    missing_security_ids: list[str],
+) -> tuple[_TaxLotSupportabilityState, str]:
+    if not lots and not request.security_ids:
+        return "UNAVAILABLE", "TAX_LOTS_EMPTY"
+    if has_more:
+        return "DEGRADED", "TAX_LOTS_PAGE_PARTIAL"
+    if request.security_ids and missing_security_ids:
+        return "INCOMPLETE", "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
+    return "READY", "TAX_LOTS_READY"
+
+
+def _requested_tax_lot_security_count(
+    request: PortfolioTaxLotWindowRequest,
+) -> int | None:
+    if request.security_ids is None:
+        return None
+    return len(request.security_ids)
+
+
+def _portfolio_tax_lot_data_quality_status(
+    state: _TaxLotSupportabilityState,
+) -> str:
+    if state == "READY":
+        return "COMPLETE"
+    if state == "UNAVAILABLE":
+        return "MISSING"
+    return "PARTIAL"
+
+
+def _portfolio_tax_lot_page_metadata(
+    *,
+    request: PortfolioTaxLotWindowRequest,
+    lots: list[Any],
+    request_scope_fingerprint: str,
+    next_page_token: str | None,
+) -> ReferencePageMetadata:
+    return ReferencePageMetadata(
+        page_size=request.page.page_size,
+        sort_key="acquisition_date:asc,lot_id:asc",
+        returned_component_count=len(lots),
+        request_scope_fingerprint=request_scope_fingerprint,
+        next_page_token=next_page_token,
+    )
+
+
+def _portfolio_tax_lot_lineage() -> dict[str, str]:
+    return {
+        "source_system": "position_lot_state",
+        "contract_version": "rfc_087_v1",
+    }
