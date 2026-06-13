@@ -1335,5 +1335,5 @@ health before that claim is defensible.
      test now enforces the opt-in for every workflow in addition to rejecting deprecated Node 20
      action pins in governed runtime workflows. Workflow YAML parsing passed for 5 workflows,
      `tests/unit/test_ci_workflow_action_versions.py` passed with 3 tests, and scoped Ruff lint and
-     format checks passed; GitHub CI remains the source of truth for whether upstream actions still
-     emit Node 20 target metadata warnings.
+     format checks passed. GitHub Remote Feature Lane run `27458485134` passed for `b4555b7d`, and
+     log inspection showed the Node 24 opt-in present without matching `Node.js 20` warning text.
