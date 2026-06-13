@@ -182,6 +182,7 @@ async def test_calculate_rearms_current_epoch_when_position_history_arrives_afte
     mock_state_repo.update_watermarks_if_older.assert_awaited_once_with(
         keys=[("P1", "S1")],
         new_watermark_date=date(2026, 3, 10),
+        touch_if_already_lagging=True,
     )
     mock_outbox_repo.create_outbox_event.assert_not_called()
 

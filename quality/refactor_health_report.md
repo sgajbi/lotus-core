@@ -1311,3 +1311,29 @@ health before that claim is defensible.
      so deprecated `actions/cache@v4`, `actions/upload-artifact@v4`,
      `actions/download-artifact@v4`, and `docker/setup-buildx-action@v3` pins cannot silently
      return in those release workflows.
+236. Reduced advisory simulation suitability result and governance issue composition complexity by
+     extracting status-change classification, candidate selection, evidence construction, summary
+     aggregation, highest-severity selection, and governance issue builders while preserving issue
+     keys, severity policy, ordering, evidence wiring, and recommended-gate behavior.
+     `compute_suitability_result` improved from `C (16)` to `A (3)`,
+     `_governance_issue_for_instrument` improved from `C (11)` to `A (1)`, and
+     `suitability.py` remains a B-ranked maintainability module at `B (18.34)`. Focused
+     suitability scanner and advisory proposal simulation tests prove resolved, persistent, new
+     issuer breach, sell-only, restricted, banned, suspended, liquidity, missing-shelf,
+     missing-enrichment, cash-band, low-severity, and proposal-level suitability behavior remains
+     compatible.
+237. Hardened current-epoch position-history correction signaling after Main Releasability exposed
+     stale cash position-timeseries values in the MWR E2E pipeline. Position-history writes now
+     opt into touching already-lagging `position_state` rows: the earliest dirty watermark is
+     preserved, status remains `REPROCESSING`, and `updated_at` advances so the valuation scheduler
+     builds a fresh correlation and can re-arm completed valuation jobs for corrected snapshots.
+     Focused non-Docker position-calculator tests passed with 46 tests, scoped Ruff lint and format
+     checks passed, and Docker-backed repository/E2E proof is deferred to GitHub CI because the
+     local Docker engine is unavailable in this workspace.
+238. Added explicit GitHub Actions Node 24 runtime opt-in across all workflows by setting
+     `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` at workflow scope. The workflow action-version
+     test now enforces the opt-in for every workflow in addition to rejecting deprecated Node 20
+     action pins in governed runtime workflows. Workflow YAML parsing passed for 5 workflows,
+     `tests/unit/test_ci_workflow_action_versions.py` passed with 3 tests, and scoped Ruff lint and
+     format checks passed. GitHub Remote Feature Lane run `27458485134` passed for `b4555b7d`, and
+     log inspection showed the Node 24 opt-in present without matching `Node.js 20` warning text.

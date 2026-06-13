@@ -177,6 +177,53 @@ async def test_update_watermarks_if_older(clean_db, async_db_session: AsyncSessi
     assert p3_state.updated_at is not None
 
 
+async def test_update_watermarks_if_older_can_touch_already_lagging_states(
+    clean_db, async_db_session: AsyncSession
+):
+    """
+    GIVEN corrected position history arrives while a key is already lagging
+    WHEN update_watermarks_if_older is called with touch_if_already_lagging
+    THEN it preserves the earliest watermark but advances reprocessing state.
+    """
+    repo = PositionStateRepository(async_db_session)
+    lagging_state = PositionState(
+        portfolio_id="P1",
+        security_id="S1",
+        watermark_date=date(2025, 5, 1),
+        epoch=0,
+        status="REPROCESSING",
+    )
+    current_state = PositionState(
+        portfolio_id="P2",
+        security_id="S2",
+        watermark_date=date(2025, 8, 1),
+        epoch=0,
+        status="CURRENT",
+    )
+    async_db_session.add_all([lagging_state, current_state])
+    await async_db_session.commit()
+
+    updated_count = await repo.update_watermarks_if_older(
+        [("P1", "S1"), ("P2", "S2")],
+        date(2025, 6, 10),
+        touch_if_already_lagging=True,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    assert updated_count == 2
+
+    refreshed_lagging_state = await async_db_session.get(PositionState, ("P1", "S1"))
+    assert refreshed_lagging_state.watermark_date == date(2025, 5, 1)
+    assert refreshed_lagging_state.status == "REPROCESSING"
+    assert refreshed_lagging_state.updated_at is not None
+
+    refreshed_current_state = await async_db_session.get(PositionState, ("P2", "S2"))
+    assert refreshed_current_state.watermark_date == date(2025, 6, 10)
+    assert refreshed_current_state.status == "REPROCESSING"
+    assert refreshed_current_state.updated_at is not None
+
+
 async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
     """
     GIVEN a list of state updates

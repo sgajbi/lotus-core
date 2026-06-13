@@ -202,6 +202,7 @@ class PositionCalculator:
             updated_count = await position_state_repo.update_watermarks_if_older(
                 keys=[(portfolio_id, security_id)],
                 new_watermark_date=transaction_date - timedelta(days=1),
+                touch_if_already_lagging=True,
             )
             if updated_count:
                 logger.info(
