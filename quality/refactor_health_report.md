@@ -1214,3 +1214,10 @@ health before that claim is defensible.
      A-ranked maintainability. Focused reference-data helper and integration-service tests prove
      inferred superseded end dates, earlier explicit end dates, non-overlapping window filtering,
      returned metadata fields, and result ordering remain compatible.
+224. Reduced reference-evidence timestamp selection complexity by extracting the durable timestamp
+     field policy and per-row timestamp extraction while preserving the public
+     `latest_reference_evidence_timestamp` helper. `latest_reference_evidence_timestamp` improved
+     from `B (6)` to `A (2)`, and the module remains A-ranked maintainability. Focused
+     reference-data helper and integration-service tests prove observed, source, assignment,
+     updated, and created timestamp handling, multi-row-group max timestamp behavior, and
+     missing/non-datetime filtering remain compatible.

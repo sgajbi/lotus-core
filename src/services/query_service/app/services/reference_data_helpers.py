@@ -10,22 +10,34 @@ from portfolio_common.market_reference_quality import (
     classify_market_reference_coverage,
 )
 
+REFERENCE_EVIDENCE_TIMESTAMP_FIELDS = (
+    "observed_at",
+    "source_timestamp",
+    "assignment_recorded_at",
+    "updated_at",
+    "created_at",
+)
+
 
 def latest_reference_evidence_timestamp(*row_groups: list[Any]) -> datetime | None:
+    timestamps = list(_reference_evidence_timestamps(row_groups))
+    return max(timestamps) if timestamps else None
+
+
+def _reference_evidence_timestamps(row_groups: tuple[list[Any], ...]) -> list[datetime]:
     timestamps: list[datetime] = []
     for rows in row_groups:
         for row in rows:
-            for field_name in (
-                "observed_at",
-                "source_timestamp",
-                "assignment_recorded_at",
-                "updated_at",
-                "created_at",
-            ):
-                value = getattr(row, field_name, None)
-                if isinstance(value, datetime):
-                    timestamps.append(value)
-    return max(timestamps) if timestamps else None
+            timestamps.extend(_row_reference_evidence_timestamps(row))
+    return timestamps
+
+
+def _row_reference_evidence_timestamps(row: Any) -> list[datetime]:
+    return [
+        value
+        for field_name in REFERENCE_EVIDENCE_TIMESTAMP_FIELDS
+        if isinstance(value := getattr(row, field_name, None), datetime)
+    ]
 
 
 def market_reference_data_quality_status(rows: list[Any], required_count: int) -> str:

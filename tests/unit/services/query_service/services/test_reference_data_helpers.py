@@ -27,6 +27,32 @@ def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps()
     )
 
 
+def test_latest_reference_evidence_timestamp_uses_multiple_row_groups() -> None:
+    observed_at = datetime(2026, 1, 2, 9, 0, tzinfo=UTC)
+    latest_assignment_recorded_at = datetime(2026, 1, 4, 12, 0, tzinfo=UTC)
+
+    assert (
+        latest_reference_evidence_timestamp(
+            [SimpleNamespace(observed_at=observed_at)],
+            [SimpleNamespace(assignment_recorded_at=latest_assignment_recorded_at)],
+        )
+        == latest_assignment_recorded_at
+    )
+
+
+def test_latest_reference_evidence_timestamp_ignores_missing_and_non_datetime_values() -> None:
+    assert (
+        latest_reference_evidence_timestamp(
+            [
+                SimpleNamespace(source_timestamp="2026-01-01T00:00:00Z"),
+                SimpleNamespace(updated_at=None),
+                SimpleNamespace(),
+            ]
+        )
+        is None
+    )
+
+
 def test_market_reference_data_quality_classifies_reference_rows() -> None:
     assert (
         market_reference_data_quality_status(
