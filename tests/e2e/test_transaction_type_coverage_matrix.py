@@ -26,6 +26,9 @@ def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
     assert len(tx_ids) == len(set(tx_ids))
     assert len(tx_types) == len(set(tx_types))
     assert set(tx_types) == SUPPORTED_TRANSACTION_TYPES
+    tax_payload = next(item for item in tx_payloads if item["transaction_type"] == "TAX")
+    assert tax_payload["security_id"] == "CASH_USD_COVER_DRYRUN"
+    assert tax_payload["instrument_id"] == "CASH_USD_COVER_DRYRUN"
 
 
 def test_cashflow_rules_cover_every_supported_transaction_type(db_engine):

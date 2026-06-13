@@ -1369,9 +1369,11 @@ health before that claim is defensible.
      type, routes cash-instrument `FEE` and `TAX` rows through the existing cash-outflow strategy,
      and rejects non-cash `TAX` rows instead of silently applying positive default cost. This
      preserves negative booked cost semantics and avoids strict lot consumption for cash expenses.
-     Focused cost-engine tests passed with 53 tests, position-calculator tests passed with 46
-     tests, and scoped Ruff lint passed. Docker-backed proof of the exact MWR E2E regression is
-     deferred to GitHub CI because local Docker Desktop is unavailable.
+     The transaction-type coverage fixture now generates `TAX` with the cash security so E2E
+     coverage exercises the supported cash-tax path. Focused cost-engine tests passed with 53
+     tests, position-calculator tests passed with 46 tests, the transaction-type coverage dry-run
+     test passed, and scoped Ruff lint passed. Docker-backed proof of the exact MWR E2E regression
+     is deferred to GitHub CI because local Docker Desktop is unavailable.
 243. Fix-forwarded PR auto-merge governance after PR #403 exposed that the required
      `Queue Auto Merge` job could not read main branch protection and failed with GitHub
      `HTTP 403`. The workflow no longer probes the branch-protection endpoint with the default
