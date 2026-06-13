@@ -1337,3 +1337,16 @@ health before that claim is defensible.
      `tests/unit/test_ci_workflow_action_versions.py` passed with 3 tests, and scoped Ruff lint and
      format checks passed. GitHub Remote Feature Lane run `27458485134` passed for `b4555b7d`, and
      log inspection showed the Node 24 opt-in present without matching `Node.js 20` warning text.
+239. Fix-forwarded the Main Releasability run `27459725250` Integration Full regression where
+     `test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_history` claimed 0
+     timeseries aggregation jobs instead of 1. The shared timeseries scheduler now expresses
+     first-day completeness as explicit authoritative snapshot `EXISTS` and missing
+     position-timeseries `NOT EXISTS` predicates, avoiding the nested count/window predicate that
+     was fragile when position snapshots exist without prior portfolio history. `timeseries_repository_base.py`
+     compiles, scoped Ruff lint and format checks pass, `git diff --check` passes, and the
+     runtime-scope unit guard tests pass with 12 tests. Docker-backed proof of the exact
+     integration regression is deferred to PR Merge Gate/Main Releasability because local Docker
+     Desktop is unavailable. After aligning the SQL-shape unit guard to reject the legacy
+     count/window gate while allowing the intentional anti-exists predicates, `make warning-gate`
+     passed locally with 2,958 tests, 10 deselected, and 0 warnings, and Remote Feature Lane run
+     `27460894329` passed for `84857360`.

@@ -2,9 +2,10 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, List, Optional
 
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from .currency_codes import normalize_currency_code
 from .database_models import (
@@ -26,6 +27,71 @@ logger = logging.getLogger(__name__)
 POSITION_TIMESERIES_IDENTITY_COLUMNS = ("portfolio_id", "security_id", "date", "epoch")
 PORTFOLIO_TIMESERIES_IDENTITY_COLUMNS = ("portfolio_id", "date", "epoch")
 TIMESERIES_AUDIT_COLUMNS = ("created_at", "updated_at")
+
+
+def _authoritative_snapshot_scope(
+    job_model: type[PortfolioAggregationJob],
+    snapshot_model: type[DailyPositionSnapshot],
+):
+    newer_snapshot = aliased(DailyPositionSnapshot)
+    newer_asof_snapshot_exists = (
+        select(1)
+        .where(
+            newer_snapshot.portfolio_id == job_model.portfolio_id,
+            newer_snapshot.security_id == snapshot_model.security_id,
+            newer_snapshot.date <= job_model.aggregation_date,
+            or_(
+                newer_snapshot.date > snapshot_model.date,
+                and_(
+                    newer_snapshot.date == snapshot_model.date,
+                    newer_snapshot.epoch > snapshot_model.epoch,
+                ),
+            ),
+        )
+        .correlate(job_model, snapshot_model)
+        .exists()
+    )
+    return (
+        snapshot_model.portfolio_id == job_model.portfolio_id,
+        snapshot_model.date <= job_model.aggregation_date,
+        ~newer_asof_snapshot_exists,
+    )
+
+
+def _authoritative_snapshot_exists(
+    job_model: type[PortfolioAggregationJob],
+    snapshot_model: type[DailyPositionSnapshot],
+    authoritative_snapshot_scope,
+):
+    return select(1).where(*authoritative_snapshot_scope).correlate(job_model).exists()
+
+
+def _missing_position_timeseries_exists(
+    job_model: type[PortfolioAggregationJob],
+    snapshot_model: type[DailyPositionSnapshot],
+    position_timeseries_model: type[PositionTimeseries],
+    authoritative_snapshot_scope,
+):
+    matching_position_timeseries_exists = (
+        select(1)
+        .where(
+            position_timeseries_model.portfolio_id == job_model.portfolio_id,
+            position_timeseries_model.security_id == snapshot_model.security_id,
+            position_timeseries_model.date == snapshot_model.date,
+            position_timeseries_model.epoch == snapshot_model.epoch,
+        )
+        .correlate(job_model, snapshot_model)
+        .exists()
+    )
+    return (
+        select(1)
+        .where(
+            *authoritative_snapshot_scope,
+            ~matching_position_timeseries_exists,
+        )
+        .correlate(job_model)
+        .exists()
+    )
 
 
 class TimeseriesRepositoryBase:
@@ -88,77 +154,10 @@ class TimeseriesRepositoryBase:
         dps = DailyPositionSnapshot
         position_ts = PositionTimeseries
 
-        latest_asof_snapshots = (
-            select(
-                dps.security_id.label("security_id"),
-                dps.date.label("date"),
-                func.max(dps.epoch).label("epoch"),
-            )
-            .where(
-                dps.portfolio_id == p1.portfolio_id,
-                dps.date <= p1.aggregation_date,
-            )
-            .group_by(dps.security_id, dps.date)
-            .correlate(p1)
-            .subquery()
-        )
-
-        ranked_asof_snapshots = (
-            select(
-                latest_asof_snapshots.c.security_id,
-                latest_asof_snapshots.c.date,
-                latest_asof_snapshots.c.epoch,
-                func.row_number()
-                .over(
-                    partition_by=latest_asof_snapshots.c.security_id,
-                    order_by=(
-                        latest_asof_snapshots.c.date.desc(),
-                        latest_asof_snapshots.c.epoch.desc(),
-                    ),
-                )
-                .label("rn"),
-            )
-            .correlate(p1)
-            .subquery()
-        )
-
-        authoritative_snapshots = (
-            select(
-                ranked_asof_snapshots.c.security_id,
-                ranked_asof_snapshots.c.date,
-                ranked_asof_snapshots.c.epoch,
-            )
-            .where(ranked_asof_snapshots.c.rn == 1)
-            .correlate(p1)
-            .subquery()
-        )
-
-        expected_snapshot_count_subq = (
-            select(func.count())
-            .select_from(authoritative_snapshots)
-            .scalar_subquery()
-            .correlate(p1)
-        )
-
-        actual_position_timeseries_count_subq = (
-            select(func.count())
-            .select_from(authoritative_snapshots)
-            .join(
-                position_ts,
-                and_(
-                    position_ts.portfolio_id == p1.portfolio_id,
-                    position_ts.security_id == authoritative_snapshots.c.security_id,
-                    position_ts.date == authoritative_snapshots.c.date,
-                    position_ts.epoch == authoritative_snapshots.c.epoch,
-                ),
-            )
-            .scalar_subquery()
-            .correlate(p1)
-        )
-
-        completeness_ready_subq = (expected_snapshot_count_subq > 0) & (
-            actual_position_timeseries_count_subq == expected_snapshot_count_subq
-        )
+        authoritative_snapshot_scope = _authoritative_snapshot_scope(p1, dps)
+        completeness_ready_subq = _authoritative_snapshot_exists(
+            p1, dps, authoritative_snapshot_scope
+        ) & ~_missing_position_timeseries_exists(p1, dps, position_ts, authoritative_snapshot_scope)
 
         eligibility_query = (
             select(p1.id)

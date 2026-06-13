@@ -393,9 +393,11 @@ async def test_find_and_claim_eligible_jobs_has_no_legacy_first_day_gate(
         executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
     )
 
+    normalized_query = compiled_query.lower()
     assert "portfolio_aggregation_jobs_1.portfolio_id" not in compiled_query
-    assert "NOT (EXISTS" not in compiled_query
     assert "FROM portfolio_timeseries, portfolio_aggregation_jobs" not in compiled_query
+    assert "count(" not in normalized_query
+    assert "row_number() over" not in normalized_query
 
 
 async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
