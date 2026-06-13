@@ -67,38 +67,40 @@ def _issue_data_quality(
     )
 
 
-def _scan_state_issues(
+def _append_single_position_issues(
     *,
-    target_state: SimulatedState,
-    before_state: SimulatedState,
-    shelf_by_instrument: Dict[str, ShelfEntry],
-    options: EngineOptions,
-) -> Dict[str, _IssueCandidate]:
-    thresholds = options.suitability_thresholds
-    issue_map: Dict[str, _IssueCandidate] = {}
-
-    target_weights = _to_instrument_weight_map(target_state)
-    before_weights = _to_instrument_weight_map(before_state)
-
+    issue_map: Dict[str, _IssueCandidate],
+    target_weights: Dict[str, Decimal],
+    thresholds: Any,
+) -> None:
     for instrument_id, weight in target_weights.items():
-        if weight > thresholds.single_position_max_weight + _EPSILON:
-            issue_key = f"SINGLE_POSITION_MAX|{instrument_id}"
-            issue_map[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_SINGLE_POSITION_MAX",
-                dimension="CONCENTRATION",
-                severity=_severity_for_concentration(weight, thresholds.single_position_max_weight),
-                summary=(
-                    f"Single position {instrument_id} exceeds "
-                    f"{thresholds.single_position_max_weight:.2%} cap."
-                ),
-                details={
-                    "instrument_id": instrument_id,
-                    "threshold": str(thresholds.single_position_max_weight),
-                    "measured": str(weight),
-                },
-            )
+        if weight <= thresholds.single_position_max_weight + _EPSILON:
+            continue
+        issue_key = f"SINGLE_POSITION_MAX|{instrument_id}"
+        issue_map[issue_key] = _IssueCandidate(
+            issue_key=issue_key,
+            issue_id="SUIT_SINGLE_POSITION_MAX",
+            dimension="CONCENTRATION",
+            severity=_severity_for_concentration(weight, thresholds.single_position_max_weight),
+            summary=(
+                f"Single position {instrument_id} exceeds "
+                f"{thresholds.single_position_max_weight:.2%} cap."
+            ),
+            details={
+                "instrument_id": instrument_id,
+                "threshold": str(thresholds.single_position_max_weight),
+                "measured": str(weight),
+            },
+        )
 
+
+def _issuer_weights_for_target(
+    *,
+    issue_map: Dict[str, _IssueCandidate],
+    target_weights: Dict[str, Decimal],
+    shelf_by_instrument: Dict[str, ShelfEntry],
+    thresholds: Any,
+) -> Dict[str, Decimal]:
     issuer_weights: Dict[str, Decimal] = {}
     for instrument_id, weight in target_weights.items():
         shelf_entry = shelf_by_instrument.get(instrument_id)
@@ -126,33 +128,49 @@ def _scan_state_issues(
                 },
                 severity=thresholds.data_quality_issue_severity,
             )
-        else:
-            issuer_weights[shelf_entry.issuer_id] = (
-                issuer_weights.get(
-                    shelf_entry.issuer_id,
-                    Decimal("0"),
-                )
-                + weight
-            )
+            continue
 
+        issuer_weights[shelf_entry.issuer_id] = (
+            issuer_weights.get(
+                shelf_entry.issuer_id,
+                Decimal("0"),
+            )
+            + weight
+        )
+    return issuer_weights
+
+
+def _append_issuer_concentration_issues(
+    *,
+    issue_map: Dict[str, _IssueCandidate],
+    issuer_weights: Dict[str, Decimal],
+    thresholds: Any,
+) -> None:
     for issuer_id, weight in issuer_weights.items():
-        if weight > thresholds.issuer_max_weight + _EPSILON:
-            issue_key = f"ISSUER_MAX|{issuer_id}"
-            issue_map[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_ISSUER_MAX",
-                dimension="ISSUER",
-                severity=_severity_for_concentration(weight, thresholds.issuer_max_weight),
-                summary=(
-                    f"Issuer {issuer_id} exceeds {thresholds.issuer_max_weight:.2%} exposure cap."
-                ),
-                details={
-                    "issuer_id": issuer_id,
-                    "threshold": str(thresholds.issuer_max_weight),
-                    "measured": str(weight),
-                },
-            )
+        if weight <= thresholds.issuer_max_weight + _EPSILON:
+            continue
+        issue_key = f"ISSUER_MAX|{issuer_id}"
+        issue_map[issue_key] = _IssueCandidate(
+            issue_key=issue_key,
+            issue_id="SUIT_ISSUER_MAX",
+            dimension="ISSUER",
+            severity=_severity_for_concentration(weight, thresholds.issuer_max_weight),
+            summary=f"Issuer {issuer_id} exceeds {thresholds.issuer_max_weight:.2%} exposure cap.",
+            details={
+                "issuer_id": issuer_id,
+                "threshold": str(thresholds.issuer_max_weight),
+                "measured": str(weight),
+            },
+        )
 
+
+def _liquidity_weights_for_target(
+    *,
+    issue_map: Dict[str, _IssueCandidate],
+    target_weights: Dict[str, Decimal],
+    shelf_by_instrument: Dict[str, ShelfEntry],
+    thresholds: Any,
+) -> Dict[str, Decimal]:
     liquidity_weights: Dict[str, Decimal] = {}
     for instrument_id, weight in target_weights.items():
         shelf_entry = shelf_by_instrument.get(instrument_id)
@@ -177,115 +195,214 @@ def _scan_state_issues(
             )
             + weight
         )
+    return liquidity_weights
 
+
+def _append_liquidity_concentration_issues(
+    *,
+    issue_map: Dict[str, _IssueCandidate],
+    liquidity_weights: Dict[str, Decimal],
+    thresholds: Any,
+) -> None:
     for tier, cap in thresholds.max_weight_by_liquidity_tier.items():
         measured = liquidity_weights.get(tier, Decimal("0"))
-        if measured > cap + _EPSILON:
-            issue_key = f"LIQUIDITY_MAX|{tier}"
-            issue_map[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_LIQUIDITY_MAX",
-                dimension="LIQUIDITY",
-                severity=_severity_for_concentration(measured, cap),
-                summary=f"Liquidity tier {tier} exceeds {cap:.2%} exposure cap.",
-                details={
-                    "liquidity_tier": tier,
-                    "threshold": str(cap),
-                    "measured": str(measured),
-                },
-            )
+        if measured <= cap + _EPSILON:
+            continue
+        issue_key = f"LIQUIDITY_MAX|{tier}"
+        issue_map[issue_key] = _IssueCandidate(
+            issue_key=issue_key,
+            issue_id="SUIT_LIQUIDITY_MAX",
+            dimension="LIQUIDITY",
+            severity=_severity_for_concentration(measured, cap),
+            summary=f"Liquidity tier {tier} exceeds {cap:.2%} exposure cap.",
+            details={
+                "liquidity_tier": tier,
+                "threshold": str(cap),
+                "measured": str(measured),
+            },
+        )
 
+
+def _governance_issue_for_instrument(
+    *,
+    instrument_id: str,
+    shelf_entry: ShelfEntry,
+    before_weight: Decimal,
+    after_weight: Decimal,
+    options: EngineOptions,
+) -> Optional[_IssueCandidate]:
+    status = shelf_entry.status
+    issue_key = f"GOVERNANCE|{instrument_id}|{status}"
+
+    if status == "BANNED" and after_weight > _EPSILON:
+        return _IssueCandidate(
+            issue_key=issue_key,
+            issue_id="SUIT_GOVERNANCE_BANNED",
+            dimension="GOVERNANCE",
+            severity=_HIGH,
+            summary=f"BANNED instrument {instrument_id} is present in the portfolio.",
+            details={
+                "instrument_id": instrument_id,
+                "shelf_status": status,
+                "measured": str(after_weight),
+            },
+        )
+
+    if status == "SUSPENDED" and after_weight > _EPSILON:
+        return _IssueCandidate(
+            issue_key=issue_key,
+            issue_id="SUIT_GOVERNANCE_SUSPENDED",
+            dimension="GOVERNANCE",
+            severity=_HIGH,
+            summary=f"SUSPENDED instrument {instrument_id} is present in the portfolio.",
+            details={
+                "instrument_id": instrument_id,
+                "shelf_status": status,
+                "measured": str(after_weight),
+            },
+        )
+
+    if status == "SELL_ONLY" and after_weight > before_weight + _EPSILON:
+        return _IssueCandidate(
+            issue_key=issue_key,
+            issue_id="SUIT_GOVERNANCE_SELL_ONLY_INCREASE",
+            dimension="GOVERNANCE",
+            severity=_HIGH,
+            summary=f"SELL_ONLY instrument {instrument_id} increased in proposed state.",
+            details={
+                "instrument_id": instrument_id,
+                "shelf_status": status,
+                "measured_before": str(before_weight),
+                "measured_after": str(after_weight),
+            },
+        )
+
+    if status == "RESTRICTED" and after_weight > before_weight + _EPSILON:
+        allowed_severity = _MEDIUM if options.allow_restricted else _HIGH
+        return _IssueCandidate(
+            issue_key=issue_key,
+            issue_id="SUIT_GOVERNANCE_RESTRICTED_INCREASE",
+            dimension="GOVERNANCE",
+            severity=allowed_severity,
+            summary=(
+                f"RESTRICTED instrument {instrument_id} increased in proposed state"
+                if not options.allow_restricted
+                else f"RESTRICTED instrument {instrument_id} increased under allow_restricted"
+            ),
+            details={
+                "instrument_id": instrument_id,
+                "shelf_status": status,
+                "allow_restricted": str(options.allow_restricted).lower(),
+                "measured_before": str(before_weight),
+                "measured_after": str(after_weight),
+            },
+        )
+
+    return None
+
+
+def _append_governance_state_issues(
+    *,
+    issue_map: Dict[str, _IssueCandidate],
+    before_weights: Dict[str, Decimal],
+    target_weights: Dict[str, Decimal],
+    shelf_by_instrument: Dict[str, ShelfEntry],
+    options: EngineOptions,
+) -> None:
     all_instruments = set(before_weights.keys()) | set(target_weights.keys())
     for instrument_id in sorted(all_instruments):
         shelf_entry = shelf_by_instrument.get(instrument_id)
         if shelf_entry is None:
             continue
-        before_weight = before_weights.get(instrument_id, Decimal("0"))
-        after_weight = target_weights.get(instrument_id, Decimal("0"))
-        status = shelf_entry.status
-        issue_key = f"GOVERNANCE|{instrument_id}|{status}"
+        issue = _governance_issue_for_instrument(
+            instrument_id=instrument_id,
+            shelf_entry=shelf_entry,
+            before_weight=before_weights.get(instrument_id, Decimal("0")),
+            after_weight=target_weights.get(instrument_id, Decimal("0")),
+            options=options,
+        )
+        if issue is not None:
+            issue_map[issue.issue_key] = issue
 
-        if status == "BANNED" and after_weight > _EPSILON:
-            issue_map[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_GOVERNANCE_BANNED",
-                dimension="GOVERNANCE",
-                severity=_HIGH,
-                summary=f"BANNED instrument {instrument_id} is present in the portfolio.",
-                details={
-                    "instrument_id": instrument_id,
-                    "shelf_status": status,
-                    "measured": str(after_weight),
-                },
-            )
 
-        if status == "SUSPENDED" and after_weight > _EPSILON:
-            issue_map[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_GOVERNANCE_SUSPENDED",
-                dimension="GOVERNANCE",
-                severity=_HIGH,
-                summary=f"SUSPENDED instrument {instrument_id} is present in the portfolio.",
-                details={
-                    "instrument_id": instrument_id,
-                    "shelf_status": status,
-                    "measured": str(after_weight),
-                },
-            )
-
-        if status == "SELL_ONLY" and after_weight > before_weight + _EPSILON:
-            issue_map[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_GOVERNANCE_SELL_ONLY_INCREASE",
-                dimension="GOVERNANCE",
-                severity=_HIGH,
-                summary=f"SELL_ONLY instrument {instrument_id} increased in proposed state.",
-                details={
-                    "instrument_id": instrument_id,
-                    "shelf_status": status,
-                    "measured_before": str(before_weight),
-                    "measured_after": str(after_weight),
-                },
-            )
-
-        if status == "RESTRICTED" and after_weight > before_weight + _EPSILON:
-            allowed_severity = _MEDIUM if options.allow_restricted else _HIGH
-            issue_map[issue_key] = _IssueCandidate(
-                issue_key=issue_key,
-                issue_id="SUIT_GOVERNANCE_RESTRICTED_INCREASE",
-                dimension="GOVERNANCE",
-                severity=allowed_severity,
-                summary=(
-                    f"RESTRICTED instrument {instrument_id} increased in proposed state"
-                    if not options.allow_restricted
-                    else f"RESTRICTED instrument {instrument_id} increased under allow_restricted"
-                ),
-                details={
-                    "instrument_id": instrument_id,
-                    "shelf_status": status,
-                    "allow_restricted": str(options.allow_restricted).lower(),
-                    "measured_before": str(before_weight),
-                    "measured_after": str(after_weight),
-                },
-            )
-
+def _append_cash_band_issue(
+    *,
+    issue_map: Dict[str, _IssueCandidate],
+    target_state: SimulatedState,
+    thresholds: Any,
+) -> None:
     cash_weight = _to_cash_weight(target_state)
     if (
-        cash_weight < thresholds.cash_band_min_weight - _EPSILON
-        or cash_weight > thresholds.cash_band_max_weight + _EPSILON
+        cash_weight >= thresholds.cash_band_min_weight - _EPSILON
+        and cash_weight <= thresholds.cash_band_max_weight + _EPSILON
     ):
-        issue_map["CASH_BAND"] = _IssueCandidate(
-            issue_key="CASH_BAND",
-            issue_id="SUIT_CASH_BAND",
-            dimension="CASH",
-            severity=_MEDIUM,
-            summary="Cash weight is outside advisory suitability band.",
-            details={
-                "threshold_min": str(thresholds.cash_band_min_weight),
-                "threshold_max": str(thresholds.cash_band_max_weight),
-                "measured": str(cash_weight),
-            },
-        )
+        return
+    issue_map["CASH_BAND"] = _IssueCandidate(
+        issue_key="CASH_BAND",
+        issue_id="SUIT_CASH_BAND",
+        dimension="CASH",
+        severity=_MEDIUM,
+        summary="Cash weight is outside advisory suitability band.",
+        details={
+            "threshold_min": str(thresholds.cash_band_min_weight),
+            "threshold_max": str(thresholds.cash_band_max_weight),
+            "measured": str(cash_weight),
+        },
+    )
+
+
+def _scan_state_issues(
+    *,
+    target_state: SimulatedState,
+    before_state: SimulatedState,
+    shelf_by_instrument: Dict[str, ShelfEntry],
+    options: EngineOptions,
+) -> Dict[str, _IssueCandidate]:
+    thresholds = options.suitability_thresholds
+    issue_map: Dict[str, _IssueCandidate] = {}
+
+    target_weights = _to_instrument_weight_map(target_state)
+    before_weights = _to_instrument_weight_map(before_state)
+
+    _append_single_position_issues(
+        issue_map=issue_map,
+        target_weights=target_weights,
+        thresholds=thresholds,
+    )
+    issuer_weights = _issuer_weights_for_target(
+        issue_map=issue_map,
+        target_weights=target_weights,
+        shelf_by_instrument=shelf_by_instrument,
+        thresholds=thresholds,
+    )
+    _append_issuer_concentration_issues(
+        issue_map=issue_map,
+        issuer_weights=issuer_weights,
+        thresholds=thresholds,
+    )
+    liquidity_weights = _liquidity_weights_for_target(
+        issue_map=issue_map,
+        target_weights=target_weights,
+        shelf_by_instrument=shelf_by_instrument,
+        thresholds=thresholds,
+    )
+    _append_liquidity_concentration_issues(
+        issue_map=issue_map,
+        liquidity_weights=liquidity_weights,
+        thresholds=thresholds,
+    )
+    _append_governance_state_issues(
+        issue_map=issue_map,
+        before_weights=before_weights,
+        target_weights=target_weights,
+        shelf_by_instrument=shelf_by_instrument,
+        options=options,
+    )
+    _append_cash_band_issue(
+        issue_map=issue_map,
+        target_state=target_state,
+        thresholds=thresholds,
+    )
 
     return issue_map
 
