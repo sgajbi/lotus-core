@@ -248,10 +248,6 @@ class PositionRepository:
                     snapshot_security_id == latest_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
-                    DailyPositionSnapshot.cost_basis == latest_history_subq.c.cost_basis,
-                    DailyPositionSnapshot.cost_basis_local.is_not_distinct_from(
-                        latest_history_subq.c.cost_basis_local
-                    ),
                 ),
             )
             .where(
@@ -375,10 +371,6 @@ class PositionRepository:
                     snapshot_security_id == latest_history_subq.c.security_id,
                     DailyPositionSnapshot.epoch == latest_history_subq.c.epoch,
                     DailyPositionSnapshot.quantity == latest_history_subq.c.quantity,
-                    DailyPositionSnapshot.cost_basis == latest_history_subq.c.cost_basis,
-                    DailyPositionSnapshot.cost_basis_local.is_not_distinct_from(
-                        latest_history_subq.c.cost_basis_local
-                    ),
                 ),
             )
             .where(
@@ -434,8 +426,6 @@ class PositionRepository:
                 history_security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
-                PositionHistory.cost_basis.label("cost_basis"),
-                PositionHistory.cost_basis_local.label("cost_basis_local"),
                 func.row_number()
                 .over(
                     partition_by=(

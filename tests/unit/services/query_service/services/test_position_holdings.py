@@ -64,6 +64,60 @@ async def test_merge_snapshot_and_history_position_rows_preserves_snapshot_autho
     assert snapshot_security_ids == {"SEC_A"}
 
 
+async def test_merge_snapshot_and_history_position_rows_uses_history_for_basis_mismatch() -> None:
+    reconciled_snapshot = DailyPositionSnapshot(
+        security_id="SEC_OK",
+        quantity=Decimal("5"),
+        cost_basis=Decimal("500"),
+        cost_basis_local=None,
+        date=date(2025, 1, 2),
+    )
+    reconciled_history = PositionHistory(
+        security_id="SEC_OK",
+        quantity=Decimal("5"),
+        cost_basis=Decimal("500"),
+        cost_basis_local=None,
+        position_date=date(2025, 1, 2),
+    )
+    stale_snapshot = DailyPositionSnapshot(
+        security_id="SEC_STALE",
+        quantity=Decimal("60"),
+        cost_basis=Decimal("-6600"),
+        cost_basis_local=Decimal("-6000"),
+        date=date(2025, 8, 15),
+    )
+    authoritative_history = PositionHistory(
+        security_id="SEC_STALE",
+        quantity=Decimal("60"),
+        cost_basis=Decimal("9900"),
+        cost_basis_local=Decimal("9000"),
+        position_date=date(2025, 8, 15),
+    )
+    snapshot_instrument = Instrument(name="Snapshot Instrument")
+    history_instrument = Instrument(name="History Instrument")
+    state = PositionState(status="CURRENT")
+
+    merged, history_supplements, snapshot_security_ids = merge_snapshot_and_history_position_rows(
+        snapshot_results=[
+            (reconciled_snapshot, snapshot_instrument, state),
+            (stale_snapshot, snapshot_instrument, state),
+        ],
+        history_results=[
+            (reconciled_history, history_instrument, state),
+            (authoritative_history, history_instrument, state),
+        ],
+    )
+
+    assert [row.security_id for row, _instrument, _state in merged] == [
+        "SEC_OK",
+        "SEC_STALE",
+    ]
+    assert merged[0] == (reconciled_snapshot, snapshot_instrument, state)
+    assert merged[1] == (authoritative_history, history_instrument, state)
+    assert history_supplements == [(authoritative_history, history_instrument, state)]
+    assert snapshot_security_ids == {"SEC_OK"}
+
+
 async def test_fallback_valuation_security_ids_normalizes_history_supplements() -> None:
     first_row = PositionHistory(security_id=" SEC_B ", position_date=date(2025, 1, 2))
     duplicate_row = PositionHistory(security_id="SEC_B", position_date=date(2025, 1, 3))
