@@ -290,6 +290,30 @@ def test_build_portfolio_tax_lot_window_response_marks_partial_page_degraded() -
     }
 
 
+def test_build_portfolio_tax_lot_window_response_marks_complete_ready_page() -> None:
+    response = build_portfolio_tax_lot_window_response(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["EQ_US_AAPL"],
+            page={"page_size": 25},
+        ),
+        request_scope_fingerprint="scope-123",
+        page_rows=[(_tax_lot_row(), "USD")],
+        has_more=False,
+        next_page_token=None,
+    )
+
+    assert response.supportability.state == "READY"
+    assert response.supportability.reason == "TAX_LOTS_READY"
+    assert response.supportability.requested_security_count == 1
+    assert response.supportability.returned_lot_count == 1
+    assert response.supportability.missing_security_ids == []
+    assert response.data_quality_status == "COMPLETE"
+    assert response.page.returned_component_count == 1
+    assert response.page.next_page_token is None
+
+
 def test_build_portfolio_tax_lot_window_response_reports_missing_requested_security() -> None:
     response = build_portfolio_tax_lot_window_response(
         portfolio_id="PB_SG_GLOBAL_BAL_001",

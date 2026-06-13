@@ -1,36 +1,113 @@
 {
-  "specVersion": "1.0.0",
-  "application": "lotus-core",
-  "governingStandard": "docs/standards/temporal-vocabulary.md",
-  "description": "Current-state legacy temporal field definitions allowed by the RFC-0083 Slice 1 temporal vocabulary guard.",
-  "allowlist": [
-    {
-      "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "field": "date",
-      "expectedCount": 4,
-      "ownerSlice": "Slice 3, Slice 6, Slice 7",
-      "reason": "Existing business date, snapshot, and timeseries table columns. New public contracts must use domain-specific temporal names."
-    },
-    {
-      "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "field": "source_timestamp",
-      "expectedCount": 8,
-      "ownerSlice": "Slice 7",
-      "reason": "Existing reference and series source-observed timestamp columns. New source-observation fields must use observed_at."
-    },
-    {
-      "path": "src/services/ingestion_service/app/DTOs/reference_data_dto.py",
-      "field": "source_timestamp",
-      "expectedCount": 8,
-      "ownerSlice": "Slice 7",
-      "reason": "Existing reference-data ingestion DTO fields. New source-observation fields must use observed_at."
-    },
-    {
-      "path": "src/services/query_service/app/dtos/reference_integration_dto.py",
-      "field": "source_timestamp",
-      "expectedCount": 2,
-      "ownerSlice": "Slice 7",
-      "reason": "Existing reference integration DTO fields. New source-observation fields must use observed_at."
-    }
-  ]
+    "specVersion": "1.0.0",
+    "application": "lotus-core",
+    "governingStandard": "docs/standards/temporal-vocabulary.md",
+    "description": "Current-state legacy temporal field definitions allowed by the RFC-0083 Slice 1 temporal vocabulary guard.",
+    "allowlist": [
+        {
+            "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
+            "field": "date",
+            "expectedCount": 4,
+            "ownerSlice": "Slice 3, Slice 6, Slice 7",
+            "reason": "Existing business date, snapshot, and timeseries table columns. New public contracts must use domain-specific temporal names."
+        },
+        {
+            "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
+            "field": "source_timestamp",
+            "expectedCount": 8,
+            "ownerSlice": "Slice 7",
+            "reason": "Existing reference and series source-observed timestamp columns. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7",
+            "reason": "Legacy reference-data ingestion DTO fields have been moved into focused DTO-family modules. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1037 / CR-1046",
+            "reason": "Legacy benchmark, index, benchmark-return, and risk-free ingestion DTO fields have been moved into focused DTO-family modules. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_records_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1046 / CR-1054",
+            "reason": "Legacy benchmark definition, composition, and benchmark-return ingestion DTO fields have been moved into focused DTO-family modules. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_definition_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1054",
+            "reason": "Existing benchmark definition ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_composition_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1054",
+            "reason": "Existing benchmark composition ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_return_series_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1054",
+            "reason": "Existing benchmark return-series ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_index_series_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1046 / CR-1053",
+            "reason": "Legacy index definition, index price, index return, and risk-free ingestion DTO fields have been moved into focused DTO-family modules. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_index_definition_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1053",
+            "reason": "Existing index definition ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_index_price_series_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1053",
+            "reason": "Existing index price-series ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_index_return_series_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1053",
+            "reason": "Existing index return-series ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_risk_free_series_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1053",
+            "reason": "Existing risk-free series ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/ingestion_service/app/DTOs/reference_data_support_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / CR-1036",
+            "reason": "Existing classification taxonomy ingestion DTO field moved from reference_data_dto.py during support-reference DTO modularization. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/query_service/app/dtos/reference_integration_dto.py",
+            "field": "source_timestamp",
+            "expectedCount": 2,
+            "ownerSlice": "Slice 7",
+            "reason": "Existing reference integration DTO fields. New source-observation fields must use observed_at."
+        }
+    ]
 }

@@ -1,0 +1,14 @@
+from . import reference_data_benchmark_composition_dto as _benchmark_composition_dto
+from . import reference_data_benchmark_definition_dto as _benchmark_definition_dto
+from . import reference_data_benchmark_return_series_dto as _benchmark_return_series_dto
+
+BenchmarkCompositionIngestionRequest = (
+    _benchmark_composition_dto.BenchmarkCompositionIngestionRequest
+)
+BenchmarkCompositionRecord = _benchmark_composition_dto.BenchmarkCompositionRecord
+BenchmarkDefinitionIngestionRequest = _benchmark_definition_dto.BenchmarkDefinitionIngestionRequest
+BenchmarkDefinitionRecord = _benchmark_definition_dto.BenchmarkDefinitionRecord
+BenchmarkReturnSeriesIngestionRequest = (
+    _benchmark_return_series_dto.BenchmarkReturnSeriesIngestionRequest
+)
+BenchmarkReturnSeriesRecord = _benchmark_return_series_dto.BenchmarkReturnSeriesRecord

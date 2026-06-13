@@ -1,0 +1,11 @@
+from . import reference_data_discretionary_mandate_dto as _discretionary_mandate_dto
+from . import reference_data_portfolio_benchmark_assignment_dto as _benchmark_assignment_dto
+
+DiscretionaryMandateBindingIngestionRequest = (
+    _discretionary_mandate_dto.DiscretionaryMandateBindingIngestionRequest
+)
+DiscretionaryMandateBindingRecord = _discretionary_mandate_dto.DiscretionaryMandateBindingRecord
+PortfolioBenchmarkAssignmentIngestionRequest = (
+    _benchmark_assignment_dto.PortfolioBenchmarkAssignmentIngestionRequest
+)
+PortfolioBenchmarkAssignmentRecord = _benchmark_assignment_dto.PortfolioBenchmarkAssignmentRecord

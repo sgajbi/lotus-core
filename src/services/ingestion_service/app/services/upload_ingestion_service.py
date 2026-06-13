@@ -54,17 +54,24 @@ def _field_alias_index(model_cls: type[BaseModel]) -> dict[str, str]:
 def _normalize_row(row: dict[str, Any], alias_index: dict[str, str]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for raw_key, raw_value in row.items():
-        if raw_key is None:
-            continue
-        canonical_key = alias_index.get(_normalized_key(str(raw_key)))
+        canonical_key = _canonical_row_key(raw_key, alias_index)
         if canonical_key is None:
             continue
-        value = raw_value
-        if isinstance(value, str):
-            stripped = value.strip()
-            value = None if stripped == "" else stripped
-        normalized[canonical_key] = value
+        normalized[canonical_key] = _normalized_row_value(raw_value)
     return normalized
+
+
+def _canonical_row_key(raw_key: Any, alias_index: dict[str, str]) -> str | None:
+    if raw_key is None:
+        return None
+    return alias_index.get(_normalized_key(str(raw_key)))
+
+
+def _normalized_row_value(raw_value: Any) -> Any:
+    if not isinstance(raw_value, str):
+        return raw_value
+    stripped = raw_value.strip()
+    return None if stripped == "" else stripped
 
 
 def _parse_csv(content: bytes) -> list[dict[str, Any]]:
@@ -80,19 +87,31 @@ def _parse_xlsx(content: bytes) -> list[dict[str, Any]]:
     if not rows:
         return []
 
-    headers = [str(cell).strip() if cell is not None else "" for cell in rows[0]]
+    headers = _xlsx_headers(rows[0])
     records: list[dict[str, Any]] = []
     for row_values in rows[1:]:
-        if row_values is None:
-            continue
-        row_dict = {
-            headers[index]: row_values[index] if index < len(row_values) else None
-            for index in range(len(headers))
-            if headers[index]
-        }
-        if any(value is not None and str(value).strip() != "" for value in row_dict.values()):
+        row_dict = _xlsx_row_record(headers, row_values)
+        if _xlsx_row_has_data(row_dict):
             records.append(row_dict)
     return records
+
+
+def _xlsx_headers(row: tuple[Any, ...]) -> list[str]:
+    return [str(cell).strip() if cell is not None else "" for cell in row]
+
+
+def _xlsx_row_record(headers: list[str], row_values: tuple[Any, ...] | None) -> dict[str, Any]:
+    if row_values is None:
+        return {}
+    return {
+        header: row_values[index] if index < len(row_values) else None
+        for index, header in enumerate(headers)
+        if header
+    }
+
+
+def _xlsx_row_has_data(row: dict[str, Any]) -> bool:
+    return any(value is not None and str(value).strip() != "" for value in row.values())
 
 
 def _detect_format(filename: str) -> Literal["csv", "xlsx"]:
@@ -199,54 +218,85 @@ class UploadIngestionService:
         allow_partial: bool,
     ) -> UploadCommitResponse:
         validation = self._validate_rows(entity_type, filename, content)
+        self._validate_commit(validation, allow_partial)
+        await self._publish_valid_models(entity_type, validation.valid_models)
+        return self._commit_response(entity_type, validation)
+
+    def _validate_commit(self, validation: _ValidationResult, allow_partial: bool) -> None:
         if validation.total_rows == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Upload file contains no data rows.",
-            )
-
+            self._raise_empty_upload()
         if validation.errors and not allow_partial:
-            raise HTTPException(
-                status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-                detail={
-                    "message": (
-                        "Upload contains invalid rows. Fix errors or use allow_partial=true."
-                    ),
-                    "errors": [error.model_dump() for error in validation.errors[:50]],
-                },
-            )
-
+            self._raise_partial_upload_rejected(validation.errors)
         if not validation.valid_models:
-            raise HTTPException(
-                status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="No valid rows found in upload.",
-            )
+            self._raise_no_valid_upload_rows()
 
-        if entity_type == "portfolios":
-            await self._ingestion_service.publish_portfolios(
-                [model for model in validation.valid_models if isinstance(model, Portfolio)]
-            )
-        elif entity_type == "instruments":
-            await self._ingestion_service.publish_instruments(
-                [model for model in validation.valid_models if isinstance(model, Instrument)]
-            )
-        elif entity_type == "transactions":
-            await self._ingestion_service.publish_transactions(
-                [model for model in validation.valid_models if isinstance(model, Transaction)]
-            )
-        elif entity_type == "market_prices":
-            await self._ingestion_service.publish_market_prices(
-                [model for model in validation.valid_models if isinstance(model, MarketPrice)]
-            )
-        elif entity_type == "fx_rates":
-            await self._ingestion_service.publish_fx_rates(
-                [model for model in validation.valid_models if isinstance(model, FxRate)]
-            )
-        else:
-            await self._ingestion_service.publish_business_dates(
-                [model for model in validation.valid_models if isinstance(model, BusinessDate)]
-            )
+    def _raise_empty_upload(self) -> None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload file contains no data rows.",
+        )
 
+    def _raise_partial_upload_rejected(self, errors: list[UploadRowError]) -> None:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "message": "Upload contains invalid rows. Fix errors or use allow_partial=true.",
+                "errors": [error.model_dump() for error in errors[:50]],
+            },
+        )
+
+    def _raise_no_valid_upload_rows(self) -> None:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No valid rows found in upload.",
+        )
+
+    async def _publish_valid_models(
+        self, entity_type: UploadEntityType, valid_models: list[BaseModel]
+    ) -> None:
+        publishers = {
+            "portfolios": self._publish_portfolios,
+            "instruments": self._publish_instruments,
+            "transactions": self._publish_transactions,
+            "market_prices": self._publish_market_prices,
+            "fx_rates": self._publish_fx_rates,
+            "business_dates": self._publish_business_dates,
+        }
+        await publishers[entity_type](valid_models)
+
+    async def _publish_portfolios(self, valid_models: list[BaseModel]) -> None:
+        await self._ingestion_service.publish_portfolios(
+            [model for model in valid_models if isinstance(model, Portfolio)]
+        )
+
+    async def _publish_instruments(self, valid_models: list[BaseModel]) -> None:
+        await self._ingestion_service.publish_instruments(
+            [model for model in valid_models if isinstance(model, Instrument)]
+        )
+
+    async def _publish_transactions(self, valid_models: list[BaseModel]) -> None:
+        await self._ingestion_service.publish_transactions(
+            [model for model in valid_models if isinstance(model, Transaction)]
+        )
+
+    async def _publish_market_prices(self, valid_models: list[BaseModel]) -> None:
+        await self._ingestion_service.publish_market_prices(
+            [model for model in valid_models if isinstance(model, MarketPrice)]
+        )
+
+    async def _publish_fx_rates(self, valid_models: list[BaseModel]) -> None:
+        await self._ingestion_service.publish_fx_rates(
+            [model for model in valid_models if isinstance(model, FxRate)]
+        )
+
+    async def _publish_business_dates(self, valid_models: list[BaseModel]) -> None:
+        await self._ingestion_service.publish_business_dates(
+            [model for model in valid_models if isinstance(model, BusinessDate)]
+        )
+
+    def _commit_response(
+        self, entity_type: UploadEntityType, validation: _ValidationResult
+    ) -> UploadCommitResponse:
         return UploadCommitResponse(
             entity_type=entity_type,
             file_format=validation.file_format,

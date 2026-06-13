@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import BusinessDate
@@ -48,6 +49,27 @@ _WORKFLOW_DEPENDENCIES: dict[str, list[str]] = {
     "portfolio_what_if_simulation": ["lotus_core.simulation.what_if"],
 }
 
+_INGESTION_INPUT_MODE_BY_FEATURE: dict[str, str] = {
+    "lotus_core.ingestion.portfolio_bundle_adapter": "inline_bundle",
+    "lotus_core.ingestion.bulk_upload_adapter": "file_upload",
+}
+
+_FEATURE_DESCRIPTIONS: dict[str, str] = {
+    "lotus_core.support.overview_api": "Support diagnostics and operational support APIs.",
+    "lotus_core.support.lineage_api": "Lineage and epoch/watermark traceability APIs.",
+    "core.observability.portfolio_supportability": (
+        "Portfolio supportability summary on readiness responses for "
+        "Gateway, Workbench, and downstream app health composition."
+    ),
+    "lotus_core.ingestion.bulk_upload_adapter": (
+        "CSV/XLSX preview+commit adapter endpoints for onboarding workflows."
+    ),
+    "lotus_core.ingestion.portfolio_bundle_adapter": (
+        "Portfolio bundle adapter endpoint for UI/manual onboarding workflows."
+    ),
+    "lotus_core.simulation.what_if": "Sandbox what-if simulation session APIs.",
+}
+
 _DEFAULT_INPUT_MODES_BY_CONSUMER: dict[str, list[str]] = {
     "lotus-advise": ["lotus_core_ref"],
     "lotus-performance": ["lotus_core_ref"],
@@ -61,6 +83,14 @@ _DEFAULT_INPUT_MODES_BY_CONSUMER: dict[str, list[str]] = {
 }
 
 
+@dataclass(frozen=True)
+class _ResolvedCapabilityPolicy:
+    feature_states: dict[str, bool]
+    policy_version: str
+    supported_input_modes: list[str]
+    workflow_overrides: dict[str, bool]
+
+
 class CapabilitiesService:
     @staticmethod
     def _resolve_as_of_date() -> date:
@@ -72,7 +102,7 @@ class CapabilitiesService:
                     BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
                 )
                 latest = db.execute(stmt).scalar_one_or_none()
-                if latest:
+                if isinstance(latest, date):
                     return latest
         except Exception:
             logger.warning(
@@ -84,28 +114,28 @@ class CapabilitiesService:
 
     @staticmethod
     def _env_bool(name: str, default: bool) -> bool:
-        return env_bool(name, default)
+        return cast(bool, env_bool(name, default))
 
     @staticmethod
-    def _load_tenant_overrides() -> dict[str, dict[str, Any]]:
-        raw = load_query_service_settings().capability_tenant_overrides_json
-        if not raw:
-            return {}
+    def _decode_tenant_overrides_payload(raw: str) -> Any | None:
         try:
             decoded = json.loads(raw)
         except json.JSONDecodeError:
             logger.warning(
                 "Invalid LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON; ignoring tenant overrides.",
             )
-            return {}
+            return None
 
         if not isinstance(decoded, dict):
             logger.warning(
                 "LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON must be a JSON object; "
                 "ignoring tenant overrides.",
             )
-            return {}
+            return None
+        return decoded
 
+    @staticmethod
+    def _normalized_tenant_overrides(decoded: dict[Any, Any]) -> dict[str, dict[str, Any]]:
         normalized: dict[str, dict[str, Any]] = {}
         for tenant_id, policy in decoded.items():
             if not isinstance(tenant_id, str) or not isinstance(policy, dict):
@@ -113,140 +143,171 @@ class CapabilitiesService:
             normalized[tenant_id] = policy
         return normalized
 
+    def _load_tenant_overrides(self) -> dict[str, dict[str, Any]]:
+        raw = load_query_service_settings().capability_tenant_overrides_json
+        if not raw:
+            return {}
+        decoded = self._decode_tenant_overrides_payload(raw)
+        return self._normalized_tenant_overrides(decoded) if decoded is not None else {}
+
+    def _default_feature_states(self) -> dict[str, bool]:
+        return {
+            key: self._env_bool(env_name, default)
+            for key, (env_name, default) in _FEATURE_ENV_DEFAULTS.items()
+        }
+
+    @staticmethod
+    def _default_input_modes(consumer_system: ConsumerSystem) -> list[str]:
+        return list(_DEFAULT_INPUT_MODES_BY_CONSUMER.get(consumer_system, ["lotus_core_ref"]))
+
+    @staticmethod
+    def _prune_disabled_ingestion_modes(
+        supported_input_modes: list[str],
+        feature_states: dict[str, bool],
+    ) -> list[str]:
+        disabled_modes = {
+            input_mode
+            for feature_key, input_mode in _INGESTION_INPUT_MODE_BY_FEATURE.items()
+            if not feature_states[feature_key]
+        }
+        return [mode for mode in supported_input_modes if mode not in disabled_modes]
+
+    @staticmethod
+    def _feature_overrides(tenant_policy: dict[str, Any]) -> dict[str, bool]:
+        feature_overrides = tenant_policy.get("features", {})
+        if not isinstance(feature_overrides, dict):
+            return {}
+        return {
+            key: value
+            for key, value in feature_overrides.items()
+            if key in _FEATURE_ENV_DEFAULTS and isinstance(value, bool)
+        }
+
+    @staticmethod
+    def _workflow_overrides(tenant_policy: dict[str, Any]) -> dict[str, bool]:
+        workflow_overrides = tenant_policy.get("workflows", {})
+        if not isinstance(workflow_overrides, dict):
+            return {}
+        return {
+            key: value
+            for key, value in workflow_overrides.items()
+            if key in _WORKFLOW_DEPENDENCIES and isinstance(value, bool)
+        }
+
+    @staticmethod
+    def _policy_version(default_policy_version: str, tenant_policy: dict[str, Any]) -> str:
+        tenant_policy_version = tenant_policy.get("policy_version")
+        if isinstance(tenant_policy_version, str) and tenant_policy_version.strip():
+            return tenant_policy_version.strip()
+        return default_policy_version
+
+    @staticmethod
+    def _tenant_input_modes(
+        consumer_system: ConsumerSystem,
+        tenant_policy: dict[str, Any],
+    ) -> list[str] | None:
+        input_modes = tenant_policy.get("supported_input_modes", {})
+        if not isinstance(input_modes, dict):
+            return None
+
+        mode_source = CapabilitiesService._input_mode_source_for_consumer(
+            consumer_system,
+            input_modes,
+        )
+        if not isinstance(mode_source, list):
+            return None
+        return CapabilitiesService._normalized_input_modes(mode_source)
+
+    @staticmethod
+    def _input_mode_source_for_consumer(
+        consumer_system: ConsumerSystem,
+        input_modes: dict[Any, Any],
+    ) -> Any:
+        consumer_modes = input_modes.get(consumer_system)
+        if isinstance(consumer_modes, list):
+            return consumer_modes
+        return input_modes.get("default")
+
+    @staticmethod
+    def _normalized_input_modes(mode_source: list[Any]) -> list[str] | None:
+        normalized_modes = [mode for mode in mode_source if isinstance(mode, str) and mode.strip()]
+        return normalized_modes or None
+
+    def _resolve_capability_policy(
+        self,
+        consumer_system: ConsumerSystem,
+        tenant_id: str,
+    ) -> _ResolvedCapabilityPolicy:
+        feature_states = self._default_feature_states()
+        policy_version = load_query_service_settings().lotus_core_policy_version
+        supported_input_modes = self._prune_disabled_ingestion_modes(
+            self._default_input_modes(consumer_system),
+            feature_states,
+        )
+        workflow_overrides: dict[str, bool] = {}
+
+        tenant_policy = self._load_tenant_overrides().get(tenant_id)
+        if tenant_policy:
+            feature_states.update(self._feature_overrides(tenant_policy))
+            workflow_overrides = self._workflow_overrides(tenant_policy)
+            policy_version = self._policy_version(policy_version, tenant_policy)
+            supported_input_modes = (
+                self._tenant_input_modes(consumer_system, tenant_policy) or supported_input_modes
+            )
+
+        return _ResolvedCapabilityPolicy(
+            feature_states=feature_states,
+            policy_version=policy_version,
+            supported_input_modes=supported_input_modes,
+            workflow_overrides=workflow_overrides,
+        )
+
+    @staticmethod
+    def _feature_capabilities(feature_states: dict[str, bool]) -> list[FeatureCapability]:
+        return [
+            FeatureCapability(
+                key=key,
+                enabled=feature_states[key],
+                owner_service="lotus-core",
+                description=description,
+            )
+            for key, description in _FEATURE_DESCRIPTIONS.items()
+        ]
+
+    @staticmethod
+    def _workflow_enabled(
+        workflow_key: str,
+        feature_states: dict[str, bool],
+        workflow_overrides: dict[str, bool],
+    ) -> bool:
+        if workflow_key in workflow_overrides:
+            return workflow_overrides[workflow_key]
+        return all(feature_states[key] for key in _WORKFLOW_DEPENDENCIES[workflow_key])
+
+    def _workflow_capabilities(
+        self,
+        feature_states: dict[str, bool],
+        workflow_overrides: dict[str, bool],
+    ) -> list[WorkflowCapability]:
+        return [
+            WorkflowCapability(
+                workflow_key=workflow_key,
+                enabled=self._workflow_enabled(
+                    workflow_key,
+                    feature_states,
+                    workflow_overrides,
+                ),
+                required_features=list(required_features),
+            )
+            for workflow_key, required_features in _WORKFLOW_DEPENDENCIES.items()
+        ]
+
     def get_integration_capabilities(
         self,
         consumer_system: ConsumerSystem,
         tenant_id: str,
     ) -> IntegrationCapabilitiesResponse:
-        feature_states: dict[str, bool] = {
-            key: self._env_bool(env_name, default)
-            for key, (env_name, default) in _FEATURE_ENV_DEFAULTS.items()
-        }
-        policy_version = load_query_service_settings().lotus_core_policy_version
-        supported_input_modes = list(
-            _DEFAULT_INPUT_MODES_BY_CONSUMER.get(consumer_system, ["lotus_core_ref"])
-        )
-        if not feature_states["lotus_core.ingestion.portfolio_bundle_adapter"]:
-            supported_input_modes = [
-                mode for mode in supported_input_modes if mode != "inline_bundle"
-            ]
-        if not feature_states["lotus_core.ingestion.bulk_upload_adapter"]:
-            supported_input_modes = [
-                mode for mode in supported_input_modes if mode != "file_upload"
-            ]
-
-        tenant_policy = self._load_tenant_overrides().get(tenant_id)
-        if tenant_policy:
-            feature_overrides = tenant_policy.get("features", {})
-            if isinstance(feature_overrides, dict):
-                for key, value in feature_overrides.items():
-                    if key in feature_states and isinstance(value, bool):
-                        feature_states[key] = value
-
-            workflow_overrides = tenant_policy.get("workflows", {})
-            policy_workflow_overrides: dict[str, bool] = {}
-            if isinstance(workflow_overrides, dict):
-                for key, value in workflow_overrides.items():
-                    if key in _WORKFLOW_DEPENDENCIES and isinstance(value, bool):
-                        policy_workflow_overrides[key] = value
-            else:
-                policy_workflow_overrides = {}
-
-            tenant_policy_version = tenant_policy.get("policy_version")
-            if isinstance(tenant_policy_version, str) and tenant_policy_version.strip():
-                policy_version = tenant_policy_version.strip()
-
-            input_modes = tenant_policy.get("supported_input_modes", {})
-            if isinstance(input_modes, dict):
-                consumer_modes = input_modes.get(consumer_system)
-                fallback_modes = input_modes.get("default")
-                mode_source = consumer_modes if isinstance(consumer_modes, list) else fallback_modes
-                if isinstance(mode_source, list):
-                    normalized_modes = [
-                        mode for mode in mode_source if isinstance(mode, str) and mode.strip()
-                    ]
-                    if normalized_modes:
-                        supported_input_modes = normalized_modes
-        else:
-            policy_workflow_overrides = {}
-
-        features = [
-            FeatureCapability(
-                key="lotus_core.support.overview_api",
-                enabled=feature_states["lotus_core.support.overview_api"],
-                owner_service="lotus-core",
-                description="Support diagnostics and operational support APIs.",
-            ),
-            FeatureCapability(
-                key="lotus_core.support.lineage_api",
-                enabled=feature_states["lotus_core.support.lineage_api"],
-                owner_service="lotus-core",
-                description="Lineage and epoch/watermark traceability APIs.",
-            ),
-            FeatureCapability(
-                key="core.observability.portfolio_supportability",
-                enabled=feature_states["core.observability.portfolio_supportability"],
-                owner_service="lotus-core",
-                description=(
-                    "Portfolio supportability summary on readiness responses for "
-                    "Gateway, Workbench, and downstream app health composition."
-                ),
-            ),
-            FeatureCapability(
-                key="lotus_core.ingestion.bulk_upload_adapter",
-                enabled=feature_states["lotus_core.ingestion.bulk_upload_adapter"],
-                owner_service="lotus-core",
-                description="CSV/XLSX preview+commit adapter endpoints for onboarding workflows.",
-            ),
-            FeatureCapability(
-                key="lotus_core.ingestion.portfolio_bundle_adapter",
-                enabled=feature_states["lotus_core.ingestion.portfolio_bundle_adapter"],
-                owner_service="lotus-core",
-                description="Portfolio bundle adapter endpoint for UI/manual onboarding workflows.",
-            ),
-            FeatureCapability(
-                key="lotus_core.simulation.what_if",
-                enabled=feature_states["lotus_core.simulation.what_if"],
-                owner_service="lotus-core",
-                description="Sandbox what-if simulation session APIs.",
-            ),
-        ]
-
-        workflows = [
-            WorkflowCapability(
-                workflow_key="advisor_workbench_overview",
-                enabled=policy_workflow_overrides.get(
-                    "advisor_workbench_overview",
-                    all(
-                        feature_states[key]
-                        for key in _WORKFLOW_DEPENDENCIES["advisor_workbench_overview"]
-                    ),
-                ),
-                required_features=list(_WORKFLOW_DEPENDENCIES["advisor_workbench_overview"]),
-            ),
-            WorkflowCapability(
-                workflow_key="portfolio_bulk_onboarding",
-                enabled=policy_workflow_overrides.get(
-                    "portfolio_bulk_onboarding",
-                    all(
-                        feature_states[key]
-                        for key in _WORKFLOW_DEPENDENCIES["portfolio_bulk_onboarding"]
-                    ),
-                ),
-                required_features=list(_WORKFLOW_DEPENDENCIES["portfolio_bulk_onboarding"]),
-            ),
-            WorkflowCapability(
-                workflow_key="portfolio_what_if_simulation",
-                enabled=policy_workflow_overrides.get(
-                    "portfolio_what_if_simulation",
-                    all(
-                        feature_states[key]
-                        for key in _WORKFLOW_DEPENDENCIES["portfolio_what_if_simulation"]
-                    ),
-                ),
-                required_features=list(_WORKFLOW_DEPENDENCIES["portfolio_what_if_simulation"]),
-            ),
-        ]
+        policy = self._resolve_capability_policy(consumer_system, tenant_id)
 
         return IntegrationCapabilitiesResponse(
             contract_version="v1",
@@ -255,8 +316,11 @@ class CapabilitiesService:
             tenant_id=tenant_id,
             generated_at=datetime.now(UTC),
             as_of_date=self._resolve_as_of_date(),
-            policy_version=policy_version,
-            supported_input_modes=supported_input_modes,
-            features=features,
-            workflows=workflows,
+            policy_version=policy.policy_version,
+            supported_input_modes=policy.supported_input_modes,
+            features=self._feature_capabilities(policy.feature_states),
+            workflows=self._workflow_capabilities(
+                policy.feature_states,
+                policy.workflow_overrides,
+            ),
         )

@@ -1,0 +1,7 @@
+from . import reference_data_model_portfolio_definition_dto as _definition_dto
+from . import reference_data_model_portfolio_target_dto as _target_dto
+
+ModelPortfolioDefinitionIngestionRequest = _definition_dto.ModelPortfolioDefinitionIngestionRequest
+ModelPortfolioDefinitionRecord = _definition_dto.ModelPortfolioDefinitionRecord
+ModelPortfolioTargetIngestionRequest = _target_dto.ModelPortfolioTargetIngestionRequest
+ModelPortfolioTargetRecord = _target_dto.ModelPortfolioTargetRecord

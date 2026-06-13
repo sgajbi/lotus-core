@@ -1,0 +1,16 @@
+from . import reference_data_income_needs_dto as _income_needs_dto
+from . import reference_data_liquidity_reserve_dto as _liquidity_reserve_dto
+from . import reference_data_planned_withdrawal_dto as _planned_withdrawal_dto
+
+ClientIncomeNeedsScheduleIngestionRequest = (
+    _income_needs_dto.ClientIncomeNeedsScheduleIngestionRequest
+)
+ClientIncomeNeedsScheduleRecord = _income_needs_dto.ClientIncomeNeedsScheduleRecord
+LiquidityReserveRequirementIngestionRequest = (
+    _liquidity_reserve_dto.LiquidityReserveRequirementIngestionRequest
+)
+LiquidityReserveRequirementRecord = _liquidity_reserve_dto.LiquidityReserveRequirementRecord
+PlannedWithdrawalScheduleIngestionRequest = (
+    _planned_withdrawal_dto.PlannedWithdrawalScheduleIngestionRequest
+)
+PlannedWithdrawalScheduleRecord = _planned_withdrawal_dto.PlannedWithdrawalScheduleRecord

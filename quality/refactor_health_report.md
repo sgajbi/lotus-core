@@ -15,8 +15,8 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, and complexity gates while other baseline checks remain report-only |
-| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, and unit collection gates while other baseline checks remain report-only |
+| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the runtime-safe unit lane with 2,964 tests |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
@@ -938,3 +938,376 @@ health before that claim is defensible.
      missing dependency calculation helpers.
      `CostCalculatorConsumer._record_bundle_a_reconciliation_diagnostics` improved from `B (9)`
      to `A (3)`, and `consumer.py` remains A-ranked maintainability at `A (20.93)`.
+191. Reduced reference-data DTO module size by extracting model-portfolio definition and target
+     DTOs into `reference_data_model_portfolio_dto.py` while preserving the public
+     `reference_data_dto.py` import surface. The aggregate DTO module improved from `B (9.31)` to
+     `B (12.49)`, the extracted module reports `A (41.43)`, and an unreachable
+     model-portfolio target band-order validation branch was removed because the target-bound
+     checks already classify every invalid min/max ordering.
+192. Reduced reference-data DTO module size again by extracting classification taxonomy,
+     cash-account master, and instrument look-through component DTOs plus their ingestion request
+     wrappers into `reference_data_support_dto.py`. The aggregate DTO module improved from
+     `B (12.49)` to `B (14.29)`, the extracted support module reports `A (43.83)`, and the
+     public `reference_data_dto.py` import surface remains compatible for routers and tests.
+     The temporal vocabulary allowlist now records the moved legacy `source_timestamp` field with
+     CR-1036 rationale so the guard preserves behavior without allowing new source-observation
+     terminology drift.
+193. Reduced reference-data DTO module size by extracting benchmark, benchmark-composition, index,
+     index-price, index-return, benchmark-return, and risk-free records plus their ingestion
+     request wrappers into `reference_data_benchmark_dto.py`. The aggregate DTO module improved
+     from `B (14.29)` to `A (21.98)`, the extracted benchmark module reports `A (30.27)`, and
+     focused DTO plus ingestion OpenAPI contract tests prove public imports and schema component
+     names remain compatible. The temporal vocabulary allowlist now records the moved legacy
+     `source_timestamp` fields with CR-1037 rationale.
+194. Reduced reference-data DTO module size by extracting discretionary mandate binding and
+     portfolio benchmark assignment records plus their ingestion request wrappers into
+     `reference_data_mandate_dto.py`. The aggregate DTO module improved from `A (21.98)` to
+     `A (27.76)`, the extracted mandate module reports `A (39.16)`, and focused DTO plus
+     ingestion OpenAPI contract tests prove public imports and schema component names remain
+     compatible.
+195. Reduced the reference-data DTO compatibility facade by moving model-portfolio definition and
+     target ingestion request wrappers into `reference_data_model_portfolio_dto.py`, beside the
+     model-portfolio records they wrap. The aggregate DTO module improved from `A (27.76)` to
+     `A (28.88)`, the model-portfolio module remains A-ranked at `A (39.13)`, and focused DTO plus
+     ingestion OpenAPI contract tests prove public imports and schema component names remain
+     compatible.
+196. Reduced the reference-data DTO compatibility facade by extracting client income-needs
+     schedule, liquidity reserve requirement, and planned withdrawal schedule records plus their
+     ingestion request wrappers into `reference_data_cashflow_planning_dto.py`. The aggregate DTO
+     module improved from `A (28.88)` to a pure compatibility facade at `A (100.00)`, the
+     extracted cashflow-planning module reports `A (31.18)`, and focused DTO plus ingestion
+     OpenAPI contract tests prove public imports and schema component names remain compatible.
+197. Reduced the ingestion-job DTO module size by extracting capacity diagnostics and backlog
+     breakdown response DTOs into `ingestion_job_capacity_dto.py` while preserving the public
+     `ingestion_job_dto.py` import surface. The aggregate ingestion-job DTO module improved from
+     `A (25.62)` to `A (27.87)` and shrank from 1,120 SLOC to 936 SLOC, the extracted operations
+     diagnostics module reports `A (50.80)`, and focused capacity/backlog service tests plus the
+     ingestion OpenAPI contract tests prove response behavior and schema component names remain
+     compatible.
+198. Reduced the ingestion-job DTO module size by extracting consumer dead-letter, consumer-lag,
+     DLQ replay, and replay-audit response/request DTOs into `ingestion_job_replay_dto.py` while
+     preserving the public `ingestion_job_dto.py` import surface. The aggregate ingestion-job DTO
+     module improved from `A (27.87)` to `A (32.33)` and shrank from 936 SLOC to 730 SLOC, the
+     extracted replay diagnostics module reports `A (43.08)`, and focused DLQ/replay guardrail
+     tests plus event-replay OpenAPI contract tests prove response behavior and schema component
+     names remain compatible.
+199. Reduced the ingestion-job DTO module size by extracting ingestion health, SLO, operating
+     band, operating policy, reprocessing queue, stalled-job, retry, ops-mode, and error-budget
+     DTOs into `ingestion_job_operations_dto.py` while preserving the public
+     `ingestion_job_dto.py` import surface. The aggregate ingestion-job DTO module improved from
+     `A (32.33)` to `A (44.17)` and shrank from 730 SLOC to 249 SLOC, the extracted operations
+     diagnostics module reports `A (37.66)`, and focused guardrail tests plus ingestion and
+     event-replay OpenAPI contract tests prove response behavior and schema component names remain
+     compatible.
+200. Completed the ingestion-job DTO compatibility-facade split by extracting job lifecycle,
+     failure, record-status, and idempotency diagnostic DTOs into `ingestion_job_lifecycle_dto.py`
+     while preserving the public `ingestion_job_dto.py` import surface. The aggregate
+     ingestion-job DTO module improved from `A (44.17)` to a pure compatibility facade at
+     `A (100.00)` and shrank from 249 SLOC to 38 SLOC, the extracted lifecycle module reports
+     `A (46.58)`, and focused guardrail tests plus ingestion and event-replay OpenAPI contract
+     tests prove response behavior and schema component names remain compatible.
+201. Reduced the transaction DTO module hotspot by extracting the canonical transaction record into
+     `transaction_model_dto.py` and the ingestion request envelope into
+     `transaction_ingestion_request_dto.py` while preserving the public `transaction_dto.py` import
+     surface. The aggregate transaction DTO module improved from 678 SLOC to a 4-SLOC
+     compatibility facade at `A (100.00)`, the extracted transaction model reports `A (42.85)`,
+     the request-envelope module reports `A (100.00)`, and the moved transaction model is now
+     directly clean under scoped mypy by replacing `condecimal(...)` annotations with explicit
+     constrained `Annotated[Decimal, Field(...)]` aliases. Focused transaction model,
+     transaction-spec characterization, and ingestion OpenAPI contract tests prove validation
+     behavior, public imports, and schema component names remain compatible.
+202. Reduced the benchmark/reference-data DTO module hotspot by extracting benchmark definition,
+     composition, and benchmark-return records into `reference_data_benchmark_records_dto.py` and
+     index definition, index price/return, and risk-free series records into
+     `reference_data_index_series_dto.py` while preserving the public
+     `reference_data_benchmark_dto.py` import surface. The aggregate benchmark DTO module improved
+     from `A (30.27)` and 444 SLOC to a pure compatibility facade at `A (100.00)` and 16 SLOC,
+     the extracted benchmark-record module reports `A (40.91)`, and the extracted index/risk-free
+     series module reports `A (37.52)`. Focused reference-data DTO, benchmark/index/risk-free
+     router, and ingestion OpenAPI contract tests prove validation behavior, route behavior, public
+     imports, and schema component names remain compatible. The temporal vocabulary allowlist now
+     records the moved legacy `source_timestamp` fields with CR-1046 rationale so the guard remains
+     strict for new source-observation field names.
+203. Reduced the ingestion operations DTO module hotspot by extracting health, SLO, operating-band,
+     policy, and error-budget response contracts into `ingestion_job_observability_dto.py` and
+     reprocessing queue, stalled-job, retry, and ops-mode contracts into
+     `ingestion_job_control_dto.py` while preserving the public
+     `ingestion_job_operations_dto.py` and `ingestion_job_dto.py` import surfaces. The aggregate
+     operations DTO module improved from `A (37.66)` and 498 SLOC to a pure compatibility facade at
+     `A (100.00)` and 15 SLOC, the extracted observability module reports `A (49.01)`, and the
+     extracted control module reports `A (47.35)`. Focused event-replay OpenAPI contract,
+     ingestion guardrail, and operating-band tests prove schema component names, public imports,
+     and representative operations behavior remain compatible.
+204. Reduced the reference-data tax DTO module hotspot by extracting client tax profile contracts
+     into `reference_data_tax_profile_dto.py` and client tax rule-set contracts into
+     `reference_data_tax_rule_set_dto.py` while preserving the public `reference_data_tax_dto.py`
+     and `reference_data_dto.py` import surfaces. The aggregate tax DTO module improved from
+     `A (29.60)` and 190 SLOC to a pure compatibility facade at `A (100.00)` and 6 SLOC, the
+     extracted tax-profile module reports `A (41.82)`, and the extracted tax-rule-set module
+     reports `A (37.58)`. The moved constrained decimal annotations are now directly clean under
+     scoped mypy, and focused reference-data DTO plus ingestion OpenAPI contract tests prove
+     validation behavior, schema component names, and public imports remain compatible.
+205. Reduced the reference-data client preference DTO module hotspot by extracting client
+     restriction profile contracts into `reference_data_client_restriction_dto.py` and
+     sustainability preference profile contracts into `reference_data_sustainability_preference_dto.py`
+     while preserving the public `reference_data_client_preference_dto.py` and
+     `reference_data_dto.py` import surfaces. The aggregate client-preference DTO module improved
+     from `A (32.04)` and 142 SLOC to a pure compatibility facade at `A (100.00)` and 10 SLOC,
+     the extracted client-restriction module reports `A (42.42)`, and the extracted
+     sustainability-preference module reports `A (40.79)`. The moved allocation-bound decimal
+     annotations are now directly clean under scoped mypy, and focused reference-data DTO plus
+     ingestion OpenAPI contract tests prove validation behavior, schema component names, and
+     public imports remain compatible.
+206. Reduced the reference-data cashflow planning DTO module hotspot by extracting client
+     income-needs contracts into `reference_data_income_needs_dto.py`, liquidity reserve
+     requirement contracts into `reference_data_liquidity_reserve_dto.py`, and planned withdrawal
+     contracts into `reference_data_planned_withdrawal_dto.py` while preserving the public
+     `reference_data_cashflow_planning_dto.py` and `reference_data_dto.py` import surfaces. The
+     aggregate cashflow-planning DTO module improved from `A (31.18)` and 190 SLOC to a pure
+     compatibility facade at `A (100.00)` and 15 SLOC, the extracted income-needs module reports
+     `A (45.42)`, the liquidity-reserve module reports `A (45.44)`, and the planned-withdrawal
+     module reports `A (49.30)`. Focused reference-data DTO plus ingestion OpenAPI contract tests
+     prove validation behavior, currency normalization, schema component names, and public imports
+     remain compatible.
+207. Reduced the reference-data mandate DTO module hotspot by extracting discretionary mandate
+     binding contracts into `reference_data_discretionary_mandate_dto.py` and portfolio benchmark
+     assignment contracts into `reference_data_portfolio_benchmark_assignment_dto.py` while
+     preserving the public `reference_data_mandate_dto.py` and `reference_data_dto.py` import
+     surfaces. The aggregate mandate DTO module improved from `A (39.16)` and 240 SLOC to a pure
+     compatibility facade at `A (100.00)` and 10 SLOC, the extracted discretionary-mandate module
+     reports `A (42.80)`, and the extracted portfolio-benchmark-assignment module reports
+     `A (57.85)`. Focused reference-data DTO plus ingestion OpenAPI contract tests prove
+     validation behavior, schema component names, and public imports remain compatible.
+208. Reduced the reference-data model portfolio DTO module hotspot by extracting model portfolio
+     definition contracts into `reference_data_model_portfolio_definition_dto.py` and model
+     portfolio target contracts into `reference_data_model_portfolio_target_dto.py` while
+     preserving the public `reference_data_model_portfolio_dto.py` and `reference_data_dto.py`
+     import surfaces. The aggregate model-portfolio DTO module improved from `A (39.13)` and
+     229 SLOC to a pure compatibility facade at `A (100.00)` and 6 SLOC, the extracted
+     model-portfolio-definition module reports `A (52.32)`, and the extracted
+     model-portfolio-target module reports `A (46.09)`. Focused reference-data DTO plus ingestion
+     OpenAPI contract tests prove validation behavior, base-currency normalization, schema
+     component names, and public imports remain compatible.
+209. Reduced the reference-data index/risk-free series DTO module hotspot by extracting index
+     definition contracts into `reference_data_index_definition_dto.py`, index price-series
+     contracts into `reference_data_index_price_series_dto.py`, index return-series contracts into
+     `reference_data_index_return_series_dto.py`, and risk-free series contracts into
+     `reference_data_risk_free_series_dto.py` while preserving the public
+     `reference_data_index_series_dto.py`, `reference_data_benchmark_dto.py`, and
+     `reference_data_dto.py` import surfaces. The aggregate index-series DTO module improved from
+     `A (37.52)` and 243 SLOC to a pure compatibility facade at `A (100.00)` and 12 SLOC, the
+     extracted index-definition module reports `A (51.44)`, the index-price-series module reports
+     `A (56.99)`, the index-return-series module reports `A (56.48)`, and the risk-free-series
+     module reports `A (54.44)`. Focused reference-data DTO plus ingestion OpenAPI contract tests
+     prove validation behavior, currency normalization, schema component names, and public imports
+     remain compatible. The temporal vocabulary allowlist now records the moved legacy
+     `source_timestamp` fields with CR-1053 rationale so the guard remains strict for new
+     source-observation field names.
+210. Reduced the reference-data benchmark-record DTO module hotspot by extracting benchmark
+     definition contracts into `reference_data_benchmark_definition_dto.py`, benchmark composition
+     contracts into `reference_data_benchmark_composition_dto.py`, and benchmark return-series
+     contracts into `reference_data_benchmark_return_series_dto.py` while preserving the public
+     `reference_data_benchmark_records_dto.py`, `reference_data_benchmark_dto.py`, and
+     `reference_data_dto.py` import surfaces. The aggregate benchmark-record DTO module improved
+     from `A (40.91)` and 207 SLOC to a pure compatibility facade at `A (100.00)` and 13 SLOC,
+     the extracted benchmark-definition module reports `A (50.64)`, the benchmark-composition
+     module reports `A (56.85)`, and the benchmark-return-series module reports `A (56.48)`.
+     Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
+     currency normalization, schema component names, and public imports remain compatible. The
+     temporal vocabulary allowlist now records the moved legacy `source_timestamp` fields with
+     CR-1054 rationale so the guard remains strict for new source-observation field names.
+211. Reduced the DPM instrument eligibility DTO validation hotspot by extracting effective-window,
+     buy-permission, and sell-permission checks into named helpers while preserving the public
+     `InstrumentEligibilityProfileRecord` and ingestion request contract. The record class improved
+     from `B (8)` to `A (2)`, the model validator improved from `B (7)` to `A (1)`, and every
+     function/class/method in `reference_data_instrument_eligibility_dto.py` now reports
+     A-ranked cyclomatic complexity. Focused reference-data DTO plus ingestion OpenAPI contract
+     tests prove validation behavior, schema component names, public imports, and route shape
+     remain compatible.
+212. Reduced the client tax rule-set DTO evidence validator by extracting bounded-evidence
+     detection into a named predicate while preserving the public `ClientTaxRuleSetRecord`
+     contract and validation error text. `_validate_tax_rule_evidence` improved from `B (6)` to
+     `A (2)`, `reference_data_tax_rule_set_dto.py` improved from `A (37.58)` to `A (38.36)`,
+     and every function/class/method in the module now reports A-ranked cyclomatic complexity.
+     Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
+     schema component names, public imports, and route shape remain compatible.
+213. Reduced the client tax profile DTO unknown-status validator by extracting applicable-tax-detail
+     detection into a named predicate while preserving the public `ClientTaxProfileRecord`
+     contract and validation error text. `_validate_unknown_tax_status_detail` improved from
+     `B (6)` to `A (3)`, `reference_data_tax_profile_dto.py` improved from `A (41.82)` to
+     `A (42.63)`, and every function/class/method in the module now reports A-ranked cyclomatic
+     complexity. Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation
+     behavior, schema component names, public imports, and route shape remain compatible.
+214. Reduced the client restriction DTO scoped-value validator by extracting scope-policy and
+     scoped-value detection into named predicates while preserving the public
+     `ClientRestrictionProfileRecord` contract and validation error text.
+     `_validate_scoped_restriction_values` improved from `B (6)` to `A (3)`,
+     `reference_data_client_restriction_dto.py` improved from `A (42.42)` to `A (43.00)`, and
+     every function/class/method in the module now reports A-ranked cyclomatic complexity.
+     Focused reference-data DTO plus ingestion OpenAPI contract tests prove validation behavior,
+     schema component names, public imports, and route shape remain compatible.
+215. Reduced the model portfolio target DTO band-order validation boundary by extracting the
+     target/min/max band policy into `_validate_target_band_order` while preserving the public
+     `ModelPortfolioTargetRecord` contract and validation error text. `ModelPortfolioTargetRecord`
+     improved from `B (6)` to `A (2)`, `validate_bands` improved from `A (5)` to `A (1)`, and
+     every DTO class now reports A-ranked cyclomatic complexity. Focused reference-data DTO plus
+     ingestion OpenAPI contract tests prove validation behavior, schema component names, public
+     imports, and route shape remain compatible.
+216. Reduced portfolio readiness supportability composition complexity by extracting explicit
+     reason-family, bucket-construction, supportability-state, freshness, blocking-reason, and
+     missing-FX payload helpers while preserving the public `PortfolioReadinessResponse` contract.
+     `build_portfolio_readiness_response` improved from `D (23)` to `A (1)`,
+     `_portfolio_supportability_summary` improved from `B (7)` to `A (2)`, and every function in
+     `portfolio_readiness_builder.py` now reports A-ranked cyclomatic complexity. Focused builder
+     and operations-service tests prove readiness buckets, blocking reasons, missing-FX payloads,
+     bounded supportability metric labels, and response fields remain compatible.
+217. Reduced integration capability policy composition complexity by extracting explicit feature
+     default, tenant-override, input-mode, workflow, and response-assembly helpers while preserving
+     the public `IntegrationCapabilitiesResponse` contract. `CapabilitiesService.get_integration_capabilities`
+     improved from `D (29)` to `A (1)`, `CapabilitiesService` improved from `C (11)` to `A (4)`,
+     and every function in `capabilities_service.py` now reports A-ranked cyclomatic complexity.
+     Focused capability-service tests prove default flags, environment overrides, tenant policy
+     overrides, invalid override handling, ecosystem consumers, workflow required features,
+     as-of-date fallback, and lazy DB engine posture remain compatible.
+218. Reduced support overview response composition complexity by extracting explicit reprocessing,
+     valuation, aggregation, analytics-export, portfolio-evidence, control-stage, reconciliation,
+     and response-assembly helpers while preserving the public `SupportOverviewResponse` contract.
+     `build_support_overview_response` improved from `D (23)` to `A (1)`, and every function in
+     `support_overview_builder.py` now reports A-ranked cyclomatic complexity. Focused support
+     overview builder and operations-service tests prove backlog age, control status, latest
+     reconciliation, blocking finding, nullable control, generated-date fallback, and
+     publish-allowed behavior remain compatible.
+219. Reduced benchmark market-series response composition complexity by extracting row-indexing,
+     component point, component series, returned-evidence, evidence-count, quality-summary, and
+     page-metadata helpers while preserving the public `BenchmarkMarketSeriesResponse` contract.
+     `build_benchmark_market_series_response` improved from `D (23)` to `A (1)`, and every
+     function in `benchmark_market_series.py` now reports A-ranked cyclomatic complexity. Focused
+     benchmark market-series tests prove page-scoped metadata, component points, FX normalization
+     status, evidence timestamps, data-quality status, quality summary, and next-page token
+     behavior remain compatible.
+220. Reduced cash-balance account record composition complexity by extracting master-row indexing,
+     fallback cash-account ID resolution, master/fallback record input construction, instrument
+     naming, account-currency, and account-ID helpers while preserving the public
+     `CashBalancesResponse` contract. `CashBalanceResolver.build_cash_account_balance_records`
+     improved from `D (22)` to `A (2)`, and every function in `cash_balance_service.py` now reports
+     A-ranked cyclomatic complexity. Focused cash-balance tests prove holdings-as-of metadata,
+     master cash-account rows, fallback identifiers, normalized master joins, zero-balance
+     accounts, sequential FX conversions, and sorting behavior remain compatible.
+221. Reduced latest cash-account ID repository complexity by extracting settlement-cash security
+     normalization, ranked transaction subquery construction, latest-ID statement assembly, and
+     result mapping helpers while preserving the public `ReportingRepository` behavior.
+     `ReportingRepository.get_latest_cash_account_ids` improved from `B (7)` to `A (2)`, and every
+     function in `reporting_repository.py` now reports A-ranked cyclomatic complexity. Focused
+     reporting repository and cash-balance tests prove normalized security matching, latest
+     transaction ranking, non-null cash-account filtering, and fallback account mapping behavior
+     remain compatible.
+222. Reduced market-reference data-quality classification complexity by extracting quality-status
+     normalization, status-family counting, and coverage-signal construction while preserving the
+     public `market_reference_data_quality_status` helper and shared market-reference quality
+     classifier. `market_reference_data_quality_status` improved from `C (11)` to `A (3)`.
+     Focused reference-data helper and integration-service tests prove accepted, estimated,
+     blocked, stale, missing-status, and required-count behavior remain compatible.
+223. Reduced benchmark component-window resolution complexity by extracting component grouping,
+     effective-date ordering, supersession end-date inference, overlap filtering, and row
+     projection helpers while preserving the public `resolve_component_window_rows` helper.
+     `resolve_component_window_rows` improved from `C (11)` to `A (4)`, and the module remains
+     A-ranked maintainability. Focused reference-data helper and integration-service tests prove
+     inferred superseded end dates, earlier explicit end dates, non-overlapping window filtering,
+     returned metadata fields, and result ordering remain compatible.
+224. Reduced reference-evidence timestamp selection complexity by extracting the durable timestamp
+     field policy and per-row timestamp extraction while preserving the public
+     `latest_reference_evidence_timestamp` helper. `latest_reference_evidence_timestamp` improved
+     from `B (6)` to `A (2)`, and the module remains A-ranked maintainability. Focused
+     reference-data helper and integration-service tests prove observed, source, assignment,
+     updated, and created timestamp handling, multi-row-group max timestamp behavior, and
+     missing/non-datetime filtering remain compatible.
+225. Reduced benchmark market-series point mapping complexity by extracting metadata precedence,
+     requested row-decimal normalization, and requested optional-value selection helpers while
+     preserving the public `benchmark_market_series_point` mapper. `benchmark_market_series_point`
+     improved from `C (19)` to `A (1)`, and every function in `reference_data_mappers.py` now
+     reports A-ranked cyclomatic complexity. Focused reference-data mapper and benchmark
+     market-series tests prove selected-field suppression, price-row metadata precedence, decimal
+     normalization, component weight, and FX-rate behavior remain compatible.
+226. Reduced discretionary mandate binding response composition complexity by extracting
+     supportability, review-schedule, rebalance-band, and lineage assembly helpers while preserving
+     the public `DiscretionaryMandateBindingResponse` contract. `build_discretionary_mandate_binding_response`
+     improved from `C (17)` to `A (2)`, the extracted review supportability helper reports
+     `B (7)`, and the module reports `A (40.24)` maintainability. Focused discretionary mandate
+     binding tests prove ready responses, repository orchestration, absent rows, policy-pack
+     hiding, inactive authority, missing policy-pack priority, missing review data, overdue-review
+     degradation, sparse rebalance bands, lineage, and runtime metadata behavior remain compatible.
+227. Reduced portfolio tax-lot window response composition complexity by extracting lot mapping,
+     missing-security detection, supportability/data-quality policy, page metadata, and lineage
+     helpers while preserving the public `PortfolioTaxLotWindowResponse` contract.
+     `build_portfolio_tax_lot_window_response` improved from `C (15)` to `A (2)`, the extracted
+     supportability-state helper reports `B (6)`, and the module reports `A (35.88)`
+     maintainability. Focused portfolio tax-lot window tests prove page-token scope binding,
+     repository orchestration, missing portfolio errors, partial-page degradation, complete
+     ready-page status, missing requested-security reporting, empty portfolio unavailability,
+     lineage, and runtime metadata behavior remain compatible.
+228. Reduced market-data coverage response composition complexity by extracting price/fx coverage
+     record mapping, missing/stale evidence classification, batch supportability, data-quality
+     status, and lineage helpers while preserving the public `MarketDataCoverageWindowResponse`
+     contract. `build_market_data_coverage_response` improved from `C (18)` to `A (1)`, every
+     function in `market_data_coverage.py` now reports A-ranked cyclomatic complexity, and the
+     module reports `A (38.12)` maintainability. Focused market-data coverage tests prove read
+     scope normalization, repository orchestration, ready evidence, stale/missing price and FX
+     supportability, resolved counts, lineage, and runtime metadata behavior remain compatible.
+229. Reduced simulation projected-position orchestration complexity by extracting baseline
+     snapshot/history fallback, baseline record construction, change normalization, new-security
+     projection defaults, instrument enrichment, change application, and response-row construction
+     helpers while preserving the public `ProjectedPositionsResponse` contract.
+     `SimulationService.get_projected_positions` improved from `D (22)` to `A (2)`, every method
+     in `simulation_service.py` now reports A-ranked cyclomatic complexity, and the module reports
+     `A (29.73)` maintainability. Focused simulation service tests prove session lookup, baseline
+     read ordering, snapshot/history fallback, normalized security IDs, new-security projection,
+     non-positive filtering, sorted response rows, and projected-summary behavior remain compatible.
+230. Reduced upload ingestion commit and XLSX parsing complexity by extracting row key/value
+     normalization, XLSX header/record/data helpers, commit validation guardrails, entity publish
+     dispatch, typed publish helpers, and commit response construction while preserving the public
+     upload preview and commit contracts. `UploadIngestionService.commit_upload` improved from
+     `D (23)` to `A (1)`, `_parse_xlsx` improved from `C (12)` to `A (4)`, every function in
+     `upload_ingestion_service.py` now reports A-ranked cyclomatic complexity, and the module
+     reports `A (25.69)` maintainability. Focused upload ingestion service tests prove CSV/XLSX
+     preview, partial-upload rejection, partial commit, empty-file rejection, publish routing,
+     published/skipped row counts, and response shape remain compatible.
+231. Reduced position next-state calculation complexity by extracting explicit transaction-family
+     constants, update-handler selection, BUY/SELL cost-basis helpers, cash-position delta
+     application, transfer cost-basis policy, same-instrument corporate-action quantity policy,
+     spin-off basis handling, FX contract lifecycle quantity helpers, and flat-position cost-basis
+     cleanup while preserving the public `calculate_next_position` contract.
+     `PositionCalculator.calculate_next_position` improved from `D (27)` to `A (2)`, and
+     `position_logic.py` reports `A (24.96)` maintainability. Focused position calculator and
+     transaction-spec characterization tests prove BUY/SELL net-cost behavior, cash-flow and
+     adjustment direction behavior, FX cash settlement, FX contract lifecycle, transfer and
+     corporate-action quantity updates, spin-off basis handling, and flat-position cost-basis reset
+     remain compatible.
+232. Reduced valuation consumer processing complexity by extracting event-session orchestration,
+     position-state lookup, reference-data validation, snapshot valuation, FX-missing failure
+     classification, terminal job completion, valuation-to-timeseries outbox publication, and
+     missing-position skip handling while preserving the public Kafka consumer behavior.
+     `ValuationConsumer.process_message` improved from `D (26)` to `B (7)`, and
+     `valuation_consumer.py` reports `A (32.50)` maintainability. Focused valuation consumer tests
+     prove Kafka delivery idempotency identity, correlation propagation, same-currency valuation
+     without FX lookup, missing-position skip handling, missing-FX failed snapshot behavior,
+     unexpected-error DLQ handling, and lost-job-ownership side-effect suppression remain
+     compatible.
+233. Reduced advisory simulation suitability scanning complexity by extracting single-position,
+     issuer enrichment, issuer concentration, liquidity enrichment, liquidity concentration,
+     governance, and cash-band scanners while preserving issue keys, severity policy, evidence
+     wiring, and gate recommendation behavior. `_scan_state_issues` improved from `D (27)` to
+     `A (1)`. Focused suitability scanner tests prove resolved, persistent, new issuer breach,
+     sell-only, restricted, banned, suspended, liquidity, missing-shelf, missing-enrichment, cash
+     band, and low-severity behavior remains compatible.
+234. Promoted the clean runtime-safe unit collection baseline into `make quality-unit-collection-gate`
+     and the quality-baseline workflow's `Quality Baseline / Unit Collection Gate`. The enforced
+     lane collected 2,964 unit tests locally and avoids the known all-suite mixed-runtime guard
+     that intentionally prevents db-direct integration tests and live-worker E2E tests from being
+     collected in one command.
+235. Remediated the GitHub Actions Node 20 deprecation warning source in the governed runtime
+     workflows by upgrading PR Merge Gate and Main Releasability uses of `actions/cache`,
+     `actions/upload-artifact`, `actions/download-artifact`, and `docker/setup-buildx-action` to
+     current major pins with available upstream tags. Added a focused workflow-action version test
+     so deprecated `actions/cache@v4`, `actions/upload-artifact@v4`,
+     `actions/download-artifact@v4`, and `docker/setup-buildx-action@v3` pins cannot silently
+     return in those release workflows.
