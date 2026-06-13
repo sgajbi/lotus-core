@@ -1282,3 +1282,13 @@ health before that claim is defensible.
      adjustment direction behavior, FX cash settlement, FX contract lifecycle, transfer and
      corporate-action quantity updates, spin-off basis handling, and flat-position cost-basis reset
      remain compatible.
+232. Reduced valuation consumer processing complexity by extracting event-session orchestration,
+     position-state lookup, reference-data validation, snapshot valuation, FX-missing failure
+     classification, terminal job completion, valuation-to-timeseries outbox publication, and
+     missing-position skip handling while preserving the public Kafka consumer behavior.
+     `ValuationConsumer.process_message` improved from `D (26)` to `B (7)`, and
+     `valuation_consumer.py` reports `A (32.50)` maintainability. Focused valuation consumer tests
+     prove Kafka delivery idempotency identity, correlation propagation, same-currency valuation
+     without FX lookup, missing-position skip handling, missing-FX failed snapshot behavior,
+     unexpected-error DLQ handling, and lost-job-ownership side-effect suppression remain
+     compatible.
