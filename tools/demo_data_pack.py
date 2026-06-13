@@ -1230,6 +1230,12 @@ def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
             "USD",
         ),
     ]
+    transaction_dates = {
+        str(item["transaction_date"]).split("T", maxsplit=1)[0]
+        for item in txs
+        if item.get("transaction_date")
+    }
+    reference_dates = sorted({*dates, *transaction_dates, as_of})
     price_paths = {
         "SEC_AAPL_US": (184, 194, "USD"),
         "SEC_SAP_DE": (118, 129, "EUR"),
@@ -1242,7 +1248,7 @@ def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
         "SEC_GOLD_ETC_USD": (208, 217, "USD"),
     }
     market_prices: list[dict[str, Any]] = []
-    for d in dates:
+    for d in reference_dates:
         market_prices.extend(
             [
                 {"security_id": "CASH_USD", "price_date": d, "price": 1, "currency": "USD"},
@@ -1252,8 +1258,8 @@ def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
             ]
         )
     for security_id, (start_px, end_px, ccy) in price_paths.items():
-        for idx, d in enumerate(dates):
-            px = round(start_px + ((end_px - start_px) * idx / (len(dates) - 1)), 2)
+        for idx, d in enumerate(reference_dates):
+            px = round(start_px + ((end_px - start_px) * idx / (len(reference_dates) - 1)), 2)
             market_prices.append(
                 {"security_id": security_id, "price_date": d, "price": px, "currency": ccy}
             )
@@ -1271,8 +1277,11 @@ def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
     }
     fx_rates: list[dict[str, Any]] = []
     for (from_ccy, to_ccy), (start_rate, end_rate) in fx_paths.items():
-        for idx, d in enumerate(dates):
-            rate = round(start_rate + ((end_rate - start_rate) * idx / (len(dates) - 1)), 6)
+        for idx, d in enumerate(reference_dates):
+            rate = round(
+                start_rate + ((end_rate - start_rate) * idx / (len(reference_dates) - 1)),
+                6,
+            )
             fx_rates.append(
                 {"from_currency": from_ccy, "to_currency": to_ccy, "rate_date": d, "rate": rate}
             )

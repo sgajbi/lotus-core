@@ -1465,3 +1465,10 @@ health before that claim is defensible.
      PR Merge Gate/Main Releasability latency jobs use a one-year history profile while preserving
      the richer three-year default for app-local demo usage. Fresh PR Merge Gate proof is required
      before merge.
+253. Fix-forwarded PR Merge Gate run `27480252636` Latency Gate bounded-history reference coverage.
+     The one-year seed profile applied correctly, reducing the demo pack to `261` business dates,
+     `3,393` market prices, and `2,610` FX rates, but the loader still did not complete because
+     cost processing retried on transaction dates that were not covered by the business-date-only
+     reference series. Demo market-price and FX series now include transaction dates and the as-of
+     date in addition to business dates, with focused coverage proving bounded-history reference
+     data covers those operational dates. Fresh PR Merge Gate proof is required before merge.

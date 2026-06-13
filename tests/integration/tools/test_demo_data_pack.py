@@ -33,6 +33,20 @@ def test_build_demo_bundle_supports_bounded_ci_history_window():
     assert ci_bundle["as_of_date"] == full_bundle["as_of_date"]
 
 
+def test_build_demo_bundle_reference_data_covers_transaction_dates_and_as_of_date():
+    bundle = demo_data_pack.build_demo_bundle(history_days=365)
+    transaction_dates = {
+        item["transaction_date"].split("T", maxsplit=1)[0] for item in bundle["transactions"]
+    }
+    required_dates = transaction_dates | {bundle["as_of_date"]}
+
+    market_price_dates = {item["price_date"] for item in bundle["market_prices"]}
+    fx_rate_dates = {item["rate_date"] for item in bundle["fx_rates"]}
+
+    assert required_dates.issubset(market_price_dates)
+    assert required_dates.issubset(fx_rate_dates)
+
+
 def test_build_demo_bundle_rejects_too_short_history_window():
     with pytest.raises(ValueError, match="history_days must be at least 365"):
         demo_data_pack.build_demo_bundle(history_days=364)
