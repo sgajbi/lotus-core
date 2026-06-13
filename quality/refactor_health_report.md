@@ -1345,4 +1345,8 @@ health before that claim is defensible.
      was fragile when position snapshots exist without prior portfolio history. `timeseries_repository_base.py`
      compiles, scoped Ruff lint and format checks pass, `git diff --check` passes, and the
      runtime-scope unit guard tests pass with 12 tests. Docker-backed proof of the exact
-     integration regression is deferred to GitHub CI because local Docker Desktop is unavailable.
+     integration regression is deferred to PR Merge Gate/Main Releasability because local Docker
+     Desktop is unavailable. After aligning the SQL-shape unit guard to reject the legacy
+     count/window gate while allowing the intentional anti-exists predicates, `make warning-gate`
+     passed locally with 2,958 tests, 10 deselected, and 0 warnings, and Remote Feature Lane run
+     `27460894329` passed for `84857360`.
