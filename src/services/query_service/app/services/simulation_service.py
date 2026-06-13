@@ -1,6 +1,7 @@
 # src/services/query_service/app/services/simulation_service.py
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -22,6 +23,18 @@ from ..repositories.position_repository import PositionRepository
 from ..repositories.simulation_repository import SimulationRepository
 from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .position_flow_effects import transaction_quantity_effect_decimal
+
+
+@dataclass(frozen=True)
+class _ProjectedBaseline:
+    records: dict[str, dict[str, Any]]
+    as_of_date: Any | None
+
+
+@dataclass(frozen=True)
+class _NormalizedSimulationChange:
+    security_id: str
+    change: Any
 
 
 class SimulationService:
@@ -88,98 +101,20 @@ class SimulationService:
         if session is None:
             raise ValueError(f"Simulation session {session_id} not found")
 
-        baseline_results = await self.position_repo.get_latest_positions_by_portfolio(
-            session.portfolio_id
-        )
+        baseline = await self._projected_baseline(session.portfolio_id)
         changes = await self.repo.get_changes(session_id)
-        use_snapshot = True
-        if not baseline_results:
-            baseline_results = await self.position_repo.get_latest_position_history_by_portfolio(
-                session.portfolio_id
-            )
-            use_snapshot = False
+        baseline_map = baseline.records
+        normalized_changes = self._normalized_simulation_changes(changes)
 
-        baseline_map: dict[str, dict[str, Any]] = {}
-        baseline_as_of = None
+        self._ensure_projection_records_for_changes(baseline_map, normalized_changes)
+        await self._enrich_projection_records_with_instruments(baseline_map)
+        self._apply_projection_changes(baseline_map, normalized_changes)
 
-        for row, instrument, _state in baseline_results:
-            position_date = row.date if use_snapshot else row.position_date
-            if baseline_as_of is None or position_date > baseline_as_of:
-                baseline_as_of = position_date
-            security_id = normalize_security_id(row.security_id)
-            if not security_id:
-                continue
-            baseline_map[security_id] = {
-                "security_id": security_id,
-                "baseline_quantity": decimal_or_zero(row.quantity),
-                "proposed_quantity": decimal_or_zero(row.quantity),
-                "cost_basis": decimal_or_none(row.cost_basis),
-                "cost_basis_local": decimal_or_none(row.cost_basis_local),
-                "instrument_name": instrument.name if instrument else security_id,
-                "asset_class": instrument.asset_class if instrument else None,
-            }
-
-        normalized_changes: list[tuple[str, Any]] = []
-        for change in changes:
-            security_id = normalize_security_id(change.security_id)
-            if not security_id:
-                raise ValueError("Simulation change is missing security_id")
-            normalized_changes.append((security_id, change))
-
-        security_ids = {security_id for security_id, _change in normalized_changes}
-        for security_id in security_ids:
-            if security_id not in baseline_map:
-                baseline_map[security_id] = {
-                    "security_id": security_id,
-                    "baseline_quantity": Decimal("0"),
-                    "proposed_quantity": Decimal("0"),
-                    "cost_basis": Decimal("0"),
-                    "cost_basis_local": Decimal("0"),
-                    "instrument_name": security_id,
-                    "asset_class": None,
-                }
-
-        instruments = await self.instrument_repo.get_by_security_ids(list(baseline_map.keys()))
-        instrument_map = {
-            security_id: item
-            for item in instruments
-            if (security_id := normalize_security_id(item.security_id))
-        }
-
-        for security_id, record in baseline_map.items():
-            instrument = instrument_map.get(security_id)
-            if instrument is not None:
-                record["instrument_name"] = instrument.name
-                record["asset_class"] = instrument.asset_class
-
-        for security_id, change in normalized_changes:
-            record = baseline_map[security_id]
-            qty = self._change_quantity_effect(change)
-            record["proposed_quantity"] += qty
-
-        response_rows: list[ProjectedPositionRecord] = []
-        for row in baseline_map.values():
-            if row["proposed_quantity"] <= 0:
-                continue
-            response_rows.append(
-                ProjectedPositionRecord(
-                    security_id=row["security_id"],
-                    instrument_name=row["instrument_name"],
-                    asset_class=row["asset_class"],
-                    baseline_quantity=row["baseline_quantity"],
-                    proposed_quantity=row["proposed_quantity"],
-                    delta_quantity=row["proposed_quantity"] - row["baseline_quantity"],
-                    cost_basis=row["cost_basis"],
-                    cost_basis_local=row["cost_basis_local"],
-                )
-            )
-
-        response_rows.sort(key=lambda item: item.security_id)
         return ProjectedPositionsResponse(
             session_id=session.session_id,
             portfolio_id=session.portfolio_id,
-            baseline_as_of=baseline_as_of,
-            positions=response_rows,
+            baseline_as_of=baseline.as_of_date,
+            positions=self._projected_position_records(baseline_map),
         )
 
     async def get_projected_summary(self, session_id: str) -> ProjectedSummaryResponse:
@@ -211,6 +146,136 @@ class SimulationService:
             raise ValueError(f"Simulation session {session_id} is not active")
         if session.expires_at is not None and session.expires_at < datetime.now(timezone.utc):
             raise ValueError(f"Simulation session {session_id} is expired")
+
+    async def _projected_baseline(self, portfolio_id: str) -> _ProjectedBaseline:
+        baseline_results = await self.position_repo.get_latest_positions_by_portfolio(portfolio_id)
+        use_snapshot = True
+        if not baseline_results:
+            baseline_results = await self.position_repo.get_latest_position_history_by_portfolio(
+                portfolio_id
+            )
+            use_snapshot = False
+
+        baseline_map: dict[str, dict[str, Any]] = {}
+        baseline_as_of = None
+        for row, instrument, _state in baseline_results:
+            position_date = row.date if use_snapshot else row.position_date
+            baseline_as_of = self._latest_baseline_as_of(baseline_as_of, position_date)
+            security_id = normalize_security_id(row.security_id)
+            if not security_id:
+                continue
+            baseline_map[security_id] = self._baseline_projection_record(
+                row=row,
+                instrument=instrument,
+                security_id=security_id,
+            )
+        return _ProjectedBaseline(records=baseline_map, as_of_date=baseline_as_of)
+
+    @staticmethod
+    def _latest_baseline_as_of(current_as_of, position_date):
+        if current_as_of is None or position_date > current_as_of:
+            return position_date
+        return current_as_of
+
+    @staticmethod
+    def _baseline_projection_record(*, row, instrument, security_id: str) -> dict[str, Any]:
+        baseline_quantity = decimal_or_zero(row.quantity)
+        return {
+            "security_id": security_id,
+            "baseline_quantity": baseline_quantity,
+            "proposed_quantity": baseline_quantity,
+            "cost_basis": decimal_or_none(row.cost_basis),
+            "cost_basis_local": decimal_or_none(row.cost_basis_local),
+            "instrument_name": instrument.name if instrument else security_id,
+            "asset_class": instrument.asset_class if instrument else None,
+        }
+
+    @staticmethod
+    def _normalized_simulation_changes(changes: list[Any]) -> list[_NormalizedSimulationChange]:
+        normalized_changes: list[_NormalizedSimulationChange] = []
+        for change in changes:
+            security_id = normalize_security_id(change.security_id)
+            if not security_id:
+                raise ValueError("Simulation change is missing security_id")
+            normalized_changes.append(
+                _NormalizedSimulationChange(security_id=security_id, change=change)
+            )
+        return normalized_changes
+
+    @staticmethod
+    def _ensure_projection_records_for_changes(
+        baseline_map: dict[str, dict[str, Any]],
+        normalized_changes: list[_NormalizedSimulationChange],
+    ) -> None:
+        for security_id in {item.security_id for item in normalized_changes}:
+            if security_id not in baseline_map:
+                baseline_map[security_id] = SimulationService._empty_projection_record(security_id)
+
+    @staticmethod
+    def _empty_projection_record(security_id: str) -> dict[str, Any]:
+        return {
+            "security_id": security_id,
+            "baseline_quantity": Decimal("0"),
+            "proposed_quantity": Decimal("0"),
+            "cost_basis": Decimal("0"),
+            "cost_basis_local": Decimal("0"),
+            "instrument_name": security_id,
+            "asset_class": None,
+        }
+
+    async def _enrich_projection_records_with_instruments(
+        self,
+        baseline_map: dict[str, dict[str, Any]],
+    ) -> None:
+        instruments = await self.instrument_repo.get_by_security_ids(list(baseline_map.keys()))
+        instrument_map = self._instrument_map_by_security_id(instruments)
+        for security_id, record in baseline_map.items():
+            instrument = instrument_map.get(security_id)
+            if instrument is not None:
+                record["instrument_name"] = instrument.name
+                record["asset_class"] = instrument.asset_class
+
+    @staticmethod
+    def _instrument_map_by_security_id(instruments: list[Any]) -> dict[str, Any]:
+        return {
+            security_id: item
+            for item in instruments
+            if (security_id := normalize_security_id(item.security_id))
+        }
+
+    def _apply_projection_changes(
+        self,
+        baseline_map: dict[str, dict[str, Any]],
+        normalized_changes: list[_NormalizedSimulationChange],
+    ) -> None:
+        for normalized_change in normalized_changes:
+            record = baseline_map[normalized_change.security_id]
+            record["proposed_quantity"] += self._change_quantity_effect(normalized_change.change)
+
+    @staticmethod
+    def _projected_position_records(
+        baseline_map: dict[str, dict[str, Any]],
+    ) -> list[ProjectedPositionRecord]:
+        response_rows = [
+            SimulationService._projected_position_record(row)
+            for row in baseline_map.values()
+            if row["proposed_quantity"] > 0
+        ]
+        response_rows.sort(key=lambda item: item.security_id)
+        return response_rows
+
+    @staticmethod
+    def _projected_position_record(row: dict[str, Any]) -> ProjectedPositionRecord:
+        return ProjectedPositionRecord(
+            security_id=row["security_id"],
+            instrument_name=row["instrument_name"],
+            asset_class=row["asset_class"],
+            baseline_quantity=row["baseline_quantity"],
+            proposed_quantity=row["proposed_quantity"],
+            delta_quantity=row["proposed_quantity"] - row["baseline_quantity"],
+            cost_basis=row["cost_basis"],
+            cost_basis_local=row["cost_basis_local"],
+        )
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.position_repo.portfolio_exists(portfolio_id):

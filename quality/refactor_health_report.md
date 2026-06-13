@@ -1253,3 +1253,12 @@ health before that claim is defensible.
      module reports `A (38.12)` maintainability. Focused market-data coverage tests prove read
      scope normalization, repository orchestration, ready evidence, stale/missing price and FX
      supportability, resolved counts, lineage, and runtime metadata behavior remain compatible.
+229. Reduced simulation projected-position orchestration complexity by extracting baseline
+     snapshot/history fallback, baseline record construction, change normalization, new-security
+     projection defaults, instrument enrichment, change application, and response-row construction
+     helpers while preserving the public `ProjectedPositionsResponse` contract.
+     `SimulationService.get_projected_positions` improved from `D (22)` to `A (2)`, every method
+     in `simulation_service.py` now reports A-ranked cyclomatic complexity, and the module reports
+     `A (29.73)` maintainability. Focused simulation service tests prove session lookup, baseline
+     read ordering, snapshot/history fallback, normalized security IDs, new-security projection,
+     non-positive filtering, sorted response rows, and projected-summary behavior remain compatible.
