@@ -11,12 +11,14 @@ from src.services.query_service.app.advisory_simulation.allocation_contract impo
 )
 from src.services.query_service.app.advisory_simulation.models import (
     AllocationMetric,
+    CashBalance,
     EngineOptions,
     MarketDataSnapshot,
     Money,
     PortfolioSnapshot,
     Position,
     PositionSummary,
+    Price,
     ProposalAllocationView,
     ShelfEntry,
     SimulatedState,
@@ -51,6 +53,71 @@ def get_fx_rate(market_data: MarketDataSnapshot, from_ccy: str, to_ccy: str) -> 
     return None
 
 
+def _price_for_position(
+    position: Position,
+    market_data: MarketDataSnapshot,
+) -> Price | None:
+    return next(
+        (price for price in market_data.prices if price.instrument_id == position.instrument_id),
+        None,
+    )
+
+
+def _price_context(
+    *,
+    price_entry: Price | None,
+    base_ccy: str,
+) -> tuple[Decimal, str]:
+    if price_entry is None:
+        return Decimal("0"), base_ccy
+    return price_entry.price, price_entry.currency
+
+
+def _trusted_market_value_in_base(
+    *,
+    position: Position,
+    price_entry: Price | None,
+    price_value: Decimal,
+    base_ccy: str,
+    market_data: MarketDataSnapshot,
+) -> tuple[Decimal, str, Decimal]:
+    trusted_value = position.market_value
+    if trusted_value is None:
+        return Decimal("0"), base_ccy, Decimal("0")
+
+    price_currency = price_entry.currency if price_entry is not None else trusted_value.currency
+    if trusted_value.currency == base_ccy and price_currency != base_ccy:
+        return (
+            position.quantity * price_value if price_entry is not None else Decimal("0"),
+            price_currency,
+            trusted_value.amount,
+        )
+
+    conversion_rate = get_fx_rate(market_data, trusted_value.currency, base_ccy)
+    if conversion_rate is None:
+        return trusted_value.amount, trusted_value.currency, Decimal("0")
+    return (
+        trusted_value.amount,
+        trusted_value.currency,
+        trusted_value.amount * conversion_rate,
+    )
+
+
+def _calculated_market_value_in_base(
+    *,
+    position: Position,
+    price_value: Decimal,
+    currency: str,
+    base_ccy: str,
+    market_data: MarketDataSnapshot,
+) -> tuple[Decimal, Decimal]:
+    market_value_in_instrument_ccy = position.quantity * price_value
+    conversion_rate = get_fx_rate(market_data, currency, base_ccy)
+    if conversion_rate is None:
+        return market_value_in_instrument_ccy, Decimal("0")
+    return market_value_in_instrument_ccy, market_value_in_instrument_ccy * conversion_rate
+
+
 class ValuationService:
     """
     Central authority for valuing positions and cash based on the configured mode.
@@ -67,53 +134,31 @@ class ValuationService:
         """
         Calculates position value based on options.valuation_mode.
         """
-        price_ent = next(
-            (p for p in market_data.prices if p.instrument_id == position.instrument_id), None
-        )
+        price_entry = _price_for_position(position, market_data)
+        price_value, currency = _price_context(price_entry=price_entry, base_ccy=base_ccy)
 
-        price_val = Decimal("0")
-        currency = base_ccy
-
-        if price_ent:
-            price_val = price_ent.price
-            currency = price_ent.currency
-
-        mv_instr_ccy = Decimal("0")
-
-        is_trust = options.valuation_mode == ValuationMode.TRUST_SNAPSHOT
-        if is_trust and position.market_value:
-            trusted_value = position.market_value
-            price_currency = price_ent.currency if price_ent is not None else trusted_value.currency
-            trust_is_base_authority = (
-                trusted_value.currency == base_ccy and price_currency != base_ccy
+        if options.valuation_mode == ValuationMode.TRUST_SNAPSHOT and position.market_value:
+            mv_instr_ccy, currency, mv_base = _trusted_market_value_in_base(
+                position=position,
+                price_entry=price_entry,
+                price_value=price_value,
+                base_ccy=base_ccy,
+                market_data=market_data,
             )
-            if trust_is_base_authority:
-                currency = price_currency
-                mv_instr_ccy = (
-                    position.quantity * price_val if price_ent is not None else Decimal("0")
-                )
-                mv_base = trusted_value.amount
-            else:
-                mv_instr_ccy = trusted_value.amount
-                currency = trusted_value.currency
-                rate = get_fx_rate(market_data, currency, base_ccy)
-                if rate is None:
-                    mv_base = Decimal("0")
-                else:
-                    mv_base = mv_instr_ccy * rate
         else:
-            mv_instr_ccy = position.quantity * price_val
-            rate = get_fx_rate(market_data, currency, base_ccy)
-            if rate is None:
-                mv_base = Decimal("0")
-            else:
-                mv_base = mv_instr_ccy * rate
+            mv_instr_ccy, mv_base = _calculated_market_value_in_base(
+                position=position,
+                price_value=price_value,
+                currency=currency,
+                base_ccy=base_ccy,
+                market_data=market_data,
+            )
 
         return PositionSummary(
             instrument_id=position.instrument_id,
             quantity=position.quantity,
             instrument_currency=currency,
-            price=Money(amount=price_val, currency=currency) if price_ent else None,
+            price=Money(amount=price_value, currency=currency) if price_entry else None,
             value_in_instrument_ccy=Money(amount=mv_instr_ccy, currency=currency),
             value_in_base_ccy=Money(amount=mv_base, currency=base_ccy),
             weight=Decimal("0"),
@@ -144,7 +189,7 @@ def _record_missing_position_inputs(
 
 def _cash_value_in_base(
     *,
-    cash_balance: Money,
+    cash_balance: CashBalance,
     base_ccy: str,
     market_data: MarketDataSnapshot,
     dq_log: Dict[str, List[str]] | None = None,
@@ -264,7 +309,7 @@ def _position_allocation_row(
 
 def _cash_allocation_row(
     *,
-    cash_balance: Money,
+    cash_balance: CashBalance,
     base_ccy: str,
     market_data: MarketDataSnapshot,
 ) -> AllocationInputRow:
