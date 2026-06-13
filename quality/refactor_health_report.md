@@ -1472,3 +1472,14 @@ health before that claim is defensible.
      reference series. Demo market-price and FX series now include transaction dates and the as-of
      date in addition to business dates, with focused coverage proving bounded-history reference
      data covers those operational dates. Fresh PR Merge Gate proof is required before merge.
+254. Fix-forwarded PR Merge Gate run `27481208159` Latency Gate seed scope.
+     The gate passed every other PR Merge Gate job, but latency still timed out waiting for
+     `demo_data_loader` after `900` seconds. The artifact showed the job was still loading all
+     five demo portfolios and retrying non-target FX dependencies even though the profiler measures
+     `DEMO_DPM_EUR_001`. The demo pack now supports a validated `--portfolio-ids` selector that
+     filters portfolios, transactions, instruments, market prices, FX pairs, existence checks, and
+     verification expectations to the selected scope. Compose exposes
+     `DEMO_DATA_PACK_PORTFOLIO_IDS`, and PR Merge Gate/Main Releasability latency jobs set it to
+     `DEMO_DPM_EUR_001` while app-local defaults continue to seed the full demo pack. Focused
+     demo-data, compose-contract, and workflow-governance tests passed with 22 tests; scoped Ruff
+     format and lint checks passed. Fresh PR Merge Gate proof is required before merge.

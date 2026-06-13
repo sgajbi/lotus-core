@@ -33,6 +33,32 @@ def test_build_demo_bundle_supports_bounded_ci_history_window():
     assert ci_bundle["as_of_date"] == full_bundle["as_of_date"]
 
 
+def test_build_demo_bundle_supports_latency_focused_portfolio_scope():
+    full_bundle = demo_data_pack.build_demo_bundle(history_days=365)
+    latency_bundle = demo_data_pack.build_demo_bundle(
+        history_days=365,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+
+    assert {item["portfolio_id"] for item in latency_bundle["portfolios"]} == {"DEMO_DPM_EUR_001"}
+    assert {item["portfolio_id"] for item in latency_bundle["transactions"]} == {"DEMO_DPM_EUR_001"}
+    assert len(latency_bundle["transactions"]) < len(full_bundle["transactions"])
+    assert len(latency_bundle["market_prices"]) < len(full_bundle["market_prices"])
+    assert len(latency_bundle["fx_rates"]) < len(full_bundle["fx_rates"])
+    assert {item["security_id"] for item in latency_bundle["instruments"]} == {
+        "CASH_EUR",
+        "SEC_ETF_WORLD_USD",
+        "SEC_SAP_DE",
+    }
+    assert {item["from_currency"] for item in latency_bundle["fx_rates"]} == {"EUR", "USD"}
+    assert {item["to_currency"] for item in latency_bundle["fx_rates"]} == {"EUR", "USD"}
+
+
+def test_build_demo_bundle_rejects_unknown_portfolio_scope():
+    with pytest.raises(ValueError, match="Unknown demo portfolio ids: DEMO_UNKNOWN"):
+        demo_data_pack.build_demo_bundle(portfolio_ids=("DEMO_UNKNOWN",))
+
+
 def test_build_demo_bundle_reference_data_covers_transaction_dates_and_as_of_date():
     bundle = demo_data_pack.build_demo_bundle(history_days=365)
     transaction_dates = {

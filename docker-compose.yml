@@ -571,6 +571,7 @@ services:
       DEMO_DATA_PACK_WAIT_SECONDS: ${DEMO_DATA_PACK_WAIT_SECONDS:-900}
       DEMO_DATA_PACK_POLL_INTERVAL_SECONDS: ${DEMO_DATA_PACK_POLL_INTERVAL_SECONDS:-3}
       DEMO_DATA_PACK_HISTORY_DAYS: ${DEMO_DATA_PACK_HISTORY_DAYS:-1095}
+      DEMO_DATA_PACK_PORTFOLIO_IDS: ${DEMO_DATA_PACK_PORTFOLIO_IDS:-}
     depends_on:
       ingestion_service:
         condition: service_healthy
@@ -604,6 +605,7 @@ services:
       --wait-seconds $$DEMO_DATA_PACK_WAIT_SECONDS
       --poll-interval-seconds $$DEMO_DATA_PACK_POLL_INTERVAL_SECONDS
       --history-days $$DEMO_DATA_PACK_HISTORY_DAYS
+      --portfolio-ids "$$DEMO_DATA_PACK_PORTFOLIO_IDS"
       "
     restart: "no"
     networks:

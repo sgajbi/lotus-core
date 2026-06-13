@@ -451,9 +451,38 @@ def build_risk_free_reference_data(
     return {"risk_free_series": risk_free_series}
 
 
-def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
+def _normalize_portfolio_ids(portfolio_ids: tuple[str, ...] | None) -> tuple[str, ...] | None:
+    if portfolio_ids is None:
+        return None
+    normalized = tuple(dict.fromkeys(item.strip() for item in portfolio_ids if item.strip()))
+    if not normalized:
+        return None
+    known_ids = {item.portfolio_id for item in DEMO_EXPECTATIONS}
+    unknown_ids = sorted(set(normalized) - known_ids)
+    if unknown_ids:
+        raise ValueError(f"Unknown demo portfolio ids: {', '.join(unknown_ids)}")
+    return normalized
+
+
+def _parse_portfolio_ids(value: str) -> tuple[str, ...] | None:
+    return _normalize_portfolio_ids(tuple(value.split(",")))
+
+
+def _expectations_for_portfolio_ids(
+    portfolio_ids: tuple[str, ...] | None,
+) -> tuple[PortfolioExpectation, ...]:
+    if portfolio_ids is None:
+        return DEMO_EXPECTATIONS
+    selected_ids = set(portfolio_ids)
+    return tuple(item for item in DEMO_EXPECTATIONS if item.portfolio_id in selected_ids)
+
+
+def build_demo_bundle(
+    *, history_days: int = 365 * 3, portfolio_ids: tuple[str, ...] | None = None
+) -> dict[str, Any]:
     if history_days < 365:
         raise ValueError("Demo data history_days must be at least 365.")
+    portfolio_ids = _normalize_portfolio_ids(portfolio_ids)
     start_date = date.today() - timedelta(days=history_days)
     end_date = date.today()
     dates = _business_dates(start_date, end_date)
@@ -1230,6 +1259,15 @@ def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
             "USD",
         ),
     ]
+    if portfolio_ids is not None:
+        selected_ids = set(portfolio_ids)
+        portfolios = [item for item in portfolios if item["portfolio_id"] in selected_ids]
+        txs = [item for item in txs if item["portfolio_id"] in selected_ids]
+        needed_security_ids = {item["security_id"] for item in txs}
+        instruments = [item for item in instruments if item["security_id"] in needed_security_ids]
+    else:
+        needed_security_ids = {item["security_id"] for item in instruments}
+
     transaction_dates = {
         str(item["transaction_date"]).split("T", maxsplit=1)[0]
         for item in txs
@@ -1248,16 +1286,25 @@ def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
         "SEC_GOLD_ETC_USD": (208, 217, "USD"),
     }
     market_prices: list[dict[str, Any]] = []
+    cash_security_ids = {
+        item["security_id"]
+        for item in instruments
+        if item.get("product_type") == "Cash" and item["security_id"] in needed_security_ids
+    }
     for d in reference_dates:
-        market_prices.extend(
-            [
-                {"security_id": "CASH_USD", "price_date": d, "price": 1, "currency": "USD"},
-                {"security_id": "CASH_EUR", "price_date": d, "price": 1, "currency": "EUR"},
-                {"security_id": "CASH_CHF", "price_date": d, "price": 1, "currency": "CHF"},
-                {"security_id": "CASH_SGD", "price_date": d, "price": 1, "currency": "SGD"},
-            ]
-        )
+        for security_id, currency in (
+            ("CASH_USD", "USD"),
+            ("CASH_EUR", "EUR"),
+            ("CASH_CHF", "CHF"),
+            ("CASH_SGD", "SGD"),
+        ):
+            if security_id in cash_security_ids:
+                market_prices.append(
+                    {"security_id": security_id, "price_date": d, "price": 1, "currency": currency}
+                )
     for security_id, (start_px, end_px, ccy) in price_paths.items():
+        if security_id not in needed_security_ids:
+            continue
         for idx, d in enumerate(reference_dates):
             px = round(start_px + ((end_px - start_px) * idx / (len(reference_dates) - 1)), 2)
             market_prices.append(
@@ -1275,8 +1322,15 @@ def build_demo_bundle(*, history_days: int = 365 * 3) -> dict[str, Any]:
         ("EUR", "CHF"): (0.96, 0.95),
         ("CHF", "EUR"): (1.04, 1.05),
     }
+    required_currencies = {
+        item["base_currency"] for item in portfolios if item.get("base_currency")
+    } | {item["trade_currency"] for item in txs if item.get("trade_currency")}
     fx_rates: list[dict[str, Any]] = []
     for (from_ccy, to_ccy), (start_rate, end_rate) in fx_paths.items():
+        if required_currencies and (
+            from_ccy not in required_currencies or to_ccy not in required_currencies
+        ):
+            continue
         for idx, d in enumerate(reference_dates):
             rate = round(
                 start_rate + ((end_rate - start_rate) * idx / (len(reference_dates) - 1)),
@@ -1394,8 +1448,10 @@ def _portfolio_exists(query_base_url: str, portfolio_id: str) -> bool:
     return any(item.get("portfolio_id") == portfolio_id for item in payload.get("portfolios") or [])
 
 
-def _all_demo_portfolios_exist(query_base_url: str) -> bool:
-    return all(_portfolio_exists(query_base_url, item.portfolio_id) for item in DEMO_EXPECTATIONS)
+def _all_demo_portfolios_exist(
+    query_base_url: str, expectations: tuple[PortfolioExpectation, ...] = DEMO_EXPECTATIONS
+) -> bool:
+    return all(_portfolio_exists(query_base_url, item.portfolio_id) for item in expectations)
 
 
 def _format_verification_state(state: dict[str, Any]) -> str:
@@ -1571,6 +1627,14 @@ def parse_args() -> argparse.Namespace:
             "CI latency gates may use a smaller one-year window to reduce unrelated backfill."
         ),
     )
+    parser.add_argument(
+        "--portfolio-ids",
+        default="",
+        help=(
+            "Optional comma-separated demo portfolio ids to seed and verify. Empty value preserves "
+            "the full demo pack. CI latency gates use this to load only the measured portfolio."
+        ),
+    )
     parser.add_argument("--verify-only", action="store_true")
     parser.add_argument("--ingest-only", action="store_true")
     parser.add_argument("--force-ingest", action="store_true")
@@ -1586,6 +1650,8 @@ def main() -> int:
     query_control_plane_base_url = args.query_control_plane_base_url.rstrip("/")
     if args.verify_only and args.ingest_only:
         raise ValueError("Cannot use --verify-only with --ingest-only")
+    portfolio_ids = _parse_portfolio_ids(args.portfolio_ids)
+    expectations = _expectations_for_portfolio_ids(portfolio_ids)
     _wait_ready(f"{ingestion_base_url}/health/ready", args.wait_seconds, args.poll_interval_seconds)
     _wait_ready(f"{query_base_url}/health/ready", args.wait_seconds, args.poll_interval_seconds)
     _wait_ready(
@@ -1593,9 +1659,9 @@ def main() -> int:
         args.wait_seconds,
         args.poll_interval_seconds,
     )
-    demo_bundle = build_demo_bundle(history_days=args.history_days)
+    demo_bundle = build_demo_bundle(history_days=args.history_days, portfolio_ids=portfolio_ids)
     if not args.verify_only:
-        if args.force_ingest or not _all_demo_portfolios_exist(query_base_url):
+        if args.force_ingest or not _all_demo_portfolios_exist(query_base_url, expectations):
             payload = _build_portfolio_bundle_payload(demo_bundle)
             LOGGER.info(
                 (
@@ -1619,7 +1685,7 @@ def main() -> int:
         )
     if not args.ingest_only:
         verification_results: list[dict[str, Any]] = []
-        for expected in DEMO_EXPECTATIONS:
+        for expected in expectations:
             result = _verify_portfolio(
                 query_base_url,
                 expected,
@@ -1638,24 +1704,34 @@ def main() -> int:
                 result["transactions"],
                 result["validated_holdings"],
             )
-        benchmark_result = _verify_benchmark_reference(
-            query_control_plane_base_url,
-            portfolio_id=demo_bundle["benchmark_verification"]["portfolio_id"],
-            benchmark_id=demo_bundle["benchmark_verification"]["benchmark_id"],
-            catalog_benchmark_ids=demo_bundle["benchmark_verification"]["catalog_benchmark_ids"],
-            start_date=demo_bundle["benchmark_verification"]["start_date"],
-            end_date=demo_bundle["benchmark_verification"]["end_date"],
-            wait_seconds=args.wait_seconds,
-            poll_interval_seconds=args.poll_interval_seconds,
-        )
-        LOGGER.info(
-            "Verified benchmark seed %s for %s (catalog_records=%d composition_segments=%d)",
-            benchmark_result["benchmark_id"],
-            benchmark_result["portfolio_id"],
-            benchmark_result["catalog_records"],
-            benchmark_result["composition_segments"],
-        )
-        if len(verification_results) != len(DEMO_EXPECTATIONS):
+        benchmark_portfolio_id = demo_bundle["benchmark_verification"]["portfolio_id"]
+        if portfolio_ids is None or benchmark_portfolio_id in set(portfolio_ids):
+            benchmark_result = _verify_benchmark_reference(
+                query_control_plane_base_url,
+                portfolio_id=benchmark_portfolio_id,
+                benchmark_id=demo_bundle["benchmark_verification"]["benchmark_id"],
+                catalog_benchmark_ids=demo_bundle["benchmark_verification"][
+                    "catalog_benchmark_ids"
+                ],
+                start_date=demo_bundle["benchmark_verification"]["start_date"],
+                end_date=demo_bundle["benchmark_verification"]["end_date"],
+                wait_seconds=args.wait_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
+            LOGGER.info(
+                "Verified benchmark seed %s for %s (catalog_records=%d composition_segments=%d)",
+                benchmark_result["benchmark_id"],
+                benchmark_result["portfolio_id"],
+                benchmark_result["catalog_records"],
+                benchmark_result["composition_segments"],
+            )
+        else:
+            LOGGER.info(
+                "Skipped benchmark verification for %s because selected demo portfolios are %s.",
+                benchmark_portfolio_id,
+                ",".join(portfolio_ids),
+            )
+        if len(verification_results) != len(expectations):
             raise RuntimeError("Demo verification failed: not all demo portfolios were verified.")
     LOGGER.info("Demo data pack workflow completed.")
     return 0

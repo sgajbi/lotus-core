@@ -234,6 +234,7 @@ jobs:
       - name: Run endpoint latency gate
         env:
           DEMO_DATA_PACK_HISTORY_DAYS: "365"
+          DEMO_DATA_PACK_PORTFOLIO_IDS: "DEMO_DPM_EUR_001"
         run: make test-latency-gate
       - name: Capture docker compose logs on failure
         if: failure()
