@@ -1371,3 +1371,10 @@ health before that claim is defensible.
      cash expenses. Focused cost-engine tests passed with 52 tests, position-calculator tests
      passed with 46 tests, and scoped Ruff lint passed. Docker-backed proof of the exact MWR E2E
      regression is deferred to GitHub CI because local Docker Desktop is unavailable.
+243. Fix-forwarded PR auto-merge governance after PR #403 exposed that the required
+     `Queue Auto Merge` job could not read main branch protection and failed with GitHub
+     `HTTP 403`. The workflow now requests `administration: read` in addition to content and
+     pull-request write permissions, allowing the branch-protection verification step to inspect
+     required status-check contexts before queuing merge. Workflow YAML parsing passed for all
+     workflows, `tests/unit/test_ci_workflow_action_versions.py` passed with 3 tests, and
+     `git diff --check` passed.
