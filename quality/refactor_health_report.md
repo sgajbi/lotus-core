@@ -15,8 +15,8 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, and complexity gates while other baseline checks remain report-only |
-| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` now reaches 3,575 collected tests before the governed mixed-runtime guard stops all-suite collection |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, and unit collection gates while other baseline checks remain report-only |
+| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the runtime-safe unit lane with 2,964 tests |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
@@ -1292,3 +1292,22 @@ health before that claim is defensible.
      without FX lookup, missing-position skip handling, missing-FX failed snapshot behavior,
      unexpected-error DLQ handling, and lost-job-ownership side-effect suppression remain
      compatible.
+233. Reduced advisory simulation suitability scanning complexity by extracting single-position,
+     issuer enrichment, issuer concentration, liquidity enrichment, liquidity concentration,
+     governance, and cash-band scanners while preserving issue keys, severity policy, evidence
+     wiring, and gate recommendation behavior. `_scan_state_issues` improved from `D (27)` to
+     `A (1)`. Focused suitability scanner tests prove resolved, persistent, new issuer breach,
+     sell-only, restricted, banned, suspended, liquidity, missing-shelf, missing-enrichment, cash
+     band, and low-severity behavior remains compatible.
+234. Promoted the clean runtime-safe unit collection baseline into `make quality-unit-collection-gate`
+     and the quality-baseline workflow's `Quality Baseline / Unit Collection Gate`. The enforced
+     lane collected 2,964 unit tests locally and avoids the known all-suite mixed-runtime guard
+     that intentionally prevents db-direct integration tests and live-worker E2E tests from being
+     collected in one command.
+235. Remediated the GitHub Actions Node 20 deprecation warning source in the governed runtime
+     workflows by upgrading PR Merge Gate and Main Releasability uses of `actions/cache`,
+     `actions/upload-artifact`, `actions/download-artifact`, and `docker/setup-buildx-action` to
+     current major pins with available upstream tags. Added a focused workflow-action version test
+     so deprecated `actions/cache@v4`, `actions/upload-artifact@v4`,
+     `actions/download-artifact@v4`, and `docker/setup-buildx-action@v3` pins cannot silently
+     return in those release workflows.
