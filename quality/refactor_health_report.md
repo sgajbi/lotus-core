@@ -1393,3 +1393,14 @@ health before that claim is defensible.
      integration tests. Focused suite-composition tests passed with 17 tests, scoped Ruff lint and
      format checks passed, and Docker-backed proof of the exact Integration Full correction is
      deferred to GitHub CI because local Docker Desktop is unavailable.
+245. Fix-forwarded the follow-up Main Releasability run `27469924560` Integration Full failure
+     where the CR-1088 DB-only mapping removed Kafka infrastructure from `integration-all`, causing
+     Kafka setup and DLQ replayer integration tests to fail with broker transport metadata errors.
+     Test service composition now distinguishes DB-only suites from DB-plus-Kafka infrastructure
+     suites: `integration-all` starts Postgres, migration runner, Zookeeper, Kafka, and the topic
+     creator, while still excluding live application worker/API services. The service-scope unit
+     guard now allows manifest-declared `db_direct` suites to use isolated DB-only or
+     DB-plus-Kafka infrastructure and explicitly proves that `integration-all` has Kafka without
+     live workers. Focused suite-composition tests passed with 18 tests, scoped Ruff lint and
+     format checks passed, and Docker-backed proof of the exact Kafka integration correction is
+     deferred to GitHub CI because local Docker Desktop is unavailable.
