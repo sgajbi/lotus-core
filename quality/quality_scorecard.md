@@ -41,7 +41,8 @@ timed out waiting for the full five-portfolio demo seed. The latency gate now us
 `DEMO_DATA_PACK_PORTFOLIO_IDS=DEMO_DPM_EUR_001` profile, with focused local test/lint evidence,
 and run `27482056426` proved the focused profile applied before failing on an out-of-scope
 benchmark assignment FK. Focused seeds now omit benchmark assignments for unseeded portfolios, but
-a fresh PR Merge Gate is still required before merge.
+Remote Feature Lane run `27482536715`, Quality Baseline run `27482537598`, and PR Merge Gate run
+`27482537616` all passed for `8d745a08`, including the PR Merge Gate Latency Gate.
 
 ## Current PR Evidence Snapshot
 

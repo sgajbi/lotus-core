@@ -1489,4 +1489,6 @@ health before that claim is defensible.
      `DEMO_ADV_USD_001` portfolio and hit the portfolio benchmark assignment foreign-key
      constraint. Focused demo seeds now omit out-of-scope benchmark assignments and skip empty
      reference payload posts, preserving benchmark catalog/reference data without violating the
-     selected portfolio scope. Fresh PR Merge Gate proof is required before merge.
+     selected portfolio scope. Remote Feature Lane run `27482536715`, Quality Baseline run
+     `27482537598`, and PR Merge Gate run `27482537616` all passed for `8d745a08`; PR Merge Gate
+     Latency Gate completed successfully with the focused seed.
