@@ -1,5 +1,7 @@
 .PHONY: install install-ci verify-dependencies compile-runtime-lock quality-ruff-gate quality-ruff-format-gate quality-import-boundary-gate quality-bandit-gate quality-vulture-source-gate quality-deptry-source-gate quality-maintainability-gate quality-complexity-gate quality-unit-collection-gate lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard temporal-vocabulary-guard route-contract-family-guard source-data-product-contract-guard domain-product-validate analytics-input-consumer-contract-guard event-runtime-contract-guard rfc0083-closure-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-completion-gate test-institutional-signoff-pack test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci live-dpm-source-validate clean
 
+LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
+
 install:
 	python scripts/bootstrap_dev.py
 
@@ -181,7 +183,7 @@ test-docker-smoke:
 	python scripts/docker_endpoint_smoke.py --build
 
 test-latency-gate:
-	python scripts/latency_profile.py --build --enforce
+	python scripts/latency_profile.py --build --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
 
 test-performance-load-gate:
 	python scripts/performance_load_gate.py --build --profile-tier fast --enforce

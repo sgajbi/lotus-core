@@ -21,6 +21,64 @@ def test_build_demo_bundle_contains_multi_product_coverage():
     assert {"DEPOSIT", "BUY", "SELL", "DIVIDEND", "FEE"}.issubset(tx_types)
 
 
+def test_build_demo_bundle_supports_bounded_ci_history_window():
+    full_bundle = demo_data_pack.build_demo_bundle()
+    ci_bundle = demo_data_pack.build_demo_bundle(history_days=365)
+
+    assert len(ci_bundle["portfolios"]) == len(full_bundle["portfolios"])
+    assert len(ci_bundle["transactions"]) == len(full_bundle["transactions"])
+    assert len(ci_bundle["market_prices"]) < len(full_bundle["market_prices"])
+    assert len(ci_bundle["fx_rates"]) < len(full_bundle["fx_rates"])
+    assert len(ci_bundle["business_dates"]) >= 250
+    assert ci_bundle["as_of_date"] == full_bundle["as_of_date"]
+
+
+def test_build_demo_bundle_supports_latency_focused_portfolio_scope():
+    full_bundle = demo_data_pack.build_demo_bundle(history_days=365)
+    latency_bundle = demo_data_pack.build_demo_bundle(
+        history_days=365,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+
+    assert {item["portfolio_id"] for item in latency_bundle["portfolios"]} == {"DEMO_DPM_EUR_001"}
+    assert {item["portfolio_id"] for item in latency_bundle["transactions"]} == {"DEMO_DPM_EUR_001"}
+    assert len(latency_bundle["transactions"]) < len(full_bundle["transactions"])
+    assert len(latency_bundle["market_prices"]) < len(full_bundle["market_prices"])
+    assert len(latency_bundle["fx_rates"]) < len(full_bundle["fx_rates"])
+    assert {item["security_id"] for item in latency_bundle["instruments"]} == {
+        "CASH_EUR",
+        "SEC_ETF_WORLD_USD",
+        "SEC_SAP_DE",
+    }
+    assert latency_bundle["benchmark_assignments"] == []
+    assert {item["from_currency"] for item in latency_bundle["fx_rates"]} == {"EUR", "USD"}
+    assert {item["to_currency"] for item in latency_bundle["fx_rates"]} == {"EUR", "USD"}
+
+
+def test_build_demo_bundle_rejects_unknown_portfolio_scope():
+    with pytest.raises(ValueError, match="Unknown demo portfolio ids: DEMO_UNKNOWN"):
+        demo_data_pack.build_demo_bundle(portfolio_ids=("DEMO_UNKNOWN",))
+
+
+def test_build_demo_bundle_reference_data_covers_transaction_dates_and_as_of_date():
+    bundle = demo_data_pack.build_demo_bundle(history_days=365)
+    transaction_dates = {
+        item["transaction_date"].split("T", maxsplit=1)[0] for item in bundle["transactions"]
+    }
+    required_dates = transaction_dates | {bundle["as_of_date"]}
+
+    market_price_dates = {item["price_date"] for item in bundle["market_prices"]}
+    fx_rate_dates = {item["rate_date"] for item in bundle["fx_rates"]}
+
+    assert required_dates.issubset(market_price_dates)
+    assert required_dates.issubset(fx_rate_dates)
+
+
+def test_build_demo_bundle_rejects_too_short_history_window():
+    with pytest.raises(ValueError, match="history_days must be at least 365"):
+        demo_data_pack.build_demo_bundle(history_days=364)
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
@@ -97,6 +155,52 @@ def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
 
     assert demo_data_pack._all_demo_portfolios_exist("http://query") is True
     assert set(seen) == {item.portfolio_id for item in demo_data_pack.DEMO_EXPECTATIONS}
+
+
+def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
+    expected = demo_data_pack.PortfolioExpectation(
+        "DEMO_TEST_001",
+        2,
+        1,
+        3,
+        (("SEC_TEST", 10.0),),
+    )
+    time_values = iter([0.0, 0.0, 2.0])
+
+    def fake_time() -> float:
+        return next(time_values)
+
+    def fake_request_json(method: str, url: str, **_kwargs):
+        assert method == "GET"
+        if url.endswith("/positions"):
+            return 200, {
+                "positions": [{"security_id": "SEC_TEST", "valuation": {"market_value": "100.00"}}]
+            }
+        if url.endswith("/transactions?limit=200"):
+            return 200, {"total": 1}
+        if url.endswith("position-history?security_id=SEC_TEST"):
+            return 200, {"positions": [{"position_date": "2026-06-12", "quantity": "9"}]}
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr(demo_data_pack.time, "time", fake_time)
+    monkeypatch.setattr(demo_data_pack.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    with pytest.raises(TimeoutError) as exc_info:
+        demo_data_pack._verify_portfolio(
+            "http://query",
+            expected,
+            wait_seconds=1,
+            poll_interval_seconds=0,
+        )
+
+    message = str(exc_info.value)
+    assert "DEMO_TEST_001" in message
+    assert "positions=1" in message
+    assert "min_positions=2" in message
+    assert "transactions=1" in message
+    assert "min_transactions=3" in message
+    assert "SEC_TEST:actual=9:expected=10" in message
 
 
 def test_request_json_treats_remote_disconnect_as_retryable_connection_error(monkeypatch):

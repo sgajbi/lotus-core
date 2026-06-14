@@ -1429,3 +1429,66 @@ health before that claim is defensible.
      offsetting. Focused HoldingsAsOf merge, repository SQL-shape, and position-calculator tests
      passed locally; scoped Ruff lint/format checks and `git diff --check` passed locally.
      Docker-backed E2E proof is deferred to GitHub CI because local Docker Desktop is unavailable.
+249. Fix-forwarded the Main Releasability run `27476338028` Latency Gate and E2E Full failures.
+     The latency artifact showed `support_overview` was functionally healthy but measured during
+     active demo-data bootstrap ingestion, breaching p95 at `452.66ms` against the `320ms` budget.
+     Compose-backed latency profiling now waits for the `demo_data_loader` one-shot service to exit
+     successfully before resolving runtime IDs and starting measurements, keeping budgets unchanged.
+     The E2E dual-currency holdings failure showed that CR-1092 corrected history cost basis but
+     could still return missing fallback unrealized P&L when snapshot market values were present.
+     HoldingsAsOf fallback valuation now derives missing base and local unrealized amounts from
+     market value minus authoritative history cost basis when both inputs exist. Focused latency and
+     holdings unit tests passed with 45 tests; scoped Ruff lint and format checks passed locally;
+     Remote Feature Lane run `27477365942` passed. Docker-backed latency and E2E proof is deferred
+     to PR Merge Gate/Main Releasability because local Docker Desktop is unavailable.
+250. Fix-forwarded PR Merge Gate run `27477746565` Latency Gate seed-readiness timeout.
+     The gate passed all other PR Merge Gate jobs but timed out before latency measurement because
+     `demo_data_loader` was still running after the initial five-minute seed-completion wait.
+     `make test-latency-gate` now passes an explicit
+     `LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS` value to the latency profiler, giving CI enough
+     bootstrap time while keeping the endpoint p95 budgets unchanged. Fresh PR Merge Gate proof is
+     required before merge.
+251. Fix-forwarded PR Merge Gate run `27478449844` Latency Gate demo verification timeout.
+     The longer seed-completion wait allowed `demo_data_loader` to reach its own verifier, but the
+     one-shot loader exited with status `1` after timing out on `DEMO_INCOME_CHF_001` output
+     verification. The app-local compose contract now makes demo-data verification wait and poll
+     intervals environment-driven with a `900` second default for CI, and the verifier timeout now
+     reports last-observed positions, valued positions, transaction counts, and terminal quantity
+     checks. Focused demo-data and compose-contract tests passed with 12 tests; scoped Ruff lint and
+     format checks passed locally. Fresh PR Merge Gate proof is required before merge.
+252. Fix-forwarded PR Merge Gate run `27479265925` Latency Gate demo seed duration.
+     The gate passed every other PR Merge Gate job, including Docker Smoke, E2E Smoke, and the fast
+     performance gate. Latency still failed before measurement because the full three-year demo pack
+     kept `demo_data_loader` running beyond the total `900` second pre-measurement wait while
+     workers processed unrelated historical valuation backfill for later demo portfolios. The demo
+     pack now supports a bounded `--history-days` window, compose passes the setting through, and
+     PR Merge Gate/Main Releasability latency jobs use a one-year history profile while preserving
+     the richer three-year default for app-local demo usage. Fresh PR Merge Gate proof is required
+     before merge.
+253. Fix-forwarded PR Merge Gate run `27480252636` Latency Gate bounded-history reference coverage.
+     The one-year seed profile applied correctly, reducing the demo pack to `261` business dates,
+     `3,393` market prices, and `2,610` FX rates, but the loader still did not complete because
+     cost processing retried on transaction dates that were not covered by the business-date-only
+     reference series. Demo market-price and FX series now include transaction dates and the as-of
+     date in addition to business dates, with focused coverage proving bounded-history reference
+     data covers those operational dates. Fresh PR Merge Gate proof is required before merge.
+254. Fix-forwarded PR Merge Gate run `27481208159` Latency Gate seed scope.
+     The gate passed every other PR Merge Gate job, but latency still timed out waiting for
+     `demo_data_loader` after `900` seconds. The artifact showed the job was still loading all
+     five demo portfolios and retrying non-target FX dependencies even though the profiler measures
+     `DEMO_DPM_EUR_001`. The demo pack now supports a validated `--portfolio-ids` selector that
+     filters portfolios, transactions, instruments, market prices, FX pairs, existence checks, and
+     verification expectations to the selected scope. Compose exposes
+     `DEMO_DATA_PACK_PORTFOLIO_IDS`, and PR Merge Gate/Main Releasability latency jobs set it to
+     `DEMO_DPM_EUR_001` while app-local defaults continue to seed the full demo pack. Focused
+     demo-data, compose-contract, and workflow-governance tests passed with 22 tests; scoped Ruff
+     format and lint checks passed. Fresh PR Merge Gate proof is required before merge.
+255. Fix-forwarded PR Merge Gate run `27482056426` Latency Gate benchmark assignment FK failure.
+     The focused seed applied correctly (`1` portfolio, `7` transactions, `789` market prices,
+     `526` FX rates), but reference ingestion still posted a benchmark assignment for the unseeded
+     `DEMO_ADV_USD_001` portfolio and hit the portfolio benchmark assignment foreign-key
+     constraint. Focused demo seeds now omit out-of-scope benchmark assignments and skip empty
+     reference payload posts, preserving benchmark catalog/reference data without violating the
+     selected portfolio scope. Remote Feature Lane run `27482536715`, Quality Baseline run
+     `27482537598`, and PR Merge Gate run `27482537616` all passed for `8d745a08`; PR Merge Gate
+     Latency Gate completed successfully with the focused seed.

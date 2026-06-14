@@ -95,6 +95,16 @@ def _run_compose_up(build: bool) -> None:
 def _raise_if_compose_service_failed(
     service_name: str,
 ) -> None:
+    status, exit_code = _get_compose_service_state(service_name)
+    if status == "exited" and exit_code != "0":
+        raise RuntimeError(
+            "Compose service "
+            f"'{service_name}' exited with status {exit_code} "
+            "before latency profiling."
+        )
+
+
+def _get_compose_service_state(service_name: str) -> tuple[str | None, str | None]:
     ps = subprocess.run(
         ["docker", "compose", "ps", "-a", "-q", service_name],
         check=False,
@@ -103,7 +113,7 @@ def _raise_if_compose_service_failed(
     )
     container_id = ps.stdout.strip()
     if not container_id:
-        return
+        return None, None
 
     inspect = subprocess.run(
         [
@@ -118,12 +128,41 @@ def _raise_if_compose_service_failed(
         text=True,
     )
     status, _, exit_code = inspect.stdout.strip().partition("|")
-    if status == "exited" and exit_code != "0":
+    return status or None, exit_code or None
+
+
+def _wait_compose_service_completed_successfully(
+    service_name: str,
+    *,
+    timeout_seconds: int,
+) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        status, exit_code = _get_compose_service_state(service_name)
+        if status == "exited":
+            if exit_code == "0":
+                return
+            raise RuntimeError(
+                "Compose service "
+                f"'{service_name}' exited with status {exit_code} "
+                "before latency profiling."
+            )
+        time.sleep(2)
+
+    status, exit_code = _get_compose_service_state(service_name)
+    if status == "exited" and exit_code == "0":
+        return
+    if status == "exited":
         raise RuntimeError(
             "Compose service "
             f"'{service_name}' exited with status {exit_code} "
             "before latency profiling."
         )
+    raise RuntimeError(
+        "Compose service "
+        f"'{service_name}' did not complete before latency profiling "
+        f"(last_status={status or 'missing'}, timeout_seconds={timeout_seconds})."
+    )
 
 
 def _pick_identifier_from_payload(payload: Any, keys: tuple[str, ...]) -> str | None:
@@ -591,6 +630,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--measured-runs", type=int, default=30)
     parser.add_argument("--ready-timeout-seconds", type=int, default=180)
     parser.add_argument(
+        "--seed-completion-timeout-seconds",
+        type=int,
+        default=300,
+        help=(
+            "Maximum time to wait for the compose demo_data_loader one-shot seed to finish "
+            "successfully before latency measurement starts."
+        ),
+    )
+    parser.add_argument(
         "--context-timeout-seconds",
         type=int,
         default=300,
@@ -626,6 +674,12 @@ def main() -> int:
         base_query_control_plane_url=args.query_control_plane_base_url,
         timeout_seconds=args.ready_timeout_seconds,
     )
+
+    if not args.skip_compose:
+        _wait_compose_service_completed_successfully(
+            "demo_data_loader",
+            timeout_seconds=args.seed_completion_timeout_seconds,
+        )
 
     session = requests.Session()
     runtime_context = _resolve_runtime_ids(

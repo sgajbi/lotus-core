@@ -11,6 +11,7 @@ from scripts.latency_profile import (
     _raise_if_compose_service_failed,
     _resolve_runtime_ids,
     _run_compose_up,
+    _wait_compose_service_completed_successfully,
 )
 
 
@@ -300,6 +301,59 @@ def test_raise_if_compose_service_failed_raises_on_failure(monkeypatch) -> None:
         assert "exited with status 1" in str(exc)
     else:
         raise AssertionError("Expected _raise_if_compose_service_failed to raise.")
+
+
+def test_wait_compose_service_completed_successfully_waits_for_zero_exit(monkeypatch) -> None:
+    states = iter(["running|0\n", "exited|0\n"])
+
+    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+        if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
+            return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
+        return CompletedProcess(cmd, 0, stdout=next(states), stderr="")
+
+    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+
+    _wait_compose_service_completed_successfully("demo_data_loader", timeout_seconds=5)
+
+
+def test_wait_compose_service_completed_successfully_raises_on_failed_exit(
+    monkeypatch,
+) -> None:
+    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+        if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
+            return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
+        return CompletedProcess(cmd, 0, stdout="exited|1\n", stderr="")
+
+    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+
+    try:
+        _wait_compose_service_completed_successfully("demo_data_loader", timeout_seconds=5)
+    except RuntimeError as exc:
+        assert "exited with status 1" in str(exc)
+    else:
+        raise AssertionError("Expected seed wait to raise on non-zero exit.")
+
+
+def test_wait_compose_service_completed_successfully_raises_on_timeout(
+    monkeypatch,
+) -> None:
+    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+        if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
+            return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
+        return CompletedProcess(cmd, 0, stdout="running|0\n", stderr="")
+
+    timeline = iter([100.0, 101.0, 106.0])
+    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+    monkeypatch.setattr("scripts.latency_profile.time.time", lambda: next(timeline))
+
+    try:
+        _wait_compose_service_completed_successfully("demo_data_loader", timeout_seconds=5)
+    except RuntimeError as exc:
+        assert "did not complete before latency profiling" in str(exc)
+    else:
+        raise AssertionError("Expected seed wait to raise on timeout.")
 
 
 def test_run_compose_up_limits_started_services(monkeypatch) -> None:
