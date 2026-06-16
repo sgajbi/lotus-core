@@ -9,7 +9,7 @@ version = "0.1.0"
 description = "Portfolio Analytics - Ingestion Service"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.137.1",
+    "fastapi==0.136.3",
     "uvicorn==0.35.0",
     "pydantic==2.12.5",
     "confluent-kafka==2.12.0",
