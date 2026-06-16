@@ -7,7 +7,6 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from portfolio_common.database_models import ConsumerDlqEvent as DBConsumerDlqEvent
 from portfolio_common.database_models import ConsumerDlqReplayAudit as DBConsumerDlqReplayAudit
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
@@ -53,6 +52,10 @@ from . import ingestion_error_budget_status as _error_budget_status
 from .ingestion_backlog_breakdown import (
     build_backlog_breakdown_response,
     empty_backlog_breakdown_response,
+)
+from .ingestion_consumer_dlq_events import (
+    get_consumer_dlq_event_response,
+    list_consumer_dlq_event_responses,
 )
 from .ingestion_consumer_lag import load_consumer_lag_response
 from .ingestion_health_summary import load_health_summary_response
@@ -167,21 +170,6 @@ def _to_failure_response(failure: DBIngestionJobFailure) -> IngestionJobFailureR
         failure_reason=failure.failure_reason,
         failed_record_keys=list(failure.failed_record_keys or []),
         failed_at=failure.failed_at,
-    )
-
-
-def _to_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEventResponse:
-    return ConsumerDlqEventResponse(
-        event_id=event.event_id,
-        original_topic=event.original_topic,
-        consumer_group=event.consumer_group,
-        dlq_topic=event.dlq_topic,
-        original_key=event.original_key,
-        error_reason_code=event.error_reason_code,
-        error_reason=event.error_reason,
-        correlation_id=event.correlation_id,
-        payload_excerpt=event.payload_excerpt,
-        observed_at=event.observed_at,
     )
 
 
@@ -698,25 +686,18 @@ class IngestionJobService:
         original_topic: str | None = None,
         consumer_group: str | None = None,
     ) -> list[ConsumerDlqEventResponse]:
-        async for db in get_async_db_session():
-            stmt = select(DBConsumerDlqEvent)
-            if original_topic:
-                stmt = stmt.where(DBConsumerDlqEvent.original_topic == original_topic)
-            if consumer_group:
-                stmt = stmt.where(DBConsumerDlqEvent.consumer_group == consumer_group)
-            rows = (
-                await db.scalars(stmt.order_by(desc(DBConsumerDlqEvent.observed_at)).limit(limit))
-            ).all()
-            return [_to_dlq_event_response(row) for row in rows]
-        return []
+        return await list_consumer_dlq_event_responses(
+            limit=limit,
+            original_topic=original_topic,
+            consumer_group=consumer_group,
+            session_factory=get_async_db_session,
+        )
 
     async def get_consumer_dlq_event(self, event_id: str) -> ConsumerDlqEventResponse | None:
-        async for db in get_async_db_session():
-            row = await db.scalar(
-                select(DBConsumerDlqEvent).where(DBConsumerDlqEvent.event_id == event_id).limit(1)
-            )
-            return _to_dlq_event_response(row) if row else None
-        return None
+        return await get_consumer_dlq_event_response(
+            event_id=event_id,
+            session_factory=get_async_db_session,
+        )
 
     async def find_successful_replay_audit_by_fingerprint(
         self,
