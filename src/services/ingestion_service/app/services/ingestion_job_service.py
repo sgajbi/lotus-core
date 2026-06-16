@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -69,6 +67,10 @@ from .ingestion_operating_band import (
     OperatingBandPolicy,
     OperatingBandSignals,
     classify_operating_band,
+)
+from .ingestion_operating_policy import (
+    IngestionOperatingPolicyConfig,
+    build_operating_policy_response,
 )
 from .ingestion_record_status import (
     failed_record_keys_from_failures,
@@ -527,88 +529,29 @@ class IngestionJobService:
         )
 
     async def get_operating_policy(self) -> IngestionOpsPolicyResponse:
-        replay_isolation_mode = (
-            REPLAY_ISOLATION_MODE
-            if REPLAY_ISOLATION_MODE in {"shared_workers", "dedicated_workers"}
-            else "shared_workers"
-        )
-        partition_growth_strategy = (
-            PARTITION_GROWTH_STRATEGY
-            if PARTITION_GROWTH_STRATEGY in {"scale_out_only", "pre_shard_large_portfolios"}
-            else "scale_out_only"
-        )
-        calculator_peak_lag_age_seconds = {
-            key: max(1, int(value)) for key, value in CALCULATOR_PEAK_LAG_AGE_SECONDS.items()
-        }
-        values = {
-            "lookback_minutes_default": DEFAULT_LOOKBACK_MINUTES,
-            "failure_rate_threshold_default": str(DEFAULT_FAILURE_RATE_THRESHOLD),
-            "queue_latency_threshold_seconds_default": DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
-            "backlog_age_threshold_seconds_default": DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
-            "replay_max_records_per_request": max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
-            "replay_max_backlog_jobs": max(1, REPLAY_MAX_BACKLOG_JOBS),
-            "reprocessing_worker_poll_interval_seconds": max(
-                1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
-            ),
-            "reprocessing_worker_batch_size": max(1, REPROCESSING_WORKER_BATCH_SIZE),
-            "valuation_scheduler_poll_interval_seconds": max(
-                1, VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-            ),
-            "valuation_scheduler_batch_size": max(1, VALUATION_SCHEDULER_BATCH_SIZE),
-            "valuation_scheduler_dispatch_rounds": max(1, VALUATION_SCHEDULER_DISPATCH_ROUNDS),
-            "dlq_budget_events_per_window": max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
-            "operating_band_yellow_backlog_age_seconds": (
-                OPERATING_BAND_POLICY.yellow_backlog_age_seconds
-            ),
-            "operating_band_orange_backlog_age_seconds": (
-                OPERATING_BAND_POLICY.orange_backlog_age_seconds
-            ),
-            "operating_band_red_backlog_age_seconds": OPERATING_BAND_POLICY.red_backlog_age_seconds,
-            "operating_band_yellow_dlq_pressure_ratio": str(
-                OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio
-            ),
-            "operating_band_orange_dlq_pressure_ratio": str(
-                OPERATING_BAND_POLICY.orange_dlq_pressure_ratio
-            ),
-            "operating_band_red_dlq_pressure_ratio": str(
-                OPERATING_BAND_POLICY.red_dlq_pressure_ratio
-            ),
-            "calculator_peak_lag_age_seconds": calculator_peak_lag_age_seconds,
-            "replay_isolation_mode": replay_isolation_mode,
-            "partition_growth_strategy": partition_growth_strategy,
-            "replay_dry_run_supported": True,
-        }
-        serialized = json.dumps(values, sort_keys=True, separators=(",", ":"))
-        fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
-        return IngestionOpsPolicyResponse(
-            policy_version="v1",
-            policy_fingerprint=fingerprint,
-            lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
-            failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
-            queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
-            backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
-            replay_max_records_per_request=max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
-            replay_max_backlog_jobs=max(1, REPLAY_MAX_BACKLOG_JOBS),
-            reprocessing_worker_poll_interval_seconds=max(
-                1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
-            ),
-            reprocessing_worker_batch_size=max(1, REPROCESSING_WORKER_BATCH_SIZE),
-            valuation_scheduler_poll_interval_seconds=max(
-                1, VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-            ),
-            valuation_scheduler_batch_size=max(1, VALUATION_SCHEDULER_BATCH_SIZE),
-            valuation_scheduler_dispatch_rounds=max(1, VALUATION_SCHEDULER_DISPATCH_ROUNDS),
-            dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
-            operating_band_yellow_backlog_age_seconds=OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
-            operating_band_orange_backlog_age_seconds=OPERATING_BAND_POLICY.orange_backlog_age_seconds,
-            operating_band_red_backlog_age_seconds=OPERATING_BAND_POLICY.red_backlog_age_seconds,
-            operating_band_yellow_dlq_pressure_ratio=OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio,
-            operating_band_orange_dlq_pressure_ratio=OPERATING_BAND_POLICY.orange_dlq_pressure_ratio,
-            operating_band_red_dlq_pressure_ratio=OPERATING_BAND_POLICY.red_dlq_pressure_ratio,
-            calculator_peak_lag_age_seconds=calculator_peak_lag_age_seconds,
-            replay_isolation_mode=replay_isolation_mode,  # type: ignore[arg-type]
-            partition_growth_strategy=partition_growth_strategy,  # type: ignore[arg-type]
-            replay_dry_run_supported=True,
+        return build_operating_policy_response(
+            IngestionOperatingPolicyConfig(
+                lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
+                failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
+                queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
+                backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
+                replay_max_records_per_request=REPLAY_MAX_RECORDS_PER_REQUEST,
+                replay_max_backlog_jobs=REPLAY_MAX_BACKLOG_JOBS,
+                reprocessing_worker_poll_interval_seconds=(
+                    REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
+                ),
+                reprocessing_worker_batch_size=REPROCESSING_WORKER_BATCH_SIZE,
+                valuation_scheduler_poll_interval_seconds=(
+                    VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
+                ),
+                valuation_scheduler_batch_size=VALUATION_SCHEDULER_BATCH_SIZE,
+                valuation_scheduler_dispatch_rounds=VALUATION_SCHEDULER_DISPATCH_ROUNDS,
+                dlq_budget_events_per_window=DLQ_BUDGET_EVENTS_PER_WINDOW,
+                operating_band_policy=OPERATING_BAND_POLICY,
+                calculator_peak_lag_age_seconds=CALCULATOR_PEAK_LAG_AGE_SECONDS,
+                replay_isolation_mode=REPLAY_ISOLATION_MODE,
+                partition_growth_strategy=PARTITION_GROWTH_STRATEGY,
+            )
         )
 
     async def get_reprocessing_queue_health(self) -> IngestionReprocessingQueueHealthResponse:
