@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -9,7 +7,6 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from portfolio_common.database_models import ConsumerDlqEvent as DBConsumerDlqEvent
 from portfolio_common.database_models import ConsumerDlqReplayAudit as DBConsumerDlqReplayAudit
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
@@ -56,6 +53,10 @@ from .ingestion_backlog_breakdown import (
     build_backlog_breakdown_response,
     empty_backlog_breakdown_response,
 )
+from .ingestion_consumer_dlq_events import (
+    get_consumer_dlq_event_response,
+    list_consumer_dlq_event_responses,
+)
 from .ingestion_consumer_lag import load_consumer_lag_response
 from .ingestion_health_summary import load_health_summary_response
 from .ingestion_idempotency_diagnostics import load_idempotency_diagnostics_response
@@ -69,6 +70,10 @@ from .ingestion_operating_band import (
     OperatingBandPolicy,
     OperatingBandSignals,
     classify_operating_band,
+)
+from .ingestion_operating_policy import (
+    IngestionOperatingPolicyConfig,
+    build_operating_policy_response,
 )
 from .ingestion_record_status import (
     failed_record_keys_from_failures,
@@ -165,21 +170,6 @@ def _to_failure_response(failure: DBIngestionJobFailure) -> IngestionJobFailureR
         failure_reason=failure.failure_reason,
         failed_record_keys=list(failure.failed_record_keys or []),
         failed_at=failure.failed_at,
-    )
-
-
-def _to_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEventResponse:
-    return ConsumerDlqEventResponse(
-        event_id=event.event_id,
-        original_topic=event.original_topic,
-        consumer_group=event.consumer_group,
-        dlq_topic=event.dlq_topic,
-        original_key=event.original_key,
-        error_reason_code=event.error_reason_code,
-        error_reason=event.error_reason,
-        correlation_id=event.correlation_id,
-        payload_excerpt=event.payload_excerpt,
-        observed_at=event.observed_at,
     )
 
 
@@ -527,88 +517,29 @@ class IngestionJobService:
         )
 
     async def get_operating_policy(self) -> IngestionOpsPolicyResponse:
-        replay_isolation_mode = (
-            REPLAY_ISOLATION_MODE
-            if REPLAY_ISOLATION_MODE in {"shared_workers", "dedicated_workers"}
-            else "shared_workers"
-        )
-        partition_growth_strategy = (
-            PARTITION_GROWTH_STRATEGY
-            if PARTITION_GROWTH_STRATEGY in {"scale_out_only", "pre_shard_large_portfolios"}
-            else "scale_out_only"
-        )
-        calculator_peak_lag_age_seconds = {
-            key: max(1, int(value)) for key, value in CALCULATOR_PEAK_LAG_AGE_SECONDS.items()
-        }
-        values = {
-            "lookback_minutes_default": DEFAULT_LOOKBACK_MINUTES,
-            "failure_rate_threshold_default": str(DEFAULT_FAILURE_RATE_THRESHOLD),
-            "queue_latency_threshold_seconds_default": DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
-            "backlog_age_threshold_seconds_default": DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
-            "replay_max_records_per_request": max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
-            "replay_max_backlog_jobs": max(1, REPLAY_MAX_BACKLOG_JOBS),
-            "reprocessing_worker_poll_interval_seconds": max(
-                1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
-            ),
-            "reprocessing_worker_batch_size": max(1, REPROCESSING_WORKER_BATCH_SIZE),
-            "valuation_scheduler_poll_interval_seconds": max(
-                1, VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-            ),
-            "valuation_scheduler_batch_size": max(1, VALUATION_SCHEDULER_BATCH_SIZE),
-            "valuation_scheduler_dispatch_rounds": max(1, VALUATION_SCHEDULER_DISPATCH_ROUNDS),
-            "dlq_budget_events_per_window": max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
-            "operating_band_yellow_backlog_age_seconds": (
-                OPERATING_BAND_POLICY.yellow_backlog_age_seconds
-            ),
-            "operating_band_orange_backlog_age_seconds": (
-                OPERATING_BAND_POLICY.orange_backlog_age_seconds
-            ),
-            "operating_band_red_backlog_age_seconds": OPERATING_BAND_POLICY.red_backlog_age_seconds,
-            "operating_band_yellow_dlq_pressure_ratio": str(
-                OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio
-            ),
-            "operating_band_orange_dlq_pressure_ratio": str(
-                OPERATING_BAND_POLICY.orange_dlq_pressure_ratio
-            ),
-            "operating_band_red_dlq_pressure_ratio": str(
-                OPERATING_BAND_POLICY.red_dlq_pressure_ratio
-            ),
-            "calculator_peak_lag_age_seconds": calculator_peak_lag_age_seconds,
-            "replay_isolation_mode": replay_isolation_mode,
-            "partition_growth_strategy": partition_growth_strategy,
-            "replay_dry_run_supported": True,
-        }
-        serialized = json.dumps(values, sort_keys=True, separators=(",", ":"))
-        fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
-        return IngestionOpsPolicyResponse(
-            policy_version="v1",
-            policy_fingerprint=fingerprint,
-            lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
-            failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
-            queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
-            backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
-            replay_max_records_per_request=max(1, REPLAY_MAX_RECORDS_PER_REQUEST),
-            replay_max_backlog_jobs=max(1, REPLAY_MAX_BACKLOG_JOBS),
-            reprocessing_worker_poll_interval_seconds=max(
-                1, REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
-            ),
-            reprocessing_worker_batch_size=max(1, REPROCESSING_WORKER_BATCH_SIZE),
-            valuation_scheduler_poll_interval_seconds=max(
-                1, VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-            ),
-            valuation_scheduler_batch_size=max(1, VALUATION_SCHEDULER_BATCH_SIZE),
-            valuation_scheduler_dispatch_rounds=max(1, VALUATION_SCHEDULER_DISPATCH_ROUNDS),
-            dlq_budget_events_per_window=max(1, DLQ_BUDGET_EVENTS_PER_WINDOW),
-            operating_band_yellow_backlog_age_seconds=OPERATING_BAND_POLICY.yellow_backlog_age_seconds,
-            operating_band_orange_backlog_age_seconds=OPERATING_BAND_POLICY.orange_backlog_age_seconds,
-            operating_band_red_backlog_age_seconds=OPERATING_BAND_POLICY.red_backlog_age_seconds,
-            operating_band_yellow_dlq_pressure_ratio=OPERATING_BAND_POLICY.yellow_dlq_pressure_ratio,
-            operating_band_orange_dlq_pressure_ratio=OPERATING_BAND_POLICY.orange_dlq_pressure_ratio,
-            operating_band_red_dlq_pressure_ratio=OPERATING_BAND_POLICY.red_dlq_pressure_ratio,
-            calculator_peak_lag_age_seconds=calculator_peak_lag_age_seconds,
-            replay_isolation_mode=replay_isolation_mode,  # type: ignore[arg-type]
-            partition_growth_strategy=partition_growth_strategy,  # type: ignore[arg-type]
-            replay_dry_run_supported=True,
+        return build_operating_policy_response(
+            IngestionOperatingPolicyConfig(
+                lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
+                failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
+                queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
+                backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
+                replay_max_records_per_request=REPLAY_MAX_RECORDS_PER_REQUEST,
+                replay_max_backlog_jobs=REPLAY_MAX_BACKLOG_JOBS,
+                reprocessing_worker_poll_interval_seconds=(
+                    REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
+                ),
+                reprocessing_worker_batch_size=REPROCESSING_WORKER_BATCH_SIZE,
+                valuation_scheduler_poll_interval_seconds=(
+                    VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
+                ),
+                valuation_scheduler_batch_size=VALUATION_SCHEDULER_BATCH_SIZE,
+                valuation_scheduler_dispatch_rounds=VALUATION_SCHEDULER_DISPATCH_ROUNDS,
+                dlq_budget_events_per_window=DLQ_BUDGET_EVENTS_PER_WINDOW,
+                operating_band_policy=OPERATING_BAND_POLICY,
+                calculator_peak_lag_age_seconds=CALCULATOR_PEAK_LAG_AGE_SECONDS,
+                replay_isolation_mode=REPLAY_ISOLATION_MODE,
+                partition_growth_strategy=PARTITION_GROWTH_STRATEGY,
+            )
         )
 
     async def get_reprocessing_queue_health(self) -> IngestionReprocessingQueueHealthResponse:
@@ -755,25 +686,18 @@ class IngestionJobService:
         original_topic: str | None = None,
         consumer_group: str | None = None,
     ) -> list[ConsumerDlqEventResponse]:
-        async for db in get_async_db_session():
-            stmt = select(DBConsumerDlqEvent)
-            if original_topic:
-                stmt = stmt.where(DBConsumerDlqEvent.original_topic == original_topic)
-            if consumer_group:
-                stmt = stmt.where(DBConsumerDlqEvent.consumer_group == consumer_group)
-            rows = (
-                await db.scalars(stmt.order_by(desc(DBConsumerDlqEvent.observed_at)).limit(limit))
-            ).all()
-            return [_to_dlq_event_response(row) for row in rows]
-        return []
+        return await list_consumer_dlq_event_responses(
+            limit=limit,
+            original_topic=original_topic,
+            consumer_group=consumer_group,
+            session_factory=get_async_db_session,
+        )
 
     async def get_consumer_dlq_event(self, event_id: str) -> ConsumerDlqEventResponse | None:
-        async for db in get_async_db_session():
-            row = await db.scalar(
-                select(DBConsumerDlqEvent).where(DBConsumerDlqEvent.event_id == event_id).limit(1)
-            )
-            return _to_dlq_event_response(row) if row else None
-        return None
+        return await get_consumer_dlq_event_response(
+            event_id=event_id,
+            session_factory=get_async_db_session,
+        )
 
     async def find_successful_replay_audit_by_fingerprint(
         self,
