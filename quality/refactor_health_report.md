@@ -1542,3 +1542,13 @@ health before that claim is defensible.
      maintainability; the expanded helper reports `A (48.38)` and all helper functions are
      A-ranked by cyclomatic complexity. Focused record-status and guardrail tests passed with
      25 tests, and scoped Ruff lint/format checks passed.
+261. Reduced ingestion replay-audit persistence coupling by moving successful replay-audit
+     fingerprint lookup, single-audit lookup, replay-audit row creation, replay-audit status
+     policy, and duplicate/failure metric accounting from `IngestionJobService` into
+     `ingestion_replay_audits.py`. The public service methods now remain thin delegates while the
+     helper owns the replay-audit read/write and metric side-effect boundary. `ingestion_job_service.py`
+     shrank from 762 SLOC to 726 SLOC and improved from `A (22.62)` to `A (25.65)` under Radon
+     maintainability; the expanded helper reports `A (52.41)`. Focused replay-audit and guardrail
+     tests passed with 21 tests, the broader ingestion service unit package passed with 79 tests,
+     scoped Ruff lint/format checks passed, and all touched replay-audit functions remain
+     A-ranked except the pre-existing list-filter helper at `B (7)`.
