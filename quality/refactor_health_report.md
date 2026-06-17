@@ -1510,3 +1510,12 @@ health before that claim is defensible.
      stalled-job and guardrail tests passed with 21 tests, the broader ingestion service unit
      package passed with 70 tests, scoped Ruff lint/format, typecheck, maintainability, and
      complexity gates passed.
+258. Reduced ingestion backlog-breakdown read-model coupling by moving grouped backlog SQL loading
+     from `IngestionJobService.get_backlog_breakdown` into `load_backlog_breakdown_response` in
+     `ingestion_backlog_breakdown.py`. The service method now delegates to the helper while the
+     helper owns query scope, total backlog counting, grouped-row response assembly, integer
+     normalization, and failure-rate policy. `ingestion_job_service.py` shrank from 835 SLOC to
+     786 SLOC and improved from `A (20.28)` to `A (21.58)` under Radon maintainability; the backlog
+     helper remains fully A-ranked at `A (45.30)`. Focused backlog helper and service tests passed
+     with 6 tests, the broader ingestion service unit package passed with 71 tests, scoped Ruff
+     lint/format, typecheck, maintainability, and complexity gates passed.

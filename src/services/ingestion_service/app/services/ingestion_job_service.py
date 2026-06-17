@@ -21,7 +21,7 @@ from portfolio_common.monitoring import (
     INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL,
     INGESTION_REPLAY_FAILURE_TOTAL,
 )
-from sqlalchemy import and_, case, desc, func, select, update
+from sqlalchemy import and_, desc, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..DTOs.ingestion_job_dto import (
@@ -47,10 +47,7 @@ from ..DTOs.ingestion_job_dto import (
 from ..settings import get_ingestion_service_settings
 from . import ingestion_capacity_status as _capacity_status
 from . import ingestion_error_budget_status as _error_budget_status
-from .ingestion_backlog_breakdown import (
-    build_backlog_breakdown_response,
-    empty_backlog_breakdown_response,
-)
+from .ingestion_backlog_breakdown import load_backlog_breakdown_response
 from .ingestion_consumer_dlq_events import (
     get_consumer_dlq_event_response,
     list_consumer_dlq_event_responses,
@@ -568,59 +565,11 @@ class IngestionJobService:
         lookback_minutes: int = 1440,
         limit: int = 200,
     ) -> IngestionBacklogBreakdownResponse:
-        async for db in get_async_db_session():
-            since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            now_utc = datetime.now(UTC)
-            total_backlog_jobs = int(
-                (
-                    await db.scalar(
-                        select(func.count(DBIngestionJob.id)).where(
-                            and_(
-                                DBIngestionJob.submitted_at >= since,
-                                DBIngestionJob.status.in_(["accepted", "queued"]),
-                            )
-                        )
-                    )
-                )
-                or 0
-            )
-            rows = await db.execute(
-                select(
-                    DBIngestionJob.endpoint,
-                    DBIngestionJob.entity_type,
-                    func.count(DBIngestionJob.id).label("total_jobs"),
-                    func.sum(case((DBIngestionJob.status == "accepted", 1), else_=0)).label(
-                        "accepted_jobs"
-                    ),
-                    func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)).label(
-                        "queued_jobs"
-                    ),
-                    func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
-                        "failed_jobs"
-                    ),
-                    func.min(
-                        case(
-                            (
-                                DBIngestionJob.status.in_(["accepted", "queued"]),
-                                DBIngestionJob.submitted_at,
-                            ),
-                            else_=None,
-                        )
-                    ).label("oldest_backlog_submitted_at"),
-                )
-                .where(DBIngestionJob.submitted_at >= since)
-                .group_by(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
-            )
-
-            return build_backlog_breakdown_response(
-                lookback_minutes=lookback_minutes,
-                total_backlog_jobs=total_backlog_jobs,
-                grouped_rows=list(rows.all()),
-                now=now_utc,
-                limit=limit,
-            )
-
-        return empty_backlog_breakdown_response(lookback_minutes=lookback_minutes)
+        return await load_backlog_breakdown_response(
+            lookback_minutes=lookback_minutes,
+            limit=limit,
+            session_factory=get_async_db_session,
+        )
 
     async def list_stalled_jobs(
         self,
