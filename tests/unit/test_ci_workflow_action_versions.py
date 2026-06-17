@@ -11,12 +11,14 @@ NODE20_DEPRECATED_ACTION_PINS = (
     "actions/cache@v4",
     "actions/upload-artifact@v4",
     "actions/download-artifact@v4",
+    "actions/upload-artifact@v5",
+    "actions/download-artifact@v5",
     "docker/setup-buildx-action@v3",
 )
 
 EXPECTED_RUNTIME_ACTION_PINS = (
     "actions/cache@v5",
-    "actions/upload-artifact@v5",
+    "actions/upload-artifact@v7",
     "docker/setup-buildx-action@v4",
 )
 
@@ -40,7 +42,7 @@ def test_runtime_workflows_use_current_action_pins_for_cache_artifacts_and_build
     for action_pin in EXPECTED_RUNTIME_ACTION_PINS:
         assert action_pin in workflow_text
 
-    assert "actions/download-artifact@v5" in Path(
+    assert "actions/download-artifact@v8" in Path(
         ".github/workflows/main-releasability.yml"
     ).read_text(encoding="utf-8")
 

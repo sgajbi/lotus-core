@@ -1311,6 +1311,12 @@ health before that claim is defensible.
      so deprecated `actions/cache@v4`, `actions/upload-artifact@v4`,
      `actions/download-artifact@v4`, and `docker/setup-buildx-action@v3` pins cannot silently
      return in those release workflows.
+235a. Hardened the artifact action runtime baseline again after GitHub Main Releasability still
+      emitted Node 20 deprecation annotations for artifact upload steps. PR Merge Gate and Main
+      Releasability now use `actions/upload-artifact@v7`, Main Releasability uses
+      `actions/download-artifact@v8` for sign-off collection, and the workflow action-version test
+      rejects stale artifact v5 pins while keeping `actions/cache@v5` and
+      `docker/setup-buildx-action@v4`.
 236. Reduced advisory simulation suitability result and governance issue composition complexity by
      extracting status-change classification, candidate selection, evidence construction, summary
      aggregation, highest-severity selection, and governance issue builders while preserving issue

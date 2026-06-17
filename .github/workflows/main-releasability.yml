@@ -159,7 +159,7 @@ jobs:
         run: |
           python scripts/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
       - name: Upload build evidence
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-docker-build-evidence
           path: output/build-evidence/*
@@ -197,7 +197,7 @@ jobs:
         run: docker compose logs > docker-smoke-logs.txt
       - name: Upload smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-docker-smoke-artifacts
           path: |
@@ -241,7 +241,7 @@ jobs:
         run: docker compose logs > latency-gate-logs.txt
       - name: Upload latency artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-latency-artifacts
           path: |
@@ -282,7 +282,7 @@ jobs:
         run: docker compose logs > performance-load-gate-logs.txt
       - name: Upload performance load artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-performance-load-artifacts
           path: |
@@ -312,7 +312,7 @@ jobs:
         run: docker compose logs > integration-all-logs.txt
       - name: Upload integration diagnostics
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-integration-all-artifacts
           path: integration-all-logs.txt
@@ -346,7 +346,7 @@ jobs:
         run: docker compose logs > e2e-all-logs.txt
       - name: Upload E2E diagnostics
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-e2e-diagnostics
           path: e2e-all-logs.txt
@@ -384,7 +384,7 @@ jobs:
         run: docker compose logs > performance-load-gate-full-logs.txt
       - name: Upload full performance load artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-performance-load-full-artifacts
           path: |
@@ -418,7 +418,7 @@ jobs:
         run: docker compose logs > failure-recovery-gate-logs.txt
       - name: Upload failure recovery artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-failure-recovery-artifacts
           path: |
@@ -464,7 +464,7 @@ jobs:
         run: docker compose logs > institutional-completion-gate-logs.txt
       - name: Upload institutional completion artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-institutional-completion-artifacts
           path: |
@@ -490,7 +490,7 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Download sign-off artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: "*-artifacts"
           merge-multiple: true
@@ -499,7 +499,7 @@ jobs:
         run: make test-institutional-signoff-pack
       - name: Upload institutional sign-off artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: main-releasability-institutional-signoff-artifacts
           path: |
