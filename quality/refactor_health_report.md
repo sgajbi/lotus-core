@@ -1533,3 +1533,12 @@ health before that claim is defensible.
      passed with 7 tests, the broader ingestion service unit package passed with 72 tests, scoped
      Ruff lint/format, typecheck, maintainability, and complexity gates passed. The backlog helper
      remains fully A-ranked at `A (44.94)`.
+260. Reduced ingestion record-status read-model coupling by moving job lookup, failure lookup,
+     malformed request-payload fallback, replayable-record extraction, failed-record aggregation,
+     and response DTO assembly from `IngestionJobService.get_job_record_status` into
+     `ingestion_record_status.py`. The public service method now delegates to the helper while
+     preserving the existing response contract and session boundary. `ingestion_job_service.py`
+     shrank from 786 SLOC to 762 SLOC and improved from `A (21.58)` to `A (22.62)` under Radon
+     maintainability; the expanded helper reports `A (48.38)` and all helper functions are
+     A-ranked by cyclomatic complexity. Focused record-status and guardrail tests passed with
+     25 tests, and scoped Ruff lint/format checks passed.
