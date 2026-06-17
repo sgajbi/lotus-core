@@ -597,6 +597,10 @@ services:
         echo 'Demo data pack disabled via DEMO_DATA_PACK_ENABLED=false';
         exit 0;
       fi;
+      portfolio_args='';
+      if [ -n \"$$DEMO_DATA_PACK_PORTFOLIO_IDS\" ]; then
+        portfolio_args=\"--portfolio-ids $$DEMO_DATA_PACK_PORTFOLIO_IDS\";
+      fi;
       python -m tools.demo_data_pack
       --ingestion-base-url http://ingestion_service:8000
       --query-base-url http://query_service:8001
@@ -605,7 +609,7 @@ services:
       --wait-seconds $$DEMO_DATA_PACK_WAIT_SECONDS
       --poll-interval-seconds $$DEMO_DATA_PACK_POLL_INTERVAL_SECONDS
       --history-days $$DEMO_DATA_PACK_HISTORY_DAYS
-      --portfolio-ids "$$DEMO_DATA_PACK_PORTFOLIO_IDS"
+      $$portfolio_args
       "
     restart: "no"
     networks:

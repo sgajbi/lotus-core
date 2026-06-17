@@ -60,7 +60,10 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
     assert "--wait-seconds $$DEMO_DATA_PACK_WAIT_SECONDS" in command
     assert "--poll-interval-seconds $$DEMO_DATA_PACK_POLL_INTERVAL_SECONDS" in command
     assert "--history-days $$DEMO_DATA_PACK_HISTORY_DAYS" in command
-    assert '--portfolio-ids "$$DEMO_DATA_PACK_PORTFOLIO_IDS"' in command
+    assert "portfolio_args='';" in command
+    assert 'if [ -n \\"$$DEMO_DATA_PACK_PORTFOLIO_IDS\\" ]; then' in command
+    assert 'portfolio_args=\\"--portfolio-ids $$DEMO_DATA_PACK_PORTFOLIO_IDS\\";' in command
+    assert "$$portfolio_args" in command
     assert "depends_on" not in demo_loader["environment"]
     assert demo_loader["environment"]["DEMO_DATA_PACK_WAIT_SECONDS"] == (
         "${DEMO_DATA_PACK_WAIT_SECONDS:-900}"
