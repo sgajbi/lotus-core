@@ -330,6 +330,30 @@ async def test_position_valuation_data_maps_snapshot_row_values() -> None:
     assert valuation.unrealized_gain_loss == Decimal("25")
 
 
+async def test_position_valuation_data_derives_missing_snapshot_unrealized_amounts() -> None:
+    position_row = DailyPositionSnapshot(
+        market_price=Decimal("180"),
+        market_value=Decimal("12960"),
+        unrealized_gain_loss=None,
+        cost_basis=Decimal("9900"),
+        market_value_local=Decimal("10800"),
+        unrealized_gain_loss_local=None,
+        cost_basis_local=Decimal("9000"),
+    )
+
+    valuation = position_valuation_data(
+        position_row=position_row,
+        is_snapshot_row=True,
+        fallback_valuation=None,
+    )
+
+    assert valuation.market_price == Decimal("180")
+    assert valuation.market_value == Decimal("12960")
+    assert valuation.unrealized_gain_loss == Decimal("3060")
+    assert valuation.market_value_local == Decimal("10800")
+    assert valuation.unrealized_gain_loss_local == Decimal("1800")
+
+
 async def test_position_valuation_data_uses_latest_snapshot_fallback() -> None:
     position_row = PositionHistory(cost_basis=Decimal("900"), cost_basis_local=Decimal("900"))
 

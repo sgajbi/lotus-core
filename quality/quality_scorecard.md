@@ -103,6 +103,14 @@ governed runtime workflows while keeping `actions/cache@v5` and `docker/setup-bu
 Remote CI must provide the final warning-clean proof because the deprecated-runtime annotation is a
 GitHub runner signal, not a local Python behavior.
 
+CR-1104 update: Main Releasability run `27665855209` passed all non-skipped jobs except
+`Main Releasability / E2E Full`, where the dual-currency workflow found a HoldingsAsOf snapshot
+with `unrealized_gain_loss_local = None` despite having local market value and local cost basis.
+Snapshot valuation assembly now uses the same arithmetic invariant as fallback valuation assembly:
+preserve explicit stored unrealized values, and derive missing base/local unrealized P&L from
+market value minus cost basis only when both inputs exist. Focused local evidence passed with
+30 position-holdings unit tests, scoped Ruff lint, scoped Ruff format, and `git diff --check`.
+
 ## Current PR Evidence Snapshot
 
 Local evidence captured on 2026-06-05 after CR-1034:
