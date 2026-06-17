@@ -6,6 +6,9 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
+from src.services.ingestion_service.app.services import (
+    ingestion_replay_audits as replay_audits_module,
+)
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
     OperatingBandPolicy,
@@ -534,13 +537,13 @@ async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_met
         "get_async_db_session",
         lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
-    monkeypatch.setattr(service_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
+    monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
     monkeypatch.setattr(
-        service_module,
+        replay_audits_module,
         "INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL",
         duplicate_counter,
     )
-    monkeypatch.setattr(service_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
+    monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
 
     replay_id = await service.record_consumer_dlq_replay_audit(
         recovery_path="ingestion_job_retry",
@@ -591,13 +594,13 @@ async def test_record_consumer_dlq_replay_audit_increments_failure_metric(
         "get_async_db_session",
         lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
-    monkeypatch.setattr(service_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
+    monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
     monkeypatch.setattr(
-        service_module,
+        replay_audits_module,
         "INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL",
         duplicate_counter,
     )
-    monkeypatch.setattr(service_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
+    monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
 
     await service.record_consumer_dlq_replay_audit(
         recovery_path="consumer_dlq_replay",
@@ -712,13 +715,13 @@ async def test_record_consumer_dlq_replay_audit_increments_bookkeeping_failure_m
         "get_async_db_session",
         lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
-    monkeypatch.setattr(service_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
+    monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_AUDIT_TOTAL", audit_counter)
     monkeypatch.setattr(
-        service_module,
+        replay_audits_module,
         "INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL",
         duplicate_counter,
     )
-    monkeypatch.setattr(service_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
+    monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
 
     await service.record_consumer_dlq_replay_audit(
         recovery_path="consumer_dlq_replay",

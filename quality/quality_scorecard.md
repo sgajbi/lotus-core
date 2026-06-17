@@ -1010,3 +1010,8 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1032 split cost calculator process-message handling into message metadata, valid cost-event
   processing, process-message error classification, and failure metric helpers, reducing
   `CostCalculatorConsumer.process_message` from `C (11)` to `A (2)`.
+- CR-1106 split ingestion replay-audit lookup, persistence, status policy, and metric accounting
+  out of `IngestionJobService` into `ingestion_replay_audits.py`, improving
+  `ingestion_job_service.py` from `A (22.62)` / 762 SLOC to `A (25.65)` / 726 SLOC while adding
+  direct helper coverage for successful/missing fingerprint lookup, audit persistence, completed
+  timestamp posture, and duplicate/failure metric routing.
