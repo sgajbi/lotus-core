@@ -154,7 +154,7 @@ jobs:
         run: |
           python scripts/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
       - name: Upload build evidence
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-docker-build-evidence
           path: output/build-evidence/*
@@ -197,7 +197,7 @@ jobs:
         run: docker compose logs > e2e-smoke-logs.txt
       - name: Upload E2E smoke diagnostics
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-e2e-smoke-artifacts
           path: e2e-smoke-logs.txt
@@ -235,7 +235,7 @@ jobs:
         run: docker compose logs > docker-smoke-logs.txt
       - name: Upload smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-docker-smoke-artifacts
           path: |
@@ -279,7 +279,7 @@ jobs:
         run: docker compose logs > latency-gate-logs.txt
       - name: Upload latency artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-latency-artifacts
           path: |
@@ -320,7 +320,7 @@ jobs:
         run: docker compose logs > performance-load-gate-logs.txt
       - name: Upload performance load artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-performance-load-artifacts
           path: |
