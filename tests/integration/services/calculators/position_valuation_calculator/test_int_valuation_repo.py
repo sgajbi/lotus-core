@@ -1539,6 +1539,54 @@ async def test_get_latest_business_date_falls_back_to_processing_dates_when_cale
     assert latest_date == date(2025, 8, 10)
 
 
+async def test_get_latest_business_date_prefers_calendar_over_future_processing_residue(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = ValuationRepository(async_db_session)
+
+    async_db_session.add_all(
+        [
+            BusinessDate(calendar_code="GLOBAL", date=date(2026, 4, 10)),
+            Portfolio(
+                portfolio_id="P-CALENDAR-BOUND-1",
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="ACTIVE",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id="P-CALENDAR-BOUND-1",
+                security_id="S-CALENDAR-BOUND-1",
+                valuation_date=date(2026, 6, 17),
+                epoch=0,
+                status="PROCESSING",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P-CALENDAR-BOUND-1",
+                security_id="S-CALENDAR-BOUND-1",
+                date=date(2026, 6, 17),
+                quantity=Decimal("1"),
+                cost_basis=Decimal("1"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    latest_date = await repo.get_latest_business_date()
+
+    assert latest_date == date(2026, 4, 10)
+
+
 async def test_get_states_needing_backfill_skips_keys_without_instrument(
     clean_db, async_db_session: AsyncSession
 ):

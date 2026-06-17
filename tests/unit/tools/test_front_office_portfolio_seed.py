@@ -727,10 +727,12 @@ def test_front_office_cleanup_retries_transient_database_conflicts(monkeypatch) 
         postgres_container="postgres",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         benchmark_id=DEFAULT_BENCHMARK_ID,
+        max_business_date=date(2026, 4, 10),
     )
 
     assert len(calls) == 2
     assert calls[0] == calls[1]
+    assert "date > '2026-04-10'" in calls[0][-1]
 
 
 def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed():
@@ -756,6 +758,22 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     assert "delete from reprocessing_jobs;" not in sql
     assert "delete from processed_events where service_name in" in sql
     assert "delete from processed_events where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+
+
+def test_front_office_seed_cleanup_sql_bounds_demo_business_dates():
+    sql = build_front_office_seed_cleanup_sql(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        benchmark_id=DEFAULT_BENCHMARK_ID,
+        max_business_date=date(2026, 4, 10),
+    )
+
+    assert (
+        "delete from business_dates where calendar_code = 'GLOBAL' "
+        "and date > '2026-04-10';"
+    ) in sql
+    assert sql.index("delete from business_dates") < sql.index(
+        "delete from financial_reconciliation_findings"
+    )
 
 
 def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
