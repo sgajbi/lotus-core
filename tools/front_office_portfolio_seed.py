@@ -271,6 +271,7 @@ def build_front_office_seed_cleanup_sql(
             *business_date_bound_sql,
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             *source_only_candidate_cleanup,
+            *business_date_bound_sql,
             (
                 "delete from model_portfolio_targets "
                 f"where model_portfolio_id = '{DEFAULT_DPM_MODEL_PORTFOLIO_ID}' "

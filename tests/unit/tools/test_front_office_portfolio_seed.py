@@ -770,8 +770,17 @@ def test_front_office_seed_cleanup_sql_bounds_demo_business_dates():
     assert (
         "delete from business_dates where calendar_code = 'GLOBAL' and date > '2026-04-10';"
     ) in sql
+    assert (
+        sql.count(
+            "delete from business_dates where calendar_code = 'GLOBAL' and date > '2026-04-10';"
+        )
+        == 2
+    )
     assert sql.index("delete from business_dates") < sql.index(
         "delete from financial_reconciliation_findings"
+    )
+    assert sql.rindex("delete from business_dates") > sql.rindex(
+        "delete from processed_events where service_name in"
     )
 
 
