@@ -1519,3 +1519,11 @@ health before that claim is defensible.
      helper remains fully A-ranked at `A (45.30)`. Focused backlog helper and service tests passed
      with 6 tests, the broader ingestion service unit package passed with 71 tests, scoped Ruff
      lint/format, typecheck, maintainability, and complexity gates passed.
+259. Hardened ingestion backlog-breakdown age semantics after PR review identified a possible
+     negative `oldest_backlog_age_seconds` value during active ingestion. The backlog count and
+     grouped-row queries now share an upper submitted-at snapshot bound, and backlog age calculation
+     defensively clamps to zero to preserve the response field's `ge=0.0` contract. Added focused
+     regression coverage for future submitted timestamps. Focused backlog helper and service tests
+     passed with 7 tests, the broader ingestion service unit package passed with 72 tests, scoped
+     Ruff lint/format, typecheck, maintainability, and complexity gates passed. The backlog helper
+     remains fully A-ranked at `A (44.94)`.

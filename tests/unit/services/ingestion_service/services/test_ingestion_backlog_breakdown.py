@@ -75,6 +75,23 @@ def test_build_backlog_breakdown_response_applies_limit_before_top3_share():
     assert response.top_3_backlog_share == Decimal("0.75")
 
 
+def test_build_backlog_breakdown_response_clamps_future_backlog_age():
+    now = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
+    rows = [
+        ("/ingest/transactions", "transaction", 1, 1, 0, 0, now + timedelta(seconds=1)),
+    ]
+
+    response = build_backlog_breakdown_response(
+        lookback_minutes=60,
+        total_backlog_jobs=1,
+        grouped_rows=rows,
+        now=now,
+        limit=10,
+    )
+
+    assert response.groups[0].oldest_backlog_age_seconds == 0.0
+
+
 def test_empty_backlog_breakdown_response_has_zero_concentration():
     response = empty_backlog_breakdown_response(lookback_minutes=15)
 

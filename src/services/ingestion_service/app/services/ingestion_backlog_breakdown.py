@@ -32,6 +32,7 @@ async def load_backlog_breakdown_response(
                     select(func.count(DBIngestionJob.id)).where(
                         and_(
                             DBIngestionJob.submitted_at >= since,
+                            DBIngestionJob.submitted_at <= now_utc,
                             DBIngestionJob.status.in_(["accepted", "queued"]),
                         )
                     )
@@ -64,6 +65,7 @@ async def load_backlog_breakdown_response(
                 ).label("oldest_backlog_submitted_at"),
             )
             .where(DBIngestionJob.submitted_at >= since)
+            .where(DBIngestionJob.submitted_at <= now_utc)
             .group_by(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
         )
 
@@ -189,4 +191,4 @@ def _backlog_age_seconds(
 ) -> float:
     if oldest_submitted_at is None:
         return 0.0
-    return (now - oldest_submitted_at).total_seconds()
+    return max(0.0, (now - oldest_submitted_at).total_seconds())
