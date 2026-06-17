@@ -71,10 +71,7 @@ from .ingestion_operating_policy import (
     build_operating_policy_response,
 )
 from .ingestion_ops_mode import load_ops_mode_response, update_ops_mode_response
-from .ingestion_record_status import (
-    failed_record_keys_from_failures,
-    replayable_record_keys_from_payload,
-)
+from .ingestion_record_status import load_record_status_response
 from .ingestion_replay_audits import (
     list_replay_audit_responses,
     to_replay_audit_response,
@@ -712,33 +709,10 @@ class IngestionJobService:
         )
 
     async def get_job_record_status(self, job_id: str) -> IngestionJobRecordStatusResponse | None:
-        async for db in get_async_db_session():
-            row = await db.scalar(
-                select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
-            )
-            if row is None:
-                return None
-            failures = (
-                await db.scalars(
-                    select(DBIngestionJobFailure)
-                    .where(DBIngestionJobFailure.job_id == job_id)
-                    .order_by(desc(DBIngestionJobFailure.failed_at))
-                )
-            ).all()
-
-            payload = row.request_payload if isinstance(row.request_payload, dict) else {}
-
-            return IngestionJobRecordStatusResponse(
-                job_id=row.job_id,
-                entity_type=row.entity_type,
-                accepted_count=row.accepted_count,
-                failed_record_keys=failed_record_keys_from_failures(list(failures)),
-                replayable_record_keys=replayable_record_keys_from_payload(
-                    endpoint=row.endpoint,
-                    payload=payload,
-                ),
-            )
-        return None
+        return await load_record_status_response(
+            job_id=job_id,
+            session_factory=get_async_db_session,
+        )
 
     async def get_idempotency_diagnostics(
         self,
