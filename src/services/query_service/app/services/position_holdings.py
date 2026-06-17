@@ -78,10 +78,22 @@ def _fallback_unrealized_amount(
     market_value_field: str,
     cost_basis: Any,
 ) -> Decimal | None:
-    unrealized_amount = fallback_valuation.get(unrealized_field)
+    return _unrealized_amount(
+        unrealized_amount=fallback_valuation.get(unrealized_field),
+        market_value=fallback_valuation.get(market_value_field),
+        cost_basis=cost_basis,
+    )
+
+
+def _unrealized_amount(
+    *,
+    unrealized_amount: Any,
+    market_value: Any,
+    cost_basis: Any,
+) -> Decimal | None:
     if unrealized_amount is not None:
         return unrealized_amount
-    market_value = _nullable_decimal_value(fallback_valuation.get(market_value_field))
+    market_value = _nullable_decimal_value(market_value)
     cost_basis_value = _nullable_decimal_value(cost_basis)
     if market_value is None or cost_basis_value is None:
         return None
@@ -129,9 +141,17 @@ def position_valuation_data(
         return ValuationData(
             market_price=position_row.market_price,
             market_value=position_row.market_value,
-            unrealized_gain_loss=position_row.unrealized_gain_loss,
+            unrealized_gain_loss=_unrealized_amount(
+                unrealized_amount=position_row.unrealized_gain_loss,
+                market_value=position_row.market_value,
+                cost_basis=position_row.cost_basis,
+            ),
             market_value_local=position_row.market_value_local,
-            unrealized_gain_loss_local=position_row.unrealized_gain_loss_local,
+            unrealized_gain_loss_local=_unrealized_amount(
+                unrealized_amount=position_row.unrealized_gain_loss_local,
+                market_value=position_row.market_value_local,
+                cost_basis=position_row.cost_basis_local,
+            ),
         )
     if fallback_valuation is not None:
         return ValuationData(
