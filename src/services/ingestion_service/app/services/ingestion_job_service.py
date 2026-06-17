@@ -10,7 +10,6 @@ from uuid import uuid4
 from portfolio_common.database_models import ConsumerDlqReplayAudit as DBConsumerDlqReplayAudit
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
-from portfolio_common.database_models import IngestionOpsControl as DBIngestionOpsControl
 from portfolio_common.db import get_async_db_session
 from portfolio_common.monitoring import (
     INGESTION_BACKLOG_AGE_SECONDS,
@@ -75,6 +74,7 @@ from .ingestion_operating_policy import (
     IngestionOperatingPolicyConfig,
     build_operating_policy_response,
 )
+from .ingestion_ops_mode import load_ops_mode_response, update_ops_mode_response
 from .ingestion_record_status import (
     failed_record_keys_from_failures,
     replayable_record_keys_from_payload,
@@ -866,29 +866,7 @@ class IngestionJobService:
         )
 
     async def get_ops_mode(self) -> IngestionOpsModeResponse:
-        async for db in get_async_db_session():
-            row = await db.scalar(
-                select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
-            )
-            if row is None:
-                row = DBIngestionOpsControl(
-                    id=1,
-                    mode="normal",
-                    replay_window_start=None,
-                    replay_window_end=None,
-                    updated_by="system_bootstrap",
-                )
-                async with db.begin():
-                    db.add(row)
-                    await db.flush()
-            return IngestionOpsModeResponse(
-                mode=row.mode,  # type: ignore[arg-type]
-                replay_window_start=row.replay_window_start,
-                replay_window_end=row.replay_window_end,
-                updated_by=row.updated_by,
-                updated_at=row.updated_at,
-            )
-        raise RuntimeError("Unable to read ingestion ops mode.")
+        return await load_ops_mode_response(session_factory=get_async_db_session)
 
     async def update_ops_mode(
         self,
@@ -898,28 +876,13 @@ class IngestionJobService:
         replay_window_end: datetime | None,
         updated_by: str | None,
     ) -> IngestionOpsModeResponse:
-        async for db in get_async_db_session():
-            async with db.begin():
-                row = await db.scalar(
-                    select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
-                )
-                if row is None:
-                    row = DBIngestionOpsControl(id=1, mode="normal")
-                    db.add(row)
-                    await db.flush()
-                row.mode = mode
-                row.replay_window_start = replay_window_start
-                row.replay_window_end = replay_window_end
-                row.updated_by = updated_by
-                row.updated_at = datetime.now(UTC)
-            return IngestionOpsModeResponse(
-                mode=row.mode,  # type: ignore[arg-type]
-                replay_window_start=row.replay_window_start,
-                replay_window_end=row.replay_window_end,
-                updated_by=row.updated_by,
-                updated_at=row.updated_at,
-            )
-        raise RuntimeError("Unable to update ingestion ops mode.")
+        return await update_ops_mode_response(
+            mode=mode,
+            replay_window_start=replay_window_start,
+            replay_window_end=replay_window_end,
+            updated_by=updated_by,
+            session_factory=get_async_db_session,
+        )
 
     async def assert_ingestion_writable(self) -> None:
         mode = await self.get_ops_mode()

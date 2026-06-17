@@ -1492,3 +1492,12 @@ health before that claim is defensible.
      selected portfolio scope. Remote Feature Lane run `27482536715`, Quality Baseline run
      `27482537598`, and PR Merge Gate run `27482537616` all passed for `8d745a08`; PR Merge Gate
      Latency Gate completed successfully with the focused seed.
+256. Reduced ingestion ops-mode persistence coupling by extracting control-row response mapping,
+     missing-row bootstrap, and update persistence into `ingestion_ops_mode.py`. The public
+     `IngestionJobService.get_ops_mode` and `update_ops_mode` methods now delegate to the helper
+     while preserving the existing response contract and database-session boundary.
+     `ingestion_job_service.py` shrank from the previously recorded 990 SLOC to 879 SLOC and
+     improved from `B (18.73)` to `A (19.55)` under Radon maintainability; the new helper reports
+     `A (62.44)`. Focused ops-mode and guardrail tests passed with 21 tests, the broader ingestion
+     service unit package passed with 67 tests, scoped Ruff lint/format, typecheck,
+     maintainability, and complexity gates passed.
