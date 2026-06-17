@@ -299,10 +299,13 @@ class ValuationRepositoryBase:
         business_date_stmt = select(func.max(BusinessDate.date)).where(
             BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
         )
+        business_date = (await self.db.execute(business_date_stmt)).scalar_one_or_none()
+        if business_date is not None:
+            return business_date
+
         snapshot_date_stmt = select(func.max(DailyPositionSnapshot.date))
         valuation_job_date_stmt = select(func.max(PortfolioValuationJob.valuation_date))
 
-        business_date = (await self.db.execute(business_date_stmt)).scalar_one_or_none()
         snapshot_date = (await self.db.execute(snapshot_date_stmt)).scalar_one_or_none()
         valuation_job_date = (await self.db.execute(valuation_job_date_stmt)).scalar_one_or_none()
 

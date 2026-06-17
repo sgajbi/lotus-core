@@ -242,7 +242,12 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     )
 
 
-def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str) -> str:
+def build_front_office_seed_cleanup_sql(
+    *,
+    portfolio_id: str,
+    benchmark_id: str,
+    max_business_date: date | None = None,
+) -> str:
     benchmark_index_id_list = ", ".join(
         f"'{index_id}'" for index_id in DEFAULT_BENCHMARK_COMPONENT_INDEX_IDS
     )
@@ -250,10 +255,23 @@ def build_front_office_seed_cleanup_sql(*, portfolio_id: str, benchmark_id: str)
         build_portfolio_seed_cleanup_sql(portfolio_id=row["portfolio_id"])
         for row in DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS
     ]
+    business_date_bound_sql = (
+        [
+            (
+                "delete from business_dates "
+                "where calendar_code = 'GLOBAL' "
+                f"and date > '{max_business_date.isoformat()}';"
+            )
+        ]
+        if max_business_date is not None
+        else []
+    )
     return "\n".join(
         [
+            *business_date_bound_sql,
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             *source_only_candidate_cleanup,
+            *business_date_bound_sql,
             (
                 "delete from model_portfolio_targets "
                 f"where model_portfolio_id = '{DEFAULT_DPM_MODEL_PORTFOLIO_ID}' "
@@ -2218,11 +2236,13 @@ def _cleanup_existing_front_office_seed(
     postgres_container: str,
     portfolio_id: str,
     benchmark_id: str,
+    max_business_date: date | None = None,
     max_attempts: int = 3,
 ) -> None:
     sql = build_front_office_seed_cleanup_sql(
         portfolio_id=portfolio_id,
         benchmark_id=benchmark_id,
+        max_business_date=max_business_date,
     )
     command = [
         "docker",
@@ -2551,6 +2571,7 @@ def main() -> int:
                 postgres_container=args.postgres_container,
                 portfolio_id=args.portfolio_id,
                 benchmark_id=args.benchmark_id,
+                max_business_date=end_date,
             )
         should_ingest = args.force_ingest or not args.skip_cleanup
         if not should_ingest:
