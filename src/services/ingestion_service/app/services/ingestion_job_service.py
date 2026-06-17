@@ -10,7 +10,6 @@ from uuid import uuid4
 from portfolio_common.database_models import ConsumerDlqReplayAudit as DBConsumerDlqReplayAudit
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
-from portfolio_common.database_models import IngestionOpsControl as DBIngestionOpsControl
 from portfolio_common.db import get_async_db_session
 from portfolio_common.monitoring import (
     INGESTION_BACKLOG_AGE_SECONDS,
@@ -22,7 +21,7 @@ from portfolio_common.monitoring import (
     INGESTION_REPLAY_DUPLICATE_BLOCKED_TOTAL,
     INGESTION_REPLAY_FAILURE_TOTAL,
 )
-from sqlalchemy import and_, case, desc, func, select, update
+from sqlalchemy import and_, desc, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..DTOs.ingestion_job_dto import (
@@ -44,15 +43,11 @@ from ..DTOs.ingestion_job_dto import (
     IngestionReprocessingQueueHealthResponse,
     IngestionSloStatusResponse,
     IngestionStalledJobListResponse,
-    IngestionStalledJobResponse,
 )
 from ..settings import get_ingestion_service_settings
 from . import ingestion_capacity_status as _capacity_status
 from . import ingestion_error_budget_status as _error_budget_status
-from .ingestion_backlog_breakdown import (
-    build_backlog_breakdown_response,
-    empty_backlog_breakdown_response,
-)
+from .ingestion_backlog_breakdown import load_backlog_breakdown_response
 from .ingestion_consumer_dlq_events import (
     get_consumer_dlq_event_response,
     list_consumer_dlq_event_responses,
@@ -75,6 +70,7 @@ from .ingestion_operating_policy import (
     IngestionOperatingPolicyConfig,
     build_operating_policy_response,
 )
+from .ingestion_ops_mode import load_ops_mode_response, update_ops_mode_response
 from .ingestion_record_status import (
     failed_record_keys_from_failures,
     replayable_record_keys_from_payload,
@@ -89,6 +85,7 @@ from .ingestion_slo_status import (
     build_slo_status_response,
     load_ingestion_slo_snapshot,
 )
+from .ingestion_stalled_jobs import load_stalled_job_list_response
 
 _SETTINGS = get_ingestion_service_settings()
 _RUNTIME_POLICY = _SETTINGS.runtime_policy
@@ -568,59 +565,11 @@ class IngestionJobService:
         lookback_minutes: int = 1440,
         limit: int = 200,
     ) -> IngestionBacklogBreakdownResponse:
-        async for db in get_async_db_session():
-            since = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
-            now_utc = datetime.now(UTC)
-            total_backlog_jobs = int(
-                (
-                    await db.scalar(
-                        select(func.count(DBIngestionJob.id)).where(
-                            and_(
-                                DBIngestionJob.submitted_at >= since,
-                                DBIngestionJob.status.in_(["accepted", "queued"]),
-                            )
-                        )
-                    )
-                )
-                or 0
-            )
-            rows = await db.execute(
-                select(
-                    DBIngestionJob.endpoint,
-                    DBIngestionJob.entity_type,
-                    func.count(DBIngestionJob.id).label("total_jobs"),
-                    func.sum(case((DBIngestionJob.status == "accepted", 1), else_=0)).label(
-                        "accepted_jobs"
-                    ),
-                    func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)).label(
-                        "queued_jobs"
-                    ),
-                    func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
-                        "failed_jobs"
-                    ),
-                    func.min(
-                        case(
-                            (
-                                DBIngestionJob.status.in_(["accepted", "queued"]),
-                                DBIngestionJob.submitted_at,
-                            ),
-                            else_=None,
-                        )
-                    ).label("oldest_backlog_submitted_at"),
-                )
-                .where(DBIngestionJob.submitted_at >= since)
-                .group_by(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
-            )
-
-            return build_backlog_breakdown_response(
-                lookback_minutes=lookback_minutes,
-                total_backlog_jobs=total_backlog_jobs,
-                grouped_rows=list(rows.all()),
-                now=now_utc,
-                limit=limit,
-            )
-
-        return empty_backlog_breakdown_response(lookback_minutes=lookback_minutes)
+        return await load_backlog_breakdown_response(
+            lookback_minutes=lookback_minutes,
+            limit=limit,
+            session_factory=get_async_db_session,
+        )
 
     async def list_stalled_jobs(
         self,
@@ -628,55 +577,10 @@ class IngestionJobService:
         threshold_seconds: int = 300,
         limit: int = 100,
     ) -> IngestionStalledJobListResponse:
-        async for db in get_async_db_session():
-            cutoff = datetime.now(UTC) - timedelta(seconds=threshold_seconds)
-            rows = (
-                await db.scalars(
-                    select(DBIngestionJob)
-                    .where(
-                        and_(
-                            DBIngestionJob.status.in_(["accepted", "queued"]),
-                            DBIngestionJob.submitted_at <= cutoff,
-                        )
-                    )
-                    .order_by(DBIngestionJob.submitted_at.asc())
-                    .limit(limit)
-                )
-            ).all()
-            now_utc = datetime.now(UTC)
-            jobs: list[IngestionStalledJobResponse] = []
-            for row in rows:
-                queue_age_seconds = float((now_utc - row.submitted_at).total_seconds())
-                suggested_action = (
-                    "Investigate consumer lag and retry this job once root cause is resolved."
-                    if row.status == "accepted"
-                    else (
-                        "Inspect downstream processing bottlenecks and verify queued "
-                        "job drain progress."
-                    )
-                )
-                jobs.append(
-                    IngestionStalledJobResponse(
-                        job_id=row.job_id,
-                        endpoint=row.endpoint,
-                        entity_type=row.entity_type,
-                        status=row.status,  # type: ignore[arg-type]
-                        submitted_at=row.submitted_at,
-                        queue_age_seconds=queue_age_seconds,
-                        retry_count=row.retry_count,
-                        suggested_action=suggested_action,
-                    )
-                )
-            return IngestionStalledJobListResponse(
-                threshold_seconds=threshold_seconds,
-                total=len(jobs),
-                jobs=jobs,
-            )
-
-        return IngestionStalledJobListResponse(
+        return await load_stalled_job_list_response(
             threshold_seconds=threshold_seconds,
-            total=0,
-            jobs=[],
+            limit=limit,
+            session_factory=get_async_db_session,
         )
 
     async def list_consumer_dlq_events(
@@ -866,29 +770,7 @@ class IngestionJobService:
         )
 
     async def get_ops_mode(self) -> IngestionOpsModeResponse:
-        async for db in get_async_db_session():
-            row = await db.scalar(
-                select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
-            )
-            if row is None:
-                row = DBIngestionOpsControl(
-                    id=1,
-                    mode="normal",
-                    replay_window_start=None,
-                    replay_window_end=None,
-                    updated_by="system_bootstrap",
-                )
-                async with db.begin():
-                    db.add(row)
-                    await db.flush()
-            return IngestionOpsModeResponse(
-                mode=row.mode,  # type: ignore[arg-type]
-                replay_window_start=row.replay_window_start,
-                replay_window_end=row.replay_window_end,
-                updated_by=row.updated_by,
-                updated_at=row.updated_at,
-            )
-        raise RuntimeError("Unable to read ingestion ops mode.")
+        return await load_ops_mode_response(session_factory=get_async_db_session)
 
     async def update_ops_mode(
         self,
@@ -898,28 +780,13 @@ class IngestionJobService:
         replay_window_end: datetime | None,
         updated_by: str | None,
     ) -> IngestionOpsModeResponse:
-        async for db in get_async_db_session():
-            async with db.begin():
-                row = await db.scalar(
-                    select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
-                )
-                if row is None:
-                    row = DBIngestionOpsControl(id=1, mode="normal")
-                    db.add(row)
-                    await db.flush()
-                row.mode = mode
-                row.replay_window_start = replay_window_start
-                row.replay_window_end = replay_window_end
-                row.updated_by = updated_by
-                row.updated_at = datetime.now(UTC)
-            return IngestionOpsModeResponse(
-                mode=row.mode,  # type: ignore[arg-type]
-                replay_window_start=row.replay_window_start,
-                replay_window_end=row.replay_window_end,
-                updated_by=row.updated_by,
-                updated_at=row.updated_at,
-            )
-        raise RuntimeError("Unable to update ingestion ops mode.")
+        return await update_ops_mode_response(
+            mode=mode,
+            replay_window_start=replay_window_start,
+            replay_window_end=replay_window_end,
+            updated_by=updated_by,
+            session_factory=get_async_db_session,
+        )
 
     async def assert_ingestion_writable(self) -> None:
         mode = await self.get_ops_mode()

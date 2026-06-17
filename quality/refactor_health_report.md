@@ -1492,3 +1492,38 @@ health before that claim is defensible.
      selected portfolio scope. Remote Feature Lane run `27482536715`, Quality Baseline run
      `27482537598`, and PR Merge Gate run `27482537616` all passed for `8d745a08`; PR Merge Gate
      Latency Gate completed successfully with the focused seed.
+256. Reduced ingestion ops-mode persistence coupling by extracting control-row response mapping,
+     missing-row bootstrap, and update persistence into `ingestion_ops_mode.py`. The public
+     `IngestionJobService.get_ops_mode` and `update_ops_mode` methods now delegate to the helper
+     while preserving the existing response contract and database-session boundary.
+     `ingestion_job_service.py` shrank from the previously recorded 990 SLOC to 879 SLOC and
+     improved from `B (18.73)` to `A (19.55)` under Radon maintainability; the new helper reports
+     `A (62.44)`. Focused ops-mode and guardrail tests passed with 21 tests, the broader ingestion
+     service unit package passed with 67 tests, scoped Ruff lint/format, typecheck,
+     maintainability, and complexity gates passed.
+257. Reduced ingestion stalled-job listing coupling by extracting stalled-job SQL scope,
+     queue-age calculation, row-to-response mapping, and operator suggested-action policy into
+     `ingestion_stalled_jobs.py`. The public `IngestionJobService.list_stalled_jobs` method now
+     delegates to the helper while preserving the response contract and session boundary.
+     `ingestion_job_service.py` shrank from 879 SLOC to 835 SLOC and improved from `A (19.55)` to
+     `A (20.28)` under Radon maintainability; the new helper reports `A (65.73)`. Focused
+     stalled-job and guardrail tests passed with 21 tests, the broader ingestion service unit
+     package passed with 70 tests, scoped Ruff lint/format, typecheck, maintainability, and
+     complexity gates passed.
+258. Reduced ingestion backlog-breakdown read-model coupling by moving grouped backlog SQL loading
+     from `IngestionJobService.get_backlog_breakdown` into `load_backlog_breakdown_response` in
+     `ingestion_backlog_breakdown.py`. The service method now delegates to the helper while the
+     helper owns query scope, total backlog counting, grouped-row response assembly, integer
+     normalization, and failure-rate policy. `ingestion_job_service.py` shrank from 835 SLOC to
+     786 SLOC and improved from `A (20.28)` to `A (21.58)` under Radon maintainability; the backlog
+     helper remains fully A-ranked at `A (45.30)`. Focused backlog helper and service tests passed
+     with 6 tests, the broader ingestion service unit package passed with 71 tests, scoped Ruff
+     lint/format, typecheck, maintainability, and complexity gates passed.
+259. Hardened ingestion backlog-breakdown age semantics after PR review identified a possible
+     negative `oldest_backlog_age_seconds` value during active ingestion. The backlog count and
+     grouped-row queries now share an upper submitted-at snapshot bound, and backlog age calculation
+     defensively clamps to zero to preserve the response field's `ge=0.0` contract. Added focused
+     regression coverage for future submitted timestamps. Focused backlog helper and service tests
+     passed with 7 tests, the broader ingestion service unit package passed with 72 tests, scoped
+     Ruff lint/format, typecheck, maintainability, and complexity gates passed. The backlog helper
+     remains fully A-ranked at `A (44.94)`.

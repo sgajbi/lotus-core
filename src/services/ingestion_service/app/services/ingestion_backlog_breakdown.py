@@ -1,13 +1,83 @@
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+
+from portfolio_common.database_models import IngestionJob as DBIngestionJob
+from sqlalchemy import and_, case, func, select
 
 from ..DTOs.ingestion_job_dto import (
     IngestionBacklogBreakdownItemResponse,
     IngestionBacklogBreakdownResponse,
 )
+
+SessionFactory = Callable[[], AsyncIterator[object]]
+
+
+async def load_backlog_breakdown_response(
+    *,
+    lookback_minutes: int,
+    limit: int,
+    session_factory: SessionFactory,
+    now: datetime | None = None,
+) -> IngestionBacklogBreakdownResponse:
+    now_utc = now or datetime.now(UTC)
+    since = now_utc - timedelta(minutes=lookback_minutes)
+    async for db in session_factory():
+        total_backlog_jobs = int(
+            (
+                await db.scalar(
+                    select(func.count(DBIngestionJob.id)).where(
+                        and_(
+                            DBIngestionJob.submitted_at >= since,
+                            DBIngestionJob.submitted_at <= now_utc,
+                            DBIngestionJob.status.in_(["accepted", "queued"]),
+                        )
+                    )
+                )
+            )
+            or 0
+        )
+        rows = await db.execute(
+            select(
+                DBIngestionJob.endpoint,
+                DBIngestionJob.entity_type,
+                func.count(DBIngestionJob.id).label("total_jobs"),
+                func.sum(case((DBIngestionJob.status == "accepted", 1), else_=0)).label(
+                    "accepted_jobs"
+                ),
+                func.sum(case((DBIngestionJob.status == "queued", 1), else_=0)).label(
+                    "queued_jobs"
+                ),
+                func.sum(case((DBIngestionJob.status == "failed", 1), else_=0)).label(
+                    "failed_jobs"
+                ),
+                func.min(
+                    case(
+                        (
+                            DBIngestionJob.status.in_(["accepted", "queued"]),
+                            DBIngestionJob.submitted_at,
+                        ),
+                        else_=None,
+                    )
+                ).label("oldest_backlog_submitted_at"),
+            )
+            .where(DBIngestionJob.submitted_at >= since)
+            .where(DBIngestionJob.submitted_at <= now_utc)
+            .group_by(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
+        )
+
+        return build_backlog_breakdown_response(
+            lookback_minutes=lookback_minutes,
+            total_backlog_jobs=total_backlog_jobs,
+            grouped_rows=list(rows.all()),
+            now=now_utc,
+            limit=limit,
+        )
+
+    return empty_backlog_breakdown_response(lookback_minutes=lookback_minutes)
 
 
 def build_backlog_breakdown_response(
@@ -55,10 +125,10 @@ def backlog_breakdown_item_from_row(
         failed_jobs_raw,
         oldest_backlog_submitted_at,
     ) = row
-    accepted_jobs = int(accepted_jobs_raw or 0)
-    queued_jobs = int(queued_jobs_raw or 0)
-    failed_jobs = int(failed_jobs_raw or 0)
-    total_jobs = int(total_jobs_raw or 0)
+    accepted_jobs = _int_or_zero(accepted_jobs_raw)
+    queued_jobs = _int_or_zero(queued_jobs_raw)
+    failed_jobs = _int_or_zero(failed_jobs_raw)
+    total_jobs = _int_or_zero(total_jobs_raw)
     return IngestionBacklogBreakdownItemResponse(
         endpoint=endpoint,
         entity_type=entity_type,
@@ -72,7 +142,7 @@ def backlog_breakdown_item_from_row(
             oldest_submitted_at=oldest_backlog_submitted_at,
             now=now,
         ),
-        failure_rate=(Decimal(failed_jobs) / Decimal(total_jobs) if total_jobs else Decimal("0")),
+        failure_rate=_failure_rate(failed_jobs=failed_jobs, total_jobs=total_jobs),
     )
 
 
@@ -100,6 +170,20 @@ def _backlog_share(
     return Decimal(numerator) / Decimal(denominator)
 
 
+def _failure_rate(
+    *,
+    failed_jobs: int,
+    total_jobs: int,
+) -> Decimal:
+    if total_jobs <= 0:
+        return Decimal("0")
+    return Decimal(failed_jobs) / Decimal(total_jobs)
+
+
+def _int_or_zero(value: Any) -> int:
+    return int(value or 0)
+
+
 def _backlog_age_seconds(
     *,
     oldest_submitted_at: datetime | None,
@@ -107,4 +191,4 @@ def _backlog_age_seconds(
 ) -> float:
     if oldest_submitted_at is None:
         return 0.0
-    return (now - oldest_submitted_at).total_seconds()
+    return max(0.0, (now - oldest_submitted_at).total_seconds())
