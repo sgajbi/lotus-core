@@ -1501,3 +1501,12 @@ health before that claim is defensible.
      `A (62.44)`. Focused ops-mode and guardrail tests passed with 21 tests, the broader ingestion
      service unit package passed with 67 tests, scoped Ruff lint/format, typecheck,
      maintainability, and complexity gates passed.
+257. Reduced ingestion stalled-job listing coupling by extracting stalled-job SQL scope,
+     queue-age calculation, row-to-response mapping, and operator suggested-action policy into
+     `ingestion_stalled_jobs.py`. The public `IngestionJobService.list_stalled_jobs` method now
+     delegates to the helper while preserving the response contract and session boundary.
+     `ingestion_job_service.py` shrank from 879 SLOC to 835 SLOC and improved from `A (19.55)` to
+     `A (20.28)` under Radon maintainability; the new helper reports `A (65.73)`. Focused
+     stalled-job and guardrail tests passed with 21 tests, the broader ingestion service unit
+     package passed with 70 tests, scoped Ruff lint/format, typecheck, maintainability, and
+     complexity gates passed.

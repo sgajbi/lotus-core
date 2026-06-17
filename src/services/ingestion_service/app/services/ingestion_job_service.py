@@ -43,7 +43,6 @@ from ..DTOs.ingestion_job_dto import (
     IngestionReprocessingQueueHealthResponse,
     IngestionSloStatusResponse,
     IngestionStalledJobListResponse,
-    IngestionStalledJobResponse,
 )
 from ..settings import get_ingestion_service_settings
 from . import ingestion_capacity_status as _capacity_status
@@ -89,6 +88,7 @@ from .ingestion_slo_status import (
     build_slo_status_response,
     load_ingestion_slo_snapshot,
 )
+from .ingestion_stalled_jobs import load_stalled_job_list_response
 
 _SETTINGS = get_ingestion_service_settings()
 _RUNTIME_POLICY = _SETTINGS.runtime_policy
@@ -628,55 +628,10 @@ class IngestionJobService:
         threshold_seconds: int = 300,
         limit: int = 100,
     ) -> IngestionStalledJobListResponse:
-        async for db in get_async_db_session():
-            cutoff = datetime.now(UTC) - timedelta(seconds=threshold_seconds)
-            rows = (
-                await db.scalars(
-                    select(DBIngestionJob)
-                    .where(
-                        and_(
-                            DBIngestionJob.status.in_(["accepted", "queued"]),
-                            DBIngestionJob.submitted_at <= cutoff,
-                        )
-                    )
-                    .order_by(DBIngestionJob.submitted_at.asc())
-                    .limit(limit)
-                )
-            ).all()
-            now_utc = datetime.now(UTC)
-            jobs: list[IngestionStalledJobResponse] = []
-            for row in rows:
-                queue_age_seconds = float((now_utc - row.submitted_at).total_seconds())
-                suggested_action = (
-                    "Investigate consumer lag and retry this job once root cause is resolved."
-                    if row.status == "accepted"
-                    else (
-                        "Inspect downstream processing bottlenecks and verify queued "
-                        "job drain progress."
-                    )
-                )
-                jobs.append(
-                    IngestionStalledJobResponse(
-                        job_id=row.job_id,
-                        endpoint=row.endpoint,
-                        entity_type=row.entity_type,
-                        status=row.status,  # type: ignore[arg-type]
-                        submitted_at=row.submitted_at,
-                        queue_age_seconds=queue_age_seconds,
-                        retry_count=row.retry_count,
-                        suggested_action=suggested_action,
-                    )
-                )
-            return IngestionStalledJobListResponse(
-                threshold_seconds=threshold_seconds,
-                total=len(jobs),
-                jobs=jobs,
-            )
-
-        return IngestionStalledJobListResponse(
+        return await load_stalled_job_list_response(
             threshold_seconds=threshold_seconds,
-            total=0,
-            jobs=[],
+            limit=limit,
+            session_factory=get_async_db_session,
         )
 
     async def list_consumer_dlq_events(
