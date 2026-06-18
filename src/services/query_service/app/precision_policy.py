@@ -10,6 +10,7 @@ FX_RATE_SCALE = Decimal("0.00000001")
 QUANTITY_SCALE = Decimal("0.000001")
 MONEY_SCALE = Decimal("0.01")
 PERFORMANCE_SCALE = Decimal("0.000001")
+RISK_SCALE = Decimal("0.000001")
 RATIO_SCALE = Decimal("0.000001")
 INPUT_MAX_SCALE = {
     "money": 8,
@@ -70,3 +71,11 @@ def quantize_fx_rate(value: Any) -> Decimal:
 
 def quantize_ratio(value: Any) -> Decimal:
     return to_decimal(value).quantize(RATIO_SCALE, rounding=ROUNDING_MODE)
+
+
+def quantize_performance(value: Any) -> Decimal:
+    return to_decimal(value).quantize(PERFORMANCE_SCALE, rounding=ROUNDING_MODE)
+
+
+def quantize_risk(value: Any) -> Decimal:
+    return to_decimal(value).quantize(RISK_SCALE, rounding=ROUNDING_MODE)
