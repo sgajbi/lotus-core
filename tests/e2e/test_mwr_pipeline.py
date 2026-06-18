@@ -10,6 +10,28 @@ from sqlalchemy.orm import Session
 from .api_client import E2EApiClient
 from .assertions import as_decimal, assert_legacy_endpoint_status
 
+EXPECTED_CASH_POSITION_TIMESERIES = [
+    ("2025-08-01", Decimal("1000")),
+    ("2025-08-15", Decimal("1200")),
+    ("2025-08-16", Decimal("1175")),
+    ("2025-08-17", Decimal("1165")),
+    ("2025-08-18", Decimal("1065")),
+]
+
+
+def _cash_position_timeseries_has_settled(row) -> bool:
+    if row is None or row.row_count != len(EXPECTED_CASH_POSITION_TIMESERIES):
+        return False
+    expected_values = {
+        expected_date: expected_value
+        for expected_date, expected_value in EXPECTED_CASH_POSITION_TIMESERIES
+    }
+    actual_values = dict(zip(row.dates, row.eod_market_values))
+    return all(
+        as_decimal(actual_values.get(expected_date)) == expected_value
+        for expected_date, expected_value in expected_values.items()
+    )
+
 
 @pytest.fixture(scope="module")
 def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, poll_db_until):
@@ -203,6 +225,35 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
         timeout=180,
         fail_message="Pipeline did not settle MWR portfolio timeseries through the final day.",
     )
+    poll_db_until(
+        query=(
+            """
+            select
+                count(*) as row_count,
+                array_agg(date::text order by date) as dates,
+                array_agg(eod_market_value order by date) as eod_market_values
+            from (
+                select distinct on (date)
+                    date, eod_market_value, epoch
+                from position_timeseries
+                where portfolio_id = :portfolio_id
+                  and security_id = :security_id
+                  and date in (
+                      '2025-08-01',
+                      '2025-08-15',
+                      '2025-08-16',
+                      '2025-08-17',
+                      '2025-08-18'
+                  )
+                order by date, epoch desc
+            ) expected_cash_dates
+            """
+        ),
+        params={"portfolio_id": portfolio_id, "security_id": cash_security_id},
+        validation_func=_cash_position_timeseries_has_settled,
+        timeout=180,
+        fail_message="Pipeline did not settle expected MWR cash position timeseries.",
+    )
 
     return {
         "portfolio_id": portfolio_id,
@@ -330,9 +381,5 @@ def test_cash_portfolio_flows_pipeline_persists_cashflows_and_timeseries(setup_m
             },
         ).fetchall()
         assert [(str(row.date), as_decimal(row.eod_market_value)) for row in timeseries_rows] == [
-            ("2025-08-01", Decimal("1000")),
-            ("2025-08-15", Decimal("1200")),
-            ("2025-08-16", Decimal("1175")),
-            ("2025-08-17", Decimal("1165")),
-            ("2025-08-18", Decimal("1065")),
+            *EXPECTED_CASH_POSITION_TIMESERIES,
         ]
