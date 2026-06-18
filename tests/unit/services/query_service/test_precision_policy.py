@@ -55,6 +55,14 @@ def test_intermediate_precision_preserved_before_final_quantize() -> None:
     assert value == Decimal("0.123456789012")
     assert quantize_ratio(value) == Decimal("0.123457")
 
+    performance_value = normalize_input("0.123456789012", "performance")
+    assert performance_value == Decimal("0.123456789012")
+    assert quantize_performance(performance_value) == Decimal("0.123457")
+
+    risk_value = normalize_input("0.222222291234", "risk")
+    assert risk_value == Decimal("0.222222291234")
+    assert quantize_risk(risk_value) == Decimal("0.222222")
+
 
 def test_to_decimal_none_defaults_zero() -> None:
     assert to_decimal(None) == Decimal("0")

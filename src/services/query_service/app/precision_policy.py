@@ -18,6 +18,8 @@ INPUT_MAX_SCALE = {
     "price": 12,
     "fx_rate": 12,
     "ratio": 12,
+    "performance": 12,
+    "risk": 12,
 }
 
 
