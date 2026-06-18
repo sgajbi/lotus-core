@@ -7,9 +7,11 @@ from src.services.query_service.app.precision_policy import (
     normalize_input,
     quantize_fx_rate,
     quantize_money,
+    quantize_performance,
     quantize_price,
     quantize_quantity,
     quantize_ratio,
+    quantize_risk,
     to_decimal,
 )
 
@@ -34,7 +36,9 @@ def test_precision_scales() -> None:
     assert quantize_fx_rate("1.234567895") == Decimal("1.23456790")
     assert quantize_quantity("100.1234567") == Decimal("100.123457")
     assert quantize_ratio("0.123456789") == Decimal("0.123457")
+    assert quantize_performance("0.123456789") == Decimal("0.123457")
     assert quantize_ratio("0.22222229") == Decimal("0.222222")
+    assert quantize_risk("0.22222229") == Decimal("0.222222")
 
 
 def test_rounding_policy_version_exposed() -> None:
@@ -50,6 +54,14 @@ def test_intermediate_precision_preserved_before_final_quantize() -> None:
     value = normalize_input("0.123456789012", "ratio")
     assert value == Decimal("0.123456789012")
     assert quantize_ratio(value) == Decimal("0.123457")
+
+    performance_value = normalize_input("0.123456789012", "performance")
+    assert performance_value == Decimal("0.123456789012")
+    assert quantize_performance(performance_value) == Decimal("0.123457")
+
+    risk_value = normalize_input("0.222222291234", "risk")
+    assert risk_value == Decimal("0.222222291234")
+    assert quantize_risk(risk_value) == Decimal("0.222222")
 
 
 def test_to_decimal_none_defaults_zero() -> None:

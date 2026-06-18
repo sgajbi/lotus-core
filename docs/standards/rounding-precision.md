@@ -16,6 +16,9 @@ This repository adopts the platform-wide mandatory standard defined in `lotus-pl
 
 - Boundary validation: `precision_policy.py` (`normalize_input`) rejects malformed and over-scale inputs.
 - Output boundary quantization: `quantize_*` helpers apply final rounding for response shaping.
+- Query-service boundary helpers include explicit `performance` and `risk` semantics in addition
+  to the legacy generic `ratio` helper so platform golden-vector validation can compare the same
+  named financial semantics across core, performance, risk, manage, report, and gateway services.
 - Intermediate precision preservation: domain logic keeps unquantized `Decimal` until output-edge serialization.
 
 ## Monetary Float Guard
