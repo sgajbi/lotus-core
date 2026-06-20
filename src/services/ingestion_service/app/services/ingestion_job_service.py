@@ -1,24 +1,15 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from uuid import uuid4
 
-from portfolio_common.database_models import IngestionJob as DBIngestionJob
-from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
 from portfolio_common.db import get_async_db_session
 from portfolio_common.monitoring import (
     INGESTION_BACKLOG_AGE_SECONDS,
-    INGESTION_JOBS_CREATED_TOTAL,
-    INGESTION_JOBS_FAILED_TOTAL,
-    INGESTION_JOBS_RETRIED_TOTAL,
     INGESTION_MODE_STATE,
 )
-from sqlalchemy import and_, desc, func, select, update
-from sqlalchemy.exc import SQLAlchemyError
 
 from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
@@ -51,6 +42,19 @@ from .ingestion_consumer_dlq_events import (
 from .ingestion_consumer_lag import load_consumer_lag_response
 from .ingestion_health_summary import load_health_summary_response
 from .ingestion_idempotency_diagnostics import load_idempotency_diagnostics_response
+from .ingestion_job_lifecycle import (
+    IngestionJobCreateResult,
+    IngestionJobReplayContext,
+    create_or_get_job_result,
+    get_job_replay_context_response,
+    get_job_response,
+    list_failure_responses,
+    mark_job_failed,
+    mark_job_queued,
+    mark_job_retried,
+    record_job_failure_observation,
+    to_job_response,
+)
 from .ingestion_job_listing import (
     IngestionJobListFilters,
     build_cursor_lookup_statement,
@@ -75,10 +79,13 @@ from .ingestion_replay_audits import (
     record_consumer_dlq_replay_audit_response,
 )
 from .ingestion_reprocessing_queue_health import load_reprocessing_queue_health_response
-from .ingestion_retry_guardrails import assert_replay_guardrails
+from .ingestion_retry_permissions import (
+    assert_reprocessing_publish_allowed_for_count,
+    assert_retry_allowed_for_record_count,
+    count_backlog_jobs,
+)
 from .ingestion_slo_status import (
-    build_slo_status_response,
-    load_ingestion_slo_snapshot,
+    load_slo_status_response,
 )
 from .ingestion_stalled_jobs import load_stalled_job_list_response
 
@@ -118,53 +125,6 @@ OPERATING_BAND_POLICY = OperatingBandPolicy(
 )
 
 
-@dataclass(slots=True)
-class IngestionJobReplayContext:
-    job_id: str
-    endpoint: str
-    entity_type: str
-    accepted_count: int
-    idempotency_key: str | None
-    request_payload: dict[str, Any] | None
-    submitted_at: datetime
-
-
-@dataclass(slots=True)
-class IngestionJobCreateResult:
-    job: IngestionJobResponse
-    created: bool
-
-
-def _to_response(job: DBIngestionJob) -> IngestionJobResponse:
-    return IngestionJobResponse(
-        job_id=job.job_id,
-        endpoint=job.endpoint,
-        entity_type=job.entity_type,
-        status=job.status,  # type: ignore[arg-type]
-        accepted_count=job.accepted_count,
-        idempotency_key=job.idempotency_key,
-        correlation_id=job.correlation_id,
-        request_id=job.request_id,
-        trace_id=job.trace_id,
-        submitted_at=job.submitted_at,
-        completed_at=job.completed_at,
-        failure_reason=job.failure_reason,
-        retry_count=job.retry_count,
-        last_retried_at=job.last_retried_at,
-    )
-
-
-def _to_failure_response(failure: DBIngestionJobFailure) -> IngestionJobFailureResponse:
-    return IngestionJobFailureResponse(
-        failure_id=failure.failure_id,
-        job_id=failure.job_id,
-        failure_phase=failure.failure_phase,
-        failure_reason=failure.failure_reason,
-        failed_record_keys=list(failure.failed_record_keys or []),
-        failed_at=failure.failed_at,
-    )
-
-
 _derive_capacity_group = _capacity_status._derive_capacity_group
 
 
@@ -172,35 +132,6 @@ class IngestionJobService:
     """
     Persists ingestion lifecycle and operational controls for ingestion runbooks.
     """
-
-    @staticmethod
-    def _default_slo_status(
-        *,
-        lookback_minutes: int,
-    ) -> IngestionSloStatusResponse:
-        return IngestionSloStatusResponse(
-            lookback_minutes=lookback_minutes,
-            total_jobs=0,
-            failed_jobs=0,
-            failure_rate=Decimal("0"),
-            p95_queue_latency_seconds=0.0,
-            backlog_age_seconds=0.0,
-            breach_failure_rate=False,
-            breach_queue_latency=False,
-            breach_backlog_age=False,
-        )
-
-    @staticmethod
-    def _default_error_budget_status(
-        *,
-        lookback_minutes: int,
-        failure_rate_threshold: Decimal,
-    ) -> IngestionErrorBudgetStatusResponse:
-        return _error_budget_status.default_error_budget_status(
-            lookback_minutes=lookback_minutes,
-            failure_rate_threshold=failure_rate_threshold,
-            dlq_budget_events_per_window=DLQ_BUDGET_EVENTS_PER_WINDOW,
-        )
 
     async def create_or_get_job(
         self,
@@ -215,57 +146,21 @@ class IngestionJobService:
         trace_id: str,
         request_payload: dict[str, Any] | None,
     ) -> IngestionJobCreateResult:
-        async for db in get_async_db_session():
-            async with db.begin():
-                if idempotency_key:
-                    existing = await db.scalar(
-                        select(DBIngestionJob)
-                        .where(
-                            and_(
-                                DBIngestionJob.endpoint == endpoint,
-                                DBIngestionJob.idempotency_key == idempotency_key,
-                            )
-                        )
-                        .order_by(desc(DBIngestionJob.submitted_at))
-                        .limit(1)
-                    )
-                    if existing is not None:
-                        return IngestionJobCreateResult(job=_to_response(existing), created=False)
-
-                row = DBIngestionJob(
-                    job_id=job_id,
-                    endpoint=endpoint,
-                    entity_type=entity_type,
-                    status="accepted",
-                    accepted_count=accepted_count,
-                    idempotency_key=idempotency_key,
-                    correlation_id=correlation_id,
-                    request_id=request_id,
-                    trace_id=trace_id,
-                    request_payload=request_payload,
-                )
-                db.add(row)
-                await db.flush()
-                INGESTION_JOBS_CREATED_TOTAL.labels(
-                    endpoint=endpoint, entity_type=entity_type
-                ).inc()
-                return IngestionJobCreateResult(job=_to_response(row), created=True)
-
-        msg = "Unable to create ingestion job due to unavailable database session."
-        raise RuntimeError(msg)
+        return await create_or_get_job_result(
+            job_id=job_id,
+            endpoint=endpoint,
+            entity_type=entity_type,
+            accepted_count=accepted_count,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+            request_id=request_id,
+            trace_id=trace_id,
+            request_payload=request_payload,
+            session_factory=get_async_db_session,
+        )
 
     async def mark_queued(self, job_id: str) -> None:
-        async for db in get_async_db_session():
-            async with db.begin():
-                await db.execute(
-                    update(DBIngestionJob)
-                    .where(DBIngestionJob.job_id == job_id)
-                    .values(
-                        status="queued",
-                        completed_at=datetime.now(UTC),
-                        failure_reason=None,
-                    )
-                )
+        await mark_job_queued(job_id=job_id, session_factory=get_async_db_session)
 
     async def mark_failed(
         self,
@@ -274,35 +169,13 @@ class IngestionJobService:
         failure_phase: str = "publish",
         failed_record_keys: list[str] | None = None,
     ) -> None:
-        async for db in get_async_db_session():
-            async with db.begin():
-                updated = await db.execute(
-                    update(DBIngestionJob)
-                    .where(DBIngestionJob.job_id == job_id)
-                    .values(
-                        status="failed",
-                        completed_at=datetime.now(UTC),
-                        failure_reason=failure_reason,
-                    )
-                    .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
-                )
-                row = updated.first()
-                if row is None:
-                    return
-                db.add(
-                    DBIngestionJobFailure(
-                        failure_id=f"fail_{uuid4().hex}",
-                        job_id=job_id,
-                        failure_phase=failure_phase,
-                        failure_reason=failure_reason,
-                        failed_record_keys=failed_record_keys or [],
-                    )
-                )
-                INGESTION_JOBS_FAILED_TOTAL.labels(
-                    endpoint=row.endpoint,
-                    entity_type=row.entity_type,
-                    failure_phase=failure_phase,
-                ).inc()
+        await mark_job_failed(
+            job_id=job_id,
+            failure_reason=failure_reason,
+            failure_phase=failure_phase,
+            failed_record_keys=failed_record_keys,
+            session_factory=get_async_db_session,
+        )
 
     async def record_failure_observation(
         self,
@@ -312,73 +185,25 @@ class IngestionJobService:
         failure_phase: str,
         failed_record_keys: list[str] | None = None,
     ) -> None:
-        async for db in get_async_db_session():
-            async with db.begin():
-                row = await db.scalar(
-                    select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
-                )
-                if row is None:
-                    return
-                db.add(
-                    DBIngestionJobFailure(
-                        failure_id=f"fail_{uuid4().hex}",
-                        job_id=job_id,
-                        failure_phase=failure_phase,
-                        failure_reason=failure_reason,
-                        failed_record_keys=failed_record_keys or [],
-                    )
-                )
-                INGESTION_JOBS_FAILED_TOTAL.labels(
-                    endpoint=row.endpoint,
-                    entity_type=row.entity_type,
-                    failure_phase=failure_phase,
-                ).inc()
+        await record_job_failure_observation(
+            job_id=job_id,
+            failure_reason=failure_reason,
+            failure_phase=failure_phase,
+            failed_record_keys=failed_record_keys,
+            session_factory=get_async_db_session,
+        )
 
     async def mark_retried(self, job_id: str) -> None:
-        async for db in get_async_db_session():
-            async with db.begin():
-                updated = await db.execute(
-                    update(DBIngestionJob)
-                    .where(DBIngestionJob.job_id == job_id)
-                    .values(
-                        retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
-                        last_retried_at=datetime.now(UTC),
-                    )
-                    .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
-                )
-                row = updated.first()
-                if row is None:
-                    return
-                INGESTION_JOBS_RETRIED_TOTAL.labels(
-                    endpoint=row.endpoint, entity_type=row.entity_type, result="accepted"
-                ).inc()
+        await mark_job_retried(job_id=job_id, session_factory=get_async_db_session)
 
     async def get_job(self, job_id: str) -> IngestionJobResponse | None:
-        async for db in get_async_db_session():
-            row = await db.scalar(
-                select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
-            )
-            return _to_response(row) if row else None
-        return None
+        return await get_job_response(job_id=job_id, session_factory=get_async_db_session)
 
     async def get_job_replay_context(self, job_id: str) -> IngestionJobReplayContext | None:
-        async for db in get_async_db_session():
-            row = await db.scalar(
-                select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
-            )
-            if row is None:
-                return None
-            payload = row.request_payload if isinstance(row.request_payload, dict) else None
-            return IngestionJobReplayContext(
-                job_id=row.job_id,
-                endpoint=row.endpoint,
-                entity_type=row.entity_type,
-                accepted_count=row.accepted_count,
-                idempotency_key=row.idempotency_key,
-                request_payload=payload,
-                submitted_at=row.submitted_at,
-            )
-        return None
+        return await get_job_replay_context_response(
+            job_id=job_id,
+            session_factory=get_async_db_session,
+        )
 
     async def list_jobs(
         self,
@@ -406,23 +231,17 @@ class IngestionJobService:
             )
             rows = list((await db.scalars(stmt)).all())
             page = ingestion_job_list_page(rows=rows, limit=limit)
-            return ([_to_response(row) for row in page.rows], page.next_cursor)
+            return ([to_job_response(row) for row in page.rows], page.next_cursor)
         return ([], None)
 
     async def list_failures(
         self, job_id: str, limit: int = 100
     ) -> list[IngestionJobFailureResponse]:
-        async for db in get_async_db_session():
-            rows = (
-                await db.scalars(
-                    select(DBIngestionJobFailure)
-                    .where(DBIngestionJobFailure.job_id == job_id)
-                    .order_by(desc(DBIngestionJobFailure.failed_at))
-                    .limit(limit)
-                )
-            ).all()
-            return [_to_failure_response(row) for row in rows]
-        return []
+        return await list_failure_responses(
+            job_id=job_id,
+            limit=limit,
+            session_factory=get_async_db_session,
+        )
 
     async def get_health_summary(self) -> IngestionHealthSummaryResponse:
         return await load_health_summary_response(
@@ -437,31 +256,15 @@ class IngestionJobService:
         queue_latency_threshold_seconds: float = 5.0,
         backlog_age_threshold_seconds: float = 300.0,
     ) -> IngestionSloStatusResponse:
-        async for db in get_async_db_session():
-            now = datetime.now(UTC)
-            since = now - timedelta(minutes=lookback_minutes)
-            try:
-                snapshot = await load_ingestion_slo_snapshot(
-                    db,
-                    since=since,
-                    now=now,
-                )
-            except SQLAlchemyError as exc:
-                logger.warning(
-                    "ingestion_slo_status_fallback_unavailable",
-                    extra={"lookback_minutes": lookback_minutes},
-                    exc_info=exc,
-                )
-                return self._default_slo_status(lookback_minutes=lookback_minutes)
-            INGESTION_BACKLOG_AGE_SECONDS.set(snapshot.backlog_age_seconds)
-            return build_slo_status_response(
-                lookback_minutes=lookback_minutes,
-                snapshot=snapshot,
-                failure_rate_threshold=failure_rate_threshold,
-                queue_latency_threshold_seconds=queue_latency_threshold_seconds,
-                backlog_age_threshold_seconds=backlog_age_threshold_seconds,
-            )
-        return self._default_slo_status(lookback_minutes=lookback_minutes)
+        return await load_slo_status_response(
+            lookback_minutes=lookback_minutes,
+            failure_rate_threshold=failure_rate_threshold,
+            queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+            backlog_age_threshold_seconds=backlog_age_threshold_seconds,
+            session_factory=get_async_db_session,
+            backlog_age_metric=INGESTION_BACKLOG_AGE_SECONDS,
+            logger=logger,
+        )
 
     async def get_operating_band(
         self,
@@ -741,19 +544,7 @@ class IngestionJobService:
         )
 
     async def _count_backlog_jobs(self) -> int:
-        async for db in get_async_db_session():
-            backlog = int(
-                (
-                    await db.scalar(
-                        select(func.count(DBIngestionJob.id)).where(
-                            DBIngestionJob.status.in_(("accepted", "queued"))
-                        )
-                    )
-                )
-                or 0
-            )
-            return backlog
-        return 0
+        return await count_backlog_jobs(session_factory=get_async_db_session)
 
     async def assert_retry_allowed_for_records(
         self,
@@ -761,26 +552,19 @@ class IngestionJobService:
         submitted_at: datetime,
         replay_record_count: int,
     ) -> None:
-        mode = await self.get_ops_mode()
-        now = datetime.now(UTC)
-        backlog_jobs = await self._count_backlog_jobs()
-        assert_replay_guardrails(
-            mode=mode.mode,
-            replay_window_start=mode.replay_window_start,
-            replay_window_end=mode.replay_window_end,
+        await assert_retry_allowed_for_record_count(
             submitted_at=submitted_at,
             replay_record_count=replay_record_count,
-            backlog_jobs=backlog_jobs,
-            now=now,
+            ops_mode_loader=self.get_ops_mode,
+            backlog_counter=self._count_backlog_jobs,
             max_records_per_request=REPLAY_MAX_RECORDS_PER_REQUEST,
             max_backlog_jobs=REPLAY_MAX_BACKLOG_JOBS,
         )
 
     async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
-        now = datetime.now(UTC)
-        await self.assert_retry_allowed_for_records(
-            submitted_at=now,
-            replay_record_count=max(1, int(record_count)),
+        await assert_reprocessing_publish_allowed_for_count(
+            record_count=record_count,
+            retry_permission_checker=self.assert_retry_allowed_for_records,
         )
 
 

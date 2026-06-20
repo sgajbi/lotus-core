@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -18,6 +18,57 @@ class IngestionSloSnapshot:
     failed_jobs: int
     p95_latency_seconds: float
     backlog_age_seconds: float
+
+
+def default_slo_status(*, lookback_minutes: int) -> IngestionSloStatusResponse:
+    return IngestionSloStatusResponse(
+        lookback_minutes=lookback_minutes,
+        total_jobs=0,
+        failed_jobs=0,
+        failure_rate=Decimal("0"),
+        p95_queue_latency_seconds=0.0,
+        backlog_age_seconds=0.0,
+        breach_failure_rate=False,
+        breach_queue_latency=False,
+        breach_backlog_age=False,
+    )
+
+
+async def load_slo_status_response(
+    *,
+    lookback_minutes: int,
+    failure_rate_threshold: Decimal,
+    queue_latency_threshold_seconds: float,
+    backlog_age_threshold_seconds: float,
+    session_factory,
+    backlog_age_metric,
+    logger,
+) -> IngestionSloStatusResponse:
+    async for db in session_factory():
+        now = datetime.now(UTC)
+        since = now - timedelta(minutes=lookback_minutes)
+        try:
+            snapshot = await load_ingestion_slo_snapshot(
+                db,
+                since=since,
+                now=now,
+            )
+        except SQLAlchemyError as exc:
+            logger.warning(
+                "ingestion_slo_status_fallback_unavailable",
+                extra={"lookback_minutes": lookback_minutes},
+                exc_info=exc,
+            )
+            return default_slo_status(lookback_minutes=lookback_minutes)
+        backlog_age_metric.set(snapshot.backlog_age_seconds)
+        return build_slo_status_response(
+            lookback_minutes=lookback_minutes,
+            snapshot=snapshot,
+            failure_rate_threshold=failure_rate_threshold,
+            queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+            backlog_age_threshold_seconds=backlog_age_threshold_seconds,
+        )
+    return default_slo_status(lookback_minutes=lookback_minutes)
 
 
 def _latency_seconds_expression() -> Any:

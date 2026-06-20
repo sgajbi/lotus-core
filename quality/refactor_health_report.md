@@ -1552,3 +1552,31 @@ health before that claim is defensible.
      tests passed with 21 tests, the broader ingestion service unit package passed with 79 tests,
      scoped Ruff lint/format checks passed, and all touched replay-audit functions remain
      A-ranked except the pre-existing list-filter helper at `B (7)`.
+262. Reduced ingestion job lifecycle persistence coupling by moving idempotent job creation,
+     queued/failed/retried state transitions, failure-observation recording, simple job reads,
+     replay-context reads, failure listing, response mapping, and lifecycle metric side effects
+     from `IngestionJobService` into `ingestion_job_lifecycle.py`. The public service methods now
+     delegate to the helper while preserving router contracts, API DTOs, database semantics, and
+     metric labels. `ingestion_job_service.py` shrank from 726 SLOC to 584 SLOC and improved from
+     `A (25.65)` to `A (38.41)` under Radon maintainability; the new helper reports
+     `A (40.28)` / 261 SLOC. Focused state-transition tests passed with 4 tests, the broader
+     ingestion service unit package passed with 79 tests, scoped Ruff lint/format checks passed,
+     and all touched service/helper functions remain A-ranked by cyclomatic complexity.
+263. Reduced ingestion SLO status coupling by moving lookback timing, SQLAlchemy fallback handling,
+     safe-default response construction, backlog-age metric updates, and SLO response orchestration
+     from `IngestionJobService.get_slo_status` into `ingestion_slo_status.py`. The public service
+     method now delegates while preserving response thresholds, fallback behavior, metric labels,
+     and logging posture. `ingestion_job_service.py` shrank from 584 SLOC to 550 SLOC and improved
+     from `A (38.41)` to `A (41.09)` under Radon maintainability; the expanded SLO helper reports
+     `A (39.95)` / 194 SLOC. Focused SLO and guardrail tests passed with 21 tests, the broader
+     ingestion service unit package passed with 79 tests, and scoped Ruff lint/format checks
+     passed.
+264. Reduced ingestion retry permission coupling by moving backlog counting, retry/replay
+     permission orchestration, and reprocessing publish record-count normalization from
+     `IngestionJobService` into `ingestion_retry_permissions.py`. The service methods remain
+     public delegates and preserve the existing guardrail test patch points. Removed an obsolete
+     error-budget default wrapper that was no longer used after helper extraction. `ingestion_job_service.py`
+     shrank from 550 SLOC to 522 SLOC and improved from `A (41.09)` to `A (44.24)` under Radon
+     maintainability; the new retry-permission helper reports `A (68.59)` / 50 SLOC. Focused
+     guardrail tests passed with 18 tests, the broader ingestion service unit package passed with
+     79 tests, and scoped Ruff lint/format checks passed.
