@@ -91,6 +91,13 @@ Current repository posture:
     Prometheus counter, and has focused tests proving
     `lotus_core_portfolio_supportability_total` does not add portfolio, account, client,
     correlation, trace, transaction, security, request-body, or response-body labels.
+21. App-level supported-surface validation now has a single repo-native evidence command:
+    `make lotus-core-validate`. It runs static contract guards plus deterministic runtime smoke over
+    ingestion, event replay and ops, operational query reads, query-control-plane support and
+    lineage, integration policy and capabilities, core snapshot, simulation, and source-data
+    contract governance. PR Merge Gate records it as report-only evidence first; blocking promotion
+    requires lotus-ci-enforcement-governance proof that the signal is stable, deterministic,
+    low-noise, and policy-backed.
 
 ## Architecture And Module Map
 
@@ -162,6 +169,8 @@ Use these commands as the primary local contract:
    `make test-docker-smoke`
 10. repo-native domain-product validation
    `make domain-product-validate`
+11. app-level supported-surface validation
+   `make lotus-core-validate`
 
 ## Validation And CI Expectations
 

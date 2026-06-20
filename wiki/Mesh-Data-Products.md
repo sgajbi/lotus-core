@@ -261,6 +261,7 @@ proof path.
 | Source-product implementation | Implemented for model targets, mandate binding, instrument eligibility, portfolio tax lots, observed transaction-cost curves, market-data/FX coverage, client restriction profiles, sustainability preferences, client tax-reference profile and rule-set evidence, DPM source-family readiness, first-wave PM-book membership, first-wave CIO model-change affected-cohort discovery, and paged DPM portfolio-universe candidate discovery. |
 | Local validation | Source-data product guard, domain-product validation, focused validator tests, OpenAPI contract tests, and product-specific service/router tests exist. |
 | Reusable live validation | `make live-dpm-source-validate` runs `scripts/validate_live_dpm_source_products.py` against `core-control.dev.lotus`. |
+| App-level validation | `make lotus-core-validate` wraps broader Core supported-surface proof, including static contracts and deterministic runtime smoke across ingestion, operational reads, support/lineage, capabilities, core snapshot, and simulation. |
 | Latest live attempt | Passed: `make live-dpm-source-validate` returned 7/7 probes with READY source-family evidence on 2026-05-02. |
 | Stateful `lotus-manage` promotion | Service-level proof passed: `make live-api-validate-core` in `lotus-manage` returned 11/11 probes with stateful core sourcing available. Runtime publication remains controlled by explicit feature gates. |
 

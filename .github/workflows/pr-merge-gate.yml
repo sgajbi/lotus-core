@@ -245,6 +245,48 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  lotus-core-validation-report:
+    name: PR Merge Gate / Lotus Core Validation Report
+    needs: [coverage-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install
+        run: make install-ci
+      - name: Restore Docker build cache
+        uses: actions/cache@v5
+        with:
+          path: .buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Prebuild compose images with cache
+        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
+      - name: Run lotus-core app validation report
+        run: make lotus-core-validate
+      - name: Capture docker compose logs on failure
+        if: failure()
+        run: docker compose logs > lotus-core-validation-logs.txt
+      - name: Upload lotus-core validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-merge-gate-lotus-core-validation-report
+          path: |
+            output/lotus-core-validation/*.json
+            output/lotus-core-validation/*.md
+            lotus-core-validation-logs.txt
+          if-no-files-found: warn
+          retention-days: 14
+
   latency-gate:
     name: PR Merge Gate / Latency Gate
     needs: [coverage-gate]

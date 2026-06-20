@@ -19,6 +19,7 @@ Status: Initial scorecard baseline on 2026-06-02.
 | Architecture boundaries | Existing strict architecture guard plus 2 kept import-linter contracts enforced by `make quality-import-boundary-gate` after CR-867 | Add focused import contracts as additional ownership boundaries stabilize |
 | OpenAPI governance | Existing OpenAPI quality and API vocabulary gates promoted into the quality-baseline API governance job after CR-868 | Keep API governance regression-free while spectral remains report-only until a stable generated-spec artifact exists |
 | Documentation | New top-level governance docs scaffolded; CR-847 records collection/build-artifact cleanup | Keep docs implementation-backed and current |
+| App-level validation evidence | CR-1107 adds `make lotus-core-validate` as a repo-native supported-surface evidence command. It runs static contract checks and deterministic runtime smoke, writes JSON evidence under `output/lotus-core-validation/`, and is wired into PR Merge Gate as report-only first. | Promote to blocking only after repeated CI evidence proves the signal is stable, deterministic, low-noise, and policy-backed under lotus-ci-enforcement-governance |
 
 ## Before/After PR Scorecard
 
