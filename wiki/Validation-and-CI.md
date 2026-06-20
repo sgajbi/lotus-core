@@ -73,3 +73,13 @@
 - [RFC Index](RFC-Index)
 - [Architecture Index](../docs/architecture/README.md)
 - [Operations Runbook](Operations-Runbook)
+
+## App-Level Validation Evidence
+
+`make lotus-core-validate` is the repo-native app-level supported-surface validation command. It
+runs contract checks and deterministic runtime smoke, writes machine-readable evidence under
+`output/lotus-core-validation/`, and exits non-zero when proof is weak.
+
+The PR Merge Gate runs this command as report-only evidence first. It must not become blocking until
+the signal has repeated stable CI runs, clear false-positive handling, and explicit
+lotus-ci-enforcement-governance approval for lane placement and exception policy.
