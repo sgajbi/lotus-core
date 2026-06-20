@@ -21,7 +21,6 @@ from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCL
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
     DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
-    UPSTREAM_PROVIDED_CASH_ENTRY_MODE,
     assert_ca_bundle_a_transaction_valid,
     assert_fx_processed_event_valid,
     assert_portfolio_flow_cash_entry_mode_allowed,
@@ -37,7 +36,7 @@ from portfolio_common.transaction_domain import (
     evaluate_ca_bundle_a_reconciliation,
     find_missing_ca_bundle_a_dependencies,
     is_ca_bundle_a_transaction_type,
-    normalize_cash_entry_mode,
+    is_upstream_provided_cash_entry_mode,
     should_auto_generate_cash_leg,
 )
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
@@ -496,20 +495,40 @@ class CostCalculatorConsumer(BaseConsumer):
         repo: CostCalculatorRepository,
     ) -> None:
         assert_portfolio_flow_cash_entry_mode_allowed(processed_event)
-        mode = normalize_cash_entry_mode(processed_event.cash_entry_mode)
-        if not (
-            processed_event.cash_entry_mode is not None
-            and mode == UPSTREAM_PROVIDED_CASH_ENTRY_MODE
-            and _normalize_event_code(processed_event.transaction_type)
-            != ADJUSTMENT_TRANSACTION_TYPE
-        ):
+        if not self._requires_upstream_cash_leg_validation(processed_event):
             return
 
+        external_cash_id = self._required_external_cash_transaction_id(processed_event)
+        cash_leg = await self._load_upstream_cash_leg(
+            external_cash_id=external_cash_id,
+            processed_event=processed_event,
+            repo=repo,
+        )
+        assert_upstream_cash_leg_pairing(processed_event, cash_leg)
+
+    @staticmethod
+    def _requires_upstream_cash_leg_validation(processed_event: TransactionEvent) -> bool:
+        return (
+            processed_event.cash_entry_mode is not None
+            and is_upstream_provided_cash_entry_mode(processed_event.cash_entry_mode)
+            and _normalize_event_code(processed_event.transaction_type)
+            != ADJUSTMENT_TRANSACTION_TYPE
+        )
+
+    @staticmethod
+    def _required_external_cash_transaction_id(processed_event: TransactionEvent) -> str:
         external_cash_id = (processed_event.external_cash_transaction_id or "").strip()
-        if not external_cash_id:
-            raise ValueError(
-                "UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg."
-            )
+        if external_cash_id:
+            return external_cash_id
+        raise ValueError("UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg.")
+
+    @staticmethod
+    async def _load_upstream_cash_leg(
+        *,
+        external_cash_id: str,
+        processed_event: TransactionEvent,
+        repo: CostCalculatorRepository,
+    ) -> TransactionEvent:
         cash_leg_db = await repo.get_transaction_by_id(
             external_cash_id, portfolio_id=processed_event.portfolio_id
         )
@@ -518,8 +537,7 @@ class CostCalculatorConsumer(BaseConsumer):
                 f"Cash leg {external_cash_id} not found for portfolio "
                 f"{processed_event.portfolio_id}."
             )
-        cash_leg = TransactionEvent.model_validate(cash_leg_db)
-        assert_upstream_cash_leg_pairing(processed_event, cash_leg)
+        return TransactionEvent.model_validate(cash_leg_db)
 
     async def _record_bundle_a_reconciliation_diagnostics(
         self,

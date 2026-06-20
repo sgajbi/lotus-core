@@ -1054,3 +1054,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1117 split cost transaction processor orchestration helpers out of
   `TransactionProcessor.process_transactions`, reducing the runtime consumer method from `C (12)`
   to `A (1)` while adding regression proof for unexpected calculator errors.
+- CR-1118 split cost upstream cash-leg validation helpers out of
+  `CostCalculatorConsumer._validate_upstream_cash_leg`, reusing shared transaction-domain
+  cash-entry-mode policy and removing that method from the B-ranked hotspot list.

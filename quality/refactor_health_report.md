@@ -1634,3 +1634,11 @@ health before that claim is defensible.
      processed new transactions are returned. Focused transaction-processor tests passed with
      3 tests, including a new regression for unexpected calculator exceptions; Radon reports
      `process_transactions` reduced from `C (12)` to `A (1)` and all extracted helpers A-ranked.
+272. Reduced cost upstream cash-leg validation complexity by replacing inline cash-entry-mode
+     comparison in `CostCalculatorConsumer._validate_upstream_cash_leg(...)` with the shared
+     `is_upstream_provided_cash_entry_mode(...)` policy helper and extracting upstream-validation
+     predicate, external cash ID resolution, and persisted cash-leg loading helpers. Focused
+     consumer tests passed with 29 tests, including a new regression that upstream-provided product
+     legs without an external cash ID fail before repository lookup. Radon no longer reports
+     `_validate_upstream_cash_leg` in the B-ranked hotspot list; `consumer.py` remains A-ranked
+     maintainability at `A (20.32)`.
