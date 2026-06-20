@@ -2,6 +2,8 @@ from datetime import date
 from subprocess import CompletedProcess
 from unittest.mock import MagicMock
 
+import requests
+
 from scripts.latency_profile import (
     RuntimeContext,
     _cases,
@@ -10,6 +12,7 @@ from scripts.latency_profile import (
     _pick_identifier_from_payload,
     _raise_if_compose_service_failed,
     _resolve_runtime_ids,
+    _response_error_sample,
     _run_compose_up,
     _wait_compose_service_completed_successfully,
 )
@@ -260,6 +263,11 @@ def test_cases_use_runtime_context_dates_and_identifiers() -> None:
     assert portfolio_positions.url.endswith("/portfolios/PORT_123/positions?as_of_date=2026-03-05")
     assert support_overview.p95_budget_ms == 320
     assert analytics_portfolio.payload["as_of_date"] == "2026-03-05"
+    assert analytics_portfolio.payload["window"] == {
+        "start_date": "2025-12-05",
+        "end_date": "2026-03-05",
+    }
+    assert "period" not in analytics_portfolio.payload
     assert analytics_position.payload["as_of_date"] == "2026-03-05"
     assert "/benchmarks/BMK_ABC/market-series" in benchmark_series.url
     assert benchmark_series.payload["as_of_date"] == "2026-03-05"
@@ -267,6 +275,26 @@ def test_cases_use_runtime_context_dates_and_identifiers() -> None:
         "start_date": "2025-12-05",
         "end_date": "2026-03-05",
     }
+
+
+def test_response_error_sample_captures_json_body() -> None:
+    response = requests.Response()
+    response.status_code = 422
+    response._content = b'{"detail":"Missing FX rate"}'
+    response.headers["content-type"] = "application/json"
+
+    assert _response_error_sample(response) == {
+        "status_code": 422,
+        "body": {"detail": "Missing FX rate"},
+    }
+
+
+def test_response_error_sample_omits_success_body() -> None:
+    response = requests.Response()
+    response.status_code = 200
+    response._content = b'{"ok":true}'
+
+    assert _response_error_sample(response) is None
 
 
 def test_context_timeout_must_not_be_shorter_than_ready_timeout() -> None:

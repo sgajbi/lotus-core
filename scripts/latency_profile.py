@@ -46,6 +46,10 @@ class RuntimeContext:
     def benchmark_window_start_date(self) -> date:
         return self.as_of_date - timedelta(days=90)
 
+    @property
+    def analytics_window_start_date(self) -> date:
+        return self.as_of_date - timedelta(days=90)
+
 
 def _percentile_ms(samples: list[float], percentile: int) -> float:
     if not samples:
@@ -355,6 +359,10 @@ def _cases(
         "start_date": runtime_context.benchmark_window_start_date.isoformat(),
         "end_date": as_of_date,
     }
+    analytics_window = {
+        "start_date": runtime_context.analytics_window_start_date.isoformat(),
+        "end_date": as_of_date,
+    }
     baseline = [
         EndpointCase("ing_ready", "GET", f"{ingestion_base_url}/health/ready", None, 300),
         EndpointCase("qry_ready", "GET", f"{query_base_url}/health/ready", None, 240),
@@ -428,7 +436,7 @@ def _cases(
             f"{query_control_plane_base_url}/integration/portfolios/{runtime_context.portfolio_id}/analytics/portfolio-timeseries",
             {
                 "as_of_date": as_of_date,
-                "period": "one_year",
+                "window": analytics_window,
                 "frequency": "daily",
                 "consumer_system": "lotus-performance",
                 "page": {"page_size": 500},
@@ -479,6 +487,19 @@ def _call_case(session: requests.Session, case: EndpointCase) -> requests.Respon
     return session.post(case.url, json=case.payload, timeout=case.timeout_seconds)
 
 
+def _response_error_sample(response: requests.Response) -> dict[str, Any] | None:
+    if 200 <= response.status_code < 300:
+        return None
+    sample: dict[str, Any] = {"status_code": response.status_code}
+    try:
+        sample["body"] = response.json()
+    except ValueError:
+        body = response.text.strip()
+        if body:
+            sample["body"] = body[:1000]
+    return sample
+
+
 def run_profile(
     *,
     ingestion_base_url: str,
@@ -510,6 +531,7 @@ def run_profile(
         samples: list[float] = []
         statuses: list[int] = []
         errors: list[str] = []
+        response_errors: list[dict[str, Any]] = []
         for _ in range(measured_runs):
             start = time.perf_counter()
             try:
@@ -517,6 +539,10 @@ def run_profile(
                 elapsed = (time.perf_counter() - start) * 1000
                 samples.append(elapsed)
                 statuses.append(response.status_code)
+                if len(response_errors) < 3:
+                    response_error = _response_error_sample(response)
+                    if response_error is not None:
+                        response_errors.append(response_error)
             except requests.RequestException as exc:
                 elapsed = (time.perf_counter() - start) * 1000
                 samples.append(elapsed)
@@ -543,6 +569,7 @@ def run_profile(
                 "min_ms": round(min(samples), 2) if samples else 0.0,
                 "p95_budget_ms": case.p95_budget_ms,
                 "errors": errors[:3],
+                "response_errors": response_errors,
             }
         )
     return results

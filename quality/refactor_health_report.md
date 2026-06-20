@@ -1588,3 +1588,10 @@ health before that claim is defensible.
      `A (48.85)` under Radon maintainability; the expanded listing helper reports `A (43.44)` /
      68 SLOC. Focused listing and guardrail tests passed with 22 tests, the broader ingestion
      service unit package passed with 80 tests, and scoped Ruff lint/format checks passed.
+266. Hardened the PR Merge Gate latency profile after run `27858285400` proved the
+     `analytics_portfolio_timeseries` case could return 422 for all measured calls when the
+     profile requested `period: one_year` against the intentionally bounded 365-day CI seed. The
+     case now uses an explicit deterministic 90-day analytics window ending at the resolved runtime
+     `as_of_date`, preserving the real portfolio-timeseries API call and p95 budget while aligning
+     the proof with seeded coverage. Latency JSON evidence now samples non-2xx response bodies so
+     future failures carry actionable validation or data-quality detail.
