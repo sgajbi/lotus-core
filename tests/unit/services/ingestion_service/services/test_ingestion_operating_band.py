@@ -8,9 +8,11 @@ import pytest
 from src.services.ingestion_service.app.services.ingestion_operating_band import (
     OperatingBandPolicy,
     OperatingBandSignals,
+    build_operating_band_policy,
     classify_operating_band,
     load_operating_band_response,
 )
+from src.services.ingestion_service.app.settings import IngestionOperatingBandSettings
 
 
 def _policy() -> OperatingBandPolicy:
@@ -21,6 +23,28 @@ def _policy() -> OperatingBandPolicy:
         yellow_dlq_pressure_ratio=Decimal("0.20"),
         orange_dlq_pressure_ratio=Decimal("0.40"),
         red_dlq_pressure_ratio=Decimal("0.90"),
+    )
+
+
+def test_build_operating_band_policy_maps_runtime_settings():
+    policy = build_operating_band_policy(
+        IngestionOperatingBandSettings(
+            yellow_backlog_age_seconds=15.0,
+            orange_backlog_age_seconds=65.0,
+            red_backlog_age_seconds=180.0,
+            yellow_dlq_pressure_ratio=Decimal("0.25"),
+            orange_dlq_pressure_ratio=Decimal("0.50"),
+            red_dlq_pressure_ratio=Decimal("0.95"),
+        )
+    )
+
+    assert policy == OperatingBandPolicy(
+        yellow_backlog_age_seconds=15.0,
+        orange_backlog_age_seconds=65.0,
+        red_backlog_age_seconds=180.0,
+        yellow_dlq_pressure_ratio=Decimal("0.25"),
+        orange_dlq_pressure_ratio=Decimal("0.50"),
+        red_dlq_pressure_ratio=Decimal("0.95"),
     )
 
 

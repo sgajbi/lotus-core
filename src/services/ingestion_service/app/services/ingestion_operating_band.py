@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any, Awaitable, Callable, Literal
 
 from ..DTOs.ingestion_job_dto import IngestionOperatingBandResponse
+from ..settings import IngestionOperatingBandSettings
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +16,17 @@ class OperatingBandPolicy:
     yellow_dlq_pressure_ratio: Decimal
     orange_dlq_pressure_ratio: Decimal
     red_dlq_pressure_ratio: Decimal
+
+
+def build_operating_band_policy(settings: IngestionOperatingBandSettings) -> OperatingBandPolicy:
+    return OperatingBandPolicy(
+        yellow_backlog_age_seconds=settings.yellow_backlog_age_seconds,
+        orange_backlog_age_seconds=settings.orange_backlog_age_seconds,
+        red_backlog_age_seconds=settings.red_backlog_age_seconds,
+        yellow_dlq_pressure_ratio=settings.yellow_dlq_pressure_ratio,
+        orange_dlq_pressure_ratio=settings.orange_dlq_pressure_ratio,
+        red_dlq_pressure_ratio=settings.red_dlq_pressure_ratio,
+    )
 
 
 @dataclass(frozen=True, slots=True)

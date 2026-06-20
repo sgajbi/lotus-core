@@ -56,7 +56,7 @@ from .ingestion_job_listing import (
     load_job_list_response,
 )
 from .ingestion_operating_band import (
-    OperatingBandPolicy,
+    build_operating_band_policy,
     load_operating_band_response,
 )
 from .ingestion_operating_policy import (
@@ -96,14 +96,7 @@ CAPACITY_ASSUMED_REPLICAS = _RUNTIME_POLICY.capacity_assumed_replicas
 logger = logging.getLogger(__name__)
 
 
-OPERATING_BAND_POLICY = OperatingBandPolicy(
-    yellow_backlog_age_seconds=_RUNTIME_POLICY.operating_band.yellow_backlog_age_seconds,
-    orange_backlog_age_seconds=_RUNTIME_POLICY.operating_band.orange_backlog_age_seconds,
-    red_backlog_age_seconds=_RUNTIME_POLICY.operating_band.red_backlog_age_seconds,
-    yellow_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.yellow_dlq_pressure_ratio,
-    orange_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.orange_dlq_pressure_ratio,
-    red_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.red_dlq_pressure_ratio,
-)
+OPERATING_BAND_POLICY = build_operating_band_policy(_RUNTIME_POLICY.operating_band)
 
 
 _derive_capacity_group = _capacity_status._derive_capacity_group

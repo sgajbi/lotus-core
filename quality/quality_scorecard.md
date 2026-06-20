@@ -1048,3 +1048,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `IngestionJobService.get_operating_policy()` into `ingestion_operating_policy.py`, keeping policy
   normalization and fingerprinting with the same boundary while preserving direct tests for
   configured threshold mapping and defensive calculator lag-threshold copying.
+- CR-1116 split ingestion operating-band threshold mapping out of `IngestionJobService` into
+  `ingestion_operating_band.py`, keeping operating-band policy construction beside the classifier
+  and response assembly with direct tests for exact yellow/orange/red threshold mapping.

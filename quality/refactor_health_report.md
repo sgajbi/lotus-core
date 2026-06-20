@@ -1618,3 +1618,10 @@ health before that claim is defensible.
      config assembly. Focused operating-policy and guardrail tests passed with 21 tests; Radon
      reports `get_operating_policy` remains `A (1)`, `ingestion_job_service.py` remains A-ranked
      at `A (100.00)`, and `ingestion_operating_policy.py` remains A-ranked at `A (58.22)`.
+270. Reduced ingestion operating-band policy coupling by moving runtime operating-band threshold
+     mapping from `IngestionJobService` into `build_operating_band_policy(...)` in
+     `ingestion_operating_band.py`. The service facade now delegates policy construction to the
+     same module that classifies operating bands and assembles operating-band responses. Focused
+     operating-band and guardrail tests passed with 24 tests; Radon reports the new helper is
+     `A (1)`, `get_operating_band` remains `A (1)`, `ingestion_job_service.py` remains A-ranked
+     at `A (100.00)`, and `ingestion_operating_band.py` remains A-ranked at `A (48.91)`.
