@@ -1044,3 +1044,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1114 split ingestion write-mode metric mapping and paused/drain denial policy out of
   `IngestionJobService.assert_ingestion_writable()` into `ingestion_ops_mode.py`, reducing that
   service method from `A (2)` to `A (1)` while keeping ops-mode behavior directly tested.
+- CR-1115 split ingestion operating-policy runtime-setting mapping out of
+  `IngestionJobService.get_operating_policy()` into `ingestion_operating_policy.py`, keeping policy
+  normalization and fingerprinting with the same boundary while preserving direct tests for
+  configured threshold mapping and defensive calculator lag-threshold copying.

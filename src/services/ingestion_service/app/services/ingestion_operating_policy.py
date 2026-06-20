@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Literal
 
 from ..DTOs.ingestion_job_dto import IngestionOpsPolicyResponse
+from ..settings import IngestionRuntimePolicySettings
 from .ingestion_operating_band import OperatingBandPolicy
 
 
@@ -29,6 +30,35 @@ class IngestionOperatingPolicyConfig:
     replay_isolation_mode: str
     partition_growth_strategy: str
     replay_dry_run_supported: bool = True
+
+
+def build_operating_policy_config(
+    *,
+    runtime_policy: IngestionRuntimePolicySettings,
+    operating_band_policy: OperatingBandPolicy,
+) -> IngestionOperatingPolicyConfig:
+    return IngestionOperatingPolicyConfig(
+        lookback_minutes_default=runtime_policy.default_lookback_minutes,
+        failure_rate_threshold_default=runtime_policy.default_failure_rate_threshold,
+        queue_latency_threshold_seconds_default=runtime_policy.default_queue_latency_threshold_seconds,
+        backlog_age_threshold_seconds_default=runtime_policy.default_backlog_age_threshold_seconds,
+        replay_max_records_per_request=runtime_policy.replay_max_records_per_request,
+        replay_max_backlog_jobs=runtime_policy.replay_max_backlog_jobs,
+        reprocessing_worker_poll_interval_seconds=(
+            runtime_policy.reprocessing_worker_poll_interval_seconds
+        ),
+        reprocessing_worker_batch_size=runtime_policy.reprocessing_worker_batch_size,
+        valuation_scheduler_poll_interval_seconds=(
+            runtime_policy.valuation_scheduler_poll_interval_seconds
+        ),
+        valuation_scheduler_batch_size=runtime_policy.valuation_scheduler_batch_size,
+        valuation_scheduler_dispatch_rounds=runtime_policy.valuation_scheduler_dispatch_rounds,
+        dlq_budget_events_per_window=runtime_policy.dlq_budget_events_per_window,
+        operating_band_policy=operating_band_policy,
+        calculator_peak_lag_age_seconds=dict(runtime_policy.calculator_peak_lag_age_seconds),
+        replay_isolation_mode=runtime_policy.replay_isolation_mode,
+        partition_growth_strategy=runtime_policy.partition_growth_strategy,
+    )
 
 
 def _replay_isolation_mode(value: str) -> Literal["shared_workers", "dedicated_workers"]:

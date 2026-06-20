@@ -1610,3 +1610,11 @@ health before that claim is defensible.
      `PermissionError` behavior. Radon reports the service method reduced from `A (2)` to `A (1)`,
      and `ingestion_ops_mode.py` remains A-ranked at `A (58.59)`. Focused ops-mode and guardrail
      tests passed with 23 tests, and scoped Ruff lint/format checks passed.
+269. Reduced ingestion operating-policy config coupling by moving runtime-policy-to-config mapping
+     from `IngestionJobService.get_operating_policy()` into `build_operating_policy_config(...)`
+     in `ingestion_operating_policy.py`. The service method now supplies the runtime policy and
+     existing operating-band policy to the helper, while response normalization and fingerprinting
+     stay in the policy module. Removed service-local aliases that only supported inline policy
+     config assembly. Focused operating-policy and guardrail tests passed with 21 tests; Radon
+     reports `get_operating_policy` remains `A (1)`, `ingestion_job_service.py` remains A-ranked
+     at `A (100.00)`, and `ingestion_operating_policy.py` remains A-ranked at `A (58.22)`.

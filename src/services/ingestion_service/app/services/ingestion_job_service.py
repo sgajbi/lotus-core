@@ -60,7 +60,7 @@ from .ingestion_operating_band import (
     load_operating_band_response,
 )
 from .ingestion_operating_policy import (
-    IngestionOperatingPolicyConfig,
+    build_operating_policy_config,
     build_operating_policy_response,
 )
 from .ingestion_ops_mode import (
@@ -92,23 +92,7 @@ _RUNTIME_POLICY = _SETTINGS.runtime_policy
 REPLAY_MAX_RECORDS_PER_REQUEST = _RUNTIME_POLICY.replay_max_records_per_request
 REPLAY_MAX_BACKLOG_JOBS = _RUNTIME_POLICY.replay_max_backlog_jobs
 DLQ_BUDGET_EVENTS_PER_WINDOW = _RUNTIME_POLICY.dlq_budget_events_per_window
-DEFAULT_LOOKBACK_MINUTES = _RUNTIME_POLICY.default_lookback_minutes
-DEFAULT_FAILURE_RATE_THRESHOLD = _RUNTIME_POLICY.default_failure_rate_threshold
-DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_queue_latency_threshold_seconds
-DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_backlog_age_threshold_seconds
-REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = (
-    _RUNTIME_POLICY.reprocessing_worker_poll_interval_seconds
-)
-REPROCESSING_WORKER_BATCH_SIZE = _RUNTIME_POLICY.reprocessing_worker_batch_size
-VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = (
-    _RUNTIME_POLICY.valuation_scheduler_poll_interval_seconds
-)
-VALUATION_SCHEDULER_BATCH_SIZE = _RUNTIME_POLICY.valuation_scheduler_batch_size
-VALUATION_SCHEDULER_DISPATCH_ROUNDS = _RUNTIME_POLICY.valuation_scheduler_dispatch_rounds
 CAPACITY_ASSUMED_REPLICAS = _RUNTIME_POLICY.capacity_assumed_replicas
-REPLAY_ISOLATION_MODE = _RUNTIME_POLICY.replay_isolation_mode
-PARTITION_GROWTH_STRATEGY = _RUNTIME_POLICY.partition_growth_strategy
-CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_RUNTIME_POLICY.calculator_peak_lag_age_seconds)
 logger = logging.getLogger(__name__)
 
 
@@ -276,28 +260,10 @@ class IngestionJobService:
 
     async def get_operating_policy(self) -> IngestionOpsPolicyResponse:
         return build_operating_policy_response(
-            IngestionOperatingPolicyConfig(
-                lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
-                failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
-                queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
-                backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
-                replay_max_records_per_request=REPLAY_MAX_RECORDS_PER_REQUEST,
-                replay_max_backlog_jobs=REPLAY_MAX_BACKLOG_JOBS,
-                reprocessing_worker_poll_interval_seconds=(
-                    REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
-                ),
-                reprocessing_worker_batch_size=REPROCESSING_WORKER_BATCH_SIZE,
-                valuation_scheduler_poll_interval_seconds=(
-                    VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-                ),
-                valuation_scheduler_batch_size=VALUATION_SCHEDULER_BATCH_SIZE,
-                valuation_scheduler_dispatch_rounds=VALUATION_SCHEDULER_DISPATCH_ROUNDS,
-                dlq_budget_events_per_window=DLQ_BUDGET_EVENTS_PER_WINDOW,
+            build_operating_policy_config(
+                runtime_policy=_RUNTIME_POLICY,
                 operating_band_policy=OPERATING_BAND_POLICY,
-                calculator_peak_lag_age_seconds=CALCULATOR_PEAK_LAG_AGE_SECONDS,
-                replay_isolation_mode=REPLAY_ISOLATION_MODE,
-                partition_growth_strategy=PARTITION_GROWTH_STRATEGY,
-            )
+            ),
         )
 
     async def get_reprocessing_queue_health(self) -> IngestionReprocessingQueueHealthResponse:
