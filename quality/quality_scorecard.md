@@ -1057,3 +1057,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1118 split cost upstream cash-leg validation helpers out of
   `CostCalculatorConsumer._validate_upstream_cash_leg`, reusing shared transaction-domain
   cash-entry-mode policy and removing that method from the B-ranked hotspot list.
+- CR-1119 split cost engine event-building helpers out of
+  `CostCalculatorConsumer._build_cost_engine_events_to_publish`, removing the final B-ranked method
+  from `cost_calculator_service/app/consumer.py` while preserving BUY/SELL lot-state update proof.

@@ -1642,3 +1642,10 @@ health before that claim is defensible.
      legs without an external cash ID fail before repository lookup. Radon no longer reports
      `_validate_upstream_cash_leg` in the B-ranked hotspot list; `consumer.py` remains A-ranked
      maintainability at `A (20.32)`.
+273. Reduced cost consumer event-building complexity by splitting history/input loading and FX
+     enrichment, processed-new persistence, and BUY/SELL-only lot-quantity updates out of
+     `CostCalculatorConsumer._build_cost_engine_events_to_publish(...)`. Focused consumer tests
+     passed with 30 tests, including a new regression that non-BUY/SELL events skip lot-quantity
+     updates while SELL events still persist them. Radon no longer reports any B-ranked method in
+     `cost_calculator_service/app/consumer.py`; the module remains A-ranked maintainability at
+     `A (19.49)`.
