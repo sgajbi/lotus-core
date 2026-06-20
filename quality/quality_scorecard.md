@@ -1041,3 +1041,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   construction, and response DTO assembly out of `IngestionJobService.get_operating_band(...)` into
   `ingestion_operating_band.py`, improving `ingestion_job_service.py` from `A (48.85)` / 512 lines
   to `A (49.41)` / 490 lines while keeping the expanded helper A-ranked at `A (49.28)`.
+- CR-1114 split ingestion write-mode metric mapping and paused/drain denial policy out of
+  `IngestionJobService.assert_ingestion_writable()` into `ingestion_ops_mode.py`, reducing that
+  service method from `A (2)` to `A (1)` while keeping ops-mode behavior directly tested.

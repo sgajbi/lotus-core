@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.services.ingestion_service.app.services.ingestion_ops_mode import (
+    assert_ingestion_writable_mode,
     load_ops_mode_response,
     to_ops_mode_response,
     update_ops_mode_response,
@@ -59,6 +60,14 @@ class _FakeSession:
 
 def _session_factory(session):
     return lambda: _SingleSessionAsyncIterator(session)
+
+
+class _FakeGauge:
+    def __init__(self):
+        self.values: list[int] = []
+
+    def set(self, value: int) -> None:
+        self.values.append(value)
 
 
 async def test_to_ops_mode_response_preserves_control_fields() -> None:
@@ -117,3 +126,32 @@ async def test_update_ops_mode_response_updates_existing_control_row() -> None:
     assert response.updated_by == "ops-user"
     assert response.updated_at is not None
     assert session.added == []
+
+
+async def test_assert_ingestion_writable_mode_records_normal_mode_metric() -> None:
+    gauge = _FakeGauge()
+
+    async def _load_mode():
+        return SimpleNamespace(mode="normal")
+
+    await assert_ingestion_writable_mode(
+        ops_mode_loader=_load_mode,
+        mode_state_metric=gauge,
+    )
+
+    assert gauge.values == [0]
+
+
+async def test_assert_ingestion_writable_mode_blocks_paused_mode() -> None:
+    gauge = _FakeGauge()
+
+    async def _load_mode():
+        return SimpleNamespace(mode="paused")
+
+    with pytest.raises(PermissionError, match="currently in 'paused' mode"):
+        await assert_ingestion_writable_mode(
+            ops_mode_loader=_load_mode,
+            mode_state_metric=gauge,
+        )
+
+    assert gauge.values == [1]

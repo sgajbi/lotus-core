@@ -1603,3 +1603,10 @@ health before that claim is defensible.
      `A (48.85)` to `A (49.41)` under Radon maintainability; the expanded operating-band helper
      remains A-ranked at `A (49.28)` / 156 lines. Focused operating-band and guardrail tests passed
      with 23 tests, and scoped Ruff lint/format checks passed.
+268. Reduced ingestion write-mode guard coupling by moving ingestion-mode metric mapping and
+     paused/drain write-denial policy from `IngestionJobService.assert_ingestion_writable()` into
+     `assert_ingestion_writable_mode(...)` in `ingestion_ops_mode.py`. The service method now
+     delegates to the ops-mode helper while preserving `INGESTION_MODE_STATE` updates and existing
+     `PermissionError` behavior. Radon reports the service method reduced from `A (2)` to `A (1)`,
+     and `ingestion_ops_mode.py` remains A-ranked at `A (58.59)`. Focused ops-mode and guardrail
+     tests passed with 23 tests, and scoped Ruff lint/format checks passed.

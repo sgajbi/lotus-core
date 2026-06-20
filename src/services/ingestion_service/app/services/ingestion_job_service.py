@@ -6,10 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.db import get_async_db_session
-from portfolio_common.monitoring import (
-    INGESTION_BACKLOG_AGE_SECONDS,
-    INGESTION_MODE_STATE,
-)
+from portfolio_common.monitoring import INGESTION_BACKLOG_AGE_SECONDS, INGESTION_MODE_STATE
 
 from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
@@ -66,7 +63,11 @@ from .ingestion_operating_policy import (
     IngestionOperatingPolicyConfig,
     build_operating_policy_response,
 )
-from .ingestion_ops_mode import load_ops_mode_response, update_ops_mode_response
+from .ingestion_ops_mode import (
+    assert_ingestion_writable_mode,
+    load_ops_mode_response,
+    update_ops_mode_response,
+)
 from .ingestion_record_status import load_record_status_response
 from .ingestion_replay_audits import (
     find_successful_replay_audit_by_fingerprint_response,
@@ -494,12 +495,10 @@ class IngestionJobService:
         )
 
     async def assert_ingestion_writable(self) -> None:
-        mode = await self.get_ops_mode()
-        INGESTION_MODE_STATE.set({"normal": 0, "paused": 1, "drain": 2}[mode.mode])
-        if mode.mode in {"paused", "drain"}:
-            raise PermissionError(
-                f"Ingestion is currently in '{mode.mode}' mode and not accepting new requests."
-            )
+        await assert_ingestion_writable_mode(
+            ops_mode_loader=self.get_ops_mode,
+            mode_state_metric=INGESTION_MODE_STATE,
+        )
 
     async def assert_retry_allowed(self, submitted_at: datetime) -> None:
         await self.assert_retry_allowed_for_records(
