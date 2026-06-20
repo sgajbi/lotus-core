@@ -1025,3 +1025,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   backlog-age metric updates, and response orchestration out of `IngestionJobService` into
   `ingestion_slo_status.py`, improving `ingestion_job_service.py` from `A (38.41)` / 584 SLOC to
   `A (41.09)` / 550 SLOC while keeping the expanded SLO helper `A (39.95)` / 194 SLOC.
+- CR-1110 split ingestion retry permission backlog counting, replay guardrail orchestration, and
+  reprocessing publish normalization out of `IngestionJobService` into
+  `ingestion_retry_permissions.py`, improving `ingestion_job_service.py` from `A (41.09)` /
+  550 SLOC to `A (44.24)` / 522 SLOC while keeping the new helper `A (68.59)` / 50 SLOC.

@@ -1571,3 +1571,12 @@ health before that claim is defensible.
      `A (39.95)` / 194 SLOC. Focused SLO and guardrail tests passed with 21 tests, the broader
      ingestion service unit package passed with 79 tests, and scoped Ruff lint/format checks
      passed.
+264. Reduced ingestion retry permission coupling by moving backlog counting, retry/replay
+     permission orchestration, and reprocessing publish record-count normalization from
+     `IngestionJobService` into `ingestion_retry_permissions.py`. The service methods remain
+     public delegates and preserve the existing guardrail test patch points. Removed an obsolete
+     error-budget default wrapper that was no longer used after helper extraction. `ingestion_job_service.py`
+     shrank from 550 SLOC to 522 SLOC and improved from `A (41.09)` to `A (44.24)` under Radon
+     maintainability; the new retry-permission helper reports `A (68.59)` / 50 SLOC. Focused
+     guardrail tests passed with 18 tests, the broader ingestion service unit package passed with
+     79 tests, and scoped Ruff lint/format checks passed.

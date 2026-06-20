@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.monitoring import (
     INGESTION_BACKLOG_AGE_SECONDS,
     INGESTION_MODE_STATE,
 )
-from sqlalchemy import func, select
 
 from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
@@ -81,7 +79,11 @@ from .ingestion_replay_audits import (
     record_consumer_dlq_replay_audit_response,
 )
 from .ingestion_reprocessing_queue_health import load_reprocessing_queue_health_response
-from .ingestion_retry_guardrails import assert_replay_guardrails
+from .ingestion_retry_permissions import (
+    assert_reprocessing_publish_allowed_for_count,
+    assert_retry_allowed_for_record_count,
+    count_backlog_jobs,
+)
 from .ingestion_slo_status import (
     load_slo_status_response,
 )
@@ -130,18 +132,6 @@ class IngestionJobService:
     """
     Persists ingestion lifecycle and operational controls for ingestion runbooks.
     """
-
-    @staticmethod
-    def _default_error_budget_status(
-        *,
-        lookback_minutes: int,
-        failure_rate_threshold: Decimal,
-    ) -> IngestionErrorBudgetStatusResponse:
-        return _error_budget_status.default_error_budget_status(
-            lookback_minutes=lookback_minutes,
-            failure_rate_threshold=failure_rate_threshold,
-            dlq_budget_events_per_window=DLQ_BUDGET_EVENTS_PER_WINDOW,
-        )
 
     async def create_or_get_job(
         self,
@@ -554,19 +544,7 @@ class IngestionJobService:
         )
 
     async def _count_backlog_jobs(self) -> int:
-        async for db in get_async_db_session():
-            backlog = int(
-                (
-                    await db.scalar(
-                        select(func.count(DBIngestionJob.id)).where(
-                            DBIngestionJob.status.in_(("accepted", "queued"))
-                        )
-                    )
-                )
-                or 0
-            )
-            return backlog
-        return 0
+        return await count_backlog_jobs(session_factory=get_async_db_session)
 
     async def assert_retry_allowed_for_records(
         self,
@@ -574,26 +552,19 @@ class IngestionJobService:
         submitted_at: datetime,
         replay_record_count: int,
     ) -> None:
-        mode = await self.get_ops_mode()
-        now = datetime.now(UTC)
-        backlog_jobs = await self._count_backlog_jobs()
-        assert_replay_guardrails(
-            mode=mode.mode,
-            replay_window_start=mode.replay_window_start,
-            replay_window_end=mode.replay_window_end,
+        await assert_retry_allowed_for_record_count(
             submitted_at=submitted_at,
             replay_record_count=replay_record_count,
-            backlog_jobs=backlog_jobs,
-            now=now,
+            ops_mode_loader=self.get_ops_mode,
+            backlog_counter=self._count_backlog_jobs,
             max_records_per_request=REPLAY_MAX_RECORDS_PER_REQUEST,
             max_backlog_jobs=REPLAY_MAX_BACKLOG_JOBS,
         )
 
     async def assert_reprocessing_publish_allowed(self, record_count: int) -> None:
-        now = datetime.now(UTC)
-        await self.assert_retry_allowed_for_records(
-            submitted_at=now,
-            replay_record_count=max(1, int(record_count)),
+        await assert_reprocessing_publish_allowed_for_count(
+            record_count=record_count,
+            retry_permission_checker=self.assert_retry_allowed_for_records,
         )
 
 
