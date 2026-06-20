@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from types import SimpleNamespace
+
+import pytest
 
 from src.services.ingestion_service.app.services.ingestion_operating_band import (
     OperatingBandPolicy,
     OperatingBandSignals,
     classify_operating_band,
+    load_operating_band_response,
 )
 
 
@@ -95,4 +99,61 @@ def test_classify_operating_band_collects_yellow_threshold_signals():
     assert decision.triggered_signals == [
         "backlog_age_seconds>=10",
         "dlq_pressure_ratio>=0.2",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_operating_band_response_builds_red_response_from_runtime_loaders():
+    loader_calls: list[tuple[str, dict]] = []
+
+    async def _load_slo_status(**kwargs):
+        loader_calls.append(("slo", kwargs))
+        return SimpleNamespace(
+            backlog_age_seconds=120.0,
+            breach_failure_rate=False,
+            breach_queue_latency=False,
+            breach_backlog_age=True,
+            failure_rate=Decimal("0.02"),
+        )
+
+    async def _load_error_budget_status(**kwargs):
+        loader_calls.append(("error_budget", kwargs))
+        return SimpleNamespace(dlq_pressure_ratio=Decimal("0.95"))
+
+    response = await load_operating_band_response(
+        lookback_minutes=45,
+        failure_rate_threshold=Decimal("0.03"),
+        queue_latency_threshold_seconds=7.5,
+        backlog_age_threshold_seconds=240.0,
+        policy=_policy(),
+        slo_status_loader=_load_slo_status,
+        error_budget_status_loader=_load_error_budget_status,
+    )
+
+    assert response.lookback_minutes == 45
+    assert response.operating_band == "red"
+    assert response.backlog_age_seconds == 120.0
+    assert response.dlq_pressure_ratio == Decimal("0.95")
+    assert response.failure_rate == Decimal("0.02")
+    assert response.triggered_signals == [
+        "backlog_age_seconds>=100",
+        "dlq_pressure_ratio>=0.9",
+    ]
+    assert loader_calls == [
+        (
+            "slo",
+            {
+                "lookback_minutes": 45,
+                "failure_rate_threshold": Decimal("0.03"),
+                "queue_latency_threshold_seconds": 7.5,
+                "backlog_age_threshold_seconds": 240.0,
+            },
+        ),
+        (
+            "error_budget",
+            {
+                "lookback_minutes": 45,
+                "failure_rate_threshold": Decimal("0.03"),
+            },
+        ),
     ]

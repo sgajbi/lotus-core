@@ -60,8 +60,7 @@ from .ingestion_job_listing import (
 )
 from .ingestion_operating_band import (
     OperatingBandPolicy,
-    OperatingBandSignals,
-    classify_operating_band,
+    load_operating_band_response,
 )
 from .ingestion_operating_policy import (
     IngestionOperatingPolicyConfig,
@@ -264,39 +263,14 @@ class IngestionJobService:
         queue_latency_threshold_seconds: float = 5.0,
         backlog_age_threshold_seconds: float = 300.0,
     ) -> IngestionOperatingBandResponse:
-        slo_status = await self.get_slo_status(
+        return await load_operating_band_response(
             lookback_minutes=lookback_minutes,
             failure_rate_threshold=failure_rate_threshold,
             queue_latency_threshold_seconds=queue_latency_threshold_seconds,
             backlog_age_threshold_seconds=backlog_age_threshold_seconds,
-        )
-        error_budget = await self.get_error_budget_status(
-            lookback_minutes=lookback_minutes,
-            failure_rate_threshold=failure_rate_threshold,
-        )
-        backlog_age_seconds = float(slo_status.backlog_age_seconds)
-        dlq_pressure_ratio = Decimal(error_budget.dlq_pressure_ratio)
-        failure_rate = Decimal(slo_status.failure_rate)
-        decision = classify_operating_band(
-            signals=OperatingBandSignals(
-                backlog_age_seconds=backlog_age_seconds,
-                dlq_pressure_ratio=dlq_pressure_ratio,
-                breach_failure_rate=bool(slo_status.breach_failure_rate),
-                breach_queue_latency=bool(slo_status.breach_queue_latency),
-                breach_backlog_age=bool(slo_status.breach_backlog_age),
-                failure_rate=failure_rate,
-            ),
             policy=OPERATING_BAND_POLICY,
-        )
-
-        return IngestionOperatingBandResponse(
-            lookback_minutes=lookback_minutes,
-            operating_band=decision.operating_band,
-            recommended_action=decision.recommended_action,
-            backlog_age_seconds=backlog_age_seconds,
-            dlq_pressure_ratio=dlq_pressure_ratio,
-            failure_rate=failure_rate,
-            triggered_signals=decision.triggered_signals,
+            slo_status_loader=self.get_slo_status,
+            error_budget_status_loader=self.get_error_budget_status,
         )
 
     async def get_operating_policy(self) -> IngestionOpsPolicyResponse:

@@ -1037,3 +1037,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `analytics_portfolio_timeseries` one-year relative period with a deterministic 90-day explicit
   window that matches the bounded CI seed, while preserving the real endpoint call, p95
   enforcement, and adding sampled non-2xx response bodies to machine-readable evidence.
+- CR-1113 split ingestion operating-band SLO/error-budget loader orchestration, classifier signal
+  construction, and response DTO assembly out of `IngestionJobService.get_operating_band(...)` into
+  `ingestion_operating_band.py`, improving `ingestion_job_service.py` from `A (48.85)` / 512 lines
+  to `A (49.41)` / 490 lines while keeping the expanded helper A-ranked at `A (49.28)`.

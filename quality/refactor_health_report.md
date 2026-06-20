@@ -1595,3 +1595,11 @@ health before that claim is defensible.
      `as_of_date`, preserving the real portfolio-timeseries API call and p95 budget while aligning
      the proof with seeded coverage. Latency JSON evidence now samples non-2xx response bodies so
      future failures carry actionable validation or data-quality detail.
+267. Reduced ingestion operating-band response assembly coupling by moving SLO/error-budget loader
+     orchestration, classifier signal construction, and `IngestionOperatingBandResponse` assembly
+     from `IngestionJobService.get_operating_band(...)` into `ingestion_operating_band.py`. The
+     public service method now delegates while preserving existing runtime thresholds, loaders, and
+     DTO behavior. `ingestion_job_service.py` shrank from 512 lines to 490 lines and improved from
+     `A (48.85)` to `A (49.41)` under Radon maintainability; the expanded operating-band helper
+     remains A-ranked at `A (49.28)` / 156 lines. Focused operating-band and guardrail tests passed
+     with 23 tests, and scoped Ruff lint/format checks passed.

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
+
+from ..DTOs.ingestion_job_dto import IngestionOperatingBandResponse
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,4 +127,50 @@ def classify_operating_band(
         operating_band="green",
         recommended_action="Hold baseline replicas.",
         triggered_signals=["stable_signals"],
+    )
+
+
+async def load_operating_band_response(
+    *,
+    lookback_minutes: int,
+    failure_rate_threshold: Decimal,
+    queue_latency_threshold_seconds: float,
+    backlog_age_threshold_seconds: float,
+    policy: OperatingBandPolicy,
+    slo_status_loader: Callable[..., Awaitable[Any]],
+    error_budget_status_loader: Callable[..., Awaitable[Any]],
+) -> IngestionOperatingBandResponse:
+    slo_status = await slo_status_loader(
+        lookback_minutes=lookback_minutes,
+        failure_rate_threshold=failure_rate_threshold,
+        queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+        backlog_age_threshold_seconds=backlog_age_threshold_seconds,
+    )
+    error_budget = await error_budget_status_loader(
+        lookback_minutes=lookback_minutes,
+        failure_rate_threshold=failure_rate_threshold,
+    )
+    backlog_age_seconds = float(slo_status.backlog_age_seconds)
+    dlq_pressure_ratio = Decimal(error_budget.dlq_pressure_ratio)
+    failure_rate = Decimal(slo_status.failure_rate)
+    decision = classify_operating_band(
+        signals=OperatingBandSignals(
+            backlog_age_seconds=backlog_age_seconds,
+            dlq_pressure_ratio=dlq_pressure_ratio,
+            breach_failure_rate=bool(slo_status.breach_failure_rate),
+            breach_queue_latency=bool(slo_status.breach_queue_latency),
+            breach_backlog_age=bool(slo_status.breach_backlog_age),
+            failure_rate=failure_rate,
+        ),
+        policy=policy,
+    )
+
+    return IngestionOperatingBandResponse(
+        lookback_minutes=lookback_minutes,
+        operating_band=decision.operating_band,
+        recommended_action=decision.recommended_action,
+        backlog_age_seconds=backlog_age_seconds,
+        dlq_pressure_ratio=dlq_pressure_ratio,
+        failure_rate=failure_rate,
+        triggered_signals=decision.triggered_signals,
     )
