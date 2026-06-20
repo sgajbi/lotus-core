@@ -1580,3 +1580,18 @@ health before that claim is defensible.
      maintainability; the new retry-permission helper reports `A (68.59)` / 50 SLOC. Focused
      guardrail tests passed with 18 tests, the broader ingestion service unit package passed with
      79 tests, and scoped Ruff lint/format checks passed.
+265. Reduced ingestion job-list read-model coupling by moving cursor lookup, filtered statement
+     execution, page construction, next-cursor selection, and row-to-response mapping from
+     `IngestionJobService.list_jobs(...)` into `ingestion_job_listing.py`. The public service
+     method now delegates while preserving filter, pagination, DTO, API, and database behavior.
+     `ingestion_job_service.py` shrank from 522 SLOC to 512 SLOC and improved from `A (44.24)` to
+     `A (48.85)` under Radon maintainability; the expanded listing helper reports `A (43.44)` /
+     68 SLOC. Focused listing and guardrail tests passed with 22 tests, the broader ingestion
+     service unit package passed with 80 tests, and scoped Ruff lint/format checks passed.
+266. Hardened the PR Merge Gate latency profile after run `27858285400` proved the
+     `analytics_portfolio_timeseries` case could return 422 for all measured calls when the
+     profile requested `period: one_year` against the intentionally bounded 365-day CI seed. The
+     case now uses an explicit deterministic 90-day analytics window ending at the resolved runtime
+     `as_of_date`, preserving the real portfolio-timeseries API call and p95 budget while aligning
+     the proof with seeded coverage. Latency JSON evidence now samples non-2xx response bodies so
+     future failures carry actionable validation or data-quality detail.

@@ -7,7 +7,8 @@ from typing import Any
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from sqlalchemy import desc, select
 
-from ..DTOs.ingestion_job_dto import IngestionJobStatus
+from ..DTOs.ingestion_job_dto import IngestionJobResponse, IngestionJobStatus
+from .ingestion_job_lifecycle import to_job_response
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,3 +59,25 @@ def ingestion_job_list_page(
         rows=page_rows,
         next_cursor=page_rows[-1].job_id if len(rows) > limit and page_rows else None,
     )
+
+
+async def load_job_list_response(
+    *,
+    filters: IngestionJobListFilters,
+    cursor: str | None,
+    limit: int,
+    session_factory,
+) -> tuple[list[IngestionJobResponse], str | None]:
+    async for db in session_factory():
+        cursor_row = None
+        if cursor is not None:
+            cursor_row = await db.scalar(build_cursor_lookup_statement(cursor=cursor))
+        stmt = build_ingestion_job_list_statement(
+            filters=filters,
+            cursor_row=cursor_row,
+            limit=limit,
+        )
+        rows = list((await db.scalars(stmt)).all())
+        page = ingestion_job_list_page(rows=rows, limit=limit)
+        return ([to_job_response(row) for row in page.rows], page.next_cursor)
+    return ([], None)

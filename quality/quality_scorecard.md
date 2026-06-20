@@ -1029,3 +1029,11 @@ Local evidence captured on 2026-06-05 after CR-1034:
   reprocessing publish normalization out of `IngestionJobService` into
   `ingestion_retry_permissions.py`, improving `ingestion_job_service.py` from `A (41.09)` /
   550 SLOC to `A (44.24)` / 522 SLOC while keeping the new helper `A (68.59)` / 50 SLOC.
+- CR-1111 split ingestion job-list cursor lookup, filtered statement execution, page construction,
+  next-cursor selection, and row-to-response mapping out of `IngestionJobService.list_jobs(...)`
+  into `ingestion_job_listing.py`, improving `ingestion_job_service.py` from `A (44.24)` /
+  522 SLOC to `A (48.85)` / 512 SLOC while keeping the expanded helper `A (43.44)` / 68 SLOC.
+- CR-1112 hardened the PR Merge Gate latency profile by replacing the
+  `analytics_portfolio_timeseries` one-year relative period with a deterministic 90-day explicit
+  window that matches the bounded CI seed, while preserving the real endpoint call, p95
+  enforcement, and adding sampled non-2xx response bodies to machine-readable evidence.
