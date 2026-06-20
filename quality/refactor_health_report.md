@@ -1562,3 +1562,12 @@ health before that claim is defensible.
      `A (40.28)` / 261 SLOC. Focused state-transition tests passed with 4 tests, the broader
      ingestion service unit package passed with 79 tests, scoped Ruff lint/format checks passed,
      and all touched service/helper functions remain A-ranked by cyclomatic complexity.
+263. Reduced ingestion SLO status coupling by moving lookback timing, SQLAlchemy fallback handling,
+     safe-default response construction, backlog-age metric updates, and SLO response orchestration
+     from `IngestionJobService.get_slo_status` into `ingestion_slo_status.py`. The public service
+     method now delegates while preserving response thresholds, fallback behavior, metric labels,
+     and logging posture. `ingestion_job_service.py` shrank from 584 SLOC to 550 SLOC and improved
+     from `A (38.41)` to `A (41.09)` under Radon maintainability; the expanded SLO helper reports
+     `A (39.95)` / 194 SLOC. Focused SLO and guardrail tests passed with 21 tests, the broader
+     ingestion service unit package passed with 79 tests, and scoped Ruff lint/format checks
+     passed.

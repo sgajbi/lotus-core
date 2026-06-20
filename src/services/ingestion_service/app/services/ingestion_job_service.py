@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -12,7 +12,6 @@ from portfolio_common.monitoring import (
     INGESTION_MODE_STATE,
 )
 from sqlalchemy import func, select
-from sqlalchemy.exc import SQLAlchemyError
 
 from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
@@ -84,8 +83,7 @@ from .ingestion_replay_audits import (
 from .ingestion_reprocessing_queue_health import load_reprocessing_queue_health_response
 from .ingestion_retry_guardrails import assert_replay_guardrails
 from .ingestion_slo_status import (
-    build_slo_status_response,
-    load_ingestion_slo_snapshot,
+    load_slo_status_response,
 )
 from .ingestion_stalled_jobs import load_stalled_job_list_response
 
@@ -132,23 +130,6 @@ class IngestionJobService:
     """
     Persists ingestion lifecycle and operational controls for ingestion runbooks.
     """
-
-    @staticmethod
-    def _default_slo_status(
-        *,
-        lookback_minutes: int,
-    ) -> IngestionSloStatusResponse:
-        return IngestionSloStatusResponse(
-            lookback_minutes=lookback_minutes,
-            total_jobs=0,
-            failed_jobs=0,
-            failure_rate=Decimal("0"),
-            p95_queue_latency_seconds=0.0,
-            backlog_age_seconds=0.0,
-            breach_failure_rate=False,
-            breach_queue_latency=False,
-            breach_backlog_age=False,
-        )
 
     @staticmethod
     def _default_error_budget_status(
@@ -285,31 +266,15 @@ class IngestionJobService:
         queue_latency_threshold_seconds: float = 5.0,
         backlog_age_threshold_seconds: float = 300.0,
     ) -> IngestionSloStatusResponse:
-        async for db in get_async_db_session():
-            now = datetime.now(UTC)
-            since = now - timedelta(minutes=lookback_minutes)
-            try:
-                snapshot = await load_ingestion_slo_snapshot(
-                    db,
-                    since=since,
-                    now=now,
-                )
-            except SQLAlchemyError as exc:
-                logger.warning(
-                    "ingestion_slo_status_fallback_unavailable",
-                    extra={"lookback_minutes": lookback_minutes},
-                    exc_info=exc,
-                )
-                return self._default_slo_status(lookback_minutes=lookback_minutes)
-            INGESTION_BACKLOG_AGE_SECONDS.set(snapshot.backlog_age_seconds)
-            return build_slo_status_response(
-                lookback_minutes=lookback_minutes,
-                snapshot=snapshot,
-                failure_rate_threshold=failure_rate_threshold,
-                queue_latency_threshold_seconds=queue_latency_threshold_seconds,
-                backlog_age_threshold_seconds=backlog_age_threshold_seconds,
-            )
-        return self._default_slo_status(lookback_minutes=lookback_minutes)
+        return await load_slo_status_response(
+            lookback_minutes=lookback_minutes,
+            failure_rate_threshold=failure_rate_threshold,
+            queue_latency_threshold_seconds=queue_latency_threshold_seconds,
+            backlog_age_threshold_seconds=backlog_age_threshold_seconds,
+            session_factory=get_async_db_session,
+            backlog_age_metric=INGESTION_BACKLOG_AGE_SECONDS,
+            logger=logger,
+        )
 
     async def get_operating_band(
         self,
