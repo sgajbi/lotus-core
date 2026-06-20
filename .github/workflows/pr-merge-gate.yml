@@ -271,10 +271,21 @@ jobs:
       - name: Prebuild compose images with cache
         run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
       - name: Run lotus-core app validation report
-        run: make lotus-core-validate
-      - name: Capture docker compose logs on failure
-        if: failure()
-        run: docker compose logs > lotus-core-validation-logs.txt
+        id: lotus_core_validation_report
+        run: |
+          set +e
+          make lotus-core-validate
+          status=$?
+          mkdir -p output/lotus-core-validation
+          echo "exit_code=${status}" >> "$GITHUB_OUTPUT"
+          echo "${status}" > output/lotus-core-validation/lotus-core-validation-exit-code.txt
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::lotus-core validation report exited ${status}; report-only rollout preserves evidence without blocking the PR merge gate."
+          fi
+          exit 0
+      - name: Capture docker compose logs on validation report failure
+        if: always() && steps.lotus_core_validation_report.outputs.exit_code != '0'
+        run: docker compose logs > lotus-core-validation-logs.txt || true
       - name: Upload lotus-core validation evidence
         if: always()
         uses: actions/upload-artifact@v7

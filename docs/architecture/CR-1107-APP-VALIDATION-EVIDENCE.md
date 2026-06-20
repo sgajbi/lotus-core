@@ -32,7 +32,10 @@ The command:
 ## CI Posture
 
 The PR Merge Gate now runs `make lotus-core-validate` as report-only evidence and uploads the JSON
-artifacts.
+artifacts. The command still exits non-zero on weak proof when run directly; the report-only
+workflow step records that exit code in
+`output/lotus-core-validation/lotus-core-validation-exit-code.txt`, emits a warning, captures logs
+when available, uploads the evidence, and exits zero until the signal is promoted.
 
 It is not blocking yet. Promotion requires:
 
@@ -66,3 +69,8 @@ Observed evidence:
    `output/lotus-core-validation/lotus-core-validation.json`.
 2. The nested runtime smoke evidence reported `Passed: 66 Failed: 0`.
 3. `make warning-gate` reported `3001 passed, 10 deselected` with `warnings=0`.
+4. The first PR report-only run proved the new workflow must not rely on job-level
+   `continue-on-error`: GitHub still surfaced a failed check when the app validation command
+   correctly exited non-zero because the sibling `lotus-platform` domain-product validator was not
+   present on the runner. Runtime smoke in that same run passed with `Passed: 66 Failed: 0`.
+   The workflow now preserves that failing evidence without blocking the PR merge gate.
