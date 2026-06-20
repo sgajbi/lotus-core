@@ -1552,3 +1552,13 @@ health before that claim is defensible.
      tests passed with 21 tests, the broader ingestion service unit package passed with 79 tests,
      scoped Ruff lint/format checks passed, and all touched replay-audit functions remain
      A-ranked except the pre-existing list-filter helper at `B (7)`.
+262. Reduced ingestion job lifecycle persistence coupling by moving idempotent job creation,
+     queued/failed/retried state transitions, failure-observation recording, simple job reads,
+     replay-context reads, failure listing, response mapping, and lifecycle metric side effects
+     from `IngestionJobService` into `ingestion_job_lifecycle.py`. The public service methods now
+     delegate to the helper while preserving router contracts, API DTOs, database semantics, and
+     metric labels. `ingestion_job_service.py` shrank from 726 SLOC to 584 SLOC and improved from
+     `A (25.65)` to `A (38.41)` under Radon maintainability; the new helper reports
+     `A (40.28)` / 261 SLOC. Focused state-transition tests passed with 4 tests, the broader
+     ingestion service unit package passed with 79 tests, scoped Ruff lint/format checks passed,
+     and all touched service/helper functions remain A-ranked by cyclomatic complexity.
