@@ -1595,3 +1595,57 @@ health before that claim is defensible.
      `as_of_date`, preserving the real portfolio-timeseries API call and p95 budget while aligning
      the proof with seeded coverage. Latency JSON evidence now samples non-2xx response bodies so
      future failures carry actionable validation or data-quality detail.
+267. Reduced ingestion operating-band response assembly coupling by moving SLO/error-budget loader
+     orchestration, classifier signal construction, and `IngestionOperatingBandResponse` assembly
+     from `IngestionJobService.get_operating_band(...)` into `ingestion_operating_band.py`. The
+     public service method now delegates while preserving existing runtime thresholds, loaders, and
+     DTO behavior. `ingestion_job_service.py` shrank from 512 lines to 490 lines and improved from
+     `A (48.85)` to `A (49.41)` under Radon maintainability; the expanded operating-band helper
+     remains A-ranked at `A (49.28)` / 156 lines. Focused operating-band and guardrail tests passed
+     with 23 tests, and scoped Ruff lint/format checks passed.
+268. Reduced ingestion write-mode guard coupling by moving ingestion-mode metric mapping and
+     paused/drain write-denial policy from `IngestionJobService.assert_ingestion_writable()` into
+     `assert_ingestion_writable_mode(...)` in `ingestion_ops_mode.py`. The service method now
+     delegates to the ops-mode helper while preserving `INGESTION_MODE_STATE` updates and existing
+     `PermissionError` behavior. Radon reports the service method reduced from `A (2)` to `A (1)`,
+     and `ingestion_ops_mode.py` remains A-ranked at `A (58.59)`. Focused ops-mode and guardrail
+     tests passed with 23 tests, and scoped Ruff lint/format checks passed.
+269. Reduced ingestion operating-policy config coupling by moving runtime-policy-to-config mapping
+     from `IngestionJobService.get_operating_policy()` into `build_operating_policy_config(...)`
+     in `ingestion_operating_policy.py`. The service method now supplies the runtime policy and
+     existing operating-band policy to the helper, while response normalization and fingerprinting
+     stay in the policy module. Removed service-local aliases that only supported inline policy
+     config assembly. Focused operating-policy and guardrail tests passed with 21 tests; Radon
+     reports `get_operating_policy` remains `A (1)`, `ingestion_job_service.py` remains A-ranked
+     at `A (100.00)`, and `ingestion_operating_policy.py` remains A-ranked at `A (58.22)`.
+270. Reduced ingestion operating-band policy coupling by moving runtime operating-band threshold
+     mapping from `IngestionJobService` into `build_operating_band_policy(...)` in
+     `ingestion_operating_band.py`. The service facade now delegates policy construction to the
+     same module that classifies operating bands and assembles operating-band responses. Focused
+     operating-band and guardrail tests passed with 24 tests; Radon reports the new helper is
+     `A (1)`, `get_operating_band` remains `A (1)`, `ingestion_job_service.py` remains A-ranked
+     at `A (100.00)`, and `ingestion_operating_band.py` remains A-ranked at `A (48.91)`.
+271. Reduced cost transaction processor orchestration complexity by splitting valid transaction
+     ID resolution, valid transaction selection, processed-new filtering, sorted-timeline
+     processing, calculator invocation, and unexpected-error recording out of
+     `TransactionProcessor.process_transactions(...)`. The runtime consumer behavior remains
+     unchanged: parser/sorter/cost-calculator/error-reporter/disposition dependencies are still
+     injected, recalculation depth and duration metrics are still emitted, and only successfully
+     processed new transactions are returned. Focused transaction-processor tests passed with
+     3 tests, including a new regression for unexpected calculator exceptions; Radon reports
+     `process_transactions` reduced from `C (12)` to `A (1)` and all extracted helpers A-ranked.
+272. Reduced cost upstream cash-leg validation complexity by replacing inline cash-entry-mode
+     comparison in `CostCalculatorConsumer._validate_upstream_cash_leg(...)` with the shared
+     `is_upstream_provided_cash_entry_mode(...)` policy helper and extracting upstream-validation
+     predicate, external cash ID resolution, and persisted cash-leg loading helpers. Focused
+     consumer tests passed with 29 tests, including a new regression that upstream-provided product
+     legs without an external cash ID fail before repository lookup. Radon no longer reports
+     `_validate_upstream_cash_leg` in the B-ranked hotspot list; `consumer.py` remains A-ranked
+     maintainability at `A (20.32)`.
+273. Reduced cost consumer event-building complexity by splitting history/input loading and FX
+     enrichment, processed-new persistence, and BUY/SELL-only lot-quantity updates out of
+     `CostCalculatorConsumer._build_cost_engine_events_to_publish(...)`. Focused consumer tests
+     passed with 30 tests, including a new regression that non-BUY/SELL events skip lot-quantity
+     updates while SELL events still persist them. Radon no longer reports any B-ranked method in
+     `cost_calculator_service/app/consumer.py`; the module remains A-ranked maintainability at
+     `A (19.49)`.

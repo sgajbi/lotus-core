@@ -1037,3 +1037,26 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `analytics_portfolio_timeseries` one-year relative period with a deterministic 90-day explicit
   window that matches the bounded CI seed, while preserving the real endpoint call, p95
   enforcement, and adding sampled non-2xx response bodies to machine-readable evidence.
+- CR-1113 split ingestion operating-band SLO/error-budget loader orchestration, classifier signal
+  construction, and response DTO assembly out of `IngestionJobService.get_operating_band(...)` into
+  `ingestion_operating_band.py`, improving `ingestion_job_service.py` from `A (48.85)` / 512 lines
+  to `A (49.41)` / 490 lines while keeping the expanded helper A-ranked at `A (49.28)`.
+- CR-1114 split ingestion write-mode metric mapping and paused/drain denial policy out of
+  `IngestionJobService.assert_ingestion_writable()` into `ingestion_ops_mode.py`, reducing that
+  service method from `A (2)` to `A (1)` while keeping ops-mode behavior directly tested.
+- CR-1115 split ingestion operating-policy runtime-setting mapping out of
+  `IngestionJobService.get_operating_policy()` into `ingestion_operating_policy.py`, keeping policy
+  normalization and fingerprinting with the same boundary while preserving direct tests for
+  configured threshold mapping and defensive calculator lag-threshold copying.
+- CR-1116 split ingestion operating-band threshold mapping out of `IngestionJobService` into
+  `ingestion_operating_band.py`, keeping operating-band policy construction beside the classifier
+  and response assembly with direct tests for exact yellow/orange/red threshold mapping.
+- CR-1117 split cost transaction processor orchestration helpers out of
+  `TransactionProcessor.process_transactions`, reducing the runtime consumer method from `C (12)`
+  to `A (1)` while adding regression proof for unexpected calculator errors.
+- CR-1118 split cost upstream cash-leg validation helpers out of
+  `CostCalculatorConsumer._validate_upstream_cash_leg`, reusing shared transaction-domain
+  cash-entry-mode policy and removing that method from the B-ranked hotspot list.
+- CR-1119 split cost engine event-building helpers out of
+  `CostCalculatorConsumer._build_cost_engine_events_to_publish`, removing the final B-ranked method
+  from `cost_calculator_service/app/consumer.py` while preserving BUY/SELL lot-state update proof.

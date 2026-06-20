@@ -11,6 +11,8 @@ from src.services.ingestion_service.app.services import (
 )
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
+)
+from src.services.ingestion_service.app.services.ingestion_operating_band import (
     OperatingBandPolicy,
     OperatingBandSignals,
     classify_operating_band,

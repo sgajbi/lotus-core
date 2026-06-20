@@ -47,36 +47,16 @@ class TransactionProcessor:
 
             parsed_existing = self._parser.parse_transactions(existing_transactions_raw)
             parsed_new = self._parser.parse_transactions(new_transactions_raw)
-            new_transaction_ids = {txn.transaction_id for txn in parsed_new if not txn.error_reason}
-
-            all_valid_transactions = [txn for txn in parsed_existing if not txn.error_reason] + [
-                txn for txn in parsed_new if not txn.error_reason
-            ]
+            new_transaction_ids = self._valid_transaction_ids(parsed_new)
+            all_valid_transactions = self._valid_transactions(parsed_existing, parsed_new)
 
             RECALCULATION_DEPTH.observe(len(all_valid_transactions))
             sorted_timeline = self._sorter.sort_transactions([], all_valid_transactions)
-
-            processed_timeline: list[Transaction] = []
-            for transaction in sorted_timeline:
-                try:
-                    self._cost_calculator.calculate_transaction_costs(transaction)
-
-                    if not self._error_reporter.has_errors_for(transaction.transaction_id):
-                        processed_timeline.append(transaction)
-                except Exception as exc:
-                    logger.error(
-                        "Unexpected error for transaction %s: %s",
-                        transaction.transaction_id,
-                        exc,
-                        exc_info=True,
-                    )
-                    self._error_reporter.add_error(
-                        transaction.transaction_id, f"Unexpected error: {str(exc)}"
-                    )
-
-            final_processed_new = [
-                txn for txn in processed_timeline if txn.transaction_id in new_transaction_ids
-            ]
+            processed_timeline = self._process_sorted_timeline(sorted_timeline)
+            final_processed_new = self._filter_processed_new_transactions(
+                processed_timeline=processed_timeline,
+                new_transaction_ids=new_transaction_ids,
+            )
 
             return (
                 final_processed_new,
@@ -86,3 +66,46 @@ class TransactionProcessor:
         finally:
             duration = time.monotonic() - start_time
             RECALCULATION_DURATION_SECONDS.observe(duration)
+
+    @staticmethod
+    def _valid_transaction_ids(transactions: list[Transaction]) -> set[str]:
+        return {txn.transaction_id for txn in transactions if not txn.error_reason}
+
+    @staticmethod
+    def _valid_transactions(
+        parsed_existing: list[Transaction],
+        parsed_new: list[Transaction],
+    ) -> list[Transaction]:
+        return [txn for txn in [*parsed_existing, *parsed_new] if not txn.error_reason]
+
+    @staticmethod
+    def _filter_processed_new_transactions(
+        *,
+        processed_timeline: list[Transaction],
+        new_transaction_ids: set[str],
+    ) -> list[Transaction]:
+        return [txn for txn in processed_timeline if txn.transaction_id in new_transaction_ids]
+
+    def _process_sorted_timeline(self, sorted_timeline: list[Transaction]) -> list[Transaction]:
+        processed_timeline: list[Transaction] = []
+        for transaction in sorted_timeline:
+            if self._calculate_transaction_costs(transaction):
+                processed_timeline.append(transaction)
+        return processed_timeline
+
+    def _calculate_transaction_costs(self, transaction: Transaction) -> bool:
+        try:
+            self._cost_calculator.calculate_transaction_costs(transaction)
+        except Exception as exc:
+            self._record_unexpected_processing_error(transaction, exc)
+            return False
+        return not self._error_reporter.has_errors_for(transaction.transaction_id)
+
+    def _record_unexpected_processing_error(self, transaction: Transaction, exc: Exception) -> None:
+        logger.error(
+            "Unexpected error for transaction %s: %s",
+            transaction.transaction_id,
+            exc,
+            exc_info=True,
+        )
+        self._error_reporter.add_error(transaction.transaction_id, f"Unexpected error: {str(exc)}")

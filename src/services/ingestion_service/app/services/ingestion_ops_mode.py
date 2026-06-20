@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
+from typing import Awaitable
 
 from portfolio_common.database_models import IngestionOpsControl as DBIngestionOpsControl
 from sqlalchemy import select
@@ -9,6 +10,8 @@ from sqlalchemy import select
 from ..DTOs.ingestion_job_dto import IngestionOpsModeResponse
 
 SessionFactory = Callable[[], AsyncIterator[object]]
+
+_MODE_STATE_VALUE = {"normal": 0, "paused": 1, "drain": 2}
 
 
 def to_ops_mode_response(row: DBIngestionOpsControl) -> IngestionOpsModeResponse:
@@ -68,3 +71,16 @@ async def update_ops_mode_response(
             row.updated_at = datetime.now(UTC)
         return to_ops_mode_response(row)
     raise RuntimeError("Unable to update ingestion ops mode.")
+
+
+async def assert_ingestion_writable_mode(
+    *,
+    ops_mode_loader: Callable[[], Awaitable[IngestionOpsModeResponse]],
+    mode_state_metric: object,
+) -> None:
+    mode = await ops_mode_loader()
+    mode_state_metric.set(_MODE_STATE_VALUE[mode.mode])
+    if mode.mode in {"paused", "drain"}:
+        raise PermissionError(
+            f"Ingestion is currently in '{mode.mode}' mode and not accepting new requests."
+        )

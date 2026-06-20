@@ -1,8 +1,12 @@
 # tests/unit/services/calculators/cost_calculator_service/consumer/test_transaction_processor.py
+from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from cost_engine.domain.models.transaction import (
+    Transaction,
+)
 from cost_engine.processing.cost_basis_strategies import (
     FIFOBasisStrategy,
 )
@@ -25,6 +29,22 @@ from cost_engine.processing.sorter import (
 from src.services.calculators.cost_calculator_service.app.transaction_processor import (
     TransactionProcessor,
 )
+
+
+def _transaction(transaction_id: str) -> Transaction:
+    return Transaction(
+        transaction_id=transaction_id,
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity=Decimal("1"),
+        gross_transaction_amount=Decimal("10"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1"),
+    )
 
 
 @pytest.fixture
@@ -194,3 +214,57 @@ def test_transaction_processor_records_metrics(
     mock_depth_metric.observe.assert_called_once_with(2)
     # The duration metric should have been observed exactly once.
     mock_duration_metric.observe.assert_called_once()
+
+
+def test_transaction_processor_reports_unexpected_calculator_errors():
+    """
+    GIVEN parser output with two valid new transactions
+    WHEN the calculator raises for one transaction
+    THEN the failed transaction is reported and excluded from processed output.
+    """
+
+    class _Parser:
+        def __init__(self):
+            self._responses = [
+                [_transaction("EXISTING_OK")],
+                [_transaction("NEW_OK"), _transaction("NEW_FAIL")],
+            ]
+
+        def parse_transactions(self, _raw_transactions):
+            return self._responses.pop(0)
+
+    class _Sorter:
+        def sort_transactions(self, _existing_transactions, transactions):
+            return list(transactions)
+
+    class _CostCalculator:
+        def calculate_transaction_costs(self, transaction):
+            if transaction.transaction_id == "NEW_FAIL":
+                raise RuntimeError("calculation failed")
+
+    class _DispositionEngine:
+        def get_open_lot_quantities(self):
+            return {"NEW_OK": Decimal("1")}
+
+    error_reporter = ErrorReporter()
+    processor = TransactionProcessor(
+        parser=_Parser(),
+        sorter=_Sorter(),
+        disposition_engine=_DispositionEngine(),
+        cost_calculator=_CostCalculator(),
+        error_reporter=error_reporter,
+    )
+
+    processed_txns, errored_txns, open_lot_quantities = processor.process_transactions(
+        existing_transactions_raw=[{"transaction_id": "EXISTING_OK"}],
+        new_transactions_raw=[
+            {"transaction_id": "NEW_OK"},
+            {"transaction_id": "NEW_FAIL"},
+        ],
+    )
+
+    assert [txn.transaction_id for txn in processed_txns] == ["NEW_OK"]
+    assert [(txn.transaction_id, txn.error_reason) for txn in errored_txns] == [
+        ("NEW_FAIL", "Unexpected error: calculation failed")
+    ]
+    assert open_lot_quantities == {"NEW_OK": Decimal("1")}

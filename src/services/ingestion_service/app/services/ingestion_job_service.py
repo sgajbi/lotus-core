@@ -6,10 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.db import get_async_db_session
-from portfolio_common.monitoring import (
-    INGESTION_BACKLOG_AGE_SECONDS,
-    INGESTION_MODE_STATE,
-)
+from portfolio_common.monitoring import INGESTION_BACKLOG_AGE_SECONDS, INGESTION_MODE_STATE
 
 from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
@@ -59,15 +56,18 @@ from .ingestion_job_listing import (
     load_job_list_response,
 )
 from .ingestion_operating_band import (
-    OperatingBandPolicy,
-    OperatingBandSignals,
-    classify_operating_band,
+    build_operating_band_policy,
+    load_operating_band_response,
 )
 from .ingestion_operating_policy import (
-    IngestionOperatingPolicyConfig,
+    build_operating_policy_config,
     build_operating_policy_response,
 )
-from .ingestion_ops_mode import load_ops_mode_response, update_ops_mode_response
+from .ingestion_ops_mode import (
+    assert_ingestion_writable_mode,
+    load_ops_mode_response,
+    update_ops_mode_response,
+)
 from .ingestion_record_status import load_record_status_response
 from .ingestion_replay_audits import (
     find_successful_replay_audit_by_fingerprint_response,
@@ -92,34 +92,11 @@ _RUNTIME_POLICY = _SETTINGS.runtime_policy
 REPLAY_MAX_RECORDS_PER_REQUEST = _RUNTIME_POLICY.replay_max_records_per_request
 REPLAY_MAX_BACKLOG_JOBS = _RUNTIME_POLICY.replay_max_backlog_jobs
 DLQ_BUDGET_EVENTS_PER_WINDOW = _RUNTIME_POLICY.dlq_budget_events_per_window
-DEFAULT_LOOKBACK_MINUTES = _RUNTIME_POLICY.default_lookback_minutes
-DEFAULT_FAILURE_RATE_THRESHOLD = _RUNTIME_POLICY.default_failure_rate_threshold
-DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_queue_latency_threshold_seconds
-DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS = _RUNTIME_POLICY.default_backlog_age_threshold_seconds
-REPROCESSING_WORKER_POLL_INTERVAL_SECONDS = (
-    _RUNTIME_POLICY.reprocessing_worker_poll_interval_seconds
-)
-REPROCESSING_WORKER_BATCH_SIZE = _RUNTIME_POLICY.reprocessing_worker_batch_size
-VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS = (
-    _RUNTIME_POLICY.valuation_scheduler_poll_interval_seconds
-)
-VALUATION_SCHEDULER_BATCH_SIZE = _RUNTIME_POLICY.valuation_scheduler_batch_size
-VALUATION_SCHEDULER_DISPATCH_ROUNDS = _RUNTIME_POLICY.valuation_scheduler_dispatch_rounds
 CAPACITY_ASSUMED_REPLICAS = _RUNTIME_POLICY.capacity_assumed_replicas
-REPLAY_ISOLATION_MODE = _RUNTIME_POLICY.replay_isolation_mode
-PARTITION_GROWTH_STRATEGY = _RUNTIME_POLICY.partition_growth_strategy
-CALCULATOR_PEAK_LAG_AGE_SECONDS = dict(_RUNTIME_POLICY.calculator_peak_lag_age_seconds)
 logger = logging.getLogger(__name__)
 
 
-OPERATING_BAND_POLICY = OperatingBandPolicy(
-    yellow_backlog_age_seconds=_RUNTIME_POLICY.operating_band.yellow_backlog_age_seconds,
-    orange_backlog_age_seconds=_RUNTIME_POLICY.operating_band.orange_backlog_age_seconds,
-    red_backlog_age_seconds=_RUNTIME_POLICY.operating_band.red_backlog_age_seconds,
-    yellow_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.yellow_dlq_pressure_ratio,
-    orange_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.orange_dlq_pressure_ratio,
-    red_dlq_pressure_ratio=_RUNTIME_POLICY.operating_band.red_dlq_pressure_ratio,
-)
+OPERATING_BAND_POLICY = build_operating_band_policy(_RUNTIME_POLICY.operating_band)
 
 
 _derive_capacity_group = _capacity_status._derive_capacity_group
@@ -264,65 +241,22 @@ class IngestionJobService:
         queue_latency_threshold_seconds: float = 5.0,
         backlog_age_threshold_seconds: float = 300.0,
     ) -> IngestionOperatingBandResponse:
-        slo_status = await self.get_slo_status(
+        return await load_operating_band_response(
             lookback_minutes=lookback_minutes,
             failure_rate_threshold=failure_rate_threshold,
             queue_latency_threshold_seconds=queue_latency_threshold_seconds,
             backlog_age_threshold_seconds=backlog_age_threshold_seconds,
-        )
-        error_budget = await self.get_error_budget_status(
-            lookback_minutes=lookback_minutes,
-            failure_rate_threshold=failure_rate_threshold,
-        )
-        backlog_age_seconds = float(slo_status.backlog_age_seconds)
-        dlq_pressure_ratio = Decimal(error_budget.dlq_pressure_ratio)
-        failure_rate = Decimal(slo_status.failure_rate)
-        decision = classify_operating_band(
-            signals=OperatingBandSignals(
-                backlog_age_seconds=backlog_age_seconds,
-                dlq_pressure_ratio=dlq_pressure_ratio,
-                breach_failure_rate=bool(slo_status.breach_failure_rate),
-                breach_queue_latency=bool(slo_status.breach_queue_latency),
-                breach_backlog_age=bool(slo_status.breach_backlog_age),
-                failure_rate=failure_rate,
-            ),
             policy=OPERATING_BAND_POLICY,
-        )
-
-        return IngestionOperatingBandResponse(
-            lookback_minutes=lookback_minutes,
-            operating_band=decision.operating_band,
-            recommended_action=decision.recommended_action,
-            backlog_age_seconds=backlog_age_seconds,
-            dlq_pressure_ratio=dlq_pressure_ratio,
-            failure_rate=failure_rate,
-            triggered_signals=decision.triggered_signals,
+            slo_status_loader=self.get_slo_status,
+            error_budget_status_loader=self.get_error_budget_status,
         )
 
     async def get_operating_policy(self) -> IngestionOpsPolicyResponse:
         return build_operating_policy_response(
-            IngestionOperatingPolicyConfig(
-                lookback_minutes_default=DEFAULT_LOOKBACK_MINUTES,
-                failure_rate_threshold_default=DEFAULT_FAILURE_RATE_THRESHOLD,
-                queue_latency_threshold_seconds_default=DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS,
-                backlog_age_threshold_seconds_default=DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS,
-                replay_max_records_per_request=REPLAY_MAX_RECORDS_PER_REQUEST,
-                replay_max_backlog_jobs=REPLAY_MAX_BACKLOG_JOBS,
-                reprocessing_worker_poll_interval_seconds=(
-                    REPROCESSING_WORKER_POLL_INTERVAL_SECONDS
-                ),
-                reprocessing_worker_batch_size=REPROCESSING_WORKER_BATCH_SIZE,
-                valuation_scheduler_poll_interval_seconds=(
-                    VALUATION_SCHEDULER_POLL_INTERVAL_SECONDS
-                ),
-                valuation_scheduler_batch_size=VALUATION_SCHEDULER_BATCH_SIZE,
-                valuation_scheduler_dispatch_rounds=VALUATION_SCHEDULER_DISPATCH_ROUNDS,
-                dlq_budget_events_per_window=DLQ_BUDGET_EVENTS_PER_WINDOW,
+            build_operating_policy_config(
+                runtime_policy=_RUNTIME_POLICY,
                 operating_band_policy=OPERATING_BAND_POLICY,
-                calculator_peak_lag_age_seconds=CALCULATOR_PEAK_LAG_AGE_SECONDS,
-                replay_isolation_mode=REPLAY_ISOLATION_MODE,
-                partition_growth_strategy=PARTITION_GROWTH_STRATEGY,
-            )
+            ),
         )
 
     async def get_reprocessing_queue_health(self) -> IngestionReprocessingQueueHealthResponse:
@@ -520,12 +454,10 @@ class IngestionJobService:
         )
 
     async def assert_ingestion_writable(self) -> None:
-        mode = await self.get_ops_mode()
-        INGESTION_MODE_STATE.set({"normal": 0, "paused": 1, "drain": 2}[mode.mode])
-        if mode.mode in {"paused", "drain"}:
-            raise PermissionError(
-                f"Ingestion is currently in '{mode.mode}' mode and not accepting new requests."
-            )
+        await assert_ingestion_writable_mode(
+            ops_mode_loader=self.get_ops_mode,
+            mode_state_metric=INGESTION_MODE_STATE,
+        )
 
     async def assert_retry_allowed(self, submitted_at: datetime) -> None:
         await self.assert_retry_allowed_for_records(

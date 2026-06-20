@@ -1011,6 +1011,77 @@ async def test_consumer_defers_upstream_mode_until_cash_leg_is_available(
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 
 
+async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    processed_event = TransactionEvent(
+        transaction_id="INT-UP-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="BOND-001",
+        security_id="SEC-BOND-001",
+        transaction_date=datetime(2025, 1, 20),
+        transaction_type="INTEREST",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("25.0"),
+        trade_currency="USD",
+        currency="USD",
+        cash_entry_mode="UPSTREAM_PROVIDED",
+        external_cash_transaction_id=" ",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg.",
+    ):
+        await cost_calculator_consumer._validate_upstream_cash_leg(
+            processed_event=processed_event,
+            repo=repo,
+        )
+
+    repo.get_transaction_by_id.assert_not_awaited()
+
+
+async def test_update_open_lot_quantities_only_for_buy_sell(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    event = TransactionEvent(
+        transaction_id="DIV-LOT-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="DIV-INST",
+        security_id="DIV-SEC",
+        transaction_date=datetime(2025, 1, 20),
+        transaction_type="DIVIDEND",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("25.0"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    await cost_calculator_consumer._update_open_lot_quantities_if_required(
+        event=event,
+        event_transaction_type="DIVIDEND",
+        open_lot_quantities={"BUY-1": Decimal("5")},
+        repo=repo,
+    )
+    repo.update_lot_open_quantities.assert_not_awaited()
+
+    await cost_calculator_consumer._update_open_lot_quantities_if_required(
+        event=event,
+        event_transaction_type="SELL",
+        open_lot_quantities={"BUY-1": Decimal("3")},
+        repo=repo,
+    )
+    repo.update_lot_open_quantities.assert_awaited_once_with(
+        portfolio_id="PORT_COST_01",
+        security_id="DIV-SEC",
+        open_quantities_by_source_transaction_id={"BUY-1": Decimal("3")},
+    )
+
+
 async def test_consumer_normalizes_upstream_adjustment_cash_leg_type(
     cost_calculator_consumer: CostCalculatorConsumer,
     mock_buy_kafka_message: MagicMock,
