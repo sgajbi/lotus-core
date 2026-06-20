@@ -1580,3 +1580,11 @@ health before that claim is defensible.
      maintainability; the new retry-permission helper reports `A (68.59)` / 50 SLOC. Focused
      guardrail tests passed with 18 tests, the broader ingestion service unit package passed with
      79 tests, and scoped Ruff lint/format checks passed.
+265. Reduced ingestion job-list read-model coupling by moving cursor lookup, filtered statement
+     execution, page construction, next-cursor selection, and row-to-response mapping from
+     `IngestionJobService.list_jobs(...)` into `ingestion_job_listing.py`. The public service
+     method now delegates while preserving filter, pagination, DTO, API, and database behavior.
+     `ingestion_job_service.py` shrank from 522 SLOC to 512 SLOC and improved from `A (44.24)` to
+     `A (48.85)` under Radon maintainability; the expanded listing helper reports `A (43.44)` /
+     68 SLOC. Focused listing and guardrail tests passed with 22 tests, the broader ingestion
+     service unit package passed with 80 tests, and scoped Ruff lint/format checks passed.

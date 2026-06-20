@@ -53,13 +53,10 @@ from .ingestion_job_lifecycle import (
     mark_job_queued,
     mark_job_retried,
     record_job_failure_observation,
-    to_job_response,
 )
 from .ingestion_job_listing import (
     IngestionJobListFilters,
-    build_cursor_lookup_statement,
-    build_ingestion_job_list_statement,
-    ingestion_job_list_page,
+    load_job_list_response,
 )
 from .ingestion_operating_band import (
     OperatingBandPolicy,
@@ -215,24 +212,17 @@ class IngestionJobService:
         cursor: str | None = None,
         limit: int = 100,
     ) -> tuple[list[IngestionJobResponse], str | None]:
-        async for db in get_async_db_session():
-            cursor_row = None
-            if cursor is not None:
-                cursor_row = await db.scalar(build_cursor_lookup_statement(cursor=cursor))
-            stmt = build_ingestion_job_list_statement(
-                filters=IngestionJobListFilters(
-                    status=status,
-                    entity_type=entity_type,
-                    submitted_from=submitted_from,
-                    submitted_to=submitted_to,
-                ),
-                cursor_row=cursor_row,
-                limit=limit,
-            )
-            rows = list((await db.scalars(stmt)).all())
-            page = ingestion_job_list_page(rows=rows, limit=limit)
-            return ([to_job_response(row) for row in page.rows], page.next_cursor)
-        return ([], None)
+        return await load_job_list_response(
+            filters=IngestionJobListFilters(
+                status=status,
+                entity_type=entity_type,
+                submitted_from=submitted_from,
+                submitted_to=submitted_to,
+            ),
+            cursor=cursor,
+            limit=limit,
+            session_factory=get_async_db_session,
+        )
 
     async def list_failures(
         self, job_id: str, limit: int = 100
