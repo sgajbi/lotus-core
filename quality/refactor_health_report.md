@@ -1625,3 +1625,12 @@ health before that claim is defensible.
      operating-band and guardrail tests passed with 24 tests; Radon reports the new helper is
      `A (1)`, `get_operating_band` remains `A (1)`, `ingestion_job_service.py` remains A-ranked
      at `A (100.00)`, and `ingestion_operating_band.py` remains A-ranked at `A (48.91)`.
+271. Reduced cost transaction processor orchestration complexity by splitting valid transaction
+     ID resolution, valid transaction selection, processed-new filtering, sorted-timeline
+     processing, calculator invocation, and unexpected-error recording out of
+     `TransactionProcessor.process_transactions(...)`. The runtime consumer behavior remains
+     unchanged: parser/sorter/cost-calculator/error-reporter/disposition dependencies are still
+     injected, recalculation depth and duration metrics are still emitted, and only successfully
+     processed new transactions are returned. Focused transaction-processor tests passed with
+     3 tests, including a new regression for unexpected calculator exceptions; Radon reports
+     `process_transactions` reduced from `C (12)` to `A (1)` and all extracted helpers A-ranked.

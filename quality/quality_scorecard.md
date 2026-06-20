@@ -1051,3 +1051,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1116 split ingestion operating-band threshold mapping out of `IngestionJobService` into
   `ingestion_operating_band.py`, keeping operating-band policy construction beside the classifier
   and response assembly with direct tests for exact yellow/orange/red threshold mapping.
+- CR-1117 split cost transaction processor orchestration helpers out of
+  `TransactionProcessor.process_transactions`, reducing the runtime consumer method from `C (12)`
+  to `A (1)` while adding regression proof for unexpected calculator errors.
