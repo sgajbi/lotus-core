@@ -1838,3 +1838,11 @@ health before that claim is defensible.
      rule-mismatch finding construction from `ReconciliationService.run_transaction_cashflow(...)`.
      Focused reconciliation service tests passed with 13 tests; scoped Ruff and format checks
      passed; Radon reports `run_transaction_cashflow` reduced from `C (11)` to `A (2)`.
+304. Reduced timeseries integrity reconciliation workflow complexity by extracting timeseries scope
+     map construction, deterministic scope-key ordering, per-key finding construction, missing
+     portfolio/position findings, completeness-gap findings, metric pair extraction, tolerance-based
+     mismatch detection, and aggregate mismatch finding construction from
+     `ReconciliationService.run_timeseries_integrity(...)`. Focused reconciliation service tests
+     passed with 13 tests; scoped Ruff and format checks passed; Radon reports
+     `run_timeseries_integrity` reduced from `C (19)` to `A (3)`, with no C-or-worse functions
+     remaining in `reconciliation_service.py`.

@@ -92,6 +92,104 @@ def _cashflow_rule_mismatches(
     }
 
 
+def _timeseries_scope_maps(
+    *,
+    portfolio_rows: list[Any],
+    aggregate_rows: list[Any],
+    snapshot_counts: list[Any],
+) -> tuple[dict[ScopeKey, Any], dict[ScopeKey, Any], dict[ScopeKey, int]]:
+    portfolio_by_key = {
+        ScopeKey(row.portfolio_id, row.date, row.epoch): row for row in portfolio_rows
+    }
+    aggregate_by_key = {
+        ScopeKey(row.portfolio_id, row.date, row.epoch): row for row in aggregate_rows
+    }
+    snapshot_count_by_key = {
+        ScopeKey(row.portfolio_id, row.date, row.epoch): int(row.snapshot_count)
+        for row in snapshot_counts
+    }
+    return portfolio_by_key, aggregate_by_key, snapshot_count_by_key
+
+
+def _timeseries_integrity_scope_keys(
+    *,
+    portfolio_by_key: dict[ScopeKey, Any],
+    aggregate_by_key: dict[ScopeKey, Any],
+    snapshot_count_by_key: dict[ScopeKey, int],
+) -> list[ScopeKey]:
+    if portfolio_by_key:
+        all_keys = set(portfolio_by_key)
+    else:
+        all_keys = set(aggregate_by_key) | set(snapshot_count_by_key)
+    return sorted(all_keys, key=lambda item: (item.portfolio_id, item.business_date, item.epoch))
+
+
+def _portfolio_timeseries_metric_pairs(
+    *,
+    portfolio_row: Any,
+    authoritative_metrics: dict[str, Decimal],
+) -> dict[str, tuple[Decimal, Decimal]]:
+    return {
+        "bod_market_value": (
+            required_decimal(
+                portfolio_row.bod_market_value,
+                field_name="portfolio_timeseries.bod_market_value",
+            ),
+            authoritative_metrics["bod_market_value"],
+        ),
+        "bod_cashflow": (
+            required_decimal(
+                portfolio_row.bod_cashflow,
+                field_name="portfolio_timeseries.bod_cashflow",
+            ),
+            authoritative_metrics["bod_cashflow"],
+        ),
+        "eod_cashflow": (
+            required_decimal(
+                portfolio_row.eod_cashflow,
+                field_name="portfolio_timeseries.eod_cashflow",
+            ),
+            authoritative_metrics["eod_cashflow"],
+        ),
+        "eod_market_value": (
+            required_decimal(
+                portfolio_row.eod_market_value,
+                field_name="portfolio_timeseries.eod_market_value",
+            ),
+            authoritative_metrics["eod_market_value"],
+        ),
+        "fees": (
+            required_decimal(
+                portfolio_row.fees,
+                field_name="portfolio_timeseries.fees",
+            ),
+            authoritative_metrics["fees"],
+        ),
+    }
+
+
+def _timeseries_metric_mismatches(
+    *,
+    portfolio_row: Any,
+    authoritative_metrics: dict[str, Decimal],
+    tolerance: Decimal,
+) -> dict[str, dict[str, str]]:
+    mismatches = {}
+    metric_pairs = _portfolio_timeseries_metric_pairs(
+        portfolio_row=portfolio_row,
+        authoritative_metrics=authoritative_metrics,
+    )
+    for metric_name, (portfolio_value, aggregate_value) in metric_pairs.items():
+        delta = portfolio_value - aggregate_value
+        if abs(delta) > tolerance:
+            mismatches[metric_name] = {
+                "portfolio_timeseries": str(portfolio_value),
+                "position_aggregate": str(aggregate_value),
+                "delta": str(delta),
+            }
+    return mismatches
+
+
 @dataclass(frozen=True, slots=True)
 class ScopeKey:
     portfolio_id: str
@@ -561,173 +659,13 @@ class ReconciliationService:
             business_date=request.business_date,
             epoch=request.epoch,
         )
-
-        portfolio_by_key = {
-            ScopeKey(row.portfolio_id, row.date, row.epoch): row for row in portfolio_rows
-        }
-        aggregate_by_key = {
-            ScopeKey(row.portfolio_id, row.date, row.epoch): row for row in aggregate_rows
-        }
-        snapshot_count_by_key = {
-            ScopeKey(row.portfolio_id, row.date, row.epoch): int(row.snapshot_count)
-            for row in snapshot_counts
-        }
-
-        findings: list[FinancialReconciliationFinding] = []
-        examined = 0
-        if portfolio_by_key:
-            all_keys = set(portfolio_by_key)
-        else:
-            all_keys = set(aggregate_by_key) | set(snapshot_count_by_key)
-        for key in sorted(
-            all_keys,
-            key=lambda item: (item.portfolio_id, item.business_date, item.epoch),
-        ):
-            examined += 1
-            portfolio_row = portfolio_by_key.get(key)
-            snapshot_count = snapshot_count_by_key.get(key, 0)
-
-            if portfolio_row is None:
-                aggregate_row = aggregate_by_key.get(key)
-                if aggregate_row is None:
-                    continue
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="timeseries_integrity",
-                        finding_type="missing_portfolio_timeseries",
-                        severity="ERROR",
-                        portfolio_id=key.portfolio_id,
-                        security_id=None,
-                        transaction_id=None,
-                        business_date=key.business_date,
-                        epoch=key.epoch,
-                        expected_value={"portfolio_timeseries": "present"},
-                        observed_value={"portfolio_timeseries": "missing"},
-                        detail={"position_timeseries_rows": int(aggregate_row.position_row_count)},
-                    )
-                )
-                continue
-
-            (
-                authoritative_metrics,
-                authoritative_position_count,
-            ) = await self._aggregate_authoritative_portfolio_metrics(
-                portfolio_id=key.portfolio_id,
-                business_date=key.business_date,
-                epoch=key.epoch,
-            )
-            authoritative_snapshot_count = await self.repository.fetch_authoritative_snapshot_count(
-                portfolio_id=key.portfolio_id,
-                business_date=key.business_date,
-                epoch=key.epoch,
-            )
-
-            if authoritative_position_count == 0:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="timeseries_integrity",
-                        finding_type="missing_position_timeseries",
-                        severity="ERROR",
-                        portfolio_id=key.portfolio_id,
-                        security_id=None,
-                        transaction_id=None,
-                        business_date=key.business_date,
-                        epoch=key.epoch,
-                        expected_value={"position_timeseries_rows": ">=1"},
-                        observed_value={"position_timeseries_rows": 0},
-                        detail=None,
-                    )
-                )
-                continue
-
-            if not portfolio_by_key:
-                snapshot_count = authoritative_snapshot_count or snapshot_count
-
-            if authoritative_position_count != authoritative_snapshot_count:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="timeseries_integrity",
-                        finding_type="position_timeseries_completeness_gap",
-                        severity="ERROR",
-                        portfolio_id=key.portfolio_id,
-                        security_id=None,
-                        transaction_id=None,
-                        business_date=key.business_date,
-                        epoch=key.epoch,
-                        expected_value={"snapshot_count": authoritative_snapshot_count},
-                        observed_value={"position_timeseries_count": authoritative_position_count},
-                        detail=None,
-                    )
-                )
-
-            metric_pairs = {
-                "bod_market_value": (
-                    required_decimal(
-                        portfolio_row.bod_market_value,
-                        field_name="portfolio_timeseries.bod_market_value",
-                    ),
-                    authoritative_metrics["bod_market_value"],
-                ),
-                "bod_cashflow": (
-                    required_decimal(
-                        portfolio_row.bod_cashflow,
-                        field_name="portfolio_timeseries.bod_cashflow",
-                    ),
-                    authoritative_metrics["bod_cashflow"],
-                ),
-                "eod_cashflow": (
-                    required_decimal(
-                        portfolio_row.eod_cashflow,
-                        field_name="portfolio_timeseries.eod_cashflow",
-                    ),
-                    authoritative_metrics["eod_cashflow"],
-                ),
-                "eod_market_value": (
-                    required_decimal(
-                        portfolio_row.eod_market_value,
-                        field_name="portfolio_timeseries.eod_market_value",
-                    ),
-                    authoritative_metrics["eod_market_value"],
-                ),
-                "fees": (
-                    required_decimal(
-                        portfolio_row.fees,
-                        field_name="portfolio_timeseries.fees",
-                    ),
-                    authoritative_metrics["fees"],
-                ),
-            }
-            mismatches = {}
-            for metric_name, (portfolio_value, aggregate_value) in metric_pairs.items():
-                delta = portfolio_value - aggregate_value
-                if abs(delta) > tolerance:
-                    mismatches[metric_name] = {
-                        "portfolio_timeseries": str(portfolio_value),
-                        "position_aggregate": str(aggregate_value),
-                        "delta": str(delta),
-                    }
-            if mismatches:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="timeseries_integrity",
-                        finding_type="portfolio_timeseries_aggregate_mismatch",
-                        severity="ERROR",
-                        portfolio_id=key.portfolio_id,
-                        security_id=None,
-                        transaction_id=None,
-                        business_date=key.business_date,
-                        epoch=key.epoch,
-                        expected_value={k: v["position_aggregate"] for k, v in mismatches.items()},
-                        observed_value={
-                            k: v["portfolio_timeseries"] for k, v in mismatches.items()
-                        },
-                        detail=mismatches,
-                    )
-                )
+        findings, examined = await self._timeseries_integrity_findings(
+            run_id=run.run_id,
+            portfolio_rows=portfolio_rows,
+            aggregate_rows=aggregate_rows,
+            snapshot_counts=snapshot_counts,
+            tolerance=tolerance,
+        )
 
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
@@ -739,6 +677,185 @@ class ReconciliationService:
             findings,
         )
         return run
+
+    async def _timeseries_integrity_findings(
+        self,
+        *,
+        run_id: str,
+        portfolio_rows: list[Any],
+        aggregate_rows: list[Any],
+        snapshot_counts: list[Any],
+        tolerance: Decimal,
+    ) -> tuple[list[FinancialReconciliationFinding], int]:
+        portfolio_by_key, aggregate_by_key, snapshot_count_by_key = _timeseries_scope_maps(
+            portfolio_rows=portfolio_rows,
+            aggregate_rows=aggregate_rows,
+            snapshot_counts=snapshot_counts,
+        )
+        findings: list[FinancialReconciliationFinding] = []
+        scope_keys = _timeseries_integrity_scope_keys(
+            portfolio_by_key=portfolio_by_key,
+            aggregate_by_key=aggregate_by_key,
+            snapshot_count_by_key=snapshot_count_by_key,
+        )
+        for key in scope_keys:
+            findings.extend(
+                await self._timeseries_integrity_findings_for_key(
+                    run_id=run_id,
+                    key=key,
+                    portfolio_by_key=portfolio_by_key,
+                    aggregate_by_key=aggregate_by_key,
+                    snapshot_count_by_key=snapshot_count_by_key,
+                    tolerance=tolerance,
+                )
+            )
+        return findings, len(scope_keys)
+
+    async def _timeseries_integrity_findings_for_key(
+        self,
+        *,
+        run_id: str,
+        key: ScopeKey,
+        portfolio_by_key: dict[ScopeKey, Any],
+        aggregate_by_key: dict[ScopeKey, Any],
+        snapshot_count_by_key: dict[ScopeKey, int],
+        tolerance: Decimal,
+    ) -> list[FinancialReconciliationFinding]:
+        portfolio_row = portfolio_by_key.get(key)
+        if portfolio_row is None:
+            aggregate_row = aggregate_by_key.get(key)
+            return (
+                []
+                if aggregate_row is None
+                else [self._missing_portfolio_timeseries_finding(run_id, key, aggregate_row)]
+            )
+
+        (
+            authoritative_metrics,
+            authoritative_position_count,
+        ) = await self._aggregate_authoritative_portfolio_metrics(
+            portfolio_id=key.portfolio_id,
+            business_date=key.business_date,
+            epoch=key.epoch,
+        )
+        authoritative_snapshot_count = await self.repository.fetch_authoritative_snapshot_count(
+            portfolio_id=key.portfolio_id,
+            business_date=key.business_date,
+            epoch=key.epoch,
+        )
+        if authoritative_position_count == 0:
+            return [self._missing_position_timeseries_finding(run_id, key)]
+
+        findings = self._timeseries_completeness_findings(
+            run_id=run_id,
+            key=key,
+            authoritative_position_count=authoritative_position_count,
+            authoritative_snapshot_count=authoritative_snapshot_count,
+        )
+        mismatch = self._portfolio_timeseries_aggregate_mismatch_finding(
+            run_id=run_id,
+            key=key,
+            portfolio_row=portfolio_row,
+            authoritative_metrics=authoritative_metrics,
+            tolerance=tolerance,
+        )
+        if mismatch is not None:
+            findings.append(mismatch)
+        return findings
+
+    def _missing_portfolio_timeseries_finding(
+        self, run_id: str, key: ScopeKey, aggregate_row: Any
+    ) -> FinancialReconciliationFinding:
+        return self._build_finding(
+            run_id=run_id,
+            reconciliation_type="timeseries_integrity",
+            finding_type="missing_portfolio_timeseries",
+            severity="ERROR",
+            portfolio_id=key.portfolio_id,
+            security_id=None,
+            transaction_id=None,
+            business_date=key.business_date,
+            epoch=key.epoch,
+            expected_value={"portfolio_timeseries": "present"},
+            observed_value={"portfolio_timeseries": "missing"},
+            detail={"position_timeseries_rows": int(aggregate_row.position_row_count)},
+        )
+
+    def _missing_position_timeseries_finding(
+        self, run_id: str, key: ScopeKey
+    ) -> FinancialReconciliationFinding:
+        return self._build_finding(
+            run_id=run_id,
+            reconciliation_type="timeseries_integrity",
+            finding_type="missing_position_timeseries",
+            severity="ERROR",
+            portfolio_id=key.portfolio_id,
+            security_id=None,
+            transaction_id=None,
+            business_date=key.business_date,
+            epoch=key.epoch,
+            expected_value={"position_timeseries_rows": ">=1"},
+            observed_value={"position_timeseries_rows": 0},
+            detail=None,
+        )
+
+    def _timeseries_completeness_findings(
+        self,
+        *,
+        run_id: str,
+        key: ScopeKey,
+        authoritative_position_count: int,
+        authoritative_snapshot_count: int,
+    ) -> list[FinancialReconciliationFinding]:
+        if authoritative_position_count == authoritative_snapshot_count:
+            return []
+        return [
+            self._build_finding(
+                run_id=run_id,
+                reconciliation_type="timeseries_integrity",
+                finding_type="position_timeseries_completeness_gap",
+                severity="ERROR",
+                portfolio_id=key.portfolio_id,
+                security_id=None,
+                transaction_id=None,
+                business_date=key.business_date,
+                epoch=key.epoch,
+                expected_value={"snapshot_count": authoritative_snapshot_count},
+                observed_value={"position_timeseries_count": authoritative_position_count},
+                detail=None,
+            )
+        ]
+
+    def _portfolio_timeseries_aggregate_mismatch_finding(
+        self,
+        *,
+        run_id: str,
+        key: ScopeKey,
+        portfolio_row: Any,
+        authoritative_metrics: dict[str, Decimal],
+        tolerance: Decimal,
+    ) -> FinancialReconciliationFinding | None:
+        mismatches = _timeseries_metric_mismatches(
+            portfolio_row=portfolio_row,
+            authoritative_metrics=authoritative_metrics,
+            tolerance=tolerance,
+        )
+        if not mismatches:
+            return None
+        return self._build_finding(
+            run_id=run_id,
+            reconciliation_type="timeseries_integrity",
+            finding_type="portfolio_timeseries_aggregate_mismatch",
+            severity="ERROR",
+            portfolio_id=key.portfolio_id,
+            security_id=None,
+            transaction_id=None,
+            business_date=key.business_date,
+            epoch=key.epoch,
+            expected_value={k: v["position_aggregate"] for k, v in mismatches.items()},
+            observed_value={k: v["portfolio_timeseries"] for k, v in mismatches.items()},
+            detail=mismatches,
+        )
 
     async def run_automatic_bundle(
         self,
