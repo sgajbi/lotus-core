@@ -1139,3 +1139,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1137 split shared transaction repository filtering into focused identity, normalized security,
   and transaction-date boundary helpers, reducing `TransactionRepository._apply_filters` from
   `C (14)` to `A (1)` while preserving list/count/evidence filter semantics.
+- CR-1138 split buy-state tax-lot filtering into focused security-scope normalization, lot-status
+  predicate selection, keyset pagination, and optional predicate helpers, reducing
+  `BuyStateRepository.list_portfolio_tax_lots` from `C (11)` to `A (4)` while preserving DPM
+  tax-lot source-read semantics.
