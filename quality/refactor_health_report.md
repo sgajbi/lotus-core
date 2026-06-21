@@ -1861,3 +1861,11 @@ health before that claim is defensible.
      format checks passed; Radon reports `ValuationScheduler.run` reduced from `C (11)` to
      `A (4)`. Remaining C-ranked scheduler routines are explicit valuation-domain workflows:
      `_advance_watermarks(...)` and `_create_backfill_jobs(...)`.
+307. Reduced valuation scheduler watermark-advance complexity by extracting terminal update
+     construction, lagging watermark advance update construction, update-example formatting,
+     epoch-fenced bulk update execution and stale-skip logging, terminal reprocessing
+     normalization, and lagging watermark advancement from
+     `ValuationScheduler._advance_watermarks(...)`. Focused scheduler tests passed with 20 tests;
+     scoped Ruff and format checks passed; Radon reports `_advance_watermarks` reduced from
+     `C (18)` to `B (6)`. The remaining C-ranked scheduler workflow is
+     `_create_backfill_jobs(...)`.
