@@ -1846,3 +1846,11 @@ health before that claim is defensible.
      passed with 13 tests; scoped Ruff and format checks passed; Radon reports
      `run_timeseries_integrity` reduced from `C (19)` to `A (3)`, with no C-or-worse functions
      remaining in `reconciliation_service.py`.
+305. Reduced durable reprocessing worker batch complexity by extracting reset-watermark job scope
+     parsing, watermark fanout observation/logging, stale reset and job claiming, per-job
+     correlation-scoped processing, impacted portfolio lookup, watermark reset/no-op decisioning,
+     terminal status update, ownership-loss posture, and failed job marking from
+     `ReprocessingWorker._process_batch(...)`. Focused reprocessing worker tests passed with
+     12 tests; scoped Ruff and format checks passed; Radon reports `_process_batch` reduced from
+     `C (18)` to `A (3)`, with no C-or-worse functions/classes remaining in
+     `reprocessing_worker.py`.
