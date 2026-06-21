@@ -1115,3 +1115,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1131 split advisory drift highlight construction into focused improvement, deterioration,
   max-exposure, unmodeled-exposure, and highlight-entry helpers, reducing `_build_highlights` from
   `C (11)` to `A (1)` while preserving deterministic advisory drift highlight ordering.
+- CR-1132 split advisory BUY intent dependency linking into focused type-narrowed security side,
+  notional currency, same-currency SELL indexing, BUY filtering, append-once mutation, and per-BUY
+  linking helpers, reducing `link_buy_intent_dependencies` from `C (16)` to `A (3)` while
+  preserving deterministic FX and optional SELL dependency semantics.

@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import TypeAlias
+from typing import TypeAlias, TypeGuard
 
 from src.services.query_service.app.advisory_simulation.models import (
     FxSpotIntent,
@@ -7,6 +7,54 @@ from src.services.query_service.app.advisory_simulation.models import (
 )
 
 ProposalIntent: TypeAlias = SecurityTradeIntent | FxSpotIntent
+
+
+def _is_security_trade_side(
+    intent: ProposalIntent,
+    side: str,
+) -> TypeGuard[SecurityTradeIntent]:
+    return intent.intent_type == "SECURITY_TRADE" and intent.side == side
+
+
+def _intent_currency(intent: SecurityTradeIntent) -> str | None:
+    return intent.notional.currency if intent.notional is not None else None
+
+
+def _same_currency_sell_dependencies(
+    intents: Sequence[ProposalIntent],
+    *,
+    enabled: bool,
+) -> dict[str, str]:
+    if not enabled:
+        return {}
+    return {
+        currency: intent.intent_id
+        for intent in intents
+        if _is_security_trade_side(intent, "SELL")
+        if (currency := _intent_currency(intent)) is not None
+    }
+
+
+def _buy_security_intents(intents: Sequence[ProposalIntent]) -> list[SecurityTradeIntent]:
+    return [intent for intent in intents if _is_security_trade_side(intent, "BUY")]
+
+
+def _append_dependency_once(intent: SecurityTradeIntent, dependency_id: str | None) -> None:
+    if dependency_id is not None and dependency_id not in intent.dependencies:
+        intent.dependencies.append(dependency_id)
+
+
+def _link_buy_intent_dependencies(
+    *,
+    intent: SecurityTradeIntent,
+    fx_dependencies: Mapping[str, str],
+    sell_dependencies: Mapping[str, str],
+) -> None:
+    currency = _intent_currency(intent)
+    if currency is None:
+        return
+    _append_dependency_once(intent, fx_dependencies.get(currency))
+    _append_dependency_once(intent, sell_dependencies.get(currency))
 
 
 def link_buy_intent_dependencies(
@@ -17,29 +65,14 @@ def link_buy_intent_dependencies(
 ) -> None:
     """Attach deterministic dependencies to BUY security intents in-place."""
     fx_dependencies = dict(fx_intent_id_by_currency or {})
+    sell_dependencies = _same_currency_sell_dependencies(
+        intents,
+        enabled=include_same_currency_sell_dependency,
+    )
 
-    sell_intent_id_by_currency: dict[str, str] = {}
-    if include_same_currency_sell_dependency:
-        for intent in intents:
-            if intent.intent_type == "SECURITY_TRADE" and intent.side == "SELL":
-                if intent.notional is None:
-                    continue
-                sell_intent_id_by_currency[intent.notional.currency] = intent.intent_id
-
-    for intent in intents:
-        if intent.intent_type != "SECURITY_TRADE" or intent.side != "BUY":
-            continue
-
-        if intent.notional is None:
-            continue
-        currency = intent.notional.currency
-        fx_dependency = fx_dependencies.get(currency)
-        if fx_dependency is not None and fx_dependency not in intent.dependencies:
-            intent.dependencies.append(fx_dependency)
-
-        if not include_same_currency_sell_dependency:
-            continue
-
-        sell_dependency = sell_intent_id_by_currency.get(currency)
-        if sell_dependency is not None and sell_dependency not in intent.dependencies:
-            intent.dependencies.append(sell_dependency)
+    for intent in _buy_security_intents(intents):
+        _link_buy_intent_dependencies(
+            intent=intent,
+            fx_dependencies=fx_dependencies,
+            sell_dependencies=sell_dependencies,
+        )

@@ -1715,3 +1715,9 @@ health before that claim is defensible.
      ordering and top-limit proof. Scoped Ruff passed. Radon reports `_build_highlights` reduced
      from `C (11)` to `A (1)`, every function in `drift_analytics.py` is A-ranked, and module
      maintainability remains A-ranked at `A (40.38)`.
+284. Reduced advisory BUY intent dependency complexity by extracting type-narrowed security side
+     detection, notional currency extraction, same-currency SELL indexing, BUY filtering,
+     append-once mutation, and per-BUY linking helpers from `link_buy_intent_dependencies(...)`.
+     Focused simulation helper tests passed with 3 tests, scoped Ruff and typecheck passed, and
+     Radon reports `link_buy_intent_dependencies` reduced from `C (16)` to `A (3)`, with all
+     functions in `intent_dependencies.py` A-ranked.
