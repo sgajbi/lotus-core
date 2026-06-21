@@ -1809,3 +1809,10 @@ health before that claim is defensible.
      bookkeeping, and final job reload from `retry_ingestion_job(...)`. Focused helper tests passed
      with 7 tests; focused ingestion retry route tests passed with 3 tests; scoped Ruff and format
      checks passed; Radon reports `retry_ingestion_job` reduced from `C (11)` to `A (2)`.
+299. Reduced consumer-DLQ replay workflow complexity by extracting required DLQ-event lookup,
+     correlated job resolution, replay candidate/context resolution, not-replayable response
+     recording, duplicate replay response recording, replay publication failure handling, and replay
+     bookkeeping from `replay_consumer_dlq_event(...)`. Focused consumer-DLQ replay route tests
+     passed with 5 tests; scoped Ruff and format checks passed; Radon reports
+     `replay_consumer_dlq_event` reduced from `C (18)` to `A (5)`, with no C-or-worse functions
+     remaining in `ingestion_operations.py`.
