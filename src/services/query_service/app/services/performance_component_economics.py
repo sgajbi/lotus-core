@@ -161,6 +161,7 @@ def _performance_component_economics_row(transaction: Any) -> PerformanceCompone
         transaction_type=str(transaction.transaction_type).strip().upper(),
         transaction_date=transaction.transaction_date.date(),
         currency=str(transaction.currency).strip().upper(),
+        trade_currency=_transaction_trade_currency(transaction),
         gross_transaction_amount=decimal_or_zero(transaction.gross_transaction_amount),
         trade_fee_amount=transaction_fee_amount(transaction),
         trade_fee_currency=_transaction_fee_currency(transaction),
@@ -198,6 +199,7 @@ def _performance_component_economics_row(transaction: Any) -> PerformanceCompone
         realized_total_pnl_local=decimal_or_zero(
             getattr(transaction, "realized_total_pnl_local", None)
         ),
+        realized_pnl_local_currency=_transaction_trade_currency(transaction),
         realized_capital_pnl_base=decimal_or_zero(
             getattr(transaction, "realized_capital_pnl_base", None)
         ),
@@ -248,6 +250,13 @@ def _transaction_fee_currency(transaction: Any) -> str:
     if len(positive_cost_currencies) > 1:
         return "MIXED"
 
+    trade_currency = getattr(transaction, "trade_currency", None)
+    if trade_currency:
+        return normalize_currency_code(trade_currency)
+    return normalize_currency_code(getattr(transaction, "currency"))
+
+
+def _transaction_trade_currency(transaction: Any) -> str:
     trade_currency = getattr(transaction, "trade_currency", None)
     if trade_currency:
         return normalize_currency_code(trade_currency)

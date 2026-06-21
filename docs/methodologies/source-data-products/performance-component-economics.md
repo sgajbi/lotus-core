@@ -41,9 +41,9 @@ The contract source-authors these component families when evidence exists:
 | `fee` | explicit `transaction_costs.amount` rows plus `trade_fee_currency`, falling back to `transactions.trade_fee` and `transactions.trade_currency` |
 | `income` | `transactions.net_interest_amount` |
 | `tax` | `transactions.withholding_tax_amount`, `other_interest_deductions_amount` |
-| `realized_capital_pnl` | `transactions.realized_capital_pnl_local/base` |
-| `realized_fx_pnl` | `transactions.realized_fx_pnl_local/base` |
-| `realized_total_pnl` | `transactions.realized_total_pnl_local/base` |
+| `realized_capital_pnl` | `transactions.realized_capital_pnl_local/base` plus `realized_pnl_local_currency` |
+| `realized_fx_pnl` | `transactions.realized_fx_pnl_local/base` plus `realized_pnl_local_currency` |
+| `realized_total_pnl` | `transactions.realized_total_pnl_local/base` plus `realized_pnl_local_currency` |
 | `fx_context` | `transactions.transaction_fx_rate`, `fx_contract_id` |
 
 Zero or absent fields remain zero or null. The product does not fabricate missing economics.
@@ -53,8 +53,10 @@ Zero or absent fields remain zero or null. The product does not fabricate missin
 `component_totals` groups non-zero component amounts by `component_family` and currency. Fee totals
 use `trade_fee_currency`, cashflow totals use `cashflow_currency`, income and tax totals use the
 transaction economics currency, and realized `*_pnl_base` totals use the portfolio base currency.
-Tax totals combine withholding tax and other interest deductions in the same currency while
-preserving row-level fields separately.
+Row-level realized `*_pnl_local` fields carry `realized_pnl_local_currency`, normally the
+transaction trade currency, so consumers do not infer local P&L currency from book currency. Tax
+totals combine withholding tax and other interest deductions in the same currency while preserving
+row-level fields separately.
 
 When positive transaction-cost rows on one transaction carry multiple currencies, the row-level
 `trade_fee_currency` and fee total currency are `MIXED`. Downstream consumers must not treat

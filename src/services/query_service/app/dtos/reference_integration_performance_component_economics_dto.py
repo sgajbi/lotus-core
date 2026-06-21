@@ -102,6 +102,14 @@ class PerformanceComponentEconomicsRow(BaseModel):
         ..., description="Transaction date for economics evidence.", examples=["2026-05-10"]
     )
     currency: str = Field(..., description="Transaction economics currency.", examples=["USD"])
+    trade_currency: str = Field(
+        ...,
+        description=(
+            "Transaction trade/local currency used for trade-fee fallback and local realized P&L "
+            "amounts."
+        ),
+        examples=["USD"],
+    )
     gross_transaction_amount: Decimal = Field(
         ..., description="Gross transaction amount recorded by core.", examples=["125.0000000000"]
     )
@@ -171,6 +179,11 @@ class PerformanceComponentEconomicsRow(BaseModel):
         ...,
         description="Realized total P&L in local currency when recorded.",
         examples=["13.0000000000"],
+    )
+    realized_pnl_local_currency: str = Field(
+        ...,
+        description="Currency for realized capital, FX, and total P&L local amounts.",
+        examples=["USD"],
     )
     realized_capital_pnl_base: Decimal = Field(
         ...,

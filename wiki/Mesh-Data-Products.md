@@ -173,12 +173,13 @@ acknowledgement, or minimum-cost execution methodology.
 `PerformanceComponentEconomics:v1` is the governed source for performance-facing component
 economics evidence at
 `/integration/portfolios/{portfolio_id}/performance-component-economics`. It preserves row-level
-transaction, latest-epoch cashflow, fee amount and fee currency, tax, income, realized P&L, and
-FX-context fields plus grouped component totals and coverage metadata so `lotus-performance` can
-consume source-authored economics instead of inferring them locally. Fee totals use the explicit
-`trade_fee_currency`; `MIXED` marks a transaction with positive cost rows in multiple currencies and
-must not be treated as an ISO currency. Requests are bounded to 366 inclusive transaction-date days
-until a paged or export contract exists. Its implementation-backed methodology is documented in
+transaction, latest-epoch cashflow, fee amount and fee currency, tax, income, realized P&L with
+explicit local P&L currency, and FX-context fields plus grouped component totals and coverage
+metadata so `lotus-performance` can consume source-authored economics instead of inferring them
+locally. Fee totals use the explicit `trade_fee_currency`; `MIXED` marks a transaction with positive
+cost rows in multiple currencies and must not be treated as an ISO currency. Requests are bounded to
+366 inclusive transaction-date days until a paged or export contract exists. Its
+implementation-backed methodology is documented in
 `docs/methodologies/source-data-products/performance-component-economics.md`. It is not
 contribution analytics, attribution analytics, a return calculator, tax advice, execution-quality
 evidence, best-execution evidence, or OMS acknowledgement. Downstream `lotus-performance`
