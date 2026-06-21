@@ -1147,3 +1147,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   security-scope, and position-ID scope helpers, reducing
   `AnalyticsTimeseriesRepository.list_position_timeseries_rows` from `C (11)` to `A (5)` while
   preserving analytics timeseries pagination semantics.
+- CR-1140 split analytics position snapshot-epoch filtering into focused security-scope,
+  position-ID scope, and instrument dimension helpers, reducing
+  `AnalyticsTimeseriesRepository.get_position_snapshot_epoch` from `B (9)` to `A (5)` and leaving
+  `analytics_timeseries_repository.py` with no B-or-worse functions/classes.

@@ -50,8 +50,23 @@ def _position_dimension_filters(ranked, dimension_filters: dict[str, set[str]]) 
     ]
 
 
+def _instrument_dimension_filters(dimension_filters: dict[str, set[str]]) -> list[object]:
+    predicates = []
+    if "asset_class" in dimension_filters:
+        predicates.append(Instrument.asset_class.in_(dimension_filters["asset_class"]))
+    if "sector" in dimension_filters:
+        predicates.append(Instrument.sector.in_(dimension_filters["sector"]))
+    if "country" in dimension_filters:
+        predicates.append(Instrument.country_of_risk.in_(dimension_filters["country"]))
+    return predicates
+
+
 def _append_optional_where(stmt, predicate):
     return stmt.where(predicate) if predicate is not None else stmt
+
+
+def _trimmed_position_timeseries_security_id():
+    return func.trim(PositionTimeseries.security_id)
 
 
 class AnalyticsTimeseriesRepository:
@@ -95,6 +110,26 @@ class AnalyticsTimeseriesRepository:
         if not security_from_position_ids:
             return False, None
         return True, ranked.c.security_id.in_(security_from_position_ids)
+
+    def _position_timeseries_security_scope_filter(self, security_ids: list[str]):
+        if not security_ids:
+            return True, None
+        normalized_security_ids = self._normalized_security_ids(security_ids)
+        if not normalized_security_ids:
+            return False, None
+        return True, _trimmed_position_timeseries_security_id().in_(normalized_security_ids)
+
+    def _position_timeseries_position_scope_filter(
+        self, portfolio_id: str, position_ids: list[str]
+    ):
+        if not position_ids:
+            return True, None
+        security_from_position_ids = self._security_ids_from_position_ids(
+            portfolio_id, position_ids
+        )
+        if not security_from_position_ids:
+            return False, None
+        return True, _trimmed_position_timeseries_security_id().in_(security_from_position_ids)
 
     @staticmethod
     def _latest_cashflow_rows_stmt(*, predicates: list[object], include_security_id: bool):
@@ -515,30 +550,15 @@ class AnalyticsTimeseriesRepository:
             )
         )
 
-        if security_ids:
-            normalized_security_ids = self._normalized_security_ids(security_ids)
-            if not normalized_security_ids:
+        for is_supported, predicate in (
+            self._position_timeseries_security_scope_filter(security_ids),
+            self._position_timeseries_position_scope_filter(portfolio_id, position_ids),
+        ):
+            if not is_supported:
                 return 0
-            stmt = stmt.where(
-                func.trim(PositionTimeseries.security_id).in_(normalized_security_ids)
-            )
-
-        if position_ids:
-            security_from_position_ids = self._security_ids_from_position_ids(
-                portfolio_id, position_ids
-            )
-            if not security_from_position_ids:
-                return 0
-            stmt = stmt.where(
-                func.trim(PositionTimeseries.security_id).in_(security_from_position_ids)
-            )
-
-        if "asset_class" in dimension_filters:
-            stmt = stmt.where(Instrument.asset_class.in_(dimension_filters["asset_class"]))
-        if "sector" in dimension_filters:
-            stmt = stmt.where(Instrument.sector.in_(dimension_filters["sector"]))
-        if "country" in dimension_filters:
-            stmt = stmt.where(Instrument.country_of_risk.in_(dimension_filters["country"]))
+            stmt = _append_optional_where(stmt, predicate)
+        for predicate in _instrument_dimension_filters(dimension_filters):
+            stmt = stmt.where(predicate)
 
         result = await self.db.execute(stmt)
         return int(result.scalar_one_or_none() or 0)
