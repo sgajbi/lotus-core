@@ -54,7 +54,7 @@ Focused complexity proof:
 Focused maintainability proof:
 
 - `python -m radon mi src\services\query_service\app\services\position_holdings.py -s`
-- Result after CR-1128 on the same branch: `A (26.17)`
+- Result after CR-1129 on the same branch: `A (25.48)`
 
 Measured movement:
 
@@ -63,8 +63,8 @@ Measured movement:
 ## Residual Risk
 
 This slice does not change API contracts, OpenAPI, persistence, or cross-app integration behavior.
-`merge_snapshot_and_history_position_rows` remains B-ranked and should be addressed separately with
-focused API-facing proof.
+CR-1129 addressed the remaining B-ranked `merge_snapshot_and_history_position_rows` helper with
+focused API-facing proof. No B-or-worse functions remain in `position_holdings.py` on this branch.
 
 ## Bank-Buyable Control Movement
 

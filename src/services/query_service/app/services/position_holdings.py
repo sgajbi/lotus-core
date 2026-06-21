@@ -11,6 +11,7 @@ from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
 
 HeldSinceRequest = tuple[int, str, int, date]
+PositionRowResult = tuple[Any, Any, Any]
 
 
 def should_use_default_holdings_as_of_date(
@@ -38,15 +39,15 @@ def effective_holdings_as_of_date(
 
 def should_fetch_fallback_valuation_map(
     *,
-    db_results: list[tuple[Any, Any, Any]],
-    history_supplements: list[tuple[Any, Any, Any]],
+    db_results: list[PositionRowResult],
+    history_supplements: list[PositionRowResult],
     snapshot_security_ids: set[str],
 ) -> bool:
     return bool(history_supplements or (db_results and not snapshot_security_ids))
 
 
 def fallback_valuation_security_ids(
-    history_supplements: list[tuple[Any, Any, Any]],
+    history_supplements: list[PositionRowResult],
 ) -> list[str]:
     return sorted(
         {
@@ -112,30 +113,67 @@ def _position_reprocessing_status(pos_state: Any) -> str | None:
     return pos_state.status if pos_state else None
 
 
-def merge_snapshot_and_history_position_rows(
-    *,
-    snapshot_results: list[tuple[Any, Any, Any]],
-    history_results: list[tuple[Any, Any, Any]],
-) -> tuple[list[tuple[Any, Any, Any]], list[tuple[Any, Any, Any]], set[str]]:
-    history_results_by_security = {
+def _position_results_by_security(
+    position_results: list[PositionRowResult],
+) -> dict[str, PositionRowResult]:
+    return {
         normalize_security_id(position_row.security_id): (position_row, instrument, pos_state)
-        for position_row, instrument, pos_state in history_results
+        for position_row, instrument, pos_state in position_results
     }
-    snapshot_results_by_security: dict[str, tuple[Any, Any, Any]] = {}
-    history_supplements_by_security: dict[str, tuple[Any, Any, Any]] = {}
+
+
+def _snapshot_uses_history_result(
+    snapshot_row: Any,
+    history_result: PositionRowResult,
+) -> bool:
+    return not _position_basis_matches(snapshot_row, history_result[0])
+
+
+def _split_snapshot_results(
+    *,
+    snapshot_results: list[PositionRowResult],
+    history_results_by_security: dict[str, PositionRowResult],
+) -> tuple[dict[str, PositionRowResult], dict[str, PositionRowResult]]:
+    snapshot_results_by_security: dict[str, PositionRowResult] = {}
+    history_supplements_by_security: dict[str, PositionRowResult] = {}
     for snapshot_row, instrument, pos_state in snapshot_results:
         security_id = normalize_security_id(snapshot_row.security_id)
         history_result = history_results_by_security.get(security_id)
-        if history_result is not None and not _position_basis_matches(
-            snapshot_row, history_result[0]
+        if history_result is not None and _snapshot_uses_history_result(
+            snapshot_row, history_result
         ):
             history_supplements_by_security[security_id] = history_result
             continue
         snapshot_results_by_security[security_id] = (snapshot_row, instrument, pos_state)
+    return snapshot_results_by_security, history_supplements_by_security
 
+
+def _add_history_only_results(
+    *,
+    history_results_by_security: dict[str, PositionRowResult],
+    snapshot_results_by_security: dict[str, PositionRowResult],
+    history_supplements_by_security: dict[str, PositionRowResult],
+) -> None:
     for security_id, history_result in history_results_by_security.items():
         if security_id not in snapshot_results_by_security:
             history_supplements_by_security.setdefault(security_id, history_result)
+
+
+def merge_snapshot_and_history_position_rows(
+    *,
+    snapshot_results: list[PositionRowResult],
+    history_results: list[PositionRowResult],
+) -> tuple[list[PositionRowResult], list[PositionRowResult], set[str]]:
+    history_results_by_security = _position_results_by_security(history_results)
+    snapshot_results_by_security, history_supplements_by_security = _split_snapshot_results(
+        snapshot_results=snapshot_results,
+        history_results_by_security=history_results_by_security,
+    )
+    _add_history_only_results(
+        history_results_by_security=history_results_by_security,
+        snapshot_results_by_security=snapshot_results_by_security,
+        history_supplements_by_security=history_supplements_by_security,
+    )
 
     merged_results = list(snapshot_results_by_security.values())
     history_supplements = list(history_supplements_by_security.values())
@@ -223,7 +261,7 @@ def position_response_data(
 
 def portfolio_position_rows_data(
     *,
-    db_results: list[tuple[Any, Any, Any]],
+    db_results: list[PositionRowResult],
     snapshot_security_ids: set[str],
     fallback_valuation_map: dict[str, dict[str, Any] | None],
 ) -> list[Position]:
@@ -371,7 +409,7 @@ def _reprocessing_data_quality_status(positions: list[Position]) -> str | None:
 def holdings_data_quality_status(
     *,
     positions: list[Position],
-    history_supplements: list[tuple[Any, Any, Any]],
+    history_supplements: list[PositionRowResult],
     response_as_of_date: date,
     latest_market_price_dates: dict[str, date],
 ) -> str:
@@ -389,7 +427,7 @@ def holdings_data_quality_status(
 
 
 def latest_holdings_evidence_timestamp(
-    db_results: list[tuple[Any, Any, Any]],
+    db_results: list[PositionRowResult],
 ) -> datetime | None:
     timestamps: list[datetime] = []
     for position_row, _instrument, pos_state in db_results:
