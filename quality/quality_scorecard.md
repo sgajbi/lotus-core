@@ -1123,3 +1123,8 @@ Local evidence captured on 2026-06-05 after CR-1034:
   data-quality, suppressed-intent, no-shorting, and insufficient-cash helpers, reducing
   `RuleEngine.evaluate` from `C (19)` to `A (1)` while preserving the six-rule advisory
   compliance output contract and multi-breach single-position behavior.
+- CR-1134 split advisory auto-funding into focused funding enablement, BUY grouping,
+  priority-candidate construction, per-target funding need calculation, FX selection,
+  missing-FX posture, insufficient-cash diagnostics, and generated FX application helpers,
+  reducing `build_auto_funding_plan` from `C (20)` to `A (4)` while preserving proposal FX
+  funding behavior and leaving no C-or-worse advisory simulation functions in the package scan.

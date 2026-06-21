@@ -71,8 +71,7 @@ Measured movement:
 ## Residual Risk
 
 This slice does not change API contracts, OpenAPI, advisory simulation response shape, or rule
-semantics. Larger advisory simulation funding logic remains a measured hotspot and should be
-handled separately.
+semantics. CR-1134 addresses the measured advisory funding hotspot on the same branch.
 
 ## Bank-Buyable Control Movement
 
