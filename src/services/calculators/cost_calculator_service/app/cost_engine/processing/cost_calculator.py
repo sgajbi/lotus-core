@@ -113,6 +113,323 @@ def _normalize_transaction_type(transaction_type: str | TransactionType) -> str:
     return str(transaction_type).strip().upper()
 
 
+def _transaction_fx_rate_or_one(transaction: Transaction) -> Decimal:
+    return transaction.transaction_fx_rate or Decimal(1)
+
+
+def _transaction_total_fees(transaction: Transaction) -> Decimal:
+    return transaction.fees.total_fees if transaction.fees else Decimal(0)
+
+
+def _apply_zero_cost_fields(transaction: Transaction) -> None:
+    transaction.net_cost = Decimal(0)
+    transaction.net_cost_local = Decimal(0)
+    transaction.gross_cost = Decimal(0)
+
+
+def _apply_zero_realized_pnl(transaction: Transaction) -> None:
+    transaction.realized_gain_loss = Decimal(0)
+    transaction.realized_gain_loss_local = Decimal(0)
+
+
+def _apply_no_realized_pnl(transaction: Transaction) -> None:
+    transaction.realized_gain_loss = None
+    transaction.realized_gain_loss_local = None
+
+
+def _has_non_zero_cost_fields(transaction: Transaction) -> bool:
+    return transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0)
+
+
+def _has_non_zero_realized_pnl(transaction: Transaction) -> bool:
+    return transaction.realized_gain_loss != Decimal(
+        0
+    ) or transaction.realized_gain_loss_local != Decimal(0)
+
+
+def _normalized_price_or_error(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+    add_invariant_error,
+) -> Decimal | None:
+    try:
+        return _normalize_decimal_field(getattr(transaction, "price", Decimal(0)), "price")
+    except ValueError as exc:
+        add_invariant_error(error_reporter, transaction, str(exc))
+        return None
+
+
+def _validate_zero_quantity_and_price(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+    *,
+    transaction_label: str,
+    add_invariant_error,
+) -> bool:
+    if transaction.quantity != Decimal(0):
+        add_invariant_error(
+            error_reporter, transaction, f"quantity_delta must be 0 for {transaction_label}."
+        )
+        return False
+
+    price = _normalized_price_or_error(transaction, error_reporter, add_invariant_error)
+    if price is None:
+        return False
+
+    if price != Decimal(0):
+        add_invariant_error(
+            error_reporter, transaction, f"price must be 0 for {transaction_label}."
+        )
+        return False
+    return True
+
+
+def _validate_zero_cost_and_realized_pnl(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+    *,
+    realized_label: str,
+    add_invariant_error,
+) -> bool:
+    if _has_non_zero_cost_fields(transaction):
+        add_invariant_error(error_reporter, transaction, "net_cost and net_cost_local must be 0.")
+        return False
+
+    if _has_non_zero_realized_pnl(transaction):
+        add_invariant_error(
+            error_reporter,
+            transaction,
+            f"realized capital/FX P&L must be explicit zero for {realized_label}.",
+        )
+        return False
+    return True
+
+
+def _apply_buy_cost_fields(transaction: Transaction) -> None:
+    total_fees_local = _transaction_total_fees(transaction)
+    accrued_interest_local = transaction.accrued_interest or Decimal(0)
+    fx_rate = _transaction_fx_rate_or_one(transaction)
+    transaction.gross_cost = transaction.gross_transaction_amount * fx_rate
+
+    transaction.net_cost_local = transaction.gross_transaction_amount + total_fees_local
+    if not _is_accrued_interest_excluded_from_book_cost(transaction):
+        transaction.net_cost_local += accrued_interest_local
+
+    transaction.net_cost = transaction.net_cost_local * fx_rate
+    _apply_zero_realized_pnl(transaction)
+
+
+def _validate_buy_cost_fields(transaction: Transaction, error_reporter: ErrorReporter) -> bool:
+    if transaction.quantity <= Decimal(0):
+        _add_buy_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
+        return False
+    if not _validate_non_negative_buy_costs(transaction, error_reporter):
+        return False
+    if _has_non_zero_realized_pnl(transaction):
+        _add_buy_invariant_error(
+            error_reporter, transaction, "realized P&L must be explicit zero for BUY."
+        )
+        return False
+    return True
+
+
+def _validate_non_negative_buy_costs(
+    transaction: Transaction, error_reporter: ErrorReporter
+) -> bool:
+    if transaction.gross_cost < Decimal(0):
+        _add_buy_invariant_error(error_reporter, transaction, "gross_cost must be >= 0.")
+        return False
+    if transaction.net_cost_local < Decimal(0):
+        _add_buy_invariant_error(error_reporter, transaction, "book_cost_local must be >= 0.")
+        return False
+    if transaction.net_cost < Decimal(0):
+        _add_buy_invariant_error(error_reporter, transaction, "book_cost_base must be >= 0.")
+        return False
+    return True
+
+
+def _record_buy_lot(
+    transaction: Transaction,
+    disposition_engine: DispositionEngine,
+    error_reporter: ErrorReporter,
+) -> None:
+    try:
+        disposition_engine.add_buy_lot(transaction)
+    except ValueError as e:
+        error_reporter.add_error(transaction.transaction_id, str(e))
+
+
+def _net_sell_proceeds_local(transaction: Transaction) -> Decimal:
+    return transaction.gross_transaction_amount - _transaction_total_fees(transaction)
+
+
+def _validate_sell_quantity_and_proceeds(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+    *,
+    net_sell_proceeds_local: Decimal,
+    net_sell_proceeds_base: Decimal,
+) -> bool:
+    if net_sell_proceeds_local < Decimal(0):
+        _add_sell_invariant_error(
+            error_reporter,
+            transaction,
+            "net_sell_proceeds_local must be >= 0.",
+        )
+        return False
+    if net_sell_proceeds_base < Decimal(0):
+        _add_sell_invariant_error(
+            error_reporter,
+            transaction,
+            "net_sell_proceeds_base must be >= 0.",
+        )
+        return False
+    if transaction.quantity <= Decimal(0):
+        _add_sell_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
+        return False
+    return True
+
+
+def _validate_sell_availability(
+    transaction: Transaction,
+    disposition_engine: DispositionEngine,
+    error_reporter: ErrorReporter,
+) -> bool:
+    available_quantity = disposition_engine.get_available_quantity(
+        transaction.portfolio_id, transaction.instrument_id
+    )
+    policy_id = _normalize_code(getattr(transaction, "calculation_policy_id", None))
+    if transaction.quantity <= available_quantity:
+        return True
+    if policy_id in SELL_ALLOW_OVERSOLD_POLICIES:
+        _add_sell_invariant_error(
+            error_reporter,
+            transaction,
+            "oversold policy is configured but not supported in current engine.",
+        )
+    else:
+        _add_sell_invariant_error(
+            error_reporter,
+            transaction,
+            "sell quantity exceeds available holdings under strict oversell policy.",
+        )
+    return False
+
+
+def _consume_sell_cost_basis(
+    transaction: Transaction,
+    disposition_engine: DispositionEngine,
+    error_reporter: ErrorReporter,
+) -> tuple[Decimal, Decimal, Decimal] | None:
+    cogs_base, cogs_local, consumed_quantity, error_reason = (
+        disposition_engine.consume_sell_quantity(transaction)
+    )
+
+    if error_reason:
+        error_reporter.add_error(transaction.transaction_id, error_reason)
+        return None
+    if consumed_quantity <= Decimal(0):
+        _add_sell_invariant_error(error_reporter, transaction, "consumed_quantity must be > 0.")
+        return None
+    if cogs_base < Decimal(0) or cogs_local < Decimal(0):
+        _add_sell_invariant_error(
+            error_reporter,
+            transaction,
+            "disposed cost basis must be non-negative.",
+        )
+        return None
+    return cogs_base, cogs_local, consumed_quantity
+
+
+def _apply_sell_disposal_fields(
+    transaction: Transaction,
+    *,
+    net_sell_proceeds_local: Decimal,
+    net_sell_proceeds_base: Decimal,
+    cogs_base: Decimal,
+    cogs_local: Decimal,
+) -> None:
+    transaction.realized_gain_loss_local = net_sell_proceeds_local - cogs_local
+    transaction.realized_gain_loss = net_sell_proceeds_base - cogs_base
+    transaction.net_cost = -cogs_base
+    transaction.net_cost_local = -cogs_local
+    transaction.gross_cost = -cogs_base
+
+
+def _validate_sell_disposal_fields(transaction: Transaction, error_reporter: ErrorReporter) -> bool:
+    if transaction.net_cost <= Decimal(0) and transaction.net_cost_local <= Decimal(0):
+        return True
+    _add_sell_invariant_error(
+        error_reporter,
+        transaction,
+        "net_cost and net_cost_local must be <= 0 for SELL disposal.",
+    )
+    return False
+
+
+def _resolve_interest_direction(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+) -> str | None:
+    raw_direction = getattr(transaction, "interest_direction", None)
+    direction = "INCOME" if raw_direction in (None, "") else _normalize_code(raw_direction)
+    if direction in {"INCOME", "EXPENSE"}:
+        return direction
+    _add_interest_invariant_error(
+        error_reporter,
+        transaction,
+        "interest_direction must be INCOME or EXPENSE when provided.",
+    )
+    return None
+
+
+def _normalize_transaction_currencies(transaction: Transaction) -> None:
+    transaction.trade_currency = _normalize_currency_code(transaction.trade_currency)
+    transaction.portfolio_base_currency = _normalize_currency_code(
+        transaction.portfolio_base_currency
+    )
+
+
+def _normalize_existing_transaction_fx_rate(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+) -> bool:
+    if transaction.transaction_fx_rate is None:
+        return True
+    try:
+        transaction.transaction_fx_rate = _normalize_decimal_field(
+            transaction.transaction_fx_rate, "transaction_fx_rate"
+        )
+    except ValueError as exc:
+        error_reporter.add_error(transaction.transaction_id, str(exc))
+        return False
+    if transaction.transaction_fx_rate > 0:
+        return True
+    error_reporter.add_error(
+        transaction.transaction_id,
+        "Missing/invalid FX rate for transaction.",
+    )
+    return False
+
+
+def _validate_normalized_transaction_fx(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+) -> bool:
+    if transaction.trade_currency == transaction.portfolio_base_currency:
+        if transaction.transaction_fx_rate is None:
+            transaction.transaction_fx_rate = Decimal(1)
+        return True
+    if transaction.transaction_fx_rate is not None and transaction.transaction_fx_rate > 0:
+        return True
+    error_reporter.add_error(
+        transaction.transaction_id,
+        "Missing/invalid FX rate for cross-currency transaction from "
+        f"{transaction.trade_currency} to {transaction.portfolio_base_currency}.",
+    )
+    return False
+
+
 class BuyStrategy:
     def calculate_costs(
         self,
@@ -120,49 +437,11 @@ class BuyStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        total_fees_local = transaction.fees.total_fees if transaction.fees else Decimal(0)
-        accrued_interest_local = transaction.accrued_interest or Decimal(0)
-
-        # Principal in base currency for consistent accounting output.
-        fx_rate = transaction.transaction_fx_rate or Decimal(1)
-        transaction.gross_cost = transaction.gross_transaction_amount * fx_rate
-
-        if _is_accrued_interest_excluded_from_book_cost(transaction):
-            transaction.net_cost_local = transaction.gross_transaction_amount + total_fees_local
-        else:
-            transaction.net_cost_local = (
-                transaction.gross_transaction_amount + total_fees_local + accrued_interest_local
-            )
-
-        transaction.net_cost = transaction.net_cost_local * fx_rate
-        transaction.realized_gain_loss = Decimal(0)
-        transaction.realized_gain_loss_local = Decimal(0)
-
-        if transaction.quantity <= Decimal(0):
-            _add_buy_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
-            return
-        if transaction.gross_cost < Decimal(0):
-            _add_buy_invariant_error(error_reporter, transaction, "gross_cost must be >= 0.")
-            return
-        if transaction.net_cost_local < Decimal(0):
-            _add_buy_invariant_error(error_reporter, transaction, "book_cost_local must be >= 0.")
-            return
-        if transaction.net_cost < Decimal(0):
-            _add_buy_invariant_error(error_reporter, transaction, "book_cost_base must be >= 0.")
-            return
-        if transaction.realized_gain_loss != Decimal(
-            0
-        ) or transaction.realized_gain_loss_local != Decimal(0):
-            _add_buy_invariant_error(
-                error_reporter, transaction, "realized P&L must be explicit zero for BUY."
-            )
+        _apply_buy_cost_fields(transaction)
+        if not _validate_buy_cost_fields(transaction, error_reporter):
             return
 
-        if transaction.quantity > Decimal(0):
-            try:
-                disposition_engine.add_buy_lot(transaction)
-            except ValueError as e:
-                error_reporter.add_error(transaction.transaction_id, str(e))
+        _record_buy_lot(transaction, disposition_engine, error_reporter)
 
 
 class SellStrategy:
@@ -172,82 +451,34 @@ class SellStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        sell_fees_local = transaction.fees.total_fees if transaction.fees else Decimal(0)
-        net_sell_proceeds_local = transaction.gross_transaction_amount - sell_fees_local
-        if net_sell_proceeds_local < Decimal(0):
-            _add_sell_invariant_error(
-                error_reporter,
-                transaction,
-                "net_sell_proceeds_local must be >= 0.",
-            )
-            return
-
-        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        net_sell_proceeds_local = _net_sell_proceeds_local(transaction)
+        fx_rate = _transaction_fx_rate_or_one(transaction)
         net_sell_proceeds_base = net_sell_proceeds_local * fx_rate
-        if net_sell_proceeds_base < Decimal(0):
-            _add_sell_invariant_error(
-                error_reporter,
-                transaction,
-                "net_sell_proceeds_base must be >= 0.",
-            )
+        if not _validate_sell_quantity_and_proceeds(
+            transaction,
+            error_reporter,
+            net_sell_proceeds_local=net_sell_proceeds_local,
+            net_sell_proceeds_base=net_sell_proceeds_base,
+        ):
             return
-        if transaction.quantity <= Decimal(0):
-            _add_sell_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
+        if not _validate_sell_availability(transaction, disposition_engine, error_reporter):
             return
 
-        available_quantity = disposition_engine.get_available_quantity(
-            transaction.portfolio_id, transaction.instrument_id
+        consumed_cost_basis = _consume_sell_cost_basis(
+            transaction, disposition_engine, error_reporter
         )
-        policy_id = _normalize_code(getattr(transaction, "calculation_policy_id", None))
-        allows_oversold = policy_id in SELL_ALLOW_OVERSOLD_POLICIES
-        if transaction.quantity > available_quantity:
-            if allows_oversold:
-                _add_sell_invariant_error(
-                    error_reporter,
-                    transaction,
-                    "oversold policy is configured but not supported in current engine.",
-                )
-            else:
-                _add_sell_invariant_error(
-                    error_reporter,
-                    transaction,
-                    "sell quantity exceeds available holdings under strict oversell policy.",
-                )
+        if consumed_cost_basis is None:
             return
+        cogs_base, cogs_local, _consumed_quantity = consumed_cost_basis
 
-        cogs_base, cogs_local, consumed_quantity, error_reason = (
-            disposition_engine.consume_sell_quantity(transaction)
+        _apply_sell_disposal_fields(
+            transaction,
+            net_sell_proceeds_local=net_sell_proceeds_local,
+            net_sell_proceeds_base=net_sell_proceeds_base,
+            cogs_base=cogs_base,
+            cogs_local=cogs_local,
         )
-
-        if error_reason:
-            error_reporter.add_error(transaction.transaction_id, error_reason)
-            return
-
-        if consumed_quantity <= Decimal(0):
-            _add_sell_invariant_error(error_reporter, transaction, "consumed_quantity must be > 0.")
-            return
-
-        if cogs_base < Decimal(0) or cogs_local < Decimal(0):
-            _add_sell_invariant_error(
-                error_reporter,
-                transaction,
-                "disposed cost basis must be non-negative.",
-            )
-            return
-
-        transaction.realized_gain_loss_local = net_sell_proceeds_local - cogs_local
-        transaction.realized_gain_loss = net_sell_proceeds_base - cogs_base
-        transaction.net_cost = -cogs_base
-        transaction.net_cost_local = -cogs_local
-        transaction.gross_cost = -cogs_base
-
-        if transaction.net_cost > Decimal(0) or transaction.net_cost_local > Decimal(0):
-            _add_sell_invariant_error(
-                error_reporter,
-                transaction,
-                "net_cost and net_cost_local must be <= 0 for SELL disposal.",
-            )
-            return
+        _validate_sell_disposal_fields(transaction, error_reporter)
 
 
 class CashInflowStrategy:
@@ -260,7 +491,7 @@ class CashInflowStrategy:
         cash_amount_local = _cash_movement_amount(transaction)
         transaction.gross_cost = cash_amount_local
         transaction.net_cost_local = cash_amount_local
-        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        fx_rate = _transaction_fx_rate_or_one(transaction)
         transaction.net_cost = transaction.net_cost_local * fx_rate
         cash_buy_equivalent = transaction.model_copy()
         cash_buy_equivalent.quantity = cash_amount_local
@@ -276,12 +507,11 @@ class CashOutflowStrategy:
         error_reporter: ErrorReporter,
     ) -> None:
         cash_amount_local = _cash_outflow_book_cost(transaction)
-        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        fx_rate = _transaction_fx_rate_or_one(transaction)
         transaction.net_cost_local = -cash_amount_local
         transaction.net_cost = transaction.net_cost_local * fx_rate
         transaction.gross_cost = transaction.net_cost
-        transaction.realized_gain_loss = None
-        transaction.realized_gain_loss_local = None
+        _apply_no_realized_pnl(transaction)
 
 
 class SecurityInflowStrategy:
@@ -294,14 +524,11 @@ class SecurityInflowStrategy:
         transaction.gross_cost = transaction.gross_transaction_amount
         transaction.net_cost_local = transaction.gross_transaction_amount
 
-        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        fx_rate = _transaction_fx_rate_or_one(transaction)
         transaction.net_cost = transaction.net_cost_local * fx_rate
 
         if transaction.quantity > Decimal(0):
-            try:
-                disposition_engine.add_buy_lot(transaction)
-            except ValueError as e:
-                error_reporter.add_error(transaction.transaction_id, str(e))
+            _record_buy_lot(transaction, disposition_engine, error_reporter)
 
 
 class SecurityOutflowStrategy:
@@ -324,8 +551,7 @@ class SecurityOutflowStrategy:
             transaction.net_cost = -cogs_base
             transaction.net_cost_local = -cogs_local
             transaction.gross_cost = -cogs_base
-            transaction.realized_gain_loss = None
-            transaction.realized_gain_loss_local = None
+            _apply_no_realized_pnl(transaction)
 
 
 class PartialTransferOutStrategy:
@@ -347,14 +573,13 @@ class PartialTransferOutStrategy:
             )
             return
 
-        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        fx_rate = _transaction_fx_rate_or_one(transaction)
         basis_out_local = transaction.gross_transaction_amount
         basis_out_base = basis_out_local * fx_rate
         transaction.net_cost_local = -basis_out_local
         transaction.net_cost = -basis_out_base
         transaction.gross_cost = -basis_out_base
-        transaction.realized_gain_loss = None
-        transaction.realized_gain_loss_local = None
+        _apply_no_realized_pnl(transaction)
 
 
 class IncomeStrategy:
@@ -364,11 +589,8 @@ class IncomeStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        transaction.net_cost = Decimal(0)
-        transaction.net_cost_local = Decimal(0)
-        transaction.gross_cost = Decimal(0)
-        transaction.realized_gain_loss = None
-        transaction.realized_gain_loss_local = None
+        _apply_zero_cost_fields(transaction)
+        _apply_no_realized_pnl(transaction)
 
 
 class QuantityRestatementStrategy:
@@ -382,11 +604,8 @@ class QuantityRestatementStrategy:
         Handles same-instrument corporate-action quantity restatements where
         quantity changes but total basis must remain unchanged.
         """
-        transaction.gross_cost = Decimal(0)
-        transaction.net_cost = Decimal(0)
-        transaction.net_cost_local = Decimal(0)
-        transaction.realized_gain_loss = Decimal(0)
-        transaction.realized_gain_loss_local = Decimal(0)
+        _apply_zero_cost_fields(transaction)
+        _apply_zero_realized_pnl(transaction)
 
 
 class DividendStrategy:
@@ -396,28 +615,15 @@ class DividendStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        transaction.net_cost = Decimal(0)
-        transaction.net_cost_local = Decimal(0)
-        transaction.gross_cost = Decimal(0)
-        transaction.realized_gain_loss = Decimal(0)
-        transaction.realized_gain_loss_local = Decimal(0)
+        _apply_zero_cost_fields(transaction)
+        _apply_zero_realized_pnl(transaction)
 
-        if transaction.quantity != Decimal(0):
-            _add_dividend_invariant_error(
-                error_reporter, transaction, "quantity_delta must be 0 for DIVIDEND."
-            )
-            return
-
-        try:
-            price = _normalize_decimal_field(getattr(transaction, "price", Decimal(0)), "price")
-        except ValueError as exc:
-            _add_dividend_invariant_error(error_reporter, transaction, str(exc))
-            return
-
-        if price != Decimal(0):
-            _add_dividend_invariant_error(
-                error_reporter, transaction, "price must be 0 for DIVIDEND."
-            )
+        if not _validate_zero_quantity_and_price(
+            transaction,
+            error_reporter,
+            transaction_label="DIVIDEND",
+            add_invariant_error=_add_dividend_invariant_error,
+        ):
             return
 
         if transaction.gross_transaction_amount <= Decimal(0):
@@ -428,21 +634,12 @@ class DividendStrategy:
             )
             return
 
-        if transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0):
-            _add_dividend_invariant_error(
-                error_reporter, transaction, "net_cost and net_cost_local must be 0."
-            )
-            return
-
-        if transaction.realized_gain_loss != Decimal(
-            0
-        ) or transaction.realized_gain_loss_local != Decimal(0):
-            _add_dividend_invariant_error(
-                error_reporter,
-                transaction,
-                "realized capital/FX P&L must be explicit zero for DIVIDEND.",
-            )
-            return
+        _validate_zero_cost_and_realized_pnl(
+            transaction,
+            error_reporter,
+            realized_label="DIVIDEND",
+            add_invariant_error=_add_dividend_invariant_error,
+        )
 
 
 class InterestStrategy:
@@ -452,41 +649,18 @@ class InterestStrategy:
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
-        transaction.net_cost = Decimal(0)
-        transaction.net_cost_local = Decimal(0)
-        transaction.gross_cost = Decimal(0)
-        transaction.realized_gain_loss = Decimal(0)
-        transaction.realized_gain_loss_local = Decimal(0)
+        _apply_zero_cost_fields(transaction)
+        _apply_zero_realized_pnl(transaction)
 
-        raw_direction = getattr(transaction, "interest_direction", None)
-        if raw_direction in (None, ""):
-            direction = "INCOME"
-        else:
-            direction = _normalize_code(raw_direction)
-        if direction not in {"INCOME", "EXPENSE"}:
-            _add_interest_invariant_error(
-                error_reporter,
-                transaction,
-                "interest_direction must be INCOME or EXPENSE when provided.",
-            )
+        if _resolve_interest_direction(transaction, error_reporter) is None:
             return
 
-        if transaction.quantity != Decimal(0):
-            _add_interest_invariant_error(
-                error_reporter, transaction, "quantity_delta must be 0 for INTEREST."
-            )
-            return
-
-        try:
-            price = _normalize_decimal_field(getattr(transaction, "price", Decimal(0)), "price")
-        except ValueError as exc:
-            _add_interest_invariant_error(error_reporter, transaction, str(exc))
-            return
-
-        if price != Decimal(0):
-            _add_interest_invariant_error(
-                error_reporter, transaction, "price must be 0 for INTEREST."
-            )
+        if not _validate_zero_quantity_and_price(
+            transaction,
+            error_reporter,
+            transaction_label="INTEREST",
+            add_invariant_error=_add_interest_invariant_error,
+        ):
             return
 
         if transaction.gross_transaction_amount <= Decimal(0):
@@ -497,21 +671,12 @@ class InterestStrategy:
             )
             return
 
-        if transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0):
-            _add_interest_invariant_error(
-                error_reporter, transaction, "net_cost and net_cost_local must be 0."
-            )
-            return
-
-        if transaction.realized_gain_loss != Decimal(
-            0
-        ) or transaction.realized_gain_loss_local != Decimal(0):
-            _add_interest_invariant_error(
-                error_reporter,
-                transaction,
-                "realized capital/FX P&L must be explicit zero for INTEREST.",
-            )
-            return
+        _validate_zero_cost_and_realized_pnl(
+            transaction,
+            error_reporter,
+            realized_label="INTEREST",
+            add_invariant_error=_add_interest_invariant_error,
+        )
 
 
 class DefaultStrategy:
@@ -523,7 +688,7 @@ class DefaultStrategy:
     ) -> None:
         transaction.gross_cost = transaction.gross_transaction_amount
         transaction.net_cost_local = transaction.gross_transaction_amount
-        fx_rate = transaction.transaction_fx_rate or Decimal(1)
+        fx_rate = _transaction_fx_rate_or_one(transaction)
         transaction.net_cost = transaction.net_cost_local * fx_rate
 
 
@@ -606,34 +771,10 @@ class CostCalculator:
         self._default_strategy = DefaultStrategy()
 
     def _validate_fx(self, t: Transaction) -> bool:
-        t.trade_currency = _normalize_currency_code(t.trade_currency)
-        t.portfolio_base_currency = _normalize_currency_code(t.portfolio_base_currency)
-        if t.transaction_fx_rate is not None:
-            try:
-                t.transaction_fx_rate = _normalize_decimal_field(
-                    t.transaction_fx_rate, "transaction_fx_rate"
-                )
-            except ValueError as exc:
-                self._error_reporter.add_error(t.transaction_id, str(exc))
-                return False
-            if t.transaction_fx_rate <= 0:
-                self._error_reporter.add_error(
-                    t.transaction_id,
-                    "Missing/invalid FX rate for transaction.",
-                )
-                return False
-        if t.trade_currency == t.portfolio_base_currency:
-            if t.transaction_fx_rate is None:
-                t.transaction_fx_rate = Decimal(1)
-            return True
-        if t.transaction_fx_rate is None or t.transaction_fx_rate <= 0:
-            self._error_reporter.add_error(
-                t.transaction_id,
-                "Missing/invalid FX rate for cross-currency transaction from "
-                f"{t.trade_currency} to {t.portfolio_base_currency}.",
-            )
-            return False
-        return True
+        _normalize_transaction_currencies(t)
+        return _normalize_existing_transaction_fx_rate(
+            t, self._error_reporter
+        ) and _validate_normalized_transaction_fx(t, self._error_reporter)
 
     def calculate_transaction_costs(self, transaction: Transaction):
         if not self._validate_fx(transaction):

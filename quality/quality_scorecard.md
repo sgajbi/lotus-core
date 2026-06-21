@@ -1060,3 +1060,9 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1119 split cost engine event-building helpers out of
   `CostCalculatorConsumer._build_cost_engine_events_to_publish`, removing the final B-ranked method
   from `cost_calculator_service/app/consumer.py` while preserving BUY/SELL lot-state update proof.
+- CR-1120 split cost-engine strategy policy helpers for BUY, SELL, DIVIDEND, INTEREST, and FX
+  validation inside `cost_calculator.py`, reducing `SellStrategy.calculate_costs` from `C (14)` to
+  `A (4)`, `BuyStrategy.calculate_costs` from `C (13)` to `A (2)`,
+  `InterestStrategy.calculate_costs` from `C (11)` to `A (4)`, `DividendStrategy.calculate_costs`
+  from `B (9)` to `A (3)`, and `CostCalculator._validate_fx` from `B (8)` to `A (2)`. The module
+  still reports B-ranked maintainability and remains a future cost-engine modularity target.
