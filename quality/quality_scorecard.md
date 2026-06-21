@@ -1128,3 +1128,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   missing-FX posture, insufficient-cash diagnostics, and generated FX application helpers,
   reducing `build_auto_funding_plan` from `C (20)` to `A (4)` while preserving proposal FX
   funding behavior and leaving no C-or-worse advisory simulation functions in the package scan.
+- CR-1135 split privileged ingestion ops authentication into focused auth error, JWT decode,
+  signature, claim-validation, bearer extraction, required-JWT, and required-token helpers,
+  reducing `require_ops_token` from `C (14)` to `A (4)` while preserving token-only, JWT-only, and
+  token-or-JWT behavior.

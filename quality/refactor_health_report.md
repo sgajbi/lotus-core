@@ -1734,3 +1734,8 @@ health before that claim is defensible.
      29 tests, scoped Ruff and typecheck passed, and Radon reports `build_auto_funding_plan`
      reduced from `C (20)` to `A (4)`, `funding_priority_currencies` reduced from `B (6)` to
      `A (2)`, with all functions/classes in `funding.py` A-ranked.
+287. Reduced privileged ingestion ops auth complexity by extracting auth error, JWT decode,
+     signature, claim validation, bearer extraction, required JWT, and required token helpers from
+     `require_ops_token(...)`. Focused auth tests passed with 5 tests across token-only, JWT-only,
+     token-or-JWT, and invalid-token behavior; scoped Ruff and typecheck passed; Radon reports
+     `require_ops_token` reduced from `C (14)` to `A (4)`.
