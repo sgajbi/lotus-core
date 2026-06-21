@@ -1681,3 +1681,10 @@ health before that claim is defensible.
      5 tests and scoped Ruff passed. Radon reduces `_observed_component_families` from `C (18)` to
      `A (4)`, keeps all extracted helpers A-ranked, and improves module maintainability from
      `A (27.59)` to `A (27.86)`.
+279. Reduced HoldingsAsOf data-quality policy complexity by extracting reprocessing status
+     normalization, unknown/non-current state detection, stale market-price evidence detection, and
+     reprocessing-derived classification from `holdings_data_quality_status(...)`. Focused holdings
+     tests passed with 34 tests, including direct coverage for non-current STALE, stale price STALE,
+     and current/fresh COMPLETE behavior. Scoped Ruff passed. Radon reports
+     `holdings_data_quality_status` reduced from `C (12)` to `A (4)`, with extracted helpers
+     A-ranked and `position_holdings.py` remaining A-ranked maintainability at `A (25.47)`.

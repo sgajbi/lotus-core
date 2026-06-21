@@ -1093,3 +1093,9 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `PerformanceComponentEconomics:v1` response contract. Focused performance economics tests passed
   with 5 tests, scoped Ruff passed, every extracted helper is A-ranked, and module maintainability
   improves from `A (27.59)` to `A (27.86)`.
+- CR-1127 split HoldingsAsOf data-quality policy into focused reprocessing-state and
+  market-price-freshness helpers, reducing `holdings_data_quality_status` from `C (12)` to
+  `A (4)` while preserving COMPLETE/PARTIAL/STALE/UNKNOWN response semantics. Focused holdings
+  tests passed with 34 tests, including direct non-current STALE, stale price STALE, and
+  current/fresh COMPLETE coverage; scoped Ruff passed; `position_holdings.py` remains A-ranked
+  maintainability at `A (25.47)`.
