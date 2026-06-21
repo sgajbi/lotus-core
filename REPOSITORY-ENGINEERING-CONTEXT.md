@@ -365,6 +365,14 @@ Most relevant current governance:
     canonical front-office contract's RFC-0026 advisor-cockpit scenario, with fallback
     `advisor_sg_001`. This keeps Core portfolio master membership aligned with downstream
     advisor-cockpit validation instead of hard-coding a separate relationship-manager identifier.
+40. `PerformanceComponentEconomics:v1` is active at
+    `/integration/portfolios/{portfolio_id}/performance-component-economics` for
+    `lotus-performance` contribution analytics sourcing. It returns source-authored transaction,
+    cashflow, fee, tax, income, realized P&L, and FX-context economics evidence with component
+    totals, coverage metadata, runtime source-product metadata, and lineage. It does not calculate
+    contribution, attribution, performance returns, tax advice, execution quality, best execution,
+    or OMS acknowledgement; downstream `lotus-performance` consumption and UI/gateway proof remain
+    separate work.
 
 ## Context Maintenance Rule
 

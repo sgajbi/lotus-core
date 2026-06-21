@@ -170,6 +170,18 @@ total absolute notional, notional-weighted average cost bps, min cost bps, and m
 group. It is not an execution-quality, market-impact, venue-routing, best-execution, OMS
 acknowledgement, or minimum-cost execution methodology.
 
+`PerformanceComponentEconomics:v1` is the governed source for performance-facing component
+economics evidence at
+`/integration/portfolios/{portfolio_id}/performance-component-economics`. It preserves row-level
+transaction, cashflow, fee, tax, income, realized P&L, and FX-context fields plus grouped component
+totals and coverage metadata so `lotus-performance` can consume source-authored economics instead
+of inferring them locally. Its implementation-backed methodology is documented in
+`docs/methodologies/source-data-products/performance-component-economics.md`. It is not
+contribution analytics, attribution analytics, a return calculator, tax advice, execution-quality
+evidence, best-execution evidence, or OMS acknowledgement. Downstream `lotus-performance`
+consumption remains tracked separately before any UI or report may claim source-backed contribution
+component economics.
+
 ```mermaid
 flowchart LR
     CoreHoldings[core HoldingsAsOf:v1<br/>positions, weights, cash balances, freshness]
@@ -180,6 +192,7 @@ flowchart LR
     CoreRealizedTax[core PortfolioRealizedTaxSummary:v1<br/>explicit realized-tax evidence totals]
     CoreTax[core ClientTaxProfile/RuleSet:v1<br/>tax-reference evidence]
     CoreFees[core TransactionCostCurve:v1<br/>observed booked fee evidence]
+    CorePerfEconomics[core PerformanceComponentEconomics:v1<br/>component economics source evidence]
     Manage[lotus-manage outcome/proof/wave consumers<br/>preserve source refs and supportability]
     Perf[lotus-performance<br/>performance methodology]
     Risk[lotus-risk<br/>risk methodology]
@@ -193,6 +206,7 @@ flowchart LR
     CoreRealizedTax --> Manage
     CoreTax --> Manage
     CoreFees --> Manage
+    CorePerfEconomics --> Perf
     Perf --> Manage
     Risk --> Manage
     FutureOwners -. unsupported until certified .-> Manage
