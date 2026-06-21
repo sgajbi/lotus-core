@@ -100,6 +100,18 @@ def _unrealized_amount(
     return market_value - cost_basis_value
 
 
+def _position_row_date(position_row: Any, *, is_snapshot_row: bool) -> date:
+    return position_row.date if is_snapshot_row else position_row.position_date
+
+
+def _instrument_field(instrument: Any, field_name: str, default: Any = None) -> Any:
+    return getattr(instrument, field_name, default) if instrument else default
+
+
+def _position_reprocessing_status(pos_state: Any) -> str | None:
+    return pos_state.status if pos_state else None
+
+
 def merge_snapshot_and_history_position_rows(
     *,
     snapshot_results: list[tuple[Any, Any, Any]],
@@ -194,18 +206,18 @@ def position_response_data(
         quantity=position_row.quantity,
         cost_basis=position_row.cost_basis,
         cost_basis_local=position_row.cost_basis_local,
-        instrument_name=instrument.name if instrument else "N/A",
-        position_date=position_row.date if is_snapshot_row else position_row.position_date,
-        asset_class=instrument.asset_class if instrument else None,
-        isin=instrument.isin if instrument else None,
-        currency=instrument.currency if instrument else None,
-        sector=instrument.sector if instrument else None,
-        country_of_risk=instrument.country_of_risk if instrument else None,
-        product_type=instrument.product_type if instrument else None,
-        rating=instrument.rating if instrument else None,
-        liquidity_tier=instrument.liquidity_tier if instrument else None,
+        instrument_name=_instrument_field(instrument, "name", "N/A"),
+        position_date=_position_row_date(position_row, is_snapshot_row=is_snapshot_row),
+        asset_class=_instrument_field(instrument, "asset_class"),
+        isin=_instrument_field(instrument, "isin"),
+        currency=_instrument_field(instrument, "currency"),
+        sector=_instrument_field(instrument, "sector"),
+        country_of_risk=_instrument_field(instrument, "country_of_risk"),
+        product_type=_instrument_field(instrument, "product_type"),
+        rating=_instrument_field(instrument, "rating"),
+        liquidity_tier=_instrument_field(instrument, "liquidity_tier"),
         valuation=valuation,
-        reprocessing_status=pos_state.status if pos_state else None,
+        reprocessing_status=_position_reprocessing_status(pos_state),
     )
 
 
