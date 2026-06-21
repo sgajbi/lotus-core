@@ -247,6 +247,36 @@ class ValuationScheduler:
             success_extra_key="updated_count",
         )
 
+    async def _load_watermark_advance_inputs(
+        self, repo: ValuationRepository
+    ) -> tuple[Any, list[Any], list[Any], Dict[tuple[str, str, int], Any]] | None:
+        latest_business_date = await repo.get_latest_business_date()
+        if not latest_business_date:
+            return None
+
+        lagging_states = await repo.get_lagging_states(latest_business_date, self._batch_size)
+        terminal_reprocessing_states = await repo.get_terminal_reprocessing_states(
+            latest_business_date, self._batch_size
+        )
+        lagging_keys = [(s.portfolio_id, s.security_id, s.epoch) for s in lagging_states]
+        first_open_dates = await repo.get_first_open_dates_for_keys(lagging_keys)
+        return (
+            latest_business_date,
+            lagging_states,
+            terminal_reprocessing_states,
+            first_open_dates,
+        )
+
+    def _observe_reprocessing_active_keys(
+        self,
+        lagging_states,
+        terminal_reprocessing_states,
+    ) -> None:
+        reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING") + len(
+            terminal_reprocessing_states
+        )
+        REPROCESSING_ACTIVE_KEYS_TOTAL.set(reprocessing_count)
+
     async def _advance_watermarks(self, db):
         """
         Checks all lagging keys, finds how far their snapshots are contiguous,
@@ -255,36 +285,32 @@ class ValuationScheduler:
         repo = ValuationRepository(db)
         position_state_repo = PositionStateRepository(db)
 
-        latest_business_date = await repo.get_latest_business_date()
-        if not latest_business_date:
+        inputs = await self._load_watermark_advance_inputs(repo)
+        if inputs is None:
             return
-
-        lagging_states = await repo.get_lagging_states(latest_business_date, self._batch_size)
-        terminal_reprocessing_states = await repo.get_terminal_reprocessing_states(
-            latest_business_date, self._batch_size
+        (
+            latest_business_date,
+            lagging_states,
+            terminal_reprocessing_states,
+            first_open_dates,
+        ) = inputs
+        self._observe_reprocessing_active_keys(
+            lagging_states,
+            terminal_reprocessing_states,
         )
-        lagging_keys = [(s.portfolio_id, s.security_id, s.epoch) for s in lagging_states]
-        first_open_dates = await repo.get_first_open_dates_for_keys(lagging_keys)
-
-        reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING") + len(
-            terminal_reprocessing_states
-        )
-        REPROCESSING_ACTIVE_KEYS_TOTAL.set(reprocessing_count)
 
         await self._normalize_terminal_reprocessing_states(
             position_state_repo, terminal_reprocessing_states
         )
 
-        if not lagging_states:
-            return
-
-        await self._advance_lagging_watermark_states(
-            repo,
-            position_state_repo,
-            lagging_states=lagging_states,
-            first_open_dates=first_open_dates,
-            latest_business_date=latest_business_date,
-        )
+        if lagging_states:
+            await self._advance_lagging_watermark_states(
+                repo,
+                position_state_repo,
+                lagging_states=lagging_states,
+                first_open_dates=first_open_dates,
+                latest_business_date=latest_business_date,
+            )
 
     def _partition_states_without_position_history(
         self,
