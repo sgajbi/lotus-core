@@ -112,6 +112,7 @@ def test_performance_component_economics_rows_preserve_source_figures() -> None:
     assert row.transaction_id == "TXN-DIV-001"
     assert row.security_id == "EQ_US_AAPL"
     assert row.transaction_type == "DIVIDEND"
+    assert row.trade_currency == "USD"
     assert row.trade_fee_amount == Decimal("2.5000")
     assert row.trade_fee_currency == "USD"
     assert row.cashflow_amount == Decimal("100.0000")
@@ -120,6 +121,7 @@ def test_performance_component_economics_rows_preserve_source_figures() -> None:
     assert row.withholding_tax_amount == Decimal("15.0000")
     assert row.other_interest_deductions_amount == Decimal("5.0000")
     assert row.net_interest_amount == Decimal("80.0000")
+    assert row.realized_pnl_local_currency == "USD"
     assert row.realized_fx_pnl_base == Decimal("3.0000")
     assert row.transaction_fx_rate == Decimal("1.2500000000")
     assert row.fx_contract_id == "FXC-001"
@@ -167,6 +169,8 @@ def test_performance_component_economics_totals_group_domain_figures() -> None:
     assert totals[("realized_fx_pnl", "USD")].amount == Decimal("3.0000")
     assert totals[("realized_total_pnl", "USD")].amount == Decimal("13.0000")
     assert totals[("tax", "EUR")].evidence_count == 2
+    assert rows[0].trade_currency == "USD"
+    assert rows[0].realized_pnl_local_currency == "USD"
 
 
 def test_performance_component_economics_response_reports_coverage_and_lineage() -> None:
