@@ -1893,5 +1893,5 @@ health before that claim is defensible.
      `source_reported_cash_weight`, denominator, and supportability posture so downstream
      `lotus-idea` high-cash evidence does not reconstruct Core-owned cash/AUM facts locally.
      Focused cash-balance, OpenAPI, domain-product, and source-data-product tests passed with
-     39 tests; scoped Ruff passed; `make openapi-gate`, `make api-vocabulary-gate`, and
+     41 tests; scoped Ruff passed; `make openapi-gate`, `make api-vocabulary-gate`, and
      `make domain-product-validate` passed.

@@ -251,6 +251,51 @@ class ReportingRepository:
             for portfolio, snapshot, instrument in rows
         ]
 
+    async def count_latest_open_position_keys(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date: date,
+    ) -> int:
+        history_security_id = func.trim(PositionHistory.security_id)
+        state_security_id = func.trim(PositionState.security_id)
+        latest_history_subq = (
+            select(
+                PositionHistory.portfolio_id.label("portfolio_id"),
+                history_security_id.label("security_id"),
+                PositionHistory.epoch.label("epoch"),
+                PositionHistory.quantity.label("quantity"),
+                func.row_number()
+                .over(
+                    partition_by=(PositionHistory.portfolio_id, history_security_id),
+                    order_by=(PositionHistory.position_date.desc(), PositionHistory.id.desc()),
+                )
+                .label("rn"),
+            )
+            .join(
+                PositionState,
+                and_(
+                    PositionHistory.portfolio_id == PositionState.portfolio_id,
+                    history_security_id == state_security_id,
+                    PositionHistory.epoch == PositionState.epoch,
+                ),
+            )
+            .where(
+                PositionHistory.portfolio_id == portfolio_id,
+                PositionHistory.position_date <= as_of_date,
+            )
+            .subquery()
+        )
+        stmt = (
+            select(func.count())
+            .select_from(latest_history_subq)
+            .where(
+                latest_history_subq.c.rn == 1,
+                latest_history_subq.c.quantity != 0,
+            )
+        )
+        return int((await self.db.execute(stmt)).scalar_one() or 0)
+
     async def get_latest_fx_rate(
         self,
         *,
