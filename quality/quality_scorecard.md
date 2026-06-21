@@ -1206,3 +1206,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   watermark-update construction, epoch-fenced bulk update, and stale-skip logging helpers, reducing
   `_advance_watermarks` from `C (18)` to `B (6)` while preserving persisted update payloads and
   stale-skip metric reasons.
+- CR-1156 split valuation scheduler backfill job creation into focused no-history normalization,
+  defer logging, lag metric, deterministic job-request construction, and per-state staging helpers,
+  reducing `_create_backfill_jobs` from `C (20)` to `A (4)` and leaving the source-wide
+  C-or-worse scan empty.

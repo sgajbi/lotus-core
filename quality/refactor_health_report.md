@@ -1869,3 +1869,11 @@ health before that claim is defensible.
      scoped Ruff and format checks passed; Radon reports `_advance_watermarks` reduced from
      `C (18)` to `B (6)`. The remaining C-ranked scheduler workflow is
      `_create_backfill_jobs(...)`.
+308. Reduced valuation scheduler backfill-job complexity by extracting no-history state
+     partitioning, no-history normalization update construction, no-history normalization
+     persistence/logging, reprocessing defer logging, backfill gap metric observation,
+     missing current-epoch history logging, deterministic `ValuationJobUpsert` request
+     construction, per-state job staging, and ordered per-state processing from
+     `ValuationScheduler._create_backfill_jobs(...)`. Focused scheduler tests passed with
+     20 tests; scoped Ruff and format checks passed; Radon reports `_create_backfill_jobs`
+     reduced from `C (20)` to `A (4)`, and the source-wide C-or-worse scan is empty.
