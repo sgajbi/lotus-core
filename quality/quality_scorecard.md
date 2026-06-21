@@ -1173,3 +1173,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1146 split ingestion job retry workflow into focused replay-context, payload-shaping,
   retry-policy, audit, dry-run, duplicate-blocking, publish, bookkeeping, and final reload helpers,
   reducing `retry_ingestion_job` from `C (11)` to `A (2)`.
+- CR-1147 split consumer-DLQ replay workflow into focused event lookup, correlated-job,
+  replay-candidate, audit-response, duplicate-blocking, publish-failure, and replay-bookkeeping
+  helpers, reducing `replay_consumer_dlq_event` from `C (18)` to `A (5)` and leaving
+  `ingestion_operations.py` with no C-or-worse functions.
