@@ -6,26 +6,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .reference_integration_common_dto import IntegrationWindow
 from .source_data_product_identity import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
-
-
-class IntegrationWindow(BaseModel):
-    start_date: date = Field(
-        ...,
-        description="Window start date for series retrieval (inclusive).",
-        examples=["2026-01-01"],
-    )
-    end_date: date = Field(
-        ...,
-        description="Window end date for series retrieval (inclusive).",
-        examples=["2026-01-31"],
-    )
-
-    model_config = ConfigDict()
 
 
 class IntegrationPolicyContext(BaseModel):

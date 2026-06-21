@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 from pydantic import ValidationError
 
@@ -123,6 +125,14 @@ def test_performance_component_economics_request_rejects_unbounded_window() -> N
             as_of_date="2026-12-31",
             window={"start_date": "2025-12-30", "end_date": "2026-12-31"},
         )
+
+
+def test_performance_component_economics_dto_imports_without_aggregate_cycle() -> None:
+    module = importlib.import_module(
+        "src.services.query_service.app.dtos.reference_integration_performance_component_economics_dto"
+    )
+
+    assert module.PerformanceComponentEconomicsRequest is PerformanceComponentEconomicsRequest
 
 
 @pytest.mark.parametrize(
