@@ -20,8 +20,10 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
 1. PR is mandatory, even without reviewer approval requirements.
 2. Treat PR checks as the quality approval layer.
 3. Enable auto-merge only on protected branches and only for PRs explicitly labeled `automerge`.
-4. Missing or removing the `automerge` label must be a successful no-op, not a skipped required-check
-   signal; re-add the label when a PR is ready to queue again.
+4. Missing the `automerge` label must be a successful no-op, not a skipped required-check signal.
+   Removing the label prevents this workflow from issuing a new queue request; it does not disable
+   GitHub auto-merge after it has already been enabled. Use `gh pr merge --disable-auto <pr>` or
+   the GitHub UI to cancel an already-enabled auto-merge request.
 
 ## CI Gate Tiers
 
