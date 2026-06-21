@@ -51,72 +51,44 @@ Boundary rules that matter:
 
 ## Current Operational Posture
 
-1. `lotus-core` is the domain authority for portfolio-management and transaction data.
-2. RFC-0082 governs downstream-facing contract-family ownership.
-3. RFC-0083 governs the system-of-record target architecture and current implementation program.
-4. The repository already carries a heavy banking-grade CI contract with architecture, OpenAPI,
-   warning, coverage, runtime, and operational gates.
-5. App-local compose remains available for isolated development, but shared platform runtime support
-   is owned centrally in `lotus-platform`.
-6. DPM source-data products for `lotus-manage` now include source-owned
-   `PortfolioManagerBookMembership:v1` and `CioModelChangeAffectedCohort:v1` contracts for
-   automatic PM-book and CIO model-change cohort discovery, resolved from core portfolio master,
-   approved model, and mandate-binding truth without making core a rebalance decisioning service.
-   `DpmPortfolioUniverseCandidate:v1` extends that source-owner boundary with paged DPM
-   portfolio-universe candidate discovery from effective discretionary mandate bindings without
-   claiming client householding, suitability approval, PM ranking, execution, or external workflow
-   ownership.
-   RFC40-WTBD-008 extends that source-owner boundary with `ClientRestrictionProfile:v1` and
-   `SustainabilityPreferenceProfile:v1` so downstream stateful construction can consume governed
-   mandate restrictions and sustainability preferences instead of local fallback truth.
-   RFC42-WTBD-006 extends the tax-reference boundary with `ClientTaxProfile:v1` and
-   `ClientTaxRuleSet:v1` so downstream consumers can carry source-owned tax evidence without
-   claiming tax advice, after-tax optimization, tax-loss harvesting, client-tax approval, or
-   jurisdiction-specific recommendations. The same source-owner slice now adds
-   `ClientIncomeNeedsSchedule:v1`, `LiquidityReserveRequirement:v1`, and
-   `PlannedWithdrawalSchedule:v1` so downstream DPM workflows can carry bounded income, reserve,
-   and withdrawal evidence without claiming financial-planning advice, suitability approval,
-   funding recommendations, cashflow forecasting, treasury instructions, or OMS acknowledgement.
-   `PortfolioRealizedTaxSummary:v1` adds source-owned portfolio realized-tax totals from explicit
-   booked withholding-tax and other-interest-deduction ledger evidence without claiming tax advice,
-   after-tax optimization, tax-loss harvesting, client-tax approval, tax-reporting certification,
-   execution quality, or OMS acknowledgement.
-7. `TransactionLedgerWindow:v1` preserves explicit row-level realized FX P&L evidence and can
-   restate book-currency and trade/local-currency fields into a requested reporting currency with
-   field-aware source-currency selection, without promoting portfolio-level FX attribution.
-8. `PortfolioCashflowProjection:v1` emits daily booked, projected-settlement, net, cumulative, and
-   component-total cashflow evidence in portfolio base currency so downstream outcome consumers can
-   preserve operational cash-movement components across a bounded one-year operational horizon
-   without deriving liquidity ladders, income-needs advice, or OMS execution forecasts.
-9. `PortfolioCashMovementSummary:v1` emits source-owned cash movement totals over latest cashflow
-   rows by classification, timing, currency, and flow scope across a bounded one-year operational
-   window without claiming cashflow forecasting, funding recommendations, treasury instructions,
-   liquidity advice, execution quality, tax methodology, or OMS acknowledgement.
-10. RFC39-WTBD-008 external treasury source products now include active fail-closed
-    `ExternalCurrencyExposure:v1`, `ExternalHedgePolicy:v1`,
-    `ExternalEligibleHedgeInstrument:v1`, `ExternalFXForwardCurve:v1`, and
-    `ExternalHedgeExecutionReadiness:v1` routes at
-    `/integration/portfolios/{portfolio_id}/external-currency-exposure` and
-    `/integration/portfolios/{portfolio_id}/external-hedge-policy`,
-    `/integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments`,
-    `/integration/market-data/external-fx-forward-curve`, and
-    `/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness`. They return
-    `UNAVAILABLE` until bank-owned treasury ingestion is certified.
-    `ExternalEligibleHedgeInstrument:v1`, `ExternalFXForwardCurve:v1`, and
-    `ExternalHedgeExecutionReadiness:v1` now have implementation-backed methodology truth at
-    `docs/methodologies/source-data-products/external-eligible-hedge-instrument.md`,
-    `docs/methodologies/source-data-products/external-fx-forward-curve.md`, and
-    `docs/methodologies/source-data-products/external-hedge-execution-readiness.md`. None of these contracts create
-    FX attribution, hedge advice, hedge-policy approval, eligible-instrument selection, product
-    recommendations, forward pricing, treasury instructions, counterparty selection, order
-    generation, venue-routing, best execution, OMS acknowledgement, fills, or settlement claims.
-11. RFC42-WTBD execution boundary coverage adds `ExternalOrderExecutionAcknowledgement:v1` at
-    `/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement`. It returns
-    `UNAVAILABLE` until bank-owned OMS acknowledgement ingestion is certified. Its
-    implementation-backed methodology is documented in
-    `docs/methodologies/source-data-products/external-order-execution-acknowledgement.md`; it does
-    not create orders, route venues, declare best execution, acknowledge OMS execution, certify
-    fills, confirm settlement, or perform autonomous execution action.
+`lotus-core` is an implementation-backed domain service with a heavy validation contract. It is not
+a marketing surface, and this README does not claim bank-buyable readiness by itself.
+
+Current repo truth:
+
+1. RFC-0082 governs downstream-facing contract-family ownership.
+2. RFC-0083 governs the system-of-record target architecture and hardening program.
+3. `query_service` is the operational read plane.
+4. `query_control_plane_service` is the governed plane for analytics-input, snapshot/simulation,
+   support, lineage, policy, source-data product, and capability contracts.
+5. App-local Docker Compose remains available for isolated backend development; shared platform
+   runtime and ingress ownership belongs in `lotus-platform`.
+6. `make lotus-core-validate` writes machine-readable app-level evidence under
+   `output/lotus-core-validation/` and is report-only in PR CI until its signal is proven stable
+   enough for blocking promotion.
+7. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
+   [CR-1123](docs/architecture/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
+
+For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
+For detailed source-data products and boundary caveats, use
+[wiki/Mesh-Data-Products.md](wiki/Mesh-Data-Products.md) and the methodology docs under
+[docs/methodologies/source-data-products/](docs/methodologies/source-data-products).
+
+## Reader Paths
+
+- Business, sales, and demo readers:
+  [Supported Features](wiki/Supported-Features.md), [Overview](wiki/Overview.md), and
+  [Integrations](wiki/Integrations.md)
+- Operators and support teams:
+  [Operations Runbook](wiki/Operations-Runbook.md), [Support and Lineage](wiki/Support-and-Lineage.md),
+  and [Troubleshooting](wiki/Troubleshooting.md)
+- Engineers:
+  [Getting Started](wiki/Getting-Started.md), [Development Workflow](wiki/Development-Workflow.md),
+  [Validation and CI](wiki/Validation-and-CI.md), and
+  [Architecture Index](docs/architecture/README.md)
+- API and contract reviewers:
+  [API Surface](wiki/API-Surface.md), [RFC Index](wiki/RFC-Index.md), and
+  [RFC-0082 Contract Family Inventory](docs/architecture/RFC-0082-contract-family-inventory.md)
 
 ## Architecture At A Glance
 
