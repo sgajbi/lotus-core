@@ -11,7 +11,9 @@
 5. governed query-control-plane source-data products,
 6. ingestion and persistence support surfaces,
 7. reconciliation, supportability, lineage, and operational evidence APIs,
-8. DPM and front-office source-data product support where declared in repository contracts.
+8. DPM and front-office source-data product support where declared in repository contracts,
+9. performance-facing component economics evidence where declared as
+   `PerformanceComponentEconomics:v1`.
 
 ## Supported Surface Families
 
@@ -23,7 +25,7 @@ Core support map:
 3. Position, valuation, and cashflow calculators
 4. Operational read plane
 5. Query control plane
-6. DPM source-data products
+6. Performance and DPM source-data products
 7. Ingestion and replay
 8. Reconciliation and supportability
 9. Simulation and advisory source effects
