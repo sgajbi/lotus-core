@@ -14,6 +14,51 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .identifier_normalization import normalize_security_id
 
 
+def _normalized_security_ids(security_ids: list[str] | None) -> list[str] | None:
+    if not security_ids:
+        return None
+    return [
+        normalized
+        for security_id in security_ids
+        if (normalized := normalize_security_id(security_id))
+    ]
+
+
+def _normalized_lot_status(lot_status_filter: str | None) -> str:
+    return (lot_status_filter or "").strip().upper()
+
+
+def _requires_open_lots(*, include_closed_lots: bool, status_filter: str) -> bool:
+    if status_filter == "OPEN" or (not include_closed_lots and status_filter != "CLOSED"):
+        return True
+    return False
+
+
+def _tax_lot_status_filter(*, include_closed_lots: bool, lot_status_filter: str | None):
+    status_filter = _normalized_lot_status(lot_status_filter)
+    if _requires_open_lots(include_closed_lots=include_closed_lots, status_filter=status_filter):
+        return PositionLotState.open_quantity > 0
+    return PositionLotState.open_quantity <= 0 if status_filter == "CLOSED" else None
+
+
+def _tax_lot_keyset_filter(after_sort_key: tuple[date, str] | None):
+    if after_sort_key is None:
+        return None
+    acquisition_date, lot_id = after_sort_key
+    return or_(
+        PositionLotState.acquisition_date > acquisition_date,
+        and_(
+            PositionLotState.acquisition_date == acquisition_date,
+            PositionLotState.lot_id > lot_id,
+        ),
+    )
+
+
+def _append_optional_filter(filters: list, predicate) -> None:
+    if predicate is not None:
+        filters.append(predicate)
+
+
 class BuyStateRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -50,35 +95,24 @@ class BuyStateRepository:
         after_sort_key: tuple[date, str] | None,
         limit: int,
     ) -> list[tuple[PositionLotState, str | None]]:
+        normalized_security_ids = _normalized_security_ids(security_ids)
+        if security_ids and not normalized_security_ids:
+            return []
+
         filters = [
             PositionLotState.portfolio_id == portfolio_id,
             PositionLotState.acquisition_date <= as_of_date,
         ]
-        if security_ids:
-            normalized_security_ids = [
-                normalized
-                for security_id in security_ids
-                if (normalized := normalize_security_id(security_id))
-            ]
-            if not normalized_security_ids:
-                return []
+        if normalized_security_ids:
             filters.append(func.trim(PositionLotState.security_id).in_(normalized_security_ids))
-        status_filter = (lot_status_filter or "").strip().upper()
-        if status_filter == "OPEN" or (not include_closed_lots and status_filter != "CLOSED"):
-            filters.append(PositionLotState.open_quantity > 0)
-        elif status_filter == "CLOSED":
-            filters.append(PositionLotState.open_quantity <= 0)
-        if after_sort_key is not None:
-            acquisition_date, lot_id = after_sort_key
-            filters.append(
-                or_(
-                    PositionLotState.acquisition_date > acquisition_date,
-                    and_(
-                        PositionLotState.acquisition_date == acquisition_date,
-                        PositionLotState.lot_id > lot_id,
-                    ),
-                )
-            )
+        _append_optional_filter(
+            filters,
+            _tax_lot_status_filter(
+                include_closed_lots=include_closed_lots,
+                lot_status_filter=lot_status_filter,
+            ),
+        )
+        _append_optional_filter(filters, _tax_lot_keyset_filter(after_sort_key))
         stmt = (
             select(PositionLotState, Transaction.trade_currency)
             .outerjoin(

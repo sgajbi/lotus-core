@@ -1751,3 +1751,9 @@ health before that claim is defensible.
      `TransactionRepository._apply_filters(...)`. Focused transaction repository tests passed with
      27 tests, including direct count-query coverage for identity and date filters; scoped Ruff
      passed; Radon reports `_apply_filters` reduced from `C (14)` to `A (1)`.
+290. Reduced buy-state tax-lot filter complexity by extracting security-scope normalization,
+     lot-status predicate selection, keyset pagination, and optional predicate appending from
+     `BuyStateRepository.list_portfolio_tax_lots(...)`. Focused buy-state repository tests passed
+     with 10 tests, including direct blank-security no-query and keyset predicate coverage; scoped
+     Ruff and format checks passed; Radon reports `list_portfolio_tax_lots` reduced from `C (11)`
+     to `A (4)`, with every function/class in `buy_state_repository.py` A-ranked.

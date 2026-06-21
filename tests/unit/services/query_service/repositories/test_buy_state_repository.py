@@ -121,3 +121,43 @@ async def test_list_portfolio_tax_lots_normalizes_closed_status_filter():
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_lot_state.open_quantity <= 0" in compiled_query
     assert "position_lot_state.open_quantity > 0" not in compiled_query
+
+
+async def test_list_portfolio_tax_lots_skips_blank_security_scope():
+    db = AsyncMock()
+    repo = BuyStateRepository(db)
+
+    rows = await repo.list_portfolio_tax_lots(
+        portfolio_id="PORT-1",
+        as_of_date=date(2026, 4, 10),
+        security_ids=[" ", ""],
+        include_closed_lots=True,
+        lot_status_filter=None,
+        after_sort_key=None,
+        limit=251,
+    )
+
+    assert rows == []
+    db.execute.assert_not_awaited()
+
+
+async def test_list_portfolio_tax_lots_applies_keyset_pagination():
+    db = AsyncMock()
+    db.execute.return_value = _mock_result(all_rows=[])
+    repo = BuyStateRepository(db)
+
+    await repo.list_portfolio_tax_lots(
+        portfolio_id="PORT-1",
+        as_of_date=date(2026, 4, 10),
+        security_ids=None,
+        include_closed_lots=True,
+        lot_status_filter=None,
+        after_sort_key=(date(2026, 1, 15), "LOT-010"),
+        limit=251,
+    )
+
+    executed_stmt = db.execute.call_args.args[0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "position_lot_state.acquisition_date > '2026-01-15'" in compiled_query
+    assert "position_lot_state.acquisition_date = '2026-01-15'" in compiled_query
+    assert "position_lot_state.lot_id > 'LOT-010'" in compiled_query
