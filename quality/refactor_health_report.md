@@ -1709,3 +1709,9 @@ health before that claim is defensible.
      scoped Ruff and typecheck passed, and Radon reports `resolve_policy_context` reduced from
      `C (11)` to `A (2)`, `build_effective_policy_response` reduced from `B (8)` to `A (2)`, and
      all functions/classes in `integration_policy.py` A-ranked.
+283. Reduced advisory drift highlight complexity by extracting largest-improvement,
+     largest-deterioration, max-exposure, unmodeled-exposure, and highlight-entry helpers from
+     `_build_highlights(...)`. Focused drift analytics tests passed with 4 tests, including direct
+     ordering and top-limit proof. Scoped Ruff passed. Radon reports `_build_highlights` reduced
+     from `C (11)` to `A (1)`, every function in `drift_analytics.py` is A-ranked, and module
+     maintainability remains A-ranked at `A (40.38)`.

@@ -127,6 +127,67 @@ def test_compute_drift_analysis_instrument_union_and_unmodeled_exposure():
     assert analysis.highlights.largest_deteriorations[0].bucket == "EQ_C"
 
 
+def test_compute_drift_analysis_highlights_are_ordered_and_limited():
+    before = _state(
+        asset_allocations=[_allocation("CASH", "1.0")],
+        instrument_allocations=[
+            _allocation("EQ_A", "0.70"),
+            _allocation("EQ_B", "0.05"),
+            _allocation("EQ_C", "0.05"),
+            _allocation("EQ_D", "0.12"),
+            _allocation("EQ_E", "0.11"),
+            _allocation("EQ_F", "0.10"),
+        ],
+    )
+    after = _state(
+        asset_allocations=[_allocation("CASH", "1.0")],
+        instrument_allocations=[
+            _allocation("EQ_A", "0.40"),
+            _allocation("EQ_B", "0.25"),
+            _allocation("EQ_C", "0.20"),
+            _allocation("EQ_D", "0.12"),
+            _allocation("EQ_E", "0.11"),
+            _allocation("EQ_F", "0.00"),
+        ],
+    )
+    reference_model = ReferenceModel(
+        model_id="model_4",
+        as_of="2026-02-18",
+        base_currency="USD",
+        asset_class_targets=[ReferenceAssetClassTarget(asset_class="CASH", weight=Decimal("1.0"))],
+        instrument_targets=[
+            ReferenceInstrumentTarget(instrument_id="EQ_A", weight=Decimal("0.40")),
+            ReferenceInstrumentTarget(instrument_id="EQ_B", weight=Decimal("0.25")),
+            ReferenceInstrumentTarget(instrument_id="EQ_C", weight=Decimal("0.25")),
+            ReferenceInstrumentTarget(instrument_id="EQ_F", weight=Decimal("0.10")),
+        ],
+    )
+
+    analysis = compute_drift_analysis(
+        before=before,
+        after=after,
+        reference_model=reference_model,
+        traded_instruments={"EQ_D", "EQ_E"},
+        options=EngineOptions(
+            enable_instrument_drift=True,
+            drift_top_contributors_limit=2,
+            drift_unmodeled_exposure_threshold=Decimal("0.10"),
+        ),
+    )
+
+    assert [entry.bucket for entry in analysis.highlights.largest_improvements] == [
+        "EQ_A",
+        "EQ_B",
+    ]
+    assert [entry.bucket for entry in analysis.highlights.largest_deteriorations] == [
+        "EQ_F",
+    ]
+    assert [entry.bucket for entry in analysis.highlights.unmodeled_exposures] == [
+        "EQ_D",
+        "EQ_E",
+    ]
+
+
 def test_compute_drift_analysis_skips_instrument_dimension_when_disabled():
     before = _state(asset_allocations=[_allocation("CASH", "1.0")], instrument_allocations=[])
     after = _state(asset_allocations=[_allocation("CASH", "1.0")], instrument_allocations=[])

@@ -1112,3 +1112,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   policy, provenance, warning, and requested-section filtering helpers, reducing
   `resolve_policy_context` from `C (11)` to `A (2)` and `build_effective_policy_response` from
   `B (8)` to `A (2)` while preserving tenant/global policy semantics and response shape.
+- CR-1131 split advisory drift highlight construction into focused improvement, deterioration,
+  max-exposure, unmodeled-exposure, and highlight-entry helpers, reducing `_build_highlights` from
+  `C (11)` to `A (1)` while preserving deterministic advisory drift highlight ordering.
