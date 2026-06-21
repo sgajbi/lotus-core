@@ -1649,3 +1649,13 @@ health before that claim is defensible.
      updates while SELL events still persist them. Radon no longer reports any B-ranked method in
      `cost_calculator_service/app/consumer.py`; the module remains A-ranked maintainability at
      `A (19.49)`.
+274. Reduced cost-engine strategy policy complexity by extracting common zero-cost and realized-P&L
+     assignment, BUY cost-field/invariant validation, SELL proceeds/availability/cost-basis/disposal
+     policy, DIVIDEND/INTEREST zero-quantity/price/cost invariants, INTEREST direction normalization,
+     and transaction FX validation helpers in `cost_calculator.py`. Focused cost-engine tests passed
+     with 72 tests and scoped Ruff passed. Radon now reports no B-or-worse functions/classes in
+     `cost_calculator.py`: `SellStrategy.calculate_costs` is `A (4)`, `BuyStrategy.calculate_costs`
+     is `A (2)`, `InterestStrategy.calculate_costs` is `A (4)`, `DividendStrategy.calculate_costs`
+     is `A (3)`, and `CostCalculator._validate_fx` is `A (2)`. Residual risk remains: the module is
+     still B-ranked maintainability (`B (16.31)`) and should remain on the cost-engine modularity
+     backlog.
