@@ -77,55 +77,88 @@ def _build_dimension(
     )
 
 
+def _largest_improvement_details(
+    details: list[DriftBucketDetail],
+    top_limit: int,
+) -> list[DriftBucketDetail]:
+    return sorted(
+        [detail for detail in details if detail.improvement > 0],
+        key=lambda detail: (-detail.improvement, detail.bucket),
+    )[:top_limit]
+
+
+def _largest_deterioration_details(
+    details: list[DriftBucketDetail],
+    top_limit: int,
+) -> list[DriftBucketDetail]:
+    return sorted(
+        [detail for detail in details if detail.improvement < 0],
+        key=lambda detail: (detail.improvement, detail.bucket),
+    )[:top_limit]
+
+
+def _max_portfolio_weight(detail: DriftBucketDetail) -> Decimal:
+    return max(detail.portfolio_weight_before, detail.portfolio_weight_after)
+
+
+def _is_unmodeled_exposure(
+    detail: DriftBucketDetail,
+    unmodeled_threshold: Decimal,
+) -> bool:
+    return detail.model_weight == 0 and _max_portfolio_weight(detail) >= unmodeled_threshold
+
+
+def _unmodeled_exposure_details(
+    *,
+    details: list[DriftBucketDetail],
+    top_limit: int,
+    unmodeled_threshold: Decimal,
+) -> list[DriftBucketDetail]:
+    return sorted(
+        [detail for detail in details if _is_unmodeled_exposure(detail, unmodeled_threshold)],
+        key=lambda detail: (-_max_portfolio_weight(detail), detail.bucket),
+    )[:top_limit]
+
+
+def _highlight_entries(details: list[DriftBucketDetail]) -> list[DriftHighlightEntry]:
+    return [
+        DriftHighlightEntry(bucket=detail.bucket, improvement=detail.improvement)
+        for detail in details
+    ]
+
+
+def _unmodeled_exposure_entries(
+    details: list[DriftBucketDetail],
+) -> list[DriftUnmodeledExposure]:
+    return [
+        DriftUnmodeledExposure(
+            bucket=detail.bucket,
+            portfolio_weight_before=detail.portfolio_weight_before,
+            portfolio_weight_after=detail.portfolio_weight_after,
+            max_portfolio_weight=_max_portfolio_weight(detail),
+        )
+        for detail in details
+    ]
+
+
 def _build_highlights(
     *,
     details: list[DriftBucketDetail],
     top_limit: int,
     unmodeled_threshold: Decimal,
 ) -> DriftHighlights:
-    improvements = sorted(
-        [detail for detail in details if detail.improvement > 0],
-        key=lambda detail: (-detail.improvement, detail.bucket),
-    )[:top_limit]
-    deteriorations = sorted(
-        [detail for detail in details if detail.improvement < 0],
-        key=lambda detail: (detail.improvement, detail.bucket),
-    )[:top_limit]
-    unmodeled = sorted(
-        [
-            detail
-            for detail in details
-            if detail.model_weight == 0
-            and max(detail.portfolio_weight_before, detail.portfolio_weight_after)
-            >= unmodeled_threshold
-        ],
-        key=lambda detail: (
-            -max(detail.portfolio_weight_before, detail.portfolio_weight_after),
-            detail.bucket,
-        ),
-    )[:top_limit]
-
     return DriftHighlights(
-        largest_improvements=[
-            DriftHighlightEntry(bucket=detail.bucket, improvement=detail.improvement)
-            for detail in improvements
-        ],
-        largest_deteriorations=[
-            DriftHighlightEntry(bucket=detail.bucket, improvement=detail.improvement)
-            for detail in deteriorations
-        ],
-        unmodeled_exposures=[
-            DriftUnmodeledExposure(
-                bucket=detail.bucket,
-                portfolio_weight_before=detail.portfolio_weight_before,
-                portfolio_weight_after=detail.portfolio_weight_after,
-                max_portfolio_weight=max(
-                    detail.portfolio_weight_before,
-                    detail.portfolio_weight_after,
-                ),
+        largest_improvements=_highlight_entries(_largest_improvement_details(details, top_limit)),
+        largest_deteriorations=_highlight_entries(
+            _largest_deterioration_details(details, top_limit)
+        ),
+        unmodeled_exposures=_unmodeled_exposure_entries(
+            _unmodeled_exposure_details(
+                details=details,
+                top_limit=top_limit,
+                unmodeled_threshold=unmodeled_threshold,
             )
-            for detail in unmodeled
-        ],
+        ),
     )
 
 
