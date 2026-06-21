@@ -70,3 +70,12 @@ def test_pr_auto_merge_does_not_probe_branch_protection_with_github_token() -> N
 
     assert "/branches/main/protection" not in workflow_text
     assert "administration:" not in workflow_text
+
+
+def test_pr_auto_merge_does_not_emit_skipped_checks_for_label_removal() -> None:
+    workflow_text = Path(".github/workflows/pr-auto-merge.yml").read_text(encoding="utf-8")
+
+    assert "labeled" in workflow_text
+    assert "unlabeled" not in workflow_text
+    assert "HAS_AUTOMERGE_LABEL:" in workflow_text
+    assert "Skipping auto-merge queue because the automerge label is absent." in workflow_text
