@@ -36,6 +36,7 @@ LOTUS_PERFORMANCE_REQUIRED_PRODUCTS = {
     "InstrumentReferenceBundle",
     "BenchmarkAssignment",
     "BenchmarkConstituentWindow",
+    "PerformanceComponentEconomics",
     "IndexSeriesWindow",
     "RiskFreeSeriesWindow",
     "ReconciliationEvidenceBundle",

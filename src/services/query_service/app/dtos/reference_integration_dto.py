@@ -2409,6 +2409,14 @@ from .reference_integration_portfolio_tax_lot_dto import (  # noqa: E402, F401
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
 )
+from .reference_integration_performance_component_economics_dto import (  # noqa: E402, F401
+    PerformanceComponentEconomicsRequest,
+    PerformanceComponentEconomicsResponse,
+    PerformanceComponentEconomicsRow,
+    PerformanceComponentEconomicsSupportability,
+    PerformanceComponentEconomicsTotal,
+    SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES,
+)
 from .reference_integration_transaction_cost_dto import (  # noqa: E402, F401
     TransactionCostCurvePageRequest,
     TransactionCostCurvePoint,

@@ -57,6 +57,8 @@ from ..dtos.reference_integration_dto import (
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
+    PerformanceComponentEconomicsRequest,
+    PerformanceComponentEconomicsResponse,
     PlannedWithdrawalScheduleRequest,
     PlannedWithdrawalScheduleResponse,
     PortfolioManagerBookMembershipRequest,
@@ -124,6 +126,9 @@ from .market_data_coverage import (
 )
 from .model_portfolio_targets import resolve_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
+from .performance_component_economics import (
+    resolve_performance_component_economics_response,
+)
 from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_response
 from .portfolio_manager_book_membership import (
     resolve_portfolio_manager_book_membership_response,
@@ -410,6 +415,18 @@ class IntegrationService:
             request=request,
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
+        )
+
+    async def get_performance_component_economics(
+        self,
+        *,
+        portfolio_id: str,
+        request: PerformanceComponentEconomicsRequest,
+    ) -> PerformanceComponentEconomicsResponse:
+        return await resolve_performance_component_economics_response(
+            repository=self._transaction_repository,
+            portfolio_id=portfolio_id,
+            request=request,
         )
 
     async def get_market_data_coverage(

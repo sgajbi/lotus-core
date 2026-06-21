@@ -29,6 +29,7 @@ from tests.integration.services.query_control_plane_service.openapi_schema_contr
     DPM_PORTFOLIO_UNIVERSE_CANDIDATE_SCHEMA_ROOTS,
     DPM_SOURCE_READINESS_SCHEMA_ROOTS,
     DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS,
+    PERFORMANCE_COMPONENT_ECONOMICS_SCHEMA_ROOTS,
     INGESTION_EVIDENCE_SCHEMA_ROOTS,
     INSTRUMENT_ENRICHMENT_SCHEMA_ROOTS,
     INTEGRATION_POLICY_SCHEMA_ROOTS,
@@ -2098,6 +2099,19 @@ async def test_openapi_fully_documents_dpm_transaction_cost_curve_schema_family(
     assert_schema_properties_are_documented_and_exampled(
         schema,
         DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS,
+    )
+
+
+async def test_openapi_fully_documents_performance_component_economics_schema_family(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert_schema_properties_are_documented_and_exampled(
+        schema,
+        PERFORMANCE_COMPONENT_ECONOMICS_SCHEMA_ROOTS,
     )
 
 
