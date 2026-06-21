@@ -130,7 +130,7 @@ def _tenant_allowed_sections(
     )
     if tenant_allowed is not None:
         return tenant_allowed, tenant_match_key
-    return normalize_sections(tenant_policy.get("default_sections")), None
+    return normalize_sections(tenant_policy.get("default_sections")), tenant_match_key
 
 
 def _tenant_matched_rule_id(
