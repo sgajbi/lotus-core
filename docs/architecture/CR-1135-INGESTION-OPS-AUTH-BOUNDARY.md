@@ -67,8 +67,8 @@ Measured movement:
 ## Residual Risk
 
 This slice does not change API routes, auth configuration names, error codes, JWT algorithm support,
-or token/JWT precedence semantics. `enforce_ingestion_write_rate_limit(...)` remains a separate
-B-ranked helper and should be handled only as a focused rate-limit slice with direct behavior proof.
+or token/JWT precedence semantics. CR-1136 addresses the separate write rate-limit helper hotspot on
+the same branch.
 
 ## Bank-Buyable Control Movement
 

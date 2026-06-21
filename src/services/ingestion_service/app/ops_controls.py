@@ -45,31 +45,62 @@ def _evict_expired(events: deque[_WriteEvent], now_utc: datetime) -> None:
         events.popleft()
 
 
+def _normalized_record_count(record_count: int) -> int:
+    return max(record_count, 1)
+
+
+def _projected_rate_limit_usage(
+    *,
+    events: deque[_WriteEvent],
+    record_count: int,
+) -> tuple[int, int]:
+    current_records = sum(item.record_count for item in events)
+    return len(events) + 1, current_records + record_count
+
+
+def _rate_limit_exceeded(*, projected_requests: int, projected_records: int) -> bool:
+    return (
+        projected_requests > RATE_LIMIT_MAX_REQUESTS or projected_records > RATE_LIMIT_MAX_RECORDS
+    )
+
+
+def _rate_limit_error_message() -> str:
+    return (
+        "Ingestion write rate limit exceeded. "
+        f"window_seconds={RATE_LIMIT_WINDOW_SECONDS}, "
+        f"max_requests={RATE_LIMIT_MAX_REQUESTS}, "
+        f"max_records={RATE_LIMIT_MAX_RECORDS}."
+    )
+
+
+def _record_write_event(
+    *,
+    events: deque[_WriteEvent],
+    now_utc: datetime,
+    record_count: int,
+) -> None:
+    events.append(_WriteEvent(observed_at=now_utc, record_count=record_count))
+
+
 def enforce_ingestion_write_rate_limit(*, endpoint: str, record_count: int) -> None:
     if not RATE_LIMIT_ENABLED:
         return
-    if record_count < 1:
-        record_count = 1
 
+    record_count = _normalized_record_count(record_count)
     now_utc = datetime.now(UTC)
     with _rate_limit_lock:
         events = _write_events[endpoint]
         _evict_expired(events, now_utc)
-        current_requests = len(events)
-        current_records = sum(item.record_count for item in events)
-        projected_requests = current_requests + 1
-        projected_records = current_records + record_count
-        if (
-            projected_requests > RATE_LIMIT_MAX_REQUESTS
-            or projected_records > RATE_LIMIT_MAX_RECORDS
+        projected_requests, projected_records = _projected_rate_limit_usage(
+            events=events,
+            record_count=record_count,
+        )
+        if _rate_limit_exceeded(
+            projected_requests=projected_requests,
+            projected_records=projected_records,
         ):
-            raise PermissionError(
-                "Ingestion write rate limit exceeded. "
-                f"window_seconds={RATE_LIMIT_WINDOW_SECONDS}, "
-                f"max_requests={RATE_LIMIT_MAX_REQUESTS}, "
-                f"max_records={RATE_LIMIT_MAX_RECORDS}."
-            )
-        events.append(_WriteEvent(observed_at=now_utc, record_count=record_count))
+            raise PermissionError(_rate_limit_error_message())
+        _record_write_event(events=events, now_utc=now_utc, record_count=record_count)
 
 
 def _ops_auth_error(status_code: int, *, code: str, message: str) -> HTTPException:
