@@ -1883,3 +1883,9 @@ health before that claim is defensible.
      `ValuationScheduler._dispatch_jobs(...)`. Focused scheduler tests passed with 20 tests;
      scoped Ruff and format checks passed; Radon reports `_dispatch_jobs` reduced from
      `B (7)` to `A (5)`.
+310. Reduced valuation scheduler watermark orchestration complexity by extracting
+     watermark-advance input loading and active reprocessing key metric observation from
+     `ValuationScheduler._advance_watermarks(...)`. Focused scheduler tests passed with
+     20 tests; scoped Ruff and format checks passed; Radon reports `_advance_watermarks`
+     reduced from `B (6)` to `A (3)`, and every function/class in
+     `valuation_scheduler.py` is A-ranked.

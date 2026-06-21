@@ -1213,3 +1213,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1157 split valuation scheduler dispatch into focused record-key, correlation-header,
   event-payload, publish, partial-failure, and delivery-confirmation helpers, reducing
   `_dispatch_jobs` from `B (7)` to `A (5)` while preserving Kafka payload and flush behavior.
+- CR-1158 split valuation scheduler watermark orchestration into focused input-loading and
+  active-key metric helpers, reducing `_advance_watermarks` from `B (6)` to `A (3)` and leaving
+  every function/class in `valuation_scheduler.py` A-ranked.
