@@ -317,6 +317,45 @@ def market_price_freshness_security_ids(positions: list[Position]) -> list[str]:
     )
 
 
+def _normalized_reprocessing_statuses(positions: list[Position]) -> list[str]:
+    return [(position.reprocessing_status or "").strip().upper() for position in positions]
+
+
+def _has_unknown_reprocessing_status(statuses: list[str]) -> bool:
+    return any(not status for status in statuses)
+
+
+def _has_non_current_reprocessing_status(statuses: list[str]) -> bool:
+    return any(status != "CURRENT" for status in statuses)
+
+
+def _has_stale_market_price_evidence(
+    *,
+    positions: list[Position],
+    response_as_of_date: date,
+    latest_market_price_dates: dict[str, date],
+) -> bool:
+    for position in positions:
+        if not position_requires_market_price_freshness(position):
+            continue
+        security_id = normalize_security_id(position.security_id)
+        if latest_market_price_dates.get(security_id) != response_as_of_date:
+            return True
+    return False
+
+
+def _reprocessing_data_quality_status(positions: list[Position]) -> str | None:
+    if not positions:
+        return UNKNOWN
+
+    normalized_statuses = _normalized_reprocessing_statuses(positions)
+    if _has_unknown_reprocessing_status(normalized_statuses):
+        return UNKNOWN
+    if _has_non_current_reprocessing_status(normalized_statuses):
+        return STALE
+    return None
+
+
 def holdings_data_quality_status(
     *,
     positions: list[Position],
@@ -324,23 +363,12 @@ def holdings_data_quality_status(
     response_as_of_date: date,
     latest_market_price_dates: dict[str, date],
 ) -> str:
-    if not positions:
-        return UNKNOWN
-    normalized_statuses = [
-        (position.reprocessing_status or "").strip().upper() for position in positions
-    ]
-    if any(not status for status in normalized_statuses):
-        return UNKNOWN
-    if any(status != "CURRENT" for status in normalized_statuses):
-        return STALE
-    if any(
-        (
-            latest_market_price_dates.get(normalize_security_id(position.security_id))
-            != response_as_of_date
-            if position_requires_market_price_freshness(position)
-            else False
-        )
-        for position in positions
+    if (reprocessing_status := _reprocessing_data_quality_status(positions)) is not None:
+        return reprocessing_status
+    if _has_stale_market_price_evidence(
+        positions=positions,
+        response_as_of_date=response_as_of_date,
+        latest_market_price_dates=latest_market_price_dates,
     ):
         return STALE
     if history_supplements:

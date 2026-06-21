@@ -776,6 +776,73 @@ async def test_holdings_data_quality_status_does_not_infer_missing_state() -> No
     )
 
 
+async def test_holdings_data_quality_status_marks_non_current_state_stale() -> None:
+    assert (
+        holdings_data_quality_status(
+            positions=[
+                Position(
+                    security_id="S1",
+                    quantity=Decimal("1"),
+                    cost_basis=Decimal("10"),
+                    position_date=date(2025, 1, 1),
+                    instrument_name="Reprocessing holding",
+                    reprocessing_status="REPROCESSING",
+                )
+            ],
+            history_supplements=[],
+            response_as_of_date=date(2025, 1, 1),
+            latest_market_price_dates={},
+        )
+        == "STALE"
+    )
+
+
+async def test_holdings_data_quality_status_marks_stale_market_price_evidence() -> None:
+    assert (
+        holdings_data_quality_status(
+            positions=[
+                Position(
+                    security_id=" EQ_A ",
+                    quantity=Decimal("1"),
+                    cost_basis=Decimal("10"),
+                    position_date=date(2025, 1, 1),
+                    instrument_name="Priced holding",
+                    asset_class="Equity",
+                    reprocessing_status="CURRENT",
+                    valuation=ValuationData(market_price=Decimal("10")),
+                )
+            ],
+            history_supplements=[],
+            response_as_of_date=date(2025, 1, 2),
+            latest_market_price_dates={"EQ_A": date(2025, 1, 1)},
+        )
+        == "STALE"
+    )
+
+
+async def test_holdings_data_quality_status_returns_complete_for_current_fresh_holdings() -> None:
+    assert (
+        holdings_data_quality_status(
+            positions=[
+                Position(
+                    security_id=" EQ_A ",
+                    quantity=Decimal("1"),
+                    cost_basis=Decimal("10"),
+                    position_date=date(2025, 1, 1),
+                    instrument_name="Priced holding",
+                    asset_class="Equity",
+                    reprocessing_status="CURRENT",
+                    valuation=ValuationData(market_price=Decimal("10")),
+                )
+            ],
+            history_supplements=[],
+            response_as_of_date=date(2025, 1, 2),
+            latest_market_price_dates={"EQ_A": date(2025, 1, 2)},
+        )
+        == "COMPLETE"
+    )
+
+
 async def test_holdings_data_quality_status_marks_history_supplement_partial() -> None:
     position = Position(
         security_id="SEC_A",
