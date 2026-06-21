@@ -509,6 +509,56 @@ class ValuationScheduler:
             latest_business_date,
         )
 
+    def _valuation_job_record_key(self, job: PortfolioValuationJob) -> str:
+        return f"{job.portfolio_id}|{job.security_id}|{job.valuation_date.isoformat()}|{job.epoch}"
+
+    def _valuation_job_headers(self, job: PortfolioValuationJob) -> list[tuple[str, bytes]]:
+        if not job.correlation_id:
+            return []
+        return [("correlation_id", job.correlation_id.encode("utf-8"))]
+
+    def _valuation_required_event(self, job: PortfolioValuationJob) -> dict[str, Any]:
+        event = PortfolioValuationRequiredEvent(
+            portfolio_id=job.portfolio_id,
+            security_id=job.security_id,
+            valuation_date=job.valuation_date,
+            epoch=job.epoch,
+            correlation_id=job.correlation_id,
+        )
+        return event.model_dump(mode="json")
+
+    def _publish_valuation_job(self, job: PortfolioValuationJob) -> None:
+        self._producer.publish_message(
+            topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
+            key=job.portfolio_id,
+            value=self._valuation_required_event(job),
+            headers=self._valuation_job_headers(job),
+        )
+
+    def _raise_dispatch_failure(
+        self,
+        *,
+        queued_count: int,
+        remaining_record_keys: list[str],
+        cause: Exception,
+    ) -> None:
+        self._producer.flush(timeout=10)
+        remaining_keys = ", ".join(remaining_record_keys)
+        raise RuntimeError(
+            "Failed to dispatch valuation jobs after "
+            f"{queued_count} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+        ) from cause
+
+    def _confirm_dispatched_jobs(self, record_keys: list[str]) -> None:
+        undelivered_count = self._producer.flush(timeout=10)
+        if not undelivered_count:
+            return
+        affected_keys = ", ".join(record_keys)
+        raise RuntimeError(
+            "Delivery confirmation timed out while dispatching valuation jobs. "
+            f"Affected job keys: {affected_keys}."
+        )
+
     async def _dispatch_jobs(self, jobs: List[PortfolioValuationJob]):
         """Publishes a batch of claimed jobs to Kafka."""
 
@@ -516,42 +566,17 @@ class ValuationScheduler:
             return
 
         logger.info(f"Dispatching {len(jobs)} claimed valuation jobs to Kafka.")
-        record_keys = [
-            f"{job.portfolio_id}|{job.security_id}|{job.valuation_date.isoformat()}|{job.epoch}"
-            for job in jobs
-        ]
+        record_keys = [self._valuation_job_record_key(job) for job in jobs]
         for idx, job in enumerate(jobs):
-            event = PortfolioValuationRequiredEvent(
-                portfolio_id=job.portfolio_id,
-                security_id=job.security_id,
-                valuation_date=job.valuation_date,
-                epoch=job.epoch,
-                correlation_id=job.correlation_id,
-            )
-            headers = []
-            if job.correlation_id:
-                headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
             try:
-                self._producer.publish_message(
-                    topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
-                    key=job.portfolio_id,
-                    value=event.model_dump(mode="json"),
-                    headers=headers,
-                )
+                self._publish_valuation_job(job)
             except Exception as exc:
-                self._producer.flush(timeout=10)
-                remaining_keys = ", ".join(record_keys[idx:])
-                raise RuntimeError(
-                    "Failed to dispatch valuation jobs after "
-                    f"{idx} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
-                ) from exc
-        undelivered_count = self._producer.flush(timeout=10)
-        if undelivered_count:
-            affected_keys = ", ".join(record_keys)
-            raise RuntimeError(
-                "Delivery confirmation timed out while dispatching valuation jobs. "
-                f"Affected job keys: {affected_keys}."
-            )
+                self._raise_dispatch_failure(
+                    queued_count=idx,
+                    remaining_record_keys=record_keys[idx:],
+                    cause=exc,
+                )
+        self._confirm_dispatched_jobs(record_keys)
         logger.info(f"Successfully flushed {len(jobs)} valuation jobs.")
 
     async def _claim_and_dispatch_ready_jobs(self) -> None:
