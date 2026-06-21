@@ -1772,3 +1772,10 @@ health before that claim is defensible.
      scoped Ruff and format checks passed; Radon reports `get_position_snapshot_epoch` reduced from
      `B (9)` to `A (5)`, with every function/class in `analytics_timeseries_repository.py`
      A-ranked.
+293. Reduced position timeseries calculation complexity by extracting beginning market value,
+     zero-safe average cost, expense classification, and cashflow bucket accumulation from
+     `PositionTimeseriesLogic.calculate_daily_record(...)`. Focused position timeseries logic tests
+     passed with 7 tests, including direct zero-quantity average-cost coverage; scoped Ruff and
+     format checks passed; Radon reports `calculate_daily_record` reduced from `C (11)` to
+     `A (1)`, `PositionTimeseriesLogic` reduced from `C (12)` to `A (2)`, with every
+     function/class in `position_timeseries_logic.py` A-ranked.
