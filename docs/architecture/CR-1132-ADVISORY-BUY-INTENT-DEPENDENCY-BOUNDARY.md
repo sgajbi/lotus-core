@@ -68,7 +68,8 @@ Measured movement:
 ## Residual Risk
 
 This slice does not change API contracts, OpenAPI, advisory simulation response shape, or dependency
-semantics. Larger advisory simulation hotspots remain in compliance and funding logic.
+semantics. CR-1133 addresses the compliance rule-engine hotspot on the same branch. Larger advisory
+simulation funding logic remains a measured hotspot.
 
 ## Bank-Buyable Control Movement
 
