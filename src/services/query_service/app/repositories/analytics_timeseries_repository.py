@@ -23,6 +23,36 @@ from ..services.decimal_amounts import decimal_or_none
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .identifier_normalization import normalize_security_id
 
+DIMENSION_FILTER_COLUMNS = {
+    "asset_class": "asset_class",
+    "sector": "sector",
+    "country": "country",
+}
+
+
+def _position_page_cursor_filter(ranked, cursor_date: date | None, cursor_security_id: str | None):
+    if cursor_date is None or cursor_security_id is None:
+        return None
+    return or_(
+        ranked.c.valuation_date > cursor_date,
+        and_(
+            ranked.c.valuation_date == cursor_date,
+            ranked.c.security_id > cursor_security_id,
+        ),
+    )
+
+
+def _position_dimension_filters(ranked, dimension_filters: dict[str, set[str]]) -> list[object]:
+    return [
+        getattr(ranked.c, column_name).in_(dimension_filters[dimension_name])
+        for dimension_name, column_name in DIMENSION_FILTER_COLUMNS.items()
+        if dimension_name in dimension_filters
+    ]
+
+
+def _append_optional_where(stmt, predicate):
+    return stmt.where(predicate) if predicate is not None else stmt
+
 
 class AnalyticsTimeseriesRepository:
     def __init__(self, db: AsyncSession):
@@ -47,6 +77,24 @@ class AnalyticsTimeseriesRepository:
             and (normalized := normalize_security_id(position_id.split(":", 1)[1]))
         ]
         return list(dict.fromkeys(normalized_security_ids))
+
+    def _security_scope_filter(self, ranked, security_ids: list[str]):
+        if not security_ids:
+            return True, None
+        normalized_security_ids = self._normalized_security_ids(security_ids)
+        if not normalized_security_ids:
+            return False, None
+        return True, ranked.c.security_id.in_(normalized_security_ids)
+
+    def _position_scope_filter(self, ranked, portfolio_id: str, position_ids: list[str]):
+        if not position_ids:
+            return True, None
+        security_from_position_ids = self._security_ids_from_position_ids(
+            portfolio_id, position_ids
+        )
+        if not security_from_position_ids:
+            return False, None
+        return True, ranked.c.security_id.in_(security_from_position_ids)
 
     @staticmethod
     def _latest_cashflow_rows_stmt(*, predicates: list[object], include_security_id: bool):
@@ -192,37 +240,19 @@ class AnalyticsTimeseriesRepository:
 
         stmt = select(ranked).where(ranked.c.rn == 1)
 
-        if cursor_date is not None and cursor_security_id is not None:
-            stmt = stmt.where(
-                or_(
-                    ranked.c.valuation_date > cursor_date,
-                    and_(
-                        ranked.c.valuation_date == cursor_date,
-                        ranked.c.security_id > cursor_security_id,
-                    ),
-                )
-            )
-
-        if security_ids:
-            normalized_security_ids = self._normalized_security_ids(security_ids)
-            if not normalized_security_ids:
+        stmt = _append_optional_where(
+            stmt,
+            _position_page_cursor_filter(ranked, cursor_date, cursor_security_id),
+        )
+        for is_supported, predicate in (
+            self._security_scope_filter(ranked, security_ids),
+            self._position_scope_filter(ranked, portfolio_id, position_ids),
+        ):
+            if not is_supported:
                 return []
-            stmt = stmt.where(ranked.c.security_id.in_(normalized_security_ids))
-
-        if position_ids:
-            security_from_position_ids = self._security_ids_from_position_ids(
-                portfolio_id, position_ids
-            )
-            if not security_from_position_ids:
-                return []
-            stmt = stmt.where(ranked.c.security_id.in_(security_from_position_ids))
-
-        if "asset_class" in dimension_filters:
-            stmt = stmt.where(ranked.c.asset_class.in_(dimension_filters["asset_class"]))
-        if "sector" in dimension_filters:
-            stmt = stmt.where(ranked.c.sector.in_(dimension_filters["sector"]))
-        if "country" in dimension_filters:
-            stmt = stmt.where(ranked.c.country.in_(dimension_filters["country"]))
+            stmt = _append_optional_where(stmt, predicate)
+        for predicate in _position_dimension_filters(ranked, dimension_filters):
+            stmt = stmt.where(predicate)
 
         stmt = stmt.order_by(ranked.c.valuation_date.asc(), ranked.c.security_id.asc()).limit(
             page_size + 1
