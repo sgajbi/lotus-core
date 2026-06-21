@@ -1187,3 +1187,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1150 split reconciliation authoritative metric aggregation into focused accumulator,
   currency-pair, FX requirement, cached FX-rate, and metric accumulation helpers, reducing
   `_aggregate_authoritative_portfolio_metrics` from `C (11)` to `A (3)`.
+- CR-1151 split transaction cashflow reconciliation into focused per-row finding,
+  missing-cashflow, rule-mismatch comparison, and mismatch finding helpers, reducing
+  `run_transaction_cashflow` from `C (11)` to `A (2)`.

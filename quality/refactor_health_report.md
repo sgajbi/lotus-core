@@ -1833,3 +1833,8 @@ health before that claim is defensible.
      `ReconciliationService._aggregate_authoritative_portfolio_metrics(...)`. Focused
      reconciliation service tests passed with 13 tests; scoped Ruff and format checks passed; Radon
      reports `_aggregate_authoritative_portfolio_metrics` reduced from `C (11)` to `A (3)`.
+303. Reduced transaction cashflow reconciliation workflow complexity by extracting per-row finding
+     construction, missing-cashflow finding construction, cashflow rule mismatch comparison, and
+     rule-mismatch finding construction from `ReconciliationService.run_transaction_cashflow(...)`.
+     Focused reconciliation service tests passed with 13 tests; scoped Ruff and format checks
+     passed; Radon reports `run_transaction_cashflow` reduced from `C (11)` to `A (2)`.
