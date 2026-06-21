@@ -1803,3 +1803,9 @@ health before that claim is defensible.
      Focused event replay helper tests passed with 7 tests; focused ingestion retry route tests
      passed with 3 tests; scoped Ruff and format checks passed; Radon reports
      `_filter_payload_by_record_keys` reduced from `C (17)` to `A (3)`.
+298. Reduced ingestion job retry workflow complexity by extracting replay-context lookup,
+     retry-payload shaping, retry-policy enforcement, retry audit recording, dry-run handling,
+     duplicate replay blocking, replay publication, failed-publish bookkeeping, successful replay
+     bookkeeping, and final job reload from `retry_ingestion_job(...)`. Focused helper tests passed
+     with 7 tests; focused ingestion retry route tests passed with 3 tests; scoped Ruff and format
+     checks passed; Radon reports `retry_ingestion_job` reduced from `C (11)` to `A (2)`.
