@@ -1827,3 +1827,9 @@ health before that claim is defensible.
      `create_core_snapshot(...)`. Focused core-snapshot route tests passed with 7 tests; scoped Ruff
      and format checks passed; Radon reports `create_core_snapshot` reduced from `C (17)` to
      `A (1)`, with no C-or-worse functions remaining in `integration.py`.
+302. Reduced reconciliation authoritative metric aggregation complexity by extracting metric
+     accumulator creation, currency pair normalization, FX conversion requirement detection,
+     cached positive FX-rate resolution, and metric accumulation from
+     `ReconciliationService._aggregate_authoritative_portfolio_metrics(...)`. Focused
+     reconciliation service tests passed with 13 tests; scoped Ruff and format checks passed; Radon
+     reports `_aggregate_authoritative_portfolio_metrics` reduced from `C (11)` to `A (3)`.

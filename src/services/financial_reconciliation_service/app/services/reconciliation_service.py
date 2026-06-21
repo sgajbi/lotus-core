@@ -18,11 +18,53 @@ from ..repositories import ReconciliationRepository
 
 DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
 ZERO = Decimal("0")
+AUTHORITATIVE_PORTFOLIO_METRIC_NAMES = (
+    "bod_market_value",
+    "bod_cashflow",
+    "eod_cashflow",
+    "eod_market_value",
+    "fees",
+)
 
 
 def _decimal_or_zero(value: object) -> Decimal:
     amount = decimal_or_none(value)
     return amount if amount is not None else ZERO
+
+
+def _empty_authoritative_portfolio_metrics() -> dict[str, Decimal]:
+    return {metric_name: ZERO for metric_name in AUTHORITATIVE_PORTFOLIO_METRIC_NAMES}
+
+
+def _authoritative_metric_currencies(instrument: object, portfolio: object) -> tuple[str, str]:
+    from_currency = (getattr(instrument, "currency", None) or "").strip()
+    to_currency = (getattr(portfolio, "base_currency", None) or "").strip()
+    return from_currency, to_currency
+
+
+def _requires_authoritative_fx_rate(from_currency: str, to_currency: str) -> bool:
+    return bool(from_currency and to_currency and from_currency != to_currency)
+
+
+def _add_authoritative_position_metrics(
+    metrics: dict[str, Decimal],
+    *,
+    position_row: object,
+    rate: Decimal,
+) -> None:
+    metrics["bod_market_value"] += (
+        _decimal_or_zero(getattr(position_row, "bod_market_value")) * rate
+    )
+    metrics["bod_cashflow"] += (
+        _decimal_or_zero(getattr(position_row, "bod_cashflow_portfolio")) * rate
+    )
+    metrics["eod_cashflow"] += (
+        _decimal_or_zero(getattr(position_row, "eod_cashflow_portfolio")) * rate
+    )
+    metrics["eod_market_value"] += (
+        _decimal_or_zero(getattr(position_row, "eod_market_value")) * rate
+    )
+    metrics["fees"] += _decimal_or_zero(getattr(position_row, "fees")) * rate
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,41 +99,46 @@ class ReconciliationService:
             business_date=business_date,
             epoch=epoch,
         )
-        metrics = {
-            "bod_market_value": ZERO,
-            "bod_cashflow": ZERO,
-            "eod_cashflow": ZERO,
-            "eod_market_value": ZERO,
-            "fees": ZERO,
-        }
+        metrics = _empty_authoritative_portfolio_metrics()
         fx_cache: dict[tuple[str, str, date], Decimal] = {}
 
         for position_row, instrument, portfolio in authoritative_rows:
-            from_currency = (instrument.currency or "").strip()
-            to_currency = (portfolio.base_currency or "").strip()
-            rate = Decimal("1")
-            if from_currency and to_currency and from_currency != to_currency:
-                cache_key = (from_currency, to_currency, position_row.date)
-                if cache_key not in fx_cache:
-                    fx_rate = await self.repository.fetch_latest_fx_rate(
-                        from_currency=from_currency,
-                        to_currency=to_currency,
-                        business_date=position_row.date,
-                    )
-                    fx_cache[cache_key] = (
-                        coerce_positive_fx_rate_or_none(fx_rate.rate) if fx_rate else None
-                    ) or ZERO
-                rate = fx_cache[cache_key]
-                if rate == ZERO:
-                    continue
-
-            metrics["bod_market_value"] += _decimal_or_zero(position_row.bod_market_value) * rate
-            metrics["bod_cashflow"] += _decimal_or_zero(position_row.bod_cashflow_portfolio) * rate
-            metrics["eod_cashflow"] += _decimal_or_zero(position_row.eod_cashflow_portfolio) * rate
-            metrics["eod_market_value"] += _decimal_or_zero(position_row.eod_market_value) * rate
-            metrics["fees"] += _decimal_or_zero(position_row.fees) * rate
+            rate = await self._authoritative_portfolio_fx_rate(
+                position_row=position_row,
+                instrument=instrument,
+                portfolio=portfolio,
+                fx_cache=fx_cache,
+            )
+            if rate == ZERO:
+                continue
+            _add_authoritative_position_metrics(metrics, position_row=position_row, rate=rate)
 
         return metrics, len(authoritative_rows)
+
+    async def _authoritative_portfolio_fx_rate(
+        self,
+        *,
+        position_row: object,
+        instrument: object,
+        portfolio: object,
+        fx_cache: dict[tuple[str, str, date], Decimal],
+    ) -> Decimal:
+        from_currency, to_currency = _authoritative_metric_currencies(instrument, portfolio)
+        if not _requires_authoritative_fx_rate(from_currency, to_currency):
+            return Decimal("1")
+
+        position_date = getattr(position_row, "date")
+        cache_key = (from_currency, to_currency, position_date)
+        if cache_key not in fx_cache:
+            fx_rate = await self.repository.fetch_latest_fx_rate(
+                from_currency=from_currency,
+                to_currency=to_currency,
+                business_date=position_date,
+            )
+            fx_cache[cache_key] = (
+                coerce_positive_fx_rate_or_none(fx_rate.rate) if fx_rate else None
+            ) or ZERO
+        return fx_cache[cache_key]
 
     @staticmethod
     def _expected_market_value_local(

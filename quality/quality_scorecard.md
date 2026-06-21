@@ -1184,3 +1184,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   request, section-resolution, governance-metadata, and service error-mapping helpers, reducing
   `create_core_snapshot` from `C (17)` to `A (1)` and leaving `integration.py` with no C-or-worse
   functions.
+- CR-1150 split reconciliation authoritative metric aggregation into focused accumulator,
+  currency-pair, FX requirement, cached FX-rate, and metric accumulation helpers, reducing
+  `_aggregate_authoritative_portfolio_metrics` from `C (11)` to `A (3)`.
