@@ -115,7 +115,10 @@ class PerformanceComponentEconomicsRow(BaseModel):
     )
     trade_fee_amount: Decimal = Field(
         ...,
-        description="Source-authored transaction fee amount from cost rows or trade_fee.",
+        description=(
+            "Source-authored transaction fee amount from cost rows or trade_fee when the fee "
+            "has one currency. Zero when trade_fee_currency is MIXED; use trade_fee_components."
+        ),
         examples=["2.5000000000"],
     )
     trade_fee_currency: str = Field(
@@ -127,6 +130,10 @@ class PerformanceComponentEconomicsRow(BaseModel):
             "currency."
         ),
         examples=["USD"],
+    )
+    trade_fee_components: list["PerformanceComponentEconomicsFeeComponent"] = Field(
+        default_factory=list,
+        description="Per-currency transaction fee components used for aggregation.",
     )
     cashflow_amount: Decimal | None = Field(
         None,
@@ -217,6 +224,21 @@ class PerformanceComponentEconomicsRow(BaseModel):
                 "contract_version": "performance_component_economics_v1",
             }
         ],
+    )
+
+    model_config = ConfigDict()
+
+
+class PerformanceComponentEconomicsFeeComponent(BaseModel):
+    currency: str = Field(..., description="Fee component currency.", examples=["USD"])
+    amount: Decimal = Field(
+        ..., description="Fee component amount in component currency.", examples=["2.5000000000"]
+    )
+    evidence_count: int = Field(
+        ...,
+        ge=1,
+        description="Number of fee evidence rows contributing to this component.",
+        examples=[1],
     )
 
     model_config = ConfigDict()

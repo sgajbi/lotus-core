@@ -53,6 +53,7 @@ DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS = {
 }
 
 PERFORMANCE_COMPONENT_ECONOMICS_SCHEMA_ROOTS = {
+    "PerformanceComponentEconomicsFeeComponent",
     "PerformanceComponentEconomicsRequest",
     "PerformanceComponentEconomicsRow",
     "PerformanceComponentEconomicsTotal",

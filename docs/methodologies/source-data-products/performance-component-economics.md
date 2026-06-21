@@ -38,7 +38,7 @@ The contract source-authors these component families when evidence exists:
 | Family | Source fields |
 | --- | --- |
 | `cashflow` | linked latest-epoch `cashflows.amount`, `currency`, canonical uppercase `classification`, canonical uppercase `timing`, flow-scope flags |
-| `fee` | explicit `transaction_costs.amount` rows plus `trade_fee_currency`, falling back to `transactions.trade_fee` and `transactions.trade_currency` |
+| `fee` | explicit per-currency `transaction_costs.amount` rows as `trade_fee_components`, falling back to `transactions.trade_fee` and `transactions.trade_currency` |
 | `income` | `transactions.net_interest_amount` |
 | `tax` | `transactions.withholding_tax_amount`, `other_interest_deductions_amount` |
 | `realized_capital_pnl` | `transactions.realized_capital_pnl_local/base` plus `realized_pnl_local_currency` |
@@ -58,9 +58,10 @@ transaction trade currency, so consumers do not infer local P&L currency from bo
 totals combine withholding tax and other interest deductions in the same currency while preserving
 row-level fields separately.
 
-When positive transaction-cost rows on one transaction carry multiple currencies, the row-level
-`trade_fee_currency` and fee total currency are `MIXED`. Downstream consumers must not treat
-`MIXED` as an ISO currency or blindly aggregate it with single-currency fee totals.
+When positive transaction-cost rows on one transaction carry multiple currencies, row-level
+`trade_fee_currency` is `MIXED`, `trade_fee_amount` is zero, and `trade_fee_components` carries one
+amount per currency. Fee totals are built from those per-currency components. Downstream consumers
+must not treat `MIXED` as an ISO currency.
 
 ## Supportability
 

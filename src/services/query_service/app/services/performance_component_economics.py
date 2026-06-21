@@ -6,6 +6,7 @@ from typing import Any
 
 from ..dtos.reference_integration_dto import (
     SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES,
+    PerformanceComponentEconomicsFeeComponent,
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
     PerformanceComponentEconomicsRow,
@@ -121,7 +122,8 @@ def build_performance_component_economics_totals(
 ) -> list[PerformanceComponentEconomicsTotal]:
     grouped: dict[tuple[str, str], list[Decimal]] = defaultdict(list)
     for row in rows:
-        _append_total(grouped, "fee", row.trade_fee_currency, row.trade_fee_amount)
+        for fee_component in row.trade_fee_components:
+            _append_total(grouped, "fee", fee_component.currency, fee_component.amount)
         _append_total(grouped, "income", row.currency, row.net_interest_amount)
         _append_total(grouped, "tax", row.currency, row.withholding_tax_amount)
         _append_total(grouped, "tax", row.currency, row.other_interest_deductions_amount)
@@ -154,6 +156,8 @@ def build_performance_component_economics_totals(
 
 def _performance_component_economics_row(transaction: Any) -> PerformanceComponentEconomicsRow:
     cashflow = getattr(transaction, "cashflow", None)
+    trade_fee_components = _transaction_fee_components(transaction)
+    trade_fee_currency = _transaction_fee_currency(trade_fee_components)
     return PerformanceComponentEconomicsRow(
         transaction_id=str(transaction.transaction_id),
         portfolio_id=str(transaction.portfolio_id),
@@ -163,8 +167,11 @@ def _performance_component_economics_row(transaction: Any) -> PerformanceCompone
         currency=str(transaction.currency).strip().upper(),
         trade_currency=_transaction_trade_currency(transaction),
         gross_transaction_amount=decimal_or_zero(transaction.gross_transaction_amount),
-        trade_fee_amount=transaction_fee_amount(transaction),
-        trade_fee_currency=_transaction_fee_currency(transaction),
+        trade_fee_amount=(
+            trade_fee_components[0].amount if len(trade_fee_components) == 1 else Decimal("0")
+        ),
+        trade_fee_currency=trade_fee_currency,
+        trade_fee_components=trade_fee_components,
         cashflow_amount=(
             decimal_or_zero(getattr(cashflow, "amount", None)) if cashflow is not None else None
         ),
@@ -238,22 +245,51 @@ def _latest_performance_evidence_timestamp(transactions: list[Any]):
     return latest_reference_evidence_timestamp(evidence_rows)
 
 
-def _transaction_fee_currency(transaction: Any) -> str:
-    positive_cost_currencies = {
-        normalize_currency_code(currency)
+def _transaction_fee_components(
+    transaction: Any,
+) -> list[PerformanceComponentEconomicsFeeComponent]:
+    costs = [
+        cost
         for cost in (getattr(transaction, "costs", None) or [])
         if decimal_or_zero(getattr(cost, "amount", None)) > 0
-        and (currency := getattr(cost, "currency", None))
-    }
-    if len(positive_cost_currencies) == 1:
-        return next(iter(positive_cost_currencies))
-    if len(positive_cost_currencies) > 1:
-        return "MIXED"
+    ]
+    if costs:
+        grouped: dict[str, list[Decimal]] = defaultdict(list)
+        for cost in costs:
+            grouped[
+                normalize_currency_code(
+                    getattr(cost, "currency", None) or _transaction_trade_currency(transaction)
+                )
+            ].append(decimal_or_zero(getattr(cost, "amount", None)))
+        return [
+            PerformanceComponentEconomicsFeeComponent(
+                currency=currency,
+                amount=sum(amounts, Decimal("0")),
+                evidence_count=len(amounts),
+            )
+            for currency, amounts in sorted(grouped.items())
+        ]
 
-    trade_currency = getattr(transaction, "trade_currency", None)
-    if trade_currency:
-        return normalize_currency_code(trade_currency)
-    return normalize_currency_code(getattr(transaction, "currency"))
+    trade_fee = transaction_fee_amount(transaction)
+    if trade_fee <= 0:
+        return []
+    return [
+        PerformanceComponentEconomicsFeeComponent(
+            currency=_transaction_trade_currency(transaction),
+            amount=trade_fee,
+            evidence_count=1,
+        )
+    ]
+
+
+def _transaction_fee_currency(
+    fee_components: list[PerformanceComponentEconomicsFeeComponent],
+) -> str:
+    if len(fee_components) > 1:
+        return "MIXED"
+    if len(fee_components) == 1:
+        return fee_components[0].currency
+    return ""
 
 
 def _transaction_trade_currency(transaction: Any) -> str:
@@ -268,7 +304,7 @@ def _observed_component_families(rows: list[PerformanceComponentEconomicsRow]) -
     for row in rows:
         if row.cashflow_amount not in (None, Decimal("0")):
             observed.add("cashflow")
-        if row.trade_fee_amount != 0:
+        if row.trade_fee_components or row.trade_fee_amount != 0:
             observed.add("fee")
         if row.net_interest_amount != 0:
             observed.add("income")
