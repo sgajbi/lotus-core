@@ -1151,3 +1151,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   position-ID scope, and instrument dimension helpers, reducing
   `AnalyticsTimeseriesRepository.get_position_snapshot_epoch` from `B (9)` to `A (5)` and leaving
   `analytics_timeseries_repository.py` with no B-or-worse functions/classes.
+- CR-1141 split position timeseries daily-record calculation into focused beginning market-value,
+  zero-safe average-cost, expense-classification, and cashflow bucket helpers, reducing
+  `PositionTimeseriesLogic.calculate_daily_record` from `C (11)` to `A (1)` and leaving
+  `position_timeseries_logic.py` with no B-or-worse functions/classes.

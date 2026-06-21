@@ -145,6 +145,27 @@ def test_logic_normalizes_string_and_blank_amounts():
     assert new_record.fees == Decimal("0")
 
 
+def test_logic_uses_zero_average_cost_for_zero_quantity(previous_day_snapshot):
+    current_snapshot = SimpleNamespace(
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 7, 29),
+        quantity=Decimal("0"),
+        cost_basis_local=Decimal("10000"),
+        market_value_local=Decimal("0"),
+    )
+
+    new_record = PositionTimeseriesLogic.calculate_daily_record(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_day_snapshot,
+        cashflows=[],
+        epoch=8,
+    )
+
+    assert new_record.quantity == Decimal("0")
+    assert new_record.cost == Decimal("0")
+
+
 def test_logic_normalizes_cashflow_timing_for_bod_bucket(current_snapshot, previous_day_snapshot):
     cashflows = [
         SimpleNamespace(
