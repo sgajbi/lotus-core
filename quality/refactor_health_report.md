@@ -1764,3 +1764,11 @@ health before that claim is defensible.
      repository tests passed with 7 tests, including invalid position-ID no-query coverage; scoped
      Ruff and format checks passed; Radon reports `list_position_timeseries_rows` reduced from
      `C (11)` to `A (5)`.
+292. Reduced analytics position snapshot-epoch filter complexity by extracting trimmed
+     position-timeseries security expression reuse, security-scope filtering, position-ID scope
+     filtering, and instrument dimension predicates from
+     `AnalyticsTimeseriesRepository.get_position_snapshot_epoch(...)`. Focused analytics
+     repository tests passed with 8 tests, including invalid position-ID no-query epoch coverage;
+     scoped Ruff and format checks passed; Radon reports `get_position_snapshot_epoch` reduced from
+     `B (9)` to `A (5)`, with every function/class in `analytics_timeseries_repository.py`
+     A-ranked.
