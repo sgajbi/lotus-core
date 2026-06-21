@@ -1674,3 +1674,10 @@ health before that claim is defensible.
      import normalization. Radon now reports no B-or-worse functions/classes in `sorter.py`;
      `_cash_dependency_rank` and `_ca_bundle_a_dependency_rank` are no longer B-ranked, and module
      maintainability improves from `A (63.50)` to `A (66.03)`.
+277. Reduced performance economics component-family supportability complexity by splitting
+     `_observed_component_families` into an ordered collector, row-level family collector, and
+     focused predicates for cashflow, fee, income, tax, realized capital P&L, realized FX P&L,
+     realized total P&L, and FX-context evidence. Focused performance economics tests passed with
+     5 tests and scoped Ruff passed. Radon reduces `_observed_component_families` from `C (18)` to
+     `A (4)`, keeps all extracted helpers A-ranked, and improves module maintainability from
+     `A (27.59)` to `A (27.86)`.

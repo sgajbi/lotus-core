@@ -1087,3 +1087,9 @@ Local evidence captured on 2026-06-05 after CR-1034:
   settlement same-timestamp ordering. Focused sorter tests passed with 8 tests, scoped Ruff passed
   after import normalization, Radon reports no B-or-worse functions/classes in `sorter.py`, and
   module maintainability improves from `A (63.50)` to `A (66.03)`.
+- CR-1125 split performance component economics supportability coverage into an ordered collector,
+  row-level family collector, and focused component-family predicates, reducing
+  `_observed_component_families` from `C (18)` to `A (4)` while preserving the
+  `PerformanceComponentEconomics:v1` response contract. Focused performance economics tests passed
+  with 5 tests, scoped Ruff passed, every extracted helper is A-ranked, and module maintainability
+  improves from `A (27.59)` to `A (27.86)`.

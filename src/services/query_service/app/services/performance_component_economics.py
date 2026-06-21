@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 from ..dtos.reference_integration_dto import (
     SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES,
@@ -22,6 +22,7 @@ from .source_data_runtime import source_product_runtime_metadata_without_as_of_d
 from .transaction_cost_curve import transaction_fee_amount
 
 SOURCE_CONTRACT_VERSION = "performance_component_economics_v1"
+_ComponentPredicate = Callable[[PerformanceComponentEconomicsRow], bool]
 
 
 async def resolve_performance_component_economics_response(
@@ -303,27 +304,64 @@ def _transaction_trade_currency(transaction: Any) -> str:
 def _observed_component_families(rows: list[PerformanceComponentEconomicsRow]) -> list[str]:
     observed: set[str] = set()
     for row in rows:
-        if row.cashflow_amount not in (None, Decimal("0")):
-            observed.add("cashflow")
-        if row.trade_fee_components or row.trade_fee_amount != 0:
-            observed.add("fee")
-        if row.net_interest_amount != 0:
-            observed.add("income")
-        if row.withholding_tax_amount != 0 or row.other_interest_deductions_amount != 0:
-            observed.add("tax")
-        if row.realized_capital_pnl_local != 0 or row.realized_capital_pnl_base != 0:
-            observed.add("realized_capital_pnl")
-        if row.realized_fx_pnl_local != 0 or row.realized_fx_pnl_base != 0:
-            observed.add("realized_fx_pnl")
-        if row.realized_total_pnl_local != 0 or row.realized_total_pnl_base != 0:
-            observed.add("realized_total_pnl")
-        if row.transaction_fx_rate is not None or row.fx_contract_id:
-            observed.add("fx_context")
+        observed.update(_observed_row_component_families(row))
     return [
         family
         for family in SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES
         if family in observed
     ]
+
+
+def _observed_row_component_families(row: PerformanceComponentEconomicsRow) -> set[str]:
+    return {
+        family
+        for family, predicate in _COMPONENT_FAMILY_PREDICATES
+        if predicate(row)
+    }
+
+
+def _has_cashflow_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return row.cashflow_amount not in (None, Decimal("0"))
+
+
+def _has_fee_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return bool(row.trade_fee_components) or row.trade_fee_amount != 0
+
+
+def _has_income_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return row.net_interest_amount != 0
+
+
+def _has_tax_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return row.withholding_tax_amount != 0 or row.other_interest_deductions_amount != 0
+
+
+def _has_realized_capital_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return row.realized_capital_pnl_local != 0 or row.realized_capital_pnl_base != 0
+
+
+def _has_realized_fx_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return row.realized_fx_pnl_local != 0 or row.realized_fx_pnl_base != 0
+
+
+def _has_realized_total_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return row.realized_total_pnl_local != 0 or row.realized_total_pnl_base != 0
+
+
+def _has_fx_context_component(row: PerformanceComponentEconomicsRow) -> bool:
+    return row.transaction_fx_rate is not None or bool(row.fx_contract_id)
+
+
+_COMPONENT_FAMILY_PREDICATES: tuple[tuple[str, _ComponentPredicate], ...] = (
+    ("cashflow", _has_cashflow_component),
+    ("fee", _has_fee_component),
+    ("income", _has_income_component),
+    ("tax", _has_tax_component),
+    ("realized_capital_pnl", _has_realized_capital_pnl_component),
+    ("realized_fx_pnl", _has_realized_fx_pnl_component),
+    ("realized_total_pnl", _has_realized_total_pnl_component),
+    ("fx_context", _has_fx_context_component),
+)
 
 
 def _request_scope_fingerprint(
