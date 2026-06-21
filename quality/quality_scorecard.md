@@ -1177,3 +1177,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   replay-candidate, audit-response, duplicate-blocking, publish-failure, and replay-bookkeeping
   helpers, reducing `replay_consumer_dlq_event` from `C (18)` to `A (5)` and leaving
   `ingestion_operations.py` with no C-or-worse functions.
+- CR-1148 split business-date ingestion into focused write-mode, rate-limit, validation-policy,
+  idempotent-job, publish-failure, queue-bookkeeping, and ACK helpers, reducing
+  `ingest_business_dates` from `C (17)` to `A (2)`.
