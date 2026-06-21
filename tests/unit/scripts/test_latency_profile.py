@@ -269,12 +269,27 @@ def test_cases_use_runtime_context_dates_and_identifiers() -> None:
     }
     assert "period" not in analytics_portfolio.payload
     assert analytics_position.payload["as_of_date"] == "2026-03-05"
+    assert analytics_position.payload["window"] == {
+        "start_date": "2025-12-05",
+        "end_date": "2026-03-05",
+    }
+    assert "period" not in analytics_position.payload
     assert "/benchmarks/BMK_ABC/market-series" in benchmark_series.url
     assert benchmark_series.payload["as_of_date"] == "2026-03-05"
     assert benchmark_series.payload["window"] == {
         "start_date": "2025-12-05",
         "end_date": "2026-03-05",
     }
+
+
+def test_analytics_latency_window_start_uses_business_day() -> None:
+    runtime_context = RuntimeContext(
+        portfolio_id="DEMO_DPM_EUR_001",
+        benchmark_id="BMK_GLOBAL_BALANCED_60_40",
+        as_of_date=date(2026, 6, 19),
+    )
+
+    assert runtime_context.analytics_window_start_date == date(2026, 3, 23)
 
 
 def test_response_error_sample_captures_json_body() -> None:

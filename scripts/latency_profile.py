@@ -48,7 +48,13 @@ class RuntimeContext:
 
     @property
     def analytics_window_start_date(self) -> date:
-        return self.as_of_date - timedelta(days=90)
+        return _next_business_date(self.as_of_date - timedelta(days=90))
+
+
+def _next_business_date(value: date) -> date:
+    while value.weekday() >= 5:
+        value += timedelta(days=1)
+    return value
 
 
 def _percentile_ms(samples: list[float], percentile: int) -> float:
@@ -450,7 +456,7 @@ def _cases(
             f"{query_control_plane_base_url}/integration/portfolios/{runtime_context.portfolio_id}/analytics/position-timeseries",
             {
                 "as_of_date": as_of_date,
-                "period": "three_months",
+                "window": analytics_window,
                 "frequency": "daily",
                 "consumer_system": "lotus-performance",
                 "page": {"page_size": 500},

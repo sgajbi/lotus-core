@@ -1910,3 +1910,10 @@ health before that claim is defensible.
      workflow-governance regression test so missing or removed labels do not emit stale skipped
      `Queue Auto Merge` check runs. Focused workflow tests, scoped Ruff, and workflow YAML parse
      validation passed.
+313. Fixed the PR Merge Gate latency profile after run `27916210920` showed deterministic
+     `422` responses for both analytics timeseries probes due to a weekend `2026-03-21` FX lookup
+     outside business-day seed coverage. The latency profile now aligns analytics window starts to
+     the next business day and sends the same explicit window to portfolio and position analytics
+     timeseries probes while preserving real endpoint calls, 30 measured runs, p95 budgets, and
+     non-2xx response-body evidence. Focused latency-profile tests and scoped Ruff validation
+     passed locally; PR Merge Gate latency rerun remains the remote proof.
