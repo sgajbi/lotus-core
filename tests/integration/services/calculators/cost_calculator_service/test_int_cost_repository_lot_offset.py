@@ -3,12 +3,16 @@ from decimal import Decimal
 
 import pytest
 from cost_engine.domain.models.transaction import (
+    Fees,
+)
+from cost_engine.domain.models.transaction import (
     Transaction as EngineTransaction,
 )
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     Portfolio,
     PositionLotState,
+    TransactionCost,
 )
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
@@ -174,3 +178,86 @@ async def test_cost_repository_updates_lot_open_quantity_from_engine_state(
     )
     lot = (await async_db_session.execute(lot_stmt)).scalar_one()
     assert lot.open_quantity == Decimal("40")
+
+
+async def test_cost_repository_replaces_transaction_cost_breakdown_idempotently(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_SLICE4_03",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="Medium",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_SLICE4_03",
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        DBTransaction(
+            transaction_id="TXN_SLICE4_03",
+            portfolio_id="PORT_SLICE4_03",
+            instrument_id="BOND_USD_03",
+            security_id="BOND_USD_03",
+            transaction_type="BUY",
+            quantity=Decimal("100"),
+            price=Decimal("98"),
+            gross_transaction_amount=Decimal("9800"),
+            trade_currency="USD",
+            currency="USD",
+            transaction_date=datetime(2026, 2, 28, 10, 0, 0),
+        )
+    )
+    async_db_session.add(
+        TransactionCost(
+            transaction_id="TXN_SLICE4_03",
+            fee_type="stale_fee",
+            amount=Decimal("999"),
+            currency="USD",
+        )
+    )
+    await async_db_session.commit()
+
+    repo = CostCalculatorRepository(async_db_session)
+    txn = EngineTransaction(
+        transaction_id="TXN_SLICE4_03",
+        portfolio_id="PORT_SLICE4_03",
+        instrument_id="BOND_USD_03",
+        security_id="BOND_USD_03",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 2, 28, 10, 0, 0),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("9800"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        fees=Fees(
+            brokerage=Decimal("12.34"),
+            stamp_duty=Decimal("0"),
+            exchange_fee=Decimal("1.25"),
+            gst=Decimal("0"),
+            other_fees=Decimal("0.01"),
+        ),
+    )
+
+    await repo.replace_transaction_cost_breakdown(txn)
+    await async_db_session.commit()
+
+    rows = (
+        (
+            await async_db_session.execute(
+                select(TransactionCost)
+                .where(TransactionCost.transaction_id == "TXN_SLICE4_03")
+                .order_by(TransactionCost.fee_type)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [(row.fee_type, row.amount, row.currency) for row in rows] == [
+        ("brokerage", Decimal("12.34"), "USD"),
+        ("exchange_fee", Decimal("1.25"), "USD"),
+        ("other_fees", Decimal("0.01"), "USD"),
+    ]

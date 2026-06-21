@@ -28,6 +28,14 @@ tested modules.
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
 
+## Current Slice Update
+
+CR-1161 hardens cost-breakdown persistence by splitting positive fee-component selection and
+`TransactionCost` row construction out of
+`CostCalculatorRepository.replace_transaction_cost_breakdown(...)`. Focused integration coverage now
+proves stale cost rows are replaced and only positive Decimal fee components persist with the
+transaction currency. The target method is reduced from `B (7)` to `A (2)`.
+
 ## Health Assessment
 
 `lotus-core` is not yet bank-buyable as a whole. It has strong existing governance machinery and
