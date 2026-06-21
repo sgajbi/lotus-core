@@ -1159,3 +1159,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   component-grouping, decomposition, weight-validation, row-construction, and metadata helpers,
   reducing `ReportingService._resolve_allocation_rows` from `C (16)` to `A (3)` and
   `_can_decompose_position` from `B (7)` to `A (2)`.
+- CR-1143 split reporting portfolio summary assembly into focused portfolio/date/currency
+  resolution, cash-total, rollup, totals, metadata, and response helpers, reducing
+  `ReportingService.get_portfolio_summary` from `C (11)` to `A (3)` and leaving
+  `reporting_service.py` with no B-or-worse functions/classes.

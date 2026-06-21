@@ -1786,3 +1786,8 @@ health before that claim is defensible.
      tests passed with 20 tests; scoped Ruff and format checks passed; Radon reports
      `_resolve_allocation_rows` reduced from `C (16)` to `A (3)` and `_can_decompose_position`
      reduced from `B (7)` to `A (2)`.
+295. Reduced reporting portfolio summary complexity by extracting required portfolio/date/currency
+     resolution, cash totals, summary rollup, totals, metadata, and response assembly from
+     `ReportingService.get_portfolio_summary(...)`. Focused reporting service tests passed with
+     20 tests; scoped Ruff and format checks passed; Radon reports `get_portfolio_summary` reduced
+     from `C (11)` to `A (3)`, with every function/class in `reporting_service.py` A-ranked.
