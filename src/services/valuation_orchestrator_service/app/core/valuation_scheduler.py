@@ -286,6 +286,180 @@ class ValuationScheduler:
             latest_business_date=latest_business_date,
         )
 
+    def _partition_states_without_position_history(
+        self,
+        states_to_backfill,
+        first_open_dates: Dict[tuple[str, str, int], Any],
+    ) -> tuple[list[Any], list[Any]]:
+        states_to_normalize: list[Any] = []
+        states_waiting_for_history: list[Any] = []
+
+        for state in states_to_backfill:
+            key = (state.portfolio_id, state.security_id, state.epoch)
+            if key in first_open_dates:
+                continue
+            if state.status == "REPROCESSING":
+                states_waiting_for_history.append(state)
+            else:
+                states_to_normalize.append(state)
+
+        return states_to_normalize, states_waiting_for_history
+
+    def _build_no_history_normalization_updates(
+        self,
+        states_to_normalize,
+        latest_business_date,
+    ) -> List[Dict[str, Any]]:
+        return [
+            {
+                "portfolio_id": state.portfolio_id,
+                "security_id": state.security_id,
+                "expected_epoch": state.epoch,
+                "watermark_date": latest_business_date,
+                "status": "CURRENT",
+            }
+            for state in states_to_normalize
+        ]
+
+    async def _normalize_no_history_states(
+        self,
+        position_state_repo: PositionStateRepository,
+        states_to_normalize,
+        latest_business_date,
+    ) -> None:
+        normalized_updates = self._build_no_history_normalization_updates(
+            states_to_normalize, latest_business_date
+        )
+        if not normalized_updates:
+            return
+
+        normalized_count = await position_state_repo.bulk_update_states(normalized_updates)
+        stale_skipped_count = len(normalized_updates) - normalized_count
+        if stale_skipped_count:
+            logger.warning(
+                "ValuationScheduler normalized fewer no-history states than prepared updates.",
+                extra={
+                    "prepared_count": len(normalized_updates),
+                    "updated_count": normalized_count,
+                    "stale_skipped_count": stale_skipped_count,
+                },
+            )
+        elif normalized_count:
+            logger.info(
+                "ValuationScheduler normalized no-history states to current watermark.",
+                extra={"normalized_count": normalized_count},
+            )
+
+    def _log_no_history_reprocessing_defer(self, states_waiting_for_history) -> None:
+        if not states_waiting_for_history:
+            return
+
+        logger.info(
+            "ValuationScheduler deferred no-history reprocessing states until "
+            "current-epoch position history is visible.",
+            extra={
+                "deferred_count": len(states_waiting_for_history),
+                "examples": [
+                    f"({state.portfolio_id},{state.security_id},{state.epoch})"
+                    for state in states_waiting_for_history[:3]
+                ],
+            },
+        )
+
+    def _observe_backfill_gap_metrics(self, state, latest_business_date) -> None:
+        gap_days = (latest_business_date - state.watermark_date).days
+        SCHEDULER_GAP_DAYS.observe(gap_days)
+        SNAPSHOT_LAG_SECONDS.observe(gap_days * 86400)
+        POSITION_STATE_WATERMARK_LAG_DAYS.labels(
+            portfolio_id=state.portfolio_id, security_id=state.security_id
+        ).set(gap_days)
+
+    def _log_missing_current_epoch_history(self, state, latest_business_date) -> None:
+        logger.info(
+            "No current-epoch position history found; skipping backfill for now.",
+            extra={
+                "portfolio_id": state.portfolio_id,
+                "security_id": state.security_id,
+                "epoch": state.epoch,
+                "status": state.status,
+                "latest_business_date": str(latest_business_date),
+            },
+        )
+
+    def _build_backfill_job_requests(
+        self,
+        state,
+        first_open_date,
+        latest_business_date,
+    ) -> list[ValuationJobUpsert]:
+        start_date = max(state.watermark_date, first_open_date - timedelta(days=1))
+        job_requests: list[ValuationJobUpsert] = []
+        current_date = start_date + timedelta(days=1)
+
+        while current_date <= latest_business_date:
+            job_requests.append(
+                ValuationJobUpsert(
+                    portfolio_id=state.portfolio_id,
+                    security_id=state.security_id,
+                    valuation_date=current_date,
+                    epoch=state.epoch,
+                    correlation_id=self._build_backfill_correlation_id(
+                        state.portfolio_id,
+                        state.security_id,
+                        state.epoch,
+                        current_date,
+                        state.updated_at,
+                    ),
+                )
+            )
+            current_date += timedelta(days=1)
+
+        return job_requests
+
+    async def _stage_backfill_jobs_for_state(
+        self,
+        job_repo: ValuationJobRepository,
+        state,
+        first_open_date,
+        latest_business_date,
+    ) -> None:
+        job_requests = self._build_backfill_job_requests(
+            state, first_open_date, latest_business_date
+        )
+        if not job_requests:
+            return
+
+        staged_count = await job_repo.upsert_jobs(job_requests)
+        VALUATION_JOBS_CREATED_TOTAL.labels(
+            portfolio_id=state.portfolio_id, security_id=state.security_id
+        ).inc(staged_count)
+        logger.info(
+            "Scheduler: Created "
+            f"{staged_count}/{len(job_requests)} backfill valuation jobs for "
+            f"{state.security_id} in {state.portfolio_id} "
+            f"for epoch {state.epoch}."
+        )
+
+    async def _process_backfill_states(
+        self,
+        job_repo: ValuationJobRepository,
+        states_to_backfill,
+        first_open_dates: Dict[tuple[str, str, int], Any],
+        latest_business_date,
+    ) -> None:
+        for state in states_to_backfill:
+            self._observe_backfill_gap_metrics(state, latest_business_date)
+            key = (state.portfolio_id, state.security_id, state.epoch)
+            first_open_date = first_open_dates.get(key)
+
+            if not first_open_date:
+                self._log_missing_current_epoch_history(state, latest_business_date)
+                continue
+
+            await self._stage_backfill_jobs_for_state(
+                job_repo, state, first_open_date, latest_business_date
+            )
+
     async def _create_backfill_jobs(self, db):
         """
         Finds keys with a lagging watermark and creates valuation jobs to fill the gap,
@@ -318,118 +492,22 @@ class ValuationScheduler:
         keys_to_check = [(s.portfolio_id, s.security_id, s.epoch) for s in states_to_backfill]
 
         first_open_dates = await repo.get_first_open_dates_for_keys(keys_to_check)
-        keys_without_history = [
-            state
-            for state in states_to_backfill
-            if (state.portfolio_id, state.security_id, state.epoch) not in first_open_dates
-        ]
-
-        keys_without_history_to_normalize = [
-            state for state in keys_without_history if state.status != "REPROCESSING"
-        ]
-        keys_waiting_for_history = [
-            state for state in keys_without_history if state.status == "REPROCESSING"
-        ]
-
-        if keys_without_history_to_normalize:
-            normalized_updates = [
-                {
-                    "portfolio_id": state.portfolio_id,
-                    "security_id": state.security_id,
-                    "expected_epoch": state.epoch,
-                    "watermark_date": latest_business_date,
-                    "status": "CURRENT",
-                }
-                for state in keys_without_history_to_normalize
-            ]
-            normalized_count = await position_state_repo.bulk_update_states(normalized_updates)
-            if normalized_count != len(normalized_updates):
-                logger.warning(
-                    "ValuationScheduler normalized fewer no-history states than prepared updates.",
-                    extra={
-                        "prepared_count": len(normalized_updates),
-                        "updated_count": normalized_count,
-                        "stale_skipped_count": len(normalized_updates) - normalized_count,
-                    },
-                )
-            elif normalized_count:
-                logger.info(
-                    "ValuationScheduler normalized no-history states to current watermark.",
-                    extra={"normalized_count": normalized_count},
-                )
-
-        if keys_waiting_for_history:
-            logger.info(
-                "ValuationScheduler deferred no-history reprocessing states until "
-                "current-epoch position history is visible.",
-                extra={
-                    "deferred_count": len(keys_waiting_for_history),
-                    "examples": [
-                        f"({state.portfolio_id},{state.security_id},{state.epoch})"
-                        for state in keys_waiting_for_history[:3]
-                    ],
-                },
-            )
-
-        for state in states_to_backfill:
-            gap_days = (latest_business_date - state.watermark_date).days
-            SCHEDULER_GAP_DAYS.observe(gap_days)
-            SNAPSHOT_LAG_SECONDS.observe(gap_days * 86400)
-
-            POSITION_STATE_WATERMARK_LAG_DAYS.labels(
-                portfolio_id=state.portfolio_id, security_id=state.security_id
-            ).set(gap_days)
-
-            key = (state.portfolio_id, state.security_id, state.epoch)
-            first_open_date = first_open_dates.get(key)
-
-            if not first_open_date:
-                logger.info(
-                    "No current-epoch position history found; skipping backfill for now.",
-                    extra={
-                        "portfolio_id": state.portfolio_id,
-                        "security_id": state.security_id,
-                        "epoch": state.epoch,
-                        "status": state.status,
-                        "latest_business_date": str(latest_business_date),
-                    },
-                )
-                continue
-
-            start_date = max(state.watermark_date, first_open_date - timedelta(days=1))
-
-            job_requests: list[ValuationJobUpsert] = []
-            current_date = start_date + timedelta(days=1)
-
-            while current_date <= latest_business_date:
-                job_requests.append(
-                    ValuationJobUpsert(
-                        portfolio_id=state.portfolio_id,
-                        security_id=state.security_id,
-                        valuation_date=current_date,
-                        epoch=state.epoch,
-                        correlation_id=self._build_backfill_correlation_id(
-                            state.portfolio_id,
-                            state.security_id,
-                            state.epoch,
-                            current_date,
-                            state.updated_at,
-                        ),
-                    )
-                )
-                current_date += timedelta(days=1)
-
-            if job_requests:
-                staged_count = await job_repo.upsert_jobs(job_requests)
-                VALUATION_JOBS_CREATED_TOTAL.labels(
-                    portfolio_id=state.portfolio_id, security_id=state.security_id
-                ).inc(staged_count)
-                logger.info(
-                    "Scheduler: Created "
-                    f"{staged_count}/{len(job_requests)} backfill valuation jobs for "
-                    f"{state.security_id} in {state.portfolio_id} "
-                    f"for epoch {state.epoch}."
-                )
+        (
+            keys_without_history_to_normalize,
+            keys_waiting_for_history,
+        ) = self._partition_states_without_position_history(states_to_backfill, first_open_dates)
+        await self._normalize_no_history_states(
+            position_state_repo,
+            keys_without_history_to_normalize,
+            latest_business_date,
+        )
+        self._log_no_history_reprocessing_defer(keys_waiting_for_history)
+        await self._process_backfill_states(
+            job_repo,
+            states_to_backfill,
+            first_open_dates,
+            latest_business_date,
+        )
 
     async def _dispatch_jobs(self, jobs: List[PortfolioValuationJob]):
         """Publishes a batch of claimed jobs to Kafka."""
