@@ -1190,3 +1190,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1151 split transaction cashflow reconciliation into focused per-row finding,
   missing-cashflow, rule-mismatch comparison, and mismatch finding helpers, reducing
   `run_transaction_cashflow` from `C (11)` to `A (2)`.
+- CR-1152 split timeseries integrity reconciliation into focused scope-map, per-key finding,
+  missing-row, completeness-gap, metric-pair, mismatch-detection, and aggregate mismatch helpers,
+  reducing `run_timeseries_integrity` from `C (19)` to `A (3)` and leaving
+  `reconciliation_service.py` with no C-or-worse functions.
