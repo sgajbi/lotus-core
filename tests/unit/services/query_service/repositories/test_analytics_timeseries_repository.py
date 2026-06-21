@@ -178,6 +178,27 @@ async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
 
 
 @pytest.mark.asyncio
+async def test_timeseries_repository_short_circuits_invalid_position_scope() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = AnalyticsTimeseriesRepository(db)
+
+    rows = await repo.list_position_timeseries_rows(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        page_size=10,
+        cursor_date=None,
+        cursor_security_id=None,
+        security_ids=[],
+        position_ids=["P2:SEC_A", "missing-delimiter"],
+        dimension_filters={},
+    )
+
+    assert rows == []
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow_queries() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [

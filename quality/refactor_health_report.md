@@ -1757,3 +1757,10 @@ health before that claim is defensible.
      with 10 tests, including direct blank-security no-query and keyset predicate coverage; scoped
      Ruff and format checks passed; Radon reports `list_portfolio_tax_lots` reduced from `C (11)`
      to `A (4)`, with every function/class in `buy_state_repository.py` A-ranked.
+291. Reduced analytics position-timeseries page-filter complexity by extracting cursor/keyset
+     predicate construction, dimension predicates, optional predicate application, security-scope
+     filtering, and position-ID scope filtering from
+     `AnalyticsTimeseriesRepository.list_position_timeseries_rows(...)`. Focused analytics
+     repository tests passed with 7 tests, including invalid position-ID no-query coverage; scoped
+     Ruff and format checks passed; Radon reports `list_position_timeseries_rows` reduced from
+     `C (11)` to `A (5)`.

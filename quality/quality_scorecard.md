@@ -1143,3 +1143,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   predicate selection, keyset pagination, and optional predicate helpers, reducing
   `BuyStateRepository.list_portfolio_tax_lots` from `C (11)` to `A (4)` while preserving DPM
   tax-lot source-read semantics.
+- CR-1139 split analytics position-timeseries page filtering into focused cursor, dimension,
+  security-scope, and position-ID scope helpers, reducing
+  `AnalyticsTimeseriesRepository.list_position_timeseries_rows` from `C (11)` to `A (5)` while
+  preserving analytics timeseries pagination semantics.
