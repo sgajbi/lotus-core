@@ -5,7 +5,10 @@ import sys
 import uuid
 from contextvars import ContextVar
 
-from pythonjsonlogger import jsonlogger  # NEW IMPORT
+try:
+    from pythonjsonlogger.json import JsonFormatter
+except ImportError:  # pragma: no cover - compatibility with python-json-logger < 3.3.
+    from pythonjsonlogger.jsonlogger import JsonFormatter
 
 # This shared context variable will hold the correlation ID for each request/event.
 # It's initialized with a default value for cases where it's not explicitly set.
@@ -68,9 +71,7 @@ def setup_logging():
 
     handler = logging.StreamHandler(sys.stdout)
 
-    # --- REFACTORED: Use JsonFormatter ---
-    # Define a standard format string that the JsonFormatter will use to structure the JSON output.
-    formatter = jsonlogger.JsonFormatter(
+    formatter = JsonFormatter(
         "%(asctime)s %(name)s %(levelname)s %(message)s %(service)s "
         "%(environment)s %(correlation_id)s %(request_id)s %(trace_id)s",
         rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
