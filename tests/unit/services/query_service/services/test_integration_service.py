@@ -2290,6 +2290,29 @@ def test_resolve_policy_context_tenant_default_sections_and_strict_mode_id(
     assert strict_only_ctx.strict_mode is True
 
 
+def test_resolve_policy_context_preserves_matched_consumer_on_default_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",
+        (
+            '{"tenants":{"tenant-x":{"strict_mode":true,'
+            '"default_sections":["OVERVIEW"],'
+            '"consumers":{"lotus-manage":null}}}}'
+        ),
+    )
+
+    ctx = resolve_policy_context(
+        tenant_id="tenant-x",
+        consumer_system="lotus-manage",
+    )
+
+    assert ctx.policy_source == "tenant"
+    assert ctx.matched_rule_id == "tenant.tenant-x.consumers.lotus-manage"
+    assert ctx.allowed_sections == ["OVERVIEW"]
+    assert ctx.strict_mode is True
+
+
 def test_get_effective_policy_filters_requested_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     service = make_service()
     monkeypatch.setenv(
