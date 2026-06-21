@@ -313,11 +313,7 @@ def _observed_component_families(rows: list[PerformanceComponentEconomicsRow]) -
 
 
 def _observed_row_component_families(row: PerformanceComponentEconomicsRow) -> set[str]:
-    return {
-        family
-        for family, predicate in _COMPONENT_FAMILY_PREDICATES
-        if predicate(row)
-    }
+    return {family for family, predicate in _COMPONENT_FAMILY_PREDICATES if predicate(row)}
 
 
 def _has_cashflow_component(row: PerformanceComponentEconomicsRow) -> bool:
