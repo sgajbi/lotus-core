@@ -73,6 +73,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
+    PerformanceComponentEconomicsRequest,
+    PerformanceComponentEconomicsResponse,
     PlannedWithdrawalScheduleRequest,
     PlannedWithdrawalScheduleResponse,
     PortfolioManagerBookMembershipRequest,
@@ -162,6 +164,9 @@ BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = {
     "detail": "No overlapping benchmark definition found for benchmark_id and requested window."
 }
 TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE = {
+    "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
+}
+PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE = {
     "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
 }
 HTTP_422_UNPROCESSABLE_CONTENT = 422
@@ -492,6 +497,47 @@ async def get_transaction_cost_curve(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/performance-component-economics",
+    response_model=PerformanceComponentEconomicsResponse,
+    summary="Resolve performance component economics source evidence",
+    description=(
+        "What: Return source-authored transaction, cashflow, fee, tax, income, realized P&L, "
+        "and FX-context economics evidence for contribution analytics.\n"
+        "How: Reads core transaction rows with linked cashflow and transaction-cost records, "
+        "returns deterministic row-level evidence plus component-family totals and coverage "
+        "metadata, and preserves source lineage for downstream proof.\n"
+        "When: Used by lotus-performance to replace local or inferred component economics in "
+        "stateful contribution analytics. This route does not calculate contribution, "
+        "attribution, performance returns, tax advice, execution quality, best execution, or "
+        "OMS acknowledgement; lotus-performance remains responsible for contribution math."
+    ),
+    responses={
+        404: problem_response(
+            "Portfolio not found",
+            PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE,
+        ),
+    },
+    openapi_extra=source_data_product_openapi_extra("PerformanceComponentEconomics"),
+)
+async def get_performance_component_economics(
+    request: PerformanceComponentEconomicsRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier whose component economics evidence should be returned.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    integration_service: IntegrationService = Depends(get_integration_service),
+) -> PerformanceComponentEconomicsResponse:
+    try:
+        return await integration_service.get_performance_component_economics(
+            portfolio_id=portfolio_id,
+            request=request,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.post(

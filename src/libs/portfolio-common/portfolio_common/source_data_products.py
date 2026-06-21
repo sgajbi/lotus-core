@@ -333,6 +333,22 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="PerformanceComponentEconomics",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-performance",),
+        current_routes=("/integration/portfolios/{portfolio_id}/performance-component-economics",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
+        notes=(
+            "Performance-facing source product for transaction, cashflow, fee, tax, income, "
+            "realized P&L, and FX-context component economics evidence. It is source evidence "
+            "for contribution analytics, not a contribution calculation."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="MarketDataCoverageWindow",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

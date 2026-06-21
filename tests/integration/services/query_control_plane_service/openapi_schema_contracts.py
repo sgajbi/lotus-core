@@ -52,6 +52,15 @@ DPM_TRANSACTION_COST_CURVE_SCHEMA_ROOTS = {
     "ReferencePageMetadata",
 }
 
+PERFORMANCE_COMPONENT_ECONOMICS_SCHEMA_ROOTS = {
+    "PerformanceComponentEconomicsRequest",
+    "PerformanceComponentEconomicsRow",
+    "PerformanceComponentEconomicsTotal",
+    "PerformanceComponentEconomicsSupportability",
+    "PerformanceComponentEconomicsResponse",
+    "IntegrationWindow",
+}
+
 DPM_MARKET_DATA_COVERAGE_SCHEMA_ROOTS = {
     "MarketDataCurrencyPair",
     "MarketDataCoverageRequest",

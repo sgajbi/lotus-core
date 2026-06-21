@@ -325,6 +325,46 @@ class TransactionRepository:
         results = await self.db.execute(stmt)
         return list(results.scalars().unique().all())
 
+    async def list_performance_component_economics_evidence(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        as_of_date: date,
+        security_ids: list[str] | None = None,
+        transaction_types: list[str] | None = None,
+    ) -> List[Transaction]:
+        stmt = (
+            select(Transaction)
+            .options(joinedload(Transaction.costs), joinedload(Transaction.cashflow))
+            .where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_date >= start_of_day(start_date),
+                Transaction.transaction_date < start_of_next_day(end_date),
+                Transaction.transaction_date < start_of_next_day(as_of_date),
+            )
+            .order_by(
+                Transaction.security_id.asc(),
+                Transaction.transaction_date.asc(),
+                Transaction.transaction_id.asc(),
+            )
+        )
+        if security_ids:
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            ]
+            if not normalized_security_ids:
+                return []
+            stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
+        if transaction_types:
+            stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
+
+        results = await self.db.execute(stmt)
+        return list(results.scalars().unique().all())
+
     async def get_latest_evidence_timestamp(
         self,
         portfolio_id: str,

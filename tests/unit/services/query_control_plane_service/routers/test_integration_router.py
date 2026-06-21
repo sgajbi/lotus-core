@@ -34,6 +34,7 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_integration_service,
     get_liquidity_reserve_requirement,
     get_market_data_coverage,
+    get_performance_component_economics,
     get_planned_withdrawal_schedule,
     get_portfolio_tax_lot_window,
     get_risk_free_coverage,
@@ -87,6 +88,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     LiquidityReserveRequirementRequest,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
+    PerformanceComponentEconomicsRequest,
     PlannedWithdrawalScheduleRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
@@ -1161,6 +1163,70 @@ async def test_get_transaction_cost_curve_success_path() -> None:
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
     )
+
+
+@pytest.mark.asyncio
+async def test_get_performance_component_economics_success_path() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_performance_component_economics = AsyncMock(
+        return_value={
+            "product_name": "PerformanceComponentEconomics",
+            "product_version": "v1",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "as_of_date": "2026-05-10",
+            "window": {"start_date": "2026-05-01", "end_date": "2026-05-10"},
+            "request_fingerprint": "fp-performance-economics",
+            "rows": [],
+            "component_totals": [],
+            "supportability": {
+                "state": "UNAVAILABLE",
+                "reason": "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND",
+                "source_owner": "lotus-core",
+                "downstream_consumer": "lotus-performance",
+                "source_row_count": 0,
+                "supported_component_families": ["cashflow", "fee"],
+                "observed_component_families": [],
+                "missing_component_families": ["cashflow", "fee"],
+            },
+            "lineage": {"contract_version": "performance_component_economics_v1"},
+        }
+    )
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date="2026-05-10",
+        window={"start_date": "2026-05-01", "end_date": "2026-05-10"},
+    )
+
+    response = await get_performance_component_economics(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        integration_service=mock_service,
+    )
+
+    assert response["product_name"] == "PerformanceComponentEconomics"
+    mock_service.get_performance_component_economics.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_performance_component_economics_maps_missing_portfolio_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_performance_component_economics = AsyncMock(
+        side_effect=LookupError("Portfolio with id PB_MISSING not found")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_performance_component_economics(
+            portfolio_id="PB_MISSING",
+            request=PerformanceComponentEconomicsRequest(
+                as_of_date="2026-05-10",
+                window={"start_date": "2026-05-01", "end_date": "2026-05-10"},
+            ),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio

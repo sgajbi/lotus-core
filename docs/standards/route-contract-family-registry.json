@@ -118,6 +118,7 @@
         "POST /integration/portfolios/{portfolio_id}/liquidity-reserve-requirement",
         "POST /integration/portfolios/{portfolio_id}/mandate-binding",
         "POST /integration/portfolios/{portfolio_id}/planned-withdrawal-schedule",
+        "POST /integration/portfolios/{portfolio_id}/performance-component-economics",
         "POST /integration/portfolios/{portfolio_id}/sustainability-preference-profile",
         "POST /integration/portfolios/{portfolio_id}/transaction-cost-curve",
         "POST /integration/portfolios/{portfolio_id}/tax-lots",
