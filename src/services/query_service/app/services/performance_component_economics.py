@@ -12,6 +12,7 @@ from ..dtos.reference_integration_dto import (
     PerformanceComponentEconomicsSupportability,
     PerformanceComponentEconomicsTotal,
 )
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
 from .reference_data_helpers import latest_reference_evidence_timestamp
@@ -31,6 +32,10 @@ async def resolve_performance_component_economics_response(
     if not await repository.portfolio_exists(portfolio_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
+    portfolio_base_currency = await repository.get_portfolio_base_currency(portfolio_id)
+    if portfolio_base_currency is None:
+        raise LookupError(f"Portfolio with id {portfolio_id} not found")
+    normalized_portfolio_base_currency = normalize_currency_code(portfolio_base_currency)
     transactions = await repository.list_performance_component_economics_evidence(
         portfolio_id=portfolio_id,
         start_date=request.window.start_date,
@@ -45,6 +50,7 @@ async def resolve_performance_component_economics_response(
         request=request,
         rows=rows,
         transactions=transactions,
+        portfolio_base_currency=normalized_portfolio_base_currency,
     )
 
 
@@ -60,6 +66,7 @@ def build_performance_component_economics_response(
     request: PerformanceComponentEconomicsRequest,
     rows: list[PerformanceComponentEconomicsRow],
     transactions: list[Any],
+    portfolio_base_currency: str,
 ) -> PerformanceComponentEconomicsResponse:
     observed_component_families = _observed_component_families(rows)
     state = "READY" if rows else "UNAVAILABLE"
@@ -79,7 +86,10 @@ def build_performance_component_economics_response(
         window=request.window,
         request_fingerprint=request_scope_fingerprint,
         rows=rows,
-        component_totals=build_performance_component_economics_totals(rows),
+        component_totals=build_performance_component_economics_totals(
+            rows,
+            portfolio_base_currency=portfolio_base_currency,
+        ),
         supportability=PerformanceComponentEconomicsSupportability(
             state=state,
             reason=reason,
@@ -99,13 +109,15 @@ def build_performance_component_economics_response(
         **source_product_runtime_metadata_without_as_of_date(
             request.as_of_date,
             data_quality_status="COMPLETE" if rows else "UNKNOWN",
-            latest_evidence_timestamp=latest_reference_evidence_timestamp(transactions),
+            latest_evidence_timestamp=_latest_performance_evidence_timestamp(transactions),
         ),
     )
 
 
 def build_performance_component_economics_totals(
     rows: list[PerformanceComponentEconomicsRow],
+    *,
+    portfolio_base_currency: str,
 ) -> list[PerformanceComponentEconomicsTotal]:
     grouped: dict[tuple[str, str], list[Decimal]] = defaultdict(list)
     for row in rows:
@@ -113,9 +125,19 @@ def build_performance_component_economics_totals(
         _append_total(grouped, "income", row.currency, row.net_interest_amount)
         _append_total(grouped, "tax", row.currency, row.withholding_tax_amount)
         _append_total(grouped, "tax", row.currency, row.other_interest_deductions_amount)
-        _append_total(grouped, "realized_capital_pnl", row.currency, row.realized_capital_pnl_base)
-        _append_total(grouped, "realized_fx_pnl", row.currency, row.realized_fx_pnl_base)
-        _append_total(grouped, "realized_total_pnl", row.currency, row.realized_total_pnl_base)
+        _append_total(
+            grouped,
+            "realized_capital_pnl",
+            portfolio_base_currency,
+            row.realized_capital_pnl_base,
+        )
+        _append_total(grouped, "realized_fx_pnl", portfolio_base_currency, row.realized_fx_pnl_base)
+        _append_total(
+            grouped,
+            "realized_total_pnl",
+            portfolio_base_currency,
+            row.realized_total_pnl_base,
+        )
         if row.cashflow_amount is not None and row.cashflow_currency:
             _append_total(grouped, "cashflow", row.cashflow_currency, row.cashflow_amount)
 
@@ -148,12 +170,12 @@ def _performance_component_economics_row(transaction: Any) -> PerformanceCompone
             str(getattr(cashflow, "currency")).strip().upper() if cashflow is not None else None
         ),
         cashflow_classification=(
-            str(getattr(cashflow, "classification")).strip().lower()
+            str(getattr(cashflow, "classification")).strip().upper()
             if cashflow is not None
             else None
         ),
         cashflow_timing=(
-            str(getattr(cashflow, "timing")).strip().lower() if cashflow is not None else None
+            str(getattr(cashflow, "timing")).strip().upper() if cashflow is not None else None
         ),
         is_position_flow=(
             bool(getattr(cashflow, "is_position_flow")) if cashflow is not None else None
@@ -200,6 +222,17 @@ def _append_total(
 ) -> None:
     if amount != 0:
         grouped[(component_family, currency)].append(amount)
+
+
+def _latest_performance_evidence_timestamp(transactions: list[Any]):
+    evidence_rows: list[Any] = []
+    for transaction in transactions:
+        evidence_rows.append(transaction)
+        cashflow = getattr(transaction, "cashflow", None)
+        if cashflow is not None:
+            evidence_rows.append(cashflow)
+        evidence_rows.extend(getattr(transaction, "costs", None) or [])
+    return latest_reference_evidence_timestamp(evidence_rows)
 
 
 def _observed_component_families(rows: list[PerformanceComponentEconomicsRow]) -> list[str]:

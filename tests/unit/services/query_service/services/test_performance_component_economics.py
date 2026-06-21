@@ -33,6 +33,7 @@ def _transaction(
     realized_total_pnl_base: str | None = None,
     transaction_fx_rate: str | None = None,
     fx_contract_id: str | None = None,
+    updated_at: datetime | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         transaction_id=transaction_id,
@@ -72,7 +73,7 @@ def _transaction(
         if transaction_fx_rate is not None
         else None,
         fx_contract_id=fx_contract_id,
-        updated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
+        updated_at=updated_at or datetime(2026, 5, 10, 15, tzinfo=UTC),
     )
 
 
@@ -111,7 +112,8 @@ def test_performance_component_economics_rows_preserve_source_figures() -> None:
     assert row.transaction_type == "DIVIDEND"
     assert row.trade_fee_amount == Decimal("2.5000")
     assert row.cashflow_amount == Decimal("100.0000")
-    assert row.cashflow_classification == "dividend"
+    assert row.cashflow_classification == "DIVIDEND"
+    assert row.cashflow_timing == "EOD"
     assert row.withholding_tax_amount == Decimal("15.0000")
     assert row.other_interest_deductions_amount == Decimal("5.0000")
     assert row.net_interest_amount == Decimal("80.0000")
@@ -125,9 +127,10 @@ def test_performance_component_economics_totals_group_domain_figures() -> None:
         [
             _transaction(
                 transaction_id="TXN-DIV-001",
+                currency="EUR",
                 cashflow=SimpleNamespace(
                     amount=Decimal("100.0000"),
-                    currency="USD",
+                    currency="EUR",
                     classification="DIVIDEND",
                     timing="EOD",
                     is_position_flow=True,
@@ -145,22 +148,30 @@ def test_performance_component_economics_totals_group_domain_figures() -> None:
 
     totals = {
         (total.component_family, total.currency): total
-        for total in build_performance_component_economics_totals(rows)
+        for total in build_performance_component_economics_totals(
+            rows,
+            portfolio_base_currency="USD",
+        )
     }
 
-    assert totals[("cashflow", "USD")].amount == Decimal("100.0000")
-    assert totals[("fee", "USD")].amount == Decimal("2.5000")
-    assert totals[("income", "USD")].amount == Decimal("80.0000")
-    assert totals[("tax", "USD")].amount == Decimal("20.0000")
+    assert totals[("cashflow", "EUR")].amount == Decimal("100.0000")
+    assert totals[("fee", "EUR")].amount == Decimal("2.5000")
+    assert totals[("income", "EUR")].amount == Decimal("80.0000")
+    assert totals[("tax", "EUR")].amount == Decimal("20.0000")
     assert totals[("realized_capital_pnl", "USD")].amount == Decimal("10.0000")
     assert totals[("realized_fx_pnl", "USD")].amount == Decimal("3.0000")
     assert totals[("realized_total_pnl", "USD")].amount == Decimal("13.0000")
-    assert totals[("tax", "USD")].evidence_count == 2
+    assert totals[("tax", "EUR")].evidence_count == 2
 
 
 def test_performance_component_economics_response_reports_coverage_and_lineage() -> None:
     transaction = _transaction(
         transaction_id="TXN-DIV-001",
+        costs=[
+            SimpleNamespace(
+                amount=Decimal("2.5000"), updated_at=datetime(2026, 5, 10, 17, tzinfo=UTC)
+            )
+        ],
         cashflow=SimpleNamespace(
             amount=Decimal("100.0000"),
             currency="USD",
@@ -168,6 +179,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
             timing="EOD",
             is_position_flow=True,
             is_portfolio_flow=False,
+            updated_at=datetime(2026, 5, 10, 16, tzinfo=UTC),
         ),
         withholding_tax_amount="15.0000",
         other_interest_deductions_amount="5.0000",
@@ -187,6 +199,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         request=request,
         rows=build_performance_component_economics_rows([transaction]),
         transactions=[transaction],
+        portfolio_base_currency="USD",
     )
 
     assert response.product_name == "PerformanceComponentEconomics"
@@ -205,7 +218,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     ]
     assert response.supportability.missing_component_families == []
     assert response.data_quality_status == "COMPLETE"
-    assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 15, tzinfo=UTC)
+    assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 17, tzinfo=UTC)
     assert response.lineage["source_table"] == "transactions,cashflows,transaction_costs"
 
 
@@ -217,6 +230,10 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
             async def portfolio_exists(self, portfolio_id: str) -> bool:
                 calls.append(("portfolio_exists", {"portfolio_id": portfolio_id}))
                 return True
+
+            async def get_portfolio_base_currency(self, portfolio_id: str) -> str:
+                calls.append(("get_portfolio_base_currency", {"portfolio_id": portfolio_id}))
+                return "USD"
 
             async def list_performance_component_economics_evidence(
                 self, **kwargs: object
@@ -241,7 +258,8 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
     assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert [call[0] for call in calls] == [
         "portfolio_exists",
+        "get_portfolio_base_currency",
         "performance_component_economics",
     ]
-    assert calls[1][1]["transaction_types"] == ["DIVIDEND"]
-    assert calls[1][1]["security_ids"] == ["EQ_US_AAPL"]
+    assert calls[2][1]["transaction_types"] == ["DIVIDEND"]
+    assert calls[2][1]["security_ids"] == ["EQ_US_AAPL"]
