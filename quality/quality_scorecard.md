@@ -1155,3 +1155,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   zero-safe average-cost, expense-classification, and cashflow bucket helpers, reducing
   `PositionTimeseriesLogic.calculate_daily_record` from `C (11)` to `A (1)` and leaving
   `position_timeseries_logic.py` with no B-or-worse functions/classes.
+- CR-1142 split reporting allocation look-through resolution into focused parent-security,
+  component-grouping, decomposition, weight-validation, row-construction, and metadata helpers,
+  reducing `ReportingService._resolve_allocation_rows` from `C (16)` to `A (3)` and
+  `_can_decompose_position` from `B (7)` to `A (2)`.
