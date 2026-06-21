@@ -1687,4 +1687,12 @@ health before that claim is defensible.
      tests passed with 34 tests, including direct coverage for non-current STALE, stale price STALE,
      and current/fresh COMPLETE behavior. Scoped Ruff passed. Radon reports
      `holdings_data_quality_status` reduced from `C (12)` to `A (4)`, with extracted helpers
-     A-ranked and `position_holdings.py` remaining A-ranked maintainability at `A (25.47)`.
+     A-ranked and `position_holdings.py` remaining A-ranked maintainability at `A (26.17)` after
+     CR-1128 on the same branch.
+280. Reduced HoldingsAsOf response mapper complexity by extracting snapshot/history date selection,
+     optional instrument field fallback, and optional position-state status selection from
+     `position_response_data(...)`. Focused holdings tests passed with 34 tests and scoped Ruff
+     passed. Radon reports `position_response_data` reduced from `C (12)` to `A (1)`, leaving
+     `merge_snapshot_and_history_position_rows` as the remaining B-ranked helper in
+     `position_holdings.py`; module maintainability remains A-ranked and improves from `A (25.47)`
+     to `A (26.17)`.

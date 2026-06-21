@@ -1098,4 +1098,8 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `A (4)` while preserving COMPLETE/PARTIAL/STALE/UNKNOWN response semantics. Focused holdings
   tests passed with 34 tests, including direct non-current STALE, stale price STALE, and
   current/fresh COMPLETE coverage; scoped Ruff passed; `position_holdings.py` remains A-ranked
-  maintainability at `A (25.47)`.
+  maintainability at `A (26.17)` after CR-1128 on the same branch.
+- CR-1128 split HoldingsAsOf response row mapping into focused row-date, instrument-field, and
+  state-status helpers, reducing `position_response_data` from `C (12)` to `A (1)` while
+  preserving snapshot/history date selection, optional instrument fallbacks, valuation attachment,
+  and reprocessing-status mapping; module maintainability improves from `A (25.47)` to `A (26.17)`.
