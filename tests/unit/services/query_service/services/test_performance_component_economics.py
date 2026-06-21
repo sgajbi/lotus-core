@@ -20,6 +20,7 @@ def _transaction(
     security_id: str = " EQ_US_AAPL ",
     transaction_type: str = "DIVIDEND",
     currency: str = " usd ",
+    trade_currency: str = " usd ",
     transaction_date: datetime | None = None,
     gross_transaction_amount: str = "125.0000",
     trade_fee: str | None = "2.5000",
@@ -41,6 +42,7 @@ def _transaction(
         security_id=security_id,
         transaction_type=transaction_type,
         currency=currency,
+        trade_currency=trade_currency,
         transaction_date=transaction_date or datetime(2026, 5, 10, 14, tzinfo=UTC),
         gross_transaction_amount=Decimal(gross_transaction_amount),
         trade_fee=Decimal(trade_fee) if trade_fee is not None else None,
@@ -83,8 +85,8 @@ def test_performance_component_economics_rows_preserve_source_figures() -> None:
             _transaction(
                 transaction_id="TXN-DIV-001",
                 costs=[
-                    SimpleNamespace(amount=Decimal("1.2500")),
-                    SimpleNamespace(amount=Decimal("1.2500")),
+                    SimpleNamespace(amount=Decimal("1.2500"), currency="USD"),
+                    SimpleNamespace(amount=Decimal("1.2500"), currency="USD"),
                 ],
                 cashflow=SimpleNamespace(
                     amount=Decimal("100.0000"),
@@ -111,6 +113,7 @@ def test_performance_component_economics_rows_preserve_source_figures() -> None:
     assert row.security_id == "EQ_US_AAPL"
     assert row.transaction_type == "DIVIDEND"
     assert row.trade_fee_amount == Decimal("2.5000")
+    assert row.trade_fee_currency == "USD"
     assert row.cashflow_amount == Decimal("100.0000")
     assert row.cashflow_classification == "DIVIDEND"
     assert row.cashflow_timing == "EOD"
@@ -128,6 +131,8 @@ def test_performance_component_economics_totals_group_domain_figures() -> None:
             _transaction(
                 transaction_id="TXN-DIV-001",
                 currency="EUR",
+                trade_currency="USD",
+                costs=[SimpleNamespace(amount=Decimal("2.5000"), currency="USD")],
                 cashflow=SimpleNamespace(
                     amount=Decimal("100.0000"),
                     currency="EUR",
@@ -155,7 +160,7 @@ def test_performance_component_economics_totals_group_domain_figures() -> None:
     }
 
     assert totals[("cashflow", "EUR")].amount == Decimal("100.0000")
-    assert totals[("fee", "EUR")].amount == Decimal("2.5000")
+    assert totals[("fee", "USD")].amount == Decimal("2.5000")
     assert totals[("income", "EUR")].amount == Decimal("80.0000")
     assert totals[("tax", "EUR")].amount == Decimal("20.0000")
     assert totals[("realized_capital_pnl", "USD")].amount == Decimal("10.0000")
@@ -220,6 +225,32 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 17, tzinfo=UTC)
     assert response.lineage["source_table"] == "transactions,cashflows,transaction_costs"
+
+
+def test_performance_component_economics_totals_do_not_mislabel_mixed_fee_currency() -> None:
+    rows = build_performance_component_economics_rows(
+        [
+            _transaction(
+                transaction_id="TXN-MIXED-FEE-001",
+                costs=[
+                    SimpleNamespace(amount=Decimal("1.0000"), currency="USD"),
+                    SimpleNamespace(amount=Decimal("2.0000"), currency="EUR"),
+                ],
+            )
+        ]
+    )
+
+    totals = {
+        (total.component_family, total.currency): total
+        for total in build_performance_component_economics_totals(
+            rows,
+            portfolio_base_currency="USD",
+        )
+    }
+
+    assert rows[0].trade_fee_amount == Decimal("3.0000")
+    assert rows[0].trade_fee_currency == "MIXED"
+    assert totals[("fee", "MIXED")].amount == Decimal("3.0000")
 
 
 def test_resolve_performance_component_economics_response_orchestrates_repository_read() -> None:

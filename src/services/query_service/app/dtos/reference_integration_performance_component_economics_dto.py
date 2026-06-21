@@ -105,6 +105,16 @@ class PerformanceComponentEconomicsRow(BaseModel):
         description="Source-authored transaction fee amount from cost rows or trade_fee.",
         examples=["2.5000000000"],
     )
+    trade_fee_currency: str = Field(
+        ...,
+        description=(
+            "Currency for trade_fee_amount. Uses the positive transaction-cost row currency when "
+            "available, otherwise the transaction trade currency. MIXED indicates multiple "
+            "positive cost-row currencies were present and must not be blindly summed as one ISO "
+            "currency."
+        ),
+        examples=["USD"],
+    )
     cashflow_amount: Decimal | None = Field(
         None,
         description="Linked cashflow amount when a cashflow row exists.",
@@ -116,10 +126,10 @@ class PerformanceComponentEconomicsRow(BaseModel):
     cashflow_classification: str | None = Field(
         None,
         description="Core cashflow classification when a cashflow row exists.",
-        examples=["dividend"],
+        examples=["DIVIDEND"],
     )
     cashflow_timing: str | None = Field(
-        None, description="Core cashflow timing when a cashflow row exists.", examples=["eod"]
+        None, description="Core cashflow timing when a cashflow row exists.", examples=["EOD"]
     )
     is_position_flow: bool | None = Field(
         None, description="True when the linked cashflow is position-scoped.", examples=[True]
