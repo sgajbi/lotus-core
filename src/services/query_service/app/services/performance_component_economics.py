@@ -121,7 +121,7 @@ def build_performance_component_economics_totals(
 ) -> list[PerformanceComponentEconomicsTotal]:
     grouped: dict[tuple[str, str], list[Decimal]] = defaultdict(list)
     for row in rows:
-        _append_total(grouped, "fee", row.currency, row.trade_fee_amount)
+        _append_total(grouped, "fee", row.trade_fee_currency, row.trade_fee_amount)
         _append_total(grouped, "income", row.currency, row.net_interest_amount)
         _append_total(grouped, "tax", row.currency, row.withholding_tax_amount)
         _append_total(grouped, "tax", row.currency, row.other_interest_deductions_amount)
@@ -163,6 +163,7 @@ def _performance_component_economics_row(transaction: Any) -> PerformanceCompone
         currency=str(transaction.currency).strip().upper(),
         gross_transaction_amount=decimal_or_zero(transaction.gross_transaction_amount),
         trade_fee_amount=transaction_fee_amount(transaction),
+        trade_fee_currency=_transaction_fee_currency(transaction),
         cashflow_amount=(
             decimal_or_zero(getattr(cashflow, "amount", None)) if cashflow is not None else None
         ),
@@ -233,6 +234,24 @@ def _latest_performance_evidence_timestamp(transactions: list[Any]):
             evidence_rows.append(cashflow)
         evidence_rows.extend(getattr(transaction, "costs", None) or [])
     return latest_reference_evidence_timestamp(evidence_rows)
+
+
+def _transaction_fee_currency(transaction: Any) -> str:
+    positive_cost_currencies = {
+        normalize_currency_code(currency)
+        for cost in (getattr(transaction, "costs", None) or [])
+        if decimal_or_zero(getattr(cost, "amount", None)) > 0
+        and (currency := getattr(cost, "currency", None))
+    }
+    if len(positive_cost_currencies) == 1:
+        return next(iter(positive_cost_currencies))
+    if len(positive_cost_currencies) > 1:
+        return "MIXED"
+
+    trade_currency = getattr(transaction, "trade_currency", None)
+    if trade_currency:
+        return normalize_currency_code(trade_currency)
+    return normalize_currency_code(getattr(transaction, "currency"))
 
 
 def _observed_component_families(rows: list[PerformanceComponentEconomicsRow]) -> list[str]:
