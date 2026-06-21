@@ -1821,3 +1821,9 @@ health before that claim is defensible.
      failure handling, queue bookkeeping, and ACK assembly from `ingest_business_dates(...)`.
      Focused business-date route tests passed with 7 tests; scoped Ruff and format checks passed;
      Radon reports `ingest_business_dates` reduced from `C (17)` to `A (2)`.
+301. Reduced core snapshot route policy complexity by extracting policy section-code normalization,
+     governed request construction, applied/dropped section resolution, strict/empty section
+     assertion, governance metadata construction, and service response/error mapping from
+     `create_core_snapshot(...)`. Focused core-snapshot route tests passed with 7 tests; scoped Ruff
+     and format checks passed; Radon reports `create_core_snapshot` reduced from `C (17)` to
+     `A (1)`, with no C-or-worse functions remaining in `integration.py`.
