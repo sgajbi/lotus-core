@@ -115,6 +115,9 @@ def test_performance_component_economics_rows_preserve_source_figures() -> None:
     assert row.trade_currency == "USD"
     assert row.trade_fee_amount == Decimal("2.5000")
     assert row.trade_fee_currency == "USD"
+    assert [(component.currency, component.amount) for component in row.trade_fee_components] == [
+        ("USD", Decimal("2.5000"))
+    ]
     assert row.cashflow_amount == Decimal("100.0000")
     assert row.cashflow_classification == "DIVIDEND"
     assert row.cashflow_timing == "EOD"
@@ -178,7 +181,9 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         transaction_id="TXN-DIV-001",
         costs=[
             SimpleNamespace(
-                amount=Decimal("2.5000"), updated_at=datetime(2026, 5, 10, 17, tzinfo=UTC)
+                amount=Decimal("2.5000"),
+                currency="USD",
+                updated_at=datetime(2026, 5, 10, 17, tzinfo=UTC),
             )
         ],
         cashflow=SimpleNamespace(
@@ -252,9 +257,16 @@ def test_performance_component_economics_totals_do_not_mislabel_mixed_fee_curren
         )
     }
 
-    assert rows[0].trade_fee_amount == Decimal("3.0000")
+    assert rows[0].trade_fee_amount == Decimal("0")
     assert rows[0].trade_fee_currency == "MIXED"
-    assert totals[("fee", "MIXED")].amount == Decimal("3.0000")
+    assert [
+        (component.currency, component.amount) for component in rows[0].trade_fee_components
+    ] == [
+        ("EUR", Decimal("2.0000")),
+        ("USD", Decimal("1.0000")),
+    ]
+    assert totals[("fee", "EUR")].amount == Decimal("2.0000")
+    assert totals[("fee", "USD")].amount == Decimal("1.0000")
 
 
 def test_resolve_performance_component_economics_response_orchestrates_repository_read() -> None:

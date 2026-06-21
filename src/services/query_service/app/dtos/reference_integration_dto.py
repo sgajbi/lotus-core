@@ -2404,6 +2404,7 @@ from .reference_integration_benchmark_market_series_dto import (  # noqa: E402, 
 )
 from .reference_integration_performance_component_economics_dto import (  # noqa: E402, F401
     SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES,
+    PerformanceComponentEconomicsFeeComponent,
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
     PerformanceComponentEconomicsRow,
