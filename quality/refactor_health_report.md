@@ -1798,3 +1798,8 @@ health before that claim is defensible.
      Focused position calculator tests passed with 47 tests; focused reprocessing atomicity
      integration tests passed with 3 tests; scoped Ruff and format checks passed; Radon reports
      `PositionCalculator.calculate` reduced from `C (16)` to `A (3)`.
+297. Reduced ingestion retry payload filter complexity by extracting endpoint-specific partial
+     retry payload filters and a governed dispatch table from `_filter_payload_by_record_keys(...)`.
+     Focused event replay helper tests passed with 7 tests; focused ingestion retry route tests
+     passed with 3 tests; scoped Ruff and format checks passed; Radon reports
+     `_filter_payload_by_record_keys` reduced from `C (17)` to `A (3)`.

@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
@@ -521,6 +521,85 @@ INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE = {
 }
 
 
+_RetryPayloadFilter = Callable[[dict[str, Any], set[str]], dict[str, Any]]
+
+
+def _filter_record_collection_payload(
+    *,
+    payload: dict[str, Any],
+    collection_name: str,
+    record_key_name: str,
+    key_set: set[str],
+    stringify_record_key: bool = False,
+) -> dict[str, Any]:
+    rows = [
+        row
+        for row in payload.get(collection_name, [])
+        if _retry_record_key(row, record_key_name, stringify_record_key) in key_set
+    ]
+    return {collection_name: rows}
+
+
+def _retry_record_key(row: dict[str, Any], record_key_name: str, stringify: bool) -> Any:
+    value = row.get(record_key_name)
+    return str(value) if stringify else value
+
+
+def _filter_transaction_retry_payload(payload: dict[str, Any], key_set: set[str]) -> dict[str, Any]:
+    return _filter_record_collection_payload(
+        payload=payload,
+        collection_name="transactions",
+        record_key_name="transaction_id",
+        key_set=key_set,
+    )
+
+
+def _filter_portfolio_retry_payload(payload: dict[str, Any], key_set: set[str]) -> dict[str, Any]:
+    return _filter_record_collection_payload(
+        payload=payload,
+        collection_name="portfolios",
+        record_key_name="portfolio_id",
+        key_set=key_set,
+    )
+
+
+def _filter_instrument_retry_payload(payload: dict[str, Any], key_set: set[str]) -> dict[str, Any]:
+    return _filter_record_collection_payload(
+        payload=payload,
+        collection_name="instruments",
+        record_key_name="security_id",
+        key_set=key_set,
+    )
+
+
+def _filter_business_date_retry_payload(
+    payload: dict[str, Any], key_set: set[str]
+) -> dict[str, Any]:
+    return _filter_record_collection_payload(
+        payload=payload,
+        collection_name="business_dates",
+        record_key_name="business_date",
+        key_set=key_set,
+        stringify_record_key=True,
+    )
+
+
+def _filter_reprocess_transaction_retry_payload(
+    payload: dict[str, Any], key_set: set[str]
+) -> dict[str, Any]:
+    rows = [txn_id for txn_id in payload.get("transaction_ids", []) if txn_id in key_set]
+    return {"transaction_ids": rows}
+
+
+_PARTIAL_RETRY_PAYLOAD_FILTERS: dict[str, _RetryPayloadFilter] = {
+    "/ingest/transactions": _filter_transaction_retry_payload,
+    "/ingest/portfolios": _filter_portfolio_retry_payload,
+    "/ingest/instruments": _filter_instrument_retry_payload,
+    "/ingest/business-dates": _filter_business_date_retry_payload,
+    "/reprocess/transactions": _filter_reprocess_transaction_retry_payload,
+}
+
+
 def _filter_payload_by_record_keys(
     *,
     endpoint: str,
@@ -530,28 +609,10 @@ def _filter_payload_by_record_keys(
     if not record_keys:
         return payload
     key_set = set(record_keys)
-    if endpoint == "/ingest/transactions":
-        rows = [
-            row for row in payload.get("transactions", []) if row.get("transaction_id") in key_set
-        ]
-        return {"transactions": rows}
-    if endpoint == "/ingest/portfolios":
-        rows = [row for row in payload.get("portfolios", []) if row.get("portfolio_id") in key_set]
-        return {"portfolios": rows}
-    if endpoint == "/ingest/instruments":
-        rows = [row for row in payload.get("instruments", []) if row.get("security_id") in key_set]
-        return {"instruments": rows}
-    if endpoint == "/ingest/business-dates":
-        rows = [
-            row
-            for row in payload.get("business_dates", [])
-            if str(row.get("business_date")) in key_set
-        ]
-        return {"business_dates": rows}
-    if endpoint == "/reprocess/transactions":
-        rows = [txn_id for txn_id in payload.get("transaction_ids", []) if txn_id in key_set]
-        return {"transaction_ids": rows}
-    raise ValueError(f"Partial retry is not supported for endpoint '{endpoint}'.")
+    payload_filter = _PARTIAL_RETRY_PAYLOAD_FILTERS.get(endpoint)
+    if payload_filter is None:
+        raise ValueError(f"Partial retry is not supported for endpoint '{endpoint}'.")
+    return payload_filter(payload, key_set)
 
 
 async def _record_replay_audit_best_effort(

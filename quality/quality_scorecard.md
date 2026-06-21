@@ -1167,3 +1167,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   completed-date, backdated-replay, deterministic replay-event, outbox-publication,
   normal replay, and persistence/rearming helpers, reducing `PositionCalculator.calculate`
   from `C (16)` to `A (3)`.
+- CR-1145 split ingestion retry payload filtering into endpoint-specific partial-retry filters
+  and a governed dispatch table, reducing `_filter_payload_by_record_keys` from `C (17)` to
+  `A (3)` with direct helper and retry-route proof.
