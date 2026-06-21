@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-05-15T12:37:51.943096+00:00",
+  "generatedAt": "2026-06-21T18:50:59.294475+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -499,7 +499,7 @@
       "semanticId": "lotus.benchmark_currency",
       "canonicalTerm": "benchmark_currency",
       "preferredName": "benchmark_currency",
-      "description": "Benchmark currency.",
+      "description": "Canonical three-letter benchmark currency used for performance comparison, policy evidence, and reporting alignment.",
       "example": "USD",
       "type": "string",
       "locations": [
@@ -2411,7 +2411,7 @@
       "semanticId": "lotus.index_currency",
       "canonicalTerm": "index_currency",
       "preferredName": "index_currency",
-      "description": "Index currency.",
+      "description": "Canonical three-letter index currency used for benchmark construction, performance comparison, and reporting alignment.",
       "example": "USD",
       "type": "string",
       "locations": [
@@ -5967,7 +5967,7 @@
       "semanticId": "lotus.series_currency",
       "canonicalTerm": "series_currency",
       "preferredName": "series_currency",
-      "description": "Series currency code.",
+      "description": "Canonical three-letter currency for the index price series.",
       "example": "USD",
       "type": "string",
       "locations": [
@@ -6290,6 +6290,48 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_reported_cash_weight",
+      "canonicalTerm": "source_reported_cash_weight",
+      "preferredName": "source_reported_cash_weight",
+      "description": "Core-owned cash weight as a decimal ratio, calculated as total portfolio-currency cash balance divided by the Core-owned portfolio market-value denominator for the same resolved as-of date. Null means the denominator was missing, zero, stale, or otherwise not supportable; downstream consumers such as lotus-idea must not reconstruct this value locally.",
+      "example": 0.1182215,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_reported_cash_weight_denominator_portfolio_currency",
+      "canonicalTerm": "source_reported_cash_weight_denominator_portfolio_currency",
+      "preferredName": "source_reported_cash_weight_denominator_portfolio_currency",
+      "description": "Core-owned portfolio market-value denominator used for `source_reported_cash_weight`, in portfolio currency. Null when the denominator is not supportable.",
+      "example": 2000000.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_reported_cash_weight_supportability",
+      "canonicalTerm": "source_reported_cash_weight_supportability",
+      "preferredName": "source_reported_cash_weight_supportability",
+      "description": "Supportability posture for the Core-owned cash-weight calculation. `SUPPORTED` means the weight was calculated from same-date Core snapshot market values. Blocked states return null weight rather than inventing a liquidity or idle-cash signal.",
+      "example": "SUPPORTED",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -6946,7 +6988,7 @@
       "semanticId": "lotus.threshold_currency",
       "canonicalTerm": "threshold_currency",
       "preferredName": "threshold_currency",
-      "description": "ISO currency code for threshold currency.",
+      "description": "Canonical three-letter currency for the threshold amount when the tax rule contains monetary threshold evidence.",
       "example": {
         "id": "OBJ_001"
       },
@@ -7121,7 +7163,10 @@
       "example": {
         "cash_account_count": 2,
         "total_balance_portfolio_currency": 236443.0,
-        "total_balance_reporting_currency": 236443.0
+        "total_balance_reporting_currency": 236443.0,
+        "source_reported_cash_weight": 0.1182215,
+        "source_reported_cash_weight_denominator_portfolio_currency": 2000000.0,
+        "source_reported_cash_weight_supportability": "SUPPORTED"
       },
       "type": "object",
       "locations": [
@@ -8038,7 +8083,7 @@
       "required": true,
       "default": "",
       "allowedValues": [],
-      "description": "Inclusive cashflow-date window start.",
+      "description": "Inclusive cashflow-date window start. The inclusive window cannot exceed 366 days.",
       "example": "2026-03-01",
       "behaviorImpact": "Affects get_cash_movement_summary_portfolios__portfolio_id__cash_movement_summary_get request behavior.",
       "exposure": "consumer_visible",
@@ -8053,7 +8098,7 @@
       "required": true,
       "default": "",
       "allowedValues": [],
-      "description": "Inclusive cashflow-date window end.",
+      "description": "Inclusive cashflow-date window end. The inclusive window cannot exceed 366 days.",
       "example": "2026-03-31",
       "behaviorImpact": "Affects get_cash_movement_summary_portfolios__portfolio_id__cash_movement_summary_get request behavior.",
       "exposure": "consumer_visible",
@@ -8593,7 +8638,7 @@
       "required": false,
       "default": 10,
       "allowedValues": [],
-      "description": "Projection window in days from as_of_date.",
+      "description": "Projection window in calendar days from as_of_date. The route is bounded to one operational year because it returns one daily point per calendar day.",
       "example": 30,
       "behaviorImpact": "Affects get_cashflow_projection_portfolios__portfolio_id__cashflow_projection_get request behavior.",
       "exposure": "consumer_visible",
@@ -10018,7 +10063,7 @@
         "Cash Balances"
       ],
       "summary": "Get strategic cash-account balances for a portfolio",
-      "description": "What: Return the strategic HoldingsAsOf cash-account balance read for one portfolio.\nHow: Resolves the latest booked or explicit as-of-date cash positions, preserves source-owned per-account identity, and publishes native, portfolio-currency, and reporting-currency balances with HoldingsAsOf runtime metadata.\nWhen: Use this route when a downstream consumer needs cash-account balances or translated cash totals without rebuilding them from broad holdings state. Prefer this contract for new gateway, advise, or report integrations. Do not use it as a substitute for canonical cash-account master metadata, broad holdings publication, or performance/risk aggregation.",
+      "description": "What: Return the strategic HoldingsAsOf cash-account balance read for one portfolio.\nHow: Resolves the latest booked or explicit as-of-date cash positions, preserves source-owned per-account identity, and publishes native, portfolio-currency, and reporting-currency balances with HoldingsAsOf runtime metadata. It also publishes a Core-owned source-reported cash weight when the same-date portfolio market-value denominator is supportable.\nWhen: Use this route when a downstream consumer needs cash-account balances or translated cash totals without rebuilding them from broad holdings state. Prefer this contract for new gateway, idea, advise, or report integrations. Do not use it as a substitute for canonical cash-account master metadata, broad holdings publication, performance/risk aggregation, liquidity advice, or cash-deployment recommendation.",
       "naming": {
         "boundedContext": "cash_balances",
         "canonicalTerms": [
@@ -10048,6 +10093,9 @@
           "security_id",
           "snapshot_id",
           "source_batch_fingerprint",
+          "source_reported_cash_weight",
+          "source_reported_cash_weight_denominator_portfolio_currency",
+          "source_reported_cash_weight_supportability",
           "tenant_id",
           "total_balance_portfolio_currency",
           "total_balance_reporting_currency",
@@ -10253,6 +10301,30 @@
             "type": "string",
             "semanticId": "lotus.total_balance_reporting_currency",
             "attributeRef": "lotus.total_balance_reporting_currency"
+          },
+          {
+            "name": "totals.source_reported_cash_weight",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_reported_cash_weight",
+            "attributeRef": "lotus.source_reported_cash_weight"
+          },
+          {
+            "name": "totals.source_reported_cash_weight_denominator_portfolio_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_reported_cash_weight_denominator_portfolio_currency",
+            "attributeRef": "lotus.source_reported_cash_weight_denominator_portfolio_currency"
+          },
+          {
+            "name": "totals.source_reported_cash_weight_supportability",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_reported_cash_weight_supportability",
+            "attributeRef": "lotus.source_reported_cash_weight_supportability"
           },
           {
             "name": "cash_accounts",
@@ -10908,7 +10980,7 @@
         "Cash Movements"
       ],
       "summary": "Get Portfolio Cash Movement Summary",
-      "description": "What: Return source-owned portfolio cash movement totals for a bounded cashflow-date window.\nHow: Aggregates latest cashflow rows by source-owned classification, timing, currency, and portfolio/position flow scope while preserving source-data product metadata.\nWhen: Use this route when downstream outcome, reporting, or DPM consumers need cash movement evidence without recalculating cashflow rows. Do not use it as a cashflow forecast, funding recommendation, treasury instruction, or OMS acknowledgement.",
+      "description": "What: Return source-owned portfolio cash movement totals for a bounded cashflow-date window of up to 366 days.\nHow: Aggregates latest cashflow rows by source-owned classification, timing, currency, and portfolio/position flow scope while preserving source-data product metadata.\nWhen: Use this route when downstream outcome, reporting, or DPM consumers need cash movement evidence without recalculating cashflow rows. Do not use it as a cashflow forecast, funding recommendation, treasury instruction, or OMS acknowledgement.",
       "naming": {
         "boundedContext": "cash_movements",
         "canonicalTerms": [

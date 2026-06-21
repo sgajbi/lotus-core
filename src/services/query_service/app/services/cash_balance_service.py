@@ -39,6 +39,7 @@ class CashBalanceResolver:
         resolved_as_of_date: date,
         reporting_currency: str,
         rows: list[Any],
+        expected_open_position_count: int,
     ) -> CashBalancesResponse:
         portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
         reporting_currency = normalize_currency_code(reporting_currency)
@@ -61,6 +62,7 @@ class CashBalanceResolver:
             total_cash_portfolio_currency=total_cash_portfolio_currency,
             rows=rows,
             resolved_as_of_date=resolved_as_of_date,
+            expected_open_position_count=expected_open_position_count,
         )
         return CashBalancesResponse(
             portfolio_id=portfolio.portfolio_id,
@@ -261,12 +263,14 @@ def _source_reported_cash_weight_evidence(
     total_cash_portfolio_currency: Decimal,
     rows: list[Any],
     resolved_as_of_date: date,
+    expected_open_position_count: int,
 ) -> _CashWeightEvidence:
     denominator = sum((decimal_or_zero(row.snapshot.market_value) for row in rows), ZERO)
     blocked_supportability = _blocked_cash_weight_supportability(
         rows=rows,
         resolved_as_of_date=resolved_as_of_date,
         denominator=denominator,
+        expected_open_position_count=expected_open_position_count,
     )
     if blocked_supportability is not None:
         return _blocked_cash_weight(blocked_supportability)
@@ -282,14 +286,38 @@ def _blocked_cash_weight_supportability(
     rows: list[Any],
     resolved_as_of_date: date,
     denominator: Decimal,
+    expected_open_position_count: int,
 ) -> str | None:
-    if not rows:
+    if _denominator_evidence_missing(
+        rows=rows,
+        expected_open_position_count=expected_open_position_count,
+    ):
         return "BLOCKED_MISSING_DENOMINATOR"
-    if any(row.snapshot.date != resolved_as_of_date for row in rows):
+    if _denominator_evidence_stale(rows=rows, resolved_as_of_date=resolved_as_of_date):
         return "BLOCKED_STALE_DENOMINATOR"
     if denominator <= ZERO:
         return "BLOCKED_ZERO_DENOMINATOR"
     return None
+
+
+def _denominator_evidence_missing(
+    *,
+    rows: list[Any],
+    expected_open_position_count: int,
+) -> bool:
+    return (
+        not rows
+        or len(rows) < expected_open_position_count
+        or any(row.snapshot.market_value is None for row in rows)
+    )
+
+
+def _denominator_evidence_stale(
+    *,
+    rows: list[Any],
+    resolved_as_of_date: date,
+) -> bool:
+    return any(row.snapshot.date != resolved_as_of_date for row in rows)
 
 
 def _blocked_cash_weight(supportability: str) -> _CashWeightEvidence:
@@ -497,11 +525,18 @@ class CashBalanceService:
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
         )
+        expected_open_position_count = await self.repo.count_latest_open_position_keys(
+            portfolio_id=portfolio.portfolio_id,
+            as_of_date=resolved_as_of_date,
+        )
+        if not isinstance(expected_open_position_count, int):
+            expected_open_position_count = len(rows)
         return await self._resolver.build_cash_balances_response(
             portfolio=portfolio,
             resolved_as_of_date=resolved_as_of_date,
             reporting_currency=effective_reporting_currency,
             rows=rows,
+            expected_open_position_count=expected_open_position_count,
         )
 
     async def _convert_amount(

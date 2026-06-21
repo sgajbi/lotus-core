@@ -37,16 +37,21 @@ def _instrument(
 def _snapshot(
     security_id: str,
     *,
-    market_value: str,
+    market_value: str | None,
     market_value_local: str | None = None,
     snapshot_date: date = date(2026, 3, 27),
     updated_at: datetime | None = None,
 ):
+    portfolio_market_value = Decimal(market_value) if market_value is not None else None
     return SimpleNamespace(
         security_id=security_id,
         date=snapshot_date,
-        market_value=Decimal(market_value),
-        market_value_local=Decimal(market_value_local or market_value),
+        market_value=portfolio_market_value,
+        market_value_local=(
+            Decimal(market_value_local)
+            if market_value_local is not None
+            else portfolio_market_value
+        ),
         updated_at=updated_at,
         created_at=None,
     )
@@ -432,6 +437,79 @@ async def test_get_cash_balances_returns_null_cash_weight_when_denominator_zero(
     assert response.totals.source_reported_cash_weight is None
     assert response.totals.source_reported_cash_weight_denominator_portfolio_currency is None
     assert response.totals.source_reported_cash_weight_supportability == "BLOCKED_ZERO_DENOMINATOR"
+
+
+async def test_get_cash_balances_blocks_cash_weight_when_denominator_market_value_missing() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="250"),
+            instrument=_instrument("CASH_USD", asset_class="CASH"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value=None),
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+        ),
+    ]
+    repo.count_latest_open_position_keys.return_value = 2
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 27),
+        )
+
+    assert response.totals.source_reported_cash_weight is None
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency is None
+    assert (
+        response.totals.source_reported_cash_weight_supportability == "BLOCKED_MISSING_DENOMINATOR"
+    )
+
+
+async def test_get_cash_balances_blocks_cash_weight_when_open_holding_snapshot_missing() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="250"),
+            instrument=_instrument("CASH_USD", asset_class="CASH"),
+        )
+    ]
+    repo.count_latest_open_position_keys.return_value = 2
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 27),
+        )
+
+    assert response.totals.source_reported_cash_weight is None
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency is None
+    assert (
+        response.totals.source_reported_cash_weight_supportability == "BLOCKED_MISSING_DENOMINATOR"
+    )
+    repo.count_latest_open_position_keys.assert_awaited_once_with(
+        portfolio_id="P1",
+        as_of_date=date(2026, 3, 27),
+    )
 
 
 async def test_get_cash_balances_returns_null_cash_weight_when_denominator_stale() -> None:

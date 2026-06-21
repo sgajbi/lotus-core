@@ -27,7 +27,7 @@ execution-quality assessment, or OMS acknowledgement.
 | Cash-balance read | `/cash-balances` without `as_of_date` | Resolves the effective `as_of_date` to the latest business date. Returns cash-account balances from snapshot rows and cash-account master data. |
 | Explicit as-of cash balances | `/cash-balances?as_of_date=<date>` | Returns cash-account balances for the requested date. |
 | Reporting-currency cash balances | `/cash-balances?reporting_currency=<ccy>` | Converts portfolio-currency cash balances to the requested reporting currency using the latest FX rate on or before the resolved `as_of_date`. |
-| Source-reported cash weight | `/cash-balances` and `/cash-balances?as_of_date=<date>` | Computes `source_reported_cash_weight` from Core-owned cash and same-date portfolio market-value snapshot evidence. Returns null with blocked supportability when the denominator is missing, zero, or stale. |
+| Source-reported cash weight | `/cash-balances` and `/cash-balances?as_of_date=<date>` | Computes `source_reported_cash_weight` from Core-owned cash and same-date portfolio market-value snapshot evidence. Returns null with blocked supportability when denominator evidence is incomplete, missing, zero, or stale. |
 
 ## Inputs
 
@@ -75,9 +75,10 @@ Cash weight is a source-owned decimal ratio, not a percentage point value:
 
 `source_reported_cash_weight = total_balance_portfolio_currency / source_reported_cash_weight_denominator_portfolio_currency`
 
-The denominator is the sum of Core-owned `daily_position_snapshots.market_value` values for the
-same portfolio and resolved as-of date. If the denominator rows are missing, sum to zero or less, or
-come from a snapshot date older than the resolved as-of date, the weight is null and
+The denominator is the sum of Core-owned `daily_position_snapshots.market_value` values for every
+open current-epoch holding in the same portfolio and resolved as-of date. If denominator rows are
+missing, omit an open holding, contain null `market_value`, sum to zero or less, or come from a
+snapshot date older than the resolved as-of date, the weight is null and
 `source_reported_cash_weight_supportability` is blocked. Downstream consumers such as `lotus-idea`
 must consume this field rather than reconstructing cash weight from cash totals and AUM locally.
 
@@ -197,7 +198,7 @@ supportability posture is one of:
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records exist but no cash snapshot rows back them | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records are backed by cash snapshot rows | Returns `data_quality_status=COMPLETE`. |
-| Cash-weight denominator rows are missing | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_MISSING_DENOMINATOR`. |
+| Cash-weight denominator rows are missing, omit an open holding, or contain null market value | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_MISSING_DENOMINATOR`. |
 | Cash-weight denominator is zero or negative | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_ZERO_DENOMINATOR`. |
 | Cash-weight denominator snapshot rows are older than the resolved `as_of_date` | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_STALE_DENOMINATOR`. |
 
