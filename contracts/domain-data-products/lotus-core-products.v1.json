@@ -126,7 +126,8 @@
         "lotus-risk",
         "lotus-report",
         "lotus-manage",
-        "lotus-advise"
+        "lotus-advise",
+        "lotus-idea"
       ],
       "deprecation_policy": {
         "state": "not_deprecated",

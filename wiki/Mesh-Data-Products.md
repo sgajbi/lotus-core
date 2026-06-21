@@ -68,7 +68,7 @@ or OMS acknowledgement methodology.
 | Audience | What this means |
 | --- | --- |
 | Business users | Core supplies recorded facts such as holdings, cash totals, transaction fees, withholding tax, other tax deductions, realized FX P&L, linked cashflow rows, tax lots, observed fee evidence, and operational cashflow projections. Decisioning products can explain those facts but must not silently invent a broader methodology. |
-| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioRealizedTaxSummary:v1`, `PortfolioTaxLotWindow:v1`, `ClientTaxProfile:v1`, `ClientTaxRuleSet:v1`, `ClientIncomeNeedsSchedule:v1`, `LiquidityReserveRequirement:v1`, `PlannedWithdrawalSchedule:v1`, `ExternalHedgeExecutionReadiness:v1`, `ExternalOrderExecutionAcknowledgement:v1`, `ExternalEligibleHedgeInstrument:v1`, `ExternalFXForwardCurve:v1`, `TransactionCostCurve:v1`, `PortfolioCashflowProjection:v1`, `PortfolioCashMovementSummary:v1`, and `PortfolioLiquidityLadder:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. |
+| Developers and architects | Use `HoldingsAsOf:v1`, `MarketDataCoverageWindow:v1`, `TransactionLedgerWindow:v1`, `PortfolioRealizedTaxSummary:v1`, `PortfolioTaxLotWindow:v1`, `ClientTaxProfile:v1`, `ClientTaxRuleSet:v1`, `ClientIncomeNeedsSchedule:v1`, `LiquidityReserveRequirement:v1`, `PlannedWithdrawalSchedule:v1`, `ExternalHedgeExecutionReadiness:v1`, `ExternalOrderExecutionAcknowledgement:v1`, `ExternalEligibleHedgeInstrument:v1`, `ExternalFXForwardCurve:v1`, `TransactionCostCurve:v1`, `PortfolioCashflowProjection:v1`, `PortfolioCashMovementSummary:v1`, and `PortfolioLiquidityLadder:v1` as explicit source products. Preserve the source measure, source unit, selected field, supportability state, lineage/source ref, evidence timestamp, and product identity in downstream contracts. `lotus-idea` high-cash evidence must consume Core's source-reported cash weight rather than reconstructing cash/AUM facts locally. |
 | Operations | Investigate stale, partial, or missing evidence at the owning source product before treating a manage/risk/performance surface as wrong. If a source product is unavailable or outside scope, downstream products should degrade rather than recalculate locally. |
 | Sales and client demos | Position the platform as source-governed: recorded ledger and portfolio facts are traceable to core, analytics are owned by their specialist services, and unsupported execution/tax/liquidity claims remain visibly outside the supported boundary. |
 
@@ -81,18 +81,21 @@ book-currency measures are restated from `currency`, while trade fees and local 
 are restated from `trade_currency` when present.
 
 `HoldingsAsOf:v1` is the governed source for position rows, position weights, current-epoch
-supportability, held-since dates, cash-account balances, portfolio/base currency, optional cash
-reporting-currency restatement, and holdings evidence timestamps. It is not a performance-return,
-risk-exposure, liquidity-ladder, income-need, tax-advice, execution-quality, or OMS acknowledgement
-product.
+supportability, held-since dates, cash-account balances, source-reported cash weight,
+portfolio/base currency, optional cash reporting-currency restatement, and holdings evidence
+timestamps. It is not a performance-return, risk-exposure, liquidity-ladder, income-need,
+tax-advice, cash-deployment recommendation, execution-quality, or OMS acknowledgement product.
 
 Its current implementation-backed methodology is conservative: the product resolves booked and
 projected-inclusive holdings modes, reconciles snapshot-backed positions to latest current-epoch
 history quantity, supplements missing snapshot securities from position history, preserves valuation
 continuity for supplement rows, checks non-cash market-price freshness against the response as-of
 date, classifies unknown, partial, stale, and complete posture, and builds cash balances from cash
-snapshot rows plus cash-account master data without deriving downstream liquidity, risk,
-performance, tax, or execution conclusions.
+snapshot rows plus cash-account master data. Cash-balances also publish a Core-owned
+source-reported cash weight only when same-date portfolio market-value denominator evidence is
+supportable; missing, zero, or stale denominators block the field instead of forcing downstream
+inference. The product does not derive downstream liquidity, risk, performance, tax, or execution
+conclusions.
 
 `MarketDataCoverageWindow:v1` is the governed source for DPM market-price and FX coverage
 diagnostics over an explicit held and target universe. It resolves latest market prices and FX

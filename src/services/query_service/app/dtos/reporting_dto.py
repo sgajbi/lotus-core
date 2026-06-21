@@ -398,6 +398,41 @@ class CashBalancesTotals(BaseModel):
         description="Total cash balance in reporting currency.",
         examples=[236443.0],
     )
+    source_reported_cash_weight: Decimal | None = Field(
+        None,
+        description=(
+            "Core-owned cash weight as a decimal ratio, calculated as total portfolio-currency "
+            "cash balance divided by the Core-owned portfolio market-value denominator for the "
+            "same resolved as-of date. Null means the denominator was missing, zero, stale, or "
+            "otherwise not supportable; downstream consumers such as lotus-idea must not "
+            "reconstruct this value locally."
+        ),
+        examples=[0.1182215],
+    )
+    source_reported_cash_weight_denominator_portfolio_currency: Decimal | None = Field(
+        None,
+        description=(
+            "Core-owned portfolio market-value denominator used for "
+            "`source_reported_cash_weight`, in portfolio currency. Null when the denominator is "
+            "not supportable."
+        ),
+        examples=[2000000.0],
+    )
+    source_reported_cash_weight_supportability: Literal[
+        "SUPPORTED",
+        "BLOCKED_MISSING_DENOMINATOR",
+        "BLOCKED_ZERO_DENOMINATOR",
+        "BLOCKED_STALE_DENOMINATOR",
+    ] = Field(
+        ...,
+        description=(
+            "Supportability posture for the Core-owned cash-weight calculation. `SUPPORTED` "
+            "means the weight was calculated from same-date Core snapshot market values. "
+            "Blocked states return null weight rather than inventing a liquidity or idle-cash "
+            "signal."
+        ),
+        examples=["SUPPORTED"],
+    )
 
 
 class CashBalancesResponse(SourceDataProductRuntimeMetadata):

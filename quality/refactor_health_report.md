@@ -1889,3 +1889,9 @@ health before that claim is defensible.
      20 tests; scoped Ruff and format checks passed; Radon reports `_advance_watermarks`
      reduced from `B (6)` to `A (3)`, and every function/class in
      `valuation_scheduler.py` is A-ranked.
+311. Expanded `HoldingsAsOf:v1` cash-balance source evidence with a Core-owned
+     `source_reported_cash_weight`, denominator, and supportability posture so downstream
+     `lotus-idea` high-cash evidence does not reconstruct Core-owned cash/AUM facts locally.
+     Focused cash-balance, OpenAPI, domain-product, and source-data-product tests passed with
+     39 tests; scoped Ruff passed; `make openapi-gate`, `make api-vocabulary-gate`, and
+     `make domain-product-validate` passed.

@@ -41,12 +41,14 @@ def get_cash_balance_service(
         "What: Return the strategic HoldingsAsOf cash-account balance read for one portfolio.\n"
         "How: Resolves the latest booked or explicit as-of-date cash positions, preserves "
         "source-owned per-account identity, and publishes native, portfolio-currency, and "
-        "reporting-currency balances with HoldingsAsOf runtime metadata.\n"
+        "reporting-currency balances with HoldingsAsOf runtime metadata. It also publishes a "
+        "Core-owned source-reported cash weight when the same-date portfolio market-value "
+        "denominator is supportable.\n"
         "When: Use this route when a downstream consumer needs cash-account balances or translated "
         "cash totals without rebuilding them from broad holdings state. Prefer this contract for "
-        "new gateway, advise, or report integrations. Do not use it as a substitute for canonical "
-        "cash-account master "
-        "metadata, broad holdings publication, or performance/risk aggregation."
+        "new gateway, idea, advise, or report integrations. Do not use it as a substitute for "
+        "canonical cash-account master metadata, broad holdings publication, performance/risk "
+        "aggregation, liquidity advice, or cash-deployment recommendation."
     ),
     openapi_extra=source_data_product_openapi_extra("HoldingsAsOf"),
 )

@@ -330,7 +330,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
         in strategic_cash_balances_query["description"]
     )
     assert (
-        "Prefer this contract for new gateway, advise, or report integrations"
+        "Prefer this contract for new gateway, idea, advise, or report integrations"
         in strategic_cash_balances_query["description"]
     )
     assert "PortfolioLiquidityLadder source-data product" in liquidity_ladder_query["description"]
@@ -402,6 +402,15 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert cash_response["properties"]["resolved_as_of_date"]["examples"] == ["2026-03-27"]
     assert cash_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert cash_response["properties"]["product_version"]["default"] == "v1"
+    cash_totals = components["CashBalancesTotals"]
+    cash_weight_description = cash_totals["properties"]["source_reported_cash_weight"][
+        "description"
+    ]
+    assert "Core-owned cash weight as a decimal ratio" in cash_weight_description
+    assert "lotus-idea must not reconstruct this value locally" in cash_weight_description
+    assert cash_totals["properties"]["source_reported_cash_weight_supportability"][
+        "description"
+    ].startswith("Supportability posture")
     assert (
         portfolio_summary_response["properties"]["snapshot_metadata"]["description"]
         == "Resolved snapshot metadata for the summary query."

@@ -9,7 +9,9 @@
 
 It returns governed position rows and cash-account balances for one portfolio with source-data
 product identity, runtime metadata, as-of semantics, instrument descriptors, position-state
-supportability, evidence timestamps, and cash reporting-currency restatement where requested.
+supportability, evidence timestamps, cash reporting-currency restatement where requested, and
+source-reported cash weight when the Core-owned same-date portfolio market-value denominator is
+supportable.
 
 The product is source evidence for recorded holdings and cash state. It is not a liquidity-ladder
 methodology, income-needs plan, performance return, risk exposure methodology, tax advice,
@@ -25,6 +27,7 @@ execution-quality assessment, or OMS acknowledgement.
 | Cash-balance read | `/cash-balances` without `as_of_date` | Resolves the effective `as_of_date` to the latest business date. Returns cash-account balances from snapshot rows and cash-account master data. |
 | Explicit as-of cash balances | `/cash-balances?as_of_date=<date>` | Returns cash-account balances for the requested date. |
 | Reporting-currency cash balances | `/cash-balances?reporting_currency=<ccy>` | Converts portfolio-currency cash balances to the requested reporting currency using the latest FX rate on or before the resolved `as_of_date`. |
+| Source-reported cash weight | `/cash-balances` and `/cash-balances?as_of_date=<date>` | Computes `source_reported_cash_weight` from Core-owned cash and same-date portfolio market-value snapshot evidence. Returns null with blocked supportability when the denominator is missing, zero, or stale. |
 
 ## Inputs
 
@@ -68,6 +71,16 @@ Cash balances preserve three levels:
 Same-currency cash restatement uses a rate of `1`. Cross-currency cash restatement uses the latest
 available FX rate on or before the resolved `as_of_date`.
 
+Cash weight is a source-owned decimal ratio, not a percentage point value:
+
+`source_reported_cash_weight = total_balance_portfolio_currency / source_reported_cash_weight_denominator_portfolio_currency`
+
+The denominator is the sum of Core-owned `daily_position_snapshots.market_value` values for the
+same portfolio and resolved as-of date. If the denominator rows are missing, sum to zero or less, or
+come from a snapshot date older than the resolved as-of date, the weight is null and
+`source_reported_cash_weight_supportability` is blocked. Downstream consumers such as `lotus-idea`
+must consume this field rather than reconstructing cash weight from cash totals and AUM locally.
+
 No performance return, risk exposure, liquidity ladder, income need, tax calculation, market-impact
 adjustment, execution-quality assessment, or OMS status inference is performed by this product.
 
@@ -88,6 +101,8 @@ adjustment, execution-quality assessment, or OMS status inference is performed b
 | `C_p` | `balance_portfolio_currency` | Cash account portfolio-currency balance. |
 | `C_r` | `balance_reporting_currency` | Cash account reporting-currency balance. |
 | `X_c` | reporting FX rate | Latest FX rate from portfolio currency to reporting currency on or before `A`. |
+| `D_mv` | `source_reported_cash_weight_denominator_portfolio_currency` | Sum of same-date Core snapshot market values used as the cash-weight denominator. |
+| `W_c` | `source_reported_cash_weight` | Core-owned cash weight, `sum(C_p) / D_mv`, or null when blocked. |
 | `Q` | `data_quality_status` | `COMPLETE`, `PARTIAL`, `STALE`, or `UNKNOWN` source-data quality posture. |
 
 ## Methodology and Formulas
@@ -129,6 +144,19 @@ For cash balances:
 
 where `X_c = 1` when portfolio currency equals reporting currency.
 
+For cash weight:
+
+`D_mv = sum(S.market_value where S.portfolio_id = P and S.date = A)`
+
+`W_c = sum(C_p) / D_mv`
+
+when `D_mv > 0` and every denominator row is same-date with `A`. Otherwise `W_c = null` and the
+supportability posture is one of:
+
+1. `BLOCKED_MISSING_DENOMINATOR`,
+2. `BLOCKED_ZERO_DENOMINATOR`,
+3. `BLOCKED_STALE_DENOMINATOR`.
+
 ## Step-by-Step Computation
 
 1. Verify the portfolio exists.
@@ -145,7 +173,12 @@ where `X_c = 1` when portfolio currency equals reporting currency.
 8. Resolve `held_since_date` as the earliest position-history date in the current continuous non-zero holding period after the last zero-quantity break in the active epoch. If no epoch exists, use the row position date.
 9. Fetch latest market-price dates for non-cash positions that have market prices and compare them with response `A` to derive stale posture.
 10. Return positions with `HoldingsAsOf:v1` metadata, evidence timestamp, and data-quality status.
-11. For cash balances, filter snapshot rows to cash instruments, join cash-account master rows and fallback account identifiers, build one row per known cash account, sort by account currency and account id, convert portfolio-currency balances to reporting currency, and return totals with `HoldingsAsOf:v1` metadata.
+11. For cash balances, read all HoldingsAsOf snapshot rows for the resolved portfolio/date, filter
+    cash instruments for account balances, join cash-account master rows and fallback account
+    identifiers, build one row per known cash account, sort by account currency and account id,
+    convert portfolio-currency balances to reporting currency, compute source-reported cash weight
+    from same-date portfolio market-value denominator evidence when supportable, and return totals
+    with `HoldingsAsOf:v1` metadata.
 
 ## Validation and Failure Behavior
 
@@ -164,6 +197,9 @@ where `X_c = 1` when portfolio currency equals reporting currency.
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records exist but no cash snapshot rows back them | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records are backed by cash snapshot rows | Returns `data_quality_status=COMPLETE`. |
+| Cash-weight denominator rows are missing | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_MISSING_DENOMINATOR`. |
+| Cash-weight denominator is zero or negative | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_ZERO_DENOMINATOR`. |
+| Cash-weight denominator snapshot rows are older than the resolved `as_of_date` | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_STALE_DENOMINATOR`. |
 
 ## Configuration Options
 
@@ -188,6 +224,9 @@ where `X_c = 1` when portfolio currency equals reporting currency.
 | `cash_accounts[]` | Cash-account balance records for the resolved scope. |
 | `totals.total_balance_portfolio_currency` | Sum of account portfolio-currency balances. |
 | `totals.total_balance_reporting_currency` | Sum of account reporting-currency balances. |
+| `totals.source_reported_cash_weight` | Core-owned cash weight ratio, `total_balance_portfolio_currency / source_reported_cash_weight_denominator_portfolio_currency`, or null when blocked. |
+| `totals.source_reported_cash_weight_denominator_portfolio_currency` | Same-date Core snapshot market-value denominator used for cash weight, or null when blocked. |
+| `totals.source_reported_cash_weight_supportability` | Cash-weight supportability posture. |
 | `as_of_date` | Effective booked-state cap or resolved response date. |
 | `data_quality_status` | Completeness and freshness posture for returned holdings or cash balances. |
 | `latest_evidence_timestamp` | Latest durable position, position-state, or cash snapshot timestamp used by the response. |
@@ -232,4 +271,7 @@ Final output mapping:
 | `totals.cash_account_count` | 1 |
 | `totals.total_balance_portfolio_currency` | 12000.00 |
 | `totals.total_balance_reporting_currency` | 16320.00 |
+| `totals.source_reported_cash_weight_denominator_portfolio_currency` | 100000.00 |
+| `totals.source_reported_cash_weight` | 0.12 |
+| `totals.source_reported_cash_weight_supportability` | `SUPPORTED` |
 | `data_quality_status` | `COMPLETE` |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable, cast
@@ -48,6 +49,19 @@ class CashBalanceResolver:
             resolved_as_of_date=resolved_as_of_date,
             reporting_currency=reporting_currency,
         )
+        total_cash_portfolio_currency = sum(
+            (record.balance_portfolio_currency for record in account_records),
+            ZERO,
+        )
+        total_cash_reporting_currency = sum(
+            (record.balance_reporting_currency for record in account_records),
+            ZERO,
+        )
+        cash_weight_evidence = _source_reported_cash_weight_evidence(
+            total_cash_portfolio_currency=total_cash_portfolio_currency,
+            rows=rows,
+            resolved_as_of_date=resolved_as_of_date,
+        )
         return CashBalancesResponse(
             portfolio_id=portfolio.portfolio_id,
             portfolio_currency=portfolio_currency,
@@ -55,14 +69,13 @@ class CashBalanceResolver:
             resolved_as_of_date=resolved_as_of_date,
             totals=CashBalancesTotals(
                 cash_account_count=len(account_records),
-                total_balance_portfolio_currency=sum(
-                    (record.balance_portfolio_currency for record in account_records),
-                    ZERO,
+                total_balance_portfolio_currency=total_cash_portfolio_currency,
+                total_balance_reporting_currency=total_cash_reporting_currency,
+                source_reported_cash_weight=(cash_weight_evidence.source_reported_cash_weight),
+                source_reported_cash_weight_denominator_portfolio_currency=(
+                    cash_weight_evidence.denominator_portfolio_currency
                 ),
-                total_balance_reporting_currency=sum(
-                    (record.balance_reporting_currency for record in account_records),
-                    ZERO,
-                ),
+                source_reported_cash_weight_supportability=cash_weight_evidence.supportability,
             ),
             cash_accounts=account_records,
             **source_data_product_runtime_metadata(
@@ -234,6 +247,57 @@ def _snapshot_rows_by_security_id(cash_rows: list[Any]) -> dict[str, Any]:
         for row in cash_rows
         if (security_id := normalize_security_id(row.snapshot.security_id))
     }
+
+
+@dataclass(frozen=True)
+class _CashWeightEvidence:
+    source_reported_cash_weight: Decimal | None
+    denominator_portfolio_currency: Decimal | None
+    supportability: str
+
+
+def _source_reported_cash_weight_evidence(
+    *,
+    total_cash_portfolio_currency: Decimal,
+    rows: list[Any],
+    resolved_as_of_date: date,
+) -> _CashWeightEvidence:
+    denominator = sum((decimal_or_zero(row.snapshot.market_value) for row in rows), ZERO)
+    blocked_supportability = _blocked_cash_weight_supportability(
+        rows=rows,
+        resolved_as_of_date=resolved_as_of_date,
+        denominator=denominator,
+    )
+    if blocked_supportability is not None:
+        return _blocked_cash_weight(blocked_supportability)
+    return _CashWeightEvidence(
+        source_reported_cash_weight=total_cash_portfolio_currency / denominator,
+        denominator_portfolio_currency=denominator,
+        supportability="SUPPORTED",
+    )
+
+
+def _blocked_cash_weight_supportability(
+    *,
+    rows: list[Any],
+    resolved_as_of_date: date,
+    denominator: Decimal,
+) -> str | None:
+    if not rows:
+        return "BLOCKED_MISSING_DENOMINATOR"
+    if any(row.snapshot.date != resolved_as_of_date for row in rows):
+        return "BLOCKED_STALE_DENOMINATOR"
+    if denominator <= ZERO:
+        return "BLOCKED_ZERO_DENOMINATOR"
+    return None
+
+
+def _blocked_cash_weight(supportability: str) -> _CashWeightEvidence:
+    return _CashWeightEvidence(
+        source_reported_cash_weight=None,
+        denominator_portfolio_currency=None,
+        supportability=supportability,
+    )
 
 
 def _master_record_input(
@@ -432,7 +496,6 @@ class CashBalanceService:
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
-            instrument_asset_class=CASH_ASSET_CLASS,
         )
         return await self._resolver.build_cash_balances_response(
             portfolio=portfolio,
