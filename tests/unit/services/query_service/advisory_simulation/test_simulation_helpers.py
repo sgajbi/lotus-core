@@ -51,6 +51,41 @@ def test_link_buy_intent_dependencies_skips_missing_notional_and_avoids_duplicat
     assert buy_with_notional.dependencies == ["fx_1", "sell_1"]
 
 
+def test_link_buy_intent_dependencies_ignores_fx_and_disabled_sell_dependency() -> None:
+    sell = SecurityTradeIntent(
+        intent_id="sell_1",
+        instrument_id="EQ_2",
+        side="SELL",
+        quantity=Decimal("1"),
+        notional=Money(amount=Decimal("100"), currency="USD"),
+    )
+    fx_intent = FxSpotIntent(
+        intent_id="fx_1",
+        pair="USD/CHF",
+        buy_currency="USD",
+        buy_amount=Decimal("100"),
+        sell_currency="CHF",
+        sell_amount_estimated=Decimal("90"),
+    )
+    buy = SecurityTradeIntent(
+        intent_id="buy_1",
+        instrument_id="EQ_3",
+        side="BUY",
+        quantity=Decimal("1"),
+        notional=Money(amount=Decimal("100"), currency="USD"),
+    )
+
+    link_buy_intent_dependencies(
+        [sell, fx_intent, buy],
+        fx_intent_id_by_currency={"USD": "fx_1"},
+        include_same_currency_sell_dependency=False,
+    )
+
+    assert fx_intent.dependencies == []
+    assert sell.dependencies == []
+    assert buy.dependencies == ["fx_1"]
+
+
 def test_apply_trade_and_fx_helpers_respect_guard_clauses_and_currency_rounding() -> None:
     portfolio = portfolio_snapshot(cash_balances=[cash("USD", "1000")])
     incomplete_buy = SecurityTradeIntent(

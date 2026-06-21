@@ -62,8 +62,9 @@ Measured movement:
 ## Residual Risk
 
 This slice does not change API contracts, OpenAPI, simulation response shape, or advisory business
-semantics. Broader advisory simulation hotspots remain in compliance, funding, and intent
-dependency logic and should be handled as separate focused slices.
+semantics. CR-1132 addresses the intent dependency hotspot on the same branch. Broader advisory
+simulation hotspots remain in compliance and funding logic and should be handled as separate
+focused slices.
 
 ## Bank-Buyable Control Movement
 
