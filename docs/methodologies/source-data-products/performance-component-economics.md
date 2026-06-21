@@ -13,7 +13,9 @@
 
 The product reads `transactions` for the requested `portfolio_id`, inclusive transaction-date
 window, and `as_of_date` bound. Optional `security_ids` and `transaction_types` narrow the source
-rows. It joins `transaction_costs` and the latest `cashflows` epoch for each transaction.
+rows. The inclusive transaction-date window must be 366 days or less until a paged or export
+contract exists. It joins `transaction_costs` and the latest `cashflows` epoch for each
+transaction.
 
 ## Deterministic Row Selection
 
@@ -23,7 +25,8 @@ Rows are selected when:
 2. `transaction_date >= window.start_date`,
 3. `transaction_date <= window.end_date`,
 4. `transaction_date <= as_of_date`,
-5. optional security and transaction-type filters match after canonical normalization.
+5. the inclusive request window is 366 days or less,
+6. optional security and transaction-type filters match after canonical normalization.
 
 Rows are ordered by `security_id`, `transaction_date`, and `transaction_id`. Linked cashflows are
 selected deterministically by highest `cashflows.epoch`, then highest `cashflows.id`.

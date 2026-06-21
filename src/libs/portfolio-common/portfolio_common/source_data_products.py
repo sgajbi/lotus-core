@@ -345,7 +345,8 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes=(
             "Performance-facing source product for transaction, cashflow, fee, tax, income, "
             "realized P&L, and FX-context component economics evidence. It is source evidence "
-            "for contribution analytics, not a contribution calculation."
+            "for contribution analytics, not a contribution calculation. Requests are bounded "
+            "to 366 inclusive transaction-date days until a paged or export contract exists."
         ),
     ),
     SourceDataProductDefinition(

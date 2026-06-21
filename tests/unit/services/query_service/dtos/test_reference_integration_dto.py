@@ -13,6 +13,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IntegrationWindow,
+    PerformanceComponentEconomicsRequest,
+    PerformanceComponentEconomicsResponse,
     RiskFreeSeriesResponse,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
@@ -112,6 +114,17 @@ def test_transaction_cost_curve_request_normalizes_filters() -> None:
     assert request.transaction_types == ["BUY"]
 
 
+def test_performance_component_economics_request_rejects_unbounded_window() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="performance component economics window must be 366 days or less",
+    ):
+        PerformanceComponentEconomicsRequest(
+            as_of_date="2026-12-31",
+            window={"start_date": "2025-12-30", "end_date": "2026-12-31"},
+        )
+
+
 @pytest.mark.parametrize(
     ("response_model", "product_name"),
     [
@@ -125,6 +138,7 @@ def test_transaction_cost_curve_request_normalizes_filters() -> None:
         (ClassificationTaxonomyResponse, "InstrumentReferenceBundle"),
         (InstrumentEnrichmentBulkResponse, "InstrumentReferenceBundle"),
         (TransactionCostCurveResponse, "TransactionCostCurve"),
+        (PerformanceComponentEconomicsResponse, "PerformanceComponentEconomics"),
         (DpmPortfolioUniverseCandidateResponse, "DpmPortfolioUniverseCandidate"),
     ],
 )

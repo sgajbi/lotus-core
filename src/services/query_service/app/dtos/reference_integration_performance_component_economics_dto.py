@@ -24,6 +24,8 @@ SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES = (
     "fx_context",
 )
 
+MAX_PERFORMANCE_COMPONENT_ECONOMICS_WINDOW_DAYS = 366
+
 
 def _normalize_optional_identifiers(values: list[str] | None, field_name: str) -> list[str] | None:
     if values is None:
@@ -75,6 +77,9 @@ class PerformanceComponentEconomicsRequest(BaseModel):
     def validate_scope(self) -> "PerformanceComponentEconomicsRequest":
         if self.window.end_date < self.window.start_date:
             raise ValueError("window.end_date must be on or after window.start_date")
+        inclusive_window_days = (self.window.end_date - self.window.start_date).days + 1
+        if inclusive_window_days > MAX_PERFORMANCE_COMPONENT_ECONOMICS_WINDOW_DAYS:
+            raise ValueError("performance component economics window must be 366 days or less")
         self.security_ids = _normalize_optional_identifiers(self.security_ids, "security_ids")
         self.transaction_types = _normalize_transaction_types(self.transaction_types)
         return self
