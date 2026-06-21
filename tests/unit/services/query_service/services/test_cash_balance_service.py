@@ -39,10 +39,12 @@ def _snapshot(
     *,
     market_value: str,
     market_value_local: str | None = None,
+    snapshot_date: date = date(2026, 3, 27),
     updated_at: datetime | None = None,
 ):
     return SimpleNamespace(
         security_id=security_id,
+        date=snapshot_date,
         market_value=Decimal(market_value),
         market_value_local=Decimal(market_value_local or market_value),
         updated_at=updated_at,
@@ -99,6 +101,11 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.totals.cash_account_count == 1
     assert response.totals.total_balance_portfolio_currency == Decimal("250")
     assert response.totals.total_balance_reporting_currency == Decimal("300.0")
+    assert response.totals.source_reported_cash_weight == Decimal("250") / Decimal("350")
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency == Decimal(
+        "350"
+    )
+    assert response.totals.source_reported_cash_weight_supportability == "SUPPORTED"
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
@@ -106,7 +113,6 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     repo.list_latest_snapshot_rows.assert_awaited_once_with(
         portfolio_ids=["P1"],
         as_of_date=date(2026, 3, 27),
-        instrument_asset_class="CASH",
     )
     repo.get_latest_fx_rate.assert_awaited_once_with(
         from_currency="USD",
@@ -167,6 +173,11 @@ async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_
     assert response.cash_accounts[0].balance_portfolio_currency == Decimal("0")
     assert response.cash_accounts[1].balance_portfolio_currency == Decimal("250")
     assert response.totals.cash_account_count == 2
+    assert response.totals.source_reported_cash_weight == Decimal("1")
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency == Decimal(
+        "250"
+    )
+    assert response.totals.source_reported_cash_weight_supportability == "SUPPORTED"
     assert response.data_quality_status == "COMPLETE"
     repo.get_latest_cash_account_ids.assert_not_awaited()
 
@@ -365,6 +376,133 @@ async def test_get_cash_balances_explicit_date_skips_default_date_lookup() -> No
 
     assert response.resolved_as_of_date == date(2026, 3, 26)
     repo.get_latest_business_date.assert_not_awaited()
+
+
+async def test_get_cash_balances_returns_null_cash_weight_when_denominator_missing() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = []
+    repo.list_cash_account_masters.return_value = []
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 27),
+        )
+
+    assert response.totals.total_balance_portfolio_currency == Decimal("0")
+    assert response.totals.source_reported_cash_weight is None
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency is None
+    assert (
+        response.totals.source_reported_cash_weight_supportability == "BLOCKED_MISSING_DENOMINATOR"
+    )
+    assert response.product_name == "HoldingsAsOf"
+    assert response.product_version == "v1"
+
+
+async def test_get_cash_balances_returns_null_cash_weight_when_denominator_zero() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="0"),
+            instrument=_instrument("CASH_USD", asset_class="CASH"),
+        )
+    ]
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 27),
+        )
+
+    assert response.totals.source_reported_cash_weight is None
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency is None
+    assert response.totals.source_reported_cash_weight_supportability == "BLOCKED_ZERO_DENOMINATOR"
+
+
+async def test_get_cash_balances_returns_null_cash_weight_when_denominator_stale() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(
+                "CASH_USD",
+                market_value="250",
+                snapshot_date=date(2026, 3, 26),
+            ),
+            instrument=_instrument("CASH_USD", asset_class="CASH"),
+        )
+    ]
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 27),
+        )
+
+    assert response.totals.total_balance_portfolio_currency == Decimal("250")
+    assert response.totals.source_reported_cash_weight is None
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency is None
+    assert response.totals.source_reported_cash_weight_supportability == "BLOCKED_STALE_DENOMINATOR"
+
+
+async def test_get_cash_balances_preserves_decimal_precision_for_source_cash_weight() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="1"),
+            instrument=_instrument("CASH_USD", asset_class="CASH"),
+        ),
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("SEC1", market_value="2"),
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+        ),
+    ]
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 27),
+        )
+
+    assert response.totals.source_reported_cash_weight == Decimal("1") / Decimal("3")
+    assert str(response.totals.source_reported_cash_weight).startswith("0.333333333333")
+    assert response.totals.source_reported_cash_weight_denominator_portfolio_currency == Decimal(
+        "3"
+    )
+    assert response.totals.source_reported_cash_weight_supportability == "SUPPORTED"
 
 
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
