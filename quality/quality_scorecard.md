@@ -1180,3 +1180,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1148 split business-date ingestion into focused write-mode, rate-limit, validation-policy,
   idempotent-job, publish-failure, queue-bookkeeping, and ACK helpers, reducing
   `ingest_business_dates` from `C (17)` to `A (2)`.
+- CR-1149 split core snapshot route policy orchestration into focused policy-section, governed
+  request, section-resolution, governance-metadata, and service error-mapping helpers, reducing
+  `create_core_snapshot` from `C (17)` to `A (1)` and leaving `integration.py` with no C-or-worse
+  functions.

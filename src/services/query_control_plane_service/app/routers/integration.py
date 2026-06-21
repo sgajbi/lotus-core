@@ -280,34 +280,86 @@ async def create_core_snapshot(
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationService = Depends(get_integration_service),
 ) -> CoreSnapshotResponse:
+    effective_request, governance = _governed_core_snapshot_request(
+        request=request,
+        integration_service=integration_service,
+    )
+    return await _core_snapshot_response_or_http_error(
+        service=service,
+        portfolio_id=portfolio_id,
+        request=effective_request,
+        governance=governance,
+    )
+
+
+def _governed_core_snapshot_request(
+    *,
+    request: CoreSnapshotRequest,
+    integration_service: IntegrationService,
+) -> tuple[CoreSnapshotRequest, SnapshotGovernanceContext]:
     requested_sections = list(request.sections)
-    requested_policy_sections = [section.value.upper() for section in requested_sections]
     policy = integration_service.get_effective_policy(
         consumer_system=request.consumer_system,
         tenant_id=request.tenant_id,
-        include_sections=requested_policy_sections,
+        include_sections=_policy_section_codes(requested_sections),
     )
-    allowed_policy_sections = set(policy.allowed_sections)
-    if "NO_ALLOWED_SECTION_RESTRICTION" in policy.warnings:
-        applied_sections = requested_sections
-        dropped_sections: list[CoreSnapshotSection] = []
-        warnings = list(policy.warnings)
-    else:
-        applied_sections = [
-            section
-            for section in requested_sections
-            if section.value.upper() in allowed_policy_sections
-        ]
-        dropped_sections = [
-            section
-            for section in requested_sections
-            if section.value.upper() not in allowed_policy_sections
-        ]
-        warnings = list(policy.warnings)
-        if dropped_sections and not policy.policy_provenance.strict_mode:
-            warnings.append("SECTIONS_DROPPED_NON_STRICT_MODE")
+    applied_sections, dropped_sections, warnings = _policy_applied_snapshot_sections(
+        requested_sections=requested_sections,
+        policy=policy,
+    )
+    _assert_core_snapshot_sections_allowed(
+        applied_sections=applied_sections,
+        dropped_sections=dropped_sections,
+        strict_mode=policy.policy_provenance.strict_mode,
+    )
+    return (
+        request.model_copy(update={"sections": applied_sections}),
+        _core_snapshot_governance(
+            policy=policy,
+            requested_sections=requested_sections,
+            applied_sections=applied_sections,
+            dropped_sections=dropped_sections,
+            warnings=warnings,
+        ),
+    )
 
-    if dropped_sections and policy.policy_provenance.strict_mode:
+
+def _policy_section_codes(sections: list[CoreSnapshotSection]) -> list[str]:
+    return [section.value.upper() for section in sections]
+
+
+def _policy_applied_snapshot_sections(
+    *,
+    requested_sections: list[CoreSnapshotSection],
+    policy,
+) -> tuple[list[CoreSnapshotSection], list[CoreSnapshotSection], list[str]]:
+    if "NO_ALLOWED_SECTION_RESTRICTION" in policy.warnings:
+        return requested_sections, [], list(policy.warnings)
+
+    allowed_policy_sections = set(policy.allowed_sections)
+    applied_sections = [
+        section
+        for section in requested_sections
+        if section.value.upper() in allowed_policy_sections
+    ]
+    dropped_sections = [
+        section
+        for section in requested_sections
+        if section.value.upper() not in allowed_policy_sections
+    ]
+    warnings = list(policy.warnings)
+    if dropped_sections and not policy.policy_provenance.strict_mode:
+        warnings.append("SECTIONS_DROPPED_NON_STRICT_MODE")
+    return applied_sections, dropped_sections, warnings
+
+
+def _assert_core_snapshot_sections_allowed(
+    *,
+    applied_sections: list[CoreSnapshotSection],
+    dropped_sections: list[CoreSnapshotSection],
+    strict_mode: bool,
+) -> None:
+    if dropped_sections and strict_mode:
         dropped = ", ".join(section.value for section in dropped_sections)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -320,8 +372,16 @@ async def create_core_snapshot(
             detail="No sections remain after policy evaluation.",
         )
 
-    effective_request = request.model_copy(update={"sections": applied_sections})
-    governance = SnapshotGovernanceContext(
+
+def _core_snapshot_governance(
+    *,
+    policy,
+    requested_sections: list[CoreSnapshotSection],
+    applied_sections: list[CoreSnapshotSection],
+    dropped_sections: list[CoreSnapshotSection],
+    warnings: list[str],
+) -> SnapshotGovernanceContext:
+    return SnapshotGovernanceContext(
         consumer_system=policy.consumer_system,
         tenant_id=policy.tenant_id,
         requested_sections=requested_sections,
@@ -334,10 +394,18 @@ async def create_core_snapshot(
         warnings=warnings,
     )
 
+
+async def _core_snapshot_response_or_http_error(
+    *,
+    service: CoreSnapshotService,
+    portfolio_id: str,
+    request: CoreSnapshotRequest,
+    governance: SnapshotGovernanceContext,
+) -> CoreSnapshotResponse:
     try:
         response = await service.get_core_snapshot(
             portfolio_id=portfolio_id,
-            request=effective_request,
+            request=request,
             governance=governance,
         )
         return cast(CoreSnapshotResponse, response)
