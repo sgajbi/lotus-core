@@ -349,6 +349,37 @@ async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loa
     assert "ORDER BY transactions.security_id ASC" in compiled_query
 
 
+async def test_list_performance_component_economics_evidence_selects_latest_cashflow_epoch(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_rows = MagicMock()
+    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    mock_db_session.execute = AsyncMock(return_value=mock_rows)
+
+    rows = await repository.list_performance_component_economics_evidence(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        security_ids=["EQ_US_AAPL"],
+        transaction_types=["DIVIDEND"],
+    )
+
+    assert len(rows) == 1
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "row_number() OVER" in compiled_query
+    assert "PARTITION BY cashflows.transaction_id" in compiled_query
+    assert "ORDER BY cashflows.epoch DESC, cashflows.id DESC" in compiled_query
+    assert "anon_1.transaction_id = transactions.transaction_id" in compiled_query
+    assert "anon_1.rn = 1" in compiled_query
+    assert "LEFT OUTER JOIN cashflows AS cashflows_1 ON cashflows_1.id = anon_1.id" in (
+        compiled_query
+    )
+    assert "trim(transactions.security_id) IN ('EQ_US_AAPL')" in compiled_query
+    assert "transactions.transaction_type IN ('DIVIDEND')" in compiled_query
+
+
 async def test_list_realized_tax_evidence_transactions_filters_explicit_tax_evidence(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):

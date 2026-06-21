@@ -7,15 +7,16 @@ from typing import List, Optional
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
+    Cashflow,
     FxRate,
     Portfolio,
     Transaction,
     TransactionCost,
 )
 from portfolio_common.utils import async_timed
-from sqlalchemy import asc, desc, exists, func, or_, select
+from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import aliased, contains_eager, joinedload
 
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .date_filters import start_of_day, start_of_next_day
@@ -335,9 +336,35 @@ class TransactionRepository:
         security_ids: list[str] | None = None,
         transaction_types: list[str] | None = None,
     ) -> List[Transaction]:
+        ranked_cashflows = (
+            select(
+                Cashflow.id.label("id"),
+                Cashflow.transaction_id.label("transaction_id"),
+                func.row_number()
+                .over(
+                    partition_by=Cashflow.transaction_id,
+                    order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
+                )
+                .label("rn"),
+            )
+            .where(Cashflow.portfolio_id == portfolio_id)
+            .subquery()
+        )
+        latest_cashflow = aliased(Cashflow)
         stmt = (
             select(Transaction)
-            .options(joinedload(Transaction.costs), joinedload(Transaction.cashflow))
+            .outerjoin(
+                ranked_cashflows,
+                and_(
+                    ranked_cashflows.c.transaction_id == Transaction.transaction_id,
+                    ranked_cashflows.c.rn == 1,
+                ),
+            )
+            .outerjoin(latest_cashflow, latest_cashflow.id == ranked_cashflows.c.id)
+            .options(
+                joinedload(Transaction.costs),
+                contains_eager(Transaction.cashflow, alias=latest_cashflow),
+            )
             .where(
                 Transaction.portfolio_id == portfolio_id,
                 Transaction.transaction_date >= start_of_day(start_date),
