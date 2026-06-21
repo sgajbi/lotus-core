@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any, Awaitable, Callable, Dict, List
 
 from portfolio_common.config import KAFKA_VALUATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioValuationJob
@@ -444,51 +444,50 @@ class ValuationScheduler:
             if len(claimed_jobs) < self._batch_size:
                 break
 
+    async def _run_db_poll_step(self, step: Callable[[Any], Awaitable[None]]) -> None:
+        async for db in get_async_db_session():
+            async with db.begin():
+                await step(db)
+
+    async def _update_reprocessing_and_queue_metrics(self, db) -> None:
+        await self._update_reprocessing_metrics(db)
+        await self._update_queue_metrics(db)
+
+    async def _reset_stale_valuation_jobs(self, db) -> None:
+        repo = ValuationRepository(db)
+        await repo.find_and_reset_stale_jobs(
+            timeout_minutes=self._stale_timeout_minutes,
+            max_attempts=self._max_attempts,
+        )
+
+    async def _run_poll_once(self) -> None:
+        await self._run_db_poll_step(self._update_reprocessing_and_queue_metrics)
+        await self._run_db_poll_step(self._process_instrument_level_triggers)
+        await self._run_db_poll_step(self._reset_stale_valuation_jobs)
+        await self._run_db_poll_step(self._create_backfill_jobs)
+        await self._claim_and_dispatch_ready_jobs()
+        await self._run_db_poll_step(self._advance_watermarks)
+        await self._run_db_poll_step(self._update_queue_metrics)
+
+    async def _wait_for_next_poll_or_stop(self) -> bool:
+        try:
+            await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
+            return False
+        except asyncio.TimeoutError:
+            return True
+        except asyncio.CancelledError:
+            return False
+
     async def run(self):
         """The main polling loop for the scheduler."""
         logger.info(f"ValuationScheduler started. Polling every {self._poll_interval} seconds.")
         while self._running:
             try:
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        await self._update_reprocessing_metrics(db)
-                        await self._update_queue_metrics(db)
-
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        await self._process_instrument_level_triggers(db)
-
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        repo = ValuationRepository(db)
-                        await repo.find_and_reset_stale_jobs(
-                            timeout_minutes=self._stale_timeout_minutes,
-                            max_attempts=self._max_attempts,
-                        )
-
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        await self._create_backfill_jobs(db)
-
-                await self._claim_and_dispatch_ready_jobs()
-
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        await self._advance_watermarks(db)
-
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        await self._update_queue_metrics(db)
-
+                await self._run_poll_once()
             except Exception:
                 logger.error("Error in scheduler polling loop.", exc_info=True)
 
-            try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
-                break
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
+            if not await self._wait_for_next_poll_or_stop():
                 break
 
         logger.info("ValuationScheduler has stopped.")

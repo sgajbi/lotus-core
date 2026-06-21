@@ -1854,3 +1854,10 @@ health before that claim is defensible.
      12 tests; scoped Ruff and format checks passed; Radon reports `_process_batch` reduced from
      `C (18)` to `A (3)`, with no C-or-worse functions/classes remaining in
      `reprocessing_worker.py`.
+306. Reduced valuation scheduler poll-loop complexity by extracting database poll-step transaction
+     execution, combined reprocessing and queue metric refresh, stale valuation job reset, one
+     complete scheduler poll iteration, and stop-aware poll waiting from
+     `ValuationScheduler.run(...)`. Focused scheduler tests passed with 20 tests; scoped Ruff and
+     format checks passed; Radon reports `ValuationScheduler.run` reduced from `C (11)` to
+     `A (4)`. Remaining C-ranked scheduler routines are explicit valuation-domain workflows:
+     `_advance_watermarks(...)` and `_create_backfill_jobs(...)`.
