@@ -1194,3 +1194,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   missing-row, completeness-gap, metric-pair, mismatch-detection, and aggregate mismatch helpers,
   reducing `run_timeseries_integrity` from `C (19)` to `A (3)` and leaving
   `reconciliation_service.py` with no C-or-worse functions.
+- CR-1153 split durable reprocessing worker batch handling into focused stale-reset/claim,
+  per-job correlation, impacted-portfolio, watermark fanout, terminal-status, ownership-loss, and
+  failure-marking helpers, reducing `_process_batch` from `C (18)` to `A (3)` and leaving
+  `reprocessing_worker.py` with no C-or-worse functions/classes.
