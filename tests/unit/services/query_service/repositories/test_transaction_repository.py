@@ -236,6 +236,40 @@ async def test_get_transactions_count_returns_zero_when_scalar_none(
     assert count == 0
 
 
+async def test_get_transactions_count_applies_identity_and_date_filters(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    count = await repository.get_transactions_count(
+        portfolio_id="P1",
+        instrument_id="INST-AAPL-USD",
+        transaction_type="BUY",
+        component_type="SECURITY_TRADE",
+        linked_transaction_group_id="LTG-001",
+        fx_contract_id="FXC-001",
+        swap_event_id="SWAP-001",
+        near_leg_group_id="NEAR-001",
+        far_leg_group_id="FAR-001",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+
+    assert count == 10
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "transactions.portfolio_id = 'P1'" in compiled_query
+    assert "transactions.instrument_id = 'INST-AAPL-USD'" in compiled_query
+    assert "transactions.transaction_type = 'BUY'" in compiled_query
+    assert "transactions.component_type = 'SECURITY_TRADE'" in compiled_query
+    assert "transactions.linked_transaction_group_id = 'LTG-001'" in compiled_query
+    assert "transactions.fx_contract_id = 'FXC-001'" in compiled_query
+    assert "transactions.swap_event_id = 'SWAP-001'" in compiled_query
+    assert "transactions.near_leg_group_id = 'NEAR-001'" in compiled_query
+    assert "transactions.far_leg_group_id = 'FAR-001'" in compiled_query
+    assert "transactions.transaction_date >= '2025-01-01 00:00:00'" in compiled_query
+    assert "transactions.transaction_date < '2025-02-01 00:00:00'" in compiled_query
+
+
 async def test_portfolio_exists_true(repository: TransactionRepository, mock_db_session: AsyncMock):
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = "P1"

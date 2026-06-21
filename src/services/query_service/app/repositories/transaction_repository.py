@@ -34,6 +34,39 @@ ALLOWED_SORT_FIELDS = {
 }
 
 
+def _identity_filter_kwargs(*, portfolio_id: str, **filters) -> dict[str, str]:
+    return {
+        field_name: value
+        for field_name, value in {"portfolio_id": portfolio_id, **filters}.items()
+        if value
+    }
+
+
+def _apply_security_filter(stmt, security_id: Optional[str]):
+    normalized_security_id = normalize_security_id(security_id)
+    if not normalized_security_id:
+        return stmt
+    return stmt.where(func.trim(Transaction.security_id) == normalized_security_id)
+
+
+def _apply_transaction_date_filters(
+    stmt,
+    *,
+    start_date: Optional[date],
+    end_date: Optional[date],
+    as_of_date: Optional[date],
+):
+    date_filters = (
+        (start_date, lambda value: Transaction.transaction_date >= start_of_day(value)),
+        (end_date, lambda value: Transaction.transaction_date < start_of_next_day(value)),
+        (as_of_date, lambda value: Transaction.transaction_date < start_of_next_day(value)),
+    )
+    for boundary_date, predicate_factory in date_filters:
+        if boundary_date:
+            stmt = stmt.filter(predicate_factory(boundary_date))
+    return stmt
+
+
 class TransactionRepository:
     """
     Handles read-only database queries for transaction data.
@@ -107,34 +140,26 @@ class TransactionRepository:
         end_date: Optional[date] = None,
         as_of_date: Optional[date] = None,
     ):
-        stmt = stmt.filter_by(portfolio_id=portfolio_id)
-        if instrument_id:
-            stmt = stmt.filter_by(instrument_id=instrument_id)
-        if security_id:
-            normalized_security_id = normalize_security_id(security_id)
-            if normalized_security_id:
-                stmt = stmt.where(func.trim(Transaction.security_id) == normalized_security_id)
-        if transaction_type:
-            stmt = stmt.filter_by(transaction_type=transaction_type)
-        if component_type:
-            stmt = stmt.filter_by(component_type=component_type)
-        if linked_transaction_group_id:
-            stmt = stmt.filter_by(linked_transaction_group_id=linked_transaction_group_id)
-        if fx_contract_id:
-            stmt = stmt.filter_by(fx_contract_id=fx_contract_id)
-        if swap_event_id:
-            stmt = stmt.filter_by(swap_event_id=swap_event_id)
-        if near_leg_group_id:
-            stmt = stmt.filter_by(near_leg_group_id=near_leg_group_id)
-        if far_leg_group_id:
-            stmt = stmt.filter_by(far_leg_group_id=far_leg_group_id)
-        if start_date:
-            stmt = stmt.filter(Transaction.transaction_date >= start_of_day(start_date))
-        if end_date:
-            stmt = stmt.filter(Transaction.transaction_date < start_of_next_day(end_date))
-        if as_of_date:
-            stmt = stmt.filter(Transaction.transaction_date < start_of_next_day(as_of_date))
-        return stmt
+        identity_filters = {
+            "instrument_id": instrument_id,
+            "transaction_type": transaction_type,
+            "component_type": component_type,
+            "linked_transaction_group_id": linked_transaction_group_id,
+            "fx_contract_id": fx_contract_id,
+            "swap_event_id": swap_event_id,
+            "near_leg_group_id": near_leg_group_id,
+            "far_leg_group_id": far_leg_group_id,
+        }
+        stmt = stmt.filter_by(
+            **_identity_filter_kwargs(portfolio_id=portfolio_id, **identity_filters)
+        )
+        stmt = _apply_security_filter(stmt, security_id)
+        return _apply_transaction_date_filters(
+            stmt,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=as_of_date,
+        )
 
     def _get_base_query(
         self,
