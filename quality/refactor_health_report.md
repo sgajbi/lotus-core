@@ -1779,3 +1779,10 @@ health before that claim is defensible.
      format checks passed; Radon reports `calculate_daily_record` reduced from `C (11)` to
      `A (1)`, `PositionTimeseriesLogic` reduced from `C (12)` to `A (2)`, with every
      function/class in `position_timeseries_logic.py` A-ranked.
+294. Reduced reporting allocation look-through complexity by extracting parent-security
+     normalization, resolved/direct allocation rows, component grouping, look-through metadata,
+     complete component-weight validation, row decomposition, and component allocation row
+     construction from `ReportingService._resolve_allocation_rows(...)`. Focused reporting service
+     tests passed with 20 tests; scoped Ruff and format checks passed; Radon reports
+     `_resolve_allocation_rows` reduced from `C (16)` to `A (3)` and `_can_decompose_position`
+     reduced from `B (7)` to `A (2)`.

@@ -38,6 +38,114 @@ from .fx_conversion import CachedFxRateConverter
 
 ZERO = Decimal("0")
 UNVALUED_STATUS = "UNVALUED"
+ResolvedAllocationRow = tuple[Any, str | None, Decimal]
+AllocationOutputRow = tuple[object | None, object, Decimal]
+
+
+def _allocation_parent_security_ids(rows: list[Any]) -> tuple[list[str], list[str | None]]:
+    parent_security_ids: list[str] = []
+    row_parent_security_ids: list[str | None] = []
+    for row in rows:
+        parent_security_id = normalize_security_id(row.snapshot.security_id)
+        if parent_security_id:
+            parent_security_ids.append(parent_security_id)
+        row_parent_security_ids.append(parent_security_id)
+    return list(dict.fromkeys(parent_security_ids)), row_parent_security_ids
+
+
+def _resolved_allocation_rows(
+    *,
+    reporting_values: list[tuple[Any, Decimal, Decimal]],
+    row_parent_security_ids: list[str | None],
+) -> list[ResolvedAllocationRow]:
+    return [
+        (row, parent_security_id, reporting_value)
+        for (row, _native_value, reporting_value), parent_security_id in zip(
+            reporting_values,
+            row_parent_security_ids,
+            strict=True,
+        )
+    ]
+
+
+def _direct_allocation_rows(
+    resolved_rows: list[ResolvedAllocationRow],
+) -> list[AllocationOutputRow]:
+    return [
+        (row.instrument, row.snapshot, reporting_value)
+        for row, _parent_security_id, reporting_value in resolved_rows
+    ]
+
+
+def _components_by_parent(
+    component_rows: list[InstrumentLookthroughComponentRow],
+) -> dict[str, list[InstrumentLookthroughComponentRow]]:
+    components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)
+    for component_row in component_rows:
+        components_by_parent[normalize_security_id(component_row.parent_security_id)].append(
+            component_row
+        )
+    return components_by_parent
+
+
+def _direct_only_lookthrough_info(
+    *, requested_mode: str, supported: bool
+) -> AllocationLookThroughInfo:
+    return AllocationLookThroughInfo(
+        requested_mode=requested_mode,
+        applied_mode="direct_only",
+        supported=supported,
+        decomposed_position_count=0,
+        limitation_reason=None,
+    )
+
+
+def _unsupported_lookthrough_info(*, requested_mode: str) -> AllocationLookThroughInfo:
+    limitation_reason = (
+        "Look-through components were requested but no fully weighted source-owned "
+        "decomposition set was available for the resolved holdings."
+    )
+    return AllocationLookThroughInfo(
+        requested_mode=requested_mode,
+        applied_mode="direct_only",
+        supported=False,
+        decomposed_position_count=0,
+        limitation_reason=limitation_reason,
+    )
+
+
+def _applied_lookthrough_info(
+    *,
+    requested_mode: str,
+    decomposed_position_count: int,
+    undecomposed_requested_count: int,
+) -> AllocationLookThroughInfo:
+    limitation_reason = None
+    if undecomposed_requested_count:
+        limitation_reason = (
+            "Look-through was applied where complete component weights were available; "
+            "remaining positions stayed at direct-holding level."
+        )
+    return AllocationLookThroughInfo(
+        requested_mode=requested_mode,
+        applied_mode="prefer_look_through",
+        supported=True,
+        decomposed_position_count=decomposed_position_count,
+        limitation_reason=limitation_reason,
+    )
+
+
+def _component_weights(
+    components: list[InstrumentLookthroughComponentRow],
+) -> list[Decimal | None]:
+    return [ReportingService._component_weight(component) for component in components]
+
+
+def _complete_component_weight_total(weights: list[Decimal | None]) -> Decimal | None:
+    complete_weights = [weight for weight in weights if weight is not None]
+    if len(complete_weights) != len(weights) or not complete_weights:
+        return None
+    return sum(complete_weights, ZERO)
 
 
 class ReportingService:
@@ -302,123 +410,109 @@ class ReportingService:
         as_of_date: date,
         reporting_currency: str,
     ) -> tuple[list[tuple[object | None, object, Decimal]], AllocationLookThroughInfo]:
-        parent_security_ids: list[str] = []
-        row_parent_security_ids: list[str] = []
-        for row in rows:
-            parent_security_id = normalize_security_id(row.snapshot.security_id)
-            if parent_security_id:
-                parent_security_ids.append(parent_security_id)
-            row_parent_security_ids.append(parent_security_id)
-
+        parent_security_ids, row_parent_security_ids = _allocation_parent_security_ids(rows)
         reporting_values = await self._snapshot_reporting_values(
             rows=rows,
             as_of_date=as_of_date,
             reporting_currency=reporting_currency,
         )
         component_rows = await self.repo.list_instrument_lookthrough_components(
-            parent_security_ids=list(dict.fromkeys(parent_security_ids)),
+            parent_security_ids=parent_security_ids,
             as_of_date=as_of_date,
         )
 
-        resolved_rows = [
-            (row, parent_security_id, reporting_value)
-            for (row, _native_value, reporting_value), parent_security_id in zip(
-                reporting_values,
-                row_parent_security_ids,
-                strict=True,
-            )
-        ]
-
-        direct_rows = [
-            (row.instrument, row.snapshot, reporting_value)
-            for row, _parent_security_id, reporting_value in resolved_rows
-        ]
-
-        components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]] = defaultdict(list)
-        for component_row in component_rows:
-            components_by_parent[normalize_security_id(component_row.parent_security_id)].append(
-                component_row
-            )
-        decomposable_parent_ids = {
-            parent_security_id
-            for parent_security_id, components in components_by_parent.items()
-            if self._can_decompose_position(components)
-        }
+        resolved_rows = _resolved_allocation_rows(
+            reporting_values=reporting_values,
+            row_parent_security_ids=row_parent_security_ids,
+        )
+        direct_rows = _direct_allocation_rows(resolved_rows)
+        components_by_parent = _components_by_parent(component_rows)
+        decomposable_parent_ids = self._decomposable_parent_ids(components_by_parent)
 
         if requested_mode == "direct_only":
-            return direct_rows, AllocationLookThroughInfo(
+            return direct_rows, _direct_only_lookthrough_info(
                 requested_mode=requested_mode,
-                applied_mode="direct_only",
                 supported=bool(decomposable_parent_ids),
-                decomposed_position_count=0,
-                limitation_reason=None,
             )
 
-        allocation_rows: list[tuple[object | None, object, Decimal]] = []
-        decomposed_position_count = 0
-        undecomposed_requested_count = 0
-
-        for row, parent_security_id, reporting_value in resolved_rows:
-            components = components_by_parent.get(parent_security_id, [])
-            if parent_security_id not in decomposable_parent_ids:
-                allocation_rows.append((row.instrument, row.snapshot, reporting_value))
-                if not self._cash_balance_resolver.is_cash_row(row):
-                    undecomposed_requested_count += 1
-                continue
-
-            decomposed_position_count += 1
-            for component in components:
-                component_weight = self._component_weight(component)
-                if component_weight is None:
-                    continue
-                allocation_rows.append(
-                    (
-                        component.component_instrument,
-                        SimpleNamespace(security_id=component.component_security_id),
-                        reporting_value * component_weight,
-                    )
-                )
+        (
+            allocation_rows,
+            decomposed_position_count,
+            undecomposed_requested_count,
+        ) = self._lookthrough_allocation_rows(
+            resolved_rows=resolved_rows,
+            components_by_parent=components_by_parent,
+            decomposable_parent_ids=decomposable_parent_ids,
+        )
 
         if decomposed_position_count == 0:
-            limitation_reason: str | None = (
-                "Look-through components were requested but no fully weighted source-owned "
-                "decomposition set was available for the resolved holdings."
-            )
-            return direct_rows, AllocationLookThroughInfo(
-                requested_mode=requested_mode,
-                applied_mode="direct_only",
-                supported=False,
-                decomposed_position_count=0,
-                limitation_reason=limitation_reason,
-            )
+            return direct_rows, _unsupported_lookthrough_info(requested_mode=requested_mode)
 
-        limitation_reason = None
-        if undecomposed_requested_count:
-            limitation_reason = (
-                "Look-through was applied where complete component weights were available; "
-                "remaining positions stayed at direct-holding level."
-            )
-        return allocation_rows, AllocationLookThroughInfo(
+        return allocation_rows, _applied_lookthrough_info(
             requested_mode=requested_mode,
-            applied_mode="prefer_look_through",
-            supported=True,
             decomposed_position_count=decomposed_position_count,
-            limitation_reason=limitation_reason,
+            undecomposed_requested_count=undecomposed_requested_count,
         )
+
+    def _lookthrough_allocation_rows(
+        self,
+        *,
+        resolved_rows: list[ResolvedAllocationRow],
+        components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]],
+        decomposable_parent_ids: set[str],
+    ) -> tuple[list[AllocationOutputRow], int, int]:
+        allocation_rows: list[AllocationOutputRow] = []
+        decomposed_position_count = 0
+        undecomposed_requested_count = 0
+        for row, parent_security_id, reporting_value in resolved_rows:
+            if parent_security_id not in decomposable_parent_ids:
+                allocation_rows.append((row.instrument, row.snapshot, reporting_value))
+                undecomposed_requested_count += self._undecomposed_row_count(row)
+                continue
+            decomposed_position_count += 1
+            allocation_rows.extend(
+                self._component_allocation_rows(
+                    components_by_parent[parent_security_id],
+                    reporting_value,
+                )
+            )
+        return allocation_rows, decomposed_position_count, undecomposed_requested_count
+
+    def _undecomposed_row_count(self, row: Any) -> int:
+        return 0 if self._cash_balance_resolver.is_cash_row(row) else 1
+
+    @staticmethod
+    def _component_allocation_rows(
+        components: list[InstrumentLookthroughComponentRow],
+        reporting_value: Decimal,
+    ) -> list[AllocationOutputRow]:
+        return [
+            (
+                component.component_instrument,
+                SimpleNamespace(security_id=component.component_security_id),
+                reporting_value * component_weight,
+            )
+            for component in components
+            if (component_weight := ReportingService._component_weight(component)) is not None
+        ]
+
+    @staticmethod
+    def _decomposable_parent_ids(
+        components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]],
+    ) -> set[str]:
+        return {
+            parent_security_id
+            for parent_security_id, components in components_by_parent.items()
+            if ReportingService._can_decompose_position(components)
+        }
 
     @staticmethod
     def _can_decompose_position(
         components: list[InstrumentLookthroughComponentRow],
     ) -> bool:
-        if not components:
+        total_weight = _complete_component_weight_total(_component_weights(components))
+        if total_weight is None:
             return False
-        weights = [ReportingService._component_weight(component) for component in components]
-        if any(weight is None for weight in weights):
-            return False
-        total_weight = sum(
-            (weight for weight in weights if weight is not None),
-            ZERO,
-        )
         return abs(total_weight - Decimal("1")) <= Decimal("0.000001")
 
     @staticmethod
