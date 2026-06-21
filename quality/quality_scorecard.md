@@ -1132,3 +1132,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   signature, claim-validation, bearer extraction, required-JWT, and required-token helpers,
   reducing `require_ops_token` from `C (14)` to `A (4)` while preserving token-only, JWT-only, and
   token-or-JWT behavior.
+- CR-1136 split ingestion write rate limiting into focused record-count normalization, projected
+  usage calculation, budget breach detection, error-message construction, and write-event recording
+  helpers, reducing `enforce_ingestion_write_rate_limit` from `B (6)` to `A (3)` while preserving
+  disabled mode, request/record budgets, and endpoint-scoped buckets.

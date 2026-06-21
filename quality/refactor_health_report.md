@@ -1739,3 +1739,10 @@ health before that claim is defensible.
      `require_ops_token(...)`. Focused auth tests passed with 5 tests across token-only, JWT-only,
      token-or-JWT, and invalid-token behavior; scoped Ruff and typecheck passed; Radon reports
      `require_ops_token` reduced from `C (14)` to `A (4)`.
+288. Reduced ingestion write rate-limit complexity by extracting record-count normalization,
+     projected usage calculation, budget breach detection, error-message construction, and
+     write-event recording helpers from `enforce_ingestion_write_rate_limit(...)`. Focused
+     ops-control tests passed with 8 tests across disabled mode, record-count flooring, budget
+     denial, and endpoint isolation; scoped Ruff and typecheck passed; Radon reports
+     `enforce_ingestion_write_rate_limit` reduced from `B (6)` to `A (3)`, with all
+     `ops_controls.py` functions/classes A-ranked.

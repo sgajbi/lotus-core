@@ -10,8 +10,6 @@ from starlette.requests import Request
 
 from src.services.ingestion_service.app import ops_controls
 
-pytestmark = pytest.mark.asyncio
-
 
 def _request(headers: dict[str, str]) -> Request:
     return Request(
@@ -42,6 +40,7 @@ def _build_hs256_jwt(secret: str, payload: dict) -> str:
     return f"{header_b64}.{payload_b64}.{signature_b64}"
 
 
+@pytest.mark.asyncio
 async def test_require_ops_token_accepts_token_only_header(monkeypatch) -> None:
     monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "token_only")
     monkeypatch.setattr(ops_controls, "OPS_TOKEN_REQUIRED", True)
@@ -59,6 +58,7 @@ async def test_require_ops_token_accepts_token_only_header(monkeypatch) -> None:
     assert principal == "ops-user"
 
 
+@pytest.mark.asyncio
 async def test_require_ops_token_rejects_invalid_token_only_header(monkeypatch) -> None:
     monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "token_only")
     monkeypatch.setattr(ops_controls, "OPS_TOKEN_REQUIRED", True)
@@ -71,6 +71,7 @@ async def test_require_ops_token_rejects_invalid_token_only_header(monkeypatch) 
     assert exc_info.value.detail["code"] == "INGESTION_OPS_TOKEN_INVALID"
 
 
+@pytest.mark.asyncio
 async def test_require_ops_token_accepts_jwt_only_bearer(monkeypatch) -> None:
     secret = "test-hs256-secret"
     now_epoch = int(datetime.now(UTC).timestamp())
@@ -85,6 +86,7 @@ async def test_require_ops_token_accepts_jwt_only_bearer(monkeypatch) -> None:
     assert principal == "ops-jwt-user"
 
 
+@pytest.mark.asyncio
 async def test_require_ops_token_prefers_bearer_in_token_or_jwt_mode(monkeypatch) -> None:
     secret = "test-hs256-secret"
     now_epoch = int(datetime.now(UTC).timestamp())
@@ -107,3 +109,50 @@ async def test_require_ops_token_prefers_bearer_in_token_or_jwt_mode(monkeypatch
     )
 
     assert principal == "ops-client"
+
+
+def test_ingestion_write_rate_limit_noops_when_disabled(monkeypatch) -> None:
+    ops_controls._write_events.clear()
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", False)
+
+    ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/test", record_count=10)
+
+    assert "/ingest/test" not in ops_controls._write_events
+
+
+def test_ingestion_write_rate_limit_floors_record_count(monkeypatch) -> None:
+    ops_controls._write_events.clear()
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_REQUESTS", 10)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_RECORDS", 10)
+
+    ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/test", record_count=0)
+
+    assert ops_controls._write_events["/ingest/test"][0].record_count == 1
+
+
+def test_ingestion_write_rate_limit_blocks_projected_record_budget(monkeypatch) -> None:
+    ops_controls._write_events.clear()
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_REQUESTS", 10)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_RECORDS", 2)
+
+    ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/test", record_count=2)
+    with pytest.raises(PermissionError) as exc_info:
+        ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/test", record_count=1)
+
+    assert "max_records=2" in str(exc_info.value)
+    assert len(ops_controls._write_events["/ingest/test"]) == 1
+
+
+def test_ingestion_write_rate_limit_is_endpoint_scoped(monkeypatch) -> None:
+    ops_controls._write_events.clear()
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_REQUESTS", 1)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_RECORDS", 100)
+
+    ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/a", record_count=1)
+    ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/b", record_count=1)
+
+    assert len(ops_controls._write_events["/ingest/a"]) == 1
+    assert len(ops_controls._write_events["/ingest/b"]) == 1
