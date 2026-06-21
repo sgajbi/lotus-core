@@ -1667,3 +1667,10 @@ health before that claim is defensible.
      with 133 tests, and scoped Ruff passed. Radon now reports no B-or-worse functions/classes in
      the module; `_validated_buy_lot_inputs` and `FIFOBasisStrategy.consume_sell_quantity` are no
      longer B-ranked, and the module remains A-ranked maintainability at `A (37.00)`.
+276. Reduced cost-engine dependency sorter complexity by replacing Bundle A/rights dependency
+     branch ladders and cash dependency branch ladders with named rank maps plus focused cash
+     transaction, inflow, and outflow predicates. Focused sorter tests passed with 8 tests,
+     including direct FX cash-settlement component-type ordering proof. Scoped Ruff passed after
+     import normalization. Radon now reports no B-or-worse functions/classes in `sorter.py`;
+     `_cash_dependency_rank` and `_ca_bundle_a_dependency_rank` are no longer B-ranked, and module
+     maintainability improves from `A (63.50)` to `A (66.03)`.

@@ -1,5 +1,32 @@
 from ..domain.models.transaction import Transaction
 
+_LAST_DEPENDENCY_RANK = 4
+_DEFAULT_CASH_DEPENDENCY_RANK = 1
+
+_CA_BUNDLE_A_DEPENDENCY_RANKS = {
+    "SPIN_OFF": 0,
+    "DEMERGER_OUT": 0,
+    "RIGHTS_ANNOUNCE": 0,
+    "RIGHTS_ALLOCATE": 0,
+    "SPIN_IN": 1,
+    "DEMERGER_IN": 1,
+    "RIGHTS_SUBSCRIBE": 1,
+    "RIGHTS_OVERSUBSCRIBE": 1,
+    "RIGHTS_SELL": 1,
+    "RIGHTS_EXPIRE": 1,
+    "RIGHTS_ADJUSTMENT": 1,
+    "CASH_CONSIDERATION": 2,
+    "RIGHTS_SHARE_DELIVERY": 2,
+    "RIGHTS_REFUND": 3,
+}
+
+_CASH_INFLOW_COMPONENT_TYPES = frozenset({"FX_CASH_SETTLEMENT_BUY"})
+_CASH_INFLOW_TRANSACTION_TYPES = frozenset(
+    {"DEPOSIT", "TRANSFER_IN", "MERGER_IN", "EXCHANGE_IN", "REPLACEMENT_IN", "BUY"}
+)
+_CASH_OUTFLOW_COMPONENT_TYPES = frozenset({"FX_CASH_SETTLEMENT_SELL"})
+_CASH_OUTFLOW_TRANSACTION_TYPES = frozenset({"SELL", "WITHDRAWAL", "FEE", "TAX", "TRANSFER_OUT"})
+
 
 class TransactionSorter:
     """
@@ -34,27 +61,7 @@ class TransactionSorter:
 
 def _ca_bundle_a_dependency_rank(txn: Transaction) -> int:
     transaction_type = _normalize_sort_code(getattr(txn, "transaction_type", ""))
-    if transaction_type in {"SPIN_OFF", "DEMERGER_OUT"}:
-        return 0
-    if transaction_type in {"RIGHTS_ANNOUNCE", "RIGHTS_ALLOCATE"}:
-        return 0
-    if transaction_type in {"SPIN_IN", "DEMERGER_IN"}:
-        return 1
-    if transaction_type in {
-        "RIGHTS_SUBSCRIBE",
-        "RIGHTS_OVERSUBSCRIBE",
-        "RIGHTS_SELL",
-        "RIGHTS_EXPIRE",
-        "RIGHTS_ADJUSTMENT",
-    }:
-        return 1
-    if transaction_type == "CASH_CONSIDERATION":
-        return 2
-    if transaction_type == "RIGHTS_SHARE_DELIVERY":
-        return 2
-    if transaction_type == "RIGHTS_REFUND":
-        return 3
-    return 4
+    return _CA_BUNDLE_A_DEPENDENCY_RANKS.get(transaction_type, _LAST_DEPENDENCY_RANK)
 
 
 def _ca_bundle_a_target_order_key(txn: Transaction) -> tuple[int, str]:
@@ -65,35 +72,43 @@ def _ca_bundle_a_target_order_key(txn: Transaction) -> tuple[int, str]:
 
 
 def _cash_dependency_rank(txn: Transaction) -> int:
-    product_type = _normalize_sort_code(getattr(txn, "product_type", ""))
-    asset_class = _normalize_sort_code(getattr(txn, "asset_class", ""))
     component_type = _normalize_sort_code(getattr(txn, "component_type", ""))
     transaction_type = _normalize_sort_code(getattr(txn, "transaction_type", ""))
+
+    if not _is_cash_transaction(txn):
+        return _DEFAULT_CASH_DEPENDENCY_RANK
+    if _is_cash_inflow(component_type, transaction_type):
+        return 0
+    if _is_cash_outflow(component_type, transaction_type):
+        return 2
+    return _DEFAULT_CASH_DEPENDENCY_RANK
+
+
+def _is_cash_transaction(txn: Transaction) -> bool:
+    product_type = _normalize_sort_code(getattr(txn, "product_type", ""))
+    asset_class = _normalize_sort_code(getattr(txn, "asset_class", ""))
     instrument_id = _normalize_sort_code(getattr(txn, "instrument_id", ""))
     security_id = _normalize_sort_code(getattr(txn, "security_id", ""))
-
-    is_cash = (
+    return (
         product_type == "CASH"
         or asset_class == "CASH"
         or instrument_id.startswith("CASH")
         or security_id.startswith("CASH")
     )
-    if not is_cash:
-        return 1
 
-    if component_type == "FX_CASH_SETTLEMENT_BUY":
-        return 0
-    if transaction_type in {"DEPOSIT", "TRANSFER_IN", "MERGER_IN", "EXCHANGE_IN", "REPLACEMENT_IN"}:
-        return 0
-    if transaction_type == "BUY":
-        return 0
 
-    if component_type == "FX_CASH_SETTLEMENT_SELL":
-        return 2
-    if transaction_type in {"SELL", "WITHDRAWAL", "FEE", "TAX", "TRANSFER_OUT"}:
-        return 2
+def _is_cash_inflow(component_type: str, transaction_type: str) -> bool:
+    return (
+        component_type in _CASH_INFLOW_COMPONENT_TYPES
+        or transaction_type in _CASH_INFLOW_TRANSACTION_TYPES
+    )
 
-    return 1
+
+def _is_cash_outflow(component_type: str, transaction_type: str) -> bool:
+    return (
+        component_type in _CASH_OUTFLOW_COMPONENT_TYPES
+        or transaction_type in _CASH_OUTFLOW_TRANSACTION_TYPES
+    )
 
 
 def _normalize_sort_code(value: object) -> str:
