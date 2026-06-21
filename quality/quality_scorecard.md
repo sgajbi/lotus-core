@@ -1202,3 +1202,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   refresh, stale-reset, poll-iteration, and stop-wait helpers, reducing `ValuationScheduler.run`
   from `C (11)` to `A (4)` while preserving scheduler order, transaction boundaries, and
   stop/cancellation posture.
+- CR-1155 split valuation scheduler watermark advancement into focused terminal-normalization,
+  watermark-update construction, epoch-fenced bulk update, and stale-skip logging helpers, reducing
+  `_advance_watermarks` from `C (18)` to `B (6)` while preserving persisted update payloads and
+  stale-skip metric reasons.
