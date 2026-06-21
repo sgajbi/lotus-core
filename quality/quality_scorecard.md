@@ -1072,3 +1072,9 @@ Local evidence captured on 2026-06-05 after CR-1034:
   behavior. Focused cost-basis tests passed with 20 tests, broader cost-engine unit tests passed
   with 91 tests, broader cost-calculator service tests passed with 133 tests, scoped Ruff passed,
   and the module remains A-ranked maintainability at `A (37.00)`.
+- CR-1122 split cost-engine dependency sorter policy into named rank maps and focused cash
+  transaction/inflow/outflow predicates, removing the B-ranked `_cash_dependency_rank` and
+  `_ca_bundle_a_dependency_rank` hotspots while preserving Bundle A, rights lifecycle, and cash
+  settlement same-timestamp ordering. Focused sorter tests passed with 8 tests, scoped Ruff passed
+  after import normalization, Radon reports no B-or-worse functions/classes in `sorter.py`, and
+  module maintainability improves from `A (63.50)` to `A (66.03)`.

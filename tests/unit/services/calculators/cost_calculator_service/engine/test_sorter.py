@@ -25,6 +25,7 @@ def _transaction(
     transaction_type: str = "BUY",
     product_type: str | None = None,
     asset_class: str | None = None,
+    component_type: str | None = None,
 ) -> Transaction:
     return Transaction(
         transaction_id=transaction_id,
@@ -40,6 +41,7 @@ def _transaction(
         portfolio_base_currency="USD",
         product_type=product_type,
         asset_class=asset_class,
+        component_type=component_type,
     )
 
 
@@ -321,3 +323,46 @@ def test_sort_cash_dependencies_normalize_source_vocabulary(sorter):
 
     sorted_list = sorter.sort_transactions([], [fee, deposit])
     assert [t.transaction_id for t in sorted_list] == ["t_deposit", "t_fee"]
+
+
+def test_sort_cash_settlement_component_types_bound_same_timestamp(sorter):
+    same_day = datetime(2025, 8, 28)
+    settlement_sell = _transaction(
+        transaction_id="t_settlement_sell",
+        transaction_date=same_day,
+        quantity=Decimal("1000"),
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="CASH_MOVEMENT",
+        product_type="Cash",
+        asset_class="Cash",
+        component_type="FX_CASH_SETTLEMENT_SELL",
+    )
+    neutral_cash = _transaction(
+        transaction_id="t_neutral",
+        transaction_date=same_day,
+        quantity=Decimal("500"),
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="CASH_MOVEMENT",
+        product_type="Cash",
+        asset_class="Cash",
+    )
+    settlement_buy = _transaction(
+        transaction_id="t_settlement_buy",
+        transaction_date=same_day,
+        quantity=Decimal("1"),
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="CASH_MOVEMENT",
+        product_type="Cash",
+        asset_class="Cash",
+        component_type="FX_CASH_SETTLEMENT_BUY",
+    )
+
+    sorted_list = sorter.sort_transactions([], [settlement_sell, neutral_cash, settlement_buy])
+    assert [t.transaction_id for t in sorted_list] == [
+        "t_settlement_buy",
+        "t_neutral",
+        "t_settlement_sell",
+    ]
