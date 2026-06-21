@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from time import perf_counter
+from typing import Any
 from uuid import uuid4
 
 from portfolio_common.database_models import FinancialReconciliationFinding
@@ -65,6 +66,30 @@ def _add_authoritative_position_metrics(
         _decimal_or_zero(getattr(position_row, "eod_market_value")) * rate
     )
     metrics["fees"] += _decimal_or_zero(getattr(position_row, "fees")) * rate
+
+
+def _cashflow_rule_mismatches(
+    *,
+    rule: Any,
+    cashflow: Any,
+) -> dict[str, tuple[object, object]]:
+    comparisons = {
+        "classification": (rule.classification, cashflow.classification),
+        "timing": (rule.timing, cashflow.timing),
+        "is_position_flow": (
+            bool(rule.is_position_flow),
+            bool(cashflow.is_position_flow),
+        ),
+        "is_portfolio_flow": (
+            bool(rule.is_portfolio_flow),
+            bool(cashflow.is_portfolio_flow),
+        ),
+    }
+    return {
+        field_name: (expected, observed)
+        for field_name, (expected, observed) in comparisons.items()
+        if expected != observed
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,66 +265,12 @@ class ReconciliationService:
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
         )
-        findings: list[FinancialReconciliationFinding] = []
-        examined = 0
-        for transaction, rule, cashflow in rows:
-            examined += 1
-            if cashflow is None:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="transaction_cashflow",
-                        finding_type="missing_cashflow",
-                        severity="ERROR",
-                        portfolio_id=transaction.portfolio_id,
-                        security_id=transaction.security_id,
-                        transaction_id=transaction.transaction_id,
-                        business_date=transaction.transaction_date.date(),
-                        epoch=request.epoch,
-                        expected_value={
-                            "classification": rule.classification,
-                            "timing": rule.timing,
-                            "is_position_flow": rule.is_position_flow,
-                            "is_portfolio_flow": rule.is_portfolio_flow,
-                        },
-                        observed_value=None,
-                        detail={
-                            "transaction_type": transaction.transaction_type,
-                            "cash_entry_mode": transaction.cash_entry_mode,
-                        },
-                    )
-                )
-                continue
-
-            mismatches: dict[str, tuple[object, object]] = {}
-            if cashflow.classification != rule.classification:
-                mismatches["classification"] = (rule.classification, cashflow.classification)
-            if cashflow.timing != rule.timing:
-                mismatches["timing"] = (rule.timing, cashflow.timing)
-            if bool(cashflow.is_position_flow) != bool(rule.is_position_flow):
-                mismatches["is_position_flow"] = (rule.is_position_flow, cashflow.is_position_flow)
-            if bool(cashflow.is_portfolio_flow) != bool(rule.is_portfolio_flow):
-                mismatches["is_portfolio_flow"] = (
-                    rule.is_portfolio_flow,
-                    cashflow.is_portfolio_flow,
-                )
-            if mismatches:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="transaction_cashflow",
-                        finding_type="cashflow_rule_mismatch",
-                        severity="ERROR",
-                        portfolio_id=transaction.portfolio_id,
-                        security_id=transaction.security_id,
-                        transaction_id=transaction.transaction_id,
-                        business_date=cashflow.cashflow_date,
-                        epoch=cashflow.epoch,
-                        expected_value={key: expected for key, (expected, _) in mismatches.items()},
-                        observed_value={key: observed for key, (_, observed) in mismatches.items()},
-                        detail={"transaction_type": transaction.transaction_type},
-                    )
-                )
+        findings = self._transaction_cashflow_findings(
+            run_id=run.run_id,
+            request_epoch=request.epoch,
+            rows=rows,
+        )
+        examined = len(rows)
 
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
@@ -311,6 +282,107 @@ class ReconciliationService:
             findings,
         )
         return run
+
+    def _transaction_cashflow_findings(
+        self,
+        *,
+        run_id: str,
+        request_epoch: int | None,
+        rows: list[tuple[Any, Any, Any | None]],
+    ) -> list[FinancialReconciliationFinding]:
+        findings: list[FinancialReconciliationFinding] = []
+        for transaction, rule, cashflow in rows:
+            finding = self._transaction_cashflow_finding(
+                run_id=run_id,
+                request_epoch=request_epoch,
+                transaction=transaction,
+                rule=rule,
+                cashflow=cashflow,
+            )
+            if finding is not None:
+                findings.append(finding)
+        return findings
+
+    def _transaction_cashflow_finding(
+        self,
+        *,
+        run_id: str,
+        request_epoch: int | None,
+        transaction: Any,
+        rule: Any,
+        cashflow: Any | None,
+    ) -> FinancialReconciliationFinding | None:
+        if cashflow is None:
+            return self._missing_cashflow_finding(
+                run_id=run_id,
+                request_epoch=request_epoch,
+                transaction=transaction,
+                rule=rule,
+            )
+
+        mismatches = _cashflow_rule_mismatches(rule=rule, cashflow=cashflow)
+        if not mismatches:
+            return None
+        return self._cashflow_rule_mismatch_finding(
+            run_id=run_id,
+            transaction=transaction,
+            cashflow=cashflow,
+            mismatches=mismatches,
+        )
+
+    def _missing_cashflow_finding(
+        self,
+        *,
+        run_id: str,
+        request_epoch: int | None,
+        transaction: Any,
+        rule: Any,
+    ) -> FinancialReconciliationFinding:
+        return self._build_finding(
+            run_id=run_id,
+            reconciliation_type="transaction_cashflow",
+            finding_type="missing_cashflow",
+            severity="ERROR",
+            portfolio_id=transaction.portfolio_id,
+            security_id=transaction.security_id,
+            transaction_id=transaction.transaction_id,
+            business_date=transaction.transaction_date.date(),
+            epoch=request_epoch,
+            expected_value={
+                "classification": rule.classification,
+                "timing": rule.timing,
+                "is_position_flow": rule.is_position_flow,
+                "is_portfolio_flow": rule.is_portfolio_flow,
+            },
+            observed_value=None,
+            detail={
+                "transaction_type": transaction.transaction_type,
+                "cash_entry_mode": transaction.cash_entry_mode,
+            },
+        )
+
+    def _cashflow_rule_mismatch_finding(
+        self,
+        *,
+        run_id: str,
+        transaction: Any,
+        cashflow: Any,
+        mismatches: dict[str, tuple[object, object]],
+    ) -> FinancialReconciliationFinding:
+        return self._build_finding(
+            run_id=run_id,
+            reconciliation_type="transaction_cashflow",
+            finding_type="cashflow_rule_mismatch",
+            severity="ERROR",
+            portfolio_id=transaction.portfolio_id,
+            security_id=transaction.security_id,
+            transaction_id=transaction.transaction_id,
+            business_date=cashflow.cashflow_date,
+            epoch=cashflow.epoch,
+            expected_value={key: expected for key, (expected, _) in mismatches.items()},
+            observed_value={key: observed for key, (_, observed) in mismatches.items()},
+            detail={"transaction_type": transaction.transaction_type},
+        )
 
     async def run_position_valuation(
         self,
