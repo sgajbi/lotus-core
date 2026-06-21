@@ -1136,3 +1136,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   usage calculation, budget breach detection, error-message construction, and write-event recording
   helpers, reducing `enforce_ingestion_write_rate_limit` from `B (6)` to `A (3)` while preserving
   disabled mode, request/record budgets, and endpoint-scoped buckets.
+- CR-1137 split shared transaction repository filtering into focused identity, normalized security,
+  and transaction-date boundary helpers, reducing `TransactionRepository._apply_filters` from
+  `C (14)` to `A (1)` while preserving list/count/evidence filter semantics.

@@ -1746,3 +1746,8 @@ health before that claim is defensible.
      denial, and endpoint isolation; scoped Ruff and typecheck passed; Radon reports
      `enforce_ingestion_write_rate_limit` reduced from `B (6)` to `A (3)`, with all
      `ops_controls.py` functions/classes A-ranked.
+289. Reduced transaction repository filter complexity by extracting identity filter construction,
+     normalized security filtering, and transaction-date boundary filtering from
+     `TransactionRepository._apply_filters(...)`. Focused transaction repository tests passed with
+     27 tests, including direct count-query coverage for identity and date filters; scoped Ruff
+     passed; Radon reports `_apply_filters` reduced from `C (14)` to `A (1)`.
