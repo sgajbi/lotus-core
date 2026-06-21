@@ -1163,3 +1163,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   resolution, cash-total, rollup, totals, metadata, and response helpers, reducing
   `ReportingService.get_portfolio_summary` from `C (11)` to `A (3)` and leaving
   `reporting_service.py` with no B-or-worse functions/classes.
+- CR-1144 split position calculator orchestration into focused epoch-validation,
+  completed-date, backdated-replay, deterministic replay-event, outbox-publication,
+  normal replay, and persistence/rearming helpers, reducing `PositionCalculator.calculate`
+  from `C (16)` to `A (3)`.

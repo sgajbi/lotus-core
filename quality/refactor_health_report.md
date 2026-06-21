@@ -1791,3 +1791,10 @@ health before that claim is defensible.
      `ReportingService.get_portfolio_summary(...)`. Focused reporting service tests passed with
      20 tests; scoped Ruff and format checks passed; Radon reports `get_portfolio_summary` reduced
      from `C (11)` to `A (3)`, with every function/class in `reporting_service.py` A-ranked.
+296. Reduced position calculator orchestration complexity by extracting epoch validation,
+     completed-date resolution, original backdated replay detection, replay logging, stale-fence
+     handling, deterministic replay event construction, outbox publication, normal position-history
+     replay, and persistence/rearming side effects from `PositionCalculator.calculate(...)`.
+     Focused position calculator tests passed with 47 tests; focused reprocessing atomicity
+     integration tests passed with 3 tests; scoped Ruff and format checks passed; Radon reports
+     `PositionCalculator.calculate` reduced from `C (16)` to `A (3)`.
