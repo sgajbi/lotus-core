@@ -109,6 +109,7 @@ def build_performance_component_economics_response(
         },
         **source_product_runtime_metadata_without_as_of_date(
             request.as_of_date,
+            tenant_id=request.tenant_id,
             data_quality_status="COMPLETE" if rows else "UNKNOWN",
             latest_evidence_timestamp=_latest_performance_evidence_timestamp(transactions),
         ),

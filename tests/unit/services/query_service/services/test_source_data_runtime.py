@@ -21,10 +21,12 @@ def test_source_product_runtime_metadata_preserves_quality_and_evidence_timestam
 
     metadata = source_product_runtime_metadata(
         date(2026, 5, 31),
+        tenant_id=" tenant-sg ",
         data_quality_status="COMPLETE",
         latest_evidence_timestamp=evidence_timestamp,
     )
 
+    assert metadata["tenant_id"] == "tenant-sg"
     assert metadata["data_quality_status"] == "COMPLETE"
     assert metadata["latest_evidence_timestamp"] == evidence_timestamp
 
@@ -32,8 +34,10 @@ def test_source_product_runtime_metadata_preserves_quality_and_evidence_timestam
 def test_source_product_runtime_metadata_without_as_of_date_removes_duplicate_field() -> None:
     metadata = source_product_runtime_metadata_without_as_of_date(
         date(2026, 5, 31),
+        tenant_id="tenant-sg",
         data_quality_status="PARTIAL",
     )
 
     assert "as_of_date" not in metadata
+    assert metadata["tenant_id"] == "tenant-sg"
     assert metadata["data_quality_status"] == "PARTIAL"

@@ -206,6 +206,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     request = PerformanceComponentEconomicsRequest(
         as_of_date=date(2026, 5, 10),
         window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+        tenant_id="tenant-sg",
     )
 
     response = build_performance_component_economics_response(
@@ -232,6 +233,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     ]
     assert response.supportability.missing_component_families == []
     assert response.data_quality_status == "COMPLETE"
+    assert response.tenant_id == "tenant-sg"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 17, tzinfo=UTC)
     assert response.lineage["source_table"] == "transactions,cashflows,transaction_costs"
 
