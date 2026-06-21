@@ -1727,3 +1727,10 @@ health before that claim is defensible.
      multi-breach single-position proof, scoped Ruff and typecheck passed, and Radon reports
      `RuleEngine` reduced from `C (20)` to `A (2)`, `RuleEngine.evaluate` reduced from `C (19)` to
      `A (1)`, with all functions in `compliance.py` A-ranked.
+286. Reduced advisory auto-funding complexity by extracting funding enablement, BUY grouping,
+     priority-candidate construction, per-target funding need calculation, FX candidate selection,
+     smallest-deficit tracking, missing-FX posture, insufficient-cash diagnostics, and generated FX
+     application helpers from `build_auto_funding_plan(...)`. Proposal-simulation tests passed with
+     29 tests, scoped Ruff and typecheck passed, and Radon reports `build_auto_funding_plan`
+     reduced from `C (20)` to `A (4)`, `funding_priority_currencies` reduced from `B (6)` to
+     `A (2)`, with all functions/classes in `funding.py` A-ranked.
