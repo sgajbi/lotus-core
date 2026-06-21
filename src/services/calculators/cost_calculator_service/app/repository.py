@@ -1,7 +1,7 @@
 # services/calculators/cost_calculator_service/app/repository.py
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
@@ -132,6 +132,36 @@ def _transaction_cost_rows(
         )
         for fee_type, amount in _positive_fee_components(transaction_result.fees).items()
     ]
+
+
+def _buy_lot_payload(transaction_result: EngineTransaction) -> dict[str, object]:
+    accrued_interest_local = getattr(transaction_result, "accrued_interest", None) or Decimal(0)
+    return {
+        "lot_id": f"LOT-{transaction_result.transaction_id}",
+        "source_transaction_id": transaction_result.transaction_id,
+        "portfolio_id": transaction_result.portfolio_id,
+        "instrument_id": transaction_result.instrument_id,
+        "security_id": transaction_result.security_id,
+        "acquisition_date": transaction_result.transaction_date.date(),
+        "original_quantity": transaction_result.quantity,
+        "open_quantity": transaction_result.quantity,
+        "lot_cost_local": transaction_result.net_cost_local or Decimal(0),
+        "lot_cost_base": transaction_result.net_cost or Decimal(0),
+        "accrued_interest_paid_local": accrued_interest_local,
+        "economic_event_id": getattr(transaction_result, "economic_event_id", None),
+        "linked_transaction_group_id": getattr(
+            transaction_result, "linked_transaction_group_id", None
+        ),
+        "calculation_policy_id": getattr(transaction_result, "calculation_policy_id", None),
+        "calculation_policy_version": getattr(
+            transaction_result, "calculation_policy_version", None
+        ),
+        "source_system": getattr(transaction_result, "source_system", None),
+    }
+
+
+def _excluded_update_fields(insert_stmt: Any, immutable_fields: set[str]) -> dict[str, object]:
+    return {c.name: c for c in insert_stmt.excluded if c.name not in immutable_fields}
 
 
 class CostCalculatorRepository:
@@ -284,35 +314,8 @@ class CostCalculatorRepository:
 
     async def upsert_buy_lot_state(self, transaction_result: EngineTransaction) -> None:
         """Persists BUY lot state as a durable, idempotent record."""
-        accrued_interest_local = getattr(transaction_result, "accrued_interest", None) or Decimal(0)
-        lot_payload = {
-            "lot_id": f"LOT-{transaction_result.transaction_id}",
-            "source_transaction_id": transaction_result.transaction_id,
-            "portfolio_id": transaction_result.portfolio_id,
-            "instrument_id": transaction_result.instrument_id,
-            "security_id": transaction_result.security_id,
-            "acquisition_date": transaction_result.transaction_date.date(),
-            "original_quantity": transaction_result.quantity,
-            "open_quantity": transaction_result.quantity,
-            "lot_cost_local": transaction_result.net_cost_local or Decimal(0),
-            "lot_cost_base": transaction_result.net_cost or Decimal(0),
-            "accrued_interest_paid_local": accrued_interest_local,
-            "economic_event_id": getattr(transaction_result, "economic_event_id", None),
-            "linked_transaction_group_id": getattr(
-                transaction_result, "linked_transaction_group_id", None
-            ),
-            "calculation_policy_id": getattr(transaction_result, "calculation_policy_id", None),
-            "calculation_policy_version": getattr(
-                transaction_result, "calculation_policy_version", None
-            ),
-            "source_system": getattr(transaction_result, "source_system", None),
-        }
-        stmt = pg_insert(PositionLotState).values(**lot_payload)
-        update_dict = {
-            c.name: c
-            for c in stmt.excluded
-            if c.name not in ["id", "lot_id", "source_transaction_id"]
-        }
+        stmt = pg_insert(PositionLotState).values(**_buy_lot_payload(transaction_result))
+        update_dict = _excluded_update_fields(stmt, {"id", "lot_id", "source_transaction_id"})
         await self.db.execute(
             stmt.on_conflict_do_update(index_elements=["source_transaction_id"], set_=update_dict)
         )

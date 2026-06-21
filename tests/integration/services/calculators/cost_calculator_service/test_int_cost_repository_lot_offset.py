@@ -180,6 +180,101 @@ async def test_cost_repository_updates_lot_open_quantity_from_engine_state(
     assert lot.open_quantity == Decimal("40")
 
 
+async def test_cost_repository_upserts_buy_lot_state_idempotently(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_SLICE4_04",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="Medium",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_SLICE4_04",
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        DBTransaction(
+            transaction_id="TXN_SLICE4_04",
+            portfolio_id="PORT_SLICE4_04",
+            instrument_id="BOND_USD_04",
+            security_id="BOND_USD_04",
+            transaction_type="BUY",
+            quantity=Decimal("100"),
+            price=Decimal("98"),
+            gross_transaction_amount=Decimal("9800"),
+            trade_currency="USD",
+            currency="USD",
+            transaction_date=datetime(2026, 2, 28, 10, 0, 0),
+        )
+    )
+    await async_db_session.commit()
+
+    async_db_session.add(
+        PositionLotState(
+            lot_id="LOT-TXN_SLICE4_04",
+            source_transaction_id="TXN_SLICE4_04",
+            portfolio_id="PORT_SLICE4_04",
+            instrument_id="OLD_BOND_USD_04",
+            security_id="OLD_BOND_USD_04",
+            acquisition_date=date(2026, 2, 27),
+            original_quantity=Decimal("50"),
+            open_quantity=Decimal("25"),
+            lot_cost_local=Decimal("4900"),
+            lot_cost_base=Decimal("4900"),
+            accrued_interest_paid_local=Decimal("0"),
+            economic_event_id="OLD-EVT",
+        )
+    )
+    await async_db_session.commit()
+
+    repo = CostCalculatorRepository(async_db_session)
+    txn = EngineTransaction(
+        transaction_id="TXN_SLICE4_04",
+        portfolio_id="PORT_SLICE4_04",
+        instrument_id="BOND_USD_04",
+        security_id="BOND_USD_04",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 2, 28, 10, 0, 0),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("9800"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        net_cost_local=Decimal("9840.12"),
+        net_cost=Decimal("9840.12"),
+        accrued_interest=Decimal("125.55"),
+        economic_event_id="EVT-2026-888",
+        linked_transaction_group_id="LTG-2026-888",
+        calculation_policy_id="BUY_DEFAULT_POLICY",
+        calculation_policy_version="1.0.1",
+        source_system="OMS_PRIMARY",
+    )
+
+    await repo.upsert_buy_lot_state(txn)
+    await async_db_session.commit()
+
+    lot_stmt = select(PositionLotState).where(
+        PositionLotState.source_transaction_id == "TXN_SLICE4_04"
+    )
+    lot = (await async_db_session.execute(lot_stmt)).scalar_one()
+    assert lot.lot_id == "LOT-TXN_SLICE4_04"
+    assert lot.source_transaction_id == "TXN_SLICE4_04"
+    assert lot.instrument_id == "BOND_USD_04"
+    assert lot.security_id == "BOND_USD_04"
+    assert lot.acquisition_date == date(2026, 2, 28)
+    assert lot.original_quantity == Decimal("100")
+    assert lot.open_quantity == Decimal("100")
+    assert lot.lot_cost_local == Decimal("9840.12")
+    assert lot.lot_cost_base == Decimal("9840.12")
+    assert lot.accrued_interest_paid_local == Decimal("125.55")
+    assert lot.economic_event_id == "EVT-2026-888"
+    assert lot.linked_transaction_group_id == "LTG-2026-888"
+    assert lot.calculation_policy_version == "1.0.1"
+
+
 async def test_cost_repository_replaces_transaction_cost_breakdown_idempotently(
     clean_db, async_db_session: AsyncSession
 ) -> None:
