@@ -219,9 +219,7 @@ def _apply_buy_cost_fields(transaction: Transaction) -> None:
     _apply_zero_realized_pnl(transaction)
 
 
-def _validate_buy_cost_fields(
-    transaction: Transaction, error_reporter: ErrorReporter
-) -> bool:
+def _validate_buy_cost_fields(transaction: Transaction, error_reporter: ErrorReporter) -> bool:
     if transaction.quantity <= Decimal(0):
         _add_buy_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
         return False
@@ -358,9 +356,7 @@ def _apply_sell_disposal_fields(
     transaction.gross_cost = -cogs_base
 
 
-def _validate_sell_disposal_fields(
-    transaction: Transaction, error_reporter: ErrorReporter
-) -> bool:
+def _validate_sell_disposal_fields(transaction: Transaction, error_reporter: ErrorReporter) -> bool:
     if transaction.net_cost <= Decimal(0) and transaction.net_cost_local <= Decimal(0):
         return True
     _add_sell_invariant_error(
