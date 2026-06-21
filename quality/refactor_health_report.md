@@ -1721,3 +1721,9 @@ health before that claim is defensible.
      Focused simulation helper tests passed with 3 tests, scoped Ruff and typecheck passed, and
      Radon reports `link_buy_intent_dependencies` reduced from `C (16)` to `A (3)`, with all
      functions in `intent_dependencies.py` A-ranked.
+285. Reduced advisory compliance rule-engine complexity by extracting cash-band, single-position,
+     data-quality, suppressed-intent, no-shorting, and insufficient-cash rule helpers from
+     `RuleEngine.evaluate(...)`. Focused compliance tests passed with 6 tests, including direct
+     multi-breach single-position proof, scoped Ruff and typecheck passed, and Radon reports
+     `RuleEngine` reduced from `C (20)` to `A (2)`, `RuleEngine.evaluate` reduced from `C (19)` to
+     `A (1)`, with all functions in `compliance.py` A-ranked.

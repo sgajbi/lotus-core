@@ -1119,3 +1119,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   notional currency, same-currency SELL indexing, BUY filtering, append-once mutation, and per-BUY
   linking helpers, reducing `link_buy_intent_dependencies` from `C (16)` to `A (3)` while
   preserving deterministic FX and optional SELL dependency semantics.
+- CR-1133 split advisory compliance rule evaluation into focused cash-band, single-position,
+  data-quality, suppressed-intent, no-shorting, and insufficient-cash helpers, reducing
+  `RuleEngine.evaluate` from `C (19)` to `A (1)` while preserving the six-rule advisory
+  compliance output contract and multi-breach single-position behavior.

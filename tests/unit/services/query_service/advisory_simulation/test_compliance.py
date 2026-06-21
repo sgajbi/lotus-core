@@ -90,6 +90,28 @@ def test_rule_engine_blocks_cash_band_single_position_and_data_quality() -> None
     assert by_rule["MIN_TRADE_SIZE"].reason_code == "INTENTS_SUPPRESSED"
 
 
+def test_rule_engine_emits_each_single_position_limit_breach() -> None:
+    state, diagnostics = _build_state()
+    options = EngineOptions(
+        cash_band_min_weight=Decimal("0"),
+        cash_band_max_weight=Decimal("1"),
+        single_position_max_weight=Decimal("0.05"),
+    )
+
+    results = RuleEngine.evaluate(state, options, diagnostics)
+
+    breaches = [
+        result
+        for result in results
+        if result.rule_id == "SINGLE_POSITION_MAX" and result.status == "FAIL"
+    ]
+    assert [breach.measured for breach in breaches] == [
+        Decimal("0.9009009009009009009009009009"),
+        Decimal("0.09009009009009009009009009009"),
+    ]
+    assert all(breach.reason_code == "LIMIT_BREACH" for breach in breaches)
+
+
 def test_rule_engine_ignores_price_and_fx_when_blocking_disabled() -> None:
     state, diagnostics = _build_state()
     diagnostics = diagnostics.model_copy(
