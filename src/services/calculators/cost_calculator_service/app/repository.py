@@ -98,6 +98,41 @@ TRANSACTION_METADATA_FIELDS = (
     "synthetic_flow_source",
 )
 
+FEE_COMPONENT_FIELDS = (
+    "brokerage",
+    "stamp_duty",
+    "exchange_fee",
+    "gst",
+    "other_fees",
+)
+
+
+def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
+    if fees is None:
+        return {}
+    return {
+        field_name: amount
+        for field_name in FEE_COMPONENT_FIELDS
+        if (amount := getattr(fees, field_name, None) or Decimal(0)) > 0
+    }
+
+
+def _transaction_cost_rows(
+    *,
+    transaction_result: EngineTransaction,
+    db_txn: DBTransaction,
+) -> list[TransactionCost]:
+    currency = db_txn.trade_currency or db_txn.currency
+    return [
+        TransactionCost(
+            transaction_id=transaction_result.transaction_id,
+            fee_type=fee_type,
+            amount=amount,
+            currency=currency,
+        )
+        for fee_type, amount in _positive_fee_components(transaction_result.fees).items()
+    ]
+
 
 class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):
@@ -243,28 +278,9 @@ class CostCalculatorRepository:
             )
         )
 
-        fees = transaction_result.fees
-        if not fees:
-            return
-
-        fee_components = {
-            "brokerage": fees.brokerage,
-            "stamp_duty": fees.stamp_duty,
-            "exchange_fee": fees.exchange_fee,
-            "gst": fees.gst,
-            "other_fees": fees.other_fees,
-        }
-        for fee_type, amount in fee_components.items():
-            if (amount or Decimal(0)) <= 0:
-                continue
-            self.db.add(
-                TransactionCost(
-                    transaction_id=transaction_result.transaction_id,
-                    fee_type=fee_type,
-                    amount=amount,
-                    currency=db_txn.trade_currency or db_txn.currency,
-                )
-            )
+        self.db.add_all(
+            _transaction_cost_rows(transaction_result=transaction_result, db_txn=db_txn)
+        )
 
     async def upsert_buy_lot_state(self, transaction_result: EngineTransaction) -> None:
         """Persists BUY lot state as a durable, idempotent record."""
