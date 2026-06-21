@@ -117,6 +117,54 @@ async def ingest_business_dates(
     ),
 ):
     idempotency_key = resolve_idempotency_key(http_request)
+    await _assert_business_date_ingestion_writable(ingestion_job_service)
+    _enforce_business_date_rate_limit(len(request.business_dates))
+    await _validate_business_date_request(request, business_calendar_repository)
+
+    num_dates = len(request.business_dates)
+    job_result = await _create_business_date_ingestion_job(
+        request=request,
+        http_request=http_request,
+        ingestion_job_service=ingestion_job_service,
+        idempotency_key=idempotency_key,
+        accepted_count=num_dates,
+    )
+    if not job_result.created:
+        return _business_date_ack(
+            message="Duplicate ingestion request accepted via idempotency replay.",
+            job_id=job_result.job.job_id,
+            accepted_count=job_result.job.accepted_count,
+            idempotency_key=idempotency_key,
+        )
+
+    logger.info(
+        "Received request to ingest business dates.",
+        extra={"num_dates": num_dates, "idempotency_key": idempotency_key},
+    )
+    await _publish_business_dates_or_fail_job(
+        request=request,
+        ingestion_service=ingestion_service,
+        ingestion_job_service=ingestion_job_service,
+        job_id=job_result.job.job_id,
+        idempotency_key=idempotency_key,
+    )
+    await _mark_business_date_job_queued(
+        ingestion_job_service=ingestion_job_service,
+        job_id=job_result.job.job_id,
+    )
+
+    logger.info("Business dates successfully queued.", extra={"num_dates": num_dates})
+    return _business_date_ack(
+        message="Business dates accepted for asynchronous ingestion processing.",
+        job_id=job_result.job.job_id,
+        accepted_count=num_dates,
+        idempotency_key=idempotency_key,
+    )
+
+
+async def _assert_business_date_ingestion_writable(
+    ingestion_job_service: IngestionJobService,
+) -> None:
     try:
         await ingestion_job_service.assert_ingestion_writable()
     except PermissionError as exc:
@@ -124,9 +172,13 @@ async def ingest_business_dates(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
         ) from exc
+
+
+def _enforce_business_date_rate_limit(record_count: int) -> None:
     try:
         enforce_ingestion_write_rate_limit(
-            endpoint="/ingest/business-dates", record_count=len(request.business_dates)
+            endpoint="/ingest/business-dates",
+            record_count=record_count,
         )
     except PermissionError as exc:
         raise HTTPException(
@@ -134,12 +186,21 @@ async def ingest_business_dates(
             detail={"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
         ) from exc
 
+
+async def _validate_business_date_request(
+    request: BusinessDateIngestionRequest,
+    business_calendar_repository: BusinessCalendarRepository,
+) -> None:
     if not request.business_dates:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE["detail"],
         )
+    _assert_business_dates_not_too_far_future(request)
+    await _enforce_business_date_monotonic_advance(request, business_calendar_repository)
 
+
+def _assert_business_dates_not_too_far_future(request: BusinessDateIngestionRequest) -> None:
     max_allowed_date = datetime.now(UTC).date() + timedelta(days=BUSINESS_DATE_MAX_FUTURE_DAYS)
     for row in request.business_dates:
         if row.business_date > max_allowed_date:
@@ -154,6 +215,11 @@ async def ingest_business_dates(
                 },
             )
 
+
+async def _enforce_business_date_monotonic_advance(
+    request: BusinessDateIngestionRequest,
+    business_calendar_repository: BusinessCalendarRepository,
+) -> None:
     if BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE:
         calendar_codes = {row.calendar_code for row in request.business_dates}
         for calendar_code in calendar_codes:
@@ -179,40 +245,45 @@ async def ingest_business_dates(
                         ),
                     },
                 )
-    num_dates = len(request.business_dates)
-    job_id = create_ingestion_job_id()
+
+
+async def _create_business_date_ingestion_job(
+    *,
+    request: BusinessDateIngestionRequest,
+    http_request: Request,
+    ingestion_job_service: IngestionJobService,
+    idempotency_key: str | None,
+    accepted_count: int,
+):
     correlation_id, request_id, trace_id = get_request_lineage()
-    job_result = await ingestion_job_service.create_or_get_job(
-        job_id=job_id,
+    return await ingestion_job_service.create_or_get_job(
+        job_id=create_ingestion_job_id(),
         endpoint=str(http_request.url.path),
         entity_type="business_date",
-        accepted_count=num_dates,
+        accepted_count=accepted_count,
         idempotency_key=idempotency_key,
         correlation_id=correlation_id,
         request_id=request_id,
         trace_id=trace_id,
         request_payload=request.model_dump(mode="json"),
     )
-    if not job_result.created:
-        return build_batch_ack(
-            message="Duplicate ingestion request accepted via idempotency replay.",
-            entity_type="business_date",
-            job_id=job_result.job.job_id,
-            accepted_count=job_result.job.accepted_count,
-            idempotency_key=idempotency_key,
-        )
-    logger.info(
-        "Received request to ingest business dates.",
-        extra={"num_dates": num_dates, "idempotency_key": idempotency_key},
-    )
 
+
+async def _publish_business_dates_or_fail_job(
+    *,
+    request: BusinessDateIngestionRequest,
+    ingestion_service: IngestionService,
+    ingestion_job_service: IngestionJobService,
+    job_id: str,
+    idempotency_key: str | None,
+) -> None:
     try:
         await ingestion_service.publish_business_dates(
             request.business_dates, idempotency_key=idempotency_key
         )
     except IngestionPublishError as exc:
         await ingestion_job_service.mark_failed(
-            job_result.job.job_id,
+            job_id,
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
@@ -222,27 +293,40 @@ async def ingest_business_dates(
                 "code": "INGESTION_PUBLISH_FAILED",
                 "message": str(exc),
                 "failed_record_keys": exc.failed_record_keys,
-                "job_id": job_result.job.job_id,
+                "job_id": job_id,
             },
         ) from exc
     except Exception as exc:
-        await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
+        await ingestion_job_service.mark_failed(job_id, str(exc))
         raise
 
+
+async def _mark_business_date_job_queued(
+    *,
+    ingestion_job_service: IngestionJobService,
+    job_id: str,
+) -> None:
     try:
-        await ingestion_job_service.mark_queued(job_result.job.job_id)
+        await ingestion_job_service.mark_queued(job_id)
     except Exception as exc:
         await raise_post_publish_bookkeeping_failure(
             ingestion_job_service=ingestion_job_service,
-            job_id=job_result.job.job_id,
+            job_id=job_id,
             failure_reason=str(exc),
         )
 
-    logger.info("Business dates successfully queued.", extra={"num_dates": num_dates})
+
+def _business_date_ack(
+    *,
+    message: str,
+    job_id: str,
+    accepted_count: int,
+    idempotency_key: str | None,
+) -> BatchIngestionAcceptedResponse:
     return build_batch_ack(
-        message="Business dates accepted for asynchronous ingestion processing.",
+        message=message,
         entity_type="business_date",
-        job_id=job_result.job.job_id,
-        accepted_count=num_dates,
+        job_id=job_id,
+        accepted_count=accepted_count,
         idempotency_key=idempotency_key,
     )

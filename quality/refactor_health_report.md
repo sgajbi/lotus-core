@@ -1816,3 +1816,8 @@ health before that claim is defensible.
      passed with 5 tests; scoped Ruff and format checks passed; Radon reports
      `replay_consumer_dlq_event` reduced from `C (18)` to `A (5)`, with no C-or-worse functions
      remaining in `ingestion_operations.py`.
+300. Reduced business-date ingestion route complexity by extracting write-mode control, rate
+     limiting, payload/future-date/monotonic policy validation, idempotent job creation, publish
+     failure handling, queue bookkeeping, and ACK assembly from `ingest_business_dates(...)`.
+     Focused business-date route tests passed with 7 tests; scoped Ruff and format checks passed;
+     Radon reports `ingest_business_dates` reduced from `C (17)` to `A (2)`.
