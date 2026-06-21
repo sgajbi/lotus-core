@@ -1210,3 +1210,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   defer logging, lag metric, deterministic job-request construction, and per-state staging helpers,
   reducing `_create_backfill_jobs` from `C (20)` to `A (4)` and leaving the source-wide
   C-or-worse scan empty.
+- CR-1157 split valuation scheduler dispatch into focused record-key, correlation-header,
+  event-payload, publish, partial-failure, and delivery-confirmation helpers, reducing
+  `_dispatch_jobs` from `B (7)` to `A (5)` while preserving Kafka payload and flush behavior.

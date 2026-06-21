@@ -1877,3 +1877,9 @@ health before that claim is defensible.
      `ValuationScheduler._create_backfill_jobs(...)`. Focused scheduler tests passed with
      20 tests; scoped Ruff and format checks passed; Radon reports `_create_backfill_jobs`
      reduced from `C (20)` to `A (4)`, and the source-wide C-or-worse scan is empty.
+309. Reduced valuation scheduler dispatch complexity by extracting valuation job record-key
+     formatting, correlation header construction, event payload construction, producer
+     publication, partial dispatch failure handling, and delivery confirmation from
+     `ValuationScheduler._dispatch_jobs(...)`. Focused scheduler tests passed with 20 tests;
+     scoped Ruff and format checks passed; Radon reports `_dispatch_jobs` reduced from
+     `B (7)` to `A (5)`.
