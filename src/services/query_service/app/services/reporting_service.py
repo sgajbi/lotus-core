@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -148,6 +149,119 @@ def _complete_component_weight_total(weights: list[Decimal | None]) -> Decimal |
     return sum(complete_weights, ZERO)
 
 
+def _cash_balance_totals(cash_account_records: list[Any]) -> tuple[Decimal, Decimal]:
+    return (
+        sum((record.balance_portfolio_currency for record in cash_account_records), ZERO),
+        sum((record.balance_reporting_currency for record in cash_account_records), ZERO),
+    )
+
+
+@dataclass
+class _PortfolioSummaryRollup:
+    total_portfolio: Decimal = ZERO
+    total_reporting: Decimal = ZERO
+    valued_position_count: int = 0
+    unvalued_position_count: int = 0
+    snapshot_date: date | None = None
+
+    def add(self, *, row: Any, portfolio_value: Decimal, reporting_value: Decimal) -> None:
+        if self.snapshot_date is None:
+            self.snapshot_date = row.snapshot.date
+        else:
+            self.snapshot_date = max(self.snapshot_date, row.snapshot.date)
+        self.total_portfolio += portfolio_value
+        self.total_reporting += reporting_value
+        if _is_unvalued_snapshot(row):
+            self.unvalued_position_count += 1
+        else:
+            self.valued_position_count += 1
+
+
+def _is_unvalued_snapshot(row: Any) -> bool:
+    return normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS
+
+
+def _portfolio_summary_rollup(
+    *,
+    row_reporting_values: list[tuple[Any, Decimal, Decimal]],
+    resolved_as_of_date: date,
+) -> _PortfolioSummaryRollup:
+    rollup = _PortfolioSummaryRollup(snapshot_date=resolved_as_of_date)
+    for row, portfolio_value, reporting_value in row_reporting_values:
+        rollup.add(row=row, portfolio_value=portfolio_value, reporting_value=reporting_value)
+    return rollup
+
+
+def _portfolio_summary_totals(
+    *,
+    total_portfolio: Decimal,
+    total_reporting: Decimal,
+    cash_portfolio: Decimal,
+    cash_reporting: Decimal,
+) -> PortfolioSummaryTotals:
+    return PortfolioSummaryTotals(
+        total_market_value_portfolio_currency=total_portfolio,
+        total_market_value_reporting_currency=total_reporting,
+        cash_balance_portfolio_currency=cash_portfolio,
+        cash_balance_reporting_currency=cash_reporting,
+        invested_market_value_portfolio_currency=total_portfolio - cash_portfolio,
+        invested_market_value_reporting_currency=total_reporting - cash_reporting,
+    )
+
+
+def _portfolio_summary_metadata(
+    *,
+    rollup: _PortfolioSummaryRollup,
+    resolved_as_of_date: date,
+    row_count: int,
+    cash_account_count: int,
+) -> PortfolioSummarySnapshotMetadata:
+    return PortfolioSummarySnapshotMetadata(
+        snapshot_date=rollup.snapshot_date or resolved_as_of_date,
+        position_count=row_count,
+        cash_account_count=cash_account_count,
+        valued_position_count=rollup.valued_position_count,
+        unvalued_position_count=rollup.unvalued_position_count,
+    )
+
+
+def _portfolio_summary_currencies(
+    *,
+    portfolio: Any,
+    requested_reporting_currency: str | None,
+) -> tuple[str, str]:
+    portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
+    reporting_currency = normalize_currency_code(
+        str(requested_reporting_currency or portfolio_currency)
+    )
+    return portfolio_currency, reporting_currency
+
+
+def _portfolio_summary_response(
+    *,
+    portfolio: Any,
+    portfolio_currency: str,
+    reporting_currency: str,
+    resolved_as_of_date: date,
+    totals: PortfolioSummaryTotals,
+    metadata: PortfolioSummarySnapshotMetadata,
+) -> PortfolioSummaryResponse:
+    return PortfolioSummaryResponse(
+        portfolio_id=portfolio.portfolio_id,
+        booking_center_code=portfolio.booking_center_code,
+        client_id=portfolio.client_id,
+        portfolio_currency=portfolio_currency,
+        reporting_currency=reporting_currency,
+        resolved_as_of_date=resolved_as_of_date,
+        portfolio_type=portfolio.portfolio_type,
+        objective=portfolio.objective,
+        risk_exposure=portfolio.risk_exposure,
+        status=portfolio.status,
+        totals=totals,
+        snapshot_metadata=metadata,
+    )
+
+
 class ReportingService:
     def __init__(self, db: AsyncSession):
         self.repo = ReportingRepository(db)
@@ -291,22 +405,12 @@ class ReportingService:
     async def get_portfolio_summary(
         self, request: PortfolioSummaryQueryRequest
     ) -> PortfolioSummaryResponse:
-        portfolio = await self.repo.get_portfolio_by_id(request.portfolio_id)
-        if portfolio is None:
-            raise LookupError(f"Portfolio with id {request.portfolio_id} not found")
-        resolved_as_of_date = (
-            await self.repo.get_latest_business_date()
-            if request.as_of_date is None
-            else request.as_of_date
+        portfolio = await self._get_required_portfolio(request.portfolio_id)
+        resolved_as_of_date = await self._resolve_portfolio_summary_date(request.as_of_date)
+        portfolio_currency, reporting_currency = _portfolio_summary_currencies(
+            portfolio=portfolio,
+            requested_reporting_currency=request.reporting_currency,
         )
-
-        if resolved_as_of_date is None:
-            raise ValueError("No business date is available for portfolio summary queries.")
-        portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
-        reporting_currency = normalize_currency_code(
-            str(request.reporting_currency or portfolio_currency)
-        )
-
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
@@ -324,56 +428,45 @@ class ReportingService:
             reporting_currency=reporting_currency,
         )
 
-        total_portfolio = ZERO
-        total_reporting = ZERO
-        cash_portfolio = sum(
-            (record.balance_portfolio_currency for record in cash_account_records),
-            ZERO,
+        cash_portfolio, cash_reporting = _cash_balance_totals(cash_account_records)
+        rollup = _portfolio_summary_rollup(
+            row_reporting_values=row_reporting_values,
+            resolved_as_of_date=resolved_as_of_date,
         )
-        cash_reporting = sum(
-            (record.balance_reporting_currency for record in cash_account_records),
-            ZERO,
-        )
-        valued_position_count = 0
-        unvalued_position_count = 0
-        snapshot_date = resolved_as_of_date
-
-        for row, portfolio_value, reporting_value in row_reporting_values:
-            snapshot_date = max(snapshot_date, row.snapshot.date)
-            total_portfolio += portfolio_value
-            total_reporting += reporting_value
-            if normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS:
-                unvalued_position_count += 1
-            else:
-                valued_position_count += 1
-
-        return PortfolioSummaryResponse(
-            portfolio_id=portfolio.portfolio_id,
-            booking_center_code=portfolio.booking_center_code,
-            client_id=portfolio.client_id,
+        return _portfolio_summary_response(
+            portfolio=portfolio,
             portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             resolved_as_of_date=resolved_as_of_date,
-            portfolio_type=portfolio.portfolio_type,
-            objective=portfolio.objective,
-            risk_exposure=portfolio.risk_exposure,
-            status=portfolio.status,
-            totals=PortfolioSummaryTotals(
-                total_market_value_portfolio_currency=total_portfolio,
-                total_market_value_reporting_currency=total_reporting,
-                cash_balance_portfolio_currency=cash_portfolio,
-                cash_balance_reporting_currency=cash_reporting,
-                invested_market_value_portfolio_currency=total_portfolio - cash_portfolio,
-                invested_market_value_reporting_currency=total_reporting - cash_reporting,
+            totals=_portfolio_summary_totals(
+                total_portfolio=rollup.total_portfolio,
+                total_reporting=rollup.total_reporting,
+                cash_portfolio=cash_portfolio,
+                cash_reporting=cash_reporting,
             ),
-            snapshot_metadata=PortfolioSummarySnapshotMetadata(
-                snapshot_date=snapshot_date,
-                position_count=len(rows),
+            metadata=_portfolio_summary_metadata(
+                rollup=rollup,
+                resolved_as_of_date=resolved_as_of_date,
+                row_count=len(rows),
                 cash_account_count=len(cash_account_records),
-                valued_position_count=valued_position_count,
-                unvalued_position_count=unvalued_position_count,
             ),
         )
+
+    async def _get_required_portfolio(self, portfolio_id: str):
+        portfolio = await self.repo.get_portfolio_by_id(portfolio_id)
+        if portfolio is None:
+            raise LookupError(f"Portfolio with id {portfolio_id} not found")
+        return portfolio
+
+    async def _resolve_portfolio_summary_date(self, requested_as_of_date: date | None) -> date:
+        resolved_as_of_date = (
+            await self.repo.get_latest_business_date()
+            if requested_as_of_date is None
+            else requested_as_of_date
+        )
+        if resolved_as_of_date is None:
+            raise ValueError("No business date is available for portfolio summary queries.")
+        return resolved_as_of_date
 
     async def _snapshot_reporting_values(
         self,
