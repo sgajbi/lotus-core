@@ -79,55 +79,142 @@ def resolve_consumer_sections(
     return None, None
 
 
-def resolve_policy_context(tenant_id: str, consumer_system: str) -> PolicyContext:
-    policy = load_policy()
+def _default_policy_context(policy: dict[str, Any]) -> PolicyContext:
+    return PolicyContext(
+        policy_version=load_query_service_settings().lotus_core_policy_version,
+        policy_source="default",
+        matched_rule_id="default",
+        strict_mode=coerce_bool(policy.get("strict_mode"), default=False),
+        allowed_sections=None,
+        warnings=[],
+    )
 
-    strict_mode = coerce_bool(policy.get("strict_mode"), default=False)
-    policy_source = "default"
-    matched_rule_id = "default"
-    warnings: list[str] = []
 
+def _global_policy_context(
+    *,
+    policy: dict[str, Any],
+    consumer_system: str,
+    context: PolicyContext,
+) -> PolicyContext:
     allowed_sections, matched_consumer_key = resolve_consumer_sections(
         policy.get("consumers"),
         consumer_system,
     )
-    if allowed_sections is not None:
-        policy_source = "global"
-        matched_rule_id = f"global.consumers.{matched_consumer_key}"
+    if allowed_sections is None:
+        return context
+    return PolicyContext(
+        policy_version=context.policy_version,
+        policy_source="global",
+        matched_rule_id=f"global.consumers.{matched_consumer_key}",
+        strict_mode=context.strict_mode,
+        allowed_sections=allowed_sections,
+        warnings=context.warnings,
+    )
 
+
+def _tenant_policy(policy: dict[str, Any], tenant_id: str) -> dict[str, Any] | None:
     tenants = policy.get("tenants")
     tenant_policy_raw = tenants.get(tenant_id) if isinstance(tenants, dict) else None
-    if isinstance(tenant_policy_raw, dict):
-        strict_mode = coerce_bool(tenant_policy_raw.get("strict_mode"), default=strict_mode)
-        tenant_consumers = tenant_policy_raw.get("consumers")
-        tenant_allowed, tenant_match_key = resolve_consumer_sections(
-            tenant_consumers if isinstance(tenant_consumers, dict) else None,
-            consumer_system,
-        )
-        if tenant_allowed is None:
-            tenant_allowed = normalize_sections(tenant_policy_raw.get("default_sections"))
-        if tenant_allowed is not None:
-            allowed_sections = tenant_allowed
-            policy_source = "tenant"
-            if tenant_match_key is not None:
-                matched_rule_id = f"tenant.{tenant_id}.consumers.{tenant_match_key}"
-            else:
-                matched_rule_id = f"tenant.{tenant_id}.default_sections"
-        if "strict_mode" in tenant_policy_raw and matched_rule_id == "default":
-            policy_source = "tenant"
-            matched_rule_id = f"tenant.{tenant_id}.strict_mode"
+    return tenant_policy_raw if isinstance(tenant_policy_raw, dict) else None
 
-    if allowed_sections is None:
-        warnings.append("NO_ALLOWED_SECTION_RESTRICTION")
 
-    return PolicyContext(
-        policy_version=load_query_service_settings().lotus_core_policy_version,
-        policy_source=policy_source,
-        matched_rule_id=matched_rule_id,
-        strict_mode=strict_mode,
-        allowed_sections=allowed_sections,
-        warnings=warnings,
+def _tenant_allowed_sections(
+    *,
+    tenant_policy: dict[str, Any],
+    consumer_system: str,
+) -> tuple[list[str] | None, str | None]:
+    tenant_consumers = tenant_policy.get("consumers")
+    tenant_allowed, tenant_match_key = resolve_consumer_sections(
+        tenant_consumers if isinstance(tenant_consumers, dict) else None,
+        consumer_system,
     )
+    if tenant_allowed is not None:
+        return tenant_allowed, tenant_match_key
+    return normalize_sections(tenant_policy.get("default_sections")), None
+
+
+def _tenant_matched_rule_id(
+    *,
+    tenant_id: str,
+    tenant_match_key: str | None,
+) -> str:
+    if tenant_match_key is not None:
+        return f"tenant.{tenant_id}.consumers.{tenant_match_key}"
+    return f"tenant.{tenant_id}.default_sections"
+
+
+def _tenant_policy_context(
+    *,
+    tenant_id: str,
+    consumer_system: str,
+    tenant_policy: dict[str, Any],
+    context: PolicyContext,
+) -> PolicyContext:
+    strict_mode = coerce_bool(tenant_policy.get("strict_mode"), default=context.strict_mode)
+    tenant_allowed, tenant_match_key = _tenant_allowed_sections(
+        tenant_policy=tenant_policy,
+        consumer_system=consumer_system,
+    )
+    if tenant_allowed is not None:
+        return PolicyContext(
+            policy_version=context.policy_version,
+            policy_source="tenant",
+            matched_rule_id=_tenant_matched_rule_id(
+                tenant_id=tenant_id,
+                tenant_match_key=tenant_match_key,
+            ),
+            strict_mode=strict_mode,
+            allowed_sections=tenant_allowed,
+            warnings=context.warnings,
+        )
+    if "strict_mode" in tenant_policy and context.matched_rule_id == "default":
+        return PolicyContext(
+            policy_version=context.policy_version,
+            policy_source="tenant",
+            matched_rule_id=f"tenant.{tenant_id}.strict_mode",
+            strict_mode=strict_mode,
+            allowed_sections=context.allowed_sections,
+            warnings=context.warnings,
+        )
+    return PolicyContext(
+        policy_version=context.policy_version,
+        policy_source=context.policy_source,
+        matched_rule_id=context.matched_rule_id,
+        strict_mode=strict_mode,
+        allowed_sections=context.allowed_sections,
+        warnings=context.warnings,
+    )
+
+
+def _with_allowed_section_warning(context: PolicyContext) -> PolicyContext:
+    if context.allowed_sections is not None:
+        return context
+    return PolicyContext(
+        policy_version=context.policy_version,
+        policy_source=context.policy_source,
+        matched_rule_id=context.matched_rule_id,
+        strict_mode=context.strict_mode,
+        allowed_sections=context.allowed_sections,
+        warnings=[*context.warnings, "NO_ALLOWED_SECTION_RESTRICTION"],
+    )
+
+
+def resolve_policy_context(tenant_id: str, consumer_system: str) -> PolicyContext:
+    policy = load_policy()
+    context = _global_policy_context(
+        policy=policy,
+        consumer_system=consumer_system,
+        context=_default_policy_context(policy),
+    )
+    tenant_policy = _tenant_policy(policy, tenant_id)
+    if tenant_policy is not None:
+        context = _tenant_policy_context(
+            tenant_id=tenant_id,
+            consumer_system=consumer_system,
+            tenant_policy=tenant_policy,
+            context=context,
+        )
+    return _with_allowed_section_warning(context)
 
 
 def resolve_effective_policy_response(
@@ -144,6 +231,33 @@ def resolve_effective_policy_response(
     )
 
 
+def _effective_allowed_sections(
+    *,
+    requested_sections: list[str] | None,
+    policy_allowed_sections: list[str] | None,
+) -> list[str]:
+    if requested_sections:
+        return _requested_allowed_sections(
+            requested_sections=requested_sections,
+            policy_allowed_sections=policy_allowed_sections,
+        )
+    if policy_allowed_sections is not None:
+        return policy_allowed_sections
+    return []
+
+
+def _requested_allowed_sections(
+    *,
+    requested_sections: list[str],
+    policy_allowed_sections: list[str] | None,
+) -> list[str]:
+    requested = normalize_sections(requested_sections) or []
+    if policy_allowed_sections is None:
+        return requested
+    allowed_set = set(policy_allowed_sections)
+    return [section for section in requested if section in allowed_set]
+
+
 def build_effective_policy_response(
     *,
     consumer_system: str,
@@ -157,18 +271,6 @@ def build_effective_policy_response(
         consumer_system=normalized_consumer,
     )
 
-    if include_sections:
-        requested = normalize_sections(include_sections) or []
-        if policy_context.allowed_sections is None:
-            allowed_sections = requested
-        else:
-            allowed_set = set(policy_context.allowed_sections)
-            allowed_sections = [section for section in requested if section in allowed_set]
-    elif policy_context.allowed_sections is not None:
-        allowed_sections = policy_context.allowed_sections
-    else:
-        allowed_sections = []
-
     return EffectiveIntegrationPolicyResponse(
         consumer_system=normalized_consumer,
         tenant_id=tenant_id,
@@ -179,6 +281,9 @@ def build_effective_policy_response(
             matched_rule_id=policy_context.matched_rule_id,
             strict_mode=policy_context.strict_mode,
         ),
-        allowed_sections=allowed_sections,
+        allowed_sections=_effective_allowed_sections(
+            requested_sections=include_sections,
+            policy_allowed_sections=policy_context.allowed_sections,
+        ),
         warnings=policy_context.warnings,
     )

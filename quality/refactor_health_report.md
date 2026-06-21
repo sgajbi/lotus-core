@@ -1702,3 +1702,10 @@ health before that claim is defensible.
      reports `merge_snapshot_and_history_position_rows` reduced from `B (7)` to `A (1)`. Every
      function in `position_holdings.py` is now A-ranked, and module maintainability remains
      A-ranked at `A (25.48)`.
+282. Reduced integration policy context complexity by extracting default/global/tenant policy
+     context construction, tenant matched-rule IDs, missing allowed-section warning posture, and
+     requested-section filtering from `resolve_policy_context(...)` and
+     `build_effective_policy_response(...)`. Focused integration-policy tests passed with 10 tests,
+     scoped Ruff and typecheck passed, and Radon reports `resolve_policy_context` reduced from
+     `C (11)` to `A (2)`, `build_effective_policy_response` reduced from `B (8)` to `A (2)`, and
+     all functions/classes in `integration_policy.py` A-ranked.

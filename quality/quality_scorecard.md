@@ -1108,3 +1108,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `merge_snapshot_and_history_position_rows` from `B (7)` to `A (1)`. Every function in
   `position_holdings.py` is now A-ranked by Radon complexity, and module maintainability remains
   A-ranked at `A (25.48)`.
+- CR-1130 split integration effective-policy context resolution into focused default/global/tenant
+  policy, provenance, warning, and requested-section filtering helpers, reducing
+  `resolve_policy_context` from `C (11)` to `A (2)` and `build_effective_policy_response` from
+  `B (8)` to `A (2)` while preserving tenant/global policy semantics and response shape.
