@@ -86,7 +86,7 @@ class CashBalanceResolver:
                     cash_rows=cash_rows,
                     account_records=account_records,
                 ),
-                latest_evidence_timestamp=latest_snapshot_evidence_timestamp(cash_rows),
+                latest_evidence_timestamp=latest_snapshot_evidence_timestamp(rows),
             ),
         )
 
