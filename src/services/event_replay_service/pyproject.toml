@@ -10,10 +10,10 @@ description = "Lotus Core Event Replay Service"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi==0.136.3",
-    "uvicorn[standard]==0.35.0",
-    "sqlalchemy==2.0.46",
-    "asyncpg==0.30.0",
-    "pydantic==2.12.5",
+    "uvicorn[standard]==0.49.0",
+    "sqlalchemy==2.0.51",
+    "asyncpg==0.31.0",
+    "pydantic==2.13.4",
     "python-dotenv==1.2.2",
     "prometheus-fastapi-instrumentator==8.0.0",
     "python-dateutil==2.9.0.post0",

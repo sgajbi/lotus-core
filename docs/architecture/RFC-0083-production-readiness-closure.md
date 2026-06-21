@@ -61,6 +61,9 @@ audit, and PR runtime Docker/build gates. It also proved that the stale vulnerab
 test dependency pin has been replaced with `pytest==9.0.3` so the security-audit lane reports no
 known vulnerabilities.
 
+Current dependency hygiene subsequently moved the compatible test/tooling set forward to
+`pytest==9.1.1` with `pip-audit==2.10.1` and no pip-audit vulnerability-ignore IDs.
+
 The canonical front-office platform end-to-end validation for `PB_SG_GLOBAL_BAL_001` completed on
 2026-04-15 and is recorded in:
 

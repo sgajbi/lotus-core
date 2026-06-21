@@ -1,25 +1,24 @@
 # tests/requirements.txt
 
 # Core testing library
-pytest==9.0.3
-pytest-cov==5.0.0
+pytest==9.1.1
+pytest-cov==7.1.0
 pytest-dependency==0.6.1
-hypothesis==6.140.2
+hypothesis==6.155.7
 openpyxl==3.1.5
 
 # Plugin for running asyncio tests
-pytest-asyncio
-
+pytest-asyncio==1.4.0
 # HTTP client for testing APIs
-requests==2.33.0
+requests==2.34.2
 httpx==0.28.1
 
 # Database drivers (sync and async)
-psycopg2-binary==2.9.10
-asyncpg==0.30.0
+psycopg2-binary==2.9.12
+asyncpg==0.31.0
 
 # Environment variable management
 python-dotenv==1.2.2
 
 # Docker testcontainers for E2E and integration tests
-testcontainers[kafka,postgres]==4.5.0
+testcontainers[kafka,postgres]==4.14.2

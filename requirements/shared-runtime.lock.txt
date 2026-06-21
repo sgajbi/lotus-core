@@ -4,7 +4,7 @@
 #
 #    pip-compile --allow-unsafe --output-file='C:\Users\Sandeep\projects\lotus-core\requirements\shared-runtime.lock.txt' --strip-extras 'C:\Users\Sandeep\projects\lotus-core\requirements\shared-runtime.in'
 #
-alembic==1.13.1
+alembic==1.18.4
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
 annotated-doc==0.0.4
     # via fastapi
@@ -15,7 +15,7 @@ anyio==4.12.1
     #   httpx
     #   starlette
     #   watchfiles
-asyncpg==0.30.0
+asyncpg==0.31.0
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
 certifi==2026.2.25
     # via
@@ -27,7 +27,7 @@ colorama==0.4.6
     # via
     #   click
     #   uvicorn
-confluent-kafka==2.12.0
+confluent-kafka==2.14.2
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
 et-xmlfile==2.0.0
     # via openpyxl
@@ -41,7 +41,7 @@ h11==0.16.0
     #   uvicorn
 httpcore==1.0.9
     # via httpx
-httptools==0.7.1
+httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
@@ -57,19 +57,19 @@ markupsafe==3.0.3
     # via mako
 openpyxl==3.1.5
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
-prometheus-client==0.20.0
+prometheus-client==0.25.0
     # via
     #   -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
     #   prometheus-fastapi-instrumentator
 prometheus-fastapi-instrumentator==8.0.0
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.12
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
-pydantic==2.12.5
+pydantic==2.13.4
     # via
     #   -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
     #   fastapi
-pydantic-core==2.41.5
+pydantic-core==2.46.4
     # via pydantic
 python-dateutil==2.9.0.post0
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
@@ -77,7 +77,7 @@ python-dotenv==1.2.2
     # via
     #   -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
     #   uvicorn
-python-json-logger==2.0.7
+python-json-logger==4.1.0
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
 python-multipart==0.0.32
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
@@ -85,7 +85,7 @@ pyyaml==6.0.3
     # via uvicorn
 six==1.17.0
     # via python-dateutil
-sqlalchemy==2.0.46
+sqlalchemy==2.0.51
     # via
     #   -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
     #   alembic
@@ -93,9 +93,9 @@ starlette==1.3.1
     # via
     #   fastapi
     #   prometheus-fastapi-instrumentator
-structlog==24.1.0
+structlog==26.1.0
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
-tenacity==8.2.3
+tenacity==9.1.4
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
 typing-extensions==4.15.0
     # via
@@ -109,7 +109,7 @@ typing-inspection==0.4.2
     # via
     #   fastapi
     #   pydantic
-uvicorn==0.35.0
+uvicorn==0.49.0
     # via -r C:/Users/Sandeep/projects/lotus-core/requirements/shared-runtime.in
 watchfiles==1.1.1
     # via uvicorn

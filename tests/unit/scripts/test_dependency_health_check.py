@@ -35,7 +35,7 @@ def test_constrained_install_command_uses_shared_runtime_lock() -> None:
     assert command[-2:] == ["-e", "src/services/query_service"]
 
 
-def test_pip_audit_command_scopes_to_site_packages_path() -> None:
+def test_pip_audit_command_scopes_to_site_packages_path_without_ignores() -> None:
     python_bin = Path("/tmp/python")
     site_packages = Path("/tmp/venv/site-packages")
     command = dependency_health_check.pip_audit_command(
@@ -49,8 +49,4 @@ def test_pip_audit_command_scopes_to_site_packages_path() -> None:
         "pip_audit",
         "--path",
         str(site_packages),
-        "--ignore-vuln",
-        "CVE-2026-3219",
-        "--ignore-vuln",
-        "PYSEC-2026-161",
     ]
