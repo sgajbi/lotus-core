@@ -1198,3 +1198,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   per-job correlation, impacted-portfolio, watermark fanout, terminal-status, ownership-loss, and
   failure-marking helpers, reducing `_process_batch` from `C (18)` to `A (3)` and leaving
   `reprocessing_worker.py` with no C-or-worse functions/classes.
+- CR-1154 split the valuation scheduler polling loop into focused database poll-step, metric
+  refresh, stale-reset, poll-iteration, and stop-wait helpers, reducing `ValuationScheduler.run`
+  from `C (11)` to `A (4)` while preserving scheduler order, transaction boundaries, and
+  stop/cancellation posture.
