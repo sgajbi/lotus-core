@@ -80,7 +80,11 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
         ),
         ReportingSnapshotRow(
             portfolio=portfolio,
-            snapshot=_snapshot("SEC1", market_value="100"),
+            snapshot=_snapshot(
+                "SEC1",
+                market_value="100",
+                updated_at=datetime(2026, 3, 27, 11, 30, tzinfo=UTC),
+            ),
             instrument=_instrument("SEC1"),
         ),
     ]
@@ -114,7 +118,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
-    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 15, tzinfo=UTC)
+    assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 30, tzinfo=UTC)
     repo.list_latest_snapshot_rows.assert_awaited_once_with(
         portfolio_ids=["P1"],
         as_of_date=date(2026, 3, 27),
