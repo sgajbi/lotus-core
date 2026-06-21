@@ -15,28 +15,58 @@ def _is_buy_transaction(transaction: Transaction) -> bool:
     return str(transaction.transaction_type or "").strip().upper() == "BUY"
 
 
+def _require_buy_lot_cost_basis(transaction: Transaction) -> None:
+    if transaction.net_cost is not None and transaction.net_cost_local is not None:
+        return
+    raise ValueError(
+        "Buy transaction "
+        f"{transaction.transaction_id} must have net_cost and "
+        "net_cost_local calculated before adding as a lot."
+    )
+
+
+def _normalized_buy_lot_amounts(transaction: Transaction) -> tuple[Decimal, Decimal, Decimal]:
+    return (
+        required_decimal(transaction.quantity, field_name="quantity"),
+        required_decimal(transaction.net_cost, field_name="net_cost"),
+        required_decimal(transaction.net_cost_local, field_name="net_cost_local"),
+    )
+
+
+def _is_zero_quantity_zero_cost_lot(
+    quantity: Decimal, net_cost: Decimal, net_cost_local: Decimal
+) -> bool:
+    return quantity == Decimal(0) and net_cost == Decimal(0) and net_cost_local == Decimal(0)
+
+
+def _should_skip_empty_buy_lot(
+    transaction: Transaction, quantity: Decimal, net_cost: Decimal, net_cost_local: Decimal
+) -> bool:
+    if quantity > Decimal(0):
+        return False
+    if _is_zero_quantity_zero_cost_lot(quantity, net_cost, net_cost_local):
+        return True
+    raise ValueError(
+        f"Buy transaction {transaction.transaction_id} must have positive lot quantity."
+    )
+
+
+def _validate_non_negative_buy_lot_cost_basis(
+    transaction: Transaction, net_cost: Decimal, net_cost_local: Decimal
+) -> None:
+    if net_cost >= Decimal(0) and net_cost_local >= Decimal(0):
+        return
+    raise ValueError(
+        f"Buy transaction {transaction.transaction_id} must have non-negative lot cost basis."
+    )
+
+
 def _validated_buy_lot_inputs(transaction: Transaction) -> tuple[Decimal, Decimal, Decimal] | None:
-    if transaction.net_cost is None or transaction.net_cost_local is None:
-        raise ValueError(
-            "Buy transaction "
-            f"{transaction.transaction_id} must have net_cost and "
-            "net_cost_local calculated before adding as a lot."
-        )
-
-    quantity = required_decimal(transaction.quantity, field_name="quantity")
-    net_cost = required_decimal(transaction.net_cost, field_name="net_cost")
-    net_cost_local = required_decimal(transaction.net_cost_local, field_name="net_cost_local")
-
-    if quantity <= Decimal(0):
-        if quantity == Decimal(0) and net_cost == Decimal(0) and net_cost_local == Decimal(0):
-            return None
-        raise ValueError(
-            f"Buy transaction {transaction.transaction_id} must have positive lot quantity."
-        )
-    if net_cost < Decimal(0) or net_cost_local < Decimal(0):
-        raise ValueError(
-            f"Buy transaction {transaction.transaction_id} must have non-negative lot cost basis."
-        )
+    _require_buy_lot_cost_basis(transaction)
+    quantity, net_cost, net_cost_local = _normalized_buy_lot_amounts(transaction)
+    if _should_skip_empty_buy_lot(transaction, quantity, net_cost, net_cost_local):
+        return None
+    _validate_non_negative_buy_lot_cost_basis(transaction, net_cost, net_cost_local)
     return quantity, net_cost, net_cost_local
 
 
@@ -44,6 +74,31 @@ def _non_positive_sell_quantity_error(sell_quantity: Decimal) -> str | None:
     if sell_quantity >= Decimal(0):
         return None
     return f"Sell quantity ({sell_quantity}) must not be negative."
+
+
+def _consume_next_fifo_lot(
+    lots_for_instrument: Deque[CostLot],
+    required_quantity: Decimal,
+    remaining_quantity_by_transaction_id: dict[str, Decimal],
+) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    current_lot = lots_for_instrument[0]
+    matched_quantity = min(required_quantity, current_lot.remaining_quantity)
+    matched_cost_base = matched_quantity * current_lot.cost_per_share_base
+    matched_cost_local = matched_quantity * current_lot.cost_per_share_local
+
+    current_lot.remaining_quantity -= matched_quantity
+    remaining_quantity_by_transaction_id[current_lot.transaction_id] = (
+        current_lot.remaining_quantity
+    )
+    if current_lot.remaining_quantity == Decimal(0):
+        lots_for_instrument.popleft()
+
+    return (
+        matched_cost_base,
+        matched_cost_local,
+        matched_quantity,
+        required_quantity - matched_quantity,
+    )
 
 
 class CostBasisStrategy(Protocol):
@@ -110,30 +165,16 @@ class FIFOBasisStrategy:
 
         lots_for_instrument = self._open_lots[key]
         while required_quantity > 0 and lots_for_instrument:
-            current_lot = lots_for_instrument[0]
-            if current_lot.remaining_quantity >= required_quantity:
-                total_matched_cost_base += required_quantity * current_lot.cost_per_share_base
-                total_matched_cost_local += required_quantity * current_lot.cost_per_share_local
-                consumed_quantity += required_quantity
-                current_lot.remaining_quantity -= required_quantity
-                self._remaining_quantity_by_transaction_id[current_lot.transaction_id] = (
-                    current_lot.remaining_quantity
+            matched_cost_base, matched_cost_local, matched_quantity, required_quantity = (
+                _consume_next_fifo_lot(
+                    lots_for_instrument,
+                    required_quantity,
+                    self._remaining_quantity_by_transaction_id,
                 )
-                required_quantity = Decimal(0)
-
-                if current_lot.remaining_quantity == Decimal(0):
-                    lots_for_instrument.popleft()
-            else:
-                total_matched_cost_base += (
-                    current_lot.remaining_quantity * current_lot.cost_per_share_base
-                )
-                total_matched_cost_local += (
-                    current_lot.remaining_quantity * current_lot.cost_per_share_local
-                )
-                consumed_quantity += current_lot.remaining_quantity
-                required_quantity -= current_lot.remaining_quantity
-                self._remaining_quantity_by_transaction_id[current_lot.transaction_id] = Decimal(0)
-                lots_for_instrument.popleft()
+            )
+            total_matched_cost_base += matched_cost_base
+            total_matched_cost_local += matched_cost_local
+            consumed_quantity += matched_quantity
         return total_matched_cost_base, total_matched_cost_local, consumed_quantity, None
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:

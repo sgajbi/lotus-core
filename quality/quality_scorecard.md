@@ -1066,3 +1066,9 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `InterestStrategy.calculate_costs` from `C (11)` to `A (4)`, `DividendStrategy.calculate_costs`
   from `B (9)` to `A (3)`, and `CostCalculator._validate_fx` from `B (8)` to `A (2)`. The module
   still reports B-ranked maintainability and remains a future cost-engine modularity target.
+- CR-1121 split cost-basis strategy validation and FIFO consumption helpers in
+  `cost_basis_strategies.py`, removing the B-ranked `_validated_buy_lot_inputs` and
+  `FIFOBasisStrategy.consume_sell_quantity` hotspots while preserving FIFO/AVCO cost-basis
+  behavior. Focused cost-basis tests passed with 20 tests, broader cost-engine unit tests passed
+  with 91 tests, broader cost-calculator service tests passed with 133 tests, scoped Ruff passed,
+  and the module remains A-ranked maintainability at `A (37.00)`.

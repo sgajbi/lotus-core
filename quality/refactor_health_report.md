@@ -1659,3 +1659,11 @@ health before that claim is defensible.
      is `A (3)`, and `CostCalculator._validate_fx` is `A (2)`. Residual risk remains: the module is
      still B-ranked maintainability (`B (16.31)`) and should remain on the cost-engine modularity
      backlog.
+275. Reduced cost-basis strategy complexity by extracting required cost-basis field checks,
+     one-pass decimal normalization, empty zero-quantity/zero-cost lot skip policy, positive
+     quantity and non-negative cost-basis validation, and single FIFO lot consumption from
+     `cost_basis_strategies.py`. Focused cost-basis tests passed with 20 tests, broader
+     cost-engine unit tests passed with 91 tests, broader cost-calculator service tests passed
+     with 133 tests, and scoped Ruff passed. Radon now reports no B-or-worse functions/classes in
+     the module; `_validated_buy_lot_inputs` and `FIFOBasisStrategy.consume_sell_quantity` are no
+     longer B-ranked, and the module remains A-ranked maintainability at `A (37.00)`.
