@@ -9,12 +9,12 @@ version = "0.1.0"
 description = "Portfolio Analytics - Cost Calculator Service"
 requires-python = ">=3.11"
 dependencies = [
-    "sqlalchemy==2.0.46",
-    "asyncpg==0.30.0",
-    "confluent-kafka==2.12.0",
-    "pydantic==2.12.5",
+    "sqlalchemy==2.0.51",
+    "asyncpg==0.31.0",
+    "confluent-kafka==2.14.2",
+    "pydantic==2.13.4",
     "fastapi==0.136.3",
-    "uvicorn[standard]==0.35.0",
+    "uvicorn[standard]==0.49.0",
     "prometheus-fastapi-instrumentator==8.0.0"
 ]
 
