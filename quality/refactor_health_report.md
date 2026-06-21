@@ -1903,3 +1903,10 @@ health before that claim is defensible.
      Focused cash-balance, OpenAPI, domain-product, and source-data-product tests passed with
      41 tests; scoped Ruff passed; `make openapi-gate`, `make api-vocabulary-gate`, and
      `make domain-product-validate` passed.
+312. Reduced PR auto-merge workflow signal noise by removing the `unlabeled` pull-request trigger
+     from `.github/workflows/pr-auto-merge.yml` and making absent `automerge` labels successful
+     no-ops inside the queue script. The workflow preserves explicit `automerge` label opt-in and
+     branch-protected `gh pr merge --auto --rebase --delete-branch` behavior. Added a
+     workflow-governance regression test so missing or removed labels do not emit stale skipped
+     `Queue Auto Merge` check runs. Focused workflow tests, scoped Ruff, and workflow YAML parse
+     validation passed.
