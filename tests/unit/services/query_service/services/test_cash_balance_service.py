@@ -609,7 +609,11 @@ async def test_cash_balance_source_fingerprint_changes_with_source_evidence() ->
             ReportingSnapshotRow(
                 portfolio=portfolio,
                 snapshot=_snapshot("CASH_USD", market_value="250"),
-                instrument=_instrument("CASH_USD", asset_class="CASH"),
+                instrument=_instrument(
+                    "CASH_USD",
+                    name="USD Operating Cash",
+                    asset_class="CASH",
+                ),
             )
         ],
         expected_open_position_count=1,
@@ -622,7 +626,28 @@ async def test_cash_balance_source_fingerprint_changes_with_source_evidence() ->
             ReportingSnapshotRow(
                 portfolio=portfolio,
                 snapshot=_snapshot("CASH_USD", market_value="251"),
-                instrument=_instrument("CASH_USD", asset_class="CASH"),
+                instrument=_instrument(
+                    "CASH_USD",
+                    name="USD Operating Cash",
+                    asset_class="CASH",
+                ),
+            )
+        ],
+        expected_open_position_count=1,
+    )
+    descriptor_response = await resolver.build_cash_balances_response(
+        portfolio=portfolio,
+        resolved_as_of_date=date(2026, 3, 27),
+        reporting_currency="USD",
+        rows=[
+            ReportingSnapshotRow(
+                portfolio=portfolio,
+                snapshot=_snapshot("CASH_USD", market_value="250"),
+                instrument=_instrument(
+                    "CASH_USD",
+                    name="USD Operating Cash - Renamed",
+                    asset_class="CASH",
+                ),
             )
         ],
         expected_open_position_count=1,
@@ -630,7 +655,9 @@ async def test_cash_balance_source_fingerprint_changes_with_source_evidence() ->
 
     assert first_response.source_batch_fingerprint
     assert second_response.source_batch_fingerprint
+    assert descriptor_response.source_batch_fingerprint
     assert first_response.source_batch_fingerprint != second_response.source_batch_fingerprint
+    assert first_response.source_batch_fingerprint != descriptor_response.source_batch_fingerprint
 
 
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
