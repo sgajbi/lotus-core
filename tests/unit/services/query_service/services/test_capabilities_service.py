@@ -158,6 +158,21 @@ def test_capabilities_includes_ecosystem_consumers() -> None:
     )
 
 
+def test_capabilities_includes_idea_as_source_reference_consumer() -> None:
+    service = CapabilitiesService()
+
+    response = service.get_integration_capabilities(
+        consumer_system="lotus-idea",
+        tenant_id="tenant_sg_pb",
+    )
+
+    assert response.consumer_system == "lotus-idea"
+    assert response.supported_input_modes == ["lotus_core_ref"]
+    feature_keys = {feature.key for feature in response.features}
+    assert "lotus_core.support.overview_api" in feature_keys
+    assert "lotus_core.support.lineage_api" in feature_keys
+
+
 def test_resolve_as_of_date_uses_latest_business_date_from_db(monkeypatch):
     class _MockResult:
         @staticmethod

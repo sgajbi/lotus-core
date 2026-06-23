@@ -2223,6 +2223,7 @@ async def test_openapi_describes_capabilities_query_parameters(async_test_client
 
     assert consumer_system["description"] == "Consumer requesting capability metadata."
     assert consumer_system["schema"]["default"] == "lotus-gateway"
+    assert "lotus-idea" in consumer_system["schema"]["enum"]
     assert tenant_id["description"] == "Tenant or client identifier for policy resolution."
     assert tenant_id["schema"]["default"] == "default"
     assert (
