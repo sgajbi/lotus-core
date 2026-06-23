@@ -11,7 +11,9 @@ It returns governed position rows and cash-account balances for one portfolio wi
 product identity, runtime metadata, as-of semantics, instrument descriptors, position-state
 supportability, evidence timestamps, cash reporting-currency restatement where requested, and
 source-reported cash weight when the Core-owned same-date portfolio market-value denominator is
-supportable.
+supportable. Cash-balance responses also publish a deterministic source evidence fingerprint and
+snapshot identity so downstream consumers can retain lineage without reconstructing Core-owned
+portfolio facts.
 
 The product is source evidence for recorded holdings and cash state. It is not a liquidity-ladder
 methodology, income-needs plan, performance return, risk exposure methodology, tax advice,
@@ -231,6 +233,8 @@ supportability posture is one of:
 | `as_of_date` | Effective booked-state cap or resolved response date. |
 | `data_quality_status` | Completeness and freshness posture for returned holdings or cash balances. |
 | `latest_evidence_timestamp` | Latest durable position, position-state, or cash snapshot timestamp used by the response. |
+| `source_batch_fingerprint` | Deterministic HoldingsAsOf cash-balance evidence fingerprint derived from the returned cash accounts, totals, cash-weight supportability, reporting-currency scope, and latest evidence timestamp. |
+| `snapshot_id` | Deterministic `holdings_as_of_cash_balances:<fingerprint>` identity for cash-balance response replay and downstream lineage. |
 
 ## Worked Example
 

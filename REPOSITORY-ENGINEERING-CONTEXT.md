@@ -375,9 +375,11 @@ Most relevant current governance:
     separate work.
 41. `HoldingsAsOf:v1` cash balances now publish Core-owned `source_reported_cash_weight`,
     denominator, and supportability posture from same-date portfolio market-value snapshot
-    evidence. `lotus-idea` is an approved consumer for high-cash source evidence, but it must
-    consume the field instead of reconstructing cash weight from Core-owned portfolio facts. This
-    evidence is not liquidity advice, cash-deployment recommendation, performance methodology,
+    evidence. The cash-balance response also publishes a deterministic evidence fingerprint and
+    `holdings_as_of_cash_balances:<fingerprint>` snapshot identity for downstream lineage and replay.
+    `lotus-idea` is an approved consumer for high-cash source evidence, but it must consume the
+    field and source identity instead of reconstructing cash weight from Core-owned portfolio facts.
+    This evidence is not liquidity advice, cash-deployment recommendation, performance methodology,
     risk methodology, or OMS acknowledgement.
 
 ## Context Maintenance Rule
