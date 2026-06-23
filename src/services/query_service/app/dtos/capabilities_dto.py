@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 ConsumerSystem = Literal[
     "lotus-advise",
     "lotus-gateway",
+    "lotus-idea",
     "lotus-manage",
     "lotus-performance",
     "lotus-report",

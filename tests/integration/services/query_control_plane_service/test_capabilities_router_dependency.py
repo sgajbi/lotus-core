@@ -51,6 +51,35 @@ async def test_capabilities_success(async_test_client):
     )
 
 
+async def test_capabilities_accepts_idea_consumer(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_integration_capabilities.return_value = {
+        "contract_version": "v1",
+        "source_service": "lotus-core",
+        "consumer_system": "lotus-idea",
+        "tenant_id": "tenant-idea",
+        "generated_at": datetime(2026, 2, 23, tzinfo=UTC),
+        "as_of_date": date(2026, 2, 23),
+        "policy_version": "tenant-idea-v1",
+        "supported_input_modes": ["lotus_core_ref"],
+        "features": [],
+        "workflows": [],
+    }
+
+    response = await client.get(
+        "/integration/capabilities?consumer_system=lotus-idea&tenant_id=tenant-idea"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["consumer_system"] == "lotus-idea"
+    assert body["supported_input_modes"] == ["lotus_core_ref"]
+    mock_service.get_integration_capabilities.assert_called_once_with(
+        consumer_system="lotus-idea",
+        tenant_id="tenant-idea",
+    )
+
+
 async def test_capabilities_defaults_to_gateway_and_default_tenant(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_integration_capabilities.return_value = {

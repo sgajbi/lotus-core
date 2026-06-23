@@ -72,6 +72,7 @@ _FEATURE_DESCRIPTIONS: dict[str, str] = {
 
 _DEFAULT_INPUT_MODES_BY_CONSUMER: dict[str, list[str]] = {
     "lotus-advise": ["lotus_core_ref"],
+    "lotus-idea": ["lotus_core_ref"],
     "lotus-performance": ["lotus_core_ref"],
     "lotus-manage": ["lotus_core_ref"],
     "lotus-report": ["lotus_core_ref"],
