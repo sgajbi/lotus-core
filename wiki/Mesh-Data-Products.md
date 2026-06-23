@@ -7,7 +7,7 @@
 ## Governed product
 
 - Product ID: `lotus-core:PortfolioStateSnapshot:v1`
-- Product role: authoritative portfolio state snapshot for downstream performance, risk, advisory, reporting, management, gateway, and Workbench discovery flows
+- Product role: authoritative portfolio state snapshot for downstream performance, risk, advisory, reporting, management, opportunity-intelligence, gateway, and Workbench discovery flows
 - Source declaration: `contracts/domain-data-products/`
 - Trust telemetry: `contracts/trust-telemetry/`
 
