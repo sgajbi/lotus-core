@@ -45,18 +45,19 @@ evidence reference rather than omitting the concept.
 
 | Product | Family | Serving plane | Primary consumers | Current route mapping |
 | --- | --- | --- | --- | --- |
-| `PortfolioStateSnapshot` | Snapshot and simulation | `query_control_plane_service` | gateway, advise, manage, risk | `/integration/portfolios/{portfolio_id}/core-snapshot` |
+| `PortfolioStateSnapshot` | Snapshot and simulation | `query_control_plane_service` | gateway, advise, manage, risk, idea | `/integration/portfolios/{portfolio_id}/core-snapshot` |
 | `HoldingsAsOf` | Operational read | `query_service` | gateway, risk, report, manage, advise, idea | `/portfolios/{portfolio_id}/positions`, `/portfolios/{portfolio_id}/cash-balances` |
 | `TransactionLedgerWindow` | Operational read | `query_service` | gateway, report, manage, risk | `/portfolios/{portfolio_id}/transactions` |
 | `PortfolioRealizedTaxSummary` | Operational read | `query_service` | gateway, report, manage | `/portfolios/{portfolio_id}/realized-tax-summary` |
-| `PortfolioCashMovementSummary` | Operational read | `query_service` | gateway, report, manage | `/portfolios/{portfolio_id}/cash-movement-summary` |
+| `PortfolioCashflowProjection` | Operational read | `query_service` | gateway, report, manage, idea | `/portfolios/{portfolio_id}/cashflow-projection` |
+| `PortfolioCashMovementSummary` | Operational read | `query_service` | gateway, report, manage, idea | `/portfolios/{portfolio_id}/cash-movement-summary` |
 | `PortfolioLiquidityLadder` | Operational read | `query_service` | gateway, report, manage, advise | `/portfolios/{portfolio_id}/liquidity-ladder` |
 | `PositionTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/position-timeseries` |
 | `PortfolioTimeseriesInput` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries` |
 | `PortfolioAnalyticsReference` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/portfolios/{portfolio_id}/analytics/reference` |
 | `MarketDataWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/market-series` |
 | `InstrumentReferenceBundle` | Analytics input | `query_control_plane_service` | performance, risk, gateway, advise | `/integration/instruments/enrichment-bulk`, `/integration/reference/classification-taxonomy` |
-| `BenchmarkAssignment` | Analytics input | `query_control_plane_service` | performance, risk, report, manage | `/integration/portfolios/{portfolio_id}/benchmark-assignment` |
+| `BenchmarkAssignment` | Analytics input | `query_control_plane_service` | performance, risk, report, manage, idea | `/integration/portfolios/{portfolio_id}/benchmark-assignment` |
 | `BenchmarkConstituentWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/composition-window` |
 | `IndexSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/indices/{index_id}/price-series`, `/integration/indices/{index_id}/return-series` |
 | `RiskFreeSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/reference/risk-free-series` |
