@@ -119,6 +119,11 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 30, tzinfo=UTC)
+    assert response.source_batch_fingerprint is not None
+    assert len(response.source_batch_fingerprint) == 64
+    assert (
+        response.snapshot_id == f"holdings_as_of_cash_balances:{response.source_batch_fingerprint}"
+    )
     repo.list_latest_snapshot_rows.assert_awaited_once_with(
         portfolio_ids=["P1"],
         as_of_date=date(2026, 3, 27),
@@ -585,6 +590,47 @@ async def test_get_cash_balances_preserves_decimal_precision_for_source_cash_wei
         "3"
     )
     assert response.totals.source_reported_cash_weight_supportability == "SUPPORTED"
+
+
+async def test_cash_balance_source_fingerprint_changes_with_source_evidence() -> None:
+    repo = AsyncMock()
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
+    portfolio = _portfolio("P1", base_currency="USD")
+    resolver = CashBalanceResolver(
+        repo=repo, convert_amount=AsyncMock(side_effect=lambda **kw: kw["amount"])
+    )
+
+    first_response = await resolver.build_cash_balances_response(
+        portfolio=portfolio,
+        resolved_as_of_date=date(2026, 3, 27),
+        reporting_currency="USD",
+        rows=[
+            ReportingSnapshotRow(
+                portfolio=portfolio,
+                snapshot=_snapshot("CASH_USD", market_value="250"),
+                instrument=_instrument("CASH_USD", asset_class="CASH"),
+            )
+        ],
+        expected_open_position_count=1,
+    )
+    second_response = await resolver.build_cash_balances_response(
+        portfolio=portfolio,
+        resolved_as_of_date=date(2026, 3, 27),
+        reporting_currency="USD",
+        rows=[
+            ReportingSnapshotRow(
+                portfolio=portfolio,
+                snapshot=_snapshot("CASH_USD", market_value="251"),
+                instrument=_instrument("CASH_USD", asset_class="CASH"),
+            )
+        ],
+        expected_open_position_count=1,
+    )
+
+    assert first_response.source_batch_fingerprint
+    assert second_response.source_batch_fingerprint
+    assert first_response.source_batch_fingerprint != second_response.source_batch_fingerprint
 
 
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:

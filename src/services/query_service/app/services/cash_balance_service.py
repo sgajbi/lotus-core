@@ -16,6 +16,7 @@ from ..repositories.reporting_repository import ReportingRepository
 from .control_code_normalization import normalize_control_code
 from .decimal_amounts import decimal_or_zero
 from .fx_conversion import CachedFxRateConverter
+from .request_fingerprint import request_fingerprint
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
@@ -64,6 +65,18 @@ class CashBalanceResolver:
             resolved_as_of_date=resolved_as_of_date,
             expected_open_position_count=expected_open_position_count,
         )
+        latest_evidence_timestamp = latest_snapshot_evidence_timestamp(rows)
+        source_fingerprint = _cash_balance_source_fingerprint(
+            portfolio_id=portfolio.portfolio_id,
+            resolved_as_of_date=resolved_as_of_date,
+            portfolio_currency=portfolio_currency,
+            reporting_currency=reporting_currency,
+            total_cash_portfolio_currency=total_cash_portfolio_currency,
+            total_cash_reporting_currency=total_cash_reporting_currency,
+            cash_weight_evidence=cash_weight_evidence,
+            account_records=account_records,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        )
         return CashBalancesResponse(
             portfolio_id=portfolio.portfolio_id,
             portfolio_currency=portfolio_currency,
@@ -86,7 +99,9 @@ class CashBalanceResolver:
                     cash_rows=cash_rows,
                     account_records=account_records,
                 ),
-                latest_evidence_timestamp=latest_snapshot_evidence_timestamp(rows),
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                source_batch_fingerprint=source_fingerprint,
+                snapshot_id=f"holdings_as_of_cash_balances:{source_fingerprint}",
             ),
         )
 
@@ -326,6 +341,61 @@ def _blocked_cash_weight(supportability: str) -> _CashWeightEvidence:
         denominator_portfolio_currency=None,
         supportability=supportability,
     )
+
+
+def _cash_balance_source_fingerprint(
+    *,
+    portfolio_id: str,
+    resolved_as_of_date: date,
+    portfolio_currency: str,
+    reporting_currency: str,
+    total_cash_portfolio_currency: Decimal,
+    total_cash_reporting_currency: Decimal,
+    cash_weight_evidence: _CashWeightEvidence,
+    account_records: list[CashAccountBalanceRecord],
+    latest_evidence_timestamp: Any,
+) -> str:
+    return request_fingerprint(
+        {
+            "source_data_product": "HoldingsAsOf:v1",
+            "mode": "cash_balances",
+            "portfolio_id": portfolio_id,
+            "as_of_date": resolved_as_of_date.isoformat(),
+            "portfolio_currency": portfolio_currency,
+            "reporting_currency": reporting_currency,
+            "totals": {
+                "total_cash_portfolio_currency": str(total_cash_portfolio_currency),
+                "total_cash_reporting_currency": str(total_cash_reporting_currency),
+                "source_reported_cash_weight": _decimal_text(
+                    cash_weight_evidence.source_reported_cash_weight
+                ),
+                "source_reported_cash_weight_denominator_portfolio_currency": _decimal_text(
+                    cash_weight_evidence.denominator_portfolio_currency
+                ),
+                "source_reported_cash_weight_supportability": cash_weight_evidence.supportability,
+            },
+            "cash_accounts": [
+                {
+                    "cash_account_id": record.cash_account_id,
+                    "security_id": record.security_id,
+                    "account_currency": record.account_currency,
+                    "balance_account_currency": str(record.balance_account_currency),
+                    "balance_portfolio_currency": str(record.balance_portfolio_currency),
+                    "balance_reporting_currency": str(record.balance_reporting_currency),
+                }
+                for record in account_records
+            ],
+            "latest_evidence_timestamp": (
+                latest_evidence_timestamp.isoformat()
+                if latest_evidence_timestamp is not None
+                else None
+            ),
+        }
+    )
+
+
+def _decimal_text(value: Decimal | None) -> str | None:
+    return str(value) if value is not None else None
 
 
 def _master_record_input(
