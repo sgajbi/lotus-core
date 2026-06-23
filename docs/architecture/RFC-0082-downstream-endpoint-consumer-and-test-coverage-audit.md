@@ -1171,7 +1171,7 @@ The boundary is explicit:
 
 | Route | Active downstream consumers verified | Integration posture |
 | --- | --- | --- |
-| `GET /portfolios/{portfolio_id}/cashflow-projection` | `lotus-gateway` | Correct. Gateway uses the route for the dedicated projected cashflow view and propagates `as_of_date`, `horizon_days`, and `include_projected` directly to lotus-core. |
+| `GET /portfolios/{portfolio_id}/cashflow-projection` | `lotus-gateway`; catalog-intended `lotus-idea` | Correct. Gateway uses the route for the dedicated projected cashflow view and propagates `as_of_date`, `horizon_days`, and `include_projected` directly to lotus-core. `lotus-idea` is approved for governed opportunity-intelligence cashflow evidence, but this audit does not evidence a live direct `lotus-idea` client binding yet. |
 
 No active direct `lotus-report`, `lotus-advise`, `lotus-risk`, or `lotus-manage` consumer was
 evidenced against this route in this pass.
