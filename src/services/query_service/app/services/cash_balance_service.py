@@ -378,6 +378,7 @@ def _cash_balance_source_fingerprint(
                 {
                     "cash_account_id": record.cash_account_id,
                     "security_id": record.security_id,
+                    "instrument_name": record.instrument_name,
                     "account_currency": record.account_currency,
                     "balance_account_currency": str(record.balance_account_currency),
                     "balance_portfolio_currency": str(record.balance_portfolio_currency),
