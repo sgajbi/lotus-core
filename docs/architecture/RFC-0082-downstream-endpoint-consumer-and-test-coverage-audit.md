@@ -1220,6 +1220,73 @@ route-purpose wording and request-parameter descriptions.
 | `lotus-core` | No open issue | No open lotus-core behavior or documentation defect remains evidenced against `GET /portfolios/{portfolio_id}/cashflow-projection` in this pass. |
 | `lotus-gateway` | No open route-specific issue needed | Gateway is already using the dedicated projected cashflow route correctly. |
 
+## Certified Endpoint Slice: Cash Movement Summary Operational Read
+
+This certification pass covers:
+
+1. `GET /portfolios/{portfolio_id}/cash-movement-summary`
+
+### Route Contract Decision
+
+This is the strategic lotus-core operational-read route for latest portfolio cash-movement evidence.
+
+The boundary is explicit:
+
+1. use it when a downstream consumer needs core-owned cash movement aggregation by classification,
+   timing, currency, and flow scope;
+2. preserve source evidence fields such as latest evidence timestamp, source fingerprint, row count,
+   and data-quality posture when making downstream opportunity or workflow decisions;
+3. do not use it as a forecast, funding recommendation, treasury instruction, tax method,
+   execution-quality assessment, or OMS acknowledgement;
+4. keep opportunity interpretation, prioritization, and advisory or workflow realization outside
+   lotus-core.
+
+### Downstream Consumer Reality
+
+| Route | Active downstream consumers verified | Integration posture |
+| --- | --- | --- |
+| `GET /portfolios/{portfolio_id}/cash-movement-summary` | catalog-intended `lotus-gateway`, `lotus-report`, `lotus-manage`, `lotus-idea` | Correct. The source-data-product catalog approves these consumers for governed cash-movement evidence, including `lotus-idea` opportunity-intelligence sourcing. This audit does not evidence a live direct `lotus-idea` client binding yet, so Idea must be described as approved/catalog-intended rather than live direct until its runtime client and tests land. |
+
+No active direct `lotus-advise`, `lotus-risk`, or `lotus-performance` consumer was evidenced
+against this route in this pass.
+
+### Upstream Integration Assessment
+
+The route is strong and domain-correct for operational cash-movement evidence:
+
+1. it exposes source-owned cash movement aggregation instead of forcing downstream consumers to
+   reconstruct movement totals from lower-level transaction or cashflow rows;
+2. movement direction, bucket totals, row count, and data-quality posture are carried with source
+   lineage rather than downstream narrative assumptions;
+3. the contract remains an operational evidence surface, not a liquidity forecast or advice
+   engine;
+4. `lotus-idea` can use the product as an input into opportunity discovery only after preserving
+   the core source-authority boundary and adding its own direct client, tests, and runtime proof.
+
+### Swagger / OpenAPI Assessment
+
+For this endpoint, Swagger should make the following explicit:
+
+1. this route serves latest portfolio cash-movement evidence for operational and downstream
+   intelligence workflows;
+2. source evidence and data-quality posture are part of the business contract;
+3. downstream systems must not treat the route as forecast, treasury instruction, advisory
+   recommendation, or execution acknowledgement;
+4. route-level examples should remain aligned to the `PortfolioCashMovementSummary` source data
+   product vocabulary.
+
+Automated source-product proof is protected by
+`tests/unit/docs/test_source_data_product_boundaries.py` and
+`tests/unit/libs/portfolio-common/test_source_data_products.py`, which assert catalog, contract,
+and documentation alignment for the approved consumer set.
+
+### Issue Disposition For This Endpoint
+
+| Issue | Assessment | Disposition |
+| --- | --- | --- |
+| `lotus-core` | No open issue | No open lotus-core behavior defect remains evidenced against `GET /portfolios/{portfolio_id}/cash-movement-summary` in this pass. The audit now records `lotus-idea` as approved/catalog-intended, not live direct. |
+| `lotus-idea` | Follow-on implementation required in Idea | Idea must add a real direct client, request/response tests, OpenAPI evidence, supported-feature truth, and runtime proof before any docs describe it as a live cash-movement-summary consumer. |
+
 ## Certified Endpoint Slice: Transaction Ledger Operational Read
 
 This certification pass covers:
