@@ -405,9 +405,9 @@ remain unresolved.
 position evidence. Fully snapshot-backed current holdings are `COMPLETE`; current holdings that
 depend on history-backed fallback or supplement rows are `PARTIAL`; holdings with any non-current
 position-state status are `STALE`; empty holdings or holdings without position-state evidence remain
-`UNKNOWN`. The response also populates `latest_evidence_timestamp` from durable position-row and
-position-state timestamps when available. Deprecated reporting convenience responses that still map
-to `HoldingsAsOf`, such as cash balances and holdings snapshots, populate
+`UNKNOWN`. The response also populates `latest_evidence_timestamp` from durable position-row,
+position-state, and joined instrument timestamps when available. Deprecated reporting convenience
+responses that still map to `HoldingsAsOf`, such as cash balances and holdings snapshots, populate
 `latest_evidence_timestamp` from the returned daily-position snapshot rows while they remain
 available during pre-live endpoint consolidation.
 Cash-balance responses also populate `source_batch_fingerprint` from the returned cash accounts,

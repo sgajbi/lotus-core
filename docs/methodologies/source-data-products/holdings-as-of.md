@@ -238,7 +238,7 @@ supportability posture is one of:
 | `totals.source_reported_cash_weight_supportability` | Cash-weight supportability posture. |
 | `as_of_date` | Effective booked-state cap or resolved response date. |
 | `data_quality_status` | Completeness and freshness posture for returned holdings or cash balances. |
-| `latest_evidence_timestamp` | Latest durable position, position-state, or cash snapshot timestamp used by the response. |
+| `latest_evidence_timestamp` | Latest durable position, position-state, instrument, or cash snapshot timestamp used by the response. |
 | `source_batch_fingerprint` | Deterministic HoldingsAsOf cash-balance evidence fingerprint derived from the returned cash accounts, totals, cash-weight supportability, reporting-currency scope, and latest evidence timestamp. |
 | `snapshot_id` | Deterministic `holdings_as_of_cash_balances:<fingerprint>` identity for cash-balance response replay and downstream lineage. |
 
