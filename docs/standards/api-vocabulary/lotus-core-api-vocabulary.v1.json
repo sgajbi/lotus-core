@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-06-21T18:50:59.294475+00:00",
+  "generatedAt": "2026-06-28T04:44:31.576111+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -3442,8 +3442,8 @@
       "semanticId": "lotus.maturity_date",
       "canonicalTerm": "maturity_date",
       "preferredName": "maturity_date",
-      "description": "Maturity date for instruments with contractual maturity.",
-      "example": "2035-12-31",
+      "description": "Source-owned instrument maturity date for maturity-bearing holdings, when Core reference data carries the lifecycle date.",
+      "example": "2026-07-15",
       "type": "object",
       "locations": [
         "body"
@@ -9733,6 +9733,7 @@
           "isin",
           "latest_evidence_timestamp",
           "liquidity_tier",
+          "maturity_date",
           "policy_version",
           "portfolio_id",
           "position_date",
@@ -10001,6 +10002,14 @@
             "type": "object",
             "semanticId": "lotus.liquidity_tier",
             "attributeRef": "lotus.liquidity_tier"
+          },
+          {
+            "name": "positions[].maturity_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.maturity_date",
+            "attributeRef": "lotus.maturity_date"
           },
           {
             "name": "positions[].cost_basis",
