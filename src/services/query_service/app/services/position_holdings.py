@@ -431,10 +431,12 @@ def latest_holdings_evidence_timestamp(
     db_results: list[PositionRowResult],
 ) -> datetime | None:
     timestamps: list[datetime] = []
-    for position_row, _instrument, pos_state in db_results:
+    for position_row, instrument, pos_state in db_results:
         for candidate in (
             getattr(position_row, "updated_at", None),
             getattr(position_row, "created_at", None),
+            getattr(instrument, "updated_at", None),
+            getattr(instrument, "created_at", None),
             getattr(pos_state, "updated_at", None),
             getattr(pos_state, "created_at", None),
         ):

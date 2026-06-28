@@ -1,6 +1,7 @@
 # tests/unit/services/query_service/services/test_position_service.py
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -12,6 +13,9 @@ from portfolio_common.database_models import (
 )
 
 from src.services.query_service.app.repositories.position_repository import PositionRepository
+from src.services.query_service.app.services.position_holdings import (
+    latest_holdings_evidence_timestamp,
+)
 from src.services.query_service.app.services.position_service import PositionService
 
 pytestmark = pytest.mark.asyncio
@@ -290,6 +294,32 @@ async def test_get_latest_positions_explicit_date_skips_default_date_lookup(
 
     assert response.as_of_date == date(2025, 1, 1)
     mock_position_repo.get_latest_business_date.assert_not_awaited()
+
+
+async def test_latest_holdings_evidence_timestamp_includes_instrument_source_updates() -> None:
+    instrument_updated_at = datetime(2025, 1, 3, 8, 0, tzinfo=UTC)
+
+    assert (
+        latest_holdings_evidence_timestamp(
+            [
+                (
+                    SimpleNamespace(
+                        updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
+                        created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
+                    ),
+                    SimpleNamespace(
+                        updated_at=instrument_updated_at,
+                        created_at=datetime(2025, 1, 2, 9, 0, tzinfo=UTC),
+                    ),
+                    SimpleNamespace(
+                        updated_at=datetime(2025, 1, 1, 11, 0, tzinfo=UTC),
+                        created_at=datetime(2025, 1, 1, 8, 30, tzinfo=UTC),
+                    ),
+                )
+            ]
+        )
+        == instrument_updated_at
+    )
 
 
 async def test_get_latest_positions_falls_back_to_position_history(mock_position_repo: AsyncMock):
