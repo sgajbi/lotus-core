@@ -56,6 +56,14 @@ class Position(BaseModel):
         description="Liquidity tier used by advisory suitability and concentration workflows.",
         examples=["L1", "L5"],
     )
+    maturity_date: Optional[date] = Field(
+        None,
+        description=(
+            "Source-owned instrument maturity date for maturity-bearing holdings, when Core "
+            "reference data carries the lifecycle date."
+        ),
+        examples=["2026-07-15"],
+    )
     cost_basis: Decimal = Field(
         ..., description="Cost basis in portfolio base currency.", examples=[15000.0]
     )

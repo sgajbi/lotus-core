@@ -254,6 +254,7 @@ def position_response_data(
         product_type=_instrument_field(instrument, "product_type"),
         rating=_instrument_field(instrument, "rating"),
         liquidity_tier=_instrument_field(instrument, "liquidity_tier"),
+        maturity_date=_instrument_field(instrument, "maturity_date"),
         valuation=valuation,
         reprocessing_status=_position_reprocessing_status(pos_state),
     )

@@ -80,11 +80,12 @@ transaction-cost methodology product. Reporting-currency fields use field-aware 
 book-currency measures are restated from `currency`, while trade fees and local realized P&L fields
 are restated from `trade_currency` when present.
 
-`HoldingsAsOf:v1` is the governed source for position rows, position weights, current-epoch
-supportability, held-since dates, cash-account balances, source-reported cash weight,
-portfolio/base currency, optional cash reporting-currency restatement, and holdings evidence
-timestamps. It is not a performance-return, risk-exposure, liquidity-ladder, income-need,
-tax-advice, cash-deployment recommendation, execution-quality, or OMS acknowledgement product.
+`HoldingsAsOf:v1` is the governed source for position rows, position weights, source-owned
+instrument maturity dates when Core reference data carries them, current-epoch supportability,
+held-since dates, cash-account balances, source-reported cash weight, portfolio/base currency,
+optional cash reporting-currency restatement, and holdings evidence timestamps. It is not a
+performance-return, risk-exposure, liquidity-ladder, income-need, tax-advice, reinvestment
+recommendation, cash-deployment recommendation, execution-quality, or OMS acknowledgement product.
 
 Its current implementation-backed methodology is conservative: the product resolves booked and
 projected-inclusive holdings modes, reconciles snapshot-backed positions to latest current-epoch

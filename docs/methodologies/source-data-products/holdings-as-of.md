@@ -8,12 +8,13 @@
 2. `GET /portfolios/{portfolio_id}/cash-balances`.
 
 It returns governed position rows and cash-account balances for one portfolio with source-data
-product identity, runtime metadata, as-of semantics, instrument descriptors, position-state
-supportability, evidence timestamps, cash reporting-currency restatement where requested, and
-source-reported cash weight when the Core-owned same-date portfolio market-value denominator is
-supportable. Cash-balance responses also publish a deterministic source evidence fingerprint and
-snapshot identity so downstream consumers can retain lineage without reconstructing Core-owned
-portfolio facts.
+product identity, runtime metadata, as-of semantics, instrument descriptors, source-owned
+instrument maturity dates when Core reference data carries them, position-state supportability,
+evidence timestamps, cash reporting-currency restatement where requested, and source-reported cash
+weight when the Core-owned same-date portfolio market-value denominator is supportable.
+Cash-balance responses also publish a deterministic source evidence fingerprint and snapshot
+identity so downstream consumers can retain lineage without reconstructing Core-owned portfolio
+facts.
 
 The product is source evidence for recorded holdings and cash state. It is not a liquidity-ladder
 methodology, income-needs plan, performance return, risk exposure methodology, tax advice,
@@ -49,7 +50,7 @@ execution-quality assessment, or OMS acknowledgement.
 | `position_state` | `portfolio_id`, `security_id`, `epoch`, `status`, `created_at`, `updated_at` | Constrains holdings to the active epoch for each portfolio-security key and supplies reprocessing supportability. |
 | `position_history` | `security_id`, `position_date`, `quantity`, `cost_basis`, `cost_basis_local`, `epoch` | Authoritative booked quantity and cost-basis stream. Also supplements missing snapshot rows when snapshot materialization lags. |
 | `daily_position_snapshots` | `security_id`, `date`, `quantity`, valuation fields, `market_value`, local valuation fields, `epoch`, timestamps | Supplies current or as-of snapshot-backed holdings, valuation fields, cash rows, and evidence timestamps. Snapshot rows must reconcile to latest current-epoch history quantity for positions. |
-| `instruments` | name, asset class, currency, ISIN, sector, country of risk, product type, rating, liquidity tier | Adds instrument descriptors and classifies cash rows. |
+| `instruments` | name, asset class, currency, ISIN, sector, country of risk, product type, rating, liquidity tier, maturity date | Adds instrument descriptors, source-owned maturity lifecycle dates for maturity-bearing holdings, and cash classification. |
 | `cash_account_masters` | cash account identity, display name, currency, effective dates | Supplies stable account identity for cash-balance rows where available. |
 | `fx_rates` | `from_currency`, `to_currency`, `rate_date`, `rate` | Used only for optional cash reporting-currency restatement. |
 | `market_prices` | `security_id`, `price_date` | Used to classify non-cash holdings as stale when latest price coverage does not reach the response `as_of_date`. |
@@ -59,6 +60,10 @@ execution-quality assessment, or OMS acknowledgement.
 Position `quantity` remains in instrument units. `cost_basis`, `market_value`, and
 `unrealized_gain_loss` are portfolio-currency values. Local valuation and cost-basis fields remain
 in the instrument or account local currency represented by the source row.
+
+Position `maturity_date` is the source-owned instrument lifecycle date carried by Core reference
+data. It is not a cashflow forecast, suitability outcome, reinvestment recommendation, risk
+measure, performance return, or client-publication decision.
 
 Position `weight` is computed as each position value divided by total returned position value. The
 position value is `valuation.market_value` when available, otherwise `cost_basis`. When total
@@ -222,6 +227,7 @@ supportability posture is one of:
 | `portfolio_id` | Requested portfolio. |
 | `positions[]` | Snapshot-backed and history-supplemented holdings rows for the resolved scope. |
 | `positions[].valuation` | Snapshot valuation when available; fallback valuation from latest snapshot or cost basis for history-backed supplement rows. |
+| `positions[].maturity_date` | Source-owned instrument maturity date for maturity-bearing holdings when Core reference data carries it. |
 | `positions[].weight` | Position value divided by total returned position value, or zero when total value is zero. |
 | `positions[].held_since_date` | Earliest continuous non-zero holding date in the active epoch. |
 | `cash_accounts[]` | Cash-account balance records for the resolved scope. |
