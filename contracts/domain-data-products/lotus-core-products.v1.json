@@ -110,7 +110,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "daily",
-        "max_allowed_age_description": "Canonical holdings and cash state for an as-of date."
+        "max_allowed_age_description": "Canonical holdings, source-owned instrument maturity dates, and cash state for an as-of date."
       },
       "completeness_policy": {
         "default_status": "complete",
