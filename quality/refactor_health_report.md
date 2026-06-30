@@ -33,13 +33,14 @@ tested modules.
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 | Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
+| Boundary mapping conformance | Improving | CR-1184 adds `make test-boundary-mapping-conformance`, extracts transaction event-to-record mapping, and covers representative transaction and portfolio tax-lot source-data mappings |
 
 ## Current Slice Update
 
-CR-1183 begins validated GitHub issue #650 by replacing replay audit persistence `RuntimeError`
-handling with `InfrastructureAuditWriteFailed` and safe reason codes for no-session and persistence
-failure cases. The successful replay audit write path is unchanged, while future infrastructure
-adapter slices now have an initial taxonomy document to extend.
+CR-1184 begins validated GitHub issues #665 and #661 by adding a repo-native boundary mapping
+conformance suite, extracting transaction event-to-record persistence mapping, and documenting the
+mapping/anti-corruption boundary. The successful persistence and source-data response contracts are
+unchanged while representative mapping invariants now have direct tests.
 
 ## Health Assessment
 
@@ -1993,3 +1994,8 @@ health before that claim is defensible.
 326. Began validated GitHub issue #650 by adding `InfrastructureAuditWriteFailed` for replay audit
      persistence failures and documenting the initial infrastructure error taxonomy. Focused
      replay-audit tests passed with 5 tests; scoped Ruff lint/format and `git diff --check` passed.
+327. Began validated GitHub issues #665 and #661 by adding a boundary mapping conformance suite and
+     repo-native `make test-boundary-mapping-conformance` target. `TransactionDBRepository` now uses
+     explicit `transaction_event_to_record_values(...)` mapping; focused transaction/source-data
+     conformance and repository tests passed with 5 tests, the manifest-backed conformance target
+     passed with 3 tests, and scoped Ruff lint passed.

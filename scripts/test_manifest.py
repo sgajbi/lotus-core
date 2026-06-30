@@ -34,6 +34,9 @@ SUITES: dict[str, list[str]] = {
     "ops-contract": [
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
     ],
+    "boundary-mapping-conformance": [
+        "tests/unit/boundary_mapping",
+    ],
     "e2e-smoke": [
         "tests/e2e/test_query_service_observability.py",
         "tests/e2e/test_complex_portfolio_lifecycle.py",
@@ -136,6 +139,7 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "integration-lite": "integration",
     "integration-all": "integration",
     "ops-contract": "integration",
+    "boundary-mapping-conformance": "unit",
     "transaction-buy-contract": "integration",
     "transaction-sell-contract": "integration",
     "transaction-dividend-contract": "integration",
@@ -152,6 +156,7 @@ SUITE_RUNTIME_MODE: dict[str, str] = {
     "integration-lite": "db_direct",
     "integration-all": "db_direct",
     "ops-contract": "db_direct",
+    "boundary-mapping-conformance": "unit",
     "transaction-buy-contract": "db_direct",
     "transaction-sell-contract": "db_direct",
     "transaction-dividend-contract": "db_direct",

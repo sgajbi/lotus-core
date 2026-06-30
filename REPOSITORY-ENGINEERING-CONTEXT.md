@@ -98,6 +98,10 @@ Current repository posture:
     contract governance. PR Merge Gate records it as report-only evidence first; blocking promotion
     requires lotus-ci-enforcement-governance proof that the signal is stable, deterministic,
     low-noise, and policy-backed.
+22. Boundary mapping conformance now has a repo-native command,
+    `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
+    `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
+    transaction event and portfolio tax-lot source-data mappings.
 
 ## Architecture And Module Map
 
@@ -163,13 +167,15 @@ Use these commands as the primary local contract:
    `make test-unit-db`
 7. integration-lite suite
    `make test-integration-lite`
-8. E2E smoke
+8. boundary mapping conformance
+   `make test-boundary-mapping-conformance`
+9. E2E smoke
    `make test-e2e-smoke`
-9. Docker smoke
+10. Docker smoke
    `make test-docker-smoke`
-10. repo-native domain-product validation
+11. repo-native domain-product validation
    `make domain-product-validate`
-11. app-level supported-surface validation
+12. app-level supported-surface validation
    `make lotus-core-validate`
 
 ## Validation And CI Expectations
@@ -231,10 +237,11 @@ Most relevant current governance:
 12. route removal or deprecation must follow `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`, update the route-family registry when routes change, and carry affected-consumer evidence,
 13. future source-data product security, retention, audit, capability, and entitlement changes must use `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md`, `src/libs/portfolio-common/portfolio_common/source_data_security.py`, and `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`; they must keep generated `x-lotus-source-data-security` route metadata and catalog-derived capability rules aligned with the governed profile and avoid reintroducing duplicated service-local authorization or audit middleware logic,
 14. future event, outbox, replay, DLQ, direct Kafka publish, and operator diagnostic changes must use `docs/architecture/RFC-0083-eventing-supportability-target-model.md`, `src/libs/portfolio-common/portfolio_common/event_supportability.py`, `src/libs/portfolio-common/portfolio_common/events.py`, and the centralized payload envelope in `src/libs/portfolio-common/portfolio_common/outbox_repository.py`; they must pass `make event-runtime-contract-guard` when outbox emissions, direct publish topics, or Kafka topics are touched,
-15. RFC-0083 target-model closure is tracked by `docs/standards/rfc-0083-implementation-ledger.json` and guarded by `make rfc0083-closure-guard`; the ledger intentionally does not claim full production runtime closure,
-16. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
-17. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
-18. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
+15. future boundary mapping changes should follow `docs/architecture/mapping-anti-corruption-boundary.md` and pass `make test-boundary-mapping-conformance` when API DTO, event, persistence-record, read-record, or source-data envelope mappings are touched,
+16. RFC-0083 target-model closure is tracked by `docs/standards/rfc-0083-implementation-ledger.json` and guarded by `make rfc0083-closure-guard`; the ledger intentionally does not claim full production runtime closure,
+17. borderline analytics-input/reference contracts in `query_control_plane_service` must be reviewed against `docs/architecture/RFC-0082-contract-family-inventory.md` before material expansion,
+18. app-local compose is useful, but canonical shared infrastructure governance now belongs in `lotus-platform`,
+19. because operational correctness matters here, failure-recovery and performance gates are part of real delivery quality, not optional extras.
 19. institutional load-run diagnosis should distinguish target-date `daily_position_snapshots`,
     security-level `position_timeseries`, and portfolio-level `portfolio_timeseries` coverage,
     because timeseries lag can concentrate before portfolio aggregation rather than inside it,
