@@ -8,6 +8,27 @@ from cost_engine.domain.models.transaction import (
 from cost_engine.processing.sorter import (
     TransactionSorter,
 )
+from portfolio_common.ca_bundle_a_constants import (
+    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
+    CA_BUNDLE_A_SOURCE_OUT_TYPES,
+    CA_BUNDLE_A_TARGET_IN_TYPES,
+)
+from portfolio_common.ca_bundle_a_ordering import ca_bundle_a_dependency_rank
+
+_CANONICAL_BUNDLE_A_SORT_TYPES = (
+    *sorted(CA_BUNDLE_A_SOURCE_OUT_TYPES),
+    "RIGHTS_ANNOUNCE",
+    "RIGHTS_ALLOCATE",
+    *sorted(CA_BUNDLE_A_TARGET_IN_TYPES),
+    "RIGHTS_SUBSCRIBE",
+    "RIGHTS_OVERSUBSCRIBE",
+    "RIGHTS_SELL",
+    "RIGHTS_EXPIRE",
+    "RIGHTS_ADJUSTMENT",
+    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
+    "RIGHTS_SHARE_DELIVERY",
+    "RIGHTS_REFUND",
+)
 
 
 @pytest.fixture
@@ -366,3 +387,23 @@ def test_sort_cash_settlement_component_types_bound_same_timestamp(sorter):
         "t_neutral",
         "t_settlement_sell",
     ]
+
+
+def test_sorter_uses_canonical_bundle_a_dependency_ordering(sorter):
+    same_day = datetime(2026, 1, 10)
+    transactions = [
+        _transaction(
+            transaction_id=f"txn_{index:02d}_{transaction_type.lower()}",
+            transaction_date=same_day,
+            transaction_type=transaction_type,
+            quantity=Decimal("1"),
+        )
+        for index, transaction_type in enumerate(reversed(_CANONICAL_BUNDLE_A_SORT_TYPES))
+    ]
+
+    sorted_list = sorter.sort_transactions([], transactions)
+    actual_types = [transaction.transaction_type for transaction in sorted_list]
+    actual_ranks = [ca_bundle_a_dependency_rank(transaction) for transaction in sorted_list]
+
+    assert set(actual_types) == set(_CANONICAL_BUNDLE_A_SORT_TYPES)
+    assert actual_ranks == sorted(actual_ranks)

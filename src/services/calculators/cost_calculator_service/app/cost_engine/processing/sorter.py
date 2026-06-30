@@ -1,24 +1,11 @@
+from portfolio_common.ca_bundle_a_ordering import (
+    ca_bundle_a_dependency_rank,
+    ca_bundle_a_target_order_key,
+)
+
 from ..domain.models.transaction import Transaction
 
-_LAST_DEPENDENCY_RANK = 4
 _DEFAULT_CASH_DEPENDENCY_RANK = 1
-
-_CA_BUNDLE_A_DEPENDENCY_RANKS = {
-    "SPIN_OFF": 0,
-    "DEMERGER_OUT": 0,
-    "RIGHTS_ANNOUNCE": 0,
-    "RIGHTS_ALLOCATE": 0,
-    "SPIN_IN": 1,
-    "DEMERGER_IN": 1,
-    "RIGHTS_SUBSCRIBE": 1,
-    "RIGHTS_OVERSUBSCRIBE": 1,
-    "RIGHTS_SELL": 1,
-    "RIGHTS_EXPIRE": 1,
-    "RIGHTS_ADJUSTMENT": 1,
-    "CASH_CONSIDERATION": 2,
-    "RIGHTS_SHARE_DELIVERY": 2,
-    "RIGHTS_REFUND": 3,
-}
 
 _CASH_INFLOW_COMPONENT_TYPES = frozenset({"FX_CASH_SETTLEMENT_BUY"})
 _CASH_INFLOW_TRANSACTION_TYPES = frozenset(
@@ -49,26 +36,14 @@ class TransactionSorter:
         all_transactions.sort(
             key=lambda txn: (
                 txn.transaction_date,
-                _ca_bundle_a_dependency_rank(txn),
+                ca_bundle_a_dependency_rank(txn),
                 _cash_dependency_rank(txn),
-                *_ca_bundle_a_target_order_key(txn),
+                *ca_bundle_a_target_order_key(txn),
                 -txn.quantity,
                 txn.transaction_id,
             )
         )
         return all_transactions
-
-
-def _ca_bundle_a_dependency_rank(txn: Transaction) -> int:
-    transaction_type = _normalize_sort_code(getattr(txn, "transaction_type", ""))
-    return _CA_BUNDLE_A_DEPENDENCY_RANKS.get(transaction_type, _LAST_DEPENDENCY_RANK)
-
-
-def _ca_bundle_a_target_order_key(txn: Transaction) -> tuple[int, str]:
-    child_sequence_hint = getattr(txn, "child_sequence_hint", None)
-    target_instrument_id = str(getattr(txn, "target_instrument_id", "") or "")
-    sequence = int(child_sequence_hint) if child_sequence_hint is not None else 2_147_483_647
-    return (sequence, target_instrument_id)
 
 
 def _cash_dependency_rank(txn: Transaction) -> int:

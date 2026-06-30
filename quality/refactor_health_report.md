@@ -36,6 +36,7 @@ tested modules.
 | Outbox failure evidence | Improving | CR-1187 persists source-safe last-failure reason code, category, redacted bounded message, and failure timestamp on retryable and terminal outbox delivery failures |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
+| Corporate-action ordering policy | Improving | CR-1197 routes cost-engine Bundle A sorting through the canonical shared ordering helper and removes the duplicated private rank map |
 | Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
@@ -47,11 +48,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1196 addresses validated GitHub issue #684 by making ingestion write rate-limit enforcement
-scope explicit and startup-validated. The default local-process limiter remains compatible, but it
-no longer silently implies global scaled-service enforcement; gateway-backed scopes now require a
-declared policy ID, startup logs expose the active contract, and local denials emit bounded
-reason/scope metrics and logs.
+CR-1197 addresses validated GitHub issue #683 by removing duplicated Bundle A ordering policy from
+the cost-engine sorter. `TransactionSorter` now consumes the canonical
+`portfolio_common.ca_bundle_a_ordering` dependency-rank and target-order helpers used by event
+ordering, while keeping separate cash same-timestamp dependency policy local to the sorter.
 
 ## Health Assessment
 
