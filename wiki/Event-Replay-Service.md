@@ -27,12 +27,16 @@ For replay and remediation workflows, the service:
 
 1. reads canonical ingestion-job and operational state
 2. exposes health, backlog, and saturation signals for operators and automation
-3. lets operators inspect consumer DLQ evidence with topic, group, and correlation context
+3. lets operators inspect redacted consumer DLQ evidence with topic, group, and correlation context
 4. replays canonical ingestion payloads through governed recovery routes
 5. records durable replay audit rows and failure posture for later review
 
 The key design rule is that replay is controlled and evidence-backed. It is not a generic message
 republisher.
+
+Consumer DLQ `payload_excerpt` values are redacted and truncated diagnostic evidence. They are useful
+for triage, but they can still contain client-linked identifiers such as portfolio or transaction
+IDs and must remain behind the protected event-replay control-plane access boundary.
 
 ## Data it owns
 

@@ -41,7 +41,7 @@ class ConsumerDlqEventResponse(BaseModel):
     )
     payload_excerpt: str | None = Field(
         default=None,
-        description="Truncated payload excerpt for operational triage.",
+        description="Redacted, truncated payload excerpt for operational triage.",
         examples=['{"transaction_id":"TXN-2026-000145"}'],
     )
     observed_at: datetime = Field(

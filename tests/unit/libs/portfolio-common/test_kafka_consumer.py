@@ -287,6 +287,46 @@ async def test_dlq_payload_is_correct(
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
+async def test_dlq_payload_and_headers_are_redacted(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message(
+        "key-sensitive",
+        {
+            "portfolio_id": "P1",
+            "authorization": "Bearer payload-token",
+            "nested": {"database_url": "postgresql://user:password@localhost/db"},
+        },
+        headers=[
+            ("authorization", b"Bearer header-token"),
+            ("source", b"postgresql://user:password@localhost/db"),
+        ],
+    )
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    result = await test_consumer._send_to_dlq_async(
+        mock_msg,
+        ValueError("token=error-token database_url=postgresql://u:p@localhost/db"),
+    )
+
+    assert result is True
+    payload = mock_kafka_producer.publish_message.call_args.kwargs["value"]
+    assert "payload-token" not in payload["original_value"]
+    assert "password" not in payload["original_value"]
+    assert json.loads(payload["original_value"]) == {
+        "authorization": "***REDACTED***",
+        "nested": {"database_url": "***REDACTED***"},
+        "portfolio_id": "P1",
+    }
+    assert payload["error_reason"] == "token=***REDACTED***"
+    assert "error-token" not in payload["error_reason"]
+    assert "postgresql://u:p@localhost/db" not in payload["error_reason"]
+
+    headers_dict = dict(mock_kafka_producer.publish_message.call_args.kwargs["headers"])
+    assert headers_dict["authorization"] == b"***REDACTED***"
+    assert headers_dict["source"] == b"postgresql://***REDACTED***@localhost/db"
+
+
 async def test_dlq_omits_unset_correlation_header(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -308,6 +348,43 @@ async def test_dlq_omits_unset_correlation_header(
     assert "correlation_id" not in dict(call_args["headers"])
     assert call_args["value"]["correlation_id"] is None
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
+
+
+async def test_record_consumer_dlq_event_redacts_payload_excerpt(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-persisted",
+        {"authorization": "Bearer persisted-token", "safe": "visible"},
+    )
+    mock_db = MagicMock()
+    transaction = MagicMock()
+    transaction.__aenter__ = AsyncMock(return_value=None)
+    transaction.__aexit__ = AsyncMock(return_value=None)
+    added_events = []
+
+    async def get_session_gen():
+        yield mock_db
+
+    mock_db.begin.return_value = transaction
+    mock_db.add.side_effect = added_events.append
+
+    with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
+        await test_consumer._record_consumer_dlq_event(
+            msg=mock_msg,
+            error=ValueError("token=event-token"),
+            error_reason_code="VALIDATION_ERROR",
+            correlation_id="corr-redacted",
+        )
+
+    assert len(added_events) == 1
+    assert added_events[0].error_reason == "token=***REDACTED***"
+    assert "event-token" not in added_events[0].error_reason
+    assert "persisted-token" not in added_events[0].payload_excerpt
+    assert json.loads(added_events[0].payload_excerpt) == {
+        "authorization": "***REDACTED***",
+        "safe": "visible",
+    }
 
 
 async def test_message_correlation_context_keeps_existing_context(

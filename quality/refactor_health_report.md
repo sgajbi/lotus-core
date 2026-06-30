@@ -28,15 +28,15 @@ tested modules.
 | Architecture gates | Improving | Existing `make architecture-guard` now enforces removed-domain import exclusions plus selected direct-import boundaries after CR-1171; `make quality-import-boundary-gate` enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are enforced in the quality-baseline API governance job; CR-1170 adds stable generated OpenAPI artifacts under `output/openapi/` and enforced portable Spectral blocker-subset linting through `make quality-openapi-spectral-gate` |
 | Observability cardinality | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics and adds focused regression coverage for route-template HTTP labels and forbidden business-key metric labels |
-| Log and CI-output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`, reuses it from enterprise audit, and masks database URLs, tokens, authorization values, and secret-like inline values before console output |
+| Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads, copied headers, traceback/error text, persisted error reasons, and persisted payload excerpts |
 
 ## Current Slice Update
 
-CR-1173 begins validated GitHub issue #496 by moving sensitive-value redaction into shared logging
-utilities, applying the redacting JSON formatter to structured logs, reusing the shared policy from
-enterprise audit, and routing test/CI console output through URL and inline-secret masking. Focused
-tests prove nested structured redaction, database URL credential masking, JSON formatter masking,
-and test-output masking.
+CR-1174 begins validated GitHub issue #497 by applying shared sensitive-value redaction to the
+shared Kafka consumer DLQ path. DLQ Kafka payloads, copied headers, traceback/error text, persisted
+error reasons, and persisted payload excerpts are redacted while non-sensitive JSON payload text is
+preserved for diagnostic compatibility. Focused tests prove DLQ publish and durable audit redaction,
+and the event-replay schema test now identifies `payload_excerpt` as redacted diagnostic evidence.
 
 ## Health Assessment
 

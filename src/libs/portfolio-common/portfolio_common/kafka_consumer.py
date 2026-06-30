@@ -2,6 +2,7 @@
 import asyncio
 import functools
 import inspect
+import json
 import logging
 import time
 import traceback
@@ -18,7 +19,14 @@ from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
 from .kafka_utils import get_kafka_producer
-from .logging_utils import correlation_id_var, generate_correlation_id, normalize_lineage_value
+from .logging_utils import (
+    REDACTED_VALUE,
+    correlation_id_var,
+    generate_correlation_id,
+    normalize_lineage_value,
+    redact_sensitive,
+    redact_sensitive_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +64,17 @@ _DLQ_REASON_TOKEN_GROUPS = (
         ("permission", "forbidden", "unauthorized", "access denied", "auth"),
     ),
 )
+_DLQ_SENSITIVE_HEADER_TOKENS = (
+    "authorization",
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "database_url",
+    "connection_string",
+    "credential",
+)
 
 
 def classify_dlq_reason_code(error: Exception) -> str:
@@ -79,6 +98,32 @@ def _combined_error_text(error: Exception) -> str:
 
 def _contains_any_token(text: str, tokens: tuple[str, ...]) -> bool:
     return any(token in text for token in tokens)
+
+
+def _redacted_payload_text(raw_value: str) -> str:
+    try:
+        parsed = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return redact_sensitive_text(raw_value)
+    redacted = redact_sensitive(parsed)
+    if redacted == parsed:
+        return raw_value
+    return json.dumps(redacted, separators=(",", ":"), sort_keys=True)
+
+
+def _redacted_dlq_header(header: tuple[str, bytes]) -> tuple[str, bytes]:
+    key, value = header
+    if _is_sensitive_dlq_header(key):
+        return key, REDACTED_VALUE.encode("utf-8")
+    try:
+        return key, redact_sensitive_text(value.decode("utf-8")).encode("utf-8")
+    except UnicodeDecodeError:
+        return key, value
+
+
+def _is_sensitive_dlq_header(key: str) -> bool:
+    normalized = key.strip().lower().replace("-", "_")
+    return any(token in normalized for token in _DLQ_SENSITIVE_HEADER_TOKENS)
 
 
 class BaseConsumer(ABC):
@@ -277,11 +322,11 @@ class BaseConsumer(ABC):
             "correlation_id": correlation_id,
             "original_topic": msg.topic(),
             "original_key": self._message_key_text(msg),
-            "original_value": msg.value().decode("utf-8"),
+            "original_value": self._redacted_message_value_text(msg),
             "error_timestamp": datetime.now(timezone.utc).isoformat(),
             "error_reason_code": error_reason_code,
-            "error_reason": str(error),
-            "error_traceback": traceback.format_exc(),
+            "error_reason": redact_sensitive_text(str(error)),
+            "error_traceback": redact_sensitive_text(traceback.format_exc()),
         }
 
     def _build_dlq_headers(
@@ -290,7 +335,7 @@ class BaseConsumer(ABC):
         *,
         correlation_id: str | None,
     ) -> list[tuple[str, bytes]]:
-        dlq_headers = msg.headers() or []
+        dlq_headers = [_redacted_dlq_header(header) for header in msg.headers() or []]
         if correlation_id:
             dlq_headers.append(("correlation_id", correlation_id.encode("utf-8")))
         return dlq_headers
@@ -324,6 +369,10 @@ class BaseConsumer(ABC):
         key = msg.key()
         return key.decode("utf-8") if key else None
 
+    def _redacted_message_value_text(self, msg: Message) -> str:
+        raw_value = msg.value().decode("utf-8")
+        return _redacted_payload_text(raw_value)
+
     async def _record_consumer_dlq_event(
         self,
         msg: Message,
@@ -333,7 +382,7 @@ class BaseConsumer(ABC):
     ) -> None:
         payload_excerpt = None
         try:
-            raw_value = msg.value().decode("utf-8")
+            raw_value = self._redacted_message_value_text(msg)
             payload_excerpt = raw_value[:1500]
         except Exception:
             payload_excerpt = None
@@ -344,7 +393,7 @@ class BaseConsumer(ABC):
             dlq_topic=self.dlq_topic or "",
             original_key=msg.key().decode("utf-8") if msg.key() else None,
             error_reason_code=error_reason_code,
-            error_reason=str(error),
+            error_reason=redact_sensitive_text(str(error)),
             correlation_id=correlation_id,
             payload_excerpt=payload_excerpt,
         )
