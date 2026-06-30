@@ -87,6 +87,56 @@ async def test_get_portfolios_empty_result(mock_portfolio_repo: AsyncMock):
         assert response_dto.portfolios == []
 
 
+async def test_search_portfolio_lookup_items_uses_bounded_repository_query(
+    mock_portfolio_repo: AsyncMock,
+):
+    mock_portfolio_repo.search_portfolio_lookup_ids.return_value = ["PF_1", "PF_2"]
+
+    with patch(
+        "src.services.query_service.app.services.portfolio_service.PortfolioRepository",
+        return_value=mock_portfolio_repo,
+    ):
+        service = PortfolioService(AsyncMock(spec=AsyncSession))
+        result = await service.search_portfolio_lookup_items(
+            client_id="CIF-1",
+            booking_center_code="SG",
+            q="PF",
+            limit=2,
+        )
+
+    assert [item.model_dump() for item in result] == [
+        {"id": "PF_1", "label": "PF_1"},
+        {"id": "PF_2", "label": "PF_2"},
+    ]
+    mock_portfolio_repo.search_portfolio_lookup_ids.assert_awaited_once_with(
+        client_id="CIF-1",
+        booking_center_code="SG",
+        q="PF",
+        limit=2,
+    )
+    mock_portfolio_repo.get_portfolios.assert_not_awaited()
+
+
+async def test_list_portfolio_currency_lookup_items_maps_codes(
+    mock_portfolio_repo: AsyncMock,
+):
+    mock_portfolio_repo.list_currency_lookup_codes.return_value = ["CHF", "USD"]
+
+    with patch(
+        "src.services.query_service.app.services.portfolio_service.PortfolioRepository",
+        return_value=mock_portfolio_repo,
+    ):
+        service = PortfolioService(AsyncMock(spec=AsyncSession))
+        result = await service.list_currency_lookup_items(q="U", limit=10)
+
+    assert [item.model_dump() for item in result] == [
+        {"id": "CHF", "label": "CHF"},
+        {"id": "USD", "label": "USD"},
+    ]
+    mock_portfolio_repo.list_currency_lookup_codes.assert_awaited_once_with(q="U", limit=10)
+    mock_portfolio_repo.get_portfolios.assert_not_awaited()
+
+
 async def test_get_portfolio_by_id_success(mock_portfolio_repo: AsyncMock):
     with patch(
         "src.services.query_service.app.services.portfolio_service.PortfolioRepository",

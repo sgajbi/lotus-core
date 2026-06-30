@@ -37,17 +37,18 @@ tested modules.
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
+| Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 | Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
 | Boundary mapping conformance | Improving | CR-1184 adds `make test-boundary-mapping-conformance`, extracts transaction event-to-record mapping, and covers representative transaction and portfolio tax-lot source-data mappings |
 
 ## Current Slice Update
 
-CR-1192 addresses validated GitHub issue #678 by adding a shared metrics access policy to the
-standard HTTP bootstrap. Default `/metrics` behavior remains `internal_open` for private Prometheus
-scrapers, while deployments can configure `LOTUS_METRICS_ACCESS_TOKEN` to require
-`Authorization: Bearer <token>` and receive stable `METRICS_ACCESS_DENIED` responses for
-unauthorized scrapes.
+CR-1193 addresses validated GitHub issue #679 by moving lookup selector filtering, ordering,
+distinct currency derivation, and limits from router-owned broad scans into bounded
+application-service and repository methods. `/lookups/portfolios`, `/lookups/instruments`, and
+`/lookups/currencies` preserve route and response contracts while no longer walking full
+portfolio/instrument catalogs for small selector responses.
 
 ## Health Assessment
 

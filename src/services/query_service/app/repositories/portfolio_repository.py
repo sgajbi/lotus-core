@@ -4,7 +4,7 @@ from datetime import date
 from typing import List, Optional
 
 from portfolio_common.database_models import Portfolio
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,50 @@ class PortfolioRepository:
         portfolios = results.scalars().all()
         logger.info(f"Found {len(portfolios)} portfolios with the given filters.")
         return portfolios
+
+    async def search_portfolio_lookup_ids(
+        self,
+        *,
+        client_id: str | None = None,
+        booking_center_code: str | None = None,
+        q: str | None = None,
+        limit: int,
+    ) -> list[str]:
+        """Return bounded portfolio IDs for selector workflows."""
+        stmt = select(Portfolio.portfolio_id)
+
+        if client_id:
+            stmt = stmt.where(Portfolio.client_id == client_id)
+
+        if booking_center_code:
+            stmt = stmt.where(Portfolio.booking_center_code == booking_center_code)
+
+        if q and (q_norm := q.strip().upper()):
+            stmt = stmt.where(func.upper(Portfolio.portfolio_id).like(f"%{q_norm}%"))
+
+        result = await self.db.execute(stmt.order_by(Portfolio.portfolio_id.asc()).limit(limit))
+        return list(result.scalars().all())
+
+    async def list_currency_lookup_codes(
+        self,
+        *,
+        q: str | None = None,
+        limit: int,
+    ) -> list[str]:
+        """Return bounded distinct portfolio base currencies for selector workflows."""
+        currency_code = func.upper(func.trim(Portfolio.base_currency))
+        stmt = (
+            select(currency_code)
+            .distinct()
+            .where(Portfolio.base_currency.is_not(None))
+            .where(func.trim(Portfolio.base_currency) != "")
+        )
+
+        if q and (q_norm := q.strip().upper()):
+            stmt = stmt.where(currency_code.like(f"%{q_norm}%"))
+
+        result = await self.db.execute(stmt.order_by(currency_code.asc()).limit(limit))
+        return list(result.scalars().all())
 
     async def get_by_id(self, portfolio_id: str) -> Optional[Portfolio]:
         """Retrieves a single portfolio by its unique portfolio_id."""
