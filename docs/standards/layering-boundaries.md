@@ -23,6 +23,11 @@ This standard defines guardrails for directory organization and dependency bound
  - Architecture and ownership changes require RFC updates.
 2. Static checks:
  - Use script-based guard checks for known boundary violations.
+ - `make architecture-guard` enforces removed-domain import exclusions and selected direct-import
+   boundaries:
+   - query-control-plane routers must not import query-service repositories directly,
+   - query runtime routers must not import query-control-plane internals,
+   - ingestion routers must not import other service implementations directly.
 3. CI conformance:
  - OpenAPI, vocabulary, no-alias, and migration checks remain mandatory.
 

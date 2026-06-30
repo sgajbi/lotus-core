@@ -18,4 +18,7 @@ Status: Progressive enforcement rule set on 2026-06-02.
 1. Existing `make architecture-guard` remains authoritative where present.
 2. `.importlinter` enforces selected high-value import boundaries through
    `make quality-import-boundary-gate`.
-3. Future slices should add focused import contracts as ownership boundaries stabilize.
+3. `make architecture-guard` also enforces selected direct-import boundaries for
+   query-control-plane router repository bypass, query runtime router control-plane imports, and
+   ingestion router cross-service imports.
+4. Future slices should add focused import contracts as ownership boundaries stabilize.
