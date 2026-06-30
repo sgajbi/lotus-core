@@ -30,12 +30,13 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1162 hardens BUY lot-state persistence by splitting deterministic lot-payload construction and
-PostgreSQL conflict-update field selection out of
-`CostCalculatorRepository.upsert_buy_lot_state(...)`. Focused integration coverage now proves
-existing lot rows are updated idempotently while immutable lot/source identifiers are preserved and
-mutable economics and source metadata are refreshed from engine output. The target method is reduced
-from `B (6)` to `A (1)`.
+CR-1163 hardens cost reprocessing consumer orchestration by splitting JSON object payload parsing,
+requested transaction-id normalization, repository-backed reprocessing execution, and
+parse/retryable/unexpected error handling out of `ReprocessingConsumer.process_message(...)`.
+Focused unit coverage now proves malformed JSON and non-object payloads go to DLQ, missing
+transaction ids skip repository execution, database errors remain retryable, and header correlation
+continues to propagate into the repository call. `process_message(...)` is reduced from `B (6)` to
+`A (3)`, and `ReprocessingConsumer` is reduced from `B (7)` to `A (4)`.
 
 ## Health Assessment
 
@@ -1918,3 +1919,9 @@ health before that claim is defensible.
      timeseries probes while preserving real endpoint calls, 30 measured runs, p95 budgets, and
      non-2xx response-body evidence. Focused latency-profile tests and scoped Ruff validation
      passed locally; PR Merge Gate latency rerun remains the remote proof.
+314. Reduced cost reprocessing consumer orchestration complexity by extracting JSON object payload
+     parsing, requested transaction-id normalization, repository-backed reprocessing execution, and
+     parse/retryable/unexpected error handling from `ReprocessingConsumer.process_message(...)`.
+     Focused reprocessing consumer tests passed with 6 tests, scoped Ruff lint and format checks
+     passed, Radon reports `process_message` reduced from `B (6)` to `A (3)`, and the class
+     reduced from `B (7)` to `A (4)`.
