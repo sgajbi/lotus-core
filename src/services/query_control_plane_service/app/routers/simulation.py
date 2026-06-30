@@ -1,5 +1,5 @@
 # src/services/query_control_plane_service/app/routers/simulation.py
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, Path, status
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,26 +13,81 @@ from src.services.query_service.app.dtos.simulation_dto import (
 )
 from src.services.query_service.app.services.simulation_service import SimulationService
 
+from .response_helpers import problem_example, problem_response, raise_problem
+
 router = APIRouter(prefix="/simulation-sessions", tags=["Simulation"])
 
-SIMULATION_SESSION_NOT_FOUND_EXAMPLE = {"detail": "Simulation session SIM-20260310-0001 not found"}
+SIMULATION_SESSION_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Simulation session not found",
+    detail="Simulation session was not found.",
+    error_code="QCP_SIMULATION_SESSION_NOT_FOUND",
+    instance="/simulation-sessions/SIM-20260310-0001",
+    metadata={"source_product": "SimulationSession"},
+)
 SIMULATION_SESSION_INVALID_STATE_EXAMPLE = {
-    "detail": "Simulation session SIM-20260310-0001 is not active"
+    **problem_example(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        title="Simulation mutation is invalid",
+        detail="Simulation mutation request is invalid for the current session state.",
+        error_code="QCP_SIMULATION_MUTATION_INVALID",
+        instance="/simulation-sessions/SIM-20260310-0001/changes",
+        metadata={"source_product": "SimulationSession"},
+    )
 }
-SIMULATION_CHANGE_NOT_FOUND_EXAMPLE = {"detail": "Simulation change SIM-CHG-0001 not found"}
-SIMULATION_PORTFOLIO_NOT_FOUND_EXAMPLE = {"detail": "Portfolio with id PORT-404 not found"}
-SIMULATION_INTERNAL_ERROR_EXAMPLE = {"detail": "Failed to create simulation session."}
+SIMULATION_CHANGE_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Simulation change not found",
+    detail="Simulation change was not found.",
+    error_code="QCP_SIMULATION_CHANGE_NOT_FOUND",
+    instance="/simulation-sessions/SIM-20260310-0001/changes/SIM-CHG-0001",
+    metadata={"source_product": "SimulationSession"},
+)
+SIMULATION_PORTFOLIO_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Simulation portfolio not found",
+    detail="Portfolio for simulation session creation was not found.",
+    error_code="QCP_SIMULATION_PORTFOLIO_NOT_FOUND",
+    instance="/simulation-sessions",
+    metadata={"source_product": "SimulationSession"},
+)
+SIMULATION_INTERNAL_ERROR_EXAMPLE = problem_example(
+    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    title="Simulation session creation failed",
+    detail="Failed to create simulation session.",
+    error_code="QCP_SIMULATION_CREATE_FAILED",
+    instance="/simulation-sessions",
+    metadata={"source_product": "SimulationSession"},
+)
 
 
 def _raise_simulation_mutation_error(exc: ValueError) -> None:
     detail = str(exc)
     if "not found" in detail.lower():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+        raise_problem(
+            status_code=status.HTTP_404_NOT_FOUND,
+            title="Simulation resource not found",
+            detail="Simulation resource was not found.",
+            error_code="QCP_SIMULATION_RESOURCE_NOT_FOUND",
+            metadata={"source_product": "SimulationSession"},
+        )
+    raise_problem(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        title="Simulation mutation is invalid",
+        detail="Simulation mutation request is invalid for the current session state.",
+        error_code="QCP_SIMULATION_MUTATION_INVALID",
+        metadata={"source_product": "SimulationSession"},
+    )
 
 
 def _raise_simulation_not_found(exc: ValueError) -> None:
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    raise_problem(
+        status_code=status.HTTP_404_NOT_FOUND,
+        title="Simulation session not found",
+        detail="Simulation session was not found.",
+        error_code="QCP_SIMULATION_SESSION_NOT_FOUND",
+        metadata={"source_product": "SimulationSession", "reason": exc.__class__.__name__},
+    )
 
 
 def get_simulation_service(
@@ -46,14 +101,14 @@ def get_simulation_service(
     response_model=SimulationSessionResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": SIMULATION_PORTFOLIO_NOT_FOUND_EXAMPLE}},
-        },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Unexpected simulation session creation failure.",
-            "content": {"application/json": {"example": SIMULATION_INTERNAL_ERROR_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio not found.",
+            SIMULATION_PORTFOLIO_NOT_FOUND_EXAMPLE,
+        ),
+        status.HTTP_500_INTERNAL_SERVER_ERROR: problem_response(
+            "Unexpected simulation session creation failure.",
+            SIMULATION_INTERNAL_ERROR_EXAMPLE,
+        ),
     },
     description=(
         "Create a what-if simulation session for a booked portfolio. Use this endpoint for "
@@ -70,22 +125,31 @@ async def create_simulation_session(
     try:
         return await service.create_session(request)
     except ValueError as exc:
-        _raise_simulation_not_found(exc)
+        raise_problem(
+            status_code=status.HTTP_404_NOT_FOUND,
+            title="Simulation portfolio not found",
+            detail="Portfolio for simulation session creation was not found.",
+            error_code="QCP_SIMULATION_PORTFOLIO_NOT_FOUND",
+            metadata={"source_product": "SimulationSession", "reason": exc.__class__.__name__},
+        )
     except Exception as exc:
-        raise HTTPException(
+        raise_problem(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=SIMULATION_INTERNAL_ERROR_EXAMPLE["detail"],
-        ) from exc
+            title="Simulation session creation failed",
+            detail="Failed to create simulation session.",
+            error_code="QCP_SIMULATION_CREATE_FAILED",
+            metadata={"source_product": "SimulationSession", "reason": exc.__class__.__name__},
+        )
 
 
 @router.get(
     "/{session_id}",
     response_model=SimulationSessionResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Simulation session not found.",
-            "content": {"application/json": {"example": SIMULATION_SESSION_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Simulation session not found.",
+            SIMULATION_SESSION_NOT_FOUND_EXAMPLE,
+        ),
     },
     description="Get simulation session metadata by session identifier.",
 )
@@ -107,10 +171,10 @@ async def get_simulation_session(
     "/{session_id}",
     response_model=SimulationSessionResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Simulation session not found.",
-            "content": {"application/json": {"example": SIMULATION_SESSION_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Simulation session not found.",
+            SIMULATION_SESSION_NOT_FOUND_EXAMPLE,
+        ),
     },
     description=(
         "Close an active simulation session. Closed sessions remain queryable but reject "
@@ -135,14 +199,14 @@ async def close_simulation_session(
     "/{session_id}/changes",
     response_model=SimulationChangesResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Simulation session not found.",
-            "content": {"application/json": {"example": SIMULATION_SESSION_NOT_FOUND_EXAMPLE}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Simulation session is inactive or change request is invalid.",
-            "content": {"application/json": {"example": SIMULATION_SESSION_INVALID_STATE_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Simulation session not found.",
+            SIMULATION_SESSION_NOT_FOUND_EXAMPLE,
+        ),
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Simulation session is inactive or change request is invalid.",
+            SIMULATION_SESSION_INVALID_STATE_EXAMPLE,
+        ),
     },
     description=(
         "Add or update simulation changes for a session. The returned payload reflects the "
@@ -169,14 +233,14 @@ async def add_simulation_changes(
     "/{session_id}/changes/{change_id}",
     response_model=SimulationChangesResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Simulation session or change not found.",
-            "content": {"application/json": {"example": SIMULATION_CHANGE_NOT_FOUND_EXAMPLE}},
-        },
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Simulation session is inactive or change request is invalid.",
-            "content": {"application/json": {"example": SIMULATION_SESSION_INVALID_STATE_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Simulation session or change not found.",
+            SIMULATION_CHANGE_NOT_FOUND_EXAMPLE,
+        ),
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Simulation session is inactive or change request is invalid.",
+            SIMULATION_SESSION_INVALID_STATE_EXAMPLE,
+        ),
     },
     description="Delete a simulation change from a session.",
 )
@@ -203,10 +267,10 @@ async def delete_simulation_change(
     "/{session_id}/projected-positions",
     response_model=ProjectedPositionsResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Simulation session not found.",
-            "content": {"application/json": {"example": SIMULATION_SESSION_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Simulation session not found.",
+            SIMULATION_SESSION_NOT_FOUND_EXAMPLE,
+        ),
     },
     description=(
         "Return deterministic projected holdings after applying the current simulation change "
@@ -232,10 +296,10 @@ async def get_projected_positions(
     "/{session_id}/projected-summary",
     response_model=ProjectedSummaryResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Simulation session not found.",
-            "content": {"application/json": {"example": SIMULATION_SESSION_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Simulation session not found.",
+            SIMULATION_SESSION_NOT_FOUND_EXAMPLE,
+        ),
     },
     description=(
         "Return deterministic projected state summary metrics for a simulation session after "

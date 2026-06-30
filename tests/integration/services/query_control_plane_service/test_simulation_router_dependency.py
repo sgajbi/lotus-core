@@ -25,6 +25,23 @@ async def async_test_client():
     app.dependency_overrides.pop(get_simulation_service, None)
 
 
+def _assert_problem_details(
+    response,
+    *,
+    status_code: int,
+    error_code: str,
+    detail: str,
+) -> dict:
+    body = response.json()
+    assert response.status_code == status_code
+    assert body["status"] == status_code
+    assert body["error_code"] == error_code
+    assert body["detail"] == detail
+    assert body["correlation_id"]
+    assert body["type"].endswith(error_code.lower())
+    return body
+
+
 async def test_create_simulation_session_success(async_test_client):
     client, mock_service = async_test_client
     now = datetime.now(timezone.utc)
@@ -79,8 +96,12 @@ async def test_create_simulation_session_unknown_portfolio_maps_to_404(async_tes
         "/simulation-sessions", json={"portfolio_id": "P404", "created_by": "tester"}
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Portfolio with id P404 not found"
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SIMULATION_PORTFOLIO_NOT_FOUND",
+        detail="Portfolio for simulation session creation was not found.",
+    )
 
 
 async def test_get_simulation_session_not_found_maps_to_404(async_test_client):
@@ -89,7 +110,12 @@ async def test_get_simulation_session_not_found_maps_to_404(async_test_client):
 
     response = await client.get("/simulation-sessions/S404")
 
-    assert response.status_code == 404
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SIMULATION_SESSION_NOT_FOUND",
+        detail="Simulation session was not found.",
+    )
 
 
 async def test_add_simulation_changes_validation_maps_to_400(async_test_client):
@@ -103,7 +129,12 @@ async def test_add_simulation_changes_validation_maps_to_400(async_test_client):
         },
     )
 
-    assert response.status_code == 400
+    _assert_problem_details(
+        response,
+        status_code=400,
+        error_code="QCP_SIMULATION_MUTATION_INVALID",
+        detail="Simulation mutation request is invalid for the current session state.",
+    )
 
 
 async def test_add_simulation_changes_missing_session_maps_to_404(async_test_client):
@@ -117,8 +148,12 @@ async def test_add_simulation_changes_missing_session_maps_to_404(async_test_cli
         },
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Simulation session S404 not found"
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SIMULATION_RESOURCE_NOT_FOUND",
+        detail="Simulation resource was not found.",
+    )
 
 
 async def test_add_simulation_changes_success(async_test_client):
@@ -206,8 +241,12 @@ async def test_create_simulation_session_unexpected_error_maps_to_500(async_test
         "/simulation-sessions", json={"portfolio_id": "P1", "created_by": "tester"}
     )
 
-    assert response.status_code == 500
-    assert response.json()["detail"] == "Failed to create simulation session."
+    _assert_problem_details(
+        response,
+        status_code=500,
+        error_code="QCP_SIMULATION_CREATE_FAILED",
+        detail="Failed to create simulation session.",
+    )
 
 
 async def test_close_simulation_session_not_found_maps_to_404(async_test_client):
@@ -215,7 +254,12 @@ async def test_close_simulation_session_not_found_maps_to_404(async_test_client)
     mock_service.close_session.side_effect = ValueError("not found")
 
     response = await client.delete("/simulation-sessions/S404")
-    assert response.status_code == 404
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SIMULATION_SESSION_NOT_FOUND",
+        detail="Simulation session was not found.",
+    )
 
 
 async def test_close_simulation_session_success(async_test_client):
@@ -246,7 +290,12 @@ async def test_delete_simulation_change_validation_maps_to_400(async_test_client
     mock_service.delete_change.side_effect = ValueError("invalid")
 
     response = await client.delete("/simulation-sessions/S1/changes/C404")
-    assert response.status_code == 400
+    _assert_problem_details(
+        response,
+        status_code=400,
+        error_code="QCP_SIMULATION_MUTATION_INVALID",
+        detail="Simulation mutation request is invalid for the current session state.",
+    )
 
 
 async def test_delete_simulation_change_not_found_maps_to_404(async_test_client):
@@ -255,8 +304,12 @@ async def test_delete_simulation_change_not_found_maps_to_404(async_test_client)
 
     response = await client.delete("/simulation-sessions/S1/changes/C404")
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Simulation change C404 not found"
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SIMULATION_RESOURCE_NOT_FOUND",
+        detail="Simulation resource was not found.",
+    )
 
 
 async def test_delete_simulation_change_success(async_test_client):
@@ -297,7 +350,12 @@ async def test_get_projected_positions_not_found_maps_to_404(async_test_client):
     mock_service.get_projected_positions.side_effect = ValueError("not found")
 
     response = await client.get("/simulation-sessions/S404/projected-positions")
-    assert response.status_code == 404
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SIMULATION_SESSION_NOT_FOUND",
+        detail="Simulation session was not found.",
+    )
 
 
 async def test_get_projected_summary_not_found_maps_to_404(async_test_client):
@@ -305,7 +363,12 @@ async def test_get_projected_summary_not_found_maps_to_404(async_test_client):
     mock_service.get_projected_summary.side_effect = ValueError("not found")
 
     response = await client.get("/simulation-sessions/S404/projected-summary")
-    assert response.status_code == 404
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SIMULATION_SESSION_NOT_FOUND",
+        detail="Simulation session was not found.",
+    )
 
 
 async def test_get_projected_summary_success(async_test_client):

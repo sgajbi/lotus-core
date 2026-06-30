@@ -33,6 +33,10 @@ from .routers import (
     operations,
     simulation,
 )
+from .routers.response_helpers import (
+    QueryControlPlaneProblem,
+    build_problem_payload,
+)
 
 SERVICE_PREFIX = "QCP"
 SERVICE_NAME = "query_control_plane_service"
@@ -81,6 +85,19 @@ include_routers(
     capabilities.router,
     simulation.router,
 )
+
+
+@app.exception_handler(QueryControlPlaneProblem)
+async def query_control_plane_problem_handler(request: Request, exc: QueryControlPlaneProblem):
+    return JSONResponse(
+        status_code=exc.status_code,
+        media_type="application/problem+json",
+        content=build_problem_payload(
+            problem=exc,
+            instance=str(request.url.path),
+            correlation_id=correlation_id_var.get() or "",
+        ),
+    )
 
 
 def _canonical_simulation_problem(

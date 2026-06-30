@@ -36,16 +36,17 @@ tested modules.
 | Outbox failure evidence | Improving | CR-1187 persists source-safe last-failure reason code, category, redacted bounded message, and failure timestamp on retryable and terminal outbox delivery failures |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
+| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 | Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
 | Boundary mapping conformance | Improving | CR-1184 adds `make test-boundary-mapping-conformance`, extracts transaction event-to-record mapping, and covers representative transaction and portfolio tax-lot source-data mappings |
 
 ## Current Slice Update
 
-CR-1190 fixes validated GitHub issue #671 by making the RFC-0083 runtime event contract guard
-validate `BaseConsumer` DLQ topic wiring. The guard now resolves literal, config-backed, and
-local-alias `dlq_topic=` values, rejects unresolved dynamic or uncataloged DLQ topics, and catalogs
-`dlq.persistence_service` as a governed direct Kafka DLQ topic.
+CR-1191 begins validated GitHub issue #677 by adding a shared query-control-plane problem-details
+contract and migrating representative core-snapshot, analytics-input, and simulation error mappings
+away from raw bare `detail` responses. Migrated failures now return stable QCP error codes,
+correlation IDs, bounded details, and source-safe metadata while preserving HTTP statuses.
 
 ## Health Assessment
 

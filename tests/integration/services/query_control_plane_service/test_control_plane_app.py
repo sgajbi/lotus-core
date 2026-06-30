@@ -1290,7 +1290,9 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
 
     assert "what-if simulation session" in create_route["description"]
     not_found_create = create_route["responses"]["404"]["content"]["application/json"]["example"]
-    assert not_found_create["detail"] == "Portfolio with id PORT-404 not found"
+    assert not_found_create["error_code"] == "QCP_SIMULATION_PORTFOLIO_NOT_FOUND"
+    assert not_found_create["detail"] == "Portfolio for simulation session creation was not found."
+    assert not_found_create["correlation_id"]
 
     session_param = next(
         parameter for parameter in get_session["parameters"] if parameter["name"] == "session_id"
@@ -1298,7 +1300,8 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     assert session_param["description"] == "Simulation session identifier."
 
     not_found = get_session["responses"]["404"]["content"]["application/json"]["example"]
-    assert not_found["detail"] == "Simulation session SIM-20260310-0001 not found"
+    assert not_found["error_code"] == "QCP_SIMULATION_SESSION_NOT_FOUND"
+    assert not_found["detail"] == "Simulation session was not found."
 
     change_id_param = next(
         parameter for parameter in delete_change["parameters"] if parameter["name"] == "change_id"
@@ -1308,17 +1311,20 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     add_changes_not_found = add_changes["responses"]["404"]["content"]["application/json"][
         "example"
     ]
-    assert add_changes_not_found["detail"] == "Simulation session SIM-20260310-0001 not found"
+    assert add_changes_not_found["error_code"] == "QCP_SIMULATION_SESSION_NOT_FOUND"
+    assert add_changes_not_found["detail"] == "Simulation session was not found."
     delete_change_not_found = delete_change["responses"]["404"]["content"]["application/json"][
         "example"
     ]
-    assert delete_change_not_found["detail"] == "Simulation change SIM-CHG-0001 not found"
+    assert delete_change_not_found["error_code"] == "QCP_SIMULATION_CHANGE_NOT_FOUND"
+    assert delete_change_not_found["detail"] == "Simulation change was not found."
     delete_change_invalid_state = delete_change["responses"]["400"]["content"]["application/json"][
         "example"
     ]
+    assert delete_change_invalid_state["error_code"] == "QCP_SIMULATION_MUTATION_INVALID"
     assert (
         delete_change_invalid_state["detail"]
-        == "Simulation session SIM-20260310-0001 is not active"
+        == "Simulation mutation request is invalid for the current session state."
     )
 
     portfolio_id = create_session["properties"]["portfolio_id"]
@@ -1411,7 +1417,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     )
 
     invalid_request = portfolio_inputs["responses"]["400"]["content"]["application/json"]["example"]
-    assert invalid_request["detail"] == "Exactly one of window or period must be provided."
+    assert invalid_request["error_code"] == "QCP_ANALYTICS_INVALID_REQUEST"
+    assert invalid_request["detail"] == "Analytics request is invalid."
+    assert invalid_request["correlation_id"]
 
     portfolio_product = portfolio_inputs["x-lotus-source-data-product"]
     assert portfolio_product["product_name"] == "PortfolioTimeseriesInput"
@@ -1437,7 +1445,8 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert "instead of repeatedly replaying large paged windows" in export_result["description"]
 
     incomplete_export = export_result["responses"]["422"]["content"]["application/json"]["example"]
-    assert incomplete_export["detail"] == "Analytics export job JOB-AN-0001 is not complete."
+    assert incomplete_export["error_code"] == "QCP_ANALYTICS_INSUFFICIENT_DATA"
+    assert incomplete_export["detail"] == "Required analytics source data is unavailable."
     assert export_result["responses"]["422"]["description"] == (
         "Export job is incomplete, source payload unavailable, or requested "
         "serialization is unsupported."
@@ -1562,7 +1571,12 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     )
 
     blocked_example = core_snapshot["responses"]["403"]["content"]["application/json"]["example"]
-    assert blocked_example["detail"] == "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
+    assert blocked_example["error_code"] == "QCP_CORE_SNAPSHOT_POLICY_BLOCKED"
+    assert (
+        blocked_example["detail"]
+        == "Requested snapshot sections are blocked by strict integration policy."
+    )
+    assert blocked_example["correlation_id"]
 
     invalid_enrichment = enrichment_bulk["responses"]["400"]["content"]["application/json"][
         "example"
