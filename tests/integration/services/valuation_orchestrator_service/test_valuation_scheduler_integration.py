@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from typing import Any
 
 import pytest
 from portfolio_common.database_models import (
@@ -26,13 +26,30 @@ from src.services.valuation_orchestrator_service.app.core.valuation_scheduler im
 pytestmark = pytest.mark.asyncio
 
 
+class InMemoryValuationJobPublisher:
+    def __init__(self) -> None:
+        self.published_jobs: list[dict[str, Any]] = []
+
+    def publish_job_requested(
+        self,
+        *,
+        key: str,
+        value: dict[str, Any],
+        headers: list[tuple[str, bytes]],
+    ) -> None:
+        self.published_jobs.append({"key": key, "value": value, "headers": headers})
+
+    def confirm_delivery(self, *, timeout_seconds: int) -> int:
+        return 0
+
+
 @pytest.fixture
 def scheduler() -> ValuationScheduler:
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_kafka_producer",
-        return_value=MagicMock(),
-    ):
-        yield ValuationScheduler(poll_interval=0.01, batch_size=2)
+    return ValuationScheduler(
+        poll_interval=0.01,
+        batch_size=2,
+        valuation_job_publisher=InMemoryValuationJobPublisher(),
+    )
 
 
 def _seed_backlog_state(
