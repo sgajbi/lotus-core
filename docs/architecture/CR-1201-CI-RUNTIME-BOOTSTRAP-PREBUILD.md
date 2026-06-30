@@ -76,6 +76,8 @@ Repo-native CI governance proof:
 
 - `make quality-ruff-format-gate`
 - Result: passed
+- `make warning-gate`
+- Result: `3234 passed, 10 deselected`, zero warnings
 - `python scripts/migration_contract_check.py --mode alembic-sql`
 - Result: passed
 - `make quality-workflow-governance-gate`

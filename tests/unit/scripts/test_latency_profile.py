@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import requests
 
+from scripts.ci_service_sets import LATENCY_GATE_SERVICES
 from scripts.latency_profile import (
     RuntimeContext,
     _cases,
@@ -410,25 +411,4 @@ def test_run_compose_up_limits_started_services(monkeypatch) -> None:
 
     _run_compose_up(build=False)
 
-    assert calls == [
-        [
-            "docker",
-            "compose",
-            "up",
-            "-d",
-            "ingestion_service",
-            "query_service",
-            "query_control_plane_service",
-            "event_replay_service",
-            "persistence_service",
-            "cost_calculator_service",
-            "cashflow_calculator_service",
-            "position_calculator_service",
-            "pipeline_orchestrator_service",
-            "valuation_orchestrator_service",
-            "position_valuation_calculator",
-            "timeseries_generator_service",
-            "portfolio_aggregation_service",
-            "demo_data_loader",
-        ]
-    ]
+    assert calls == [["docker", "compose", "up", "-d", *LATENCY_GATE_SERVICES]]
