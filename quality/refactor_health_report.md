@@ -25,16 +25,17 @@ tested modules.
 | Dependency-usage baseline | Clean and enforced | `make quality-deptry-source-gate` reports no production-source dependency issues after CR-878 |
 | Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; CR-883 removed shared OpenAPI enrichment from the C-ranked hotspot list |
 | Complexity baseline | Clean and enforced | CR-880 reduced advisory proposal simulation from F to B, CR-881 reduced the cost-calculator consumer from F to C, and CR-882 reduced FX linkage from D to B; `make quality-complexity-gate` now passes |
-| Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
+| Architecture gates | Improving | Existing `make architecture-guard` now enforces removed-domain import exclusions plus selected direct-import boundaries after CR-1171; `make quality-import-boundary-gate` enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are enforced in the quality-baseline API governance job; CR-1170 adds stable generated OpenAPI artifacts under `output/openapi/` and enforced portable Spectral blocker-subset linting through `make quality-openapi-spectral-gate` |
 
 ## Current Slice Update
 
-CR-1170 addresses validated GitHub issue #444 by adding deterministic per-service OpenAPI artifact
-generation under `output/openapi/` and promoting an enforced Spectral blocker-subset gate into the
-quality-baseline API governance job. `make quality-openapi-spectral-gate` generates 14 service
-artifacts and reports no warn-or-higher Spectral results; focused OpenAPI/workflow/Spectral tests
-pass with 21 tests, and issue #444 remains open pending GitHub CI/QA evidence.
+CR-1171 begins validated GitHub issue #462 by adding AST-based direct-import architecture checks to
+`make architecture-guard`. The guard now prevents query-control-plane routers from importing
+query-service repositories, query runtime routers from importing query-control-plane internals, and
+ingestion routers from importing other service implementations directly. Focused architecture tests
+pass with 2 tests, `make architecture-guard` passes, and issue #462 remains open for broader
+layering enforcement.
 
 ## Health Assessment
 
@@ -1963,3 +1964,10 @@ health before that claim is defensible.
      14 service artifacts and reported no warn-or-higher Spectral results; focused
      OpenAPI/workflow/Spectral tests passed with 21 tests; scoped Ruff lint and format checks
      passed; `python scripts/openapi_quality_gate.py` passed; and workflow YAML parsing passed.
+322. Began validated GitHub issue #462 by adding AST-based direct-import architecture checks to
+     `scripts/architecture_boundary_guard.py`. `make architecture-guard` now blocks direct
+     query-control-plane router imports of query-service repositories, query runtime router imports
+     of query-control-plane internals, and ingestion router imports of other service
+     implementations. Focused architecture boundary tests passed with 2 tests; `make
+     architecture-guard` and `make quality-import-boundary-gate` passed; scoped Ruff lint and
+     format checks passed.
