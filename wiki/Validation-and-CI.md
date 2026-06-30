@@ -28,6 +28,7 @@
 - `make rfc0083-closure-guard`
 - `make openapi-gate`
 - `make quality-openapi-spectral-gate`
+- `make quality-wiki-docs-gate`
 - `make architecture-guard`
 
 ## Guard-to-contract mapping
@@ -49,6 +50,11 @@
   generates stable per-service OpenAPI artifacts under `output/openapi/` and enforces the portable
   Spectral blocker subset for operation IDs, descriptions, summaries, tags, and common successful
   `2xx` responses
+- `make quality-wiki-docs-gate`
+  validates repo-authored wiki source before publication by checking sidebar coverage, orphaned
+  pages, publication-safe page names, first headings, and local relative links; when a published
+  wiki clone is available, run `python scripts/wiki_validation_guard.py --published-wiki-dir <path>`
+  to compare authored and published pages
 - `make architecture-guard`
   protects layering and repository boundary posture
 
@@ -60,6 +66,7 @@
 - eventing and supportability posture
 - OpenAPI quality
 - portable Spectral OpenAPI linting
+- wiki source publication readiness
 - architecture boundaries
 - production-readiness closure evidence
 
@@ -73,6 +80,10 @@
 - architecture or OpenAPI guard failure:
   start with [Architecture](Architecture), [API Surface](API-Surface), and the deep architecture
   index before changing code or docs
+- wiki docs gate failure:
+  update repo-local `wiki/` source first, keep `_Sidebar.md` aligned with every publishable page,
+  and run the optional published-wiki parity check only against a generated or cloned publication
+  target
 
 ## Related references
 

@@ -225,6 +225,19 @@ jobs:
       - name: Workflow governance gate
         run: make quality-workflow-governance-gate
 
+  wiki-docs-gate:
+    name: Quality Baseline / Wiki Docs Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Wiki docs gate
+        run: make quality-wiki-docs-gate
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest

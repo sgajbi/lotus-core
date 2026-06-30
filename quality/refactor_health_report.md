@@ -15,7 +15,7 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, manifest-backed unit collection, manifest-backed integration-lite collection, and workflow-governance gates while other baseline checks remain report-only |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, manifest-backed unit collection, manifest-backed integration-lite collection, workflow-governance, and wiki-docs gates while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the manifest-backed runtime-safe unit lane with `3082/3092` tests and 10 manifest deselects; `make quality-integration-lite-collection-gate` collects 121 integration-lite tests |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
@@ -31,15 +31,15 @@ tested modules.
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 | Ingestion idempotency | Improving | CR-1177 compares source-safe canonical payload fingerprints for duplicate ingestion idempotency keys and returns deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT` when the same endpoint/key is reused with a different payload |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
+| Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 
 ## Current Slice Update
 
-CR-1178 addresses validated GitHub issue #558 by moving shared governed event models from
-`extra="ignore"` to `extra="forbid"` while explicitly preserving existing outbox envelope metadata
-fields. Producer/consumer drift is now rejected instead of silently dropping unknown lineage,
-version, or audit fields. Shared Kafka consumer DLQ evidence renders Pydantic validation errors
-without raw rejected input values. Focused tests prove event-contract rejection, envelope
-compatibility, and source-safe DLQ error evidence.
+CR-1179 begins validated GitHub issue #619 by adding a fast wiki docs governance gate. The new
+stdlib-only guard validates repo-authored `wiki/` source for sidebar coverage, orphaned pages,
+publication-safe names, first headings, local relative links, and optional authored-vs-published
+wiki parity when a publication target is available. The gate is exposed as
+`make quality-wiki-docs-gate` and enforced in the Quality Baseline workflow.
 
 ## Health Assessment
 

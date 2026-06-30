@@ -218,3 +218,12 @@ def test_quality_baseline_runs_openapi_spectral_gate() -> None:
     assert "actions/setup-node@v6" in workflow_text
     assert "OpenAPI Spectral gate" in workflow_text
     assert "make quality-openapi-spectral-gate" in workflow_text
+
+
+def test_quality_baseline_runs_wiki_docs_gate() -> None:
+    workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
+    makefile_text = Path("Makefile").read_text(encoding="utf-8")
+
+    assert "quality-wiki-docs-gate:" in makefile_text
+    assert "Quality Baseline / Wiki Docs Gate" in workflow_text
+    assert "make quality-wiki-docs-gate" in workflow_text
