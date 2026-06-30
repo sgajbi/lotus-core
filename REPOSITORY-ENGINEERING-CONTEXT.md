@@ -401,6 +401,11 @@ Most relevant current governance:
     branch helpers return typed processing outcomes and a single application boundary owns commit
     or rollback. Preserve this pattern for replay, duplicate, epoch-fence, lifecycle, and
     cashflow/outbox atomicity changes; do not reintroduce helper-owned transaction finalization.
+44. `TransactionLedgerWindow:v1` now checks returned row security ids against governed instrument
+    master data. Missing instrument references are additive read-side supportability evidence:
+    `data_quality_status=PARTIAL`, `TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING`, and bounded
+    missing-security fields. Preserve this degraded-reference pattern for legacy/orphan rows while
+    broader ingestion and tax-lot reference policies are completed.
 
 ## Context Maintenance Rule
 

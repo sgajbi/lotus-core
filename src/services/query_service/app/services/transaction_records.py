@@ -5,7 +5,7 @@ from typing import Any
 
 from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..dtos.transaction_dto import PaginatedTransactionResponse, TransactionRecord
-from .transaction_metadata import ledger_data_quality_status
+from .transaction_metadata import ledger_data_quality_status, ledger_reason_codes
 from .transaction_reporting_currency import apply_transaction_reporting_currency_fields
 
 ConvertAmount = Callable[
@@ -54,8 +54,10 @@ def paginated_transaction_ledger_response(
     effective_as_of_date: date | None,
     end_date: date | None,
     latest_evidence_timestamp: datetime | None,
+    missing_instrument_security_ids: list[str] | None = None,
     today: Callable[[], date] = date.today,
 ) -> PaginatedTransactionResponse:
+    missing_instrument_security_ids = missing_instrument_security_ids or []
     return PaginatedTransactionResponse(
         portfolio_id=portfolio_id,
         reporting_currency=reporting_currency,
@@ -69,7 +71,16 @@ def paginated_transaction_ledger_response(
                 total_count=total_count,
                 returned_count=len(transactions),
                 skip=skip,
+                missing_instrument_security_ids=missing_instrument_security_ids,
             ),
             latest_evidence_timestamp=latest_evidence_timestamp,
         ),
+        reason_codes=ledger_reason_codes(
+            total_count=total_count,
+            returned_count=len(transactions),
+            skip=skip,
+            missing_instrument_security_ids=missing_instrument_security_ids,
+        ),
+        missing_instrument_reference_count=len(missing_instrument_security_ids),
+        missing_instrument_security_ids=missing_instrument_security_ids,
     )

@@ -2021,3 +2021,6 @@ health before that claim is defensible.
      rollback, stale replay commit, epoch-fence rollback, semantic duplicate commit, non-cashflow
      lifecycle commit, successful calculation, failure rollback, and finalizer outcome policy;
      scoped Ruff lint and format checks passed.
+329. Continued validated GitHub issue #674 by adding returned-row instrument-reference
+     supportability to `TransactionLedgerWindow:v1`. Focused transaction metadata, record,
+     service, and repository tests passed with 73 tests; scoped Ruff lint and format checks passed.

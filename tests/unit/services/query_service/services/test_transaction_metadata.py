@@ -4,10 +4,17 @@ from types import SimpleNamespace
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 
 from src.services.query_service.app.services.transaction_metadata import (
+    TRANSACTION_LEDGER_EMPTY,
+    TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING,
+    TRANSACTION_LEDGER_PAGE_PARTIAL,
+    TRANSACTION_LEDGER_READY,
     latest_transaction_evidence_timestamp,
     ledger_data_quality_status,
+    ledger_reason_codes,
+    missing_transaction_instrument_security_ids,
     realized_tax_summary_filters,
     transaction_ledger_filters,
+    transaction_security_ids,
 )
 
 
@@ -44,6 +51,53 @@ def test_ledger_data_quality_status_classifies_complete_partial_and_empty_window
         )
         == UNKNOWN
     )
+    assert (
+        ledger_data_quality_status(
+            total_count=2,
+            returned_count=2,
+            skip=0,
+            missing_instrument_security_ids=["S2"],
+        )
+        == PARTIAL
+    )
+
+
+def test_ledger_reason_codes_classify_page_and_instrument_reference_supportability() -> None:
+    assert ledger_reason_codes(
+        total_count=2,
+        returned_count=2,
+        skip=0,
+    ) == [TRANSACTION_LEDGER_READY]
+    assert ledger_reason_codes(
+        total_count=0,
+        returned_count=0,
+        skip=0,
+    ) == [TRANSACTION_LEDGER_EMPTY]
+    assert ledger_reason_codes(
+        total_count=25,
+        returned_count=10,
+        skip=10,
+        missing_instrument_security_ids=["S2"],
+    ) == [
+        TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING,
+        TRANSACTION_LEDGER_PAGE_PARTIAL,
+    ]
+
+
+def test_missing_transaction_instrument_security_ids_are_normalized_and_ordered() -> None:
+    transactions = [
+        SimpleNamespace(security_id=" S1 "),
+        SimpleNamespace(security_id="S2"),
+        SimpleNamespace(security_id="S1"),
+        SimpleNamespace(security_id=None),
+        SimpleNamespace(),
+    ]
+
+    assert transaction_security_ids(transactions) == ["S1", "S2"]
+    assert missing_transaction_instrument_security_ids(
+        transactions=transactions,
+        known_instrument_security_ids={" S1 "},
+    ) == ["S2"]
 
 
 def test_latest_transaction_evidence_timestamp_uses_latest_available_update() -> None:

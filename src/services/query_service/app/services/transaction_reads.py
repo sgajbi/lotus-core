@@ -2,7 +2,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from .transaction_metadata import latest_transaction_evidence_timestamp
+from .transaction_metadata import (
+    latest_transaction_evidence_timestamp,
+    missing_transaction_instrument_security_ids,
+    transaction_security_ids,
+)
 
 
 @dataclass(frozen=True)
@@ -10,6 +14,7 @@ class TransactionLedgerPage:
     total_count: int
     rows: list[Any]
     latest_evidence_timestamp: datetime | None
+    missing_instrument_security_ids: list[str]
 
 
 @dataclass(frozen=True)
@@ -34,6 +39,7 @@ async def read_transaction_ledger_page(
             total_count=0,
             rows=[],
             latest_evidence_timestamp=None,
+            missing_instrument_security_ids=[],
         )
 
     rows = await repository.get_transactions(
@@ -49,10 +55,19 @@ async def read_transaction_ledger_page(
     else:
         latest_evidence_timestamp = latest_transaction_evidence_timestamp(rows)
 
+    known_instrument_security_ids = await repository.list_known_instrument_security_ids(
+        transaction_security_ids(rows)
+    )
+    missing_instrument_security_ids = missing_transaction_instrument_security_ids(
+        transactions=rows,
+        known_instrument_security_ids=known_instrument_security_ids,
+    )
+
     return TransactionLedgerPage(
         total_count=total_count,
         rows=rows,
         latest_evidence_timestamp=latest_evidence_timestamp,
+        missing_instrument_security_ids=missing_instrument_security_ids,
     )
 
 

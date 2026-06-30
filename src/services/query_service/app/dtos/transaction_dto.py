@@ -549,6 +549,27 @@ class PaginatedTransactionResponse(SourceDataProductRuntimeMetadata):
     transactions: List[TransactionRecord] = Field(
         ..., description="The list of transaction records for the current page."
     )
+    reason_codes: list[str] = Field(
+        default_factory=list,
+        description="Bounded supportability reason codes for this transaction ledger page.",
+        examples=[["TRANSACTION_LEDGER_READY"]],
+    )
+    missing_instrument_reference_count: int = Field(
+        0,
+        description=(
+            "Number of returned transaction security identifiers without matching governed "
+            "instrument master rows."
+        ),
+        examples=[0],
+    )
+    missing_instrument_security_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Returned transaction security identifiers that do not resolve to governed instrument "
+            "master rows. Empty when all returned rows have instrument reference support."
+        ),
+        examples=[["SEC_UNKNOWN_001"]],
+    )
 
 
 class RealizedTaxCurrencyTotal(BaseModel):
