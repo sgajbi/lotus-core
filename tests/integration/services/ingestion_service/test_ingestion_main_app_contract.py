@@ -420,8 +420,9 @@ async def test_openapi_describes_index_price_series_shared_schema(async_test_cli
     assert index_price_number["exclusiveMinimum"] == 0.0
     assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
     assert record_schema["properties"]["value_convention"]["examples"] == ["close_price"]
-    assert record_schema["properties"]["source_timestamp"]["description"] == (
-        "Source publication timestamp for the index price series record."
+    assert record_schema["properties"]["observed_at"]["description"] == (
+        "Timestamp when the upstream source observed or published this record. Legacy payloads "
+        "may still submit source_timestamp; ingestion normalizes it into this field."
     )
 
 
@@ -446,8 +447,9 @@ async def test_openapi_describes_index_return_series_shared_schema(async_test_cl
     assert record_schema["properties"]["return_period"]["examples"] == ["1d"]
     assert record_schema["properties"]["return_convention"]["examples"] == ["total_return_index"]
     assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
-    assert record_schema["properties"]["source_timestamp"]["description"] == (
-        "Source publication timestamp for the index return series record."
+    assert record_schema["properties"]["observed_at"]["description"] == (
+        "Timestamp when the upstream source observed or published this record. Legacy payloads "
+        "may still submit source_timestamp; ingestion normalizes it into this field."
     )
 
 
@@ -474,8 +476,9 @@ async def test_openapi_describes_benchmark_return_series_shared_schema(async_tes
     assert record_schema["properties"]["return_period"]["examples"] == ["1d"]
     assert record_schema["properties"]["return_convention"]["examples"] == ["total_return_index"]
     assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
-    assert record_schema["properties"]["source_timestamp"]["description"] == (
-        "Source publication timestamp for the benchmark return series record."
+    assert record_schema["properties"]["observed_at"]["description"] == (
+        "Timestamp when the upstream source observed or published this record. Legacy payloads "
+        "may still submit source_timestamp; ingestion normalizes it into this field."
     )
 
 
@@ -503,8 +506,9 @@ async def test_openapi_describes_risk_free_series_shared_schema(async_test_clien
     assert record_schema["properties"]["day_count_convention"]["examples"] == ["act_360"]
     assert record_schema["properties"]["compounding_convention"]["examples"] == ["simple"]
     assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
-    assert record_schema["properties"]["source_timestamp"]["description"] == (
-        "Source publication timestamp for the risk-free curve series record."
+    assert record_schema["properties"]["observed_at"]["description"] == (
+        "Timestamp when the upstream source observed or published this record. Legacy payloads "
+        "may still submit source_timestamp; ingestion normalizes it into this field."
     )
 
 
@@ -533,8 +537,9 @@ async def test_openapi_describes_classification_taxonomy_shared_schema(async_tes
     ]
     assert record_schema["properties"]["effective_from"]["examples"] == ["2025-01-01"]
     assert record_schema["properties"]["effective_to"]["examples"] == ["2026-12-31"]
-    assert record_schema["properties"]["source_timestamp"]["description"] == (
-        "Source publication timestamp for the taxonomy record."
+    assert record_schema["properties"]["observed_at"]["description"] == (
+        "Timestamp when the upstream source observed or published this record. Legacy payloads "
+        "may still submit source_timestamp; ingestion normalizes it into this field."
     )
 
 
@@ -875,12 +880,11 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     index_definition_request = components["IndexDefinitionIngestionRequest"]
     classification_request = components["ClassificationTaxonomyIngestionRequest"]
 
-    assert benchmark_definition["properties"]["source_timestamp"]["description"] == (
-        "Source publication timestamp for the benchmark definition payload."
+    assert benchmark_definition["properties"]["observed_at"]["description"] == (
+        "Timestamp when the upstream source observed or published this record. Legacy payloads "
+        "may still submit source_timestamp; ingestion normalizes it into this field."
     )
-    assert index_price_series["properties"]["source_timestamp"]["examples"] == [
-        "2026-01-02T21:00:00Z"
-    ]
+    assert index_price_series["properties"]["observed_at"]["examples"] == ["2026-01-02T21:00:00Z"]
     assert (
         benchmark_definition_request["properties"]["benchmark_definitions"]["description"]
         == "Benchmark definition records to ingest or upsert."

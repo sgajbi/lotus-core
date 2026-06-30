@@ -2391,8 +2391,8 @@ async def test_ingest_benchmark_definitions_returns_ack_and_persists_full_contra
     }
     assert definition["effective_from"].isoformat() == "2025-01-01"
     assert definition["effective_to"].isoformat() == "2026-12-31"
-    assert definition["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
-    assert definition["source_vendor"] == "MSCI"
+    assert definition["observed_at"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert definition["source_system"] == "MSCI"
     assert definition["source_record_id"] == "bmk_v20260102"
     assert definition["quality_status"] == "accepted"
 
@@ -2568,8 +2568,8 @@ async def test_ingest_benchmark_compositions_returns_ack_and_persists_full_contr
     assert composition["composition_effective_to"].isoformat() == "2026-03-31"
     assert composition["composition_weight"] == Decimal("0.6000000000")
     assert composition["rebalance_event_id"] == "rebalance_2026q1"
-    assert composition["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
-    assert composition["source_vendor"] == "MSCI"
+    assert composition["observed_at"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert composition["source_system"] == "MSCI"
     assert composition["source_record_id"] == "cmp_v20260102"
     assert composition["quality_status"] == "accepted"
 
@@ -2778,8 +2778,8 @@ async def test_ingest_indices_returns_ack_and_persists_full_contract(
     }
     assert index["effective_from"].isoformat() == "2026-01-01"
     assert index["effective_to"].isoformat() == "2026-12-31"
-    assert index["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
-    assert index["source_vendor"] == "MSCI"
+    assert index["observed_at"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert index["source_system"] == "MSCI"
     assert index["source_record_id"] == "idx_v20260102"
     assert index["quality_status"] == "accepted"
 
@@ -2930,8 +2930,8 @@ async def test_ingest_index_price_series_returns_ack_and_persists_full_contract(
     assert series["index_price"] == Decimal("4567.1234000000")
     assert series["series_currency"] == "USD"
     assert series["value_convention"] == "official_close"
-    assert series["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
-    assert series["source_vendor"] == "MSCI"
+    assert series["observed_at"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert series["source_system"] == "MSCI"
     assert series["source_record_id"] == "idx_price_v20260102"
     assert series["quality_status"] == "accepted"
 
@@ -3123,8 +3123,8 @@ async def test_ingest_index_return_series_returns_ack_and_persists_full_contract
     assert series["return_period"] == "1d"
     assert series["return_convention"] == "total_return_index"
     assert series["series_currency"] == "USD"
-    assert series["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
-    assert series["source_vendor"] == "MSCI"
+    assert series["observed_at"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert series["source_system"] == "MSCI"
     assert series["source_record_id"] == "idx_return_v20260102"
     assert series["quality_status"] == "accepted"
 
@@ -3316,8 +3316,8 @@ async def test_ingest_benchmark_return_series_returns_ack_and_persists_full_cont
     assert series["return_period"] == "1d"
     assert series["return_convention"] == "total_return_index"
     assert series["series_currency"] == "USD"
-    assert series["source_timestamp"].isoformat() == "2026-01-02T21:00:00+00:00"
-    assert series["source_vendor"] == "MSCI"
+    assert series["observed_at"].isoformat() == "2026-01-02T21:00:00+00:00"
+    assert series["source_system"] == "MSCI"
     assert series["source_record_id"] == "bmk_return_v20260102"
     assert series["quality_status"] == "accepted"
 
@@ -3512,8 +3512,8 @@ async def test_ingest_risk_free_series_returns_ack_and_persists_full_contract(
     assert series["day_count_convention"] == "act_360"
     assert series["compounding_convention"] == "simple"
     assert series["series_currency"] == "USD"
-    assert series["source_timestamp"].isoformat() == "2026-01-02T06:00:00+00:00"
-    assert series["source_vendor"] == "BLOOMBERG"
+    assert series["observed_at"].isoformat() == "2026-01-02T06:00:00+00:00"
+    assert series["source_system"] == "BLOOMBERG"
     assert series["source_record_id"] == "rf_20260102"
     assert series["quality_status"] == "accepted"
 
@@ -3696,8 +3696,8 @@ async def test_ingest_classification_taxonomy_returns_ack_and_persists_full_cont
     assert taxonomy["dimension_description"] == "Listed equity instrument taxonomy label"
     assert taxonomy["effective_from"].isoformat() == "2026-01-01"
     assert taxonomy["effective_to"].isoformat() == "2026-12-31"
-    assert taxonomy["source_timestamp"].isoformat() == "2026-01-31T23:00:00+00:00"
-    assert taxonomy["source_vendor"] == "LOTUS_TAXONOMY"
+    assert taxonomy["observed_at"].isoformat() == "2026-01-31T23:00:00+00:00"
+    assert taxonomy["source_system"] == "LOTUS_TAXONOMY"
     assert taxonomy["source_record_id"] == "tax_20260131"
     assert taxonomy["quality_status"] == "accepted"
 
@@ -4512,6 +4512,8 @@ async def test_ingestion_consumer_dlq_events_endpoint_filters_and_returns_full_r
                 "error_reason_code": "VALIDATION_ERROR",
                 "error_reason": "ValidationError: portfolio_id is required",
                 "correlation_id": "ING:test-correlation-id",
+                "correlation_missing_reason": None,
+                "alternate_lookup_key": None,
                 "payload_excerpt": '{"transaction_id":"TXN-2026-000145","portfolio_id":null}',
                 "observed_at": "2026-03-06T09:11:05.812000Z",
             }
@@ -4535,6 +4537,8 @@ async def test_ingestion_consumer_dlq_events_endpoint_filters_and_returns_full_r
         "error_reason_code": "DEPENDENCY_TIMEOUT",
         "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
         "correlation_id": "ING:test-correlation-bundle",
+        "correlation_missing_reason": None,
+        "alternate_lookup_key": None,
         "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
         "observed_at": "2026-03-06T09:15:42.114000Z",
     }
@@ -5368,6 +5372,8 @@ async def test_ingestion_replay_audit_list_and_get_filters_full_rows(
                 "event_id": "cdlq_test_001",
                 "replay_fingerprint": replay_fingerprint,
                 "correlation_id": "ING:test-correlation-id",
+                "correlation_missing_reason": None,
+                "alternate_lookup_key": None,
                 "job_id": replay_body["job_id"],
                 "endpoint": "/ingest/transactions",
                 "replay_status": "dry_run",
