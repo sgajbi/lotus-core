@@ -1,4 +1,4 @@
-.PHONY: install install-ci verify-dependencies compile-runtime-lock quality-ruff-gate quality-ruff-format-gate quality-import-boundary-gate quality-bandit-gate quality-vulture-source-gate quality-deptry-source-gate quality-maintainability-gate quality-complexity-gate quality-unit-collection-gate quality-workflow-governance-gate lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard temporal-vocabulary-guard route-contract-family-guard source-data-product-contract-guard domain-product-validate analytics-input-consumer-contract-guard event-runtime-contract-guard rfc0083-closure-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-completion-gate test-institutional-signoff-pack lotus-core-validate test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci live-dpm-source-validate clean
+.PHONY: install install-ci verify-dependencies compile-runtime-lock quality-ruff-gate quality-ruff-format-gate quality-import-boundary-gate quality-bandit-gate quality-vulture-source-gate quality-deptry-source-gate quality-maintainability-gate quality-complexity-gate quality-unit-collection-gate quality-integration-lite-collection-gate quality-workflow-governance-gate lint typecheck architecture-guard monetary-float-guard ingestion-contract-gate config-access-guard temporal-vocabulary-guard route-contract-family-guard source-data-product-contract-guard domain-product-validate analytics-input-consumer-contract-guard event-runtime-contract-guard rfc0083-closure-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-completion-gate test-institutional-signoff-pack lotus-core-validate test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci live-dpm-source-validate clean
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 
@@ -39,7 +39,10 @@ quality-complexity-gate:
 	python -m xenon --max-absolute E --max-modules C --max-average A src
 
 quality-unit-collection-gate:
-	python -m pytest tests/unit --collect-only -q
+	python scripts/test_manifest.py --suite unit --collect-only --quiet
+
+quality-integration-lite-collection-gate:
+	python scripts/test_manifest.py --suite integration-lite --collect-only --quiet
 
 quality-workflow-governance-gate:
 	python -m pytest tests/unit/test_ci_workflow_action_versions.py -q

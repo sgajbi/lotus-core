@@ -185,7 +185,24 @@ jobs:
           python -m pip install -U pip
           python scripts/bootstrap_dev.py
       - name: Unit collection gate
-        run: python -m pytest tests/unit --collect-only -q
+        run: make quality-unit-collection-gate
+
+  integration-lite-collection-gate:
+    name: Quality Baseline / Integration Lite Collection Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install repository
+        run: |
+          python -m pip install -U pip
+          python scripts/bootstrap_dev.py
+      - name: Integration lite collection gate
+        run: make quality-integration-lite-collection-gate
 
   workflow-governance-gate:
     name: Quality Baseline / Workflow Governance Gate

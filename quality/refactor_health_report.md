@@ -15,8 +15,8 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, unit collection, and workflow-governance gates while other baseline checks remain report-only |
-| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the runtime-safe unit lane with 2,964 tests |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, manifest-backed unit collection, manifest-backed integration-lite collection, and workflow-governance gates while other baseline checks remain report-only |
+| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the manifest-backed runtime-safe unit lane with `3082/3092` tests and 10 manifest deselects; `make quality-integration-lite-collection-gate` collects 121 integration-lite tests |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
@@ -30,12 +30,12 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1168 continues GitHub issue #446 by reducing consumer-DLQ replay candidate selection complexity.
-`_consumer_dlq_replay_candidate_or_response(...)` now delegates replay job id extraction,
-deterministic fingerprint construction, and missing-payload response recording to focused helpers.
-Focused ingestion operations tests pass with 13 tests, event replay app integration/OpenAPI tests
-pass with 10 tests, `_consumer_dlq_replay_candidate_or_response(...)` is reduced from `B (8)` to
-`A (4)`, and issue #446 remains open for further retry payload and operator response extraction.
+CR-1169 addresses validated GitHub issue #445 by moving collection gates onto
+`scripts/test_manifest.py` and adding a manifest-backed `integration-lite` collection gate to the
+quality-baseline workflow. `make quality-unit-collection-gate` now collects the manifest `unit`
+suite (`3082/3092` tests with 10 deselects), `make quality-integration-lite-collection-gate`
+collects 121 tests, focused manifest/workflow governance tests pass with 20 tests, and issue #445
+remains open pending GitHub CI/QA evidence.
 
 ## Health Assessment
 
@@ -1952,3 +1952,9 @@ health before that claim is defensible.
      Focused ingestion operations tests passed with 13 tests; event replay app integration/OpenAPI
      tests passed with 10 tests; scoped Ruff lint and format checks passed; complexity and
      maintainability gates passed; Radon reports the helper reduced from `B (8)` to `A (4)`.
+320. Addressed validated GitHub issue #445 by routing collection-only gates through
+     `scripts/test_manifest.py` and adding a named manifest-backed `integration-lite` collection
+     job to the quality-baseline workflow. `make quality-unit-collection-gate` collected
+     `3082/3092` tests with 10 manifest deselects, `make quality-integration-lite-collection-gate`
+     collected 121 tests, focused manifest/workflow governance tests passed with 20 tests, scoped
+     Ruff lint and format checks passed, and workflow YAML parsing passed.
