@@ -17,7 +17,7 @@ from portfolio_common.database_models import (
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -99,6 +99,22 @@ TRANSACTION_METADATA_FIELDS = (
     "synthetic_flow_fx_source",
     "synthetic_flow_source",
 )
+
+TRANSACTION_TABLE_FIELDS = frozenset(DBTransaction.__table__.columns.keys())
+TRANSACTION_EVENT_PERSISTENCE_EXCLUDE_FIELDS = frozenset(
+    {"id", "epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"}
+)
+
+
+def _transaction_event_payload(event: TransactionEvent) -> dict[str, Any]:
+    event_payload = event_business_payload(event, mode="python")
+    return {
+        field: value
+        for field, value in event_payload.items()
+        if value is not None
+        and field in TRANSACTION_TABLE_FIELDS
+        and field not in TRANSACTION_EVENT_PERSISTENCE_EXCLUDE_FIELDS
+    }
 
 FEE_COMPONENT_FIELDS = (
     "brokerage",
@@ -317,10 +333,7 @@ class CostCalculatorRepository:
             )
 
     async def create_or_update_transaction_event(self, event: TransactionEvent) -> DBTransaction:
-        event_dict = event.model_dump(
-            exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
-            exclude_none=True,
-        )
+        event_dict = _transaction_event_payload(event)
         stmt = pg_insert(DBTransaction).values(**event_dict)
         update_fields = [k for k in event_dict.keys() if k not in {"id", "transaction_id"}]
         update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}

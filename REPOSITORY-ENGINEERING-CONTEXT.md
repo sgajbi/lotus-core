@@ -480,6 +480,12 @@ Most relevant current governance:
     Dockerfiles so supply-chain coverage cannot silently drift. Repository admins still need to
     enable Dependabot alerts/security updates and CodeQL/default code scanning in GitHub settings;
     the repo file does not enable those settings by itself.
+50. Cost-calculator persistence boundaries must strip event-envelope fields before transaction-table
+    upserts. `TransactionEvent` carries governed event fields such as `event_type`,
+    `schema_version`, and `correlation_id` that are not `transactions` columns. Use the shared
+    `event_business_payload(...)` helper and the SQLAlchemy table-column whitelist in the cost
+    repository instead of persisting event DTO dictionaries directly; this prevents FX lifecycle
+    rows from DLQing when event-envelope metadata is present.
 
 ## Context Maintenance Rule
 
