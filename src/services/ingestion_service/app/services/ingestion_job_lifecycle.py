@@ -19,6 +19,7 @@ from ..DTOs.ingestion_job_dto import (
     IngestionJobResponse,
 )
 from .ingestion_payload_evidence import (
+    ingestion_payload_fingerprint,
     source_safe_payload_fingerprint,
     source_safe_request_payload,
 )
@@ -110,6 +111,11 @@ async def create_or_get_job_result(
                 if existing is not None:
                     if _idempotency_payload_conflicts(
                         existing_payload=existing.request_payload,
+                        existing_payload_fingerprint=getattr(
+                            existing,
+                            "request_payload_fingerprint",
+                            None,
+                        ),
                         requested_payload=request_payload,
                     ):
                         raise IngestionIdempotencyConflictError(
@@ -132,6 +138,7 @@ async def create_or_get_job_result(
                     dict[str, Any] | None,
                     source_safe_request_payload(request_payload),
                 ),
+                request_payload_fingerprint=ingestion_payload_fingerprint(request_payload),
             )
             db.add(row)
             await db.flush()
@@ -319,8 +326,12 @@ def _build_failure_row(
 def _idempotency_payload_conflicts(
     *,
     existing_payload: Any,
+    existing_payload_fingerprint: str | None,
     requested_payload: dict[str, Any] | None,
 ) -> bool:
+    requested_payload_fingerprint = ingestion_payload_fingerprint(requested_payload)
+    if existing_payload_fingerprint is not None:
+        return existing_payload_fingerprint != requested_payload_fingerprint
     existing_payload_dict = existing_payload if isinstance(existing_payload, dict) else None
     return source_safe_payload_fingerprint(
         existing_payload_dict

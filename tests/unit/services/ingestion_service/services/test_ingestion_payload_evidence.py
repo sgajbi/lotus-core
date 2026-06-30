@@ -73,7 +73,11 @@ class _FakeExistingSession:
         self.added_rows.append(row)
 
 
-def _existing_job(*, request_payload: dict) -> SimpleNamespace:
+def _existing_job(
+    *,
+    request_payload: dict,
+    request_payload_fingerprint: str | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         job_id="job_existing",
         endpoint="/ingest/transactions",
@@ -90,6 +94,7 @@ def _existing_job(*, request_payload: dict) -> SimpleNamespace:
         retry_count=0,
         last_retried_at=None,
         request_payload=request_payload,
+        request_payload_fingerprint=request_payload_fingerprint,
     )
 
 
@@ -171,13 +176,21 @@ async def test_create_or_get_job_persists_source_safe_request_payload():
             }
         ]
     }
+    assert session.added_rows[0].request_payload_fingerprint == ingestion_payload_fingerprint(
+        payload
+    )
     assert payload["transactions"][0]["authorization"] == "Bearer secret-token"
 
 
 @pytest.mark.asyncio
 async def test_create_or_get_job_replays_same_idempotency_key_and_same_payload():
     payload = {"transactions": [{"transaction_id": "T1", "amount": "10"}]}
-    session = _FakeExistingSession(_existing_job(request_payload=payload))
+    session = _FakeExistingSession(
+        _existing_job(
+            request_payload=source_safe_request_payload(payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(payload),
+        )
+    )
 
     result = await create_or_get_job_result(
         job_id="job_new",
@@ -199,8 +212,12 @@ async def test_create_or_get_job_replays_same_idempotency_key_and_same_payload()
 
 @pytest.mark.asyncio
 async def test_create_or_get_job_rejects_same_idempotency_key_with_different_payload():
+    existing_payload = {"transactions": [{"transaction_id": "T1"}]}
     session = _FakeExistingSession(
-        _existing_job(request_payload={"transactions": [{"transaction_id": "T1"}]})
+        _existing_job(
+            request_payload=source_safe_request_payload(existing_payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(existing_payload),
+        )
     )
 
     with pytest.raises(IngestionIdempotencyConflictError) as exc_info:
@@ -219,6 +236,46 @@ async def test_create_or_get_job_rejects_same_idempotency_key_with_different_pay
 
     assert exc_info.value.endpoint == "/ingest/transactions"
     assert exc_info.value.idempotency_key == "idem_1"
+    assert session.added_rows == []
+
+
+@pytest.mark.asyncio
+async def test_create_or_get_job_rejects_same_idempotency_key_with_different_sensitive_payload():
+    existing_payload = {
+        "authorization": "Bearer first-token",
+        "transactions": [{"transaction_id": "T1"}],
+    }
+    requested_payload = {
+        "authorization": "Bearer second-token",
+        "transactions": [{"transaction_id": "T1"}],
+    }
+    session = _FakeExistingSession(
+        _existing_job(
+            request_payload=source_safe_request_payload(existing_payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(existing_payload),
+        )
+    )
+
+    with pytest.raises(IngestionIdempotencyConflictError):
+        await create_or_get_job_result(
+            job_id="job_new",
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            accepted_count=1,
+            idempotency_key="idem_1",
+            correlation_id="corr_1",
+            request_id="req_1",
+            trace_id="trace_1",
+            request_payload=requested_payload,
+            session_factory=lambda: _SingleSessionAsyncIterable(session),
+        )
+
+    assert source_safe_payload_fingerprint(existing_payload) == source_safe_payload_fingerprint(
+        requested_payload
+    )
+    assert ingestion_payload_fingerprint(existing_payload) != ingestion_payload_fingerprint(
+        requested_payload
+    )
     assert session.added_rows == []
 
 

@@ -2022,6 +2022,7 @@ class IngestionJob(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
     request_payload = Column(JSON, nullable=True)
+    request_payload_fingerprint = Column(String, nullable=True)
     retry_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_retried_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -2032,6 +2033,11 @@ class IngestionJob(Base):
             "ix_ingestion_jobs_idempotency_key_submitted_at",
             "idempotency_key",
             submitted_at.desc(),
+        ),
+        Index(
+            "ix_ingestion_jobs_idempotency_payload_fingerprint",
+            "idempotency_key",
+            "request_payload_fingerprint",
         ),
         Index(
             "ix_ingestion_jobs_submitted_completed_at",
