@@ -473,6 +473,13 @@ Most relevant current governance:
     failure-recovery, and institutional-completion gates. E2E diagnostics should be captured by the
     pytest fixture through `LOTUS_TESTS_COMPOSE_LOG_FILE` before compose teardown; workflow-level
     `docker compose logs` capture is only fallback evidence after fixture ownership is gone.
+49. GitHub Security automation coverage is governed as repository truth. `.github/dependabot.yml`
+    covers GitHub Actions, every governed Python dependency manifest, and every runtime service
+    Dockerfile with grouped, bounded PR limits. Keep
+    `tests/unit/test_dependabot_security_coverage.py` aligned with new service manifests or
+    Dockerfiles so supply-chain coverage cannot silently drift. Repository admins still need to
+    enable Dependabot alerts/security updates and CodeQL/default code scanning in GitHub settings;
+    the repo file does not enable those settings by itself.
 
 ## Context Maintenance Rule
 
