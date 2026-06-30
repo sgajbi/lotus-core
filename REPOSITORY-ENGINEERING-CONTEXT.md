@@ -139,6 +139,11 @@ Current repository posture:
     runtime settings also use the shared parser while preserving existing local fallback and clamp
     semantics. `make monetary-float-guard` uses token-aware money-like matching and currently has
     zero active findings and zero allowlisted suppressions.
+29. Service runtime import correctness is now part of the architecture guard. Service code under
+    `src/services/<service>/app` must not import its own application package through the repo-root
+    path `src.services.<service>.app...`; use relative imports so the same code works in repo-root
+    tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`
+    enforces this to prevent CI-only Docker readiness failures caused by packaging path drift.
 
 ## Architecture And Module Map
 
@@ -227,6 +232,9 @@ Important validation expectations:
 4. deterministic test-manifest orchestration is part of the repo truth and should not be bypassed casually,
 5. repo-local wiki and README content should stay limited to current `lotus-core` ownership and
    should not re-import ecosystem-wide or commercial narrative that now belongs in `lotus-platform`.
+6. service-runtime packaging/import checks are part of architecture validation: when a slice touches
+   service app imports, Dockerfiles, compose mounts, or package metadata, run `make architecture-guard`
+   plus a focused runtime import proof such as `PYTHONPATH=src/services/<service>;src/libs/portfolio-common python -c "import app.main"` for the affected service.
 
 ## Standards And RFCs That Govern This Repository
 
@@ -448,6 +456,11 @@ Most relevant current governance:
     `TAX_LOTS_INSTRUMENT_REFERENCE_MISSING`, `missing_instrument_security_ids`, and
     `data_quality_status=PARTIAL` while preserving existing lot evidence and requested-security
     missing-lot supportability.
+46. Service self-imports must preserve runtime package truth. Do not reintroduce
+    `src.services.<same_service>.app...` imports inside a service package; they can pass repo-root
+    tests while failing in installed service images. Prefer relative imports for same-service code,
+    shared libraries for durable cross-service contracts, and explicit migration plans for
+    transitional cross-service app imports that are still mounted in compose.
 
 ## Context Maintenance Rule
 

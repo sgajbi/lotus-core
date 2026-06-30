@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Sequence
 from decimal import Decimal
 
-from src.services.query_service.app.advisory_simulation.models import (
+from ..models import (
     AllocationMetric,
     DriftAnalysis,
     DriftBucketDetail,

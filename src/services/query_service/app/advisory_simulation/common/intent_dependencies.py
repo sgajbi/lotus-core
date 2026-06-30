@@ -1,7 +1,7 @@
 from collections.abc import Mapping, Sequence
 from typing import TypeAlias, TypeGuard
 
-from src.services.query_service.app.advisory_simulation.models import (
+from ..models import (
     FxSpotIntent,
     SecurityTradeIntent,
 )

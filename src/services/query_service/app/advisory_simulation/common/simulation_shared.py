@@ -5,7 +5,7 @@ FILE: src/core/simulation_shared.py
 from decimal import Decimal
 from typing import Literal
 
-from src.services.query_service.app.advisory_simulation.models import (
+from ..models import (
     CashBalance,
     Money,
     PortfolioSnapshot,
@@ -15,7 +15,7 @@ from src.services.query_service.app.advisory_simulation.models import (
     RuleResult,
     SecurityTradeIntent,
 )
-from src.services.query_service.app.advisory_simulation.precision_policy import to_decimal
+from ..precision_policy import to_decimal
 
 _CURRENCY_MINOR_UNITS = {
     "BHD": 3,

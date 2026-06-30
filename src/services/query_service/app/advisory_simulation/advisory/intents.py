@@ -1,15 +1,15 @@
 from decimal import Decimal
 from typing import Any
 
-from src.services.query_service.app.advisory_simulation.common.simulation_shared import (
+from ..common.simulation_shared import (
     ensure_cash_balance,
 )
-from src.services.query_service.app.advisory_simulation.models import (
+from ..models import (
     IntentRationale,
     Money,
     SecurityTradeIntent,
 )
-from src.services.query_service.app.advisory_simulation.valuation import get_fx_rate
+from ..valuation import get_fx_rate
 
 
 def apply_proposal_cash_flow(after_pf: Any, cash_flow: Any) -> None:

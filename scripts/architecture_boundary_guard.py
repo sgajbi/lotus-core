@@ -112,6 +112,15 @@ def _module_matches(import_name: str, forbidden_prefix: str) -> bool:
     return import_name == forbidden_prefix or import_name.startswith(f"{forbidden_prefix}.")
 
 
+def _service_name_for_app_file(file_path: Path) -> str | None:
+    rel_parts = file_path.relative_to(ROOT).parts
+    if len(rel_parts) < 5 or rel_parts[0:2] != ("src", "services"):
+        return None
+    if rel_parts[3] != "app":
+        return None
+    return rel_parts[2]
+
+
 def _scan_for_disallowed_imports(
     files: list[Path],
     rules: tuple[DirectImportBoundaryRule, ...] = DIRECT_IMPORT_BOUNDARY_RULES,
@@ -134,6 +143,24 @@ def _scan_for_disallowed_imports(
                             f"{rel}:{line_no}: {rule.name}: disallowed direct import "
                             f"'{import_name}'"
                         )
+    return findings
+
+
+def _scan_for_service_runtime_imports(files: list[Path]) -> list[str]:
+    findings: list[str] = []
+    for file_path in files:
+        service_name = _service_name_for_app_file(file_path)
+        if service_name is None:
+            continue
+        rel = file_path.relative_to(ROOT).as_posix()
+        forbidden_prefix = f"services.{service_name}.app"
+        for line_no, import_name in _imported_modules(file_path):
+            if _module_matches(import_name, forbidden_prefix):
+                findings.append(
+                    f"{rel}:{line_no}: service runtime packages must not import their own "
+                    f"app through repo-root module path '{import_name}'; use package-local "
+                    "'app...' or relative imports"
+                )
     return findings
 
 
@@ -160,6 +187,7 @@ def main() -> int:
     files = _collect_python_files()
     findings = _scan_for_disallowed_patterns(files, disallowed_import_patterns)
     findings.extend(_scan_for_disallowed_imports(files))
+    findings.extend(_scan_for_service_runtime_imports(files))
 
     if findings:
         print("Architecture boundary guard findings:")

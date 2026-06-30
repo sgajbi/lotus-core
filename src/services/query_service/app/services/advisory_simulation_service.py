@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from src.services.query_service.app.advisory_simulation.advisory_engine import (
+from ..advisory_simulation.advisory_engine import (
     run_proposal_simulation,
 )
-from src.services.query_service.app.advisory_simulation.common.canonical import (
+from ..advisory_simulation.common.canonical import (
     hash_canonical_payload,
 )
-from src.services.query_service.app.advisory_simulation.models import (
+from ..advisory_simulation.models import (
     ProposalResult,
     ProposalSimulateRequest,
 )

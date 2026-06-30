@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import get_args
 
-from src.services.query_service.app.dtos.reporting_dto import AllocationDimension
+from ..dtos.reporting_dto import AllocationDimension
 
 ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS: tuple[AllocationDimension, ...] = (
     "asset_class",
