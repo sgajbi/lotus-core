@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
 from scripts.institutional_completion_gate import (
     ScenarioArtifactMetadata,
     _compose_down,
@@ -148,20 +149,7 @@ def test_compose_up_starts_governed_completion_services(monkeypatch: pytest.Monk
                 "docker-compose.yml",
                 "up",
                 "-d",
-                "ingestion_service",
-                "event_replay_service",
-                "query_service",
-                "query_control_plane_service",
-                "persistence_service",
-                "cost_calculator_service",
-                "cashflow_calculator_service",
-                "position_calculator_service",
-                "pipeline_orchestrator_service",
-                "position_valuation_calculator",
-                "timeseries_generator_service",
-                "valuation_orchestrator_service",
-                "portfolio_aggregation_service",
-                "financial_reconciliation_service",
+                *INSTITUTIONAL_COMPLETION_GATE_SERVICES,
             ],
             repo_root,
         )
