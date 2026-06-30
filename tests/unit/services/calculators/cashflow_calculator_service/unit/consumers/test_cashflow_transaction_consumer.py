@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer import (  # noqa: E501
     CachedCashflowRule,
     CashflowCalculatorConsumer,
+    CashflowProcessingOutcome,
     LinkedCashLegError,
     NoCashflowRuleError,
 )
@@ -122,6 +123,8 @@ def mock_dependencies():
         ),
     ):
         yield {
+            "db_session": mock_db_session,
+            "db_transaction": mock_transaction,
             "cashflow_repo": mock_cashflow_repo,
             "idempotency_repo": mock_idempotency_repo,
             "outbox_repo": mock_outbox_repo,
@@ -238,6 +241,34 @@ async def test_process_message_sends_negative_interest_deduction_to_dlq(
     cashflow_consumer._send_to_dlq_async.assert_awaited_once()
 
 
+async def test_process_message_rolls_back_physical_duplicate_claim(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+):
+    mock_cashflow_repo = mock_dependencies["cashflow_repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_rules_repo = mock_dependencies["rules_repo"]
+
+    mock_idempotency_repo.claim_event_processing.return_value = False
+
+    await cashflow_consumer.process_message(mock_kafka_message)
+
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
+        "transactions.persisted-0-123",
+        "PORT_CFC_01",
+        "cashflow-calculator",
+        "test-corr-id",
+    )
+    mock_rules_repo.get_all_rules.assert_not_awaited()
+    mock_cashflow_repo.create_cashflow.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_dependencies["db_session"].commit.assert_not_awaited()
+    mock_dependencies["db_transaction"].rollback.assert_awaited_once()
+    cashflow_consumer._send_to_dlq_async.assert_not_called()
+
+
 async def test_process_message_sends_to_dlq_if_rule_not_found(
     cashflow_consumer: CashflowCalculatorConsumer,
     mock_kafka_message: MagicMock,
@@ -320,6 +351,8 @@ async def test_process_message_skips_stale_epoch_event(
         mock_cashflow_repo.create_cashflow.assert_not_called()
         mock_outbox_repo.create_outbox_event.assert_not_called()
         cashflow_consumer._send_to_dlq_async.assert_not_called()
+        mock_dependencies["db_session"].commit.assert_not_awaited()
+        mock_dependencies["db_transaction"].rollback.assert_awaited_once()
 
 
 async def test_process_message_skips_replay_event_when_canonical_state_was_removed(
@@ -366,6 +399,8 @@ async def test_process_message_skips_replay_event_when_canonical_state_was_remov
     mock_cashflow_repo.create_cashflow.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
     cashflow_consumer._send_to_dlq_async.assert_not_called()
+    mock_dependencies["db_session"].commit.assert_awaited_once()
+    mock_dependencies["db_transaction"].rollback.assert_not_awaited()
 
 
 async def test_process_message_skips_duplicate_cross_topic_cashflow_publication(
@@ -439,6 +474,42 @@ async def test_process_message_skips_duplicate_cross_topic_cashflow_publication(
     mock_cashflow_repo.create_cashflow.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
     cashflow_consumer._send_to_dlq_async.assert_not_called()
+    mock_dependencies["db_session"].commit.assert_awaited_once()
+    mock_dependencies["db_transaction"].rollback.assert_not_awaited()
+
+
+async def test_cashflow_unit_of_work_finalizer_commits_only_durable_outcomes(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    db = AsyncMock(spec=AsyncSession)
+    tx = AsyncMock()
+
+    for outcome in [
+        CashflowProcessingOutcome.PROCESSED,
+        CashflowProcessingOutcome.STALE_REPLAY_SKIPPED,
+        CashflowProcessingOutcome.SEMANTIC_DUPLICATE,
+        CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT,
+    ]:
+        await cashflow_consumer._finalize_cashflow_unit_of_work(db=db, tx=tx, outcome=outcome)
+
+    assert db.commit.await_count == 4
+    tx.rollback.assert_not_awaited()
+
+
+async def test_cashflow_unit_of_work_finalizer_rolls_back_rejected_outcomes(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    db = AsyncMock(spec=AsyncSession)
+    tx = AsyncMock()
+
+    for outcome in [
+        CashflowProcessingOutcome.PHYSICAL_DUPLICATE,
+        CashflowProcessingOutcome.EPOCH_REJECTED,
+    ]:
+        await cashflow_consumer._finalize_cashflow_unit_of_work(db=db, tx=tx, outcome=outcome)
+
+    db.commit.assert_not_awaited()
+    assert tx.rollback.await_count == 2
 
 
 async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(

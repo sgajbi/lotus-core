@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, Optional
 
 from confluent_kafka import Message
@@ -115,8 +116,23 @@ class LinkedCashLegError(ValueError):
     """Raised when a linked-cash-leg contract is malformed."""
 
 
+class CashflowProcessingOutcome(str, Enum):
+    PROCESSED = "processed"
+    PHYSICAL_DUPLICATE = "physical_duplicate"
+    STALE_REPLAY_SKIPPED = "stale_replay_skipped"
+    EPOCH_REJECTED = "epoch_rejected"
+    SEMANTIC_DUPLICATE = "semantic_duplicate"
+    NON_CASHFLOW_LIFECYCLE_EVENT = "non_cashflow_lifecycle_event"
+
+
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
+CASHFLOW_COMMIT_OUTCOMES = {
+    CashflowProcessingOutcome.PROCESSED,
+    CashflowProcessingOutcome.STALE_REPLAY_SKIPPED,
+    CashflowProcessingOutcome.SEMANTIC_DUPLICATE,
+    CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT,
+}
 
 
 def _semantic_cashflow_event_id(event: TransactionEvent) -> str:
@@ -405,80 +421,100 @@ class CashflowCalculatorConsumer(BaseConsumer):
             cashflow_repo = CashflowRepository(db)
             outbox_repo = OutboxRepository(db)
 
-            if await self._stop_after_physical_or_stale_replay(
+            outcome = await self._cashflow_processing_outcome(
                 db,
-                tx,
                 cashflow_repo,
                 idempotency_repo,
-                event,
-                event_id,
-                correlation_id,
-                msg.topic(),
-            ):
-                return
-
-            if await self._stop_after_fence_or_semantic_duplicate(
-                db,
-                tx,
-                idempotency_repo,
+                outbox_repo,
                 event,
                 event_id,
                 semantic_event_id,
                 correlation_id,
                 msg.topic(),
-            ):
-                return
-
-            await self._stage_or_skip_cashflow_calculation(
-                db,
-                cashflow_repo,
-                outbox_repo,
-                event,
-                correlation_id,
             )
+            await self._finalize_cashflow_unit_of_work(db=db, tx=tx, outcome=outcome)
         except Exception:
             await tx.rollback()
             raise
 
-    async def _stop_after_physical_or_stale_replay(
+    async def _cashflow_processing_outcome(
         self,
         db,
-        tx,
+        cashflow_repo: CashflowRepository,
+        idempotency_repo: IdempotencyRepository,
+        outbox_repo: OutboxRepository,
+        event: TransactionEvent,
+        event_id: str,
+        semantic_event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> CashflowProcessingOutcome:
+        physical_replay_outcome = await self._physical_or_stale_replay_outcome(
+            cashflow_repo=cashflow_repo,
+            idempotency_repo=idempotency_repo,
+            event=event,
+            event_id=event_id,
+            correlation_id=correlation_id,
+            topic=topic,
+        )
+        if physical_replay_outcome is not None:
+            return physical_replay_outcome
+
+        fence_outcome = await self._fence_or_semantic_duplicate_outcome(
+            db=db,
+            idempotency_repo=idempotency_repo,
+            event=event,
+            event_id=event_id,
+            semantic_event_id=semantic_event_id,
+            correlation_id=correlation_id,
+            topic=topic,
+        )
+        if fence_outcome is not None:
+            return fence_outcome
+
+        return await self._stage_cashflow_processing(
+            db=db,
+            cashflow_repo=cashflow_repo,
+            outbox_repo=outbox_repo,
+            event=event,
+            correlation_id=correlation_id,
+        )
+
+    async def _physical_or_stale_replay_outcome(
+        self,
+        *,
         cashflow_repo: CashflowRepository,
         idempotency_repo: IdempotencyRepository,
         event: TransactionEvent,
         event_id: str,
         correlation_id: str,
         topic: str,
-    ) -> bool:
+    ) -> CashflowProcessingOutcome | None:
         if not await self._claim_physical_event(
             idempotency_repo,
             event,
             event_id,
             correlation_id,
         ):
-            await tx.rollback()
-            return True
+            return CashflowProcessingOutcome.PHYSICAL_DUPLICATE
         if await self._should_skip_stale_replay_event(cashflow_repo, event, topic):
-            await db.commit()
-            return True
-        return False
+            return CashflowProcessingOutcome.STALE_REPLAY_SKIPPED
+        return None
 
-    async def _stop_after_fence_or_semantic_duplicate(
+    async def _fence_or_semantic_duplicate_outcome(
         self,
+        *,
         db,
-        tx,
         idempotency_repo: IdempotencyRepository,
         event: TransactionEvent,
         event_id: str,
         semantic_event_id: str,
         correlation_id: str,
         topic: str,
-    ) -> bool:
+    ) -> CashflowProcessingOutcome | None:
         fencer = EpochFencer(db, service_name=SERVICE_NAME)
         if not await fencer.check(event):
-            await tx.rollback()
-            return True
+            return CashflowProcessingOutcome.EPOCH_REJECTED
         if not await self._claim_semantic_event(
             idempotency_repo,
             event,
@@ -487,22 +523,21 @@ class CashflowCalculatorConsumer(BaseConsumer):
             correlation_id,
             topic,
         ):
-            await db.commit()
-            return True
-        return False
+            return CashflowProcessingOutcome.SEMANTIC_DUPLICATE
+        return None
 
-    async def _stage_or_skip_cashflow_calculation(
+    async def _stage_cashflow_processing(
         self,
+        *,
         db,
         cashflow_repo: CashflowRepository,
         outbox_repo: OutboxRepository,
         event: TransactionEvent,
         correlation_id: str,
-    ) -> None:
+    ) -> CashflowProcessingOutcome:
         event_transaction_type = _validated_cashflow_transaction_type(event)
         if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
-            await db.commit()
-            return
+            return CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT
         rule = await self._required_rule_for_transaction(db, event_transaction_type)
         await _stage_cashflow_calculation(
             cashflow_repo,
@@ -511,7 +546,16 @@ class CashflowCalculatorConsumer(BaseConsumer):
             rule,
             correlation_id,
         )
-        await db.commit()
+        return CashflowProcessingOutcome.PROCESSED
+
+    @staticmethod
+    async def _finalize_cashflow_unit_of_work(
+        *, db, tx, outcome: CashflowProcessingOutcome
+    ) -> None:
+        if outcome in CASHFLOW_COMMIT_OUTCOMES:
+            await db.commit()
+            return
+        await tx.rollback()
 
     async def _claim_physical_event(
         self,

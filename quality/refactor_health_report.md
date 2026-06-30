@@ -2015,3 +2015,9 @@ health before that claim is defensible.
      explicit `transaction_event_to_record_values(...)` mapping; focused transaction/source-data
      conformance and repository tests passed with 5 tests, the manifest-backed conformance target
      passed with 3 tests, and scoped Ruff lint passed.
+328. Addressed validated GitHub issue #666 by centralizing cashflow consumer transaction
+     finalization behind a typed `CashflowProcessingOutcome` policy and single unit-of-work
+     finalizer. Focused cashflow consumer tests passed with 24 tests, covering physical duplicate
+     rollback, stale replay commit, epoch-fence rollback, semantic duplicate commit, non-cashflow
+     lifecycle commit, successful calculation, failure rollback, and finalizer outcome policy;
+     scoped Ruff lint and format checks passed.
