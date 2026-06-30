@@ -26,6 +26,12 @@ class PortfolioTaxLotWindowRequestScope:
 
 _TaxLotSupportabilityState = Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"]
 
+TAX_LOTS_READY = "TAX_LOTS_READY"
+TAX_LOTS_EMPTY = "TAX_LOTS_EMPTY"
+TAX_LOTS_PAGE_PARTIAL = "TAX_LOTS_PAGE_PARTIAL"
+TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES = "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
+TAX_LOTS_INSTRUMENT_REFERENCE_MISSING = "TAX_LOTS_INSTRUMENT_REFERENCE_MISSING"
+
 
 @dataclass(frozen=True)
 class _PortfolioTaxLotSupportabilityContext:
@@ -134,6 +140,9 @@ async def resolve_portfolio_tax_lot_window_response(
         page_rows=page_rows,
         encode_page_token=encode_page_token,
     )
+    known_instrument_security_ids = await repository.list_known_instrument_security_ids(
+        _portfolio_tax_lot_security_ids(page_rows)
+    )
 
     return build_portfolio_tax_lot_window_response(
         portfolio_id=portfolio_id,
@@ -142,6 +151,7 @@ async def resolve_portfolio_tax_lot_window_response(
         page_rows=page_rows,
         has_more=has_more,
         next_page_token=next_page_token,
+        known_instrument_security_ids=known_instrument_security_ids,
     )
 
 
@@ -153,12 +163,21 @@ def build_portfolio_tax_lot_window_response(
     page_rows: list[tuple[Any, str | None]],
     has_more: bool,
     next_page_token: str | None,
+    known_instrument_security_ids: set[str] | None = None,
 ) -> PortfolioTaxLotWindowResponse:
     lots = _portfolio_tax_lot_records(page_rows)
     supportability_context = _portfolio_tax_lot_supportability_context(
         request=request,
         lots=lots,
         has_more=has_more,
+        missing_instrument_security_ids=(
+            _missing_tax_lot_instrument_security_ids(
+                page_rows=page_rows,
+                known_instrument_security_ids=known_instrument_security_ids,
+            )
+            if known_instrument_security_ids is not None
+            else []
+        ),
     )
 
     return PortfolioTaxLotWindowResponse(
@@ -190,11 +209,39 @@ def _portfolio_tax_lot_records(page_rows: list[tuple[Any, str | None]]) -> list[
     ]
 
 
+def _portfolio_tax_lot_security_ids(page_rows: list[tuple[Any, str | None]]) -> list[str]:
+    return list(
+        dict.fromkeys(
+            normalized
+            for lot, _local_currency in page_rows
+            if (normalized := normalize_security_id(getattr(lot, "security_id", None)))
+        )
+    )
+
+
+def _missing_tax_lot_instrument_security_ids(
+    *,
+    page_rows: list[tuple[Any, str | None]],
+    known_instrument_security_ids: set[str],
+) -> list[str]:
+    normalized_known_security_ids = {
+        normalized
+        for security_id in known_instrument_security_ids
+        if (normalized := normalize_security_id(security_id))
+    }
+    return [
+        security_id
+        for security_id in _portfolio_tax_lot_security_ids(page_rows)
+        if security_id not in normalized_known_security_ids
+    ]
+
+
 def _portfolio_tax_lot_supportability_context(
     *,
     request: PortfolioTaxLotWindowRequest,
     lots: list[Any],
     has_more: bool,
+    missing_instrument_security_ids: list[str],
 ) -> _PortfolioTaxLotSupportabilityContext:
     missing_security_ids = _missing_tax_lot_security_ids(
         request=request,
@@ -206,6 +253,7 @@ def _portfolio_tax_lot_supportability_context(
         lots=lots,
         has_more=has_more,
         missing_security_ids=missing_security_ids,
+        missing_instrument_security_ids=missing_instrument_security_ids,
     )
     return _PortfolioTaxLotSupportabilityContext(
         supportability=PortfolioTaxLotWindowSupportability(
@@ -214,6 +262,14 @@ def _portfolio_tax_lot_supportability_context(
             requested_security_count=_requested_tax_lot_security_count(request),
             returned_lot_count=len(lots),
             missing_security_ids=missing_security_ids,
+            missing_instrument_security_ids=missing_instrument_security_ids,
+            missing_instrument_reference_count=len(missing_instrument_security_ids),
+            reason_codes=_portfolio_tax_lot_reason_codes(
+                lots=lots,
+                has_more=has_more,
+                missing_security_ids=missing_security_ids,
+                missing_instrument_security_ids=missing_instrument_security_ids,
+            ),
         ),
         data_quality_status=_portfolio_tax_lot_data_quality_status(state),
     )
@@ -240,14 +296,36 @@ def _portfolio_tax_lot_supportability_state(
     lots: list[Any],
     has_more: bool,
     missing_security_ids: list[str],
+    missing_instrument_security_ids: list[str],
 ) -> tuple[_TaxLotSupportabilityState, str]:
     if not lots and not request.security_ids:
-        return "UNAVAILABLE", "TAX_LOTS_EMPTY"
+        return "UNAVAILABLE", TAX_LOTS_EMPTY
     if has_more:
-        return "DEGRADED", "TAX_LOTS_PAGE_PARTIAL"
+        return "DEGRADED", TAX_LOTS_PAGE_PARTIAL
     if request.security_ids and missing_security_ids:
-        return "INCOMPLETE", "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
-    return "READY", "TAX_LOTS_READY"
+        return "INCOMPLETE", TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES
+    if missing_instrument_security_ids:
+        return "DEGRADED", TAX_LOTS_INSTRUMENT_REFERENCE_MISSING
+    return "READY", TAX_LOTS_READY
+
+
+def _portfolio_tax_lot_reason_codes(
+    *,
+    lots: list[Any],
+    has_more: bool,
+    missing_security_ids: list[str],
+    missing_instrument_security_ids: list[str],
+) -> list[str]:
+    if not lots and not missing_security_ids:
+        return [TAX_LOTS_EMPTY]
+    reason_codes: list[str] = []
+    if has_more:
+        reason_codes.append(TAX_LOTS_PAGE_PARTIAL)
+    if missing_security_ids:
+        reason_codes.append(TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES)
+    if missing_instrument_security_ids:
+        reason_codes.append(TAX_LOTS_INSTRUMENT_REFERENCE_MISSING)
+    return reason_codes or [TAX_LOTS_READY]
 
 
 def _requested_tax_lot_security_count(

@@ -4,6 +4,7 @@ from typing import Optional
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     Cashflow,
+    Instrument,
     Portfolio,
     PositionLotState,
     Transaction,
@@ -17,11 +18,13 @@ from .identifier_normalization import normalize_security_id
 def _normalized_security_ids(security_ids: list[str] | None) -> list[str] | None:
     if not security_ids:
         return None
-    return [
-        normalized
-        for security_id in security_ids
-        if (normalized := normalize_security_id(security_id))
-    ]
+    return list(
+        dict.fromkeys(
+            normalized
+            for security_id in security_ids
+            if (normalized := normalize_security_id(security_id))
+        )
+    )
 
 
 def _normalized_lot_status(lot_status_filter: str | None) -> str:
@@ -127,6 +130,18 @@ class BuyStateRepository:
             .limit(limit)
         )
         return list((await self.db.execute(stmt)).all())
+
+    async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
+        normalized_security_ids = _normalized_security_ids(security_ids)
+        if not normalized_security_ids:
+            return set()
+
+        instrument_security_id = func.trim(Instrument.security_id)
+        stmt = select(instrument_security_id).where(
+            instrument_security_id.in_(normalized_security_ids)
+        )
+        result = await self.db.execute(stmt)
+        return set(result.scalars().all())
 
     async def get_accrued_offsets(
         self, portfolio_id: str, security_id: str

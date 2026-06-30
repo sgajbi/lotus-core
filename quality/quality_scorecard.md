@@ -1281,3 +1281,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   Returned transaction security ids are checked against governed instrument master data, unresolved
   references degrade the response to `PARTIAL`, and additive bounded reason/missing-security fields
   make legacy or orphan rows explicit without hiding the ledger evidence.
+- CR-1204 added the same degraded-reference supportability pattern to `PortfolioTaxLotWindow:v1`.
+  Returned lot security ids are checked against governed instrument master data, unresolved
+  references degrade tax-lot readiness to `PARTIAL`, and tax-lot query scopes now deduplicate
+  normalized security ids before building predicates or reference lookups.

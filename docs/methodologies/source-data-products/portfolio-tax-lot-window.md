@@ -46,7 +46,7 @@ jurisdiction-specific advice modes.
 | `portfolios` | `portfolio_id` | Portfolio must exist. |
 | `position_lot_state` | `portfolio_id`, `security_id`, `instrument_id`, `lot_id`, `open_quantity`, `original_quantity`, `acquisition_date`, `lot_cost_base`, `lot_cost_local`, `source_transaction_id`, `source_system`, `calculation_policy_id`, `calculation_policy_version`, `updated_at` | Lot must match the portfolio, optional security filter, as-of date, and status filter. |
 | `transactions` | `transaction_id`, `trade_currency` | Optional outer join by `source_transaction_id` to populate local lot currency. |
-| `instruments` | `security_id` and instrument master context | New BUY lot-state writes from the cost consumer require instrument master data before persistence. Historical lots written before that guard may still require separate read-side degraded supportability. |
+| `instruments` | `security_id` and instrument master context | Returned lot security ids are checked against this governed reference source. Missing matches degrade the response to partial supportability. New BUY lot-state writes from the cost consumer also require instrument master data before persistence. |
 
 The product preserves lot state already calculated and stored in `position_lot_state`. Cost-basis
 fields are preserved, not recalculated, reallocated, or tax-optimized by the endpoint.
@@ -77,6 +77,7 @@ wash-sale adjustment is performed by this product.
 | `CB_base` | `cost_basis_base` | Current lot cost basis in portfolio base currency. |
 | `CB_local` | `cost_basis_local` | Current lot cost basis in local trade currency. |
 | `Status` | `tax_lot_status` | `OPEN` when `Q_open > 0`, otherwise `CLOSED`. |
+| `U` | `supportability.missing_instrument_security_ids[]` | Returned lot security ids that do not resolve to governed `instruments.security_id`. |
 
 ## Methodology and Formulas
 
@@ -89,6 +90,10 @@ For every source lot row:
 `cost_basis_local = lot_cost_local`
 
 `local_currency = transactions.trade_currency when the source transaction is available else null`
+
+Returned-row instrument reference support is:
+
+`U = distinct returned lot security ids where no instruments.security_id match exists`
 
 The endpoint does not calculate unrealized gain, realized gain, tax payable, tax alpha, wash-sale
 adjustment, or optimal disposal sequence.
@@ -109,9 +114,11 @@ adjustment, or optimal disposal sequence.
 8. Outer join `transactions` by `source_transaction_id` to obtain local currency when available.
 9. Sort by `acquisition_date` ascending, then `lot_id` ascending.
 10. Fetch `page_size + 1` rows to detect whether the page is partial.
-11. Map each returned lot into `PortfolioTaxLotRecord`, preserving source transaction and
+11. Resolve distinct returned lot security ids against `instruments.security_id` and retain any
+    missing ids as `supportability.missing_instrument_security_ids`.
+12. Map each returned lot into `PortfolioTaxLotRecord`, preserving source transaction and
     calculation-policy lineage.
-12. Emit supportability, pagination metadata, lineage, and source-data product runtime metadata.
+13. Emit supportability, pagination metadata, lineage, and source-data product runtime metadata.
 
 ## Validation and Failure Behavior
 
@@ -122,6 +129,7 @@ adjustment, or optimal disposal sequence.
 | Page token scope does not match the request | Service raises `ValueError`; the API maps it to HTTP `400`. |
 | More rows exist than the page size | Response carries supportability `DEGRADED` and reason `TAX_LOTS_PAGE_PARTIAL`. |
 | Requested securities have no matching lots in the complete page scope | Response carries supportability `INCOMPLETE` and reason `TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES`. |
+| Any returned lot `security_id` does not resolve to `instruments.security_id` | Response carries supportability `DEGRADED`, reason `TAX_LOTS_INSTRUMENT_REFERENCE_MISSING`, `data_quality_status=PARTIAL`, and bounded missing instrument security ids. |
 | Full-portfolio request returns no lots | Response carries supportability `UNAVAILABLE`, reason `TAX_LOTS_EMPTY`, and `data_quality_status=MISSING`. |
 | Product BUY reaches cost/lot processing before instrument master data is available | Cost consumer defers processing as a retryable reference-data dependency and does not write BUY lot state. |
 
@@ -156,6 +164,9 @@ tax-lot evidence availability only, not tax advice or tax optimization.
 | `lots[].tax_lot_status` | `Status`. |
 | `lots[].source_lineage` | Source system, source transaction id, calculation policy id, and calculation policy version. |
 | `supportability` | Readiness state for tax-lot evidence only. |
+| `supportability.reason_codes[]` | `TAX_LOTS_READY`, `TAX_LOTS_EMPTY`, `TAX_LOTS_PAGE_PARTIAL`, `TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES`, or `TAX_LOTS_INSTRUMENT_REFERENCE_MISSING`. |
+| `supportability.missing_instrument_reference_count` | Count of returned lot security ids without governed instrument master support. |
+| `supportability.missing_instrument_security_ids[]` | Returned lot security ids that do not resolve to `instruments.security_id`. |
 
 ## Worked Example
 
@@ -187,3 +198,4 @@ Final output mapping:
 | `lots[0].cost_basis_base` | `15005.50` |
 | `lots[0].cost_basis_local` | `15005.50` |
 | `supportability.state` | `READY` |
+| `supportability.reason_codes` | `["TAX_LOTS_READY"]` |

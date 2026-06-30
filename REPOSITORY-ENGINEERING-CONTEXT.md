@@ -406,6 +406,11 @@ Most relevant current governance:
     `data_quality_status=PARTIAL`, `TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING`, and bounded
     missing-security fields. Preserve this degraded-reference pattern for legacy/orphan rows while
     broader ingestion and tax-lot reference policies are completed.
+45. `PortfolioTaxLotWindow:v1` now applies the same degraded-reference pattern for returned lot
+    rows. Missing instrument master support is exposed through
+    `TAX_LOTS_INSTRUMENT_REFERENCE_MISSING`, `missing_instrument_security_ids`, and
+    `data_quality_status=PARTIAL` while preserving existing lot evidence and requested-security
+    missing-lot supportability.
 
 ## Context Maintenance Rule
 

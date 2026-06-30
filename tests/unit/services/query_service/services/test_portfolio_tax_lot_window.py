@@ -190,6 +190,10 @@ def test_resolve_portfolio_tax_lot_window_response_orchestrates_repository_reads
                     (_tax_lot_row(lot_id="LOT-B"), "USD"),
                 ]
 
+            async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
+                calls.append(("known_instruments", {"security_ids": security_ids}))
+                return {"EQ_US_AAPL"}
+
         def encode(payload: dict[str, str]) -> str:
             encoded_payloads.append(payload)
             return "encoded-token"
@@ -215,7 +219,7 @@ def test_resolve_portfolio_tax_lot_window_response_orchestrates_repository_reads
     assert response.page.next_page_token == "encoded-token"
     assert response.page.returned_component_count == 1
     assert response.lots[0].lot_id == "LOT-A"
-    assert [call[0] for call in calls] == ["portfolio_exists", "tax_lots"]
+    assert [call[0] for call in calls] == ["portfolio_exists", "tax_lots", "known_instruments"]
     assert calls[1] == (
         "tax_lots",
         {
@@ -228,6 +232,7 @@ def test_resolve_portfolio_tax_lot_window_response_orchestrates_repository_reads
             "limit": 2,
         },
     )
+    assert calls[2] == ("known_instruments", {"security_ids": ["EQ_US_AAPL"]})
     assert encoded_payloads == [
         {
             "scope_fingerprint": response.page.request_scope_fingerprint,
@@ -312,6 +317,9 @@ def test_build_portfolio_tax_lot_window_response_marks_complete_ready_page() -> 
     assert response.data_quality_status == "COMPLETE"
     assert response.page.returned_component_count == 1
     assert response.page.next_page_token is None
+    assert response.supportability.reason_codes == ["TAX_LOTS_READY"]
+    assert response.supportability.missing_instrument_security_ids == []
+    assert response.supportability.missing_instrument_reference_count == 0
 
 
 def test_build_portfolio_tax_lot_window_response_reports_missing_requested_security() -> None:
@@ -330,6 +338,54 @@ def test_build_portfolio_tax_lot_window_response_reports_missing_requested_secur
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.reason == "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
     assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert response.data_quality_status == "PARTIAL"
+    assert response.supportability.reason_codes == ["TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"]
+
+
+def test_build_portfolio_tax_lot_window_response_preserves_empty_requested_security_gap() -> None:
+    response = build_portfolio_tax_lot_window_response(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["UNKNOWN_SEC"],
+        ),
+        request_scope_fingerprint="scope-123",
+        page_rows=[],
+        has_more=False,
+        next_page_token=None,
+    )
+
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"
+    assert response.supportability.missing_security_ids == ["UNKNOWN_SEC"]
+    assert response.supportability.reason_codes == ["TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES"]
+    assert response.data_quality_status == "PARTIAL"
+
+
+def test_build_portfolio_tax_lot_window_response_degrades_missing_instrument_reference() -> None:
+    response = build_portfolio_tax_lot_window_response(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioTaxLotWindowRequest(
+            as_of_date=date(2026, 4, 10),
+            security_ids=["EQ_US_AAPL", "ORPHAN_SEC"],
+            page={"page_size": 25},
+        ),
+        request_scope_fingerprint="scope-123",
+        page_rows=[
+            (_tax_lot_row(security_id="EQ_US_AAPL"), "USD"),
+            (_tax_lot_row(security_id="ORPHAN_SEC", lot_id="LOT-ORPHAN-001"), "USD"),
+        ],
+        has_more=False,
+        next_page_token=None,
+        known_instrument_security_ids={"EQ_US_AAPL"},
+    )
+
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "TAX_LOTS_INSTRUMENT_REFERENCE_MISSING"
+    assert response.supportability.missing_security_ids == []
+    assert response.supportability.missing_instrument_security_ids == ["ORPHAN_SEC"]
+    assert response.supportability.missing_instrument_reference_count == 1
+    assert response.supportability.reason_codes == ["TAX_LOTS_INSTRUMENT_REFERENCE_MISSING"]
     assert response.data_quality_status == "PARTIAL"
 
 
