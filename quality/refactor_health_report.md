@@ -39,7 +39,7 @@ tested modules.
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | DLQ/replay correlation diagnostics | Improving | CR-1206 adds correlation-or-reason diagnostics to consumer DLQ and replay-audit records, exposes alternate lookup keys in replay responses, and hardens ingestion rate-limit metric registration against duplicate-import CI failures |
 | Mandatory replay audit | Improving | CR-1207 removes best-effort replay-audit recording from ingestion retry and consumer-DLQ replay paths, adds `INGESTION_REPLAY_AUDIT_WRITE_FAILED`, and keeps replay outcomes unacknowledged when audit persistence fails |
-| Runtime configuration strictness | Improving | CR-1208 makes ingestion resilience env parsing strict in non-local profiles, logs explicit local fallback, and restores monetary-float CI enforcement to a zero-finding, zero-allowlist baseline |
+| Runtime configuration strictness | Improving | CR-1208 makes ingestion resilience env parsing strict in non-local profiles, logs explicit local fallback, and restores monetary-float CI enforcement to a zero-finding, zero-allowlist baseline; CR-1209 adds a shared strict/local runtime settings helper and migrates query-service plus query-control-plane settings onto it |
 | Corporate-action ordering policy | Improving | CR-1197 routes cost-engine Bundle A sorting through the canonical shared ordering helper and removes the duplicated private rank map |
 | Corporate-action reconciliation evidence | Improving | CR-1198 records Bundle A reconciliation outcomes as durable `corporate_action_bundle_a` financial reconciliation runs and findings instead of log-only diagnostics |
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
@@ -56,9 +56,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1208 advances validated GitHub issue #600 by making ingestion resilience configuration strict in
-non-local profiles, preserving explicit local fallback logging, and turning the monetary-float guard
-back into a high-signal CI gate with zero active findings and zero stale suppressions.
+CR-1209 continues validated GitHub issue #600 by replacing duplicated permissive query-service and
+query-control-plane settings parsers with a shared strict/local runtime settings helper. Public
+settings helper names remain compatible, while strict/non-local profiles now reject malformed
+enterprise-readiness and resilience configuration.
 
 ## Health Assessment
 
@@ -2033,3 +2034,6 @@ health before that claim is defensible.
      non-local profiles while preserving explicit local fallback logging. The monetary-float guard
      now uses token-aware matching, rejects stale allowlist entries, and passes with zero findings
      and zero allowlisted suppressions.
+332. Continued validated GitHub issue #600 by adding shared strict/local runtime settings parsing
+     and migrating query-service plus query-control-plane settings onto it. Focused shared/query/
+     control-plane settings tests passed with 16 tests.
