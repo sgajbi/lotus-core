@@ -336,6 +336,7 @@ async def test_dlq_payload_and_headers_are_redacted(
         headers=[
             ("authorization", b"Bearer header-token"),
             ("source", b"postgresql://user:password@localhost/db"),
+            ("optional-header", None),
         ],
     )
     test_consumer._record_consumer_dlq_event = AsyncMock()
@@ -361,6 +362,7 @@ async def test_dlq_payload_and_headers_are_redacted(
     headers_dict = dict(mock_kafka_producer.publish_message.call_args.kwargs["headers"])
     assert headers_dict["authorization"] == b"***REDACTED***"
     assert headers_dict["source"] == b"postgresql://***REDACTED***@localhost/db"
+    assert headers_dict["optional-header"] == b""
 
 
 async def test_dlq_validation_error_reason_omits_rejected_input_value(
@@ -410,6 +412,26 @@ async def test_dlq_omits_unset_correlation_header(
     assert "correlation_id" not in dict(call_args["headers"])
     assert call_args["value"]["correlation_id"] is None
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
+
+
+async def test_dlq_persistence_uses_original_missing_header_state(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key-generated", {"data": "value-generated"})
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    token = correlation_id_var.set("SVC:generated-correlation")
+    try:
+        result = await test_consumer._send_to_dlq_async(mock_msg, ValueError("Test Error"))
+    finally:
+        correlation_id_var.reset(token)
+
+    assert result is True
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    assert dict(call_args["headers"])["correlation_id"] == b"SVC:generated-correlation"
+    assert call_args["value"]["correlation_id"] == "SVC:generated-correlation"
+    test_consumer._record_consumer_dlq_event.assert_awaited_once()
+    assert test_consumer._record_consumer_dlq_event.await_args.kwargs["correlation_id"] is None
 
 
 async def test_record_consumer_dlq_event_redacts_payload_excerpt(

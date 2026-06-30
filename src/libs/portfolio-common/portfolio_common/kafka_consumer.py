@@ -137,10 +137,12 @@ def _source_safe_error_traceback(error: Exception) -> str:
     return redact_sensitive_text(traceback.format_exc())
 
 
-def _redacted_dlq_header(header: tuple[str, bytes]) -> tuple[str, bytes]:
+def _redacted_dlq_header(header: tuple[str, bytes | None]) -> tuple[str, bytes]:
     key, value = header
     if _is_sensitive_dlq_header(key):
         return key, REDACTED_VALUE.encode("utf-8")
+    if value is None:
+        return key, b""
     try:
         return key, redact_sensitive_text(value.decode("utf-8")).encode("utf-8")
     except UnicodeDecodeError:
@@ -312,6 +314,9 @@ class BaseConsumer(ABC):
 
         try:
             correlation_id = normalize_lineage_value(correlation_id_var.get())
+            message_correlation_id = normalize_lineage_value(
+                self._get_message_header_correlation_id(msg)
+            )
             error_reason_code = classify_dlq_reason_code(error)
             dlq_payload = self._build_dlq_payload(
                 msg,
@@ -326,7 +331,7 @@ class BaseConsumer(ABC):
                 msg=msg,
                 error=error,
                 error_reason_code=error_reason_code,
-                correlation_id=correlation_id,
+                correlation_id=message_correlation_id,
             )
             logger.warning(
                 f"Message with key '{dlq_payload['original_key']}' sent to DLQ '{self.dlq_topic}'."
