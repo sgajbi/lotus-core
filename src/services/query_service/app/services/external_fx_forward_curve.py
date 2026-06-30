@@ -53,16 +53,7 @@ def build_external_fx_forward_curve_response(
             tenant_id=request.tenant_id,
             data_quality_status="MISSING",
             latest_evidence_timestamp=None,
-            source_batch_fingerprint=request_fingerprint(
-                {
-                    "product": "ExternalFXForwardCurve",
-                    "as_of_date": request.as_of_date.isoformat(),
-                    "reporting_currency": request.reporting_currency,
-                    "currency_pairs": sorted(request.currency_pairs),
-                    "tenors": sorted(request.tenors),
-                    "integration_status": "not_ingested",
-                }
-            ),
+            source_batch_fingerprint=None,
             snapshot_id=(
                 "external_fx_forward_curve:"
                 + request_fingerprint(

@@ -81,17 +81,7 @@ def build_planned_withdrawal_schedule_response(
             tenant_id=request.tenant_id,
             data_quality_status=("ACCEPTED" if rows else "MISSING"),
             latest_evidence_timestamp=latest_reference_evidence_timestamp([binding], rows),
-            source_batch_fingerprint=request_fingerprint(
-                {
-                    "product": "PlannedWithdrawalSchedule",
-                    "portfolio_id": portfolio_id,
-                    "client_id": binding.client_id,
-                    "mandate_id": binding.mandate_id,
-                    "as_of_date": request.as_of_date.isoformat(),
-                    "horizon_days": request.horizon_days,
-                    "row_count": len(rows),
-                }
-            ),
+            source_batch_fingerprint=None,
             snapshot_id=(
                 "planned_withdrawal_schedule:"
                 + request_fingerprint(

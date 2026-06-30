@@ -68,7 +68,7 @@ def test_build_planned_withdrawal_schedule_response_marks_ready() -> None:
     assert response.withdrawals[0].scheduled_date == date(2026, 7, 15)
     assert response.data_quality_status == "ACCEPTED"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, tzinfo=UTC)
-    assert response.source_batch_fingerprint is not None
+    assert response.source_batch_fingerprint is None
     assert response.snapshot_id is not None
     assert response.snapshot_id.startswith("planned_withdrawal_schedule:")
     assert response.lineage == {

@@ -87,7 +87,7 @@ def test_build_cio_model_change_affected_cohort_response_marks_ready() -> None:
     ]
     assert response.data_quality_status == "ACCEPTED"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 1, 8, 4, tzinfo=UTC)
-    assert response.source_batch_fingerprint is not None
+    assert response.source_batch_fingerprint is None
     assert response.snapshot_id is not None
     assert response.snapshot_id.startswith("cio_model_change_cohort:")
     assert response.lineage == {

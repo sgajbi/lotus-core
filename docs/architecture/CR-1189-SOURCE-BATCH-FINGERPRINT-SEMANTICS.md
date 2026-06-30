@@ -62,5 +62,5 @@ command or wiki-authored runbook changed.
 - Continue auditing other source-data products that still synthesize request fingerprints in
   `source_batch_fingerprint`.
 - Wire true source-batch fingerprints from persisted ingestion evidence where available.
-- Add broader conformance coverage to prevent request/snapshot fingerprints from being assigned to
-  source-batch lineage fields.
+- Keep the CR-1220 source-data product contract guard enforced so request/snapshot fingerprints are
+  not reassigned to source-batch lineage fields.

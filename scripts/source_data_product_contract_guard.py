@@ -31,7 +31,15 @@ ROUTER_ROOTS = {
 }
 
 DTO_ROOT = REPO_ROOT / "src" / "services" / "query_service" / "app" / "dtos"
+SOURCE_DATA_PRODUCT_SERVICE_ROOTS = (
+    REPO_ROOT / "src" / "services" / "query_service" / "app" / "services",
+)
 ROUTE_METHODS = {"delete", "get", "patch", "post", "put"}
+REQUEST_SCOPED_SOURCE_BATCH_NAMES = {
+    "request_fingerprint",
+    "request_scope_fingerprint",
+    "snapshot_fingerprint",
+}
 
 
 @dataclass(frozen=True)
@@ -100,6 +108,50 @@ def _name_or_attribute(node: ast.AST) -> str | None:
     if isinstance(node, ast.Attribute):
         return node.attr
     return None
+
+
+def _request_scoped_source_batch_expression(node: ast.AST) -> str | None:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            function_name = _name_or_attribute(child.func)
+            if function_name == "request_fingerprint":
+                return "request_fingerprint(...)"
+            continue
+        symbol_name = _name_or_attribute(child)
+        if symbol_name in REQUEST_SCOPED_SOURCE_BATCH_NAMES:
+            return symbol_name
+    return None
+
+
+def evaluate_source_batch_fingerprint_semantics(
+    service_roots: tuple[Path, ...] = SOURCE_DATA_PRODUCT_SERVICE_ROOTS,
+) -> list[str]:
+    errors: list[str] = []
+    for service_root in service_roots:
+        for service_file in sorted(service_root.glob("*.py")):
+            tree = ast.parse(service_file.read_text(encoding="utf-8"))
+            try:
+                source_label = service_file.relative_to(REPO_ROOT).as_posix()
+            except ValueError:
+                source_label = service_file.as_posix()
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                for keyword in node.keywords:
+                    if keyword.arg != "source_batch_fingerprint":
+                        continue
+                    request_scoped_expression = _request_scoped_source_batch_expression(
+                        keyword.value
+                    )
+                    if request_scoped_expression is None:
+                        continue
+                    errors.append(
+                        f"{source_label}:{keyword.value.lineno} source_batch_fingerprint "
+                        "must not use request/snapshot scope expression "
+                        f"{request_scoped_expression}; leave it null or populate it from "
+                        "persisted/source-derived source-batch lineage"
+                    )
+    return errors
 
 
 def _extract_routes_from_file(service: str, router_file: Path) -> list[SourceDataProductRoute]:
@@ -297,6 +349,7 @@ def main() -> int:
         discover_source_data_product_routes(),
         response_model_identities=discover_response_model_product_identities(),
     )
+    errors.extend(evaluate_source_batch_fingerprint_semantics())
     if errors:
         print("Source-data product contract guard failed:")
         for error in errors:

@@ -76,18 +76,7 @@ def build_external_order_execution_acknowledgement_response(
             tenant_id=request.tenant_id,
             data_quality_status="MISSING",
             latest_evidence_timestamp=None,
-            source_batch_fingerprint=request_fingerprint(
-                {
-                    "product": "ExternalOrderExecutionAcknowledgement",
-                    "portfolio_id": portfolio_id,
-                    "client_id": binding.client_id,
-                    "mandate_id": binding.mandate_id,
-                    "as_of_date": request.as_of_date.isoformat(),
-                    "execution_intent_id": request.execution_intent_id,
-                    "order_reference_ids": sorted(request.order_reference_ids),
-                    "integration_status": "not_ingested",
-                }
-            ),
+            source_batch_fingerprint=None,
             snapshot_id=(
                 "external_order_execution_acknowledgement:"
                 + request_fingerprint(
