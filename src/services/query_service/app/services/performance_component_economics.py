@@ -21,7 +21,7 @@ from .decimal_amounts import decimal_or_zero
 from .reference_data_helpers import latest_reference_evidence_timestamp
 from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
-from .transaction_cost_curve import transaction_fee_amount
+from .transaction_cost_curve import transaction_fee_amount, unique_transaction_cost_components
 
 SOURCE_CONTRACT_VERSION = "performance_component_economics_v1"
 _ComponentPredicate = Callable[[PerformanceComponentEconomicsRow], bool]
@@ -368,7 +368,7 @@ def _transaction_fee_components(
 ) -> list[PerformanceComponentEconomicsFeeComponent]:
     costs = [
         cost
-        for cost in (getattr(transaction, "costs", None) or [])
+        for cost in unique_transaction_cost_components(transaction)
         if decimal_or_zero(getattr(cost, "amount", None)) > 0
     ]
     if costs:

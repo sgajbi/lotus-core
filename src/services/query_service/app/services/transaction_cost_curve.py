@@ -12,6 +12,7 @@ from ..dtos.reference_integration_dto import (
     TransactionCostCurveResponse,
     TransactionCostCurveSupportability,
 )
+from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
 from .reference_data_helpers import latest_reference_evidence_timestamp
@@ -181,13 +182,44 @@ async def resolve_transaction_cost_curve_response(
 
 
 def transaction_fee_amount(transaction: Any) -> Decimal:
-    costs = list(getattr(transaction, "costs", None) or [])
+    costs = unique_transaction_cost_components(transaction)
     if costs:
         return sum((decimal_or_zero(getattr(cost, "amount", Decimal("0"))) for cost in costs))
     trade_fee = getattr(transaction, "trade_fee", None)
     if trade_fee is None:
         return Decimal("0")
     return decimal_or_zero(trade_fee)
+
+
+def unique_transaction_cost_components(transaction: Any) -> list[Any]:
+    unique_costs: list[Any] = []
+    observed_keys: set[tuple[str, str, str]] = set()
+    for index, cost in enumerate(getattr(transaction, "costs", None) or []):
+        component_key = transaction_cost_component_identity(
+            transaction=transaction,
+            cost=cost,
+            fallback_sequence=index,
+        )
+        if component_key in observed_keys:
+            continue
+        observed_keys.add(component_key)
+        unique_costs.append(cost)
+    return unique_costs
+
+
+def transaction_cost_component_identity(
+    *,
+    transaction: Any,
+    cost: Any,
+    fallback_sequence: int,
+) -> tuple[str, str, str]:
+    fee_type = str(getattr(cost, "fee_type", "") or "").strip().lower()
+    cost_currency = getattr(cost, "currency", None) or getattr(transaction, "trade_currency", None)
+    if cost_currency is None:
+        cost_currency = getattr(transaction, "currency", None)
+    if fee_type and cost_currency:
+        return ("component", fee_type, normalize_currency_code(cost_currency))
+    return ("anonymous", str(fallback_sequence), "")
 
 
 def transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:

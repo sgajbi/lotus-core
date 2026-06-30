@@ -579,6 +579,11 @@ def test_normalized_calculation_lookup_indexes_are_declared():
             "ix_txn_costs_positive_txn_id": [
                 "transaction_costs.transaction_id",
             ],
+            "uq_transaction_costs_component_identity": [
+                "transaction_costs.transaction_id",
+                "lower(trim(transaction_costs.fee_type))",
+                "upper(trim(transaction_costs.currency))",
+            ],
         },
         PositionTimeseries: {
             "ix_pos_ts_norm_port_sec_date_epoch": [
@@ -636,6 +641,7 @@ def test_normalized_calculation_lookup_indexes_are_declared():
         )
         == "amount > 0"
     )
+    assert transaction_cost_indexes["uq_transaction_costs_component_identity"].unique is True
 
 
 def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():

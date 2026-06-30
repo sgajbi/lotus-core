@@ -1566,6 +1566,13 @@ class TransactionCost(Base):
             "transaction_id",
             postgresql_where=text("amount > 0"),
         ),
+        Index(
+            "uq_transaction_costs_component_identity",
+            "transaction_id",
+            func.lower(func.trim(fee_type)),
+            func.upper(func.trim(currency)),
+            unique=True,
+        ),
     )
 
 

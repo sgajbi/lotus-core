@@ -277,6 +277,47 @@ def test_performance_component_economics_totals_do_not_mislabel_mixed_fee_curren
     assert totals[("fee", "USD")].amount == Decimal("1.0000")
 
 
+def test_performance_component_economics_deduplicates_fee_component_identity() -> None:
+    rows = build_performance_component_economics_rows(
+        [
+            _transaction(
+                transaction_id="TXN-DUP-FEE-001",
+                costs=[
+                    SimpleNamespace(
+                        fee_type=" brokerage ",
+                        amount=Decimal("1.0000"),
+                        currency="usd",
+                    ),
+                    SimpleNamespace(
+                        fee_type="BROKERAGE",
+                        amount=Decimal("1.0000"),
+                        currency="USD",
+                    ),
+                    SimpleNamespace(
+                        fee_type="exchange_fee",
+                        amount=Decimal("2.0000"),
+                        currency="USD",
+                    ),
+                ],
+            )
+        ]
+    )
+
+    totals = {
+        (total.component_family, total.currency): total
+        for total in build_performance_component_economics_totals(
+            rows,
+            portfolio_base_currency="USD",
+        )
+    }
+
+    assert [
+        (component.currency, component.amount) for component in rows[0].trade_fee_components
+    ] == [("USD", Decimal("3.0000"))]
+    assert totals[("fee", "USD")].amount == Decimal("3.0000")
+    assert totals[("fee", "USD")].evidence_count == 1
+
+
 def test_resolve_performance_component_economics_response_orchestrates_repository_read() -> None:
     async def run_case():
         calls: list[tuple[str, dict[str, object]]] = []

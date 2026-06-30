@@ -43,6 +43,11 @@ Primary transaction-flow tables include:
 This layer is the canonical transaction ledger and normalized cash movement foundation. Downstream
 services should not recreate these semantics independently.
 
+`transaction_costs` is keyed at the normalized component grain
+`(transaction_id, lower(trim(fee_type)), upper(trim(currency)))`. That grain prevents accidental
+duplicate booked-fee evidence from inflating source-data products such as
+`TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1`.
+
 ### Position and valuation state
 
 Primary position and valuation tables include:

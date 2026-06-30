@@ -43,11 +43,16 @@ switch into simulated, quoted, venue, broker, or expected-cost modes.
 | --- | --- | --- |
 | `portfolios` | `portfolio_id` | Portfolio must exist. |
 | `transactions` | `transaction_id`, `security_id`, `transaction_type`, `currency`, `transaction_date`, `gross_transaction_amount`, `trade_fee`, `updated_at` | Transaction must match the portfolio, requested filters, as-of scope, and requested transaction-date window. Gross transaction amount must be non-zero after absolute-value normalization. |
-| `transaction_costs` | `amount` | If explicit transaction-cost rows exist, their amounts are summed and used as the fee amount. If no explicit cost rows exist, the transaction `trade_fee` field is used. |
+| `transaction_costs` | `fee_type`, `amount`, `currency` | If explicit transaction-cost rows exist, one row per normalized `(transaction_id, fee_type, currency)` component is summed and used as the fee amount. If no explicit cost rows exist, the transaction `trade_fee` field is used. |
 
 Transactions with zero or missing fee evidence, or zero gross notional, do not contribute to a curve
 point. Cost rows take precedence over `trade_fee` so the product does not double count fees when
 both representations are present.
+
+`transaction_costs` component identity is normalized as `(transaction_id, lower(trim(fee_type)),
+upper(trim(currency)))`. The database enforces that grain. Read-side aggregation also de-duplicates
+already-loaded duplicate rows at the same normalized identity so accidental replay or legacy
+duplicate evidence cannot double count a transaction fee component.
 
 ## Unit Conventions
 
@@ -110,8 +115,8 @@ For each qualifying group `G`:
    materialization.
 6. Query booked transactions and explicit transaction-cost rows only for the selected page curve
    keys.
-7. For each transaction, determine `F_i` from summed explicit `transaction_costs.amount` when cost
-   rows exist; otherwise use `trade_fee`.
+7. For each transaction, determine `F_i` from summed explicit `transaction_costs.amount` at the
+   normalized component identity grain when cost rows exist; otherwise use `trade_fee`.
 8. Exclude transactions where `F_i <= 0` or `abs(gross_transaction_amount) <= 0`.
 9. Group remaining transactions by `(security_id, upper(transaction_type), upper(currency))`.
 10. Exclude groups whose `observation_count` is less than `min_observation_count`.

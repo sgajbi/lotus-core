@@ -76,6 +76,20 @@ def test_transaction_cost_curve_fee_amount_treats_blank_cost_as_zero() -> None:
     assert transaction_fee_amount(transaction) == Decimal("7.5000")
 
 
+def test_transaction_cost_curve_deduplicates_component_identity_rows() -> None:
+    transaction = _transaction(
+        transaction_id="TXN-AAPL-001",
+        trade_fee="999.0000",
+        costs=[
+            SimpleNamespace(fee_type=" brokerage ", amount=Decimal("12.5000"), currency="usd"),
+            SimpleNamespace(fee_type="BROKERAGE", amount=Decimal("12.5000"), currency="USD"),
+            SimpleNamespace(fee_type="exchange_fee", amount=Decimal("7.5000"), currency="USD"),
+        ],
+    )
+
+    assert transaction_fee_amount(transaction) == Decimal("20.0000")
+
+
 def test_transaction_cost_curve_points_group_and_filter_evidence() -> None:
     points = build_transaction_cost_curve_points(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
