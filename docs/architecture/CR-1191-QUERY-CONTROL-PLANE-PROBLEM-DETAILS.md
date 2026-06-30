@@ -63,6 +63,14 @@ depend on raw internal exception text for the migrated representative paths.
   source-product/portfolio/reason metadata.
 - Control-plane OpenAPI tests assert the migrated source-evidence 400 and 404 examples are
   documented under `application/problem+json` with the correct source-product metadata.
+- Integration source-data discovery tests assert benchmark assignment, model portfolio target,
+  portfolio-manager book membership, CIO model-change affected cohort, DPM portfolio universe, and
+  discretionary mandate binding not-found or invalid-request failures now use shared
+  `QCP_INTEGRATION_SOURCE_*` problem-details contracts with source-product and safe identifier
+  metadata instead of bare `detail` strings.
+- Control-plane OpenAPI tests assert the migrated integration source-data discovery examples are
+  documented under `application/problem+json` and keep legacy `application/json` examples limited to
+  route families that have not yet migrated.
 
 ## Validation Evidence
 
@@ -80,6 +88,12 @@ depend on raw internal exception text for the migrated representative paths.
   passed with 10 tests.
 - `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_portfolio_source_evidence_problem_details -q`
   passed with 101 tests.
+- `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_portfolio_benchmark_assignment_maps_not_found_to_404 tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_model_portfolio_targets_maps_not_found_to_404 tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404 tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_cio_model_change_affected_cohort_maps_missing_model_to_404 tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404 tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_dpm_portfolio_universe_candidates_maps_empty_universe_to_404 tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_dpm_portfolio_universe_candidates_maps_bad_token_to_422 tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_resolve_discretionary_mandate_binding_maps_not_found_to_404 -q`
+  passed with 8 tests.
+- `python -m pytest tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_assignment_not_found_maps_to_404 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_model_portfolio_targets_not_found_maps_to_404 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_mandate_binding_not_found_maps_to_404 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_dpm_portfolio_universe_bad_request_maps_to_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_benchmark_reference_parameters tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_integration_source_problem_details -q`
+  passed with 6 tests.
+- `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_benchmark_reference_parameters tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_integration_source_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_portfolio_source_evidence_problem_details -q`
+  passed with 105 tests.
 - `python -m ruff check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
   passed.
 - `python -m ruff format --check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
@@ -112,6 +126,11 @@ For the migrated source-evidence trio, missing portfolio/evidence and invalid pa
 errors now expose stable `QCP_SOURCE_EVIDENCE_NOT_FOUND` or
 `QCP_SOURCE_EVIDENCE_INVALID_REQUEST` codes with source product, portfolio ID, and exception-family
 metadata instead of raw service exception text.
+For the migrated integration source-data discovery routes, missing benchmark assignments, model
+targets, PM book memberships, CIO affected cohorts, DPM portfolio universe candidates, and mandate
+bindings now expose stable `QCP_INTEGRATION_SOURCE_NOT_FOUND` metadata. DPM portfolio-universe
+invalid request failures now expose `QCP_INTEGRATION_SOURCE_INVALID_REQUEST`. Existing HTTP status
+codes are preserved.
 
 ## Documentation And Wiki Decision
 
@@ -121,8 +140,8 @@ No wiki update is required because no operator command, runbook, or published wo
 ## Remaining Follow-Up
 
 - Continue migrating the remaining query-control-plane route families that still raise bare
-  `HTTPException(detail=...)`; operations support and the portfolio source-evidence trio are now
-  part of the migrated baseline.
+  `HTTPException(detail=...)`; operations support, the portfolio source-evidence trio, and the
+  selected integration source-data discovery routes are now part of the migrated baseline.
 - Replace simulation mutation substring classification with typed service exceptions in a later
   slice.
 - Add a deterministic guard or OpenAPI inventory once the problem-details migration baseline is

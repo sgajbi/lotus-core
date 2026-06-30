@@ -573,14 +573,24 @@ async def test_resolve_portfolio_benchmark_assignment_maps_not_found_to_404() ->
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.resolve_benchmark_assignment = AsyncMock(return_value=None)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_portfolio_benchmark_assignment(
             portfolio_id="DEMO_DPM_EUR_001",
             request=BenchmarkAssignmentRequest(as_of_date="2026-01-31"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective benchmark assignment found for portfolio and as_of_date.",
+        metadata={
+            "source_product": "BenchmarkAssignment",
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "reason": "not_found",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -658,14 +668,24 @@ async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.resolve_model_portfolio_targets = AsyncMock(return_value=None)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_model_portfolio_targets(
             model_portfolio_id="MODEL_MISSING",
             request=ModelPortfolioTargetRequest(as_of_date="2026-03-31"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No approved model portfolio target found for model_portfolio_id and as_of_date.",
+        metadata={
+            "source_product": "DpmModelPortfolioTarget",
+            "model_portfolio_id": "MODEL_MISSING",
+            "reason": "not_found",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -723,14 +743,24 @@ async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404(
         return_value=MagicMock(members=[])
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_portfolio_manager_book_membership(
             portfolio_manager_id="PM_EMPTY",
             request=PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No portfolio memberships found for portfolio_manager_id and request filters.",
+        metadata={
+            "source_product": "PortfolioManagerBookMembership",
+            "portfolio_manager_id": "PM_EMPTY",
+            "reason": "empty_result",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -794,14 +824,24 @@ async def test_resolve_cio_model_change_affected_cohort_maps_missing_model_to_40
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.resolve_cio_model_change_affected_cohort = AsyncMock(return_value=None)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_cio_model_change_affected_cohort(
             model_portfolio_id="MODEL_MISSING",
             request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="Approved model portfolio definition was not found for model_portfolio_id.",
+        metadata={
+            "source_product": "CioModelChangeAffectedCohort",
+            "model_portfolio_id": "MODEL_MISSING",
+            "reason": "not_found",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -811,14 +851,24 @@ async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404
         return_value=MagicMock(affected_mandates=[])
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_cio_model_change_affected_cohort(
             model_portfolio_id="MODEL_EMPTY",
             request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No affected mandates found for model_portfolio_id and request filters.",
+        metadata={
+            "source_product": "CioModelChangeAffectedCohort",
+            "model_portfolio_id": "MODEL_EMPTY",
+            "reason": "empty_result",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -902,13 +952,47 @@ async def test_resolve_dpm_portfolio_universe_candidates_maps_empty_universe_to_
         return_value=MagicMock(candidates=[])
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_dpm_portfolio_universe_candidates(
             request=DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No DPM portfolio-universe candidates found for request filters.",
+        metadata={
+            "source_product": "DpmPortfolioUniverseCandidate",
+            "reason": "empty_result",
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_dpm_portfolio_universe_candidates_maps_bad_token_to_422() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+        side_effect=ValueError("DPM portfolio-universe page token does not match request scope.")
+    )
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await resolve_dpm_portfolio_universe_candidates(
+            request=DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03"),
+            integration_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=422,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        detail="DPM portfolio-universe request is invalid.",
+        metadata={
+            "source_product": "DpmPortfolioUniverseCandidate",
+            "reason": "ValueError",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -975,14 +1059,24 @@ async def test_resolve_discretionary_mandate_binding_maps_not_found_to_404() -> 
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_discretionary_mandate_binding(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=DiscretionaryMandateBindingRequest(as_of_date="2026-04-10"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
+        metadata={
+            "source_product": "DiscretionaryMandateBinding",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "reason": "not_found",
+        },
+    )
 
 
 @pytest.mark.asyncio

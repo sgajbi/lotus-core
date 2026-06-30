@@ -870,10 +870,17 @@ async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
         json={"as_of_date": "2026-01-31"},
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == (
-        "No effective benchmark assignment found for portfolio and as_of_date."
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective benchmark assignment found for portfolio and as_of_date.",
     )
+    assert body["metadata"] == {
+        "source_product": "BenchmarkAssignment",
+        "portfolio_id": "PORT-INT-001",
+        "reason": "not_found",
+    }
 
 
 async def test_model_portfolio_targets_success(async_test_client):
@@ -913,10 +920,17 @@ async def test_model_portfolio_targets_not_found_maps_to_404(async_test_client):
         json={"as_of_date": "2026-03-31"},
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == (
-        "No approved model portfolio target found for model_portfolio_id and as_of_date."
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No approved model portfolio target found for model_portfolio_id and as_of_date.",
     )
+    assert body["metadata"] == {
+        "source_product": "DpmModelPortfolioTarget",
+        "model_portfolio_id": "MODEL_MISSING",
+        "reason": "not_found",
+    }
 
 
 async def test_mandate_binding_success(async_test_client):
@@ -954,10 +968,40 @@ async def test_mandate_binding_not_found_maps_to_404(async_test_client):
         json={"as_of_date": "2026-04-10"},
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == (
-        "No effective discretionary mandate binding found for portfolio and as_of_date."
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
     )
+    assert body["metadata"] == {
+        "source_product": "DiscretionaryMandateBinding",
+        "portfolio_id": "PORT-INT-001",
+        "reason": "not_found",
+    }
+
+
+async def test_dpm_portfolio_universe_bad_request_maps_to_problem_details(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+        side_effect=ValueError("DPM portfolio-universe page token does not match request scope.")
+    )
+
+    response = await client.post(
+        "/integration/dpm/portfolio-universe/candidates",
+        json={"as_of_date": "2026-05-03"},
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=422,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        detail="DPM portfolio-universe request is invalid.",
+    )
+    assert body["metadata"] == {
+        "source_product": "DpmPortfolioUniverseCandidate",
+        "reason": "ValueError",
+    }
 
 
 async def test_benchmark_definition_success(async_test_client):
