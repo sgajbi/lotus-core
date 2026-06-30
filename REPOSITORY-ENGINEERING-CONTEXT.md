@@ -391,6 +391,12 @@ Most relevant current governance:
     identity instead of reconstructing cash weight from Core-owned portfolio facts. This evidence
     is not liquidity advice, cash-deployment recommendation, performance methodology, risk
     methodology, or OMS acknowledgement.
+42. Cost-calculator product transaction processing requires instrument master data before
+    cost-engine processing, transaction-cost persistence, BUY lot-state persistence, or processed
+    event publication. Missing product instrument references are retryable reference-data
+    dependencies, not normal cost/lot writes; FX contract and pure adjustment flows keep their
+    specialized creation/validation paths. This is the first write-side enforcement slice for the
+    broader instrument-reference integrity backlog.
 
 ## Context Maintenance Rule
 

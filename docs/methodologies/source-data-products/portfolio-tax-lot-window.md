@@ -46,6 +46,7 @@ jurisdiction-specific advice modes.
 | `portfolios` | `portfolio_id` | Portfolio must exist. |
 | `position_lot_state` | `portfolio_id`, `security_id`, `instrument_id`, `lot_id`, `open_quantity`, `original_quantity`, `acquisition_date`, `lot_cost_base`, `lot_cost_local`, `source_transaction_id`, `source_system`, `calculation_policy_id`, `calculation_policy_version`, `updated_at` | Lot must match the portfolio, optional security filter, as-of date, and status filter. |
 | `transactions` | `transaction_id`, `trade_currency` | Optional outer join by `source_transaction_id` to populate local lot currency. |
+| `instruments` | `security_id` and instrument master context | New BUY lot-state writes from the cost consumer require instrument master data before persistence. Historical lots written before that guard may still require separate read-side degraded supportability. |
 
 The product preserves lot state already calculated and stored in `position_lot_state`. Cost-basis
 fields are preserved, not recalculated, reallocated, or tax-optimized by the endpoint.
@@ -122,6 +123,7 @@ adjustment, or optimal disposal sequence.
 | More rows exist than the page size | Response carries supportability `DEGRADED` and reason `TAX_LOTS_PAGE_PARTIAL`. |
 | Requested securities have no matching lots in the complete page scope | Response carries supportability `INCOMPLETE` and reason `TAX_LOTS_MISSING_FOR_REQUESTED_SECURITIES`. |
 | Full-portfolio request returns no lots | Response carries supportability `UNAVAILABLE`, reason `TAX_LOTS_EMPTY`, and `data_quality_status=MISSING`. |
+| Product BUY reaches cost/lot processing before instrument master data is available | Cost consumer defers processing as a retryable reference-data dependency and does not write BUY lot state. |
 
 `data_quality_status` is `COMPLETE` only when supportability is `READY`; it is `MISSING` for
 `UNAVAILABLE` and `PARTIAL` for degraded or incomplete responses. This status certifies source
