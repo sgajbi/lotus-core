@@ -26,7 +26,7 @@ from portfolio_common.openapi_enrichment import enrich_openapi_schema
 _TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
 METRICS_INTERNAL_OPEN_MODE = "internal_open"
-METRICS_BEARER_TOKEN_MODE = "bearer_token"
+METRICS_PROTECTED_SCRAPE_MODE = "protected_scrape"
 _METRICS_POLICY_CONFIGURED_STATE_KEY = "lotus_metrics_access_policy_configured"
 
 
@@ -37,7 +37,7 @@ class MetricsAccessPolicy:
 
     @property
     def protected(self) -> bool:
-        return self.mode == METRICS_BEARER_TOKEN_MODE
+        return self.mode == METRICS_PROTECTED_SCRAPE_MODE
 
 
 def resolve_metrics_access_policy(
@@ -47,7 +47,7 @@ def resolve_metrics_access_policy(
     if token is None:
         token = load_metrics_runtime_settings().metrics_access_token
     if token:
-        return MetricsAccessPolicy(mode=METRICS_BEARER_TOKEN_MODE, token=token)
+        return MetricsAccessPolicy(mode=METRICS_PROTECTED_SCRAPE_MODE, token=token)
     return MetricsAccessPolicy(mode=METRICS_INTERNAL_OPEN_MODE)
 
 
@@ -158,7 +158,7 @@ def _ensure_metrics_openapi_contract(schema: dict[str, Any]) -> None:
                             "message": (
                                 "Metrics endpoint access is restricted to authorized scrapers."
                             ),
-                            "metrics_access_mode": METRICS_BEARER_TOKEN_MODE,
+                            "metrics_access_mode": METRICS_PROTECTED_SCRAPE_MODE,
                         }
                     }
                 }
