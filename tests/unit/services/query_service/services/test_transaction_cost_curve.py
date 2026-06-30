@@ -339,6 +339,21 @@ def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads()
                 calls.append(("portfolio_exists", {"portfolio_id": portfolio_id}))
                 return True
 
+            async def list_transaction_cost_curve_keys(
+                self, **kwargs: object
+            ) -> list[tuple[str, str, str]]:
+                calls.append(("transaction_cost_curve_keys", kwargs))
+                return [
+                    ("EQ_US_AAPL", "BUY", "USD"),
+                    ("EQ_US_MSFT", "BUY", "USD"),
+                ]
+
+            async def list_transaction_cost_curve_available_security_ids(
+                self, **kwargs: object
+            ) -> set[str]:
+                calls.append(("transaction_cost_curve_available_security_ids", kwargs))
+                return {"EQ_US_AAPL", "EQ_US_MSFT"}
+
             async def list_transaction_cost_evidence(
                 self, **kwargs: object
             ) -> list[SimpleNamespace]:
@@ -375,9 +390,37 @@ def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads()
     assert [point.security_id for point in response.curve_points] == ["EQ_US_AAPL"]
     assert [call[0] for call in calls] == [
         "portfolio_exists",
+        "transaction_cost_curve_keys",
+        "transaction_cost_curve_available_security_ids",
         "transaction_cost_evidence",
     ]
     assert calls[1] == (
+        "transaction_cost_curve_keys",
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": date(2026, 4, 1),
+            "end_date": date(2026, 4, 10),
+            "as_of_date": date(2026, 4, 10),
+            "security_ids": ["EQ_US_AAPL", "EQ_US_MSFT"],
+            "transaction_types": ["BUY"],
+            "min_observation_count": 1,
+            "after_key": (),
+            "limit": 2,
+        },
+    )
+    assert calls[2] == (
+        "transaction_cost_curve_available_security_ids",
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": date(2026, 4, 1),
+            "end_date": date(2026, 4, 10),
+            "as_of_date": date(2026, 4, 10),
+            "security_ids": ["EQ_US_AAPL", "EQ_US_MSFT"],
+            "transaction_types": ["BUY"],
+            "min_observation_count": 1,
+        },
+    )
+    assert calls[3] == (
         "transaction_cost_evidence",
         {
             "portfolio_id": "PB_SG_GLOBAL_BAL_001",
@@ -386,6 +429,10 @@ def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads()
             "as_of_date": date(2026, 4, 10),
             "security_ids": ["EQ_US_AAPL", "EQ_US_MSFT"],
             "transaction_types": ["BUY"],
+            "curve_keys": [
+                ("EQ_US_AAPL", "BUY", "USD"),
+                ("EQ_US_MSFT", "BUY", "USD"),
+            ],
         },
     )
     assert encoded_payloads == [
@@ -401,6 +448,14 @@ def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -
         class Repository:
             async def portfolio_exists(self, portfolio_id: str) -> bool:
                 return False
+
+            async def list_transaction_cost_curve_keys(self, **_: object) -> list[object]:
+                raise AssertionError("Unexpected curve-key read for missing portfolio")
+
+            async def list_transaction_cost_curve_available_security_ids(
+                self, **_: object
+            ) -> set[str]:
+                raise AssertionError("Unexpected available-security read for missing portfolio")
 
             async def list_transaction_cost_evidence(self, **_: object) -> list[object]:
                 raise AssertionError("Unexpected transaction read for missing portfolio")
@@ -422,6 +477,36 @@ def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -
         assert "Portfolio with id PB_UNKNOWN not found" in str(exc)
     else:
         raise AssertionError("Expected missing portfolio lookup failure")
+
+
+def test_resolve_transaction_cost_curve_response_skips_evidence_read_without_page_keys() -> None:
+    async def run_case() -> object:
+        class Repository:
+            async def portfolio_exists(self, portfolio_id: str) -> bool:
+                return True
+
+            async def list_transaction_cost_curve_keys(self, **_: object) -> list[object]:
+                return []
+
+            async def list_transaction_cost_evidence(self, **_: object) -> list[object]:
+                raise AssertionError("Unexpected evidence read without eligible curve keys")
+
+        return await resolve_transaction_cost_curve_response(
+            repository=Repository(),
+            portfolio_id="PB_EMPTY",
+            request=TransactionCostCurveRequest(
+                as_of_date=date(2026, 4, 10),
+                window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+            ),
+            decode_page_token=lambda _: {},
+            encode_page_token=lambda _: "token",
+        )
+
+    response = asyncio.run(run_case())
+
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.curve_points == []
+    assert response.page.next_page_token is None
 
 
 def test_transaction_cost_curve_response_reports_page_scoped_supportability() -> None:

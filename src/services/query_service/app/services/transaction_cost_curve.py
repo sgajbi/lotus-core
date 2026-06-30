@@ -31,6 +31,7 @@ class TransactionCostCurvePage:
     points: list[TransactionCostCurvePoint]
     all_curve_keys: list[tuple[str, str, str]]
     has_more: bool
+    available_security_ids: set[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -118,13 +119,42 @@ async def resolve_transaction_cost_curve_response(
         request=request,
         cursor=decode_page_token(request.page.page_token),
     )
-    transactions = await repository.list_transaction_cost_evidence(
+    curve_keys = await repository.list_transaction_cost_curve_keys(
         portfolio_id=portfolio_id,
         start_date=request.window.start_date,
         end_date=request.window.end_date,
         as_of_date=request.as_of_date,
         security_ids=request.security_ids,
         transaction_types=request.transaction_types,
+        min_observation_count=request.min_observation_count,
+        after_key=request_scope.after_key,
+        limit=request.page.page_size + 1,
+    )
+    available_security_ids = (
+        await repository.list_transaction_cost_curve_available_security_ids(
+            portfolio_id=portfolio_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+            as_of_date=request.as_of_date,
+            security_ids=request.security_ids,
+            transaction_types=request.transaction_types,
+            min_observation_count=request.min_observation_count,
+        )
+        if request.security_ids
+        else None
+    )
+    transactions = (
+        await repository.list_transaction_cost_evidence(
+            portfolio_id=portfolio_id,
+            start_date=request.window.start_date,
+            end_date=request.window.end_date,
+            as_of_date=request.as_of_date,
+            security_ids=request.security_ids,
+            transaction_types=request.transaction_types,
+            curve_keys=curve_keys,
+        )
+        if curve_keys
+        else []
     )
     curve_page = build_transaction_cost_curve_page(
         portfolio_id=portfolio_id,
@@ -132,6 +162,7 @@ async def resolve_transaction_cost_curve_response(
         min_observation_count=request.min_observation_count,
         after_key=request_scope.after_key,
         page_size=request.page.page_size,
+        available_security_ids=available_security_ids,
     )
     next_page_token = transaction_cost_curve_page_token(
         request_scope=request_scope,
@@ -275,6 +306,7 @@ def build_transaction_cost_curve_page(
     min_observation_count: int,
     after_key: tuple[str, str, str] | tuple[()] = (),
     page_size: int,
+    available_security_ids: set[str] | None = None,
 ) -> TransactionCostCurvePage:
     grouped = _group_transaction_cost_observations(transactions)
     all_curve_keys = _eligible_curve_keys(
@@ -299,6 +331,7 @@ def build_transaction_cost_curve_page(
         points=points,
         all_curve_keys=all_curve_keys,
         has_more=has_more,
+        available_security_ids=available_security_ids,
     )
 
 
@@ -314,7 +347,9 @@ def build_transaction_cost_curve_response(
     requested_security_ids = {
         normalize_security_id(security_id) for security_id in request.security_ids or []
     }
-    returned_security_ids = {key[0] for key in curve_page.all_curve_keys}
+    returned_security_ids = curve_page.available_security_ids or {
+        key[0] for key in curve_page.all_curve_keys
+    }
     missing_security_ids = sorted(requested_security_ids - returned_security_ids)
 
     supportability_state = "READY"

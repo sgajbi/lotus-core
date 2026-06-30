@@ -42,6 +42,44 @@ def _identity_filter_kwargs(*, portfolio_id: str, **filters) -> dict[str, str]:
     }
 
 
+def _transaction_cost_curve_key_expressions():
+    return (
+        func.trim(Transaction.security_id),
+        func.upper(func.trim(Transaction.transaction_type)),
+        func.upper(func.trim(Transaction.currency)),
+    )
+
+
+def _transaction_cost_curve_after_key_predicate(after_key: tuple[str, str, str] | tuple[()]):
+    if not after_key:
+        return None
+    security_id, transaction_type, currency = after_key
+    security_expr, transaction_type_expr, currency_expr = _transaction_cost_curve_key_expressions()
+    return or_(
+        security_expr > security_id,
+        and_(security_expr == security_id, transaction_type_expr > transaction_type),
+        and_(
+            security_expr == security_id,
+            transaction_type_expr == transaction_type,
+            currency_expr > currency,
+        ),
+    )
+
+
+def _transaction_cost_curve_key_filter(curve_keys: list[tuple[str, str, str]]):
+    security_expr, transaction_type_expr, currency_expr = _transaction_cost_curve_key_expressions()
+    return or_(
+        *[
+            and_(
+                security_expr == security_id,
+                transaction_type_expr == transaction_type,
+                currency_expr == currency,
+            )
+            for security_id, transaction_type, currency in curve_keys
+        ]
+    )
+
+
 def _apply_security_filter(stmt, security_id: Optional[str]):
     normalized_security_id = normalize_security_id(security_id)
     if not normalized_security_id:
@@ -309,6 +347,7 @@ class TransactionRepository:
         as_of_date: date,
         security_ids: list[str] | None = None,
         transaction_types: list[str] | None = None,
+        curve_keys: list[tuple[str, str, str]] | None = None,
     ) -> List[Transaction]:
         stmt = (
             select(Transaction)
@@ -341,6 +380,10 @@ class TransactionRepository:
             stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
         if transaction_types:
             stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
+        if curve_keys is not None:
+            if not curve_keys:
+                return []
+            stmt = stmt.where(_transaction_cost_curve_key_filter(curve_keys))
         stmt = stmt.order_by(
             Transaction.security_id.asc(),
             Transaction.transaction_type.asc(),
@@ -350,6 +393,128 @@ class TransactionRepository:
         )
         results = await self.db.execute(stmt)
         return list(results.scalars().unique().all())
+
+    async def list_transaction_cost_curve_keys(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        as_of_date: date,
+        security_ids: list[str] | None = None,
+        transaction_types: list[str] | None = None,
+        min_observation_count: int,
+        after_key: tuple[str, str, str] | tuple[()] = (),
+        limit: int,
+    ) -> list[tuple[str, str, str]]:
+        security_expr, transaction_type_expr, currency_expr = (
+            _transaction_cost_curve_key_expressions()
+        )
+        stmt = (
+            select(
+                security_expr.label("security_id"),
+                transaction_type_expr.label("transaction_type"),
+                currency_expr.label("currency"),
+            )
+            .where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_date >= start_of_day(start_date),
+                Transaction.transaction_date < start_of_next_day(end_date),
+                Transaction.transaction_date < start_of_next_day(as_of_date),
+                func.abs(Transaction.gross_transaction_amount) > 0,
+                or_(
+                    Transaction.trade_fee > 0,
+                    exists(
+                        select(1).where(
+                            TransactionCost.transaction_id == Transaction.transaction_id,
+                            TransactionCost.amount > 0,
+                        )
+                    ),
+                ),
+            )
+            .group_by(security_expr, transaction_type_expr, currency_expr)
+            .having(func.count(Transaction.id) >= min_observation_count)
+            .order_by(security_expr.asc(), transaction_type_expr.asc(), currency_expr.asc())
+            .limit(limit)
+        )
+
+        if security_ids:
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            ]
+            if not normalized_security_ids:
+                return []
+            stmt = stmt.where(security_expr.in_(normalized_security_ids))
+        if transaction_types:
+            stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
+        after_predicate = _transaction_cost_curve_after_key_predicate(after_key)
+        if after_predicate is not None:
+            stmt = stmt.where(after_predicate)
+
+        result = await self.db.execute(stmt)
+        return [
+            (security_id, transaction_type, currency)
+            for security_id, transaction_type, currency in result.all()
+        ]
+
+    async def list_transaction_cost_curve_available_security_ids(
+        self,
+        *,
+        portfolio_id: str,
+        start_date: date,
+        end_date: date,
+        as_of_date: date,
+        security_ids: list[str] | None = None,
+        transaction_types: list[str] | None = None,
+        min_observation_count: int,
+    ) -> set[str]:
+        security_expr, transaction_type_expr, currency_expr = (
+            _transaction_cost_curve_key_expressions()
+        )
+        eligible_groups = (
+            select(security_expr.label("security_id"))
+            .where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_date >= start_of_day(start_date),
+                Transaction.transaction_date < start_of_next_day(end_date),
+                Transaction.transaction_date < start_of_next_day(as_of_date),
+                func.abs(Transaction.gross_transaction_amount) > 0,
+                or_(
+                    Transaction.trade_fee > 0,
+                    exists(
+                        select(1).where(
+                            TransactionCost.transaction_id == Transaction.transaction_id,
+                            TransactionCost.amount > 0,
+                        )
+                    ),
+                ),
+            )
+            .group_by(security_expr, transaction_type_expr, currency_expr)
+            .having(func.count(Transaction.id) >= min_observation_count)
+        )
+        if security_ids:
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            ]
+            if not normalized_security_ids:
+                return set()
+            eligible_groups = eligible_groups.where(security_expr.in_(normalized_security_ids))
+        if transaction_types:
+            eligible_groups = eligible_groups.where(
+                Transaction.transaction_type.in_(transaction_types)
+            )
+
+        eligible_groups_subquery = eligible_groups.subquery()
+        result = await self.db.execute(
+            select(eligible_groups_subquery.c.security_id)
+            .distinct()
+            .order_by(eligible_groups_subquery.c.security_id.asc())
+        )
+        return set(result.scalars().all())
 
     async def list_performance_component_economics_evidence(
         self,
