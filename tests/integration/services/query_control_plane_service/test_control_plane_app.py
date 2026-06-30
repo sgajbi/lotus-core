@@ -1592,10 +1592,12 @@ async def test_openapi_describes_integration_policy_and_core_snapshot(async_test
     )
     assert blocked_example["correlation_id"]
 
-    invalid_enrichment = enrichment_bulk["responses"]["400"]["content"]["application/json"][
+    invalid_enrichment = enrichment_bulk["responses"]["400"]["content"]["application/problem+json"][
         "example"
     ]
-    assert invalid_enrichment["detail"] == "security_ids must contain at least one identifier"
+    assert invalid_enrichment["error_code"] == "QCP_INSTRUMENT_ENRICHMENT_INVALID_REQUEST"
+    assert invalid_enrichment["metadata"]["source_product"] == "InstrumentReferenceBundle"
+    assert invalid_enrichment["detail"] == "Instrument enrichment request is invalid."
     assert "Used directly by lotus-advise and lotus-risk" in (enrichment_bulk["description"])
     assert "lotus-performance or lotus-gateway may adopt" in (enrichment_bulk["description"])
     assert "null issuer fields for unknown securities" in enrichment_bulk["description"]

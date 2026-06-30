@@ -1226,8 +1226,16 @@ async def test_instrument_enrichment_bulk_whitespace_only_ids_map_to_400(async_t
         json={"security_ids": ["   "]},
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "security_ids must contain at least one identifier"
+    body = _assert_problem_details(
+        response,
+        status_code=400,
+        error_code="QCP_INSTRUMENT_ENRICHMENT_INVALID_REQUEST",
+        detail="Instrument enrichment request is invalid.",
+    )
+    assert body["metadata"] == {
+        "source_product": "InstrumentReferenceBundle",
+        "reason": "CoreSnapshotBadRequestError",
+    }
 
 
 async def test_benchmark_composition_window_success(async_test_client):
