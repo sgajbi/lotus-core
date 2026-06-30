@@ -10,7 +10,11 @@ from typing import Any, Awaitable, Callable, Protocol
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
-from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
+from portfolio_common.logging_utils import (
+    correlation_id_var,
+    normalize_lineage_value,
+    redact_sensitive,
+)
 from portfolio_common.source_data_security import source_data_capability_rules
 
 MiddlewareNext = Callable[[Request], Awaitable[Response]]
@@ -22,15 +26,6 @@ READ_AUDIT_METHODS = {"GET", "HEAD"}
 READ_AUTHZ_METHODS = {"GET", "HEAD"}
 CAPABILITY_RULE_METHODS = WRITE_METHODS | READ_AUTHZ_METHODS
 REQUIRED_HEADERS = {"x-actor-id", "x-tenant-id", "x-role", "x-correlation-id"}
-REDACT_FIELDS = {
-    "password",
-    "secret",
-    "token",
-    "authorization",
-    "ssn",
-    "account_number",
-    "client_email",
-}
 
 
 class EnterpriseSettings(Protocol):
@@ -247,21 +242,6 @@ class EnterpriseReadinessRuntime:
                 }
             },
         )
-
-
-def redact_sensitive(value: Any) -> Any:
-    if isinstance(value, dict):
-        return _redact_dict(value)
-    if isinstance(value, list):
-        return [redact_sensitive(item) for item in value]
-    return value
-
-
-def _redact_dict(value: dict[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, item in value.items():
-        result[key] = "***REDACTED***" if key.lower() in REDACT_FIELDS else redact_sensitive(item)
-    return result
 
 
 def _dict_value(value: dict[str, Any], key: str) -> dict[str, Any]:

@@ -29,3 +29,15 @@ def test_emit_test_output_always_writes_non_verbose_messages(capsys) -> None:
     emit_test_output("always")
     captured = capsys.readouterr()
     assert captured.out == "always\n"
+
+
+def test_emit_test_output_redacts_database_urls_and_tokens(capsys) -> None:
+    emit_test_output(
+        "db=postgresql://user:password@localhost:5432/portfolio_db authorization=Bearer abc123"
+    )
+
+    captured = capsys.readouterr()
+    assert "password" not in captured.out
+    assert "abc123" not in captured.out
+    assert "postgresql://***REDACTED***@localhost:5432/portfolio_db" in captured.out
+    assert "authorization=***REDACTED***" in captured.out

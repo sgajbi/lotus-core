@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 
+from portfolio_common.logging_utils import redact_sensitive_text
+
 
 def should_verbose_test_output(env: dict[str, str] | None = None) -> bool:
     source = os.environ if env is None else env
@@ -14,4 +16,4 @@ def should_verbose_test_output(env: dict[str, str] | None = None) -> bool:
 def emit_test_output(message: str, *, verbose_only: bool = False) -> None:
     if verbose_only and not should_verbose_test_output():
         return
-    print(message)
+    print(redact_sensitive_text(message))
