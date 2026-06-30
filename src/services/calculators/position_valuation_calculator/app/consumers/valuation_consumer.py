@@ -264,8 +264,6 @@ class ValuationConsumer(BaseConsumer):
     ) -> None:
         error_msg = ValuationConsumer._missing_reference_data_message(event, reference_data)
         VALUATION_JOBS_FAILED_TOTAL.labels(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
             reason="missing_ref_data",
         ).inc()
         logger.error(f"{error_msg} Job will be marked FAILED.")
@@ -347,8 +345,6 @@ class ValuationConsumer(BaseConsumer):
             f"Valuation logic returned no result for {event.security_id} on {event.valuation_date}"
         )
         VALUATION_JOBS_FAILED_TOTAL.labels(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
             reason="valuation_logic_failed",
         ).inc()
         return _ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=failure_reason)
@@ -383,8 +379,6 @@ class ValuationConsumer(BaseConsumer):
             f"{instrument_currency}->{portfolio_currency} on or before {event.valuation_date}"
         )
         VALUATION_JOBS_FAILED_TOTAL.labels(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
             reason="missing_fx_rate",
         ).inc()
         logger.error(
@@ -475,9 +469,7 @@ class ValuationConsumer(BaseConsumer):
         correlation_id: str,
         error: DataNotFoundError,
     ) -> None:
-        VALUATION_JOBS_SKIPPED_TOTAL.labels(
-            portfolio_id=event.portfolio_id, security_id=event.security_id
-        ).inc()
+        VALUATION_JOBS_SKIPPED_TOTAL.labels(reason="no_position_history").inc()
         logger.warning(
             f"Skipping job due to missing position data: {error}",
             extra={

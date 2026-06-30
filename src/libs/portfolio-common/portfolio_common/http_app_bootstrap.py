@@ -20,6 +20,7 @@ from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUE
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
 
 _TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
 
 
 def normalize_trace_id(value: str | None) -> str | None:
@@ -28,6 +29,14 @@ def normalize_trace_id(value: str | None) -> str | None:
         return None
     candidate = normalized.lower()
     return candidate if _TRACE_ID_PATTERN.fullmatch(candidate) else None
+
+
+def http_metric_path_template(request: Request) -> str:
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None)
+    if isinstance(route_path, str) and route_path:
+        return route_path
+    return UNMATCHED_ROUTE_TEMPLATE
 
 
 def configure_standard_openapi(app: FastAPI, *, service_name: str) -> None:
@@ -102,11 +111,12 @@ def configure_standard_http_app(
         start = time.perf_counter()
         response = await call_next(request)
         elapsed = time.perf_counter() - start
+        route_template = http_metric_path_template(request)
 
         labels = {
             "service": service_name,
             "method": request.method,
-            "path": request.url.path,
+            "path": route_template,
         }
         HTTP_REQUEST_LATENCY_SECONDS.labels(**labels).observe(elapsed)
         HTTP_REQUESTS_TOTAL.labels(status=str(response.status_code), **labels).inc()
@@ -116,6 +126,7 @@ def configure_standard_http_app(
             extra={
                 "method": request.method,
                 "path": request.url.path,
+                "route_template": route_template,
                 "status_code": response.status_code,
                 "duration_ms": round(elapsed * 1000, 2),
             },

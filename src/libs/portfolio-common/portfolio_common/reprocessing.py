@@ -50,8 +50,6 @@ class EpochFencer:
             EPOCH_MISMATCH_DROPPED_TOTAL.labels(
                 service_name=self.service_name,
                 topic=getattr(event, "topic", "<unknown>") or "<unknown>",
-                portfolio_id=event.portfolio_id,
-                security_id=event.security_id,
             ).inc()
             logger.warning(
                 "Message has stale epoch. Discarding.",

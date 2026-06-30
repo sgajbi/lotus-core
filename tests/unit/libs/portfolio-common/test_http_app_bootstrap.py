@@ -1,4 +1,14 @@
-from portfolio_common.http_app_bootstrap import normalize_trace_id
+from unittest.mock import MagicMock, patch
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from portfolio_common.http_app_bootstrap import (
+    UNMATCHED_ROUTE_TEMPLATE,
+    configure_standard_http_app,
+    http_metric_path_template,
+    normalize_trace_id,
+)
+from starlette.requests import Request
 
 
 def test_normalize_trace_id_accepts_valid_hex_trace_id():
@@ -13,3 +23,47 @@ def test_normalize_trace_id_rejects_invalid_values():
     assert normalize_trace_id("<not-set>") is None
     assert normalize_trace_id("trace-123") is None
     assert normalize_trace_id("0123") is None
+
+
+def test_http_metric_path_template_falls_back_for_unmatched_routes():
+    request = Request({"type": "http", "method": "GET", "path": "/not-found", "headers": []})
+
+    assert http_metric_path_template(request) == UNMATCHED_ROUTE_TEMPLATE
+
+
+def test_standard_http_metrics_use_route_template_for_dynamic_paths():
+    app = FastAPI()
+
+    @app.get("/portfolios/{portfolio_id}/positions/{security_id}")
+    def read_position(portfolio_id: str, security_id: str):
+        return {"portfolio_id": portfolio_id, "security_id": security_id}
+
+    latency_metric = MagicMock()
+    request_metric = MagicMock()
+
+    with (
+        patch("portfolio_common.http_app_bootstrap.HTTP_REQUEST_LATENCY_SECONDS", latency_metric),
+        patch("portfolio_common.http_app_bootstrap.HTTP_REQUESTS_TOTAL", request_metric),
+    ):
+        configure_standard_http_app(
+            app,
+            service_name="test-service",
+            service_prefix="TST",
+            logger=MagicMock(),
+            id_generator=lambda prefix: f"{prefix}-id",
+        )
+
+        client = TestClient(app)
+        first_response = client.get("/portfolios/P1/positions/S1")
+        second_response = client.get("/portfolios/P2/positions/S2")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    observed_paths = [call.kwargs["path"] for call in latency_metric.labels.call_args_list]
+    assert observed_paths == [
+        "/portfolios/{portfolio_id}/positions/{security_id}",
+        "/portfolios/{portfolio_id}/positions/{security_id}",
+    ]
+    assert {call.kwargs["path"] for call in request_metric.labels.call_args_list} == {
+        "/portfolios/{portfolio_id}/positions/{security_id}"
+    }

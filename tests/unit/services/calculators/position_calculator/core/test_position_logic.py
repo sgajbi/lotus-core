@@ -244,7 +244,7 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     )
 
     # Assert that the metric was instrumented correctly
-    mock_metric.labels.assert_called_once_with(portfolio_id="P1", security_id="S1")
+    mock_metric.labels.assert_called_once_with(trigger="backdated_transaction")
     mock_metric.labels.return_value.inc.assert_called_once()
 
     # Assert that it tried to publish TWO events: one historical + the triggering one

@@ -187,9 +187,7 @@ class PositionCalculator:
             effective_completed_date=effective_completed_date,
             latest_position_history_date=latest_position_history_date,
         )
-        REPROCESSING_EPOCH_BUMPED_TOTAL.labels(
-            portfolio_id=portfolio_id, security_id=security_id
-        ).inc()
+        REPROCESSING_EPOCH_BUMPED_TOTAL.labels(trigger="backdated_transaction").inc()
 
         new_watermark = transaction_date - timedelta(days=1)
         new_state = await position_state_repo.increment_epoch_and_reset_watermark(
