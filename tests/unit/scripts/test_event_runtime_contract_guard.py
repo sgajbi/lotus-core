@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from portfolio_common.event_supportability import EventFamilyDefinition
+from portfolio_common.event_supportability import DirectKafkaTopicDefinition, EventFamilyDefinition
 
 from scripts import event_runtime_contract_guard as guard
 
@@ -28,6 +28,16 @@ def test_discover_direct_kafka_publishes_finds_current_ingestion_topics() -> Non
     assert "transactions.reprocessing.requested" in topics
     assert "valuation.job.requested" in topics
     assert "portfolio_day.aggregation.job.requested" in topics
+
+
+def test_discover_consumer_dlq_wirings_finds_current_base_consumer_topics() -> None:
+    wirings = guard.discover_consumer_dlq_topic_wirings()
+    topics = {wiring.topic for wiring in wirings}
+    consumer_names = {wiring.consumer_name for wiring in wirings}
+
+    assert "dlq.persistence_service" in topics
+    assert "PortfolioConsumer" in consumer_names
+    assert "CostCalculatorConsumer" in consumer_names
 
 
 def test_evaluate_outbox_event_contracts_accepts_current_runtime_emissions() -> None:
@@ -127,6 +137,48 @@ def test_evaluate_outbox_event_contracts_rejects_uncataloged_direct_kafka_publis
     ]
 
 
+def test_evaluate_outbox_event_contracts_rejects_uncataloged_dlq_topic() -> None:
+    errors = guard.evaluate_outbox_event_contracts(
+        emissions=(),
+        direct_publishes=(),
+        consumer_dlq_wirings=(
+            guard.ConsumerDlqTopicWiring(
+                source="src/example.py",
+                function_name="build",
+                consumer_name="ExampleConsumer",
+                topic="uncataloged.dlq",
+                expression='"uncataloged.dlq"',
+            ),
+        ),
+    )
+
+    assert errors == [
+        "src/example.py:build: ExampleConsumer wires DLQ topic 'uncataloged.dlq' missing from "
+        "the RFC-0083 direct Kafka topic catalog"
+    ]
+
+
+def test_evaluate_outbox_event_contracts_rejects_unresolved_dlq_topic() -> None:
+    errors = guard.evaluate_outbox_event_contracts(
+        emissions=(),
+        direct_publishes=(),
+        consumer_dlq_wirings=(
+            guard.ConsumerDlqTopicWiring(
+                source="src/example.py",
+                function_name="build",
+                consumer_name="ExampleConsumer",
+                topic=None,
+                expression="settings.dlq_topic",
+            ),
+        ),
+    )
+
+    assert errors == [
+        "src/example.py:build: ExampleConsumer wires an unresolved BaseConsumer DLQ topic "
+        "expression 'settings.dlq_topic'"
+    ]
+
+
 def test_discover_outbox_event_emissions_resolves_literal_and_config_topics(
     tmp_path: Path,
 ) -> None:
@@ -209,3 +261,127 @@ def publish_literal(producer):
             topic="transactions.raw.received",
         ),
     )
+
+
+def test_discover_consumer_dlq_wirings_resolves_literal_config_alias_and_dynamic(
+    tmp_path: Path,
+) -> None:
+    source_file = tmp_path / "consumer_manager.py"
+    source_file.write_text(
+        """
+from portfolio_common.config import KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
+from portfolio_common.kafka_consumer import BaseConsumer
+
+class ExampleConsumer(BaseConsumer):
+    pass
+
+class ChildConsumer(ExampleConsumer):
+    pass
+
+def build_config():
+    dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
+    return ExampleConsumer(
+        bootstrap_servers="kafka:9092",
+        topic="transactions.raw.received",
+        group_id="example",
+        dlq_topic=dlq_topic,
+    )
+
+def build_literal():
+    return ChildConsumer(
+        bootstrap_servers="kafka:9092",
+        topic="transactions.raw.received",
+        group_id="example",
+        dlq_topic="literal.dlq",
+    )
+
+def build_dynamic(settings):
+    return ExampleConsumer(
+        bootstrap_servers="kafka:9092",
+        topic="transactions.raw.received",
+        group_id="example",
+        dlq_topic=settings.dlq_topic,
+    )
+""",
+        encoding="utf-8",
+    )
+
+    wirings = guard.discover_consumer_dlq_topic_wirings(source_root=tmp_path)
+    by_function = {wiring.function_name: wiring for wiring in wirings}
+
+    assert by_function["build_config"] == guard.ConsumerDlqTopicWiring(
+        source="consumer_manager.py",
+        function_name="build_config",
+        consumer_name="ExampleConsumer",
+        topic="dlq.persistence_service",
+        expression="dlq_topic",
+    )
+    assert by_function["build_literal"] == guard.ConsumerDlqTopicWiring(
+        source="consumer_manager.py",
+        function_name="build_literal",
+        consumer_name="ChildConsumer",
+        topic="literal.dlq",
+        expression="'literal.dlq'",
+    )
+    assert by_function["build_dynamic"] == guard.ConsumerDlqTopicWiring(
+        source="consumer_manager.py",
+        function_name="build_dynamic",
+        consumer_name="ExampleConsumer",
+        topic=None,
+        expression="settings.dlq_topic",
+    )
+
+
+def test_evaluate_outbox_event_contracts_accepts_cataloged_literal_and_config_dlq_topics(
+    tmp_path: Path,
+) -> None:
+    source_file = tmp_path / "consumer_manager.py"
+    source_file.write_text(
+        """
+from portfolio_common.config import KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
+from portfolio_common.kafka_consumer import BaseConsumer
+
+class ExampleConsumer(BaseConsumer):
+    pass
+
+def build_config():
+    return ExampleConsumer(
+        bootstrap_servers="kafka:9092",
+        topic="transactions.raw.received",
+        group_id="example",
+        dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+    )
+
+def build_literal():
+    return ExampleConsumer(
+        bootstrap_servers="kafka:9092",
+        topic="transactions.raw.received",
+        group_id="example",
+        dlq_topic="literal.dlq",
+    )
+""",
+        encoding="utf-8",
+    )
+    literal_dlq_definition = DirectKafkaTopicDefinition(
+        name="LiteralDlq",
+        topic="literal.dlq",
+        semantic_type="consumer_dlq",
+        producer_service="BaseConsumer",
+        consumer_services=("event_replay_service",),
+        payload_contract="base_consumer_dlq_payload",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=("IngestionEvidenceBundle",),
+    )
+
+    errors = guard.evaluate_outbox_event_contracts(
+        emissions=(),
+        direct_publishes=(),
+        direct_topic_definitions=(
+            *guard.DIRECT_KAFKA_TOPIC_DEFINITIONS,
+            literal_dlq_definition,
+        ),
+        consumer_dlq_wirings=guard.discover_consumer_dlq_topic_wirings(source_root=tmp_path),
+    )
+
+    assert errors == []
