@@ -2,11 +2,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from portfolio_common.health import create_health_router
 from portfolio_common.http_app_bootstrap import configure_standard_http_app, include_routers
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.logging_utils import generate_correlation_id, setup_logging
+from starlette.responses import JSONResponse
 
 from .routers import (
     business_dates,
@@ -20,6 +21,7 @@ from .routers import (
     transactions,
     uploads,
 )
+from .services.ingestion_job_lifecycle import IngestionIdempotencyConflictError
 
 SERVICE_PREFIX = "ING"
 SERVICE_NAME = "ingestion_service"
@@ -83,6 +85,25 @@ configure_standard_http_app(
     logger=logger,
     id_generator=lambda prefix: generate_correlation_id(prefix),
 )
+
+
+@app.exception_handler(IngestionIdempotencyConflictError)
+async def ingestion_idempotency_conflict_handler(
+    _request: Request,
+    exc: IngestionIdempotencyConflictError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "detail": {
+                "code": "INGESTION_IDEMPOTENCY_CONFLICT",
+                "message": str(exc),
+                "endpoint": exc.endpoint,
+                "idempotency_key": exc.idempotency_key,
+            }
+        },
+    )
+
 
 health_router = create_health_router("kafka")
 include_routers(

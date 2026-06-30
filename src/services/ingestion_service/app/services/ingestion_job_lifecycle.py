@@ -18,7 +18,19 @@ from ..DTOs.ingestion_job_dto import (
     IngestionJobFailureResponse,
     IngestionJobResponse,
 )
-from .ingestion_payload_evidence import source_safe_request_payload
+from .ingestion_payload_evidence import (
+    source_safe_payload_fingerprint,
+    source_safe_request_payload,
+)
+
+
+class IngestionIdempotencyConflictError(ValueError):
+    def __init__(self, *, endpoint: str, idempotency_key: str):
+        self.endpoint = endpoint
+        self.idempotency_key = idempotency_key
+        super().__init__(
+            "Ingestion idempotency key was reused for the same endpoint with a different payload."
+        )
 
 
 @dataclass(slots=True)
@@ -96,6 +108,14 @@ async def create_or_get_job_result(
                     .limit(1)
                 )
                 if existing is not None:
+                    if _idempotency_payload_conflicts(
+                        existing_payload=existing.request_payload,
+                        requested_payload=request_payload,
+                    ):
+                        raise IngestionIdempotencyConflictError(
+                            endpoint=endpoint,
+                            idempotency_key=idempotency_key,
+                        )
                     return IngestionJobCreateResult(job=to_job_response(existing), created=False)
 
             row = DBIngestionJob(
@@ -294,3 +314,14 @@ def _build_failure_row(
         failure_reason=failure_reason,
         failed_record_keys=failed_record_keys or [],
     )
+
+
+def _idempotency_payload_conflicts(
+    *,
+    existing_payload: Any,
+    requested_payload: dict[str, Any] | None,
+) -> bool:
+    existing_payload_dict = existing_payload if isinstance(existing_payload, dict) else None
+    return source_safe_payload_fingerprint(
+        existing_payload_dict
+    ) != source_safe_payload_fingerprint(requested_payload)
