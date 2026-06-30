@@ -21,7 +21,7 @@ assessment, OMS acknowledgement, or minimum-cost execution optimizer.
 | optional `security_ids` | Restricts evidence to requested securities and reports missing requested securities as supportability gaps. |
 | optional `transaction_types` | Restricts evidence to requested transaction types after upper-case normalization. |
 | `min_observation_count` | Suppresses curve points whose group has fewer observed transactions than the threshold. |
-| `page.page_size` / `page.page_token` | Returns deterministic cursor pages ordered by security id, transaction type, and currency. |
+| `page.page_size` / `page.page_token` | Returns deterministic cursor pages ordered by security id, transaction type, and currency. Page size is also a source-read budget: the implementation first resolves the requested curve keys plus one extra key for `has_more`, then reads transaction evidence only for those curve keys. |
 
 The product currently has one implemented methodology: observed booked-fee aggregation. It does not
 switch into simulated, quoted, venue, broker, or expected-cost modes.
@@ -102,18 +102,25 @@ For each qualifying group `G`:
 2. Build a request-scope fingerprint from portfolio id, as-of date, window, filters, minimum
    observation count, and tenant scope.
 3. Decode and validate the optional page token against the request-scope fingerprint.
-4. Query booked transactions and explicit transaction-cost rows for the portfolio, as-of date,
-   requested transaction-date window, and optional filters.
-5. For each transaction, determine `F_i` from summed explicit `transaction_costs.amount` when cost
+4. Query eligible curve keys for the portfolio, as-of date, requested transaction-date window, and
+   optional filters using the normalized `(security_id, transaction_type, currency)` sort key, the
+   page cursor, `min_observation_count`, and `page_size + 1` key budget.
+5. When `security_ids` are requested, query the eligible requested security IDs through grouped
+   curve-key evidence so missing-security supportability does not require full transaction
+   materialization.
+6. Query booked transactions and explicit transaction-cost rows only for the selected page curve
+   keys.
+7. For each transaction, determine `F_i` from summed explicit `transaction_costs.amount` when cost
    rows exist; otherwise use `trade_fee`.
-6. Exclude transactions where `F_i <= 0` or `abs(gross_transaction_amount) <= 0`.
-7. Group remaining transactions by `(security_id, upper(transaction_type), upper(currency))`.
-8. Exclude groups whose `observation_count` is less than `min_observation_count`.
-9. Compute total cost, total notional, average cost bps, min cost bps, max cost bps, first observed
+8. Exclude transactions where `F_i <= 0` or `abs(gross_transaction_amount) <= 0`.
+9. Group remaining transactions by `(security_id, upper(transaction_type), upper(currency))`.
+10. Exclude groups whose `observation_count` is less than `min_observation_count`.
+11. Compute total cost, total notional, average cost bps, min cost bps, max cost bps, first observed
    date, last observed date, and a bounded deterministic sample of up to five transaction ids.
-10. Sort curve points by security id, transaction type, and currency.
-11. Apply cursor paging and emit a next page token when more grouped points remain.
-12. Return supportability, lineage, and runtime source-data product metadata.
+12. Sort curve points by security id, transaction type, and currency.
+13. Emit a next page token when the keyset query found more grouped points than the requested page
+   size.
+14. Return supportability, lineage, and runtime source-data product metadata.
 
 ## Validation and Failure Behavior
 
@@ -131,6 +138,11 @@ For each qualifying group `G`:
 `data_quality_status` is `COMPLETE` only when the returned supportability is `READY`; otherwise it
 is `PARTIAL`. This status certifies the observed-fee evidence response only, not execution quality
 or best execution.
+
+The endpoint does not materialize the full transaction evidence window for each cursor page. It may
+run grouped aggregate queries over the request window to find eligible curve keys and requested
+security coverage, but transaction and `transaction_costs` rows are fetched only for the selected
+page keys.
 
 ## Configuration Options
 

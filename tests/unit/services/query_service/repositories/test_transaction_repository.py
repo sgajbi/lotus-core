@@ -383,6 +383,109 @@ async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loa
     assert "ORDER BY transactions.security_id ASC" in compiled_query
 
 
+async def test_list_transaction_cost_evidence_filters_to_bounded_curve_keys(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_rows = MagicMock()
+    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    mock_db_session.execute = AsyncMock(return_value=mock_rows)
+
+    rows = await repository.list_transaction_cost_evidence(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        curve_keys=[("EQ_US_AAPL", "BUY", "USD"), ("EQ_US_MSFT", "SELL", "USD")],
+    )
+
+    assert len(rows) == 1
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(transactions.security_id) = 'EQ_US_AAPL'" in compiled_query
+    assert "upper(trim(transactions.transaction_type)) = 'BUY'" in compiled_query
+    assert "upper(trim(transactions.currency)) = 'USD'" in compiled_query
+    assert "trim(transactions.security_id) = 'EQ_US_MSFT'" in compiled_query
+    assert "upper(trim(transactions.transaction_type)) = 'SELL'" in compiled_query
+
+
+async def test_list_transaction_cost_evidence_skips_read_when_curve_key_scope_empty(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    rows = await repository.list_transaction_cost_evidence(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        curve_keys=[],
+    )
+
+    assert rows == []
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_list_transaction_cost_curve_keys_uses_grouped_keyset_limit(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_rows = MagicMock()
+    mock_rows.all.return_value = [("EQ_US_MSFT", "BUY", "USD")]
+    mock_db_session.execute = AsyncMock(return_value=mock_rows)
+
+    keys = await repository.list_transaction_cost_curve_keys(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        security_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+        transaction_types=["BUY"],
+        min_observation_count=2,
+        after_key=("EQ_US_AAPL", "BUY", "USD"),
+        limit=3,
+    )
+
+    assert keys == [("EQ_US_MSFT", "BUY", "USD")]
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SELECT trim(transactions.security_id) AS security_id" in compiled_query
+    assert "upper(trim(transactions.transaction_type)) AS transaction_type" in compiled_query
+    assert "upper(trim(transactions.currency)) AS currency" in compiled_query
+    assert "trim(transactions.security_id) IN ('EQ_US_AAPL', 'EQ_US_MSFT')" in compiled_query
+    assert "transactions.transaction_type IN ('BUY')" in compiled_query
+    assert "GROUP BY trim(transactions.security_id)" in compiled_query
+    assert "HAVING count(transactions.id) >= 2" in compiled_query
+    assert "trim(transactions.security_id) > 'EQ_US_AAPL'" in compiled_query
+    assert "upper(trim(transactions.transaction_type)) > 'BUY'" in compiled_query
+    assert "upper(trim(transactions.currency)) > 'USD'" in compiled_query
+    assert "ORDER BY trim(transactions.security_id) ASC" in compiled_query
+    assert "LIMIT 3" in compiled_query
+
+
+async def test_list_transaction_cost_curve_available_security_ids_uses_grouped_subquery(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_rows = MagicMock()
+    mock_rows.scalars.return_value.all.return_value = ["EQ_US_AAPL"]
+    mock_db_session.execute = AsyncMock(return_value=mock_rows)
+
+    security_ids = await repository.list_transaction_cost_curve_available_security_ids(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        security_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+        transaction_types=["BUY"],
+        min_observation_count=2,
+    )
+
+    assert security_ids == {"EQ_US_AAPL"}
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SELECT DISTINCT anon_1.security_id" in compiled_query
+    assert "GROUP BY trim(transactions.security_id)" in compiled_query
+    assert "HAVING count(transactions.id) >= 2" in compiled_query
+    assert "trim(transactions.security_id) IN ('EQ_US_AAPL', 'EQ_US_MSFT')" in compiled_query
+    assert "transactions.transaction_type IN ('BUY')" in compiled_query
+
+
 async def test_list_performance_component_economics_evidence_selects_latest_cashflow_epoch(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
