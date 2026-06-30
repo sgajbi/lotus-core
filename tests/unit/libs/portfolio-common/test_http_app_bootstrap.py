@@ -3,11 +3,14 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from portfolio_common.http_app_bootstrap import (
+    METRICS_BEARER_TOKEN_MODE,
+    METRICS_INTERNAL_OPEN_MODE,
     UNMATCHED_ROUTE_TEMPLATE,
     configure_standard_http_app,
     create_standard_health_app,
     http_metric_path_template,
     normalize_trace_id,
+    resolve_metrics_access_policy,
 )
 from starlette.requests import Request
 
@@ -118,3 +121,84 @@ def test_standard_health_app_exposes_shared_observability_contract():
         }
         for call in request_metric.labels.call_args_list
     )
+
+
+def test_metrics_access_policy_defaults_to_internal_open(monkeypatch):
+    monkeypatch.delenv("LOTUS_METRICS_ACCESS_TOKEN", raising=False)
+
+    policy = resolve_metrics_access_policy()
+
+    assert policy.mode == METRICS_INTERNAL_OPEN_MODE
+    assert policy.token is None
+
+
+def test_metrics_access_policy_uses_configured_bearer_token(monkeypatch):
+    monkeypatch.setenv("LOTUS_METRICS_ACCESS_TOKEN", " scrape-secret ")
+
+    policy = resolve_metrics_access_policy()
+
+    assert policy.mode == METRICS_BEARER_TOKEN_MODE
+    assert policy.token == "scrape-secret"
+
+
+def test_metrics_endpoint_denies_unauthorized_scrape_when_token_configured():
+    app = FastAPI()
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+        metrics_access_token="scrape-secret",
+    )
+    client = TestClient(app)
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {
+        "code": "METRICS_ACCESS_DENIED",
+        "message": "Metrics endpoint access is restricted to authorized scrapers.",
+        "metrics_access_mode": METRICS_BEARER_TOKEN_MODE,
+    }
+
+
+def test_metrics_endpoint_allows_authorized_scrape_when_token_configured():
+    app = FastAPI()
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+        metrics_access_token="scrape-secret",
+    )
+    client = TestClient(app)
+
+    response = client.get("/metrics", headers={"Authorization": "Bearer scrape-secret"})
+
+    assert response.status_code == 200
+    assert "http_requests_total{" in response.text
+
+
+def test_openapi_documents_metrics_access_policy():
+    app = FastAPI()
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+        metrics_access_token="scrape-secret",
+    )
+    client = TestClient(app)
+
+    metrics_operation = client.get("/openapi.json").json()["paths"]["/metrics"]["get"]
+
+    assert metrics_operation["summary"] == "Prometheus metrics scrape endpoint"
+    assert "not a public business API" in metrics_operation["description"]
+    assert metrics_operation["responses"]["200"]["content"] == {
+        "text/plain": {"schema": {"type": "string"}}
+    }
+    denied_example = metrics_operation["responses"]["403"]["content"]["application/json"]["example"]
+    assert denied_example["detail"]["code"] == "METRICS_ACCESS_DENIED"
