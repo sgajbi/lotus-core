@@ -194,9 +194,18 @@ CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE = problem_example(
     error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
     metadata={"source_product": "PortfolioStateSnapshot"},
 )
-INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
-    "detail": "security_ids must contain at least one identifier"
-}
+INSTRUMENT_ENRICHMENT_INVALID_DETAIL = "Instrument enrichment request is invalid."
+INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = problem_example(
+    status_code=status.HTTP_400_BAD_REQUEST,
+    title="Instrument enrichment request is invalid",
+    detail=INSTRUMENT_ENRICHMENT_INVALID_DETAIL,
+    error_code="QCP_INSTRUMENT_ENRICHMENT_INVALID_REQUEST",
+    instance="/integration/instruments/enrichment-bulk",
+    metadata={
+        "source_product": "InstrumentReferenceBundle",
+        "reason": "CoreSnapshotBadRequestError",
+    },
+)
 BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL = (
     "No effective benchmark assignment found for portfolio and as_of_date."
 )
@@ -465,6 +474,19 @@ def _raise_integration_source_conflict(
             "source_product": source_product,
             "reason": exc.__class__.__name__,
             **(metadata or {}),
+        },
+    )
+
+
+def _raise_instrument_enrichment_invalid_request(exc: Exception) -> NoReturn:
+    raise_problem(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        title="Instrument enrichment request is invalid",
+        detail=INSTRUMENT_ENRICHMENT_INVALID_DETAIL,
+        error_code="QCP_INSTRUMENT_ENRICHMENT_INVALID_REQUEST",
+        metadata={
+            "source_product": "InstrumentReferenceBundle",
+            "reason": exc.__class__.__name__,
         },
     )
 
@@ -829,7 +851,7 @@ async def get_instrument_enrichment_bulk(
         records = await service.get_instrument_enrichment_bulk(request.security_ids)
         return InstrumentEnrichmentBulkResponse(records=records)
     except CoreSnapshotBadRequestError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        _raise_instrument_enrichment_invalid_request(exc)
 
 
 @router.post(

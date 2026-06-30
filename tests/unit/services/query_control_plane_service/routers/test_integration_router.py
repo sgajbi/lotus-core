@@ -559,13 +559,22 @@ async def test_get_instrument_enrichment_bulk_maps_bad_request_to_400() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
     mock_service.get_instrument_enrichment_bulk.side_effect = CoreSnapshotBadRequestError("bad")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_instrument_enrichment_bulk(
             request=InstrumentEnrichmentBulkRequest(security_ids=["SEC_AAPL_US"]),
             service=mock_service,
         )
 
-    assert exc_info.value.status_code == 400
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=400,
+        error_code="QCP_INSTRUMENT_ENRICHMENT_INVALID_REQUEST",
+        detail="Instrument enrichment request is invalid.",
+        metadata={
+            "source_product": "InstrumentReferenceBundle",
+            "reason": "CoreSnapshotBadRequestError",
+        },
+    )
 
 
 @pytest.mark.asyncio
