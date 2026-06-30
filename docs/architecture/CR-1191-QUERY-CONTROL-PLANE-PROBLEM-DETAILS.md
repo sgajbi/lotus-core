@@ -84,6 +84,9 @@ depend on raw internal exception text for the migrated representative paths.
 - Instrument enrichment route tests now assert invalid enrichment requests raise or return
   `QCP_INSTRUMENT_ENRICHMENT_INVALID_REQUEST` problem-details payloads with
   `InstrumentReferenceBundle` metadata.
+- Benchmark market-series route tests now assert invalid page-token requests raise or return
+  `QCP_INTEGRATION_SOURCE_INVALID_REQUEST` problem-details payloads with `MarketDataWindow`
+  metadata.
 
 ## Validation Evidence
 
@@ -114,6 +117,8 @@ depend on raw internal exception text for the migrated representative paths.
 - `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_composition_window_maps_not_found_to_problem_details tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_composition_window_maps_currency_conflict_to_problem_details tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_definition_not_found_maps_problem_details tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_definition_not_found_maps_to_404 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_composition_window_not_found_maps_to_404 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_composition_window_conflict_maps_to_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_benchmark_reference_parameters -q`
   passed with 7 tests.
 - `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_get_instrument_enrichment_bulk_maps_bad_request_to_400 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_instrument_enrichment_bulk_whitespace_only_ids_map_to_400 tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_integration_policy_and_core_snapshot -q`
+  passed with 3 tests.
+- `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_market_series_maps_invalid_page_token_to_400 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_market_series_invalid_page_token_maps_to_400 tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_benchmark_reference_parameters -q`
   passed with 3 tests.
 - `python -m ruff check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
   passed.
@@ -162,6 +167,8 @@ failures expose `QCP_INTEGRATION_SOURCE_NOT_FOUND`, and composition-window confl
 For the migrated instrument enrichment route, invalid identifier requests expose
 `QCP_INSTRUMENT_ENRICHMENT_INVALID_REQUEST` with bounded details instead of raw
 `CoreSnapshotBadRequestError` text.
+For the migrated benchmark market-series route, invalid request failures expose
+`QCP_INTEGRATION_SOURCE_INVALID_REQUEST` with bounded details instead of raw `ValueError` text.
 
 ## Documentation And Wiki Decision
 

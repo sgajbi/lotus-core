@@ -1,6 +1,6 @@
 from typing import NoReturn, cast
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,6 +134,23 @@ def _integration_source_invalid_request_example(
 ) -> dict[str, object]:
     return problem_example(
         status_code=422,
+        title="Integration source request is invalid",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        instance=instance,
+        metadata={"source_product": source_product, **(metadata or {})},
+    )
+
+
+def _integration_source_bad_request_example(
+    *,
+    source_product: str,
+    detail: str,
+    metadata: dict[str, object] | None = None,
+    instance: str = "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/market-series",
+) -> dict[str, object]:
+    return problem_example(
+        status_code=status.HTTP_400_BAD_REQUEST,
         title="Integration source request is invalid",
         detail=detail,
         error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
@@ -366,6 +383,12 @@ BENCHMARK_COMPOSITION_WINDOW_CONFLICT_EXAMPLE = _integration_source_conflict_exa
     detail=BENCHMARK_COMPOSITION_WINDOW_CONFLICT_DETAIL,
     metadata={"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "reason": "ValueError"},
 )
+BENCHMARK_MARKET_SERIES_INVALID_REQUEST_DETAIL = "Benchmark market series request is invalid."
+BENCHMARK_MARKET_SERIES_INVALID_REQUEST_EXAMPLE = _integration_source_bad_request_example(
+    source_product="MarketDataWindow",
+    detail=BENCHMARK_MARKET_SERIES_INVALID_REQUEST_DETAIL,
+    metadata={"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "reason": "ValueError"},
+)
 TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE = problem_example(
     status_code=status.HTTP_404_NOT_FOUND,
     title="Portfolio source evidence not found",
@@ -447,6 +470,26 @@ def _raise_integration_source_invalid_request(
 ) -> NoReturn:
     raise_problem(
         status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+        title="Integration source request is invalid",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        metadata={
+            "source_product": source_product,
+            "reason": exc.__class__.__name__,
+            **(metadata or {}),
+        },
+    )
+
+
+def _raise_integration_source_bad_request(
+    *,
+    source_product: str,
+    detail: str,
+    exc: Exception,
+    metadata: dict[str, object] | None = None,
+) -> NoReturn:
+    raise_problem(
+        status_code=status.HTTP_400_BAD_REQUEST,
         title="Integration source request is invalid",
         detail=detail,
         error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
@@ -2195,6 +2238,12 @@ async def fetch_index_catalog(
 @router.post(
     "/benchmarks/{benchmark_id}/market-series",
     response_model=BenchmarkMarketSeriesResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Benchmark market series request is invalid.",
+            BENCHMARK_MARKET_SERIES_INVALID_REQUEST_EXAMPLE,
+        ),
+    },
     summary="Fetch benchmark market series inputs",
     description=(
         "What: Return benchmark market series inputs required by lotus-performance.\n"
@@ -2225,7 +2274,12 @@ async def fetch_benchmark_market_series(
             ),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        _raise_integration_source_bad_request(
+            source_product="MarketDataWindow",
+            detail=BENCHMARK_MARKET_SERIES_INVALID_REQUEST_DETAIL,
+            exc=exc,
+            metadata={"benchmark_id": benchmark_id},
+        )
 
 
 @router.post(
