@@ -3,11 +3,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from portfolio_common.health import create_health_router
 from portfolio_common.http_app_bootstrap import configure_standard_http_app, include_routers
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.logging_utils import generate_correlation_id, setup_logging
-from starlette.responses import JSONResponse
 
 from .ops_controls import (
     ingestion_write_rate_limit_contract,
