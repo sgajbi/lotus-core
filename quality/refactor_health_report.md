@@ -32,13 +32,14 @@ tested modules.
 | Ingestion idempotency | Improving | CR-1177 compares source-safe canonical payload fingerprints for duplicate ingestion idempotency keys and returns deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT` when the same endpoint/key is reused with a different payload |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
+| Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
 
 ## Current Slice Update
 
-CR-1182 begins validated GitHub issue #655 by moving financial reconciliation elapsed-duration
-measurement and generated finding IDs behind runtime provider ports. `ReconciliationService` no
-longer imports `perf_counter` or `uuid4`; deterministic tests inject fixed providers, and
-`make architecture-guard` now blocks future direct `time` or `uuid` imports in that service.
+CR-1183 begins validated GitHub issue #650 by replacing replay audit persistence `RuntimeError`
+handling with `InfrastructureAuditWriteFailed` and safe reason codes for no-session and persistence
+failure cases. The successful replay audit write path is unchanged, while future infrastructure
+adapter slices now have an initial taxonomy document to extend.
 
 ## Health Assessment
 
@@ -1989,3 +1990,6 @@ health before that claim is defensible.
      ports. Focused financial reconciliation and architecture-boundary tests passed with 19 tests;
      `make architecture-guard`, `make quality-import-boundary-gate`, scoped Ruff lint/format, and
      `git diff --check` passed.
+326. Began validated GitHub issue #650 by adding `InfrastructureAuditWriteFailed` for replay audit
+     persistence failures and documenting the initial infrastructure error taxonomy. Focused
+     replay-audit tests passed with 5 tests; scoped Ruff lint/format and `git diff --check` passed.

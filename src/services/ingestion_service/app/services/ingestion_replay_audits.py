@@ -12,6 +12,7 @@ from portfolio_common.monitoring import (
 from sqlalchemy import and_, desc, select
 
 from ..DTOs.ingestion_job_dto import IngestionReplayAuditResponse
+from .infrastructure_errors import InfrastructureAuditWriteFailed
 
 _SUCCESSFUL_REPLAY_AUDIT_STATUSES = {"replayed", "replayed_bookkeeping_failed"}
 _FAILED_REPLAY_AUDIT_STATUSES = {"not_replayable", "failed", "replayed_bookkeeping_failed"}
@@ -115,30 +116,39 @@ async def record_consumer_dlq_replay_audit_response(
     session_factory,
 ) -> str:
     replay_id = f"replay_{uuid4().hex}"
-    async for db in session_factory():
-        async with db.begin():
-            db.add(
-                DBConsumerDlqReplayAudit(
-                    replay_id=replay_id,
-                    recovery_path=recovery_path,
-                    event_id=event_id,
-                    replay_fingerprint=replay_fingerprint,
-                    correlation_id=correlation_id,
-                    job_id=job_id,
-                    endpoint=endpoint,
-                    replay_status=replay_status,
-                    dry_run=dry_run,
-                    replay_reason=replay_reason,
-                    requested_by=requested_by,
-                    completed_at=datetime.now(UTC),
+    try:
+        async for db in session_factory():
+            async with db.begin():
+                db.add(
+                    DBConsumerDlqReplayAudit(
+                        replay_id=replay_id,
+                        recovery_path=recovery_path,
+                        event_id=event_id,
+                        replay_fingerprint=replay_fingerprint,
+                        correlation_id=correlation_id,
+                        job_id=job_id,
+                        endpoint=endpoint,
+                        replay_status=replay_status,
+                        dry_run=dry_run,
+                        replay_reason=replay_reason,
+                        requested_by=requested_by,
+                        completed_at=datetime.now(UTC),
+                    )
                 )
+            _record_replay_audit_metrics(
+                recovery_path=recovery_path,
+                replay_status=replay_status,
             )
-        _record_replay_audit_metrics(
-            recovery_path=recovery_path,
-            replay_status=replay_status,
-        )
-        return replay_id
-    raise RuntimeError("Unable to record consumer DLQ replay audit.")
+            return replay_id
+    except Exception as exc:
+        raise InfrastructureAuditWriteFailed(
+            message="Unable to record consumer DLQ replay audit.",
+            reason_code="audit_persistence_failed",
+        ) from exc
+    raise InfrastructureAuditWriteFailed(
+        message="Unable to record consumer DLQ replay audit.",
+        reason_code="audit_session_unavailable",
+    )
 
 
 def _record_replay_audit_metrics(*, recovery_path: str, replay_status: str) -> None:
