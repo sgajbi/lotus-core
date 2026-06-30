@@ -30,6 +30,7 @@ tested modules.
 | HTTP observability | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics; CR-1175 routes health-only worker web apps through the standard HTTP bootstrap for `/metrics`, `/health/live`, `/health/ready`, correlation/request/trace headers, route-template HTTP metrics, and request-completion logs |
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 | Ingestion idempotency | Improving | CR-1177 added deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT`; CR-1188 stores full canonical non-reversible request fingerprints so same endpoint/key reuse with changed sensitive values conflicts while durable payload evidence remains redacted |
+| Source-batch lineage semantics | Improving | CR-1189 stops selected source-data products from populating upstream `source_batch_fingerprint` with request/snapshot fingerprints when true source-batch evidence is unavailable |
 | Reference-data ingestion unit of work | Improving | CR-1185 removes commit ownership from the low-level reference-data upsert staging helper, preserves existing single-table commit behavior through an explicit wrapper, and adds source-batch commit/rollback orchestration |
 | Outbox retry eligibility | Improving | CR-1186 adds durable `next_attempt_at` retry eligibility, bounded exponential outbox retry scheduling, and claim filtering so retryable publish failures are not immediately reselected before their retry window matures |
 | Outbox failure evidence | Improving | CR-1187 persists source-safe last-failure reason code, category, redacted bounded message, and failure timestamp on retryable and terminal outbox delivery failures |
@@ -40,10 +41,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1188 fixes validated GitHub issue #675 by separating full idempotency identity from source-safe
-payload evidence. New ingestion jobs store a non-reversible full canonical request fingerprint for
-conflict detection while keeping durable request-payload diagnostics redacted; same-key submissions
-with changed sensitive values now conflict instead of replaying the previous job.
+CR-1189 begins validated GitHub issue #676 by correcting selected source-batch lineage semantics.
+Client tax, client restriction, sustainability preference, and DPM portfolio universe responses now
+leave `source_batch_fingerprint` null when true upstream source-batch evidence is unavailable while
+preserving snapshot/request identity in correctly named fields.
 
 ## Health Assessment
 

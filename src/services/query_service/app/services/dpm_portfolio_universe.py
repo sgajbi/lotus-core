@@ -213,7 +213,7 @@ def build_dpm_portfolio_universe_response(
             tenant_id=request.tenant_id,
             data_quality_status=data_quality_status,
             latest_evidence_timestamp=latest_reference_evidence_timestamp(page_rows),
-            source_batch_fingerprint=read_scope.request_scope_fingerprint,
+            source_batch_fingerprint=None,
             snapshot_id=f"dpm_portfolio_universe:{read_scope.request_scope_fingerprint}",
         ),
     )

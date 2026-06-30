@@ -325,10 +325,15 @@ Future runtime slices must:
 
 1. add `product_name` and `product_version` to affected DTO envelopes,
 2. wire snapshot ids from `reconstruction_identity.py`,
-3. wire source batch fingerprints from `ingestion_evidence.py`,
+3. wire source batch fingerprints from `ingestion_evidence.py` or persisted source-batch lineage,
 4. wire reconciliation and data-quality statuses from `reconciliation_quality.py`,
 5. preserve RFC-0082 route-family classification,
 6. update downstream contract tests for affected consumers.
+
+`source_batch_fingerprint` is reserved for upstream source-batch identity. Request-scope,
+pagination, or response snapshot fingerprints must remain in request/snapshot fields such as
+`request_scope_fingerprint` or `snapshot_id`; products without true source-batch evidence must leave
+`source_batch_fingerprint` null rather than substituting a request fingerprint.
 
 ## Runtime Binding Progress
 
@@ -400,6 +405,12 @@ The initial binding populated `generated_at`, `as_of_date`, `restatement_version
 later runtime slices could wire product-specific evidence without overclaiming lineage. The sections
 below record the fields that are now derived from durable runtime evidence and the fields that
 remain unresolved.
+
+Some portfolio and reference source-data products expose deterministic request or snapshot identity
+before source-batch lineage is available. Those fingerprints are not source-batch evidence and must
+not be copied into `source_batch_fingerprint`. When persisted source-batch lineage is unavailable,
+the product keeps `source_batch_fingerprint` null while retaining request/snapshot identity under
+the correctly named response fields.
 
 `HoldingsAsOf` portfolio-position responses additionally derive `data_quality_status` from returned
 position evidence. Fully snapshot-backed current holdings are `COMPLETE`; current holdings that

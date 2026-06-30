@@ -63,7 +63,11 @@ class SourceDataProductRuntimeMetadata(BaseModel):
     )
     source_batch_fingerprint: str | None = Field(
         None,
-        description="Source-batch fingerprint when the product can be traced to a batch.",
+        description=(
+            "Upstream source-batch fingerprint when the product can be traced to source-batch "
+            "evidence. Request-scope and snapshot identities must use request/snapshot fields, "
+            "not this lineage field."
+        ),
         examples=["sbf_9c3f13c0a5d14f3e"],
     )
     snapshot_id: str | None = Field(
