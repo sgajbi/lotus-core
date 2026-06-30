@@ -87,6 +87,9 @@ depend on raw internal exception text for the migrated representative paths.
 - Benchmark market-series route tests now assert invalid page-token requests raise or return
   `QCP_INTEGRATION_SOURCE_INVALID_REQUEST` problem-details payloads with `MarketDataWindow`
   metadata.
+- Added a deterministic query-control-plane problem-details guard that rejects direct FastAPI or
+  Starlette `HTTPException` usage and raw `detail=str(...)` payloads in active
+  query-control-plane router files.
 
 ## Validation Evidence
 
@@ -120,6 +123,8 @@ depend on raw internal exception text for the migrated representative paths.
   passed with 3 tests.
 - `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_market_series_maps_invalid_page_token_to_400 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_market_series_invalid_page_token_maps_to_400 tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_benchmark_reference_parameters -q`
   passed with 3 tests.
+- `python -m pytest tests/unit/scripts/test_qcp_problem_details_guard.py -q` passed with 6 tests.
+- `make qcp-problem-details-guard` passed.
 - `python -m ruff check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
   passed.
 - `python -m ruff format --check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
@@ -169,6 +174,8 @@ For the migrated instrument enrichment route, invalid identifier requests expose
 `CoreSnapshotBadRequestError` text.
 For the migrated benchmark market-series route, invalid request failures expose
 `QCP_INTEGRATION_SOURCE_INVALID_REQUEST` with bounded details instead of raw `ValueError` text.
+The CR-1217 guard slice adds no runtime behavior change; it prevents future raw-error regressions
+in the query-control-plane router layer.
 
 ## Documentation And Wiki Decision
 
@@ -177,10 +184,10 @@ No wiki update is required because no operator command, runbook, or published wo
 
 ## Remaining Follow-Up
 
-- Continue migrating the remaining query-control-plane route families that still raise bare
-  `HTTPException(detail=...)`; operations support, the portfolio source-evidence trio, and the
-  selected integration source-data discovery routes are now part of the migrated baseline.
+- Continue migrating any future query-control-plane route families discovered with raw error
+  payloads; operations support, the portfolio source-evidence trio, selected integration
+  source-data discovery routes, mandate-scoped routes, benchmark reference, instrument enrichment,
+  and benchmark market-series are now part of the migrated and guarded baseline.
 - Replace simulation mutation substring classification with typed service exceptions in a later
   slice.
-- Add a deterministic guard or OpenAPI inventory once the problem-details migration baseline is
-  broad enough to enforce without noisy exceptions.
+- Consider a later OpenAPI media-type inventory once false positives are understood.

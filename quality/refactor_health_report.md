@@ -45,7 +45,7 @@ tested modules.
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
 | Cash-balance account-id provenance | Improving | CR-1200 validates transaction-derived cash-account fallback mappings against active/effective cash-account master data and exposes response-level provenance |
 | Instrument reference integrity | Improving | CR-1201 defers product cost processing when instrument master data is missing, before cost and lot-state writes |
-| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, simulation, operations-support, portfolio source-evidence, selected integration source-data discovery, mandate-scoped source-route, benchmark reference, instrument enrichment, and benchmark market-series failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples |
+| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, simulation, operations-support, portfolio source-evidence, selected integration source-data discovery, mandate-scoped source-route, benchmark reference, instrument enrichment, and benchmark market-series failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples; CR-1217 adds `make qcp-problem-details-guard` to prevent direct router `HTTPException` and raw `detail=str(...)` regressions |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Transaction cost curve source reads | Improving | CR-1194 makes `TransactionCostCurve:v1` cursor paging source-read bounded through grouped keyset selection and page-key-scoped transaction evidence reads |
@@ -104,6 +104,12 @@ Current continuation: CR-1216 migrates benchmark market-series invalid-request e
 with bounded detail and `MarketDataWindow` metadata. HTTP status, route, request/success DTOs,
 service call, persistence, and source-data envelope are preserved. Focused proof passed with 3
 unit/app/OpenAPI tests.
+
+Current continuation: CR-1217 converts the repeated query-control-plane issue #677 lesson into an
+enforced guard. `make qcp-problem-details-guard` now scans active
+`query_control_plane_service` router files and fails direct FastAPI/Starlette `HTTPException`
+usage or raw `detail=str(...)` payloads before the same defect class reaches runtime, OpenAPI, or
+downstream clients. No API behavior changed.
 
 ## Health Assessment
 
