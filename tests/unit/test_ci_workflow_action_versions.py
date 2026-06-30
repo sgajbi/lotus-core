@@ -199,3 +199,12 @@ def test_quality_baseline_runs_workflow_governance_gate() -> None:
     assert "quality-workflow-governance-gate:" in makefile_text
     assert "Quality Baseline / Workflow Governance Gate" in workflow_text
     assert "make quality-workflow-governance-gate" in workflow_text
+
+
+def test_quality_baseline_runs_manifest_integration_lite_collection_gate() -> None:
+    workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
+    makefile_text = Path("Makefile").read_text(encoding="utf-8")
+
+    assert "quality-integration-lite-collection-gate:" in makefile_text
+    assert "Quality Baseline / Integration Lite Collection Gate" in workflow_text
+    assert "make quality-integration-lite-collection-gate" in workflow_text

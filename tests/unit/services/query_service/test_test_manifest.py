@@ -7,6 +7,7 @@ from scripts.test_manifest import (
     SUITE_RUNTIME_MODE,
     SUITES,
     get_suite,
+    suite_pytest_command,
     validate_suite_paths,
 )
 
@@ -65,3 +66,11 @@ def test_manifest_paths_exist_for_all_suites() -> None:
         validate_suite_paths(suite_name)
         for path in get_suite(suite_name):
             assert Path(path).exists()
+
+
+def test_manifest_collection_command_uses_suite_definition() -> None:
+    command = suite_pytest_command("integration-lite", collect_only=True, quiet=True)
+
+    assert "--collect-only" in command
+    assert "-q" in command
+    assert "tests/integration/services/query_service/test_main_app.py" in command

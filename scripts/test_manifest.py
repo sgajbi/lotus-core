@@ -181,20 +181,41 @@ def validate_suite_paths(name: str) -> None:
         )
 
 
+def suite_pytest_command(
+    name: str,
+    *,
+    quiet: bool = False,
+    with_coverage: bool = False,
+    collect_only: bool = False,
+) -> list[str]:
+    validate_suite_paths(name)
+
+    cmd = [sys.executable, "-m", "pytest", *get_suite(name), *SUITE_PYTEST_ARGS.get(name, [])]
+    if collect_only:
+        cmd.append("--collect-only")
+    if quiet:
+        cmd.append("-q")
+    if with_coverage:
+        cmd.extend([f"--cov={SOURCE}", "--cov-report="])
+    return cmd
+
+
 def run_suite(
     name: str,
     *,
     quiet: bool = False,
     with_coverage: bool = False,
     coverage_file: str | None = None,
+    collect_only: bool = False,
 ) -> int:
     validate_suite_paths(name)
 
-    cmd = [sys.executable, "-m", "pytest", *get_suite(name), *SUITE_PYTEST_ARGS.get(name, [])]
-    if quiet:
-        cmd.append("-q")
-    if with_coverage:
-        cmd.extend([f"--cov={SOURCE}", "--cov-report="])
+    cmd = suite_pytest_command(
+        name,
+        quiet=quiet,
+        with_coverage=with_coverage,
+        collect_only=collect_only,
+    )
 
     env = os.environ.copy()
     env_profile = SUITE_ENV_PROFILE.get(name, "unit")
@@ -235,6 +256,11 @@ def main() -> int:
         help="Add --cov and --cov-report= to pytest invocation.",
     )
     parser.add_argument(
+        "--collect-only",
+        action="store_true",
+        help="Collect tests for the suite without executing them.",
+    )
+    parser.add_argument(
         "--coverage-file",
         default=None,
         help="Set COVERAGE_FILE while running the suite.",
@@ -261,6 +287,7 @@ def main() -> int:
         quiet=args.quiet,
         with_coverage=args.with_coverage,
         coverage_file=args.coverage_file,
+        collect_only=args.collect_only,
     )
 
 
