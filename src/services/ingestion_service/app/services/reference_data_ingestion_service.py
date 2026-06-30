@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,6 +34,14 @@ from portfolio_common.database_models import (
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@dataclass(frozen=True)
+class ReferenceDataUpsertOperation:
+    model: Any
+    records: list[dict[str, Any]]
+    conflict_columns: list[str]
+    update_columns: list[str]
 
 
 class ReferenceDataIngestionService:
@@ -69,7 +79,7 @@ class ReferenceDataIngestionService:
             if row.get("assignment_recorded_at") is None:
                 row["assignment_recorded_at"] = now
             normalized_records.append(row)
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=PortfolioBenchmarkAssignment,
             records=normalized_records,
             conflict_columns=[
@@ -89,7 +99,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_model_portfolio_definitions(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=ModelPortfolioDefinition,
             records=self._normalize_currency_field(records, "base_currency"),
             conflict_columns=[
@@ -114,7 +124,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_model_portfolio_targets(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=ModelPortfolioTarget,
             records=records,
             conflict_columns=[
@@ -137,7 +147,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_discretionary_mandate_bindings(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=PortfolioMandateBinding,
             records=records,
             conflict_columns=[
@@ -174,7 +184,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_instrument_eligibility_profiles(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=InstrumentEligibilityProfile,
             records=records,
             conflict_columns=[
@@ -207,7 +217,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_client_restriction_profiles(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=ClientRestrictionProfile,
             records=records,
             conflict_columns=[
@@ -239,7 +249,7 @@ class ReferenceDataIngestionService:
     async def upsert_sustainability_preference_profiles(
         self, records: list[dict[str, Any]]
     ) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=SustainabilityPreferenceProfile,
             records=records,
             conflict_columns=[
@@ -268,7 +278,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_client_tax_profiles(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=ClientTaxProfile,
             records=records,
             conflict_columns=[
@@ -298,7 +308,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_client_tax_rule_sets(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=ClientTaxRuleSet,
             records=self._normalize_optional_currency_field(records, "threshold_currency"),
             conflict_columns=[
@@ -331,7 +341,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_client_income_needs_schedules(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=ClientIncomeNeedsSchedule,
             records=self._normalize_currency_field(records, "currency"),
             conflict_columns=["client_id", "portfolio_id", "schedule_id", "start_date"],
@@ -353,7 +363,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_liquidity_reserve_requirements(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=LiquidityReserveRequirement,
             records=self._normalize_currency_field(records, "currency"),
             conflict_columns=[
@@ -381,7 +391,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_planned_withdrawal_schedules(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=PlannedWithdrawalSchedule,
             records=self._normalize_currency_field(records, "currency"),
             conflict_columns=[
@@ -406,7 +416,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_benchmark_definitions(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=BenchmarkDefinition,
             records=self._normalize_currency_field(records, "benchmark_currency"),
             conflict_columns=["benchmark_id", "effective_from"],
@@ -430,7 +440,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_benchmark_compositions(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=BenchmarkCompositionSeries,
             records=records,
             conflict_columns=["benchmark_id", "index_id", "composition_effective_from"],
@@ -446,7 +456,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_indices(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=IndexDefinition,
             records=self._normalize_currency_field(records, "index_currency"),
             conflict_columns=["index_id", "effective_from"],
@@ -468,7 +478,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_index_price_series(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=IndexPriceSeries,
             records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "index_id", "series_date"],
@@ -484,7 +494,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_index_return_series(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=IndexReturnSeries,
             records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "index_id", "series_date"],
@@ -501,7 +511,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_benchmark_return_series(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=BenchmarkReturnSeries,
             records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "benchmark_id", "series_date"],
@@ -518,7 +528,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_risk_free_series(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=RiskFreeSeries,
             records=self._normalize_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "risk_free_curve_id", "series_date"],
@@ -536,7 +546,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_classification_taxonomy(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=ClassificationTaxonomy,
             records=records,
             conflict_columns=[
@@ -557,7 +567,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_cash_account_masters(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=CashAccountMaster,
             records=self._normalize_currency_field(records, "account_currency"),
             conflict_columns=["cash_account_id"],
@@ -576,7 +586,7 @@ class ReferenceDataIngestionService:
         )
 
     async def upsert_instrument_lookthrough_components(self, records: list[dict[str, Any]]) -> None:
-        await self._upsert_many(
+        await self._commit_upsert_many(
             model=InstrumentLookthroughComponent,
             records=records,
             conflict_columns=[
@@ -591,6 +601,44 @@ class ReferenceDataIngestionService:
                 "source_record_id",
             ],
         )
+
+    async def upsert_source_batch(self, operations: Sequence[ReferenceDataUpsertOperation]) -> None:
+        attempted = False
+        staged = False
+        try:
+            for operation in operations:
+                if not operation.records:
+                    continue
+                attempted = True
+                await self._upsert_many(
+                    model=operation.model,
+                    records=operation.records,
+                    conflict_columns=operation.conflict_columns,
+                    update_columns=operation.update_columns,
+                )
+                staged = True
+            if staged:
+                await self._db.commit()
+        except Exception:
+            if attempted:
+                await self._db.rollback()
+            raise
+
+    async def _commit_upsert_many(
+        self,
+        *,
+        model: Any,
+        records: list[dict[str, Any]],
+        conflict_columns: list[str],
+        update_columns: list[str],
+    ) -> None:
+        operation = ReferenceDataUpsertOperation(
+            model=model,
+            records=records,
+            conflict_columns=conflict_columns,
+            update_columns=update_columns,
+        )
+        await self.upsert_source_batch([operation])
 
     async def _upsert_many(
         self,
@@ -616,7 +664,6 @@ class ReferenceDataIngestionService:
         update_map["updated_at"] = now
         stmt = stmt.on_conflict_do_update(index_elements=conflict_columns, set_=update_map)
         await self._db.execute(stmt)
-        await self._db.commit()
 
 
 def get_reference_data_ingestion_service(

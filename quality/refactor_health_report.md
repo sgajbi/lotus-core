@@ -30,6 +30,7 @@ tested modules.
 | HTTP observability | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics; CR-1175 routes health-only worker web apps through the standard HTTP bootstrap for `/metrics`, `/health/live`, `/health/ready`, correlation/request/trace headers, route-template HTTP metrics, and request-completion logs |
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 | Ingestion idempotency | Improving | CR-1177 compares source-safe canonical payload fingerprints for duplicate ingestion idempotency keys and returns deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT` when the same endpoint/key is reused with a different payload |
+| Reference-data ingestion unit of work | Improving | CR-1185 removes commit ownership from the low-level reference-data upsert staging helper, preserves existing single-table commit behavior through an explicit wrapper, and adds source-batch commit/rollback orchestration |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 | Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
@@ -37,10 +38,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1184 begins validated GitHub issues #665 and #661 by adding a repo-native boundary mapping
-conformance suite, extracting transaction event-to-record persistence mapping, and documenting the
-mapping/anti-corruption boundary. The successful persistence and source-data response contracts are
-unchanged while representative mapping invariants now have direct tests.
+CR-1185 fixes validated GitHub issue #668 by making reference-data ingestion transaction ownership
+explicit. The low-level upsert builder now stages SQL without committing, existing single-table
+endpoint behavior remains compatible through a one-operation unit of work, and source-batch
+orchestration can commit once or roll back earlier staged table updates when a later table fails.
 
 ## Health Assessment
 

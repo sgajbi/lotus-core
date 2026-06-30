@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.ingestion_service.app.services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
+    ReferenceDataUpsertOperation,
     get_reference_data_ingestion_service,
 )
 
@@ -398,7 +399,7 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
         ),
     ],
 )
-async def test_reference_data_upsert_methods_delegate_to_upsert_many(
+async def test_reference_data_upsert_methods_delegate_to_single_table_unit_of_work(
     method_name: str,
     records: list[dict[str, str]],
     conflict_columns: list[str],
@@ -406,14 +407,14 @@ async def test_reference_data_upsert_methods_delegate_to_upsert_many(
 ) -> None:
     db = AsyncMock(spec=AsyncSession)
     service = ReferenceDataIngestionService(db)
-    service._upsert_many = AsyncMock()  # type: ignore[method-assign]
+    service._commit_upsert_many = AsyncMock()  # type: ignore[method-assign]
 
     await getattr(service, method_name)(records)
 
-    service._upsert_many.assert_awaited_once()
-    assert service._upsert_many.await_args.kwargs["records"] == records
-    assert service._upsert_many.await_args.kwargs["conflict_columns"] == conflict_columns
-    assert service._upsert_many.await_args.kwargs["update_columns"] == update_columns
+    service._commit_upsert_many.assert_awaited_once()
+    assert service._commit_upsert_many.await_args.kwargs["records"] == records
+    assert service._commit_upsert_many.await_args.kwargs["conflict_columns"] == conflict_columns
+    assert service._commit_upsert_many.await_args.kwargs["update_columns"] == update_columns
 
 
 @pytest.mark.asyncio
@@ -430,6 +431,86 @@ async def test_upsert_many_returns_without_db_calls_for_empty_records() -> None:
 
     db.execute.assert_not_awaited()
     db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_upsert_source_batch_commits_once_after_all_operations_stage() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+    service._upsert_many = AsyncMock()  # type: ignore[method-assign]
+    operations = [
+        ReferenceDataUpsertOperation(
+            model=object,
+            records=[{"id": "benchmark"}],
+            conflict_columns=["id"],
+            update_columns=["name"],
+        ),
+        ReferenceDataUpsertOperation(
+            model=object,
+            records=[{"id": "index"}],
+            conflict_columns=["id"],
+            update_columns=["name"],
+        ),
+    ]
+
+    await service.upsert_source_batch(operations)
+
+    assert service._upsert_many.await_count == 2
+    db.commit.assert_awaited_once()
+    db.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_upsert_source_batch_rolls_back_when_later_operation_fails() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+    failure = RuntimeError("second reference table failed")
+    service._upsert_many = AsyncMock(side_effect=[None, failure])  # type: ignore[method-assign]
+    operations = [
+        ReferenceDataUpsertOperation(
+            model=object,
+            records=[{"id": "benchmark"}],
+            conflict_columns=["id"],
+            update_columns=["name"],
+        ),
+        ReferenceDataUpsertOperation(
+            model=object,
+            records=[{"id": "index"}],
+            conflict_columns=["id"],
+            update_columns=["name"],
+        ),
+    ]
+
+    with pytest.raises(RuntimeError, match="second reference table failed"):
+        await service.upsert_source_batch(operations)
+
+    assert service._upsert_many.await_count == 2
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_upsert_source_batch_rolls_back_when_first_operation_fails() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+    service._upsert_many = AsyncMock(  # type: ignore[method-assign]
+        side_effect=RuntimeError("first reference table failed")
+    )
+
+    with pytest.raises(RuntimeError, match="first reference table failed"):
+        await service.upsert_source_batch(
+            [
+                ReferenceDataUpsertOperation(
+                    model=object,
+                    records=[{"id": "benchmark"}],
+                    conflict_columns=["id"],
+                    update_columns=["name"],
+                )
+            ]
+        )
+
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
 
 
 def test_get_reference_data_ingestion_service_wraps_db_session() -> None:
