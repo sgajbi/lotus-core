@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 import time
 from dataclasses import dataclass
@@ -20,14 +19,15 @@ from portfolio_common.logging_utils import (
     request_id_var,
     trace_id_var,
 )
+from portfolio_common.metrics_settings import load_metrics_runtime_settings
 from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUESTS_TOTAL
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
 
 _TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
-METRICS_ACCESS_TOKEN_ENV = "LOTUS_METRICS_ACCESS_TOKEN"
 METRICS_INTERNAL_OPEN_MODE = "internal_open"
 METRICS_BEARER_TOKEN_MODE = "bearer_token"
+_METRICS_POLICY_CONFIGURED_STATE_KEY = "lotus_metrics_access_policy_configured"
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ def resolve_metrics_access_policy(
 ) -> MetricsAccessPolicy:
     token = normalize_lineage_value(metrics_access_token)
     if token is None:
-        token = normalize_lineage_value(os.getenv(METRICS_ACCESS_TOKEN_ENV))
+        token = load_metrics_runtime_settings().metrics_access_token
     if token:
         return MetricsAccessPolicy(mode=METRICS_BEARER_TOKEN_MODE, token=token)
     return MetricsAccessPolicy(mode=METRICS_INTERNAL_OPEN_MODE)
@@ -76,6 +76,25 @@ def _metrics_forbidden_response(policy: MetricsAccessPolicy) -> JSONResponse:
             }
         },
     )
+
+
+def configure_metrics_access_policy(
+    app: FastAPI,
+    *,
+    metrics_access_policy: MetricsAccessPolicy,
+) -> None:
+    if getattr(app.state, _METRICS_POLICY_CONFIGURED_STATE_KEY, False):
+        return
+    setattr(app.state, _METRICS_POLICY_CONFIGURED_STATE_KEY, True)
+
+    @app.middleware("http")
+    async def enforce_metrics_access_policy(request: Request, call_next):
+        if request.url.path == "/metrics" and not _metrics_request_allowed(
+            request,
+            metrics_access_policy,
+        ):
+            return _metrics_forbidden_response(metrics_access_policy)
+        return await call_next(request)
 
 
 def normalize_trace_id(value: str | None) -> str | None:
@@ -165,15 +184,7 @@ def configure_standard_http_app(
     )
 
     configure_standard_openapi(app, service_name=service_name)
-
-    @app.middleware("http")
-    async def enforce_metrics_access_policy(request: Request, call_next):
-        if request.url.path == "/metrics" and not _metrics_request_allowed(
-            request,
-            metrics_access_policy,
-        ):
-            return _metrics_forbidden_response(metrics_access_policy)
-        return await call_next(request)
+    configure_metrics_access_policy(app, metrics_access_policy=metrics_access_policy)
 
     @app.middleware("http")
     async def add_correlation_id_middleware(request: Request, call_next):

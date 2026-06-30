@@ -24,15 +24,15 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
    `traceparent` headers and emit route-template HTTP metrics.
 9. `/metrics` is an operational Prometheus scrape endpoint, not a public business API. The default
    `internal_open` mode preserves private-network scraper compatibility; deployments that expose the
-   endpoint outside a private scrape boundary must configure `LOTUS_METRICS_ACCESS_TOKEN` and send
-   `Authorization: Bearer <token>` from authorized scrapers.
+   endpoint outside a private scrape boundary must configure `LOTUS_METRICS_ACCESS_TOKEN` through
+   the common metrics settings layer and send `Authorization: Bearer <token>` from authorized
+   scrapers. Web-backed worker runtime metrics use the same policy.
 
 ## Current Gaps
 
 The initial quality baseline records observability as a documentation and gate gap. The shared
 monitoring unit guard now rejects `portfolio_id` and `security_id` as production Prometheus metric
-labels. The shared HTTP bootstrap now enforces the configured metrics access policy for standard API
-and health-only worker apps. Future slices should add automated checks for additional
-high-cardinality identifiers, correlation ID propagation, sensitive logging, health/readiness
-completeness, and inventory enforcement that prevents new runtime web apps from bypassing the shared
-bootstrap.
+labels. The shared HTTP bootstrap and web-backed worker runtime now enforce the configured metrics
+access policy. Future slices should add automated checks for additional high-cardinality
+identifiers, correlation ID propagation, sensitive logging, health/readiness completeness, and
+inventory enforcement that prevents new runtime web apps from bypassing the shared metrics policy.
