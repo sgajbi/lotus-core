@@ -16,7 +16,7 @@ tested modules.
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
 | Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, manifest-backed unit collection, manifest-backed integration-lite collection, workflow-governance, and wiki-docs gates while other baseline checks remain report-only |
-| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the manifest-backed runtime-safe unit lane with `3082/3092` tests and 10 manifest deselects; `make quality-integration-lite-collection-gate` collects 121 integration-lite tests |
+| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the manifest-backed runtime-safe unit lane with `3257/3267` tests and 10 manifest deselects; `make quality-integration-lite-collection-gate` collects 121 integration-lite tests |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
@@ -39,6 +39,7 @@ tested modules.
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | DLQ/replay correlation diagnostics | Improving | CR-1206 adds correlation-or-reason diagnostics to consumer DLQ and replay-audit records, exposes alternate lookup keys in replay responses, and hardens ingestion rate-limit metric registration against duplicate-import CI failures |
 | Mandatory replay audit | Improving | CR-1207 removes best-effort replay-audit recording from ingestion retry and consumer-DLQ replay paths, adds `INGESTION_REPLAY_AUDIT_WRITE_FAILED`, and keeps replay outcomes unacknowledged when audit persistence fails |
+| Ingestion publish dependency errors | Improving | CR-1218 routes direct ingestion-router Kafka publish failures through a shared mapper that returns HTTP 503 with `Retry-After`, dependency metadata, retryability, lineage, failed-record keys, publish state, and published-record count while preserving failure-history writes and the `INGESTION_PUBLISH_FAILED` application code |
 | Runtime configuration strictness | Improving | CR-1208 makes ingestion resilience env parsing strict in non-local profiles, logs explicit local fallback, and restores monetary-float CI enforcement to a zero-finding, zero-allowlist baseline; CR-1209 adds a shared strict/local runtime settings helper and migrates query-service plus query-control-plane settings onto it; CR-1210 migrates common outbox and valuation runtime settings onto the shared parser |
 | Corporate-action ordering policy | Improving | CR-1197 routes cost-engine Bundle A sorting through the canonical shared ordering helper and removes the duplicated private rank map |
 | Corporate-action reconciliation evidence | Improving | CR-1198 records Bundle A reconciliation outcomes as durable `corporate_action_bundle_a` financial reconciliation runs and findings instead of log-only diagnostics |
@@ -110,6 +111,15 @@ enforced guard. `make qcp-problem-details-guard` now scans active
 `query_control_plane_service` router files and fails direct FastAPI/Starlette `HTTPException`
 usage or raw `detail=str(...)` payloads before the same defect class reaches runtime, OpenAPI, or
 downstream clients. No API behavior changed.
+
+Current continuation: CR-1218 fixes GitHub issue #594 for direct ingestion publish routers.
+Kafka publish dependency failures now return HTTP 503 with `Retry-After`, dependency=`kafka`,
+retryable metadata, lineage, failed-record keys, publish state, and published-record count through a
+shared mapper. Route paths, success DTOs, Kafka publish attempts, job failure-history writes, and
+the `INGESTION_PUBLISH_FAILED` application code are preserved; reference-data persistence and
+post-publish bookkeeping failures remain distinct 500 contracts. Proof passed with 258 affected
+mapper/service, ASGI router, and OpenAPI tests plus `make lint`, OpenAPI, vocabulary, Spectral,
+typecheck, unit-collection, wiki-docs, scoped Ruff, and diff checks.
 
 ## Health Assessment
 
@@ -2099,3 +2109,10 @@ health before that claim is defensible.
      request bodies still advertise FastAPI validation `application/json` alongside application
      problem details. Focused unit/app/OpenAPI proof passed with 109 tests; scoped Ruff lint and
      format checks passed.
+335. Continued validated GitHub issue #594 by mapping direct ingestion-router Kafka publish
+     dependency failures to shared HTTP 503 responses with `Retry-After`, dependency metadata,
+     retryability, lineage, failed-record keys, publish state, and published-record count while
+     preserving the `INGESTION_PUBLISH_FAILED` application code and failure-history writes.
+     Mapper/service, ASGI router, and OpenAPI tests passed with 258 tests; `make lint`, OpenAPI,
+     vocabulary, Spectral, typecheck, unit-collection, wiki-docs, scoped Ruff, and diff checks
+     passed.

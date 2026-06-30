@@ -11,6 +11,11 @@ from ..services.upload_ingestion_service import (
     UploadIngestionService,
     get_upload_ingestion_service,
 )
+from .publish_errors import (
+    ingestion_publish_failed_example,
+    ingestion_unavailable_response,
+    raise_ingestion_publish_unavailable,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -31,16 +36,14 @@ INGESTION_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for /ingest/uploads/commit.",
     }
 }
-UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = {
-    "detail": {
-        "code": "INGESTION_PUBLISH_FAILED",
-        "message": (
-            "Failed to publish transaction 'T2' after 1 earlier record(s) were already "
-            "published. Remaining unpublished record keys: T2."
-        ),
-        "failed_record_keys": ["T2"],
-    }
-}
+UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
+    message=(
+        "Failed to publish transaction 'T2' after 1 earlier record(s) were already "
+        "published. Remaining unpublished record keys: T2."
+    ),
+    failed_record_keys=["T2"],
+    published_record_count=1,
+)
 
 
 @router.post(
@@ -120,14 +123,10 @@ async def preview_upload(
             "description": "Write-rate protection blocked the commit request.",
             "content": {"application/json": {"example": INGESTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Upload commit publish failed after validation succeeded.",
-            "content": {"application/json": {"example": UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE}},
-        },
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "Ingestion operating mode blocked writes.",
-            "content": {"application/json": {"example": INGESTION_MODE_BLOCKS_WRITES_EXAMPLE}},
-        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: ingestion_unavailable_response(
+            mode_blocked_example=INGESTION_MODE_BLOCKS_WRITES_EXAMPLE,
+            publish_failed_example=UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE,
+        ),
         status.HTTP_410_GONE: {
             "description": "Bulk upload adapter mode disabled for this environment.",
             "content": {"application/json": {"example": UPLOAD_ADAPTER_DISABLED_EXAMPLE}},
@@ -188,14 +187,7 @@ async def commit_upload(
             allow_partial=allow_partial,
         )
     except IngestionPublishError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "INGESTION_PUBLISH_FAILED",
-                "message": str(exc),
-                "failed_record_keys": exc.failed_record_keys,
-            },
-        ) from exc
+        raise_ingestion_publish_unavailable(exc)
     logger.info(
         "Upload commit completed.",
         extra={

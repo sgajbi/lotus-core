@@ -19,6 +19,11 @@ from ..services.ingestion_service import (
     get_ingestion_service,
 )
 from .job_bookkeeping import raise_post_publish_bookkeeping_failure
+from .publish_errors import (
+    ingestion_publish_failed_example,
+    ingestion_unavailable_response,
+    raise_ingestion_publish_unavailable,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,19 +43,17 @@ PORTFOLIO_BUNDLE_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for /ingest/portfolio-bundle.",
     }
 }
-PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE = {
-    "detail": {
-        "code": "INGESTION_PUBLISH_FAILED",
-        "message": (
-            "Portfolio bundle publish stopped after these entity groups were already published: "
-            "{'business_dates': 1, 'portfolios': 0, 'instruments': 0, "
-            "'transactions': 0, 'market_prices': 0, 'fx_rates': 0}. "
-            "Failed to publish portfolio 'P1'."
-        ),
-        "failed_record_keys": ["P1"],
-        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
-    }
-}
+PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
+    message=(
+        "Portfolio bundle publish stopped after these entity groups were already published: "
+        "{'business_dates': 1, 'portfolios': 0, 'instruments': 0, "
+        "'transactions': 0, 'market_prices': 0, 'fx_rates': 0}. "
+        "Failed to publish portfolio 'P1'."
+    ),
+    failed_record_keys=["P1"],
+    job_id="ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+    published_record_count=1,
+)
 
 
 @router.post(
@@ -68,14 +71,10 @@ PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE = {
                 "application/json": {"example": PORTFOLIO_BUNDLE_RATE_LIMIT_EXCEEDED_EXAMPLE}
             },
         },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Portfolio-bundle publish failed after job metadata was recorded.",
-            "content": {"application/json": {"example": PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE}},
-        },
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "Ingestion operating mode blocked writes.",
-            "content": {"application/json": {"example": PORTFOLIO_BUNDLE_MODE_BLOCKED_EXAMPLE}},
-        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: ingestion_unavailable_response(
+            mode_blocked_example=PORTFOLIO_BUNDLE_MODE_BLOCKED_EXAMPLE,
+            publish_failed_example=PORTFOLIO_BUNDLE_PUBLISH_FAILED_EXAMPLE,
+        ),
     },
     tags=["Portfolio Bundle"],
     summary="Ingest a complete portfolio bundle",
@@ -152,15 +151,7 @@ async def ingest_portfolio_bundle(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "INGESTION_PUBLISH_FAILED",
-                "message": str(exc),
-                "failed_record_keys": exc.failed_record_keys,
-                "job_id": job_result.job.job_id,
-            },
-        ) from exc
+        raise_ingestion_publish_unavailable(exc, job_id=job_result.job.job_id)
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise
