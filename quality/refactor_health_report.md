@@ -38,6 +38,7 @@ tested modules.
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | Corporate-action ordering policy | Improving | CR-1197 routes cost-engine Bundle A sorting through the canonical shared ordering helper and removes the duplicated private rank map |
 | Corporate-action reconciliation evidence | Improving | CR-1198 records Bundle A reconciliation outcomes as durable `corporate_action_bundle_a` financial reconciliation runs and findings instead of log-only diagnostics |
+| Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
 | Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
@@ -49,10 +50,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1198 addresses validated GitHub issue #680 by promoting Bundle A reconciliation diagnostics into
-the existing financial reconciliation evidence surface. Cost-consumer processing now records
-completed `corporate_action_bundle_a` reconciliation runs and durable findings for basis mismatch,
-insufficient legs, and missing dependency references, while balanced groups remain finding-free.
+CR-1199 addresses validated GitHub issue #672 by adding a durable transaction-cost component
+identity. The schema now enforces one normalized fee component per transaction, fee type, and
+currency, while `TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1` defensively reuse
+the same grain when already-loaded duplicate rows are encountered.
 
 ## Health Assessment
 

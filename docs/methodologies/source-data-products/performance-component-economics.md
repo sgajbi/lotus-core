@@ -61,6 +61,11 @@ The contract source-authors these component families when evidence exists:
 
 Zero or absent fields remain zero or null. The product does not fabricate missing economics.
 
+`transaction_costs` component identity is normalized as `(transaction_id, lower(trim(fee_type)),
+upper(trim(currency)))`. The database enforces one row per normalized component. The response
+builder also de-duplicates already-loaded duplicate rows at that grain before producing
+`trade_fee_components`, so accidental replay or legacy duplicate rows cannot inflate fee evidence.
+
 ## Totals
 
 `component_totals` groups non-zero component amounts by `component_family` and currency for the

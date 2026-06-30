@@ -169,9 +169,10 @@ certification, best execution, or OMS acknowledgement.
 `TransactionCostCurve:v1` is the governed source for observed booked transaction-fee evidence
 grouped by security, transaction type, and fee currency. Its implementation-backed methodology uses
 explicit `transaction_costs` rows when present, falls back to `trade_fee` only when explicit cost
-rows are absent, filters unusable zero-fee or zero-notional observations, and computes total cost,
-total absolute notional, notional-weighted average cost bps, min cost bps, and max cost bps for each
-group. It is not an execution-quality, market-impact, venue-routing, best-execution, OMS
+rows are absent, enforces one normalized component per `(transaction_id, fee_type, currency)`,
+filters unusable zero-fee or zero-notional observations, and computes total cost, total absolute
+notional, notional-weighted average cost bps, min cost bps, and max cost bps for each group. It is
+not an execution-quality, market-impact, venue-routing, best-execution, OMS
 acknowledgement, or minimum-cost execution methodology.
 
 `PerformanceComponentEconomics:v1` is the governed source for performance-facing component
@@ -182,9 +183,10 @@ explicit local P&L currency, and FX-context fields plus grouped component totals
 metadata so `lotus-performance` can consume source-authored economics instead of inferring them
 locally. Fee totals use the explicit `trade_fee_currency`; `MIXED` marks a transaction with positive
 cost rows in multiple currencies, with per-currency amounts carried in `trade_fee_components`, and
-must not be treated as an ISO currency. Requests remain bounded to 366 inclusive transaction-date
-days and row-level evidence is cursor-paged by normalized security, transaction date, and
-transaction ID. `component_totals` are scoped to the returned page, with
+must not be treated as an ISO currency. Fee components use the same normalized
+`(transaction_id, fee_type, currency)` identity as `TransactionCostCurve:v1`. Requests remain
+bounded to 366 inclusive transaction-date days and row-level evidence is cursor-paged by normalized
+security, transaction date, and transaction ID. `component_totals` are scoped to the returned page, with
 `component_totals_scope=returned_page`; consumers that need full-window totals must iterate pages or
 use a future aggregate contract. Its
 implementation-backed methodology is documented in

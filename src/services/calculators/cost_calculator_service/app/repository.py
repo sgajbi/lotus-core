@@ -124,7 +124,7 @@ def _transaction_cost_rows(
     transaction_result: EngineTransaction,
     db_txn: DBTransaction,
 ) -> list[TransactionCost]:
-    currency = db_txn.trade_currency or db_txn.currency
+    currency = normalize_currency_code(db_txn.trade_currency or db_txn.currency)
     return [
         TransactionCost(
             transaction_id=transaction_result.transaction_id,
