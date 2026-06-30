@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: reviewdog/action-actionlint@v1
 
   lint-typecheck-contracts-security:
@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -95,7 +95,7 @@ jobs:
           - suite: transaction-portfolio-flow-bundle-contract
             target: test-transaction-portfolio-flow-bundle-contract
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -127,7 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -139,7 +139,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements/ci-tooling.lock.txt
       - name: Restore Docker build cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .buildx-cache
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
@@ -167,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -177,7 +177,7 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Restore Docker build cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .buildx-cache
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
@@ -213,7 +213,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -223,7 +223,7 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Restore Docker build cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .buildx-cache
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
@@ -255,7 +255,7 @@ jobs:
     timeout-minutes: 60
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -265,7 +265,7 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Restore Docker build cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .buildx-cache
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
@@ -307,7 +307,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -317,7 +317,7 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Restore Docker build cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .buildx-cache
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
@@ -351,7 +351,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -361,7 +361,7 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Restore Docker build cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .buildx-cache
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
