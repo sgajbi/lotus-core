@@ -1757,11 +1757,19 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     )
 
     composition_not_found = benchmark_composition_window["responses"]["404"]["content"][
-        "application/json"
+        "application/problem+json"
     ]["example"]
-    assert composition_not_found["detail"] == (
-        "No overlapping benchmark definition found for benchmark_id and requested window."
+    assert composition_not_found["error_code"] == "QCP_INTEGRATION_SOURCE_NOT_FOUND"
+    assert composition_not_found["metadata"]["source_product"] == "BenchmarkConstituentWindow"
+    assert (
+        composition_not_found["detail"]
+        == "No overlapping benchmark definition found for benchmark_id and requested window."
     )
+    composition_conflict = benchmark_composition_window["responses"]["409"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert composition_conflict["error_code"] == "QCP_INTEGRATION_SOURCE_CONFLICT"
+    assert composition_conflict["metadata"]["source_product"] == "BenchmarkConstituentWindow"
 
     benchmark_id = next(
         parameter
@@ -1781,11 +1789,14 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         in (benchmark_definition["description"])
     )
 
-    definition_not_found = benchmark_definition["responses"]["404"]["content"]["application/json"][
-        "example"
-    ]
-    assert definition_not_found["detail"] == (
-        "No effective benchmark definition found for benchmark_id and as_of_date."
+    definition_not_found = benchmark_definition["responses"]["404"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert definition_not_found["error_code"] == "QCP_INTEGRATION_SOURCE_NOT_FOUND"
+    assert definition_not_found["metadata"]["source_product"] == "BenchmarkDefinition"
+    assert (
+        definition_not_found["detail"]
+        == "No effective benchmark definition found for benchmark_id and as_of_date."
     )
 
     market_series_param = next(

@@ -1123,10 +1123,17 @@ async def test_benchmark_definition_not_found_maps_to_404(async_test_client):
         json={"as_of_date": "2026-01-31"},
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == (
-        "No effective benchmark definition found for benchmark_id and as_of_date."
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective benchmark definition found for benchmark_id and as_of_date.",
     )
+    assert body["metadata"] == {
+        "source_product": "BenchmarkDefinition",
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+        "reason": "not_found",
+    }
 
 
 async def test_benchmark_catalog_success(async_test_client):
@@ -1256,10 +1263,46 @@ async def test_benchmark_composition_window_not_found_maps_to_404(async_test_cli
         json={"window": {"start_date": "2026-01-01", "end_date": "2026-03-31"}},
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == (
-        "No overlapping benchmark definition found for benchmark_id and requested window."
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No overlapping benchmark definition found for benchmark_id and requested window.",
     )
+    assert body["metadata"] == {
+        "source_product": "BenchmarkConstituentWindow",
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+        "reason": "not_found",
+    }
+
+
+async def test_benchmark_composition_window_conflict_maps_to_problem_details(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_benchmark_composition_window = AsyncMock(
+        side_effect=ValueError(
+            "Benchmark definition currency changed within requested composition window."
+        )
+    )
+
+    response = await client.post(
+        "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/composition-window",
+        json={"window": {"start_date": "2026-01-01", "end_date": "2026-03-31"}},
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=409,
+        error_code="QCP_INTEGRATION_SOURCE_CONFLICT",
+        detail=(
+            "Benchmark composition window request conflicts with effective benchmark "
+            "definition data."
+        ),
+    )
+    assert body["metadata"] == {
+        "source_product": "BenchmarkConstituentWindow",
+        "reason": "ValueError",
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+    }
 
 
 async def test_benchmark_market_series_success(async_test_client):
