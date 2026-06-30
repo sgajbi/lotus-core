@@ -20,6 +20,8 @@ KEYWORDS = (
 IGNORE_DIRS = {"tests", ".venv", "venv", "docs", "rfcs", "output", "build", "dist", "__pycache__"}
 
 FLOAT_ANNOTATION = re.compile(r"\bfloat\b")
+IDENTIFIER = re.compile(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b")
+NON_DOMAIN_TOKENS = {"return", "float"}
 
 
 def is_candidate(path: Path) -> bool:
@@ -37,7 +39,7 @@ def scan_repo(repo_root: Path) -> list[str]:
         rel = file_path.relative_to(repo_root).as_posix()
         for line_no, line in enumerate(file_path.read_text(encoding="utf-8").splitlines(), start=1):
             lowered = line.lower()
-            if not any(k in lowered for k in KEYWORDS):
+            if not _contains_monetary_keyword(lowered):
                 continue
             if not FLOAT_ANNOTATION.search(lowered):
                 continue
@@ -46,6 +48,23 @@ def scan_repo(repo_root: Path) -> list[str]:
             finding = f"{rel}:{line_no}:{line.strip()}"
             findings.append(finding)
     return sorted(set(findings))
+
+
+def _contains_monetary_keyword(line: str) -> bool:
+    tokens = set(_identifier_tokens(line))
+    return any(keyword in tokens for keyword in KEYWORDS)
+
+
+def _identifier_tokens(line: str) -> list[str]:
+    tokens: list[str] = []
+    for identifier in IDENTIFIER.findall(line):
+        normalized_identifier = identifier.lower()
+        if normalized_identifier == "value":
+            continue
+        for token in normalized_identifier.split("_"):
+            if token and token not in NON_DOMAIN_TOKENS:
+                tokens.append(token)
+    return tokens
 
 
 def _parse_review_date(value: str) -> datetime:
@@ -166,6 +185,14 @@ def main() -> int:
         return 1
 
     unexpected = sorted(set(findings) - set(allowlist_entries))
+    unused_allowlist_entries = sorted(set(allowlist_entries) - set(findings))
+
+    if unused_allowlist_entries:
+        print("Allowlist contains entries that no longer match active findings:")
+        for item in unused_allowlist_entries:
+            print(f" - {item}")
+        print(f"\nRemove stale entries from {allowlist_path}.")
+        return 1
 
     if unexpected:
         print("Unauthorized monetary float usage detected:")

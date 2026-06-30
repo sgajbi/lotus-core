@@ -1,9 +1,16 @@
 from decimal import Decimal
 
-from src.services.ingestion_service.app.settings import load_ingestion_service_settings
+import pytest
+
+from src.services.ingestion_service.app.settings import (
+    IngestionConfigurationError,
+    load_ingestion_service_settings,
+)
 
 
 def test_load_ingestion_service_settings_defaults(monkeypatch):
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.delenv("LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", raising=False)
     monkeypatch.delenv("LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD", raising=False)
     monkeypatch.delenv("LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON", raising=False)
@@ -19,6 +26,7 @@ def test_load_ingestion_service_settings_defaults(monkeypatch):
 
 
 def test_load_ingestion_service_settings_invalid_json_falls_back(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON", "not-json")
 
     settings = load_ingestion_service_settings()
@@ -33,6 +41,7 @@ def test_load_ingestion_service_settings_invalid_json_falls_back(monkeypatch):
 
 
 def test_load_ingestion_service_settings_coerces_env_values(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_AUTH_MODE", "jwt_only")
     monkeypatch.setenv(
         "LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE",
@@ -58,6 +67,7 @@ def test_load_ingestion_service_settings_coerces_env_values(monkeypatch):
 
 
 def test_load_ingestion_service_settings_adapter_mode_flags(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", "false")
     monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", "0")
 
@@ -68,8 +78,49 @@ def test_load_ingestion_service_settings_adapter_mode_flags(monkeypatch):
 
 
 def test_load_ingestion_service_settings_invalid_rate_limit_scope_falls_back(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE", "global_magic")
 
     settings = load_ingestion_service_settings()
 
     assert settings.rate_limit.enforcement_scope == "local_process"
+
+
+def test_load_ingestion_service_settings_strict_rejects_invalid_float(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS", "not-a-number")
+
+    with pytest.raises(
+        IngestionConfigurationError,
+        match="LOTUS_CORE_DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS",
+    ):
+        load_ingestion_service_settings()
+
+
+def test_load_ingestion_service_settings_strict_rejects_out_of_range_int(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("REPROCESSING_WORKER_BATCH_SIZE", "0")
+
+    with pytest.raises(IngestionConfigurationError, match="REPROCESSING_WORKER_BATCH_SIZE"):
+        load_ingestion_service_settings()
+
+
+def test_load_ingestion_service_settings_strict_rejects_invalid_json(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON", "not-json")
+
+    with pytest.raises(
+        IngestionConfigurationError,
+        match="LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON",
+    ):
+        load_ingestion_service_settings()
+
+
+def test_load_ingestion_service_settings_local_fallback_logs_warning(monkeypatch, caplog):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("LOTUS_CORE_DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS", "not-a-number")
+
+    settings = load_ingestion_service_settings()
+
+    assert settings.runtime_policy.default_backlog_age_threshold_seconds == 300.0
+    assert "falling back to default" in caplog.text

@@ -25,6 +25,8 @@ This repository adopts the platform-wide mandatory standard defined in `lotus-pl
 
 - CI runs python scripts/check_monetary_float_usage.py.
 - Baseline allowlist: docs/standards/monetary-float-allowlist.json.
+- The current baseline is zero active findings and an empty allowlist; stale allowlist entries fail
+  the guard.
 - New findings fail CI until explicitly approved and allowlisted in dedicated PR.
 - Each allowlist entry requires `justification`, `owner`, and `review_by` metadata.
 - Stale allowlist entries (past `review_by`) fail CI.

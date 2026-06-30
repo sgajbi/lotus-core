@@ -129,6 +129,12 @@ Current repository posture:
     documented as legacy `application/json` bare-detail responses until their runtime handlers are
     converted; do not publish problem-details OpenAPI schemas for routes that still raise default
     FastAPI `HTTPException(detail=...)`.
+28. Ingestion resilience configuration is strict outside local/development/test profiles. Invalid
+    bounded settings for rate limits, replay caps, worker polling and batching, scheduler dispatch,
+    operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
+    `LOTUS_CORE_STRICT_CONFIG_VALIDATION=true` or non-local `ENVIRONMENT` is active; local profiles
+    retain explicit warning-backed fallback. `make monetary-float-guard` uses token-aware
+    money-like matching and currently has zero active findings and zero allowlisted suppressions.
 
 ## Architecture And Module Map
 
