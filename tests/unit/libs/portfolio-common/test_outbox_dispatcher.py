@@ -10,6 +10,9 @@ def test_get_outbox_runtime_settings_uses_default(monkeypatch):
     monkeypatch.delenv("OUTBOX_DISPATCHER_MAX_RETRIES", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_BATCH_SIZE", raising=False)
+    monkeypatch.delenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", raising=False)
+    monkeypatch.delenv("OUTBOX_DISPATCHER_RETRY_MAX_DELAY_SECONDS", raising=False)
+    monkeypatch.delenv("OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS", raising=False)
 
     import portfolio_common.outbox_settings as module
 
@@ -18,12 +21,18 @@ def test_get_outbox_runtime_settings_uses_default(monkeypatch):
     assert settings.poll_interval_seconds == 5
     assert settings.batch_size == 50
     assert settings.max_retries == 3
+    assert settings.retry_initial_delay_seconds == 5
+    assert settings.retry_max_delay_seconds == 300
+    assert settings.retry_jitter_seconds == 0
 
 
 def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "11")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "77")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "7")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "13")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_DELAY_SECONDS", "144")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS", "3")
 
     import portfolio_common.outbox_settings as module
 
@@ -32,6 +41,9 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
     assert settings.poll_interval_seconds == 11
     assert settings.batch_size == 77
     assert settings.max_retries == 7
+    assert settings.retry_initial_delay_seconds == 13
+    assert settings.retry_max_delay_seconds == 144
+    assert settings.retry_jitter_seconds == 3
 
 
 def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, caplog):
@@ -39,6 +51,9 @@ def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, capl
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "nope")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "0")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "-4")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "0")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_DELAY_SECONDS", "1")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS", "-1")
 
     import portfolio_common.outbox_settings as module
 
@@ -47,6 +62,9 @@ def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, capl
     assert settings.poll_interval_seconds == 5
     assert settings.batch_size == 50
     assert settings.max_retries == 3
+    assert settings.retry_initial_delay_seconds == 5
+    assert settings.retry_max_delay_seconds == 5
+    assert settings.retry_jitter_seconds == 0
     assert "falling back to default" in caplog.text
 
 
@@ -54,6 +72,9 @@ def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "13")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "88")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "9")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "21")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_DELAY_SECONDS", "210")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS", "4")
 
     import portfolio_common.outbox_dispatcher as module
 
@@ -62,17 +83,26 @@ def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
         poll_interval=2,
         batch_size=4,
         max_retries=2,
+        retry_initial_delay_seconds=7,
+        retry_max_delay_seconds=70,
+        retry_jitter_seconds=0,
     )
 
     assert dispatcher._poll_interval == 2
     assert dispatcher._batch_size == 4
     assert dispatcher._max_retries == 2
+    assert dispatcher._retry_initial_delay_seconds == 7
+    assert dispatcher._retry_max_delay_seconds == 70
+    assert dispatcher._retry_jitter_seconds == 0
 
 
 def test_dispatcher_constructor_uses_runtime_defaults(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "17")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "91")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "6")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "19")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_DELAY_SECONDS", "190")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS", "5")
 
     import portfolio_common.outbox_dispatcher as module
 
@@ -81,6 +111,25 @@ def test_dispatcher_constructor_uses_runtime_defaults(monkeypatch):
     assert dispatcher._poll_interval == 17
     assert dispatcher._batch_size == 91
     assert dispatcher._max_retries == 6
+    assert dispatcher._retry_initial_delay_seconds == 19
+    assert dispatcher._retry_max_delay_seconds == 190
+    assert dispatcher._retry_jitter_seconds == 5
+
+
+def test_dispatcher_retry_delay_uses_bounded_exponential_backoff() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        retry_initial_delay_seconds=10,
+        retry_max_delay_seconds=45,
+        retry_jitter_seconds=0,
+    )
+
+    assert dispatcher._retry_delay_seconds(1) == 10.0
+    assert dispatcher._retry_delay_seconds(2) == 20.0
+    assert dispatcher._retry_delay_seconds(3) == 40.0
+    assert dispatcher._retry_delay_seconds(4) == 45.0
 
 
 @pytest.mark.asyncio

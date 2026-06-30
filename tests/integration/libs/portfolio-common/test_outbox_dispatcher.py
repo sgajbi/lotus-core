@@ -193,7 +193,7 @@ def test_dispatcher_recovers_after_failure(db_engine, clean_db, smart_mock_kafka
     """
     GIVEN a pending event
     WHEN the dispatcher fails on its first poll and then recovers
-    THEN the event should be processed on the subsequent poll.
+    THEN the event should be processed after its durable retry eligibility matures.
     """
     # ARRANGE
     TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
@@ -247,14 +247,35 @@ def test_dispatcher_recovers_after_failure(db_engine, clean_db, smart_mock_kafka
 
     # ASSERT 1
     with TestSessionFactory() as session:
-        status, retry_count = session.execute(
-            text("SELECT status, retry_count FROM outbox_events WHERE aggregate_id = :id"),
+        status, retry_count, next_attempt_at = session.execute(
+            text(
+                "SELECT status, retry_count, next_attempt_at "
+                "FROM outbox_events WHERE aggregate_id = :id"
+            ),
             {"id": aggregate_id},
         ).one()
         assert status == "PENDING"
         assert retry_count == 1
+        assert next_attempt_at is not None
 
-    # ACT 2: Second poll cycle should succeed
+    # Immature retry rows are deliberately not eligible for immediate reselection.
+    dispatcher._process_batch_sync()
+    assert smart_mock_kafka_producer.flush.call_count == 1
+
+    with TestSessionFactory() as session:
+        with session.begin():
+            session.execute(
+                text(
+                    "UPDATE outbox_events SET next_attempt_at = :eligible_at "
+                    "WHERE aggregate_id = :id"
+                ),
+                {
+                    "eligible_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+                    "id": aggregate_id,
+                },
+            )
+
+    # ACT 2: The next poll cycle should succeed after eligibility matures.
     dispatcher._process_batch_sync()
 
     # ASSERT 2
@@ -264,6 +285,63 @@ def test_dispatcher_recovers_after_failure(db_engine, clean_db, smart_mock_kafka
             text("SELECT status FROM outbox_events WHERE aggregate_id = :id"), {"id": aggregate_id}
         ).scalar_one()
         assert status == "PROCESSED"
+
+
+def test_dispatcher_skips_pending_rows_before_next_attempt_at(
+    db_engine, clean_db, smart_mock_kafka_producer
+):
+    """
+    GIVEN one pending row waiting for a future retry and one immediately eligible pending row
+    WHEN the dispatcher claims a batch
+    THEN only the eligible row is published.
+    """
+    TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    waiting_aggregate_id = f"waiting-agg-{uuid.uuid4()}"
+    ready_aggregate_id = f"ready-agg-{uuid.uuid4()}"
+    with TestSessionFactory() as session:
+        with session.begin():
+            session.add_all(
+                [
+                    OutboxEvent(
+                        aggregate_type="RetryEligibilityTest",
+                        aggregate_id=waiting_aggregate_id,
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload="{}",
+                        topic="retry.topic",
+                        next_attempt_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+                    ),
+                    OutboxEvent(
+                        aggregate_type="RetryEligibilityTest",
+                        aggregate_id=ready_aggregate_id,
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload="{}",
+                        topic="retry.topic",
+                    ),
+                ]
+            )
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=smart_mock_kafka_producer,
+        db_session_factory=TestSessionFactory,
+    )
+    dispatcher._process_batch_sync()
+
+    assert smart_mock_kafka_producer.publish_message.call_count == 1
+    assert smart_mock_kafka_producer.publish_message.call_args.kwargs["key"] == ready_aggregate_id
+    with TestSessionFactory() as session:
+        waiting_status, ready_status = session.execute(
+            text(
+                "SELECT "
+                "max(CASE WHEN aggregate_id = :waiting THEN status END) AS waiting_status, "
+                "max(CASE WHEN aggregate_id = :ready THEN status END) AS ready_status "
+                "FROM outbox_events WHERE aggregate_id IN (:waiting, :ready)"
+            ),
+            {"waiting": waiting_aggregate_id, "ready": ready_aggregate_id},
+        ).one()
+        assert waiting_status == "PENDING"
+        assert ready_status == "PROCESSED"
 
 
 def test_dispatcher_marks_terminal_failures_as_failed(db_engine, clean_db):

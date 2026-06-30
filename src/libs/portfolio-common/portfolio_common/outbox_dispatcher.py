@@ -2,10 +2,11 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from random import SystemRandom
 from typing import Dict, List, Optional
 
-from sqlalchemy import func, update
+from sqlalchemy import func, or_, update
 from sqlalchemy.orm import sessionmaker
 
 from portfolio_common.database_models import OutboxEvent
@@ -42,6 +43,9 @@ class OutboxDispatcher:
         batch_size: Optional[int] = None,
         db_session_factory: Optional[sessionmaker] = None,
         max_retries: Optional[int] = None,
+        retry_initial_delay_seconds: Optional[int] = None,
+        retry_max_delay_seconds: Optional[int] = None,
+        retry_jitter_seconds: Optional[int] = None,
     ):
         runtime_settings = get_outbox_runtime_settings()
         self._producer = kafka_producer
@@ -59,6 +63,22 @@ class OutboxDispatcher:
         self._max_retries = (
             max(1, int(max_retries)) if max_retries is not None else runtime_settings.max_retries
         )
+        self._retry_initial_delay_seconds = (
+            max(1, int(retry_initial_delay_seconds))
+            if retry_initial_delay_seconds is not None
+            else runtime_settings.retry_initial_delay_seconds
+        )
+        self._retry_max_delay_seconds = (
+            max(self._retry_initial_delay_seconds, int(retry_max_delay_seconds))
+            if retry_max_delay_seconds is not None
+            else runtime_settings.retry_max_delay_seconds
+        )
+        self._retry_jitter_seconds = (
+            max(0, int(retry_jitter_seconds))
+            if retry_jitter_seconds is not None
+            else runtime_settings.retry_jitter_seconds
+        )
+        self._retry_random = SystemRandom()
 
     def stop(self):
         logger.info("Outbox dispatcher shutdown signal received.")
@@ -107,10 +127,20 @@ class OutboxDispatcher:
         with self._session_factory() as db:  # type: Session
             with outbox_batch_timer():
                 with db.begin():
+                    now = datetime.now(timezone.utc)
                     events_to_process: List[OutboxEvent] = (
                         db.query(OutboxEvent)
                         .filter(OutboxEvent.status == "PENDING")
-                        .order_by(OutboxEvent.created_at.asc())
+                        .filter(
+                            or_(
+                                OutboxEvent.next_attempt_at.is_(None),
+                                OutboxEvent.next_attempt_at <= now,
+                            )
+                        )
+                        .order_by(
+                            OutboxEvent.next_attempt_at.asc().nullsfirst(),
+                            OutboxEvent.created_at.asc(),
+                        )
                         .with_for_update(skip_locked=True, of=OutboxEvent)
                         .limit(self._batch_size)
                         .all()
@@ -231,7 +261,11 @@ class OutboxDispatcher:
         db.execute(
             update(OutboxEvent)
             .where(OutboxEvent.id.in_(success_ids))
-            .values(status="PROCESSED", processed_at=datetime.now(timezone.utc))
+            .values(
+                status="PROCESSED",
+                processed_at=datetime.now(timezone.utc),
+                next_attempt_at=None,
+            )
         )
         for event in events_to_process:
             if event.id in success_ids:
@@ -247,24 +281,37 @@ class OutboxDispatcher:
     ) -> None:
         if not retryable_failure_ids:
             return
-        db.execute(
-            update(OutboxEvent)
-            .where(OutboxEvent.id.in_(retryable_failure_ids))
-            .values(
-                # Use COALESCE to treat NULL as 0 before incrementing
-                retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
-                last_attempted_at=datetime.now(timezone.utc),
+        attempted_at = datetime.now(timezone.utc)
+        retryable_failure_id_set = set(retryable_failure_ids)
+        retryable_events = [
+            event for event in events_to_process if event.id in retryable_failure_id_set
+        ]
+        for event in retryable_events:
+            next_retry_count = (event.retry_count or 0) + 1
+            next_attempt_at = self._next_attempt_at(
+                now=attempted_at,
+                retry_count=next_retry_count,
             )
-        )
-        for event in events_to_process:
-            if event.id in retryable_failure_ids:
-                observe_outbox_failed(event.aggregate_type, event.topic)
-                observe_outbox_retried(event.aggregate_type, event.topic)
-        for failure_id in retryable_failure_ids:
-            reason = delivery_errs.get(failure_id, "unknown error")
+            db.execute(
+                update(OutboxEvent)
+                .where(OutboxEvent.id == event.id)
+                .values(
+                    # Use COALESCE to treat NULL as 0 before incrementing.
+                    retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
+                    last_attempted_at=attempted_at,
+                    next_attempt_at=next_attempt_at,
+                )
+            )
+            observe_outbox_failed(event.aggregate_type, event.topic)
+            observe_outbox_retried(event.aggregate_type, event.topic)
+            reason = delivery_errs.get(event.id, "unknown error")
             logger.warning(
                 "OutboxDispatcher: Kafka delivery failed; will retry later.",
-                extra={"outbox_id": failure_id, "reason": reason},
+                extra={
+                    "outbox_id": event.id,
+                    "reason": reason,
+                    "next_attempt_at": next_attempt_at.isoformat(),
+                },
             )
 
     def _mark_terminal_failures(
@@ -283,6 +330,7 @@ class OutboxDispatcher:
                 status=TERMINAL_FAILURE_STATUS,
                 retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
                 last_attempted_at=datetime.now(timezone.utc),
+                next_attempt_at=None,
             )
         )
         for event in events_to_process:
@@ -298,6 +346,18 @@ class OutboxDispatcher:
                     "max_retries": self._max_retries,
                 },
             )
+
+    def _retry_delay_seconds(self, retry_count: int) -> float:
+        normalized_retry_count = max(1, retry_count)
+        delay_seconds = self._retry_initial_delay_seconds * (2 ** (normalized_retry_count - 1))
+        bounded_delay = min(self._retry_max_delay_seconds, delay_seconds)
+        if self._retry_jitter_seconds <= 0 or bounded_delay >= self._retry_max_delay_seconds:
+            return float(bounded_delay)
+        jittered_delay = bounded_delay + self._retry_random.uniform(0, self._retry_jitter_seconds)
+        return float(min(self._retry_max_delay_seconds, jittered_delay))
+
+    def _next_attempt_at(self, *, now: datetime, retry_count: int) -> datetime:
+        return now + timedelta(seconds=self._retry_delay_seconds(retry_count))
 
     async def run(self):
         logger.info(f"Outbox dispatcher started. Polling every {self._poll_interval} seconds.")
