@@ -140,8 +140,47 @@ async def test_calculate_normal_flow(
     # ASSERT
     mock_fencer_instance.check.assert_awaited_once()
     mock_state_repo.increment_epoch_and_reset_watermark.assert_not_called()
+    mock_repo.acquire_position_history_replay_lock.assert_awaited_once_with("P1", "S1", 1)
     mock_repo.save_positions.assert_awaited_once()
     mock_outbox_repo.create_outbox_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_recalculate_position_history_locks_key_before_delete(sample_event: TransactionEvent):
+    """
+    GIVEN concurrent workers may rebuild the same key/date window
+    WHEN position history is recalculated
+    THEN the transaction-scoped key lock is acquired before destructive replay starts.
+    """
+    call_order: list[str] = []
+    repo = AsyncMock(spec=PositionRepository)
+    state_repo = AsyncMock(spec=PositionStateRepository)
+    state_repo.update_watermarks_if_older.return_value = 1
+    current_state = PositionState(watermark_date=date(2025, 8, 19), epoch=1)
+
+    async def acquire_lock(*_args, **_kwargs):
+        call_order.append("lock")
+
+    async def delete_positions(*_args, **_kwargs):
+        call_order.append("delete")
+        return 0
+
+    repo.acquire_position_history_replay_lock.side_effect = acquire_lock
+    repo.delete_positions_from.side_effect = delete_positions
+    repo.get_last_position_before.return_value = None
+    repo.get_transactions_on_or_after.return_value = [sample_event]
+
+    await PositionCalculator._recalculate_position_history(
+        event=sample_event,
+        repo=repo,
+        position_state_repo=state_repo,
+        current_state=current_state,
+        transaction_date=sample_event.transaction_date.date(),
+    )
+
+    assert call_order[:2] == ["lock", "delete"]
+    repo.acquire_position_history_replay_lock.assert_awaited_once_with("P1", "S1", 1)
+    repo.delete_positions_from.assert_awaited_once_with("P1", "S1", date(2025, 8, 20), 1)
 
 
 @pytest.mark.asyncio

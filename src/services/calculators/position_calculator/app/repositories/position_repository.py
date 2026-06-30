@@ -1,4 +1,5 @@
 # services/calculators/position_calculator/app/repositories/position_repository.py
+import hashlib
 import logging
 from datetime import date, datetime, time
 from typing import List, Optional
@@ -12,10 +13,20 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.utils import async_timed
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+def _position_history_replay_lock_key(portfolio_id: str, security_id: str, epoch: int) -> int:
+    normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+    normalized_security_id = normalize_lookup_identifier(security_id)
+    lock_scope = (
+        f"position-history-replay:{normalized_portfolio_id}:{normalized_security_id}:{epoch}"
+    )
+    digest = hashlib.blake2b(lock_scope.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, byteorder="big", signed=True)
 
 
 class PositionRepository:
@@ -25,6 +36,23 @@ class PositionRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @async_timed(repository="PositionRepository", method="acquire_position_history_replay_lock")
+    async def acquire_position_history_replay_lock(
+        self, portfolio_id: str, security_id: str, epoch: int
+    ) -> None:
+        """
+        Serializes delete-and-replay materialization for one position-history key.
+
+        PostgreSQL advisory transaction locks are scoped to the current transaction and
+        are released automatically on commit or rollback. The position calculator already
+        runs inside a transaction, so this protects the existing delete/reinsert replay
+        algorithm from concurrent workers without adding a durable lock table.
+        """
+        lock_key = _position_history_replay_lock_key(portfolio_id, security_id, epoch)
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+        )
 
     @async_timed(repository="PositionRepository", method="get_latest_completed_snapshot_date")
     async def get_latest_completed_snapshot_date(
