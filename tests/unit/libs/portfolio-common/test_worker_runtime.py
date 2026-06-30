@@ -35,6 +35,32 @@ async def test_run_instrumented_worker_service_instruments_and_runs(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_run_instrumented_worker_service_skips_existing_metrics_route(monkeypatch):
+    instrumentator_cls = MagicMock()
+    monkeypatch.setattr(worker_runtime, "Instrumentator", instrumentator_cls)
+
+    manager = MagicMock()
+    manager.run = AsyncMock()
+    logger = MagicMock(spec=logging.Logger)
+    metrics_route = MagicMock()
+    metrics_route.path = "/metrics"
+    web_app = MagicMock()
+    web_app.routes = [metrics_route]
+
+    await worker_runtime.run_instrumented_worker_service(
+        service_name="Example Worker",
+        logger=logger,
+        manager=manager,
+        web_app=web_app,
+    )
+
+    instrumentator_cls.assert_not_called()
+    manager.run.assert_awaited_once()
+    logger.info.assert_any_call("Prometheus metrics already exposed at /metrics")
+    logger.info.assert_any_call("%s has shut down.", "Example Worker")
+
+
+@pytest.mark.asyncio
 async def test_run_instrumented_worker_service_reraises_critical_runtime_errors(monkeypatch):
     instrumentator = MagicMock()
     instrumentator.instrument.return_value = instrumentator

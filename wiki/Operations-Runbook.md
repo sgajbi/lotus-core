@@ -106,6 +106,11 @@ When app-local runtime is unhealthy, check this order:
 4. service health routes are responding
 5. demo data loader completed if the scenario expects seeded data
 
+Runtime-facing API services and worker health web apps expose `/health/live`, `/health/ready`, and
+`/metrics`. Health responses include `X-Correlation-ID`, `X-Request-Id`, `X-Trace-Id`, and
+`traceparent` headers so incident triage can tie probe behavior to request logs and route-template
+HTTP metrics.
+
 ## Database-first diagnostics
 
 Prefer API diagnostics first, but go to the database when:

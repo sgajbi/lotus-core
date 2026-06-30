@@ -48,7 +48,7 @@ class ConsumerManager:
 
         # Setup web app and metrics first
         self.web_app = web_app
-        custom_metrics = setup_metrics(self.web_app)
+        custom_metrics = setup_metrics()
 
         dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
         service_prefix = "PST"
