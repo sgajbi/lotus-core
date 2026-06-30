@@ -2,40 +2,40 @@ from copy import deepcopy
 from decimal import Decimal
 from typing import Any, Optional
 
-from src.services.query_service.app.advisory_simulation.advisory.funding import (
+from .advisory.funding import (
     build_auto_funding_plan,
 )
-from src.services.query_service.app.advisory_simulation.advisory.ids import (
+from .advisory.ids import (
     proposal_run_id_from_request_hash,
 )
-from src.services.query_service.app.advisory_simulation.advisory.intents import (
+from .advisory.intents import (
     apply_proposal_cash_flow,
     build_proposal_security_trade_intent,
     expected_cash_delta_base,
 )
-from src.services.query_service.app.advisory_simulation.common.diagnostics import (
+from .common.diagnostics import (
     make_diagnostics_data,
 )
-from src.services.query_service.app.advisory_simulation.common.drift_analytics import (
+from .common.drift_analytics import (
     compute_drift_analysis,
 )
-from src.services.query_service.app.advisory_simulation.common.intent_dependencies import (
+from .common.intent_dependencies import (
     link_buy_intent_dependencies,
 )
-from src.services.query_service.app.advisory_simulation.common.simulation_shared import (
+from .common.simulation_shared import (
     apply_security_trade_to_portfolio,
     build_reconciliation,
     derive_status_from_rules,
     sort_execution_intents,
 )
-from src.services.query_service.app.advisory_simulation.common.suitability import (
+from .common.suitability import (
     compute_suitability_result,
 )
-from src.services.query_service.app.advisory_simulation.common.workflow_gates import (
+from .common.workflow_gates import (
     evaluate_gate_decision,
 )
-from src.services.query_service.app.advisory_simulation.compliance import RuleEngine
-from src.services.query_service.app.advisory_simulation.models import (
+from .compliance import RuleEngine
+from .models import (
     CashFlowIntent,
     EngineOptions,
     GateDecision,
@@ -53,7 +53,7 @@ from src.services.query_service.app.advisory_simulation.models import (
     SuitabilityResult,
     ValuationMode,
 )
-from src.services.query_service.app.advisory_simulation.valuation import build_simulated_state
+from .valuation import build_simulated_state
 
 
 def run_proposal_simulation(

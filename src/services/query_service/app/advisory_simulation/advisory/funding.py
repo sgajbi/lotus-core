@@ -1,18 +1,18 @@
 from decimal import Decimal
 from typing import Any, Optional, TypeAlias, TypedDict
 
-from src.services.query_service.app.advisory_simulation.common.simulation_shared import (
+from ..common.simulation_shared import (
     apply_fx_spot_to_portfolio,
     ensure_cash_balance,
     quantize_amount_for_currency,
 )
-from src.services.query_service.app.advisory_simulation.models import (
+from ..models import (
     FundingPlanEntry,
     FxSpotIntent,
     InsufficientCashEntry,
     IntentRationale,
 )
-from src.services.query_service.app.advisory_simulation.valuation import get_fx_rate
+from ..valuation import get_fx_rate
 
 
 class _FundingSelection(TypedDict):

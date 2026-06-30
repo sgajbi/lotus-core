@@ -1,6 +1,7 @@
 from scripts.architecture_boundary_guard import (
     DirectImportBoundaryRule,
     _scan_for_disallowed_imports,
+    _scan_for_service_runtime_imports,
 )
 
 
@@ -196,3 +197,55 @@ def test_direct_import_boundary_flags_reconciliation_runtime_provider_bypass(
         "financial reconciliation service must use runtime provider ports: "
         "disallowed direct import 'uuid'",
     ]
+
+
+def test_service_runtime_import_guard_flags_own_repo_root_import(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = tmp_path
+    service_module = (
+        repo_root
+        / "src"
+        / "services"
+        / "query_service"
+        / "app"
+        / "advisory_simulation"
+        / "valuation.py"
+    )
+    service_module.parent.mkdir(parents=True)
+    service_module.write_text(
+        "from src.services.query_service.app.advisory_simulation.models import "
+        "ProposalSimulateRequest\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+
+    assert _scan_for_service_runtime_imports([service_module]) == [
+        "src/services/query_service/app/advisory_simulation/valuation.py:1: "
+        "service runtime packages must not import their own app through repo-root module "
+        "path 'services.query_service.app.advisory_simulation.models'; use package-local "
+        "'app...' or relative imports"
+    ]
+
+
+def test_service_runtime_import_guard_allows_package_local_import(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = tmp_path
+    service_module = (
+        repo_root
+        / "src"
+        / "services"
+        / "query_service"
+        / "app"
+        / "advisory_simulation"
+        / "valuation.py"
+    )
+    service_module.parent.mkdir(parents=True)
+    service_module.write_text(
+        "from app.advisory_simulation.models import ProposalSimulateRequest\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+
+    assert _scan_for_service_runtime_imports([service_module]) == []

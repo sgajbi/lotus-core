@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, Iterable, Optional
 
-from src.services.query_service.app.advisory_simulation.models import (
+from ..models import (
     EngineOptions,
     ShelfEntry,
     SimulatedState,

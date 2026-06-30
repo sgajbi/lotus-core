@@ -6,10 +6,14 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Dict, List, Optional
 
-from src.services.query_service.app.advisory_simulation.allocation_contract import (
+from ..services.allocation_calculator import (
+    AllocationInputRow,
+    calculate_allocation_views,
+)
+from .allocation_contract import (
     ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS,
 )
-from src.services.query_service.app.advisory_simulation.models import (
+from .models import (
     AllocationMetric,
     CashBalance,
     EngineOptions,
@@ -24,11 +28,7 @@ from src.services.query_service.app.advisory_simulation.models import (
     SimulatedState,
     ValuationMode,
 )
-from src.services.query_service.app.advisory_simulation.precision_policy import to_decimal
-from src.services.query_service.app.services.allocation_calculator import (
-    AllocationInputRow,
-    calculate_allocation_views,
-)
+from .precision_policy import to_decimal
 
 
 def get_fx_rate(market_data: MarketDataSnapshot, from_ccy: str, to_ccy: str) -> Optional[Decimal]:

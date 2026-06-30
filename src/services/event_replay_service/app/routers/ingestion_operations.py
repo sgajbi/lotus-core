@@ -7,10 +7,6 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 
-from src.services.event_replay_service.app.application.replay_payload_dispatcher import (
-    IngestionServiceReplayPayloadDispatcher,
-    ReplayPayloadDispatcher,
-)
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     ConsumerDlqEventListResponse,
     ConsumerDlqReplayRequest,
@@ -45,6 +41,11 @@ from src.services.ingestion_service.app.services.ingestion_job_service import (
 from src.services.ingestion_service.app.services.ingestion_service import (
     IngestionService,
     get_ingestion_service,
+)
+
+from ..application.replay_payload_dispatcher import (
+    IngestionServiceReplayPayloadDispatcher,
+    ReplayPayloadDispatcher,
 )
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])

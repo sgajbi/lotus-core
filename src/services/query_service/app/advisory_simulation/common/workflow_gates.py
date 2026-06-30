@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from typing import Literal
 
-from src.services.query_service.app.advisory_simulation.models import (
+from ..models import (
     DiagnosticsData,
     EngineOptions,
     GateDecision,

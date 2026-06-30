@@ -6,7 +6,7 @@ Post-trade Rule Engine implementation (RFC-0005/RFC-0006B).
 from decimal import Decimal
 from typing import List
 
-from src.services.query_service.app.advisory_simulation.models import (
+from .models import (
     DiagnosticsData,
     EngineOptions,
     RuleResult,

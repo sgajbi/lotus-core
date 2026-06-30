@@ -1,4 +1,9 @@
+import os
+import shutil
+import subprocess
+import sys
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -17,6 +22,47 @@ from src.services.event_replay_service.app.routers.ingestion_operations import (
     _mark_ingestion_job_retry_replayed,
     _record_mandatory_replay_audit,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _copy_package_tree(source: Path, destination: Path) -> None:
+    shutil.copytree(
+        source,
+        destination,
+        ignore=shutil.ignore_patterns("__pycache__", "*.egg-info"),
+    )
+
+
+def test_event_replay_app_imports_under_compose_runtime_layout(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    _copy_package_tree(
+        REPO_ROOT / "src" / "services" / "event_replay_service" / "app",
+        runtime_root / "app",
+    )
+    _copy_package_tree(
+        REPO_ROOT / "src" / "services" / "ingestion_service" / "app",
+        runtime_root / "src" / "services" / "ingestion_service" / "app",
+    )
+
+    python_path = os.pathsep.join(
+        [
+            str(runtime_root),
+            str(REPO_ROOT / "src" / "libs" / "portfolio-common"),
+        ]
+    )
+    env = {**os.environ, "PYTHONPATH": python_path}
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import app.main"],
+        cwd=runtime_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_filter_payload_by_record_keys_returns_original_payload_without_record_keys() -> None:
