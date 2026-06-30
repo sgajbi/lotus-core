@@ -308,17 +308,22 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert "daily operational SLO checks" in calculator_slos["description"]
     assert "snapshot, timeseries, and job facts" in load_run_progress["description"]
 
-    not_found_example = overview["responses"]["404"]["content"]["application/json"]["example"]
-    assert not_found_example["detail"] == "Portfolio with id PORT-OPS-001 not found"
-    readiness_invalid_date = readiness["responses"]["400"]["content"]["application/json"]["example"]
-    assert readiness_invalid_date["detail"] == (
-        "Invalid as_of_date '2026-31-03'. Expected YYYY-MM-DD format."
-    )
+    not_found_example = overview["responses"]["404"]["content"]["application/problem+json"][
+        "example"
+    ]
+    assert not_found_example["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
+    assert not_found_example["detail"] == "Requested operations support resource was not found."
+    readiness_invalid_date = readiness["responses"]["400"]["content"]["application/problem+json"][
+        "example"
+    ]
+    assert readiness_invalid_date["error_code"] == "QCP_OPERATIONS_INVALID_DATE"
+    assert readiness_invalid_date["metadata"]["field"] == "as_of_date"
 
-    lineage_not_found = lineage["responses"]["404"]["content"]["application/json"]["example"]
-    assert lineage_not_found["detail"] == (
-        "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
-    )
+    lineage_not_found = lineage["responses"]["404"]["content"]["application/problem+json"][
+        "example"
+    ]
+    assert lineage_not_found["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
+    assert lineage_not_found["metadata"]["resource"] == "lineage"
     lineage_response = schema["components"]["schemas"]["LineageResponse"]
     assert lineage_response["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this lineage snapshot was generated."
@@ -416,18 +421,16 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     reprocessing_keys = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-keys"][
         "get"
     ]
-    control_stages_invalid_date = control_stages["responses"]["400"]["content"]["application/json"][
-        "example"
-    ]
-    assert control_stages_invalid_date["detail"] == (
-        "Invalid business_date '2026-31-03'. Expected YYYY-MM-DD format."
-    )
-    reprocessing_keys_invalid_date = reprocessing_keys["responses"]["400"]["content"][
-        "application/json"
+    control_stages_invalid_date = control_stages["responses"]["400"]["content"][
+        "application/problem+json"
     ]["example"]
-    assert reprocessing_keys_invalid_date["detail"] == (
-        "Invalid watermark_date '2026-31-03'. Expected YYYY-MM-DD format."
-    )
+    assert control_stages_invalid_date["error_code"] == "QCP_OPERATIONS_INVALID_DATE"
+    assert control_stages_invalid_date["metadata"]["field"] == "business_date"
+    reprocessing_keys_invalid_date = reprocessing_keys["responses"]["400"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert reprocessing_keys_invalid_date["error_code"] == "QCP_OPERATIONS_INVALID_DATE"
+    assert reprocessing_keys_invalid_date["metadata"]["field"] == "watermark_date"
     reprocessing_jobs = schema["paths"]["/support/portfolios/{portfolio_id}/reprocessing-jobs"][
         "get"
     ]
@@ -603,9 +606,12 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         == "Optional durable replay correlation identifier filter."
     )
     analytics_export_not_found = analytics_export_jobs["responses"]["404"]["content"][
-        "application/json"
+        "application/problem+json"
     ]["example"]
-    assert analytics_export_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    assert analytics_export_not_found["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
+    assert analytics_export_not_found["detail"] == (
+        "Requested operations support resource was not found."
+    )
     assert reprocessing_jobs["summary"] == "List durable replay jobs for support workflows"
     reprocessing_jobs_status = next(
         parameter
@@ -1019,15 +1025,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
 
     reconciliation_not_found = reconciliation_runs["responses"]["404"]["content"][
-        "application/json"
+        "application/problem+json"
     ]["example"]
-    assert reconciliation_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
-    findings_not_found = reconciliation_findings["responses"]["404"]["content"]["application/json"][
-        "example"
-    ]
-    assert findings_not_found["detail"] == (
-        "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
-    )
+    assert reconciliation_not_found["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
+    findings_not_found = reconciliation_findings["responses"]["404"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert findings_not_found["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
+    assert findings_not_found["metadata"]["resource"] == "reconciliation_findings"
     control_stage_name = next(
         parameter for parameter in control_stages["parameters"] if parameter["name"] == "stage_name"
     )
@@ -1059,14 +1064,14 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         reprocessing_watermark_date["description"]
         == "Optional replay watermark date filter in YYYY-MM-DD format."
     )
-    control_stages_not_found = control_stages["responses"]["404"]["content"]["application/json"][
-        "example"
-    ]
-    assert control_stages_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
-    reprocessing_keys_not_found = reprocessing_keys["responses"]["404"]["content"][
-        "application/json"
+    control_stages_not_found = control_stages["responses"]["404"]["content"][
+        "application/problem+json"
     ]["example"]
-    assert reprocessing_keys_not_found["detail"] == "Portfolio with id PORT-OPS-001 not found"
+    assert control_stages_not_found["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
+    reprocessing_keys_not_found = reprocessing_keys["responses"]["404"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert reprocessing_keys_not_found["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
 
 
 async def test_openapi_fully_documents_readiness_support_schema_family(async_test_client):

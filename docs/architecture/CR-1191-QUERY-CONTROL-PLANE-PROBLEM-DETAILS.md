@@ -20,6 +20,9 @@ responses with bounded RFC-7807-style problem-details contracts.
   invalid request, not found, insufficient data, and unsupported configuration outcomes.
 - Migrated simulation lifecycle/mutation error responses away from raw exception text for
   representative not-found, invalid mutation, and create-failure outcomes.
+- Migrated operations support, lineage, reconciliation, job-list, readiness, and load-run error
+  handling through the shared problem-details exception path for invalid date filters, missing
+  required dates, not-found outcomes, and unexpected failures.
 - Updated affected OpenAPI examples to show problem-details fields instead of bare `detail`
   payloads.
 - Tightened the shared OpenAPI response helper so migrated problem-details examples are documented
@@ -47,6 +50,9 @@ depend on raw internal exception text for the migrated representative paths.
   produce distinct, truthful OpenAPI media types.
 - Control-plane OpenAPI tests assert the affected examples now expose problem-details fields under
   `application/problem+json` while legacy route examples remain `application/json`.
+- Operations route-family tests assert invalid-date, missing-date, not-found, and unexpected
+  failure outcomes return `application/problem+json`, stable `QCP_OPERATIONS_*` error codes,
+  bounded product-safe details, correlation IDs, and source-safe metadata.
 
 ## Validation Evidence
 
@@ -58,6 +64,8 @@ depend on raw internal exception text for the migrated representative paths.
   passed with 67 tests.
 - `python -m pytest tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`
   passed with 40 tests.
+- `python -m pytest tests/integration/services/query_control_plane_service/test_operations_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_operations_support_parameters -q`
+  passed with 46 tests.
 - `python -m ruff check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
   passed.
 - `python -m ruff format --check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
@@ -80,7 +88,8 @@ HTTP status codes are preserved for the migrated representative paths. API route
 success response DTOs, source-data response envelopes, database schema, and service contracts are
 unchanged. The intentional behavior change is the error body shape for migrated failures: responses
 now use problem-details fields and bounded product-safe details instead of raw `{"detail": str(exc)}`
-payloads.
+payloads. Operations support error details are intentionally less specific than previous raw
+service exception text; field and route-family context is exposed through bounded metadata instead.
 
 ## Documentation And Wiki Decision
 
@@ -90,7 +99,7 @@ No wiki update is required because no operator command, runbook, or published wo
 ## Remaining Follow-Up
 
 - Continue migrating the remaining query-control-plane route families that still raise bare
-  `HTTPException(detail=...)`.
+  `HTTPException(detail=...)`; operations support routes are now part of the migrated baseline.
 - Replace simulation mutation substring classification with typed service exceptions in a later
   slice.
 - Add a deterministic guard or OpenAPI inventory once the problem-details migration baseline is
