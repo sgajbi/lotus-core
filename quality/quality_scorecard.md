@@ -1273,3 +1273,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1158 split valuation scheduler watermark orchestration into focused input-loading and
   active-key metric helpers, reducing `_advance_watermarks` from `B (6)` to `A (3)` and leaving
   every function/class in `valuation_scheduler.py` A-ranked.
+- CR-1202 centralized cashflow consumer transaction finalization behind a typed outcome policy and
+  single unit-of-work finalizer. Duplicate, replay, fence, lifecycle, success, and failure paths now
+  stage or classify outcomes before one commit/rollback boundary, preserving cashflow/outbox
+  atomicity while making the reusable event-consumer transaction pattern directly testable.
