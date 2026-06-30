@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 from portfolio_common.logging_utils import normalize_lineage_value
 
-METRICS_ACCESS_TOKEN_ENV = "LOTUS_METRICS_ACCESS_TOKEN"
+_METRICS_ACCESS_ENV_PREFIX = "LOTUS_METRICS_ACCESS"
+METRICS_ACCESS_TOKEN_ENV = f"{_METRICS_ACCESS_ENV_PREFIX}_TOKEN"
 
 
 @dataclass(frozen=True)

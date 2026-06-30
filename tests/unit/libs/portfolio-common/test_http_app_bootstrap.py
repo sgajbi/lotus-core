@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from portfolio_common.http_app_bootstrap import (
-    METRICS_BEARER_TOKEN_MODE,
     METRICS_INTERNAL_OPEN_MODE,
+    METRICS_PROTECTED_SCRAPE_MODE,
     UNMATCHED_ROUTE_TEMPLATE,
     configure_standard_http_app,
     create_standard_health_app,
@@ -137,7 +137,7 @@ def test_metrics_access_policy_uses_configured_bearer_token(monkeypatch):
 
     policy = resolve_metrics_access_policy()
 
-    assert policy.mode == METRICS_BEARER_TOKEN_MODE
+    assert policy.mode == METRICS_PROTECTED_SCRAPE_MODE
     assert policy.token == "scrape-secret"
 
 
@@ -159,7 +159,7 @@ def test_metrics_endpoint_denies_unauthorized_scrape_when_token_configured():
     assert response.json()["detail"] == {
         "code": "METRICS_ACCESS_DENIED",
         "message": "Metrics endpoint access is restricted to authorized scrapers.",
-        "metrics_access_mode": METRICS_BEARER_TOKEN_MODE,
+        "metrics_access_mode": METRICS_PROTECTED_SCRAPE_MODE,
     }
 
 

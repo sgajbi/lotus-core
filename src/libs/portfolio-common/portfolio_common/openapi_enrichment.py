@@ -302,7 +302,7 @@ def _ensure_metrics_response_content(schema: dict[str, Any]) -> None:
                             "message": (
                                 "Metrics endpoint access is restricted to authorized scrapers."
                             ),
-                            "metrics_access_mode": "bearer_token",
+                            "metrics_access_mode": "protected_scrape",
                         }
                     }
                 }
