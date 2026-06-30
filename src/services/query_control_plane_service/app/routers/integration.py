@@ -102,6 +102,41 @@ from .response_helpers import problem_example, problem_response, raise_problem
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
+
+def _integration_source_not_found_example(
+    *,
+    source_product: str,
+    detail: str,
+    metadata: dict[str, object] | None = None,
+    instance: str = "/integration/portfolios/PORT-INT-001/benchmark-assignment",
+) -> dict[str, object]:
+    return problem_example(
+        status_code=status.HTTP_404_NOT_FOUND,
+        title="Integration source data not found",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        instance=instance,
+        metadata={"source_product": source_product, **(metadata or {})},
+    )
+
+
+def _integration_source_invalid_request_example(
+    *,
+    source_product: str,
+    detail: str,
+    metadata: dict[str, object] | None = None,
+    instance: str = "/integration/dpm/portfolio-universe/candidates",
+) -> dict[str, object]:
+    return problem_example(
+        status_code=422,
+        title="Integration source request is invalid",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        instance=instance,
+        metadata={"source_product": source_product, **(metadata or {})},
+    )
+
+
 INTEGRATION_POLICY_BLOCKED_EXAMPLE = problem_example(
     status_code=status.HTTP_403_FORBIDDEN,
     title="Core snapshot sections blocked by policy",
@@ -140,21 +175,65 @@ CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE = problem_example(
 INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
     "detail": "security_ids must contain at least one identifier"
 }
-BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective benchmark assignment found for portfolio and as_of_date."
-}
-MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = {
-    "detail": "No approved model portfolio target found for model_portfolio_id and as_of_date."
-}
-PORTFOLIO_MANAGER_BOOK_EMPTY_EXAMPLE = {
-    "detail": "No portfolio memberships found for portfolio_manager_id and request filters."
-}
-DPM_PORTFOLIO_UNIVERSE_EMPTY_EXAMPLE = {
-    "detail": "No DPM portfolio-universe candidates found for request filters."
-}
-MANDATE_BINDING_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
+BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL = (
+    "No effective benchmark assignment found for portfolio and as_of_date."
+)
+BENCHMARK_ASSIGNMENT_NOT_FOUND_EXAMPLE = _integration_source_not_found_example(
+    source_product="BenchmarkAssignment",
+    detail=BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL,
+    metadata={"portfolio_id": "PORT-INT-001", "reason": "not_found"},
+)
+MODEL_PORTFOLIO_TARGET_NOT_FOUND_DETAIL = (
+    "No approved model portfolio target found for model_portfolio_id and as_of_date."
+)
+MODEL_PORTFOLIO_TARGET_NOT_FOUND_EXAMPLE = _integration_source_not_found_example(
+    source_product="DpmModelPortfolioTarget",
+    detail=MODEL_PORTFOLIO_TARGET_NOT_FOUND_DETAIL,
+    metadata={"model_portfolio_id": "MODEL_SG_BALANCED_DPM", "reason": "not_found"},
+    instance="/integration/model-portfolios/MODEL_SG_BALANCED_DPM/targets",
+)
+PORTFOLIO_MANAGER_BOOK_EMPTY_DETAIL = (
+    "No portfolio memberships found for portfolio_manager_id and request filters."
+)
+PORTFOLIO_MANAGER_BOOK_EMPTY_EXAMPLE = _integration_source_not_found_example(
+    source_product="PortfolioManagerBookMembership",
+    detail=PORTFOLIO_MANAGER_BOOK_EMPTY_DETAIL,
+    metadata={"portfolio_manager_id": "PM_SG_DPM_001", "reason": "empty_result"},
+    instance="/integration/portfolio-manager-books/PM_SG_DPM_001/memberships",
+)
+CIO_MODEL_CHANGE_AFFECTED_COHORT_EMPTY_DETAIL = (
+    "No affected mandates found for model_portfolio_id and request filters."
+)
+CIO_MODEL_CHANGE_AFFECTED_COHORT_EMPTY_EXAMPLE = _integration_source_not_found_example(
+    source_product="CioModelChangeAffectedCohort",
+    detail=CIO_MODEL_CHANGE_AFFECTED_COHORT_EMPTY_DETAIL,
+    metadata={"model_portfolio_id": "MODEL_PB_SG_GLOBAL_BAL_DPM", "reason": "empty_result"},
+    instance="/integration/model-portfolios/MODEL_PB_SG_GLOBAL_BAL_DPM/affected-mandates",
+)
+DPM_PORTFOLIO_UNIVERSE_EMPTY_DETAIL = (
+    "No DPM portfolio-universe candidates found for request filters."
+)
+DPM_PORTFOLIO_UNIVERSE_INVALID_REQUEST_DETAIL = "DPM portfolio-universe request is invalid."
+DPM_PORTFOLIO_UNIVERSE_EMPTY_EXAMPLE = _integration_source_not_found_example(
+    source_product="DpmPortfolioUniverseCandidate",
+    detail=DPM_PORTFOLIO_UNIVERSE_EMPTY_DETAIL,
+    metadata={"reason": "empty_result"},
+    instance="/integration/dpm/portfolio-universe/candidates",
+)
+DPM_PORTFOLIO_UNIVERSE_INVALID_REQUEST_EXAMPLE = _integration_source_invalid_request_example(
+    source_product="DpmPortfolioUniverseCandidate",
+    detail=DPM_PORTFOLIO_UNIVERSE_INVALID_REQUEST_DETAIL,
+    metadata={"reason": "ValueError"},
+)
+MANDATE_BINDING_NOT_FOUND_DETAIL = (
+    "No effective discretionary mandate binding found for portfolio and as_of_date."
+)
+MANDATE_BINDING_NOT_FOUND_EXAMPLE = _integration_source_not_found_example(
+    source_product="DiscretionaryMandateBinding",
+    detail=MANDATE_BINDING_NOT_FOUND_DETAIL,
+    metadata={"portfolio_id": "PB_SG_GLOBAL_BAL_001", "reason": "not_found"},
+    instance="/integration/portfolios/PB_SG_GLOBAL_BAL_001/mandate-binding",
+)
 CLIENT_RESTRICTION_PROFILE_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
@@ -238,6 +317,41 @@ def get_core_snapshot_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> CoreSnapshotService:
     return CoreSnapshotService(db)
+
+
+def _raise_integration_source_not_found(
+    *,
+    source_product: str,
+    detail: str,
+    metadata: dict[str, object] | None = None,
+) -> NoReturn:
+    raise_problem(
+        status_code=status.HTTP_404_NOT_FOUND,
+        title="Integration source data not found",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        metadata={"source_product": source_product, **(metadata or {})},
+    )
+
+
+def _raise_integration_source_invalid_request(
+    *,
+    source_product: str,
+    detail: str,
+    exc: Exception,
+    metadata: dict[str, object] | None = None,
+) -> NoReturn:
+    raise_problem(
+        status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+        title="Integration source request is invalid",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        metadata={
+            "source_product": source_product,
+            "reason": exc.__class__.__name__,
+            **(metadata or {}),
+        },
+    )
 
 
 def _raise_source_evidence_problem(
@@ -878,9 +992,13 @@ async def resolve_portfolio_manager_book_membership(
     if members is None and isinstance(response, dict):
         members = response.get("members", [])
     if not members:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No portfolio memberships found for portfolio_manager_id and request filters.",
+        _raise_integration_source_not_found(
+            source_product="PortfolioManagerBookMembership",
+            detail=PORTFOLIO_MANAGER_BOOK_EMPTY_DETAIL,
+            metadata={
+                "portfolio_manager_id": portfolio_manager_id,
+                "reason": "empty_result",
+            },
         )
     return response
 
@@ -901,7 +1019,7 @@ async def resolve_portfolio_manager_book_membership(
     responses={
         404: problem_response(
             "No affected mandates found.",
-            {"detail": "No affected mandates found for model_portfolio_id and request filters."},
+            CIO_MODEL_CHANGE_AFFECTED_COHORT_EMPTY_EXAMPLE,
         ),
     },
     openapi_extra=source_data_product_openapi_extra("CioModelChangeAffectedCohort"),
@@ -920,17 +1038,25 @@ async def resolve_cio_model_change_affected_cohort(
         request=request,
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        _raise_integration_source_not_found(
+            source_product="CioModelChangeAffectedCohort",
             detail="Approved model portfolio definition was not found for model_portfolio_id.",
+            metadata={
+                "model_portfolio_id": model_portfolio_id,
+                "reason": "not_found",
+            },
         )
     affected_mandates = getattr(response, "affected_mandates", None)
     if affected_mandates is None and isinstance(response, dict):
         affected_mandates = response.get("affected_mandates", [])
     if not affected_mandates:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No affected mandates found for model_portfolio_id and request filters.",
+        _raise_integration_source_not_found(
+            source_product="CioModelChangeAffectedCohort",
+            detail=CIO_MODEL_CHANGE_AFFECTED_COHORT_EMPTY_DETAIL,
+            metadata={
+                "model_portfolio_id": model_portfolio_id,
+                "reason": "empty_result",
+            },
         )
     return response
 
@@ -956,7 +1082,7 @@ async def resolve_cio_model_change_affected_cohort(
         ),
         422: problem_response(
             "Invalid DPM portfolio-universe request",
-            {"detail": "DPM portfolio-universe page token does not match request scope."},
+            DPM_PORTFOLIO_UNIVERSE_INVALID_REQUEST_EXAMPLE,
         ),
     },
     openapi_extra=source_data_product_openapi_extra("DpmPortfolioUniverseCandidate"),
@@ -970,14 +1096,19 @@ async def resolve_dpm_portfolio_universe_candidates(
             request=request,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        _raise_integration_source_invalid_request(
+            source_product="DpmPortfolioUniverseCandidate",
+            detail=DPM_PORTFOLIO_UNIVERSE_INVALID_REQUEST_DETAIL,
+            exc=exc,
+        )
     candidates = getattr(response, "candidates", None)
     if candidates is None and isinstance(response, dict):
         candidates = response.get("candidates", [])
     if not candidates:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No DPM portfolio-universe candidates found for request filters.",
+        _raise_integration_source_not_found(
+            source_product="DpmPortfolioUniverseCandidate",
+            detail=DPM_PORTFOLIO_UNIVERSE_EMPTY_DETAIL,
+            metadata={"reason": "empty_result"},
         )
     return response
 
@@ -1059,9 +1190,13 @@ async def resolve_portfolio_benchmark_assignment(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No effective benchmark assignment found for portfolio and as_of_date.",
+        _raise_integration_source_not_found(
+            source_product="BenchmarkAssignment",
+            detail=BENCHMARK_ASSIGNMENT_NOT_FOUND_DETAIL,
+            metadata={
+                "portfolio_id": portfolio_id,
+                "reason": "not_found",
+            },
         )
     return response
 
@@ -1106,11 +1241,13 @@ async def resolve_model_portfolio_targets(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No approved model portfolio target found for model_portfolio_id and as_of_date."
-            ),
+        _raise_integration_source_not_found(
+            source_product="DpmModelPortfolioTarget",
+            detail=MODEL_PORTFOLIO_TARGET_NOT_FOUND_DETAIL,
+            metadata={
+                "model_portfolio_id": model_portfolio_id,
+                "reason": "not_found",
+            },
         )
     return response
 
@@ -1156,11 +1293,13 @@ async def resolve_discretionary_mandate_binding(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_integration_source_not_found(
+            source_product="DiscretionaryMandateBinding",
+            detail=MANDATE_BINDING_NOT_FOUND_DETAIL,
+            metadata={
+                "portfolio_id": portfolio_id,
+                "reason": "not_found",
+            },
         )
     return response
 

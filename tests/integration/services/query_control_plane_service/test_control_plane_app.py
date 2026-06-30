@@ -1732,9 +1732,11 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert "reporting workflows" in benchmark_assignment["description"]
     assert "portfolio_id and as_of_date" in benchmark_assignment["description"]
 
-    assignment_not_found = benchmark_assignment["responses"]["404"]["content"]["application/json"][
-        "example"
-    ]
+    assignment_not_found = benchmark_assignment["responses"]["404"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert assignment_not_found["error_code"] == "QCP_INTEGRATION_SOURCE_NOT_FOUND"
+    assert assignment_not_found["metadata"]["source_product"] == "BenchmarkAssignment"
     assert assignment_not_found["detail"] == (
         "No effective benchmark assignment found for portfolio and as_of_date."
     )
@@ -2125,6 +2127,40 @@ async def test_openapi_describes_portfolio_source_evidence_problem_details(
         invalid_request = responses["400"]["content"]["application/problem+json"]["example"]
         assert invalid_request["error_code"] == "QCP_SOURCE_EVIDENCE_INVALID_REQUEST"
         assert invalid_request["metadata"]["source_product"] == source_product
+
+
+async def test_openapi_describes_integration_source_problem_details(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    not_found_routes = {
+        "/integration/portfolios/{portfolio_id}/benchmark-assignment": "BenchmarkAssignment",
+        "/integration/model-portfolios/{model_portfolio_id}/targets": "DpmModelPortfolioTarget",
+        "/integration/portfolio-manager-books/{portfolio_manager_id}/memberships": (
+            "PortfolioManagerBookMembership"
+        ),
+        "/integration/model-portfolios/{model_portfolio_id}/affected-mandates": (
+            "CioModelChangeAffectedCohort"
+        ),
+        "/integration/dpm/portfolio-universe/candidates": "DpmPortfolioUniverseCandidate",
+        "/integration/portfolios/{portfolio_id}/mandate-binding": "DiscretionaryMandateBinding",
+    }
+    for route_path, source_product in not_found_routes.items():
+        example = schema["paths"][route_path]["post"]["responses"]["404"]["content"][
+            "application/problem+json"
+        ]["example"]
+        assert example["error_code"] == "QCP_INTEGRATION_SOURCE_NOT_FOUND"
+        assert example["metadata"]["source_product"] == source_product
+        assert example["correlation_id"]
+
+    invalid_universe = schema["paths"]["/integration/dpm/portfolio-universe/candidates"]["post"][
+        "responses"
+    ]["422"]["content"]["application/problem+json"]["example"]
+    assert invalid_universe["error_code"] == "QCP_INTEGRATION_SOURCE_INVALID_REQUEST"
+    assert invalid_universe["metadata"]["source_product"] == "DpmPortfolioUniverseCandidate"
 
 
 async def test_openapi_fully_documents_dpm_portfolio_tax_lot_schema_family(
