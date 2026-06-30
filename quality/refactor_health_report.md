@@ -26,16 +26,15 @@ tested modules.
 | Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; CR-883 removed shared OpenAPI enrichment from the C-ranked hotspot list |
 | Complexity baseline | Clean and enforced | CR-880 reduced advisory proposal simulation from F to B, CR-881 reduced the cost-calculator consumer from F to C, and CR-882 reduced FX linkage from D to B; `make quality-complexity-gate` now passes |
 | Architecture gates | Improving | Existing `make architecture-guard`; `make quality-import-boundary-gate` now enforces 2 kept import-linter contracts |
-| OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are now enforced in the quality-baseline API governance job; `.spectral.yaml` remains report-only |
+| OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are enforced in the quality-baseline API governance job; CR-1170 adds stable generated OpenAPI artifacts under `output/openapi/` and enforced portable Spectral blocker-subset linting through `make quality-openapi-spectral-gate` |
 
 ## Current Slice Update
 
-CR-1169 addresses validated GitHub issue #445 by moving collection gates onto
-`scripts/test_manifest.py` and adding a manifest-backed `integration-lite` collection gate to the
-quality-baseline workflow. `make quality-unit-collection-gate` now collects the manifest `unit`
-suite (`3082/3092` tests with 10 deselects), `make quality-integration-lite-collection-gate`
-collects 121 tests, focused manifest/workflow governance tests pass with 20 tests, and issue #445
-remains open pending GitHub CI/QA evidence.
+CR-1170 addresses validated GitHub issue #444 by adding deterministic per-service OpenAPI artifact
+generation under `output/openapi/` and promoting an enforced Spectral blocker-subset gate into the
+quality-baseline API governance job. `make quality-openapi-spectral-gate` generates 14 service
+artifacts and reports no warn-or-higher Spectral results; focused OpenAPI/workflow/Spectral tests
+pass with 21 tests, and issue #444 remains open pending GitHub CI/QA evidence.
 
 ## Health Assessment
 
@@ -1958,3 +1957,9 @@ health before that claim is defensible.
      `3082/3092` tests with 10 manifest deselects, `make quality-integration-lite-collection-gate`
      collected 121 tests, focused manifest/workflow governance tests passed with 20 tests, scoped
      Ruff lint and format checks passed, and workflow YAML parsing passed.
+321. Addressed validated GitHub issue #444 by generating stable per-service OpenAPI artifacts under
+     `output/openapi/` and adding an enforced portable Spectral blocker-subset gate to the
+     quality-baseline API governance job. The new `make quality-openapi-spectral-gate` generated
+     14 service artifacts and reported no warn-or-higher Spectral results; focused
+     OpenAPI/workflow/Spectral tests passed with 21 tests; scoped Ruff lint and format checks
+     passed; `python scripts/openapi_quality_gate.py` passed; and workflow YAML parsing passed.

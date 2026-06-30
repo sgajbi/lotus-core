@@ -208,3 +208,13 @@ def test_quality_baseline_runs_manifest_integration_lite_collection_gate() -> No
     assert "quality-integration-lite-collection-gate:" in makefile_text
     assert "Quality Baseline / Integration Lite Collection Gate" in workflow_text
     assert "make quality-integration-lite-collection-gate" in workflow_text
+
+
+def test_quality_baseline_runs_openapi_spectral_gate() -> None:
+    workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
+    makefile_text = Path("Makefile").read_text(encoding="utf-8")
+
+    assert "quality-openapi-spectral-gate:" in makefile_text
+    assert "actions/setup-node@v6" in workflow_text
+    assert "OpenAPI Spectral gate" in workflow_text
+    assert "make quality-openapi-spectral-gate" in workflow_text
