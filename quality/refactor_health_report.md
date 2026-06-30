@@ -2063,5 +2063,7 @@ health before that claim is defensible.
      model portfolio target, portfolio-manager book membership, CIO model-change affected cohort,
      DPM portfolio universe, and discretionary mandate binding failures now return stable
      `QCP_INTEGRATION_SOURCE_*` codes with source-product metadata instead of bare `detail` strings.
-     Focused unit/app/OpenAPI proof passed with 105 tests; scoped Ruff lint and format checks
-     passed.
+     A review-driven fix added dual-media documentation for custom QCP 422 responses so malformed
+     request bodies still advertise FastAPI validation `application/json` alongside application
+     problem details. Focused unit/app/OpenAPI proof passed with 109 tests; scoped Ruff lint and
+     format checks passed.

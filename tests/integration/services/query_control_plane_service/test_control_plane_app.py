@@ -1458,6 +1458,7 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     ]
     assert incomplete_export["error_code"] == "QCP_ANALYTICS_INSUFFICIENT_DATA"
     assert incomplete_export["detail"] == "Required analytics source data is unavailable."
+    assert "application/json" in export_result["responses"]["422"]["content"]
     assert export_result["responses"]["422"]["description"] == (
         "Export job is incomplete, source payload unavailable, or requested "
         "serialization is unsupported."
@@ -2161,6 +2162,12 @@ async def test_openapi_describes_integration_source_problem_details(
     ]["422"]["content"]["application/problem+json"]["example"]
     assert invalid_universe["error_code"] == "QCP_INTEGRATION_SOURCE_INVALID_REQUEST"
     assert invalid_universe["metadata"]["source_product"] == "DpmPortfolioUniverseCandidate"
+    assert (
+        "application/json"
+        in schema["paths"]["/integration/dpm/portfolio-universe/candidates"]["post"]["responses"][
+            "422"
+        ]["content"]
+    )
 
 
 async def test_openapi_fully_documents_dpm_portfolio_tax_lot_schema_family(

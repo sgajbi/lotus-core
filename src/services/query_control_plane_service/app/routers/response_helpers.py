@@ -10,6 +10,17 @@ LEGACY_DETAIL_RESPONSE_SCHEMA = {
     "properties": {"detail": {"type": "string"}},
     "required": ["detail"],
 }
+FASTAPI_VALIDATION_ERROR_SCHEMA = {"$ref": "#/components/schemas/HTTPValidationError"}
+FASTAPI_VALIDATION_ERROR_EXAMPLE = {
+    "detail": [
+        {
+            "type": "missing",
+            "loc": ["body", "as_of_date"],
+            "msg": "Field required",
+            "input": {},
+        }
+    ]
+}
 
 
 class QueryControlPlaneProblemDetails(BaseModel):
@@ -138,6 +149,16 @@ def problem_response(description: str, example: dict[str, Any]) -> dict[str, obj
             }
         },
     }
+
+
+def problem_or_validation_response(description: str, example: dict[str, Any]) -> dict[str, object]:
+    response = problem_response(description, example)
+    if _is_problem_details_example(example):
+        response["content"]["application/json"] = {
+            "schema": FASTAPI_VALIDATION_ERROR_SCHEMA,
+            "example": FASTAPI_VALIDATION_ERROR_EXAMPLE,
+        }
+    return response
 
 
 def _is_problem_details_example(example: dict[str, Any]) -> bool:
