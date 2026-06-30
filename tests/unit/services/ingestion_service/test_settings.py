@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 
 import pytest
@@ -117,6 +118,7 @@ def test_load_ingestion_service_settings_strict_rejects_invalid_json(monkeypatch
 
 
 def test_load_ingestion_service_settings_local_fallback_logs_warning(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING, logger="src.services.ingestion_service.app.settings")
     monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("LOTUS_CORE_DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS", "not-a-number")
 

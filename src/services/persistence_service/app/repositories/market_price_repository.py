@@ -5,7 +5,7 @@ from typing import List
 
 from portfolio_common.database_models import DailyPositionSnapshot
 from portfolio_common.database_models import MarketPrice as DBMarketPrice
-from portfolio_common.events import MarketPriceEvent
+from portfolio_common.events import MarketPriceEvent, event_business_payload
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,7 +59,7 @@ class MarketPriceRepository:
         Idempotently creates or updates a market price using a native PostgreSQL UPSERT.
         """
         try:
-            market_price_data = event.model_dump()
+            market_price_data = event_business_payload(event)
 
             stmt = pg_insert(DBMarketPrice).values(**market_price_data)
 

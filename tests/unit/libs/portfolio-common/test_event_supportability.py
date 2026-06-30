@@ -146,7 +146,7 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
 
         parsed = model_cls.model_validate(payload)
 
-        assert model_cls.model_config["extra"] == "ignore"
+        assert model_cls.model_config["extra"] == "forbid"
         assert parsed is not None
 
 

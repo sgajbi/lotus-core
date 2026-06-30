@@ -131,7 +131,7 @@ transaction-cost and cashflow evidence; optionally populates reporting-currency 
 available FX rates using book versus trade/local source-currency selection, including explicit
 row-level realized FX P&L local evidence; checks returned row security ids against governed
 instrument master data; exposes `reason_codes`, `missing_instrument_reference_count`, and
-`missing_instrument_security_ids`; and classifies empty, complete, paged, and missing-instrument
+`missing_instrument_security_ids`; classifies empty, complete, and paged windows; and reports missing-instrument
 windows without deriving tax advice, FX attribution, cash-movement aggregation, transaction-cost
 curves, execution quality, or OMS acknowledgement.
 

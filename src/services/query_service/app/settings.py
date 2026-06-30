@@ -23,6 +23,7 @@ def env_int(
     *,
     minimum: int | None = None,
     maximum: int | None = None,
+    minimum_fallback: int | None = None,
 ) -> int:
     return shared_env_int(
         name,
@@ -30,6 +31,7 @@ def env_int(
         service_name=QUERY_SERVICE_NAME,
         minimum=minimum,
         maximum=maximum,
+        minimum_fallback=minimum_fallback,
     )
 
 
@@ -81,7 +83,10 @@ def load_query_service_settings() -> QueryServiceSettings:
         enterprise_primary_key_id=env_str("ENTERPRISE_PRIMARY_KEY_ID", ""),
         enterprise_secret_rotation_days=env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90, minimum=1),
         enterprise_max_write_payload_bytes=env_int(
-            "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576, minimum=1
+            "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES",
+            1_048_576,
+            minimum=1,
+            minimum_fallback=0,
         ),
         enterprise_feature_flags=env_json_map("ENTERPRISE_FEATURE_FLAGS_JSON"),
         enterprise_capability_rules=env_json_map("ENTERPRISE_CAPABILITY_RULES_JSON"),

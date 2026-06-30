@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.config import KAFKA_MARKET_PRICES_PERSISTED_TOPIC
 from portfolio_common.database_models import MarketPrice as DBMarketPrice
-from portfolio_common.events import MarketPriceEvent
+from portfolio_common.events import MarketPriceEvent, event_business_payload
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
@@ -116,7 +116,7 @@ async def test_process_message_success(
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     # Simulate the repository returning a persisted DB model instance
-    persisted_price = DBMarketPrice(**valid_market_price_event.model_dump())
+    persisted_price = DBMarketPrice(**event_business_payload(valid_market_price_event))
     mock_repo.create_market_price.return_value = persisted_price
 
     # Use patch.object for robust mocking
@@ -158,7 +158,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
 
     mock_idempotency_repo.claim_event_processing.return_value = True
     mock_repo.create_market_price.return_value = DBMarketPrice(
-        **valid_market_price_event.model_dump()
+        **event_business_payload(valid_market_price_event)
     )
 
     token = correlation_id_var.set("<not-set>")

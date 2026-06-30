@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 from portfolio_common.runtime_settings import (
     RuntimeConfigurationError,
@@ -11,6 +13,7 @@ from portfolio_common.runtime_settings import (
 
 
 def test_runtime_settings_default_to_local_fallback(monkeypatch, caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="portfolio_common.runtime_settings")
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("LOTUS_TEST_BOOL", "maybe")

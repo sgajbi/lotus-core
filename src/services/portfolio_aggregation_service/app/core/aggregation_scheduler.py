@@ -6,7 +6,7 @@ from typing import List
 from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
-from portfolio_common.events import PortfolioAggregationRequiredEvent
+from portfolio_common.events import PortfolioAggregationRequiredEvent, event_business_payload
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.monitoring import (
     set_control_queue_failed_stored,
@@ -75,7 +75,11 @@ class AggregationScheduler:
                 self._producer.publish_message(
                     topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
                     key=record_key,
-                    value=event.model_dump(mode="json"),
+                    value=event_business_payload(
+                        event,
+                        include_correlation_id=True,
+                        mode="json",
+                    ),
                     headers=headers,
                 )
             except Exception as exc:
