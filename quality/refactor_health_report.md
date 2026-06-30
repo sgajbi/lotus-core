@@ -30,12 +30,13 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1166 hardens cost transaction datetime normalization by extracting ISO text normalization,
-datetime parsing, UTC-aware marking, and public normalization policy out of the Pydantic validator.
-Focused transaction model tests now prove `Z` suffix parsing, naive datetime UTC marking, aware
-offset preservation, and nullable settlement date behavior. The broader cost-engine unit folder
-passes with 96 tests, `Transaction.standardize_datetimes(...)` is reduced from `B (6)` to `A (1)`,
-and `Transaction` is reduced from `B (7)` to `A (2)`.
+CR-1167 makes partial progress on GitHub issue #446 by reducing event replay ingestion operations
+route complexity around replay payload publish dispatch. `_replay_job_payload(...)` now delegates to
+a declarative endpoint publisher table while preserving request DTO validation, idempotency-key
+propagation, whole-model portfolio-bundle publishing, and unsupported endpoint errors. Focused
+ingestion operations tests pass with 10 tests, event replay app integration/OpenAPI tests pass with
+10 tests, `_replay_job_payload(...)` is reduced from `B (9)` to `A (2)`, and issue #446 remains
+open for further DLQ/retry/operator-response extraction.
 
 ## Health Assessment
 
@@ -1940,3 +1941,9 @@ health before that claim is defensible.
      folder passed with 96 tests; scoped Ruff lint and format checks passed; Radon reports
      `Transaction.standardize_datetimes` reduced from `B (6)` to `A (1)` and `Transaction` from
      `B (7)` to `A (2)`.
+318. Made partial progress on GitHub issue #446 by reducing event replay ingestion operations
+     replay publish dispatch complexity. `_replay_job_payload(...)` now delegates to an immutable
+     endpoint publisher descriptor and declarative publisher table. Focused ingestion operations
+     tests passed with 10 tests; event replay app integration/OpenAPI tests passed with 10 tests;
+     scoped Ruff lint and format checks passed; complexity and maintainability gates passed; Radon
+     reports `_replay_job_payload` reduced from `B (9)` to `A (2)`.
