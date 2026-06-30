@@ -187,6 +187,21 @@ jobs:
       - name: Unit collection gate
         run: python -m pytest tests/unit --collect-only -q
 
+  workflow-governance-gate:
+    name: Quality Baseline / Workflow Governance Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Install repository
+        run: make install-ci
+      - name: Workflow governance gate
+        run: make quality-workflow-governance-gate
+
   report-only:
     name: Quality Baseline / Report Only
     runs-on: ubuntu-latest
