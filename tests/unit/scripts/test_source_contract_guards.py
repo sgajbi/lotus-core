@@ -20,6 +20,10 @@ def test_config_access_guard_allows_typed_service_settings_modules() -> None:
         Path("src/libs/portfolio-common/portfolio_common/valuation_runtime_settings.py")
         in config_access_guard.ALLOWED_OS_GETENV_PATHS
     )
+    assert (
+        Path("src/libs/portfolio-common/portfolio_common/metrics_settings.py")
+        in config_access_guard.ALLOWED_OS_GETENV_PATHS
+    )
 
 
 def test_no_alias_contract_guard_ignores_generated_build_artifacts() -> None:

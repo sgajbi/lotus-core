@@ -27,7 +27,7 @@ tested modules.
 | Complexity baseline | Clean and enforced | CR-880 reduced advisory proposal simulation from F to B, CR-881 reduced the cost-calculator consumer from F to C, and CR-882 reduced FX linkage from D to B; `make quality-complexity-gate` now passes |
 | Architecture gates | Improving | Existing `make architecture-guard` now enforces removed-domain import exclusions plus selected direct-import boundaries after CR-1171; CR-1180 adds an event-replay router rule blocking concrete Kafka utility imports; CR-1181 adds a valuation scheduler rule blocking concrete Kafka utility imports; CR-1182 adds a financial reconciliation service rule blocking direct time/UUID imports; `make quality-import-boundary-gate` enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are enforced in the quality-baseline API governance job; CR-1170 adds stable generated OpenAPI artifacts under `output/openapi/` and enforced portable Spectral blocker-subset linting through `make quality-openapi-spectral-gate`; CR-1192 documents `/metrics` as an operational Prometheus scrape endpoint with explicit success and access-denied response contracts |
-| HTTP observability | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics; CR-1175 routes health-only worker web apps through the standard HTTP bootstrap for `/metrics`, `/health/live`, `/health/ready`, correlation/request/trace headers, route-template HTTP metrics, and request-completion logs; CR-1192 adds centralized metrics access policy enforcement while preserving default private-network scrape compatibility |
+| HTTP observability | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics; CR-1175 routes health-only worker web apps through the standard HTTP bootstrap for `/metrics`, `/health/live`, `/health/ready`, correlation/request/trace headers, route-template HTTP metrics, and request-completion logs; CR-1192 adds centralized metrics access policy enforcement for standard apps and web-backed worker runtime while preserving default private-network scrape compatibility |
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 | Ingestion idempotency | Improving | CR-1177 added deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT`; CR-1188 stores full canonical non-reversible request fingerprints so same endpoint/key reuse with changed sensitive values conflicts while durable payload evidence remains redacted |
 | Source-batch lineage semantics | Improving | CR-1189 stops selected source-data products from populating upstream `source_batch_fingerprint` with request/snapshot fingerprints when true source-batch evidence is unavailable |
@@ -55,10 +55,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1207 addresses the mandatory replay-audit slice for validated GitHub issue #555. Ingestion
-retry and consumer-DLQ replay paths no longer best-effort replay-audit recording after exceptional
-bookkeeping failures; audit-store failures now return `INGESTION_REPLAY_AUDIT_WRITE_FAILED` with
-source-safe recovery context and no acknowledged replay outcome.
+CR-1192 follow-up addresses the remaining metrics access-policy gaps for validated GitHub issue
+#678. Metrics-token env parsing now lives in approved common settings, the config-access guard
+passes, and web-backed worker runtime `/metrics` exposure uses the same token policy as standard
+HTTP apps.
 
 ## Health Assessment
 

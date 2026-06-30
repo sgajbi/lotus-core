@@ -118,6 +118,11 @@ Current repository posture:
     `INGESTION_REPLAY_AUDIT_WRITE_FAILED` with recovery path, event/job identity, replay status, and
     deterministic fingerprint so operators can restore audit persistence and retry through the
     governed endpoint.
+26. `/metrics` is an operational scrape endpoint governed by the shared metrics access policy.
+    Token parsing belongs in `portfolio_common.metrics_settings`, and standard API apps,
+    health-only worker apps, and web-backed worker runtime paths must all use the shared policy so
+    `LOTUS_METRICS_ACCESS_TOKEN` consistently enables bearer-token protection without direct env
+    reads in HTTP middleware.
 
 ## Architecture And Module Map
 
