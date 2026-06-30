@@ -1986,6 +1986,53 @@ def _job_field(job: Any, field: str) -> Any:
     return getattr(job, field, None)
 
 
+def _replay_job_id(replay_job: Any) -> str:
+    return str(_job_field(replay_job, "job_id"))
+
+
+def _consumer_dlq_replay_fingerprint(
+    *,
+    event_id: str,
+    correlation_id: str,
+    replay_job_id: str,
+    context: Any | None,
+) -> str:
+    return _deterministic_replay_fingerprint(
+        event_id=event_id,
+        correlation_id=correlation_id,
+        job_id=replay_job_id,
+        endpoint=context.endpoint if context else None,
+        payload=context.request_payload if context else None,
+        idempotency_key=context.idempotency_key if context else None,
+    )
+
+
+async def _consumer_dlq_missing_payload_response(
+    *,
+    event_id: str,
+    correlation_id: str,
+    replay_job_id: str,
+    context: Any | None,
+    replay_fingerprint: str,
+    dry_run: bool,
+    ingestion_job_service: IngestionJobService,
+    requested_by: str | None,
+) -> ConsumerDlqReplayResponse:
+    return await _record_consumer_dlq_replay_response(
+        event_id=event_id,
+        correlation_id=correlation_id,
+        job_id=replay_job_id,
+        endpoint=context.endpoint if context else None,
+        replay_fingerprint=replay_fingerprint,
+        replay_status="not_replayable",
+        dry_run=dry_run,
+        replay_reason="Correlated ingestion job does not have durable replay payload.",
+        message="Correlated ingestion job does not have durable replay payload.",
+        ingestion_job_service=ingestion_job_service,
+        requested_by=requested_by,
+    )
+
+
 async def _consumer_dlq_replay_candidate_or_response(
     *,
     event_id: str,
@@ -2010,27 +2057,22 @@ async def _consumer_dlq_replay_candidate_or_response(
             requested_by=requested_by,
         )
 
-    replay_job_id = str(_job_field(replay_job, "job_id"))
+    replay_job_id = _replay_job_id(replay_job)
     context = await ingestion_job_service.get_job_replay_context(replay_job_id)
-    replay_fingerprint = _deterministic_replay_fingerprint(
+    replay_fingerprint = _consumer_dlq_replay_fingerprint(
         event_id=event_id,
         correlation_id=correlation_id,
-        job_id=replay_job_id,
-        endpoint=context.endpoint if context else None,
-        payload=context.request_payload if context else None,
-        idempotency_key=context.idempotency_key if context else None,
+        replay_job_id=replay_job_id,
+        context=context,
     )
     if context is None or context.request_payload is None:
-        return await _record_consumer_dlq_replay_response(
+        return await _consumer_dlq_missing_payload_response(
             event_id=event_id,
             correlation_id=correlation_id,
-            job_id=replay_job_id,
-            endpoint=context.endpoint if context else None,
+            replay_job_id=replay_job_id,
+            context=context,
             replay_fingerprint=replay_fingerprint,
-            replay_status="not_replayable",
             dry_run=dry_run,
-            replay_reason="Correlated ingestion job does not have durable replay payload.",
-            message="Correlated ingestion job does not have durable replay payload.",
             ingestion_job_service=ingestion_job_service,
             requested_by=requested_by,
         )
