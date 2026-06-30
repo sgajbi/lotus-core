@@ -5,6 +5,7 @@ import pytest
 
 from src.services.calculators.position_calculator.app.repositories.position_repository import (
     PositionRepository,
+    _position_history_replay_lock_key,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -29,6 +30,22 @@ async def test_get_latest_completed_snapshot_date_trims_portfolio_and_security_i
     assert "trim(daily_position_snapshots.portfolio_id) = 'PORT_COST_01'" in compiled_query
     assert "trim(daily_position_snapshots.security_id) = 'SEC01'" in compiled_query
     assert "daily_position_snapshots.epoch = 42" in compiled_query
+
+
+async def test_acquire_position_history_replay_lock_uses_stable_normalized_key():
+    db_session = AsyncMock()
+    repository = PositionRepository(db_session)
+
+    await repository.acquire_position_history_replay_lock(" PORT_COST_01 ", " SEC01 ", 42)
+
+    statement = db_session.execute.call_args.args[0]
+    assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
+    assert statement.compile().params == {
+        "lock_key": _position_history_replay_lock_key("PORT_COST_01", "SEC01", 42)
+    }
+    assert _position_history_replay_lock_key(" PORT_COST_01 ", " SEC01 ", 42) == (
+        _position_history_replay_lock_key("PORT_COST_01", "SEC01", 42)
+    )
 
 
 async def test_find_open_security_ids_as_of_trims_portfolio_and_security_id_partition():

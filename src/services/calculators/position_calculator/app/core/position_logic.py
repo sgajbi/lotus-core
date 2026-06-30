@@ -292,6 +292,7 @@ class PositionCalculator:
         portfolio_id = event.portfolio_id
         security_id = event.security_id
         message_epoch = event.epoch if event.epoch is not None else current_state.epoch
+        await repo.acquire_position_history_replay_lock(portfolio_id, security_id, message_epoch)
         await repo.delete_positions_from(portfolio_id, security_id, transaction_date, message_epoch)
         anchor_position = await repo.get_last_position_before(
             portfolio_id, security_id, transaction_date, message_epoch
