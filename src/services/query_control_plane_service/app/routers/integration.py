@@ -98,7 +98,12 @@ from src.services.query_service.app.services.core_snapshot_service import (
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
-from .response_helpers import problem_example, problem_response, raise_problem
+from .response_helpers import (
+    problem_example,
+    problem_or_validation_response,
+    problem_response,
+    raise_problem,
+)
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -475,7 +480,7 @@ async def get_effective_integration_policy(
             "Simulation expected version mismatch or portfolio/session conflict.",
             CORE_SNAPSHOT_CONFLICT_EXAMPLE,
         ),
-        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_or_validation_response(
             "Section cannot be fulfilled due to missing valuation dependencies.",
             CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE,
         ),
@@ -1080,7 +1085,7 @@ async def resolve_cio_model_change_affected_cohort(
             "No DPM portfolio-universe candidates found.",
             DPM_PORTFOLIO_UNIVERSE_EMPTY_EXAMPLE,
         ),
-        422: problem_response(
+        422: problem_or_validation_response(
             "Invalid DPM portfolio-universe request",
             DPM_PORTFOLIO_UNIVERSE_INVALID_REQUEST_EXAMPLE,
         ),

@@ -24,7 +24,12 @@ from src.services.query_service.app.services.analytics_timeseries_service import
     AnalyticsTimeseriesService,
 )
 
-from .response_helpers import problem_example, problem_response, raise_problem
+from .response_helpers import (
+    problem_example,
+    problem_or_validation_response,
+    problem_response,
+    raise_problem,
+)
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
@@ -134,7 +139,7 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
             "Portfolio not found.",
             PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE,
         ),
-        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_or_validation_response(
             "Insufficient data or unsupported configuration.",
             ANALYTICS_INSUFFICIENT_DATA_EXAMPLE,
         ),
@@ -182,7 +187,7 @@ async def get_portfolio_analytics_timeseries(
             "Portfolio not found.",
             PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE,
         ),
-        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_or_validation_response(
             "Insufficient data or unsupported configuration.",
             ANALYTICS_INSUFFICIENT_DATA_EXAMPLE,
         ),
@@ -272,7 +277,7 @@ async def get_portfolio_analytics_reference(
             "Portfolio not found.",
             PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE,
         ),
-        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_or_validation_response(
             "Insufficient source data or unsupported configuration.",
             ANALYTICS_INSUFFICIENT_DATA_EXAMPLE,
         ),
@@ -342,7 +347,7 @@ async def get_analytics_export_job(
             "Export job not found.",
             ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE,
         ),
-        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_or_validation_response(
             (
                 "Export job is incomplete, source payload unavailable, or requested "
                 "serialization is unsupported."

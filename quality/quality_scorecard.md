@@ -1303,4 +1303,6 @@ Local evidence captured on 2026-06-05 after CR-1034:
   source-data discovery routes. Benchmark assignment, DPM model targets, PM-book memberships, CIO
   affected cohorts, DPM portfolio-universe candidates, and mandate bindings now share stable
   `QCP_INTEGRATION_SOURCE_*` error contracts with source-safe metadata, preserving routes,
-  statuses, success DTOs, service calls, persistence, and source-data envelopes.
+  statuses, success DTOs, service calls, persistence, and source-data envelopes. Custom QCP 422
+  examples now also document FastAPI validation `application/json` alongside application problem
+  details.
