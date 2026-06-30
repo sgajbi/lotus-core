@@ -706,6 +706,10 @@ Local evidence captured on 2026-06-05 after CR-1034:
   and format checks passed; `make quality-complexity-gate` and
   `make quality-maintainability-gate` passed; `CostCalculatorConsumer.process_message` improved
   from `C (11)` to `A (2)`, and `consumer.py` remains A-ranked maintainability at `A (22.35)`.
+- CR-1163 focused evidence: cost reprocessing consumer tests passed with 6 tests; scoped Ruff lint
+  and format checks passed; `ReprocessingConsumer.process_message` improved from `B (6)` to
+  `A (3)`, `ReprocessingConsumer` improved from `B (7)` to `A (4)`, and
+  `reprocessing_consumer.py` remains A-ranked maintainability at `A (67.65)`.
 
 ## Incremental Maintainability Updates
 
@@ -1020,6 +1024,10 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1032 split cost calculator process-message handling into message metadata, valid cost-event
   processing, process-message error classification, and failure metric helpers, reducing
   `CostCalculatorConsumer.process_message` from `C (11)` to `A (2)`.
+- CR-1163 split cost reprocessing consumer orchestration into JSON object payload parsing,
+  requested transaction-id normalization, repository-backed reprocessing execution, and
+  parse/retryable/unexpected error handling, reducing `ReprocessingConsumer.process_message` from
+  `B (6)` to `A (3)` and `ReprocessingConsumer` from `B (7)` to `A (4)`.
 - CR-1106 split ingestion replay-audit lookup, persistence, status policy, and metric accounting
   out of `IngestionJobService` into `ingestion_replay_audits.py`, improving
   `ingestion_job_service.py` from `A (22.62)` / 762 SLOC to `A (25.65)` / 726 SLOC while adding

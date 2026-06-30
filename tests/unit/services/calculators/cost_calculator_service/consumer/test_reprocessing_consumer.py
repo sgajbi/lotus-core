@@ -4,6 +4,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reprocessing_repository import ReprocessingRepository
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cost_calculator_service.app.consumers.reprocessing_consumer import (
@@ -116,5 +117,79 @@ async def test_reprocessing_consumer_propagates_header_correlation_id(
         new=get_session_gen,
     ):
         await consumer.process_message(mock_kafka_message)
+
+    consumer._send_to_dlq_async.assert_not_called()
+
+
+async def test_reprocessing_consumer_sends_malformed_json_to_dlq(
+    consumer: ReprocessingConsumer,
+    mock_kafka_message: MagicMock,
+):
+    mock_kafka_message.value.return_value = b"{not-json"
+
+    await consumer.process_message(mock_kafka_message)
+
+    consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_reprocessing_consumer_sends_non_object_payload_to_dlq(
+    consumer: ReprocessingConsumer,
+    mock_kafka_message: MagicMock,
+):
+    mock_kafka_message.value.return_value = b'["TXN_TO_REPROCESS"]'
+
+    await consumer.process_message(mock_kafka_message)
+
+    consumer._send_to_dlq_async.assert_awaited_once()
+
+
+@patch(
+    "src.services.calculators.cost_calculator_service.app.consumers.reprocessing_consumer.get_kafka_producer"
+)
+@patch(
+    "src.services.calculators.cost_calculator_service.app.consumers.reprocessing_consumer.ReprocessingRepository"
+)
+async def test_reprocessing_consumer_skips_missing_transaction_id(
+    MockReprocessingRepo,
+    MockGetKafkaProducer,
+    consumer: ReprocessingConsumer,
+    mock_kafka_message: MagicMock,
+):
+    mock_kafka_message.value.return_value = b'{"correlation_id": "corr-missing-txn"}'
+
+    await consumer.process_message(mock_kafka_message)
+
+    MockGetKafkaProducer.assert_not_called()
+    MockReprocessingRepo.assert_not_called()
+    consumer._send_to_dlq_async.assert_not_called()
+
+
+@patch(
+    "src.services.calculators.cost_calculator_service.app.consumers.reprocessing_consumer.get_kafka_producer"
+)
+@patch(
+    "src.services.calculators.cost_calculator_service.app.consumers.reprocessing_consumer.ReprocessingRepository"
+)
+async def test_reprocessing_consumer_reraises_database_errors(
+    MockReprocessingRepo,
+    MockGetKafkaProducer,
+    consumer: ReprocessingConsumer,
+    mock_kafka_message: MagicMock,
+):
+    mock_repo_instance = AsyncMock(spec=ReprocessingRepository)
+    db_error = OperationalError("select 1", {}, RuntimeError("db unavailable"))
+    mock_repo_instance.reprocess_transactions_by_ids.side_effect = db_error
+    MockReprocessingRepo.return_value = mock_repo_instance
+    mock_db_session = AsyncMock(spec=AsyncSession)
+
+    async def get_session_gen():
+        yield mock_db_session
+
+    with patch(
+        "src.services.calculators.cost_calculator_service.app.consumers.reprocessing_consumer.get_async_db_session",
+        new=get_session_gen,
+    ):
+        with pytest.raises(OperationalError):
+            await consumer.process_message(mock_kafka_message)
 
     consumer._send_to_dlq_async.assert_not_called()
