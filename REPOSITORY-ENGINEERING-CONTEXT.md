@@ -507,6 +507,14 @@ Most relevant current governance:
     structured-note, lockup, expiry, liquidity, reinvestment, performance, risk, tax, execution,
     and OMS methodology remain outside this product unless Core reference data and methodology
     expand explicitly.
+52. Source-data lineage fixes should be executed category-wise: fix every active product in the
+    defect pattern that can be safely corrected, then promote the rule into the source-data product
+    contract guard. `source_batch_fingerprint` is upstream source-batch lineage only. Request,
+    pagination, and response snapshot identity must remain in request/snapshot fields such as
+    `snapshot_id` or `request_scope_fingerprint`; products without true source-batch evidence must
+    return `source_batch_fingerprint: null`. `make source-data-product-contract-guard` now blocks
+    `request_fingerprint(...)`, `snapshot_fingerprint`, and `request_scope_fingerprint` from being
+    assigned to source-batch lineage.
 
 ## Context Maintenance Rule
 

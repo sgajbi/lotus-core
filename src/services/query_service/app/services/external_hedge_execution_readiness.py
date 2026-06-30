@@ -81,18 +81,7 @@ def build_external_hedge_execution_readiness_response(
             tenant_id=request.tenant_id,
             data_quality_status="MISSING",
             latest_evidence_timestamp=None,
-            source_batch_fingerprint=request_fingerprint(
-                {
-                    "product": "ExternalHedgeExecutionReadiness",
-                    "portfolio_id": portfolio_id,
-                    "client_id": binding.client_id,
-                    "mandate_id": binding.mandate_id,
-                    "as_of_date": request.as_of_date.isoformat(),
-                    "reporting_currency": request.reporting_currency,
-                    "exposure_currencies": sorted(request.exposure_currencies),
-                    "integration_status": "not_ingested",
-                }
-            ),
+            source_batch_fingerprint=None,
             snapshot_id=(
                 "external_hedge_execution_readiness:"
                 + request_fingerprint(

@@ -57,7 +57,7 @@ def test_build_external_currency_exposure_response_fails_closed() -> None:
     )
     assert response.data_quality_status == "MISSING"
     assert response.latest_evidence_timestamp is None
-    assert response.source_batch_fingerprint is not None
+    assert response.source_batch_fingerprint is None
     assert response.snapshot_id is not None
     assert response.snapshot_id.startswith("external_currency_exposure:")
     assert response.lineage == {

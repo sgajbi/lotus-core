@@ -106,7 +106,7 @@ def build_cio_model_change_affected_cohort_response(
                 [definition],
                 mandate_rows,
             ),
-            source_batch_fingerprint=snapshot_fingerprint,
+            source_batch_fingerprint=None,
             snapshot_id=f"cio_model_change_cohort:{snapshot_fingerprint}",
         ),
     )

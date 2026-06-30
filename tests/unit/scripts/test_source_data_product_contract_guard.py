@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from portfolio_common.source_data_products import (
     ANALYTICS_INPUT,
     QUERY_CONTROL_PLANE_SERVICE,
@@ -45,12 +47,94 @@ def _product(
     )
 
 
+def _write_service_file(tmp_path: Path, source: str) -> Path:
+    service_file = tmp_path / "example_source_product.py"
+    service_file.write_text(source, encoding="utf-8")
+    return service_file
+
+
 def test_evaluate_source_data_product_bindings_accepts_catalog_route_metadata() -> None:
     catalog = (_product("PortfolioTimeseriesInput", "/integration/example"),)
     routes = [_route(QUERY_SERVICE, "/integration/example", "PortfolioTimeseriesInput")]
     identities = {"ExampleResponse": ("PortfolioTimeseriesInput", "v1")}
 
     assert guard.evaluate_source_data_product_bindings(routes, catalog, identities) == []
+
+
+def test_evaluate_source_batch_fingerprint_semantics_accepts_null_and_source_evidence(
+    tmp_path: Path,
+) -> None:
+    _write_service_file(
+        tmp_path,
+        """
+from portfolio_common.ingestion_evidence import build_source_batch_fingerprint
+
+def build_response(scope):
+    source_fingerprint = build_source_batch_fingerprint(scope)
+    first = source_data_product_runtime_metadata(source_batch_fingerprint=None)
+    second = source_data_product_runtime_metadata(source_batch_fingerprint=source_fingerprint)
+    return first, second
+""",
+    )
+
+    assert guard.evaluate_source_batch_fingerprint_semantics((tmp_path,)) == []
+
+
+def test_evaluate_source_batch_fingerprint_semantics_rejects_request_fingerprint(
+    tmp_path: Path,
+) -> None:
+    _write_service_file(
+        tmp_path,
+        """
+def build_response(request):
+    return source_data_product_runtime_metadata(
+        source_batch_fingerprint=request_fingerprint({"portfolio_id": request.portfolio_id})
+    )
+""",
+    )
+
+    errors = guard.evaluate_source_batch_fingerprint_semantics((tmp_path,))
+
+    assert len(errors) == 1
+    assert "request_fingerprint(...)" in errors[0]
+    assert "must not use request/snapshot scope expression" in errors[0]
+
+
+def test_evaluate_source_batch_fingerprint_semantics_rejects_snapshot_fingerprint(
+    tmp_path: Path,
+) -> None:
+    _write_service_file(
+        tmp_path,
+        """
+def build_response():
+    snapshot_fingerprint = "abc"
+    return source_data_product_runtime_metadata(source_batch_fingerprint=snapshot_fingerprint)
+""",
+    )
+
+    errors = guard.evaluate_source_batch_fingerprint_semantics((tmp_path,))
+
+    assert len(errors) == 1
+    assert "snapshot_fingerprint" in errors[0]
+
+
+def test_evaluate_source_batch_fingerprint_semantics_rejects_request_scope_fingerprint(
+    tmp_path: Path,
+) -> None:
+    _write_service_file(
+        tmp_path,
+        """
+def build_response(read_scope):
+    return source_data_product_runtime_metadata(
+        source_batch_fingerprint=read_scope.request_scope_fingerprint
+    )
+""",
+    )
+
+    errors = guard.evaluate_source_batch_fingerprint_semantics((tmp_path,))
+
+    assert len(errors) == 1
+    assert "request_scope_fingerprint" in errors[0]
 
 
 def test_evaluate_source_data_product_bindings_rejects_missing_catalog_route_metadata() -> None:

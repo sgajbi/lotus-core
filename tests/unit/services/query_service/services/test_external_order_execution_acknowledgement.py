@@ -53,7 +53,7 @@ def test_build_external_order_execution_acknowledgement_response_fails_closed() 
     assert response.supportability.blocked_capabilities == (EXTERNAL_ORDER_ACK_BLOCKED_CAPABILITIES)
     assert response.data_quality_status == "MISSING"
     assert response.latest_evidence_timestamp is None
-    assert response.source_batch_fingerprint is not None
+    assert response.source_batch_fingerprint is None
     assert response.snapshot_id is not None
     assert response.snapshot_id.startswith("external_order_execution_acknowledgement:")
     assert response.lineage == {
