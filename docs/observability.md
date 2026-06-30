@@ -13,9 +13,16 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
 4. Operational supportability APIs expose evidence timestamps, stale/backlog state, and reason
    codes where relevant.
 5. Source-data product responses expose runtime metadata and data-quality posture.
+6. Prometheus metric labels use bounded operational dimensions. Portfolio, security, run, replay,
+   page-token, or raw-path drilldown belongs in structured logs, audit records, support APIs, or
+   queryable operational tables, not production metric labels.
+7. HTTP request metrics use FastAPI route templates such as
+   `/portfolios/{portfolio_id}/positions` and fall back to a fixed unmatched bucket for routes that
+   do not resolve.
 
 ## Current Gaps
 
-The initial quality baseline records observability as a documentation and gate gap. Future slices
-should add automated checks for correlation ID propagation, metrics cardinality, sensitive logging,
-and health/readiness completeness.
+The initial quality baseline records observability as a documentation and gate gap. The shared
+monitoring unit guard now rejects `portfolio_id` and `security_id` as production Prometheus metric
+labels. Future slices should add automated checks for additional high-cardinality identifiers,
+correlation ID propagation, sensitive logging, and health/readiness completeness.

@@ -87,8 +87,6 @@ async def test_fencer_returns_false_and_logs_for_stale_epoch(
     mock_metric.labels.assert_called_once_with(
         service_name="test-service",
         topic="valuation.snapshot.persisted",
-        portfolio_id="P1",
-        security_id="S1",
     )
     mock_metric.labels.return_value.inc.assert_called_once()
     assert "Message has stale epoch. Discarding." in caplog.text
@@ -116,6 +114,4 @@ async def test_fencer_can_be_configured_with_service_name(mock_dependencies, sam
     mock_metric.labels.assert_called_once_with(
         service_name="TestService",
         topic="valuation.snapshot.persisted",
-        portfolio_id="P1",
-        security_id="S1",
     )

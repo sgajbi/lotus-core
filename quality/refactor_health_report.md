@@ -27,15 +27,15 @@ tested modules.
 | Complexity baseline | Clean and enforced | CR-880 reduced advisory proposal simulation from F to B, CR-881 reduced the cost-calculator consumer from F to C, and CR-882 reduced FX linkage from D to B; `make quality-complexity-gate` now passes |
 | Architecture gates | Improving | Existing `make architecture-guard` now enforces removed-domain import exclusions plus selected direct-import boundaries after CR-1171; `make quality-import-boundary-gate` enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are enforced in the quality-baseline API governance job; CR-1170 adds stable generated OpenAPI artifacts under `output/openapi/` and enforced portable Spectral blocker-subset linting through `make quality-openapi-spectral-gate` |
+| Observability cardinality | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics and adds focused regression coverage for route-template HTTP labels and forbidden business-key metric labels |
 
 ## Current Slice Update
 
-CR-1171 begins validated GitHub issue #462 by adding AST-based direct-import architecture checks to
-`make architecture-guard`. The guard now prevents query-control-plane routers from importing
-query-service repositories, query runtime routers from importing query-control-plane internals, and
-ingestion routers from importing other service implementations directly. Focused architecture tests
-pass with 2 tests, `make architecture-guard` passes, and issue #462 remains open for broader
-layering enforcement.
+CR-1172 begins validated GitHub issues #494 and #495 by normalizing shared HTTP metrics to route
+templates and removing `portfolio_id` / `security_id` from the flagged production Prometheus metric
+labels. Drilldown identifiers remain available through structured logs and support APIs; focused
+tests prove dynamic request paths collapse to one metric label and exported metrics reject the
+forbidden business-key labels.
 
 ## Health Assessment
 

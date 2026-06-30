@@ -110,7 +110,7 @@ async def test_scheduler_creates_position_aware_backfill_jobs(
     mock_repo.get_first_open_dates_for_keys.return_value = {("P1", "S1", 1): first_open_date}
     mock_job_repo.upsert_jobs.return_value = 3
 
-    with patch.object(POSITION_STATE_WATERMARK_LAG_DAYS, "labels") as mock_gauge_labels:
+    with patch.object(POSITION_STATE_WATERMARK_LAG_DAYS, "set") as mock_lag_set:
         await scheduler._create_backfill_jobs(AsyncMock())
 
         mock_job_repo.upsert_jobs.assert_awaited_once()
@@ -121,8 +121,7 @@ async def test_scheduler_creates_position_aware_backfill_jobs(
             date(2025, 8, 12),
         ]
         assert scheduled_jobs[0].correlation_id == "SCHEDULER_BACKFILL:P1:S1:1:2025-08-10"
-        mock_gauge_labels.assert_called_once_with(portfolio_id="P1", security_id="S1")
-        mock_gauge_labels.return_value.set.assert_called_once_with(expected_lag)
+        mock_lag_set.assert_called_once_with(expected_lag)
 
 
 async def test_scheduler_rearms_completed_jobs_after_watermark_reset(

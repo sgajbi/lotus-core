@@ -198,7 +198,7 @@ INSTRUMENT_REPROCESSING_TRIGGERS_PENDING = Gauge(
 EPOCH_MISMATCH_DROPPED_TOTAL = Counter(
     "epoch_mismatch_dropped_total",
     "Number of Kafka messages dropped due to a stale epoch.",
-    labelnames=("service_name", "topic", "portfolio_id", "security_id"),
+    labelnames=("service_name", "topic"),
 )
 
 REPROCESSING_ACTIVE_KEYS_TOTAL = Gauge(
@@ -221,7 +221,7 @@ SCHEDULER_GAP_DAYS = Histogram(
 REPROCESSING_EPOCH_BUMPED_TOTAL = Counter(
     "reprocessing_epoch_bumped_total",
     "Total number of times a reprocessing flow was triggered by an epoch increment.",
-    labelnames=("portfolio_id", "security_id"),
+    labelnames=("trigger",),
 )
 
 REPROCESSING_WORKER_JOBS_CLAIMED_TOTAL = Counter(
@@ -268,26 +268,26 @@ REPROCESSING_STALE_SKIPS_TOTAL = Counter(
 
 POSITION_STATE_WATERMARK_LAG_DAYS = Gauge(
     "position_state_watermark_lag_days",
-    "The current lag in days between the latest business date and a key's watermark.",
-    labelnames=("portfolio_id", "security_id"),
+    "The most recently observed lag in days between the latest business date "
+    "and a key's watermark.",
 )
 
 VALUATION_JOBS_CREATED_TOTAL = Counter(
     "valuation_jobs_created_total",
     "Total number of valuation jobs created by the scheduler.",
-    labelnames=("portfolio_id", "security_id"),
+    labelnames=("job_type",),
 )
 
 VALUATION_JOBS_SKIPPED_TOTAL = Counter(
     "valuation_jobs_skipped_total",
     "Total number of valuation jobs skipped by the consumer due to no position history.",
-    labelnames=("portfolio_id", "security_id"),
+    labelnames=("reason",),
 )
 
 VALUATION_JOBS_FAILED_TOTAL = Counter(
     "valuation_jobs_failed_total",
     "Total number of valuation jobs that failed for terminal reasons (e.g., missing ref data).",
-    labelnames=("portfolio_id", "security_id", "reason"),
+    labelnames=("reason",),
 )
 
 VALUATION_WORKER_JOBS_CLAIMED_TOTAL = Counter(

@@ -396,9 +396,7 @@ class ValuationScheduler:
         gap_days = (latest_business_date - state.watermark_date).days
         SCHEDULER_GAP_DAYS.observe(gap_days)
         SNAPSHOT_LAG_SECONDS.observe(gap_days * 86400)
-        POSITION_STATE_WATERMARK_LAG_DAYS.labels(
-            portfolio_id=state.portfolio_id, security_id=state.security_id
-        ).set(gap_days)
+        POSITION_STATE_WATERMARK_LAG_DAYS.set(gap_days)
 
     def _log_missing_current_epoch_history(self, state, latest_business_date) -> None:
         logger.info(
@@ -456,9 +454,7 @@ class ValuationScheduler:
             return
 
         staged_count = await job_repo.upsert_jobs(job_requests)
-        VALUATION_JOBS_CREATED_TOTAL.labels(
-            portfolio_id=state.portfolio_id, security_id=state.security_id
-        ).inc(staged_count)
+        VALUATION_JOBS_CREATED_TOTAL.labels(job_type="backfill").inc(staged_count)
         logger.info(
             "Scheduler: Created "
             f"{staged_count}/{len(job_requests)} backfill valuation jobs for "
