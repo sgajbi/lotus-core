@@ -2,7 +2,6 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import HTTPException
 
 from src.services.query_control_plane_service.app.routers.integration import (
     create_core_snapshot,
@@ -2724,7 +2723,7 @@ async def test_fetch_benchmark_market_series_maps_invalid_page_token_to_400() ->
         side_effect=ValueError("Malformed page token.")
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_market_series(
             benchmark_id="B1",
             request=BenchmarkMarketSeriesRequest(
@@ -2737,4 +2736,14 @@ async def test_fetch_benchmark_market_series_maps_invalid_page_token_to_400() ->
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 400
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=400,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        detail="Benchmark market series request is invalid.",
+        metadata={
+            "source_product": "MarketDataWindow",
+            "reason": "ValueError",
+            "benchmark_id": "B1",
+        },
+    )

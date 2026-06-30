@@ -1379,8 +1379,17 @@ async def test_benchmark_market_series_invalid_page_token_maps_to_400(async_test
         },
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid benchmark market series page_token."
+    body = _assert_problem_details(
+        response,
+        status_code=400,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        detail="Benchmark market series request is invalid.",
+    )
+    assert body["metadata"] == {
+        "source_product": "MarketDataWindow",
+        "reason": "ValueError",
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+    }
 
 
 async def test_index_price_series_success(async_test_client):
