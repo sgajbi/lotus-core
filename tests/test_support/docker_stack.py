@@ -294,6 +294,23 @@ def compose_down(compose_file: str) -> None:
     )
 
 
+def capture_compose_logs(compose_file: str, output_path: str | Path) -> None:
+    """Capture logs for the active compose project before teardown."""
+    ensure_docker_engine_available()
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [*_compose_base_args(compose_file), "logs", "--no-color"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    log_text = result.stdout
+    if result.stderr:
+        log_text = f"{log_text}\n--- docker compose logs stderr ---\n{result.stderr}"
+    destination.write_text(log_text, encoding="utf-8")
+
+
 def _remove_conflicting_named_containers(
     stderr: str,
     runner: Callable[..., subprocess.CompletedProcess],
