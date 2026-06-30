@@ -27,6 +27,7 @@
 - `make event-runtime-contract-guard`
 - `make rfc0083-closure-guard`
 - `make openapi-gate`
+- `make quality-openapi-spectral-gate`
 - `make architecture-guard`
 
 ## Guard-to-contract mapping
@@ -44,6 +45,10 @@
   protects the machine-readable RFC-0083 implementation-closure ledger
 - `make openapi-gate`
   protects consumer-facing contract quality and OpenAPI completeness
+- `make quality-openapi-spectral-gate`
+  generates stable per-service OpenAPI artifacts under `output/openapi/` and enforces the portable
+  Spectral blocker subset for operation IDs, descriptions, summaries, tags, and common successful
+  `2xx` responses
 - `make architecture-guard`
   protects layering and repository boundary posture
 
@@ -54,6 +59,7 @@
 - source-data product semantics
 - eventing and supportability posture
 - OpenAPI quality
+- portable Spectral OpenAPI linting
 - architecture boundaries
 - production-readiness closure evidence
 

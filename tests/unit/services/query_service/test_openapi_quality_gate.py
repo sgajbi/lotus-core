@@ -1,4 +1,6 @@
-from scripts.openapi_quality_gate import evaluate_schema
+import json
+
+from scripts.openapi_quality_gate import evaluate_schema, write_openapi_artifacts
 
 
 def test_evaluate_schema_flags_missing_contract_fields() -> None:
@@ -217,3 +219,20 @@ def test_evaluate_schema_flags_missing_parameter_descriptions() -> None:
 
     errors = evaluate_schema(schema, service_name="query_service")
     assert any("missing parameter description" in error for error in errors)
+
+
+def test_write_openapi_artifacts_uses_stable_service_paths(tmp_path) -> None:
+    schema = {
+        "openapi": "3.1.0",
+        "info": {"title": "Example API", "version": "1.0.0"},
+        "paths": {},
+    }
+
+    generated = write_openapi_artifacts(
+        output_dir=tmp_path,
+        schemas={"query_service": schema},
+    )
+
+    assert generated == [tmp_path / "query_service.openapi.json"]
+    assert json.loads(generated[0].read_text(encoding="utf-8")) == schema
+    assert generated[0].read_text(encoding="utf-8").endswith("\n")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from collections import Counter
@@ -27,6 +28,7 @@ for lib_dir in LIBS_ROOT.glob("*"):
             sys.path.append(str(candidate))
 
 ALLOWED_METHODS = {"get", "post", "put", "patch", "delete"}
+DEFAULT_OPENAPI_OUTPUT_DIR = REPO_ROOT / "output" / "openapi"
 
 
 def _has_success_response(operation: dict) -> bool:
@@ -231,7 +233,7 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
     return errors
 
 
-def main() -> int:
+def service_schemas() -> dict[str, dict]:
     from src.services.calculators.cashflow_calculator_service.app.web import (
         app as cashflow_calculator_web_app,
     )
@@ -265,7 +267,7 @@ def main() -> int:
         app as valuation_orchestrator_web_app,
     )
 
-    service_schemas = {
+    return {
         "query_service": query_app.openapi(),
         "query_control_plane_service": query_control_plane_app.openapi(),
         "ingestion_service": ingestion_app.openapi(),
@@ -283,8 +285,28 @@ def main() -> int:
             position_valuation_calculator_web_app.openapi()
         ),
     }
+
+
+def write_openapi_artifacts(
+    output_dir: Path = DEFAULT_OPENAPI_OUTPUT_DIR,
+    schemas: dict[str, dict] | None = None,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    generated_paths: list[Path] = []
+    for service_name, schema in sorted((schemas or service_schemas()).items()):
+        output_path = output_dir / f"{service_name}.openapi.json"
+        output_path.write_text(
+            json.dumps(schema, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        generated_paths.append(output_path)
+    return generated_paths
+
+
+def main() -> int:
+    schemas = service_schemas()
     errors: list[str] = []
-    for service_name, schema in service_schemas.items():
+    for service_name, schema in schemas.items():
         errors.extend(evaluate_schema(schema, service_name=service_name))
 
     if errors:

@@ -29,6 +29,10 @@ Every public endpoint should provide:
 1. Existing `make openapi-gate` and `make api-vocabulary-gate` remain authoritative where present.
 2. `.github/workflows/quality-baseline.yml` now enforces the OpenAPI quality and API vocabulary
    gates in the API governance job.
-3. `.spectral.yaml` remains report-only until a stable generated-spec artifact path exists for CI
-   publication.
-4. Future gates should fail only new regressions before enforcing enterprise thresholds.
+3. `make quality-openapi-spectral-gate` now generates stable per-service OpenAPI artifacts under
+   `output/openapi/` and enforces the `.spectral.yaml` blocker subset in the quality-baseline API
+   governance job.
+4. The enforced Spectral subset covers operation IDs, descriptions, summaries, tags, and common
+   successful `2xx` response declarations. Broader `spectral:oas` findings remain advisory until
+   their baselines are remediated and governed.
+5. Future gates should fail only new regressions before enforcing enterprise thresholds.

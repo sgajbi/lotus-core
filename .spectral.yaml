@@ -1,16 +1,48 @@
-extends:
-  - spectral:oas
-
 rules:
   operation-operationId:
+    description: Operation should have a stable operationId.
     severity: warn
+    given: $.paths[*][get,put,post,delete,options,head,patch,trace]
+    then:
+      field: operationId
+      function: truthy
   operation-description:
+    description: Operation should describe downstream behavior.
     severity: warn
-  operation-tags:
-    severity: warn
+    given: $.paths[*][get,put,post,delete,options,head,patch,trace]
+    then:
+      field: description
+      function: truthy
   operation-summary:
+    description: Operation should have a summary.
     severity: warn
+    given: $.paths[*][get,put,post,delete,options,head,patch,trace]
+    then:
+      field: summary
+      function: truthy
+  operation-tags:
+    description: Operation should declare at least one tag.
+    severity: warn
+    given: $.paths[*][get,put,post,delete,options,head,patch,trace]
+    then:
+      field: tags
+      function: schema
+      functionOptions:
+        schema:
+          type: array
+          minItems: 1
   operation-success-response:
+    description: Operation should document a common successful 2xx response.
     severity: warn
-  oas3-api-servers:
-    severity: off
+    given: $.paths[*][get,put,post,delete,options,head,patch,trace]
+    then:
+      field: responses
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          anyOf:
+            - required: ["200"]
+            - required: ["201"]
+            - required: ["202"]
+            - required: ["204"]
