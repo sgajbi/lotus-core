@@ -40,6 +40,7 @@ tested modules.
 | Corporate-action reconciliation evidence | Improving | CR-1198 records Bundle A reconciliation outcomes as durable `corporate_action_bundle_a` financial reconciliation runs and findings instead of log-only diagnostics |
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
 | Cash-balance account-id provenance | Improving | CR-1200 validates transaction-derived cash-account fallback mappings against active/effective cash-account master data and exposes response-level provenance |
+| Instrument reference integrity | Improving | CR-1201 defers product cost processing when instrument master data is missing, before cost and lot-state writes |
 | Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
@@ -51,10 +52,11 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1200 addresses validated GitHub issue #673 by validating transaction-derived cash-account
-fallback mappings against active/effective cash-account master data. `HoldingsAsOf:v1` cash-balance
-rows now publish `cash_account_id_source`, and unresolved cash-security fallback rows degrade to
-`PARTIAL` instead of presenting an ungoverned transaction string as fully governed account identity.
+CR-1201 addresses the first write-side enforcement slice for validated GitHub issue #674 by
+deferring product cost processing when instrument master data is missing. The cost consumer now
+blocks cost-engine processing, transaction-cost persistence, BUY lot-state persistence, and
+processed-event publication for unresolved product instrument references while preserving FX and
+pure adjustment specialized flows.
 
 ## Health Assessment
 

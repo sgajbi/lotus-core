@@ -36,6 +36,10 @@ downstream operational and analytics-input contracts.
 Transaction settlement cash-account strings can support fallback mapping only after they validate
 against active/effective cash-account master rows for the same portfolio and cash instrument.
 
+`instruments` is the governed instrument identity source for product transaction cost processing and
+new BUY lot-state writes. Product transactions whose instrument master has not arrived are
+retryable reference-data dependencies, not normal cost or lot-state writes.
+
 ### Transactions and cashflows
 
 Primary transaction-flow tables include:

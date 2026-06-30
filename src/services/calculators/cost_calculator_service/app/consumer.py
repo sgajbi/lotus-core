@@ -67,6 +67,12 @@ SERVICE_NAME = "cost-calculator"
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 BUNDLE_A_RECONCILIATION_TYPE = "corporate_action_bundle_a"
 BUNDLE_A_REQUEST_OWNER = "cost-calculator"
+INSTRUMENT_REFERENCE_OPTIONAL_TRANSACTION_TYPES = {
+    ADJUSTMENT_TRANSACTION_TYPE,
+    "FX_SPOT",
+    "FX_FORWARD",
+    "FX_SWAP",
+}
 
 
 def _normalize_event_code(value: object) -> str:
@@ -149,6 +155,12 @@ class PortfolioNotFoundError(Exception):
 
 class UpstreamCashLegUnavailableError(Exception):
     """Raised when a required upstream cash leg is not yet persisted."""
+
+    pass
+
+
+class InstrumentReferenceUnavailableError(Exception):
+    """Raised when a product transaction references an unavailable instrument master."""
 
     pass
 
@@ -296,6 +308,22 @@ class CostCalculatorConsumer(BaseConsumer):
             instrument=instrument,
             repo=repo,
             cost_basis_method=cost_basis_method,
+        )
+
+    @staticmethod
+    def _assert_required_instrument_reference_available(
+        *,
+        event: TransactionEvent,
+        event_transaction_type: str,
+        instrument: Any,
+    ) -> None:
+        if event_transaction_type in INSTRUMENT_REFERENCE_OPTIONAL_TRANSACTION_TYPES:
+            return
+        if instrument is not None:
+            return
+        raise InstrumentReferenceUnavailableError(
+            f"Instrument reference {event.security_id} not found for transaction "
+            f"{event.transaction_id}. Retrying until instrument master data is available."
         )
 
     async def _build_fx_events_to_publish(
@@ -1098,13 +1126,17 @@ class CostCalculatorConsumer(BaseConsumer):
                     raise PortfolioNotFoundError(
                         f"Portfolio {event.portfolio_id} not found. Retrying..."
                     )
-                instrument = await repo.get_instrument(event.security_id)
-
                 (
                     event,
                     event_transaction_type,
                     cost_basis_method,
                 ) = await self._prepare_transaction_event(event, portfolio)
+                instrument = await repo.get_instrument(event.security_id)
+                self._assert_required_instrument_reference_available(
+                    event=event,
+                    event_transaction_type=event_transaction_type,
+                    instrument=instrument,
+                )
                 (
                     events_to_publish,
                     instrument_events_to_publish,
@@ -1143,11 +1175,16 @@ class CostCalculatorConsumer(BaseConsumer):
             logger.error(f"Invalid TransactionEvent; sending to DLQ. Error: {exc}", exc_info=True)
             await self._send_to_dlq_async(msg, ValueError("invalid payload"))
             return
-        if isinstance(exc, (FxRateNotFoundError, UpstreamCashLegUnavailableError)):
+        if isinstance(
+            exc,
+            (
+                FxRateNotFoundError,
+                UpstreamCashLegUnavailableError,
+                InstrumentReferenceUnavailableError,
+            ),
+        ):
             self._record_process_message_failure(event, "retryable_error")
-            logger.warning(
-                "FX dependency not available yet; deferring message without DLQ.", exc_info=True
-            )
+            logger.warning("Required reference data is not available; deferring message.")
             raise RetryableConsumerError(str(exc))
         if isinstance(exc, (DBAPIError, IntegrityError, PortfolioNotFoundError)):
             self._record_process_message_failure(event, "retryable_error")

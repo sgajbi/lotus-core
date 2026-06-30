@@ -54,6 +54,7 @@ acknowledgement, or client advice output.
 | `transaction_costs` | `fee_type`, `amount`, `currency` | Joined as row-level cost evidence and returned without aggregation. |
 | `cashflows` | cashflow row fields linked to the transaction | Joined as row-level linked cashflow evidence when present. |
 | `fx_rates` | `from_currency`, `to_currency`, `rate_date`, `rate` | Used only for optional reporting-currency restatement fields. |
+| `instruments` | `security_id` and instrument master context | Cost-calculator product transaction processing requires this reference before cost fields and processed events are produced. Historical rows written before that guard may still require separate read-side degraded supportability. |
 
 ## Unit Conventions
 
@@ -158,6 +159,7 @@ page.
 | `sort_by` is not in the allowed sort-field set | Falls back to `transaction_date`. |
 | Row-level `transaction_costs` exist | Returned as `costs[]`; this endpoint does not aggregate them into cost curves. |
 | Row-level linked `cashflow` exists | Returned as `cashflow`; this endpoint does not aggregate it into operational cashflow methodology. |
+| Product transaction reaches cost processing before instrument master data is available | Cost consumer defers processing as a retryable reference-data dependency; it does not write calculated costs or emit processed transaction evidence. |
 
 ## Configuration Options
 

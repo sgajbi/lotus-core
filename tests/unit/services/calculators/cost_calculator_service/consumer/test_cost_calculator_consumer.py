@@ -119,7 +119,10 @@ def mock_dependencies():
             return_value=mock_outbox_repo,
         ),
     ):
-        mock_repo.get_instrument.return_value = None
+        mock_repo.get_instrument.return_value = MagicMock(
+            product_type="EQUITY",
+            asset_class="EQUITY",
+        )
         yield {
             "repo": mock_repo,
             "idempotency_repo": mock_idempotency_repo,
@@ -279,6 +282,8 @@ async def test_consumer_integration_with_engine(
         data.pop("net_transaction_amount", None)
         data.pop("average_price", None)
         data.pop("error_reason", None)
+        data.pop("product_type", None)
+        data.pop("asset_class", None)
         return DBTransaction(**data)
 
     mock_repo.update_transaction_costs.side_effect = create_db_tx
@@ -351,6 +356,8 @@ async def test_cost_consumer_direct_path_uses_header_correlation(
         data.pop("net_transaction_amount", None)
         data.pop("average_price", None)
         data.pop("error_reason", None)
+        data.pop("product_type", None)
+        data.pop("asset_class", None)
         return DBTransaction(**data)
 
     mock_repo.update_transaction_costs.side_effect = create_db_tx
@@ -831,6 +838,31 @@ async def test_consumer_defer_when_fx_rate_missing(
     with pytest.raises(RetryableConsumerError):
         await cost_calculator_consumer.process_message(mock_buy_kafka_message)
 
+    cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_consumer_defer_when_instrument_reference_missing(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+    mock_dependencies,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+
+    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD", portfolio_id="PORT_COST_01"
+    )
+    mock_repo.get_instrument.return_value = None
+
+    with pytest.raises(RetryableConsumerError, match="Instrument reference SEC_COST_01 not found"):
+        await cost_calculator_consumer.process_message(mock_buy_kafka_message)
+
+    mock_repo.get_transaction_history.assert_not_called()
+    mock_repo.update_transaction_costs.assert_not_called()
+    mock_repo.upsert_buy_lot_state.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 
 
