@@ -499,7 +499,8 @@ class TransactionProcessingCompletedEvent(CoreEventModel):
     Stage-gate event emitted when transaction processing prerequisites are satisfied.
     Current prerequisite pair:
     - processed transaction record is available
-    - cashflow calculation record is available
+    - cashflow calculation record is available, or the transaction-domain policy marks
+      the concrete processing type as non-cashflow
     """
 
     transaction_id: str

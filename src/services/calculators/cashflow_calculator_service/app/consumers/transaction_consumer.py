@@ -26,6 +26,7 @@ from portfolio_common.transaction_domain import (
     assert_portfolio_flow_cash_entry_mode_allowed,
     is_ca_bundle_a_transaction_type,
     normalize_cash_entry_mode,
+    requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
 )
 from portfolio_common.transaction_domain.control_code_normalization import (
@@ -126,7 +127,6 @@ class CashflowProcessingOutcome(str, Enum):
 
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
-NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 CASHFLOW_COMMIT_OUTCOMES = {
     CashflowProcessingOutcome.PROCESSED,
     CashflowProcessingOutcome.STALE_REPLAY_SKIPPED,
@@ -177,7 +177,7 @@ def _is_non_cashflow_lifecycle_event(
     event: TransactionEvent,
     event_transaction_type: str,
 ) -> bool:
-    if event_transaction_type not in NON_CASHFLOW_EFFECTIVE_PROCESSING_TYPES:
+    if requires_cashflow_processing(event):
         return False
     logger.info(
         "Skipping cashflow creation for non-cash FX contract lifecycle event.",
