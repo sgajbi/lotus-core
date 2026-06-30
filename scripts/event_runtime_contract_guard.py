@@ -44,17 +44,34 @@ class DirectKafkaPublish:
         return f"{self.source}:{self.function_name}: {self.topic}"
 
 
+@dataclass(frozen=True)
+class ConsumerDlqTopicWiring:
+    source: str
+    function_name: str
+    consumer_name: str
+    topic: str | None
+    expression: str
+
+    @property
+    def diagnostic_key(self) -> str:
+        return f"{self.source}:{self.function_name}: {self.consumer_name}"
+
+
 def _literal_string(node: ast.AST) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     return None
 
 
-def _resolve_topic(node: ast.AST) -> str | None:
+def _resolve_topic(node: ast.AST | None, bindings: dict[str, str] | None = None) -> str | None:
+    if node is None:
+        return None
     topic = _literal_string(node)
     if topic is not None:
         return topic
     if isinstance(node, ast.Name):
+        if bindings is not None and node.id in bindings:
+            return bindings[node.id]
         value = getattr(config, node.id, None)
         return value if isinstance(value, str) else None
     return None
@@ -109,12 +126,40 @@ def _is_publish_message_call(node: ast.Call) -> bool:
     return False
 
 
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
+
+
+def _base_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _source_expression(node: ast.AST | None) -> str:
+    if node is None:
+        return "<missing>"
+    try:
+        return ast.unparse(node)
+    except Exception:
+        return node.__class__.__name__
+
+
 class _OutboxEmissionVisitor(ast.NodeVisitor):
-    def __init__(self, source: str) -> None:
+    def __init__(self, source: str, consumer_class_names: set[str] | None = None) -> None:
         self.source = source
         self.function_name = "<module>"
+        self.consumer_class_names = consumer_class_names or set()
         self.emissions: list[OutboxEventEmission] = []
         self.direct_publishes: list[DirectKafkaPublish] = []
+        self.consumer_dlq_wirings: list[ConsumerDlqTopicWiring] = []
+        self._topic_bindings_stack: list[dict[str, str]] = [{}]
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
         self._visit_function(node)
@@ -133,7 +178,7 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
             if emission is not None:
                 self.emissions.append(emission)
         if _is_publish_message_call(node):
-            topic = _resolve_topic(_call_keyword_value(node, "topic"))
+            topic = _resolve_topic(_call_keyword_value(node, "topic"), self._topic_bindings)
             if topic is not None:
                 self.direct_publishes.append(
                     DirectKafkaPublish(
@@ -142,6 +187,32 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
                         topic=topic,
                     )
                 )
+        consumer_name = _call_name(node)
+        dlq_topic_node = _call_keyword_value(node, "dlq_topic")
+        if consumer_name in self.consumer_class_names and dlq_topic_node is not None:
+            self.consumer_dlq_wirings.append(
+                ConsumerDlqTopicWiring(
+                    source=self.source,
+                    function_name=self.function_name,
+                    consumer_name=consumer_name or "<unknown>",
+                    topic=_resolve_topic(dlq_topic_node, self._topic_bindings),
+                    expression=_source_expression(dlq_topic_node),
+                )
+            )
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> Any:
+        topic = _resolve_topic(node.value, self._topic_bindings)
+        if topic is not None:
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    self._topic_bindings[target.id] = topic
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
+        topic = _resolve_topic(node.value, self._topic_bindings)
+        if topic is not None and isinstance(node.target, ast.Name):
+            self._topic_bindings[node.target.id] = topic
         self.generic_visit(node)
 
     def visit_Dict(self, node: ast.Dict) -> Any:
@@ -159,8 +230,14 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
     def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         previous_function_name = self.function_name
         self.function_name = node.name
+        self._topic_bindings_stack.append(self._topic_bindings.copy())
         self.generic_visit(node)
+        self._topic_bindings_stack.pop()
         self.function_name = previous_function_name
+
+    @property
+    def _topic_bindings(self) -> dict[str, str]:
+        return self._topic_bindings_stack[-1]
 
 
 def _is_outbox_details_dict(node: ast.Dict) -> bool:
@@ -171,10 +248,11 @@ def discover_outbox_event_emissions(
     source_root: Path = SOURCE_ROOT,
 ) -> tuple[OutboxEventEmission, ...]:
     emissions: list[OutboxEventEmission] = []
+    consumer_class_names = _discover_consumer_class_names(source_root)
     for source_file in sorted(source_root.rglob("*.py")):
         tree = ast.parse(source_file.read_text(encoding="utf-8"))
         source = _source_label(source_file, source_root)
-        visitor = _OutboxEmissionVisitor(source)
+        visitor = _OutboxEmissionVisitor(source, consumer_class_names=consumer_class_names)
         visitor.visit(tree)
         emissions.extend(visitor.emissions)
     return tuple(
@@ -186,13 +264,54 @@ def discover_direct_kafka_publishes(
     source_root: Path = SOURCE_ROOT,
 ) -> tuple[DirectKafkaPublish, ...]:
     publishes: list[DirectKafkaPublish] = []
+    consumer_class_names = _discover_consumer_class_names(source_root)
     for source_file in sorted(source_root.rglob("*.py")):
         tree = ast.parse(source_file.read_text(encoding="utf-8"))
         source = _source_label(source_file, source_root)
-        visitor = _OutboxEmissionVisitor(source)
+        visitor = _OutboxEmissionVisitor(source, consumer_class_names=consumer_class_names)
         visitor.visit(tree)
         publishes.extend(visitor.direct_publishes)
     return tuple(sorted(set(publishes), key=lambda item: (item.topic, item.source)))
+
+
+def discover_consumer_dlq_topic_wirings(
+    source_root: Path = SOURCE_ROOT,
+) -> tuple[ConsumerDlqTopicWiring, ...]:
+    wirings: list[ConsumerDlqTopicWiring] = []
+    consumer_class_names = _discover_consumer_class_names(source_root)
+    for source_file in sorted(source_root.rglob("*.py")):
+        tree = ast.parse(source_file.read_text(encoding="utf-8"))
+        source = _source_label(source_file, source_root)
+        visitor = _OutboxEmissionVisitor(source, consumer_class_names=consumer_class_names)
+        visitor.visit(tree)
+        wirings.extend(visitor.consumer_dlq_wirings)
+    return tuple(
+        sorted(
+            set(wirings),
+            key=lambda item: (item.topic or "", item.consumer_name, item.source),
+        )
+    )
+
+
+def _discover_consumer_class_names(source_root: Path = SOURCE_ROOT) -> set[str]:
+    class_bases: dict[str, set[str]] = {}
+    for source_file in sorted(source_root.rglob("*.py")):
+        tree = ast.parse(source_file.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                class_bases[node.name] = {
+                    base_name for base in node.bases if (base_name := _base_name(base)) is not None
+                }
+
+    consumer_class_names = {"BaseConsumer"}
+    changed = True
+    while changed:
+        changed = False
+        for class_name, base_names in class_bases.items():
+            if class_name not in consumer_class_names and base_names & consumer_class_names:
+                consumer_class_names.add(class_name)
+                changed = True
+    return consumer_class_names
 
 
 def _source_label(source_file: Path, source_root: Path) -> str:
@@ -209,6 +328,7 @@ def evaluate_outbox_event_contracts(
     direct_topic_definitions: tuple[
         DirectKafkaTopicDefinition, ...
     ] = DIRECT_KAFKA_TOPIC_DEFINITIONS,
+    consumer_dlq_wirings: tuple[ConsumerDlqTopicWiring, ...] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     available_models = {
@@ -226,6 +346,11 @@ def evaluate_outbox_event_contracts(
     emissions = discover_outbox_event_emissions() if emissions is None else emissions
     direct_publishes = (
         discover_direct_kafka_publishes() if direct_publishes is None else direct_publishes
+    )
+    consumer_dlq_wirings = (
+        discover_consumer_dlq_topic_wirings()
+        if consumer_dlq_wirings is None
+        else consumer_dlq_wirings
     )
     definitions_by_event_type = {
         definition.event_type: definition for definition in event_definitions
@@ -250,6 +375,19 @@ def evaluate_outbox_event_contracts(
         if publish.topic not in direct_topics:
             errors.append(
                 f"{publish.diagnostic_key} publishes a direct Kafka topic missing from the "
+                "RFC-0083 direct Kafka topic catalog"
+            )
+
+    for wiring in consumer_dlq_wirings:
+        if wiring.topic is None:
+            errors.append(
+                f"{wiring.diagnostic_key} wires an unresolved BaseConsumer DLQ topic "
+                f"expression {wiring.expression!r}"
+            )
+            continue
+        if wiring.topic not in direct_topics:
+            errors.append(
+                f"{wiring.diagnostic_key} wires DLQ topic {wiring.topic!r} missing from the "
                 "RFC-0083 direct Kafka topic catalog"
             )
 

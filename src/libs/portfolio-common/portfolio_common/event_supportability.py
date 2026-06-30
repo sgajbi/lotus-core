@@ -476,6 +476,17 @@ DIRECT_KAFKA_TOPIC_DEFINITIONS: tuple[DirectKafkaTopicDefinition, ...] = (
         supportability_evidence=(DATA_QUALITY_COVERAGE_REPORT,),
         source_data_products=("PortfolioTimeseriesInput",),
     ),
+    DirectKafkaTopicDefinition(
+        name="PersistenceServiceDlq",
+        topic="dlq.persistence_service",
+        semantic_type="consumer_dlq",
+        producer_service="BaseConsumer",
+        consumer_services=("event_replay_service", "ingestion_service"),
+        payload_contract="base_consumer_dlq_payload",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    ),
 )
 
 
@@ -745,13 +756,17 @@ def _validate_direct_kafka_topic(
     )
     if (
         available_models is not None
-        and not topic_definition.payload_contract.endswith("_command")
+        and _direct_topic_payload_requires_schema(topic_definition.payload_contract)
         and payload_contract not in available_models
     ):
         raise ValueError(
             f"{topic_definition.name} references missing payload contract: "
             f"{topic_definition.payload_contract}"
         )
+
+
+def _direct_topic_payload_requires_schema(payload_contract: str) -> bool:
+    return not payload_contract.endswith(("_command", "_payload"))
 
 
 def _require_direct_topic_headers(topic_definition: DirectKafkaTopicDefinition) -> None:
