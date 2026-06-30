@@ -74,6 +74,10 @@ depend on raw internal exception text for the migrated representative paths.
 - Control-plane OpenAPI tests assert the migrated integration source-data discovery examples are
   documented under `application/problem+json` and keep legacy `application/json` examples limited to
   route families that have not yet migrated.
+- Mandate-scoped integration source route tests now assert client restriction, sustainability
+  preference, client tax, client cashflow/liquidity, external treasury, and external OMS missing
+  mandate-binding failures raise or return `QCP_INTEGRATION_SOURCE_NOT_FOUND` with exact
+  source-product, portfolio, and reason metadata.
 
 ## Validation Evidence
 
@@ -99,6 +103,8 @@ depend on raw internal exception text for the migrated representative paths.
   passed with 105 tests.
 - `python -m pytest tests/unit/services/query_control_plane_service/routers/test_response_helpers.py tests/unit/services/query_control_plane_service/routers/test_integration_router.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_benchmark_reference_parameters tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_integration_source_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_portfolio_source_evidence_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_analytics_input_parameters_and_examples -q`
   passed with 109 tests after the review-driven 422 validation-media fix.
+- `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_mandate_scoped_source_routes_missing_binding_map_to_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_integration_source_problem_details -q`
+  passed with 84 tests.
 - `python -m ruff check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
   passed.
 - `python -m ruff format --check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
@@ -136,6 +142,10 @@ targets, PM book memberships, CIO affected cohorts, DPM portfolio universe candi
 bindings now expose stable `QCP_INTEGRATION_SOURCE_NOT_FOUND` metadata. DPM portfolio-universe
 invalid request failures now expose `QCP_INTEGRATION_SOURCE_INVALID_REQUEST`. Existing HTTP status
 codes are preserved.
+For the migrated mandate-scoped source routes, missing discretionary mandate bindings now expose
+stable `QCP_INTEGRATION_SOURCE_NOT_FOUND` payloads with the source product, portfolio ID, and
+`not_found` reason. Existing HTTP status codes, routes, request/success DTOs, service calls, and
+source-data envelopes are preserved.
 
 ## Documentation And Wiki Decision
 
