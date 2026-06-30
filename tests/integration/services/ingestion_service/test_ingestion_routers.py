@@ -87,6 +87,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self.job_payloads: dict[str, dict] = {}
             self.failures: dict[str, list[dict]] = {}
             self.replay_audit: dict[str, dict] = {}
+            self.fail_replay_audit_statuses: set[str] = set()
             self.fail_mark_queued_job_ids: set[str] = set()
             self.fail_mark_retried_job_ids: set[str] = set()
             self.fail_next_mark_queued = False
@@ -789,6 +790,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             correlation_missing_reason: str | None = None,
             alternate_lookup_key: str | None = None,
         ) -> str:
+            if replay_status in self.fail_replay_audit_statuses:
+                raise RuntimeError("replay audit write failed")
             replay_id = f"replay_test_{len(self.replay_audit) + 1}"
             self.replay_audit[replay_fingerprint] = {
                 "replay_id": replay_id,
@@ -5116,6 +5119,47 @@ async def test_replay_consumer_dlq_event_reports_not_replayable_without_correlat
     }
 
 
+async def test_replay_consumer_dlq_event_reports_audit_write_failure_for_dry_run(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_REPLAY_AUDIT_FAIL_DRY_RUN_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+    await async_test_client.post(
+        "/ingest/transactions",
+        headers={"X-Correlation-Id": "ING:test-correlation-id"},
+        json=payload,
+    )
+    ingestion_test_harness["fake_job_service"].fail_replay_audit_statuses.add("dry_run")
+
+    response = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        json={"dry_run": True},
+    )
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail["code"] == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
+    assert detail["replay_status"] == "dry_run"
+    assert detail["replay_fingerprint"]
+
+
 async def test_replay_consumer_dlq_event_returns_not_found_for_missing_event(
     event_replay_test_client: httpx.AsyncClient,
 ):
@@ -5224,6 +5268,51 @@ async def test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publi
     )
     assert second.status_code == 200
     assert second.json()["replay_status"] == "duplicate_blocked"
+
+
+async def test_replay_consumer_dlq_event_reports_audit_write_failure_after_publish(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = {
+        "transactions": [
+            {
+                "transaction_id": "TX_REPLAY_AUDIT_FAIL_AFTER_PUBLISH_001",
+                "portfolio_id": "P1",
+                "instrument_id": "I1",
+                "security_id": "S1",
+                "transaction_date": "2025-08-12T10:00:00Z",
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "price": 1,
+                "gross_transaction_amount": 1,
+                "trade_currency": "USD",
+                "currency": "USD",
+            }
+        ]
+    }
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        headers={"X-Correlation-Id": "ING:test-correlation-id"},
+        json=payload,
+    )
+    job_id = ingest_response.json()["job_id"]
+    fake_job_service = ingestion_test_harness["fake_job_service"]
+    fake_job_service.fail_mark_queued_job_ids.add(job_id)
+    fake_job_service.fail_replay_audit_statuses.add("replayed_bookkeeping_failed")
+
+    response = await event_replay_test_client.post(
+        "/ingestion/dlq/consumer-events/cdlq_test_001/replay",
+        json={"dry_run": False},
+    )
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert detail["code"] == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
+    assert detail["replay_status"] == "replayed_bookkeeping_failed"
+    assert detail["job_id"] == job_id
+    assert detail["replay_fingerprint"]
 
 
 async def test_ingestion_replay_audit_list_and_get_filters_full_rows(

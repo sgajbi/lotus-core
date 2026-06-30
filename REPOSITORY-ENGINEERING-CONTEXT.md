@@ -113,6 +113,11 @@ Current repository posture:
     forensics. The first implementation covers shared Kafka DLQ persistence, consumer DLQ read
     DTOs, replay response DTOs, replay-audit persistence, and missing-correlation not-replayable
     replay responses.
+25. Replay audit recording is mandatory for ingestion-job retry and consumer-DLQ replay workflows.
+    Replay outcomes must not be acknowledged when audit persistence fails; affected endpoints return
+    `INGESTION_REPLAY_AUDIT_WRITE_FAILED` with recovery path, event/job identity, replay status, and
+    deterministic fingerprint so operators can restore audit persistence and retry through the
+    governed endpoint.
 
 ## Architecture And Module Map
 

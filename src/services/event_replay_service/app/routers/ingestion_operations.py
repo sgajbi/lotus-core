@@ -509,6 +509,18 @@ INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE = {
     }
 }
 
+INGESTION_REPLAY_AUDIT_WRITE_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_REPLAY_AUDIT_WRITE_FAILED",
+        "message": "Replay audit could not be recorded; replay outcome was not acknowledged.",
+        "recovery_path": "ingestion_job_retry",
+        "event_id": "job:job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+        "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+        "replay_status": "replayed_bookkeeping_failed",
+        "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+    }
+}
+
 INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE = {
     "detail": {
         "code": "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND",
@@ -624,7 +636,7 @@ def _filter_payload_by_record_keys(
     return payload_filter(payload, key_set)
 
 
-async def _record_replay_audit_best_effort(
+async def _record_mandatory_replay_audit(
     *,
     ingestion_job_service: IngestionJobService,
     recovery_path: str,
@@ -637,7 +649,9 @@ async def _record_replay_audit_best_effort(
     dry_run: bool,
     replay_reason: str,
     requested_by: str | None,
-) -> str | None:
+    correlation_missing_reason: str | None = None,
+    alternate_lookup_key: str | None = None,
+) -> str:
     try:
         return await ingestion_job_service.record_consumer_dlq_replay_audit(
             recovery_path=recovery_path,
@@ -650,10 +664,12 @@ async def _record_replay_audit_best_effort(
             dry_run=dry_run,
             replay_reason=replay_reason,
             requested_by=requested_by,
+            correlation_missing_reason=correlation_missing_reason,
+            alternate_lookup_key=alternate_lookup_key,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception(
-            "Failed to record replay audit row.",
+            "Mandatory replay audit recording failed.",
             extra={
                 "recovery_path": recovery_path,
                 "event_id": event_id,
@@ -661,7 +677,20 @@ async def _record_replay_audit_best_effort(
                 "replay_status": replay_status,
             },
         )
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_REPLAY_AUDIT_WRITE_FAILED",
+                "message": (
+                    "Replay audit could not be recorded; replay outcome was not acknowledged."
+                ),
+                "recovery_path": recovery_path,
+                "event_id": event_id,
+                "job_id": job_id,
+                "replay_status": replay_status,
+                "replay_fingerprint": replay_fingerprint,
+            },
+        ) from exc
 
 
 async def _replay_job_payload(
@@ -958,9 +987,18 @@ async def get_ingestion_job_records(
             },
         },
         500: {
-            "description": "Replay publish succeeded but retry bookkeeping failed.",
+            "description": "Replay audit or retry bookkeeping failed.",
             "content": {
-                "application/json": {"example": INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE}
+                "application/json": {
+                    "examples": {
+                        "retry_bookkeeping_failed": {
+                            "value": INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE
+                        },
+                        "replay_audit_write_failed": {
+                            "value": INGESTION_REPLAY_AUDIT_WRITE_FAILED_EXAMPLE
+                        },
+                    }
+                }
             },
         },
     },
@@ -1105,7 +1143,8 @@ async def _record_ingestion_job_retry_audit(
     replay_reason: str,
     requested_by: str | None,
 ) -> None:
-    await ingestion_job_service.record_consumer_dlq_replay_audit(
+    await _record_mandatory_replay_audit(
+        ingestion_job_service=ingestion_job_service,
         recovery_path="ingestion_job_retry",
         event_id=f"job:{job_id}",
         replay_fingerprint=replay_fingerprint,
@@ -1248,9 +1287,11 @@ async def _mark_ingestion_job_retry_replayed(
             replay_reason="Ingestion job retry replay succeeded.",
             requested_by=ops_actor,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
-        replay_audit_id = await _record_replay_audit_best_effort(
+        replay_audit_id = await _record_mandatory_replay_audit(
             ingestion_job_service=ingestion_job_service,
             recovery_path="ingestion_job_retry",
             event_id=f"job:{job_id}",
@@ -1262,6 +1303,8 @@ async def _mark_ingestion_job_retry_replayed(
             dry_run=False,
             replay_reason=replay_reason,
             requested_by=ops_actor,
+            correlation_missing_reason="ingestion_job_retry_uses_job_id",
+            alternate_lookup_key=f"job:{job_id}",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1805,6 +1848,18 @@ async def list_consumer_dlq_events(
                 "application/json": {"example": INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE}
             },
         },
+        500: {
+            "description": "Replay audit, publish, or replay bookkeeping failed.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "replay_audit_write_failed": {
+                            "value": INGESTION_REPLAY_AUDIT_WRITE_FAILED_EXAMPLE
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 async def replay_consumer_dlq_event(
@@ -2109,7 +2164,8 @@ async def _record_consumer_dlq_replay_response(
     ingestion_job_service: IngestionJobService,
     requested_by: str | None,
 ) -> ConsumerDlqReplayResponse:
-    replay_audit_id = await ingestion_job_service.record_consumer_dlq_replay_audit(
+    replay_audit_id = await _record_mandatory_replay_audit(
+        ingestion_job_service=ingestion_job_service,
         recovery_path="consumer_dlq_replay",
         event_id=event_id,
         replay_fingerprint=replay_fingerprint,
@@ -2190,7 +2246,8 @@ async def _publish_consumer_dlq_replay(
             replay_payload_dispatcher=replay_payload_dispatcher,
         )
     except Exception as exc:
-        replay_audit_id = await ingestion_job_service.record_consumer_dlq_replay_audit(
+        replay_audit_id = await _record_mandatory_replay_audit(
+            ingestion_job_service=ingestion_job_service,
             recovery_path="consumer_dlq_replay",
             event_id=event_id,
             replay_fingerprint=replay_fingerprint,
@@ -2238,9 +2295,11 @@ async def _mark_consumer_dlq_replay_replayed(
             ingestion_job_service=ingestion_job_service,
             requested_by=requested_by,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
-        replay_audit_id = await _record_replay_audit_best_effort(
+        replay_audit_id = await _record_mandatory_replay_audit(
             ingestion_job_service=ingestion_job_service,
             recovery_path="consumer_dlq_replay",
             event_id=event_id,
