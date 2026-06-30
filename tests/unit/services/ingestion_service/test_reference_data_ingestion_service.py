@@ -596,6 +596,37 @@ async def test_upsert_benchmark_definitions_normalizes_benchmark_currency() -> N
 
 
 @pytest.mark.asyncio
+async def test_upsert_benchmark_definitions_maps_canonical_lineage_to_legacy_columns() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+    observed_at = datetime.fromisoformat("2026-01-31T23:00:00+00:00")
+
+    await service.upsert_benchmark_definitions(
+        [
+            {
+                "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+                "benchmark_name": "Global Balanced 60/40 Total Return",
+                "benchmark_type": "composite",
+                "benchmark_currency": "USD",
+                "return_convention": "total_return_index",
+                "effective_from": "2025-01-01",
+                "source_system": "MSCI",
+                "source_record_id": "bmk_v20260131",
+                "observed_at": observed_at,
+                "quality_status": "accepted",
+            }
+        ]
+    )
+
+    compiled_params = db.execute.await_args.args[0].compile().params
+    assert compiled_params["source_vendor_m0"] == "MSCI"
+    assert compiled_params["source_timestamp_m0"] == observed_at
+    assert "source_system_m0" not in compiled_params
+    assert "observed_at_m0" not in compiled_params
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method_name", "record", "compiled_param"),
     [

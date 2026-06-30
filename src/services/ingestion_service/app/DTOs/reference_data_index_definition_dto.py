@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import cast
 
 from portfolio_common.currency_codes import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class IndexDefinitionRecord(BaseModel):
+
+class IndexDefinitionRecord(SourceObservationLineage):
     index_id: str = Field(
         ..., description="Canonical index identifier.", examples=["IDX_MSCI_WORLD_TR"]
     )
@@ -48,16 +50,6 @@ class IndexDefinitionRecord(BaseModel):
     effective_to: date | None = Field(
         None, description="Definition effective end date.", examples=["2026-12-31"]
     )
-    source_timestamp: datetime | None = Field(
-        None,
-        description="Source publication timestamp for the index definition payload.",
-        examples=["2026-01-31T23:00:00Z"],
-    )
-    source_vendor: str | None = Field(None, description="Source vendor.", examples=["MSCI"])
-    source_record_id: str | None = Field(
-        None, description="Source record identifier.", examples=["idx_v20260131"]
-    )
-    quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
 
     @field_validator("index_currency", mode="before")
     @classmethod

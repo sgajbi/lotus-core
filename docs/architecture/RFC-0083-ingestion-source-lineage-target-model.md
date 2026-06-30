@@ -79,6 +79,18 @@ Canonical source-batch fingerprints trim text fields, normalize `observed_at` to
 datetimes. This prevents equivalent source evidence from splitting into different batch identities due
 to formatting or timezone representation drift.
 
+## Source Observation DTO Alignment
+
+Runtime alignment has started for reference-data ingestion DTOs. Benchmark, index, risk-free, and
+classification ingestion records now use the canonical source-observation field names
+`source_system`, `source_record_id`, `observed_at`, and `quality_status` at the API contract
+boundary. Legacy `source_vendor` and `source_timestamp` payload fields remain accepted as input
+aliases and are mapped back to the existing storage columns until a dedicated persistence migration is
+approved.
+
+This keeps the API vocabulary moving toward the source-lineage target model without breaking
+existing source adapters or database consumers.
+
 ## Validation Report Contract
 
 Target validation reports must include:

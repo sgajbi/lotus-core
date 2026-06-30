@@ -102,6 +102,11 @@ Current repository posture:
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
     `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
     transaction event and portfolio tax-lot source-data mappings.
+23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
+    benchmark, index, risk-free, and classification families. The canonical API-facing fields are
+    `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
+    `source_vendor` and `source_timestamp` inputs remain accepted and are mapped to the existing
+    storage columns until persistence migrations are explicitly approved.
 
 ## Architecture And Module Map
 
