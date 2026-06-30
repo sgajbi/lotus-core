@@ -42,23 +42,23 @@
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_definition_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1054",
-            "reason": "Existing benchmark definition ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1054 / CR-1211",
+            "reason": "Benchmark definition ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_composition_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1054",
-            "reason": "Existing benchmark composition ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1054 / CR-1211",
+            "reason": "Benchmark composition ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_benchmark_return_series_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1054",
-            "reason": "Existing benchmark return-series ingestion DTO field moved from reference_data_benchmark_records_dto.py during benchmark DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1054 / CR-1211",
+            "reason": "Benchmark return-series ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_index_series_dto.py",
@@ -70,37 +70,37 @@
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_index_definition_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1053",
-            "reason": "Existing index definition ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1053 / CR-1211",
+            "reason": "Index definition ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_index_price_series_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1053",
-            "reason": "Existing index price-series ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1053 / CR-1211",
+            "reason": "Index price-series ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_index_return_series_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1053",
-            "reason": "Existing index return-series ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1053 / CR-1211",
+            "reason": "Index return-series ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_risk_free_series_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1053",
-            "reason": "Existing risk-free series ingestion DTO field moved from reference_data_index_series_dto.py during index/risk-free DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1053 / CR-1211",
+            "reason": "Risk-free series ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_support_dto.py",
             "field": "source_timestamp",
-            "expectedCount": 1,
-            "ownerSlice": "Slice 7 / CR-1036",
-            "reason": "Existing classification taxonomy ingestion DTO field moved from reference_data_dto.py during support-reference DTO modularization. New source-observation fields must use observed_at."
+            "expectedCount": 0,
+            "ownerSlice": "Slice 7 / CR-1036 / CR-1211",
+            "reason": "Classification taxonomy ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
             "path": "src/services/query_service/app/dtos/reference_integration_dto.py",
