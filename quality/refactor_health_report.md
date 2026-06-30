@@ -15,7 +15,7 @@ tested modules.
 | --- | --- | --- |
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
-| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, and unit collection gates while other baseline checks remain report-only |
+| Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, unit collection, and workflow-governance gates while other baseline checks remain report-only |
 | Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the runtime-safe unit lane with 2,964 tests |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
@@ -30,12 +30,11 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1164 hardens workflow fail-closed governance by adding a bounded timeout to the PR auto-merge
-queue job and regression tests that require every workflow job to define a positive timeout. It also
-restricts `continue-on-error` to documented report-only scope: the app-validation report job and
-named quality-baseline report-only steps. Focused workflow-governance tests now pass with 8 tests,
-all 5 workflow YAML files parse, and the `lotus-core-validation-report` job remains report-only
-under the existing CR-1107 promotion policy instead of being silently promoted or weakened.
+CR-1165 promotes workflow fail-closed governance into a first-class quality-baseline gate. The new
+`make quality-workflow-governance-gate` target runs the focused workflow contract tests, and the
+quality-baseline workflow now exposes the same target as `Quality Baseline / Workflow Governance
+Gate`. Focused workflow-governance tests now pass with 9 tests, all 5 workflow YAML files parse, and
+the gate remains fast because it does not add Docker or integration workload.
 
 ## Health Assessment
 
@@ -1929,3 +1928,8 @@ health before that claim is defensible.
      timeout and restrict `continue-on-error` to documented report-only scope. Focused workflow
      tests passed with 8 tests; scoped Ruff lint and format checks passed; all 5 workflow YAML files
      parsed successfully.
+316. Promoted workflow fail-closed governance into the progressive quality lane by adding
+     `make quality-workflow-governance-gate`, wiring it into `.github/workflows/quality-baseline.yml`
+     as `Quality Baseline / Workflow Governance Gate`, and adding a regression assertion that the
+     workflow runs the Make target. The Make gate passed with 9 tests; scoped Ruff lint and format
+     checks passed; all 5 workflow YAML files parsed successfully.

@@ -190,3 +190,12 @@ def test_continue_on_error_is_limited_to_documented_report_only_scope() -> None:
 
     assert unexpected_non_blocking_jobs == []
     assert unexpected_non_blocking_steps == []
+
+
+def test_quality_baseline_runs_workflow_governance_gate() -> None:
+    workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
+    makefile_text = Path("Makefile").read_text(encoding="utf-8")
+
+    assert "quality-workflow-governance-gate:" in makefile_text
+    assert "Quality Baseline / Workflow Governance Gate" in workflow_text
+    assert "make quality-workflow-governance-gate" in workflow_text
