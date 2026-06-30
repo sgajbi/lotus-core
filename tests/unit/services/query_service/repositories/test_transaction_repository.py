@@ -515,6 +515,41 @@ async def test_list_performance_component_economics_evidence_selects_latest_cash
     )
     assert "trim(transactions.security_id) IN ('EQ_US_AAPL')" in compiled_query
     assert "transactions.transaction_type IN ('DIVIDEND')" in compiled_query
+    assert "ORDER BY trim(transactions.security_id) ASC" in compiled_query
+    assert "date(transactions.transaction_date) ASC" in compiled_query
+    assert "transactions.transaction_id ASC" in compiled_query
+
+
+async def test_list_performance_component_economics_evidence_applies_cursor_and_limit(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    mock_rows = MagicMock()
+    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    mock_db_session.execute = AsyncMock(return_value=mock_rows)
+
+    rows = await repository.list_performance_component_economics_evidence(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 30),
+        as_of_date=date(2026, 5, 3),
+        security_ids=["EQ_US_AAPL", "EQ_US_MSFT"],
+        transaction_types=["DIVIDEND", "BUY"],
+        after_key=("EQ_US_AAPL", "2026-04-10", "TXN-001"),
+        limit=11,
+    )
+
+    assert len(rows) == 1
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(transactions.security_id) IN ('EQ_US_AAPL', 'EQ_US_MSFT')" in compiled_query
+    assert "transactions.transaction_type IN ('DIVIDEND', 'BUY')" in compiled_query
+    assert "trim(transactions.security_id) > 'EQ_US_AAPL'" in compiled_query
+    assert "date(transactions.transaction_date) > '2026-04-10'" in compiled_query
+    assert "transactions.transaction_id > 'TXN-001'" in compiled_query
+    assert "ORDER BY trim(transactions.security_id) ASC" in compiled_query
+    assert "date(transactions.transaction_date) ASC" in compiled_query
+    assert "transactions.transaction_id ASC" in compiled_query
+    assert "LIMIT 11" in compiled_query
 
 
 async def test_list_realized_tax_evidence_transactions_filters_explicit_tax_evidence(

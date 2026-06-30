@@ -1178,6 +1178,14 @@ async def test_get_performance_component_economics_success_path() -> None:
             "request_fingerprint": "fp-performance-economics",
             "rows": [],
             "component_totals": [],
+            "component_totals_scope": "returned_page",
+            "page": {
+                "page_size": 250,
+                "sort_key": "security_id:asc,transaction_date:asc,transaction_id:asc",
+                "returned_component_count": 0,
+                "request_scope_fingerprint": "fp-performance-economics",
+                "next_page_token": None,
+            },
             "supportability": {
                 "state": "UNAVAILABLE",
                 "reason": "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND",
@@ -1227,6 +1235,26 @@ async def test_get_performance_component_economics_maps_missing_portfolio_to_404
         )
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_performance_component_economics_maps_bad_token_to_400() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_performance_component_economics = AsyncMock(
+        side_effect=ValueError("bad token")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_performance_component_economics(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PerformanceComponentEconomicsRequest(
+                as_of_date="2026-05-10",
+                window={"start_date": "2026-05-01", "end_date": "2026-05-10"},
+            ),
+            integration_service=mock_service,
+        )
+
+    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio

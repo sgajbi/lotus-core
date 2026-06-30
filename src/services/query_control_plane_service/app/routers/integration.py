@@ -194,6 +194,9 @@ TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE = {
 PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE = {
     "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
 }
+PERFORMANCE_COMPONENT_ECONOMICS_BAD_REQUEST_EXAMPLE = {
+    "detail": "Performance component economics page token does not match request scope."
+}
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 
 
@@ -649,6 +652,10 @@ async def get_transaction_cost_curve(
             "Portfolio not found",
             PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE,
         ),
+        400: problem_response(
+            "Invalid performance component economics request",
+            PERFORMANCE_COMPONENT_ECONOMICS_BAD_REQUEST_EXAMPLE,
+        ),
     },
     openapi_extra=source_data_product_openapi_extra("PerformanceComponentEconomics"),
 )
@@ -668,6 +675,8 @@ async def get_performance_component_economics(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post(

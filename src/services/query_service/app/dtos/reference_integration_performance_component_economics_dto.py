@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .reference_integration_common_dto import IntegrationWindow
+from .reference_integration_dto import ReferencePageMetadata, ReferencePageRequest
 from .source_data_product_identity import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
@@ -71,6 +72,13 @@ class PerformanceComponentEconomicsRequest(BaseModel):
             "Tenant scope for future policy enforcement. Null until tenant partitioning is active."
         ),
         examples=["tenant_sg_pb"],
+    )
+    page: ReferencePageRequest = Field(
+        default_factory=ReferencePageRequest,
+        description=(
+            "Cursor paging controls for row-level component economics evidence. Component totals "
+            "are scoped to the returned page."
+        ),
     )
 
     @model_validator(mode="after")
@@ -265,7 +273,7 @@ class PerformanceComponentEconomicsTotal(BaseModel):
 
 
 class PerformanceComponentEconomicsSupportability(BaseModel):
-    state: Literal["READY", "UNAVAILABLE"] = Field(
+    state: Literal["READY", "DEGRADED", "UNAVAILABLE"] = Field(
         ...,
         description="Supportability state for source-authored performance component economics.",
         examples=["READY"],
@@ -331,7 +339,18 @@ class PerformanceComponentEconomicsResponse(SourceDataProductRuntimeMetadata):
     )
     component_totals: list[PerformanceComponentEconomicsTotal] = Field(
         default_factory=list,
-        description="Grouped source-authored component economics totals.",
+        description="Grouped source-authored component economics totals for the returned page.",
+    )
+    component_totals_scope: Literal["returned_page"] = Field(
+        "returned_page",
+        description=(
+            "Scope for component_totals. This contract reports totals for rows in the current "
+            "response page, not for the full requested window."
+        ),
+    )
+    page: ReferencePageMetadata = Field(
+        ...,
+        description="Cursor metadata for returned row-level component economics evidence.",
     )
     supportability: PerformanceComponentEconomicsSupportability = Field(
         ..., description="Supportability and coverage posture for the response."

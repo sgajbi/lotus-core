@@ -13,9 +13,9 @@
 
 The product reads `transactions` for the requested `portfolio_id`, inclusive transaction-date
 window, and `as_of_date` bound. Optional `security_ids` and `transaction_types` narrow the source
-rows. The inclusive transaction-date window must be 366 days or less until a paged or export
-contract exists. It joins `transaction_costs` and the latest `cashflows` epoch for each
-transaction.
+rows. The inclusive transaction-date window remains capped at 366 days. It joins
+`transaction_costs` and the latest `cashflows` epoch for each transaction. The row-level evidence
+read is cursor-paged with `page.page_size + 1` source-row budgeting.
 
 ## Deterministic Row Selection
 
@@ -28,8 +28,21 @@ Rows are selected when:
 5. the inclusive request window is 366 days or less,
 6. optional security and transaction-type filters match after canonical normalization.
 
-Rows are ordered by `security_id`, `transaction_date`, and `transaction_id`. Linked cashflows are
-selected deterministically by highest `cashflows.epoch`, then highest `cashflows.id`.
+Rows are ordered by normalized `security_id`, transaction date, and `transaction_id`. Linked
+cashflows are selected deterministically by highest `cashflows.epoch`, then highest `cashflows.id`.
+
+## Paging
+
+The request accepts optional cursor paging controls through `page.page_size` and
+`page.page_token`. Page tokens are scoped to the full request fingerprint, including portfolio,
+window, `as_of_date`, filters, and tenant. Tokens from another request scope are rejected with HTTP
+400 by the query control plane.
+
+Repository reads request `page_size + 1` ordered rows to determine `has_more` without materializing
+the full transaction window. Response `page.sort_key` is
+`security_id:asc,transaction_date:asc,transaction_id:asc`; `page.returned_component_count` reports
+the number of row-level economics records returned in the current response, and
+`page.next_page_token` is present only when another page exists.
 
 ## Component Families
 
@@ -50,8 +63,10 @@ Zero or absent fields remain zero or null. The product does not fabricate missin
 
 ## Totals
 
-`component_totals` groups non-zero component amounts by `component_family` and currency. Fee totals
-use `trade_fee_currency`, cashflow totals use `cashflow_currency`, income and tax totals use the
+`component_totals` groups non-zero component amounts by `component_family` and currency for the
+returned page. `component_totals_scope` is always `returned_page`; consumers that need full-window
+totals must iterate all pages or request a future aggregate contract. Fee totals use
+`trade_fee_currency`, cashflow totals use `cashflow_currency`, income and tax totals use the
 transaction economics currency, and realized `*_pnl_base` totals use the portfolio base currency.
 Row-level realized `*_pnl_local` fields carry `realized_pnl_local_currency`, normally the
 transaction trade currency, so consumers do not infer local P&L currency from book currency. Tax
@@ -65,10 +80,13 @@ must not treat `MIXED` as an ISO currency.
 
 ## Supportability
 
-`READY` means at least one source row was returned. `UNAVAILABLE` means the portfolio exists but no
-source rows matched the requested scope. `observed_component_families` and
-`missing_component_families` describe coverage; downstream consumers must decide which families are
-required for a specific performance workflow.
+`READY` means at least one source row was returned and no additional page is indicated. `DEGRADED`
+with reason `PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL` means the current response is a valid
+partial page and `page.next_page_token` must be followed to exhaust the requested window.
+`UNAVAILABLE` means the portfolio exists but no source rows matched the requested scope.
+`observed_component_families` and `missing_component_families` describe coverage for the returned
+page; downstream consumers must decide which families are required for a specific performance
+workflow.
 
 ## Explicit Non-Claims
 
