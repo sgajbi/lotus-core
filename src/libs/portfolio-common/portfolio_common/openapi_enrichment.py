@@ -276,8 +276,36 @@ def attach_enriched_openapi(app: FastAPI, *, service_name: str) -> FastAPI:
 
 
 def _ensure_metrics_response_content(schema: dict[str, Any]) -> None:
-    metrics_response = (
-        schema.get("paths", {}).get("/metrics", {}).get("get", {}).get("responses", {}).get("200")
+    metrics_operation = schema.get("paths", {}).get("/metrics", {}).get("get")
+    if not isinstance(metrics_operation, dict):
+        return
+    metrics_operation["summary"] = "Prometheus metrics scrape endpoint"
+    metrics_operation["description"] = (
+        "Operational Prometheus scrape endpoint. This is not a public business API; access is "
+        "governed by the shared metrics access policy and should be reachable only by authorized "
+        "scrapers or a private metrics network."
     )
+    metrics_operation["tags"] = ["Monitoring"]
+    responses = metrics_operation.setdefault("responses", {})
+    metrics_response = responses.setdefault("200", {"description": "Prometheus metrics payload."})
     if isinstance(metrics_response, dict):
         metrics_response["content"] = {"text/plain": {"schema": {"type": "string"}}}
+    responses.setdefault(
+        "403",
+        {
+            "description": "Metrics scrape was denied by the shared metrics access policy.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "METRICS_ACCESS_DENIED",
+                            "message": (
+                                "Metrics endpoint access is restricted to authorized scrapers."
+                            ),
+                            "metrics_access_mode": "bearer_token",
+                        }
+                    }
+                }
+            },
+        },
+    )

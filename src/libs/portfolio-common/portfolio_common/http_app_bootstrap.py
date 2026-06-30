@@ -1,6 +1,9 @@
 import logging
+import os
 import re
 import time
+from dataclasses import dataclass
+from hmac import compare_digest
 from typing import Any
 from uuid import uuid4
 
@@ -22,6 +25,57 @@ from portfolio_common.openapi_enrichment import enrich_openapi_schema
 
 _TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
+METRICS_ACCESS_TOKEN_ENV = "LOTUS_METRICS_ACCESS_TOKEN"
+METRICS_INTERNAL_OPEN_MODE = "internal_open"
+METRICS_BEARER_TOKEN_MODE = "bearer_token"
+
+
+@dataclass(frozen=True)
+class MetricsAccessPolicy:
+    mode: str
+    token: str | None = None
+
+    @property
+    def protected(self) -> bool:
+        return self.mode == METRICS_BEARER_TOKEN_MODE
+
+
+def resolve_metrics_access_policy(
+    metrics_access_token: str | None = None,
+) -> MetricsAccessPolicy:
+    token = normalize_lineage_value(metrics_access_token)
+    if token is None:
+        token = normalize_lineage_value(os.getenv(METRICS_ACCESS_TOKEN_ENV))
+    if token:
+        return MetricsAccessPolicy(mode=METRICS_BEARER_TOKEN_MODE, token=token)
+    return MetricsAccessPolicy(mode=METRICS_INTERNAL_OPEN_MODE)
+
+
+def _metrics_request_allowed(request: Request, policy: MetricsAccessPolicy) -> bool:
+    if not policy.protected:
+        return True
+    configured_token = policy.token
+    if not configured_token:
+        return False
+    authorization = request.headers.get("Authorization", "")
+    bearer_prefix = "Bearer "
+    if not authorization.startswith(bearer_prefix):
+        return False
+    supplied_token = authorization[len(bearer_prefix) :].strip()
+    return bool(supplied_token) and compare_digest(supplied_token, configured_token)
+
+
+def _metrics_forbidden_response(policy: MetricsAccessPolicy) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={
+            "detail": {
+                "code": "METRICS_ACCESS_DENIED",
+                "message": "Metrics endpoint access is restricted to authorized scrapers.",
+                "metrics_access_mode": policy.mode,
+            }
+        },
+    )
 
 
 def normalize_trace_id(value: str | None) -> str | None:
@@ -50,20 +104,48 @@ def configure_standard_openapi(app: FastAPI, *, service_name: str) -> None:
             description=app.description,
             routes=app.routes,
         )
-        metrics_response = (
-            schema.get("paths", {})
-            .get("/metrics", {})
-            .get("get", {})
-            .get("responses", {})
-            .get("200")
-        )
-        if isinstance(metrics_response, dict):
-            metrics_response["content"] = {"text/plain": {"schema": {"type": "string"}}}
+        _ensure_metrics_openapi_contract(schema)
         schema = enrich_openapi_schema(schema, service_name=service_name)
         app.openapi_schema = schema
         return app.openapi_schema
 
     app.openapi = custom_openapi
+
+
+def _ensure_metrics_openapi_contract(schema: dict[str, Any]) -> None:
+    metrics_operation = schema.get("paths", {}).get("/metrics", {}).get("get")
+    if not isinstance(metrics_operation, dict):
+        return
+    metrics_operation["summary"] = "Prometheus metrics scrape endpoint"
+    metrics_operation["description"] = (
+        "Operational Prometheus scrape endpoint. This is not a public business API; access is "
+        "governed by the shared metrics access policy and should be reachable only by authorized "
+        "scrapers or a private metrics network."
+    )
+    metrics_operation["tags"] = ["Monitoring"]
+    responses = metrics_operation.setdefault("responses", {})
+    response_200 = responses.setdefault("200", {"description": "Prometheus metrics payload."})
+    if isinstance(response_200, dict):
+        response_200["content"] = {"text/plain": {"schema": {"type": "string"}}}
+    responses.setdefault(
+        "403",
+        {
+            "description": "Metrics scrape was denied by the shared metrics access policy.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "METRICS_ACCESS_DENIED",
+                            "message": (
+                                "Metrics endpoint access is restricted to authorized scrapers."
+                            ),
+                            "metrics_access_mode": METRICS_BEARER_TOKEN_MODE,
+                        }
+                    }
+                }
+            },
+        },
+    )
 
 
 def configure_standard_http_app(
@@ -73,11 +155,25 @@ def configure_standard_http_app(
     service_prefix: str,
     logger: logging.Logger,
     id_generator=generate_correlation_id,
+    metrics_access_token: str | None = None,
 ) -> None:
+    metrics_access_policy = resolve_metrics_access_policy(metrics_access_token)
     Instrumentator().instrument(app).expose(app)
-    logger.info("Prometheus metrics exposed at /metrics")
+    logger.info(
+        "Prometheus metrics exposed at /metrics",
+        extra={"metrics_access_mode": metrics_access_policy.mode},
+    )
 
     configure_standard_openapi(app, service_name=service_name)
+
+    @app.middleware("http")
+    async def enforce_metrics_access_policy(request: Request, call_next):
+        if request.url.path == "/metrics" and not _metrics_request_allowed(
+            request,
+            metrics_access_policy,
+        ):
+            return _metrics_forbidden_response(metrics_access_policy)
+        return await call_next(request)
 
     @app.middleware("http")
     async def add_correlation_id_middleware(request: Request, call_next):
@@ -174,6 +270,7 @@ def create_standard_health_app(
     version: str = "1.0.0",
     logger: logging.Logger | None = None,
     id_generator=generate_correlation_id,
+    metrics_access_token: str | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title=title,
@@ -187,6 +284,7 @@ def create_standard_health_app(
         service_prefix=service_prefix,
         logger=app_logger,
         id_generator=id_generator,
+        metrics_access_token=metrics_access_token,
     )
     include_routers(app, create_health_router(*dependencies))
     return app
