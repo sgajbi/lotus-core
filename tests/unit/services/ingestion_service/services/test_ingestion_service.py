@@ -424,6 +424,7 @@ async def test_publish_portfolio_bundle_reports_completed_group_counts_before_fa
         await ingestion_service.publish_portfolio_bundle(bundle)
 
     assert exc_info.value.failed_record_keys == ["P1"]
+    assert exc_info.value.published_record_count == 1
     assert (
         "Portfolio bundle publish stopped after these entity groups were already published: "
         "{'business_dates': 1, 'portfolios': 0, 'instruments': 0, 'transactions': 0, "

@@ -18,6 +18,11 @@ from ..services.ingestion_service import (
     get_ingestion_service,
 )
 from .job_bookkeeping import raise_post_publish_bookkeeping_failure
+from .publish_errors import (
+    ingestion_publish_failed_example,
+    ingestion_unavailable_response,
+    raise_ingestion_publish_unavailable,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -40,13 +45,10 @@ TRANSACTION_BATCH_RATE_LIMIT_EXCEEDED_EXAMPLE = {
         "message": "Ingestion write rate limit exceeded for /ingest/transactions.",
     }
 }
-TRANSACTION_PUBLISH_FAILED_EXAMPLE = {
-    "detail": {
-        "code": "INGESTION_PUBLISH_FAILED",
-        "message": "Kafka publish failed for transaction payload.",
-        "failed_record_keys": ["TRN_001"],
-    }
-}
+TRANSACTION_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
+    message="Kafka publish failed for transaction payload.",
+    failed_record_keys=["TRN_001"],
+)
 
 
 @router.post(
@@ -58,14 +60,10 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = {
             "description": "Write-rate protection blocked the single-transaction request.",
             "content": {"application/json": {"example": TRANSACTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
         },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Transaction publish failed after validation.",
-            "content": {"application/json": {"example": TRANSACTION_PUBLISH_FAILED_EXAMPLE}},
-        },
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "Ingestion operating mode blocked writes.",
-            "content": {"application/json": {"example": TRANSACTION_MODE_BLOCKED_EXAMPLE}},
-        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: ingestion_unavailable_response(
+            mode_blocked_example=TRANSACTION_MODE_BLOCKED_EXAMPLE,
+            publish_failed_example=TRANSACTION_PUBLISH_FAILED_EXAMPLE,
+        ),
     },
     tags=["Transactions"],
     summary="Ingest a single transaction",
@@ -109,14 +107,7 @@ async def ingest_transaction(
     try:
         await ingestion_service.publish_transaction(transaction, idempotency_key=idempotency_key)
     except IngestionPublishError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "INGESTION_PUBLISH_FAILED",
-                "message": str(exc),
-                "failed_record_keys": exc.failed_record_keys,
-            },
-        ) from exc
+        raise_ingestion_publish_unavailable(exc)
 
     logger.info(
         "Transaction successfully queued.", extra={"transaction_id": transaction.transaction_id}
@@ -139,14 +130,10 @@ async def ingest_transaction(
                 "application/json": {"example": TRANSACTION_BATCH_RATE_LIMIT_EXCEEDED_EXAMPLE}
             },
         },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Transaction batch publish failed after job metadata was recorded.",
-            "content": {"application/json": {"example": TRANSACTION_PUBLISH_FAILED_EXAMPLE}},
-        },
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "Ingestion operating mode blocked writes.",
-            "content": {"application/json": {"example": TRANSACTION_MODE_BLOCKED_EXAMPLE}},
-        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: ingestion_unavailable_response(
+            mode_blocked_example=TRANSACTION_MODE_BLOCKED_EXAMPLE,
+            publish_failed_example=TRANSACTION_PUBLISH_FAILED_EXAMPLE,
+        ),
     },
     tags=["Transactions"],
     summary="Ingest a transaction batch",
@@ -221,15 +208,7 @@ async def ingest_transactions(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "INGESTION_PUBLISH_FAILED",
-                "message": str(exc),
-                "failed_record_keys": exc.failed_record_keys,
-                "job_id": job_result.job.job_id,
-            },
-        ) from exc
+        raise_ingestion_publish_unavailable(exc, job_id=job_result.job.job_id)
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise

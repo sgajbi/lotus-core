@@ -337,13 +337,16 @@ class IngestionService:
             await self.publish_fx_rates(bundle.fx_rates, idempotency_key)
             published_counts["fx_rates"] = len(bundle.fx_rates)
         except IngestionPublishError as exc:
+            total_published_record_count = (
+                sum(published_counts.values()) + exc.published_record_count
+            )
             raise IngestionPublishError(
                 (
                     "Portfolio bundle publish stopped after these entity groups were already "
                     f"published: {published_counts}. {exc}"
                 ),
                 failed_record_keys=exc.failed_record_keys,
-                published_record_count=exc.published_record_count,
+                published_record_count=total_published_record_count,
             ) from exc
 
         return published_counts

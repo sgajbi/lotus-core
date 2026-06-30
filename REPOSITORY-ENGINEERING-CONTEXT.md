@@ -118,12 +118,17 @@ Current repository posture:
     `INGESTION_REPLAY_AUDIT_WRITE_FAILED` with recovery path, event/job identity, replay status, and
     deterministic fingerprint so operators can restore audit persistence and retry through the
     governed endpoint.
-26. `/metrics` is an operational scrape endpoint governed by the shared metrics access policy.
+26. Direct ingestion-router Kafka publish dependency failures use the shared
+    `routers.publish_errors` mapper. Preserve the `INGESTION_PUBLISH_FAILED` application code, but
+    return HTTP 503 with `Retry-After`, dependency=`kafka`, retryability, correlation lineage,
+    failed-record keys, publish state, and published-record count. Reference-data persistence
+    failures and post-publish bookkeeping failures remain distinct HTTP 500 contracts.
+27. `/metrics` is an operational scrape endpoint governed by the shared metrics access policy.
     Token parsing belongs in `portfolio_common.metrics_settings`, and standard API apps,
     health-only worker apps, and web-backed worker runtime paths must all use the shared policy so
     `LOTUS_METRICS_ACCESS_TOKEN` consistently enables bearer-token protection without direct env
     reads in HTTP middleware.
-27. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
+28. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
     shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,
     correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
@@ -135,7 +140,7 @@ Current repository posture:
     portfolio ID, and `not_found` reason metadata at unit, ASGI, and OpenAPI layers.
     `make qcp-problem-details-guard` now prevents active QCP routers from reintroducing direct
     FastAPI/Starlette `HTTPException` calls or raw `detail=str(...)` payloads.
-28. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
+29. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
     `LOTUS_CORE_STRICT_CONFIG_VALIDATION=true` or non-local `ENVIRONMENT` is active; local profiles
@@ -145,7 +150,7 @@ Current repository posture:
     runtime settings also use the shared parser while preserving existing local fallback and clamp
     semantics. `make monetary-float-guard` uses token-aware money-like matching and currently has
     zero active findings and zero allowlisted suppressions.
-29. Service runtime import correctness is now part of the architecture guard. Service code under
+30. Service runtime import correctness is now part of the architecture guard. Service code under
     `src/services/<service>/app` must not import its own application package through the repo-root
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root
     tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`

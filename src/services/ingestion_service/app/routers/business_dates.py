@@ -28,6 +28,11 @@ from ..services.ingestion_service import (
     get_ingestion_service,
 )
 from .job_bookkeeping import raise_post_publish_bookkeeping_failure
+from .publish_errors import (
+    ingestion_publish_failed_example,
+    ingestion_unavailable_response,
+    raise_ingestion_publish_unavailable,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -65,14 +70,11 @@ BUSINESS_DATE_MONOTONIC_POLICY_EXAMPLE = {
         ),
     }
 }
-BUSINESS_DATE_PUBLISH_FAILED_EXAMPLE = {
-    "detail": {
-        "code": "INGESTION_PUBLISH_FAILED",
-        "message": "Failed to publish business date 'GLOBAL|2026-03-10'.",
-        "failed_record_keys": ["GLOBAL|2026-03-10"],
-        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
-    }
-}
+BUSINESS_DATE_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
+    message="Failed to publish business date 'GLOBAL|2026-03-10'.",
+    failed_record_keys=["GLOBAL|2026-03-10"],
+    job_id="ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+)
 
 
 @router.post(
@@ -88,14 +90,10 @@ BUSINESS_DATE_PUBLISH_FAILED_EXAMPLE = {
             "description": "Business-date payload violated validation or policy rules.",
             "content": {"application/json": {"example": BUSINESS_DATE_PAYLOAD_EMPTY_EXAMPLE}},
         },
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {
-            "description": "Business-date publish failed after job metadata was recorded.",
-            "content": {"application/json": {"example": BUSINESS_DATE_PUBLISH_FAILED_EXAMPLE}},
-        },
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "Ingestion operating mode blocked writes.",
-            "content": {"application/json": {"example": BUSINESS_DATE_MODE_BLOCKED_EXAMPLE}},
-        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: ingestion_unavailable_response(
+            mode_blocked_example=BUSINESS_DATE_MODE_BLOCKED_EXAMPLE,
+            publish_failed_example=BUSINESS_DATE_PUBLISH_FAILED_EXAMPLE,
+        ),
     },
     tags=["Business Dates"],
     summary="Ingest business dates",
@@ -287,15 +285,7 @@ async def _publish_business_dates_or_fail_job(
             str(exc),
             failed_record_keys=exc.failed_record_keys,
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "INGESTION_PUBLISH_FAILED",
-                "message": str(exc),
-                "failed_record_keys": exc.failed_record_keys,
-                "job_id": job_id,
-            },
-        ) from exc
+        raise_ingestion_publish_unavailable(exc, job_id=job_id)
     except Exception as exc:
         await ingestion_job_service.mark_failed(job_id, str(exc))
         raise

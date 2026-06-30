@@ -17,6 +17,23 @@ async def async_test_client():
         yield client
 
 
+def _publish_failed_example(operation: dict) -> dict:
+    response = operation["responses"]["503"]
+    assert "Retry-After" in response["headers"]
+    example = response["content"]["application/json"]["examples"]["publish_failed"]["value"]
+    assert example["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert example["detail"]["dependency"] == "kafka"
+    assert example["detail"]["retryable"] is True
+    assert example["detail"]["retry_after_seconds"] == 30
+    return example
+
+
+def _mode_blocked_example(operation: dict) -> dict:
+    return operation["responses"]["503"]["content"]["application/json"]["examples"]["mode_blocked"][
+        "value"
+    ]
+
+
 async def test_openapi_declares_metrics_as_text_plain(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
@@ -79,10 +96,10 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     commit_429 = commit["responses"]["429"]["content"]["application/json"]["example"]
     assert commit_429["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
-    commit_500 = commit["responses"]["500"]["content"]["application/json"]["example"]
-    assert commit_500["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    commit_publish_failed = _publish_failed_example(commit)
+    assert commit_publish_failed["detail"]["publish_state"] == "partial"
 
-    commit_503 = commit["responses"]["503"]["content"]["application/json"]["example"]
+    commit_503 = _mode_blocked_example(commit)
     assert commit_503["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 
     preview_schema = components["UploadPreviewResponse"]
@@ -115,10 +132,10 @@ async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(a
     rate_limited = bundle["responses"]["429"]["content"]["application/json"]["example"]
     assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
-    publish_failed = bundle["responses"]["500"]["content"]["application/json"]["example"]
-    assert publish_failed["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    publish_failed = _publish_failed_example(bundle)
+    assert publish_failed["detail"]["publish_state"] == "partial"
 
-    mode_blocked = bundle["responses"]["503"]["content"]["application/json"]["example"]
+    mode_blocked = _mode_blocked_example(bundle)
     assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 
     assert bundle_schema["properties"]["portfolios"]["description"] == (
@@ -152,10 +169,9 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
     rate_limited = reprocess["responses"]["429"]["content"]["application/json"]["example"]
     assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
-    publish_failed = reprocess["responses"]["500"]["content"]["application/json"]["example"]
-    assert publish_failed["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    _publish_failed_example(reprocess)
 
-    mode_blocked = reprocess["responses"]["503"]["content"]["application/json"]["example"]
+    mode_blocked = _mode_blocked_example(reprocess)
     assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 
     reprocessing_request = components["ReprocessingRequest"]
@@ -191,17 +207,9 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         portfolios["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
-    assert (
-        portfolios["responses"]["503"]["content"]["application/json"]["example"]["detail"]["code"]
-        == "INGESTION_MODE_BLOCKS_WRITES"
-    )
+    assert _mode_blocked_example(portfolios)["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 
-    assert (
-        single_transaction["responses"]["500"]["content"]["application/json"]["example"]["detail"][
-            "code"
-        ]
-        == "INGESTION_PUBLISH_FAILED"
-    )
+    _publish_failed_example(single_transaction)
     assert "propagate any idempotency key as publish lineage" in single_transaction["description"]
     assert "replay" not in single_transaction["description"].lower()
     assert (
@@ -211,15 +219,10 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
     assert (
-        batch_transactions["responses"]["500"]["content"]["application/json"]["example"]["detail"][
-            "code"
-        ]
-        == "INGESTION_PUBLISH_FAILED"
+        _publish_failed_example(batch_transactions)["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
     )
     assert (
-        batch_transactions["responses"]["503"]["content"]["application/json"]["example"]["detail"][
-            "code"
-        ]
+        _mode_blocked_example(batch_transactions)["detail"]["code"]
         == "INGESTION_MODE_BLOCKS_WRITES"
     )
 
@@ -227,44 +230,22 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         instruments["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
-    assert (
-        instruments["responses"]["500"]["content"]["application/json"]["example"]["detail"]["code"]
-        == "INGESTION_PUBLISH_FAILED"
-    )
-    assert (
-        instruments["responses"]["503"]["content"]["application/json"]["example"]["detail"]["code"]
-        == "INGESTION_MODE_BLOCKS_WRITES"
-    )
+    assert _publish_failed_example(instruments)["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert _mode_blocked_example(instruments)["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
     assert (
         market_prices["responses"]["429"]["content"]["application/json"]["example"]["detail"][
             "code"
         ]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
-    assert (
-        market_prices["responses"]["500"]["content"]["application/json"]["example"]["detail"][
-            "code"
-        ]
-        == "INGESTION_PUBLISH_FAILED"
-    )
-    assert (
-        market_prices["responses"]["503"]["content"]["application/json"]["example"]["detail"][
-            "code"
-        ]
-        == "INGESTION_MODE_BLOCKS_WRITES"
-    )
+    assert _publish_failed_example(market_prices)["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert _mode_blocked_example(market_prices)["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
     assert (
         fx_rates["responses"]["429"]["content"]["application/json"]["example"]["detail"]["code"]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
-    assert (
-        fx_rates["responses"]["500"]["content"]["application/json"]["example"]["detail"]["code"]
-        == "INGESTION_PUBLISH_FAILED"
-    )
-    assert (
-        fx_rates["responses"]["503"]["content"]["application/json"]["example"]["detail"]["code"]
-        == "INGESTION_MODE_BLOCKS_WRITES"
-    )
+    assert _publish_failed_example(fx_rates)["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert _mode_blocked_example(fx_rates)["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
 
     business_date_422 = business_dates["responses"]["422"]["content"]["application/json"]["example"]
     assert business_date_422["detail"]["code"] == "BUSINESS_DATE_PAYLOAD_EMPTY"
@@ -274,18 +255,8 @@ async def test_openapi_describes_remaining_ingestion_operational_responses(async
         ]
         == "INGESTION_RATE_LIMIT_EXCEEDED"
     )
-    assert (
-        business_dates["responses"]["500"]["content"]["application/json"]["example"]["detail"][
-            "code"
-        ]
-        == "INGESTION_PUBLISH_FAILED"
-    )
-    assert (
-        business_dates["responses"]["503"]["content"]["application/json"]["example"]["detail"][
-            "code"
-        ]
-        == "INGESTION_MODE_BLOCKS_WRITES"
-    )
+    assert _publish_failed_example(business_dates)["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    assert _mode_blocked_example(business_dates)["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
     assert (
         benchmark_assignments["responses"]["503"]["content"]["application/json"]["example"][
             "detail"

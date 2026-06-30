@@ -63,6 +63,26 @@ from src.services.ingestion_service.app.services.ingestion_job_service import (
 pytestmark = pytest.mark.asyncio
 
 
+def _assert_publish_dependency_failure(
+    response: httpx.Response,
+    *,
+    failed_record_keys: list[str],
+    published_record_count: int = 0,
+) -> dict:
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "30"
+    body = response.json()["detail"]
+    assert body["code"] == "INGESTION_PUBLISH_FAILED"
+    assert body["dependency"] == "kafka"
+    assert body["retryable"] is True
+    assert body["retry_after_seconds"] == 30
+    assert body["publish_state"] == ("partial" if published_record_count else "unpublished")
+    assert body["published_record_count"] == published_record_count
+    assert body["failed_record_keys"] == failed_record_keys
+    assert body["correlation_id"]
+    return body
+
+
 @pytest.fixture
 def mock_kafka_producer() -> MagicMock:
     """Provides a mock KafkaProducer."""
@@ -1393,8 +1413,13 @@ async def test_ingest_portfolios_marks_job_failed_when_publish_fails(
         ]
     }
 
-    with pytest.raises(Exception, match="Failed to publish portfolio"):
-        await async_test_client.post("/ingest/portfolios", json=payload)
+    failed_response = await async_test_client.post("/ingest/portfolios", json=payload)
+    detail = _assert_publish_dependency_failure(
+        failed_response,
+        failed_record_keys=["P1", "P2"],
+    )
+    assert "Failed to publish portfolio 'P1'" in detail["message"]
+    assert "Remaining unpublished record keys: P1, P2" in detail["message"]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -1498,12 +1523,11 @@ async def test_ingest_single_transaction_returns_failed_record_keys_when_publish
         json=_single_transaction_payload("TX_SINGLE_PUBLISH_FAIL_001"),
     )
 
-    assert response.status_code == 500
-    assert response.json()["detail"] == {
-        "code": "INGESTION_PUBLISH_FAILED",
-        "message": "Failed to publish transaction 'TX_SINGLE_PUBLISH_FAIL_001'.",
-        "failed_record_keys": ["TX_SINGLE_PUBLISH_FAIL_001"],
-    }
+    detail = _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=["TX_SINGLE_PUBLISH_FAIL_001"],
+    )
+    assert detail["message"] == "Failed to publish transaction 'TX_SINGLE_PUBLISH_FAIL_001'."
 
 
 async def test_ingest_transactions_endpoint(
@@ -1618,9 +1642,10 @@ async def test_ingestion_jobs_status_endpoint_returns_failed_job_detail(
         headers={"X-Idempotency-Key": "job-detail-failed-idempotency-001"},
     )
 
-    assert failed_response.status_code == 500
-    failed_body = failed_response.json()["detail"]
-    assert failed_body["code"] == "INGESTION_PUBLISH_FAILED"
+    failed_body = _assert_publish_dependency_failure(
+        failed_response,
+        failed_record_keys=["TX_JOB_DETAIL_FAILED_001"],
+    )
     job_id = failed_body["job_id"]
 
     job_response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}")
@@ -1661,7 +1686,7 @@ async def test_ingestion_jobs_list_endpoint_filters_and_paginates(
         json=_transaction_batch_payload("TX_JOB_LIST_FAILED_001"),
         headers={"X-Idempotency-Key": "job-list-failed-001"},
     )
-    assert failed_response.status_code == 500
+    assert failed_response.status_code == 503
     failed_job_id = failed_response.json()["detail"]["job_id"]
     mock_kafka_producer.publish_message.side_effect = None
 
@@ -1740,8 +1765,11 @@ async def test_ingestion_job_failures_endpoint_returns_full_failure_rows(
         headers={"X-Idempotency-Key": "job-failure-row-001"},
     )
 
-    assert failed_response.status_code == 500
-    job_id = failed_response.json()["detail"]["job_id"]
+    detail = _assert_publish_dependency_failure(
+        failed_response,
+        failed_record_keys=["TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"],
+    )
+    job_id = detail["job_id"]
     mock_kafka_producer.publish_message.side_effect = None
 
     response = await event_replay_test_client.get(
@@ -1864,9 +1892,10 @@ async def test_ingestion_job_failure_history_and_retry(
     payload = _transaction_batch_payload("TX_FAIL_001")
 
     failed_response = await async_test_client.post("/ingest/transactions", json=payload)
-    assert failed_response.status_code == 500
-    assert failed_response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert failed_response.json()["detail"]["failed_record_keys"] == ["TX_FAIL_001"]
+    _assert_publish_dependency_failure(
+        failed_response,
+        failed_record_keys=["TX_FAIL_001"],
+    )
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -3860,8 +3889,10 @@ async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publ
 
     failed_response = await async_test_client.post("/ingest/transactions", json=payload)
 
-    assert failed_response.status_code == 500
-    assert failed_response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    _assert_publish_dependency_failure(
+        failed_response,
+        failed_record_keys=["TX_RETRY_BOOKKEEPING_001"],
+    )
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -3946,8 +3977,14 @@ async def test_ingestion_job_failure_history_tracks_remaining_unpublished_batch_
     }
 
     response = await async_test_client.post("/ingest/transactions", json=payload)
-    assert response.status_code == 500
-    assert response.json()["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=[
+            "TX_BATCH_FAIL_002",
+            "TX_BATCH_FAIL_003",
+        ],
+        published_record_count=1,
+    )
     assert response.json()["detail"]["failed_record_keys"] == [
         "TX_BATCH_FAIL_002",
         "TX_BATCH_FAIL_003",
@@ -4209,7 +4246,7 @@ async def _seed_ingestion_health_jobs(
         json=_transaction_batch_payload("TX_HEALTH_SUMMARY_FAILED_001"),
         headers={"X-Idempotency-Key": "health-summary-failed-001"},
     )
-    assert failed_response.status_code == 500
+    assert failed_response.status_code == 503
     failed_job_id = failed_response.json()["detail"]["job_id"]
     mock_kafka_producer.publish_message.side_effect = None
 
@@ -4972,8 +5009,11 @@ async def test_ingestion_job_record_status_endpoint_merges_failure_keys(
         json=_transaction_batch_payload("TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"),
         headers={"X-Idempotency-Key": "job-record-status-failed-001"},
     )
-    assert failed_response.status_code == 500
-    job_id = failed_response.json()["detail"]["job_id"]
+    detail = _assert_publish_dependency_failure(
+        failed_response,
+        failed_record_keys=["TX_RECORD_FAIL_001", "TX_RECORD_FAIL_002"],
+    )
+    job_id = detail["job_id"]
     mock_kafka_producer.publish_message.side_effect = None
 
     response = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/records")
@@ -5564,11 +5604,11 @@ async def test_ingest_instruments_returns_failed_record_keys_when_publish_fails(
         json=_instrument_batch_payload("SEC_INST_FAIL_001", "SEC_INST_FAIL_002"),
     )
 
-    assert response.status_code == 500
-    body = response.json()
-    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert body["detail"]["failed_record_keys"] == ["SEC_INST_FAIL_001", "SEC_INST_FAIL_002"]
-    job_id = body["detail"]["job_id"]
+    detail = _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=["SEC_INST_FAIL_001", "SEC_INST_FAIL_002"],
+    )
+    job_id = detail["job_id"]
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -5688,11 +5728,11 @@ async def test_ingest_market_prices_returns_failed_record_keys_when_publish_fail
         json=_market_price_batch_payload("SEC_PRICE_FAIL_001", "SEC_PRICE_FAIL_002"),
     )
 
-    assert response.status_code == 500
-    body = response.json()
-    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert body["detail"]["failed_record_keys"] == ["SEC_PRICE_FAIL_001", "SEC_PRICE_FAIL_002"]
-    job_id = body["detail"]["job_id"]
+    detail = _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=["SEC_PRICE_FAIL_001", "SEC_PRICE_FAIL_002"],
+    )
+    job_id = detail["job_id"]
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -5811,14 +5851,14 @@ async def test_ingest_fx_rates_returns_failed_record_keys_when_publish_fails(
         json=_fx_rate_batch_payload(("USD", "SGD"), ("EUR", "USD")),
     )
 
-    assert response.status_code == 500
-    body = response.json()
-    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert body["detail"]["failed_record_keys"] == [
-        "USD-SGD-2025-01-01",
-        "EUR-USD-2025-01-01",
-    ]
-    job_id = body["detail"]["job_id"]
+    detail = _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=[
+            "USD-SGD-2025-01-01",
+            "EUR-USD-2025-01-01",
+        ],
+    )
+    job_id = detail["job_id"]
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -6263,13 +6303,15 @@ async def test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_f
         json=_portfolio_bundle_payload(),
     )
 
-    assert response.status_code == 500
     body = response.json()
-    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert body["detail"]["failed_record_keys"] == ["P1"]
+    detail = _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=["P1"],
+        published_record_count=1,
+    )
     assert "'business_dates': 1" in body["detail"]["message"]
     assert "'portfolios': 0" in body["detail"]["message"]
-    job_id = body["detail"]["job_id"]
+    job_id = detail["job_id"]
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
@@ -6733,10 +6775,12 @@ async def test_upload_commit_returns_failed_record_keys_when_publish_fails(
         data={"entity_type": "transactions", "allow_partial": "true"},
     )
 
-    assert response.status_code == 500
     body = response.json()
-    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert body["detail"]["failed_record_keys"] == ["T2"]
+    _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=["T2"],
+        published_record_count=1,
+    )
     assert "Remaining unpublished record keys: T2" in body["detail"]["message"]
     assert mock_kafka_producer.publish_message.call_count == 2
 
@@ -6963,11 +7007,12 @@ async def test_reprocess_transactions_records_remaining_unpublished_keys_on_part
         json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
     )
 
-    assert response.status_code == 500
-    body = response.json()
-    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
-    assert body["detail"]["failed_record_keys"] == ["TXN2", "TXN3"]
-    failed_job_id = body["detail"]["job_id"]
+    detail = _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=["TXN2", "TXN3"],
+        published_record_count=1,
+    )
+    failed_job_id = detail["job_id"]
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",
@@ -7256,9 +7301,14 @@ async def test_ingest_business_dates_returns_failed_record_keys_when_publish_fai
         json=_business_date_batch_payload("2025-01-07", "2025-01-08"),
     )
 
-    assert response.status_code == 500
     body = response.json()
-    assert body["detail"]["code"] == "INGESTION_PUBLISH_FAILED"
+    _assert_publish_dependency_failure(
+        response,
+        failed_record_keys=[
+            "GLOBAL|2025-01-07",
+            "GLOBAL|2025-01-08",
+        ],
+    )
     assert body["detail"]["failed_record_keys"] == [
         "GLOBAL|2025-01-07",
         "GLOBAL|2025-01-08",
