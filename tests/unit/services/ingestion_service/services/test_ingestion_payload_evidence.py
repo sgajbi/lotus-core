@@ -1,12 +1,17 @@
+import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
+from src.services.ingestion_service.app.main import ingestion_idempotency_conflict_handler
 from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
+    IngestionIdempotencyConflictError,
     create_or_get_job_result,
 )
 from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
     ingestion_payload_fingerprint,
+    source_safe_payload_fingerprint,
     source_safe_request_payload,
 )
 
@@ -53,12 +58,54 @@ class _FakeCreateSession:
         row.last_retried_at = None
 
 
+class _FakeExistingSession:
+    def __init__(self, existing):
+        self.existing = existing
+        self.added_rows = []
+
+    def begin(self):
+        return _FakeBegin()
+
+    async def scalar(self, _stmt):
+        return self.existing
+
+    def add(self, row):
+        self.added_rows.append(row)
+
+
+def _existing_job(*, request_payload: dict) -> SimpleNamespace:
+    return SimpleNamespace(
+        job_id="job_existing",
+        endpoint="/ingest/transactions",
+        entity_type="transaction",
+        status="accepted",
+        accepted_count=1,
+        idempotency_key="idem_1",
+        correlation_id="corr_existing",
+        request_id="req_existing",
+        trace_id="trace_existing",
+        submitted_at=datetime.now(UTC),
+        completed_at=None,
+        failure_reason=None,
+        retry_count=0,
+        last_retried_at=None,
+        request_payload=request_payload,
+    )
+
+
 def test_ingestion_payload_fingerprint_is_canonical_for_key_order():
     left = {"transactions": [{"transaction_id": "T1", "amount": "10"}], "source": "api"}
     right = {"source": "api", "transactions": [{"amount": "10", "transaction_id": "T1"}]}
 
     assert ingestion_payload_fingerprint(left) == ingestion_payload_fingerprint(right)
     assert ingestion_payload_fingerprint(left).startswith("sha256:")
+
+
+def test_source_safe_payload_fingerprint_redacts_before_hashing_sensitive_values():
+    left = {"authorization": "Bearer first-token", "records": [{"id": "1"}]}
+    right = {"authorization": "Bearer second-token", "records": [{"id": "1"}]}
+
+    assert source_safe_payload_fingerprint(left) == source_safe_payload_fingerprint(right)
 
 
 def test_source_safe_request_payload_redacts_sensitive_values_without_mutating_input():
@@ -125,3 +172,75 @@ async def test_create_or_get_job_persists_source_safe_request_payload():
         ]
     }
     assert payload["transactions"][0]["authorization"] == "Bearer secret-token"
+
+
+@pytest.mark.asyncio
+async def test_create_or_get_job_replays_same_idempotency_key_and_same_payload():
+    payload = {"transactions": [{"transaction_id": "T1", "amount": "10"}]}
+    session = _FakeExistingSession(_existing_job(request_payload=payload))
+
+    result = await create_or_get_job_result(
+        job_id="job_new",
+        endpoint="/ingest/transactions",
+        entity_type="transaction",
+        accepted_count=1,
+        idempotency_key="idem_1",
+        correlation_id="corr_1",
+        request_id="req_1",
+        trace_id="trace_1",
+        request_payload={"transactions": [{"amount": "10", "transaction_id": "T1"}]},
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+    )
+
+    assert result.created is False
+    assert result.job.job_id == "job_existing"
+    assert session.added_rows == []
+
+
+@pytest.mark.asyncio
+async def test_create_or_get_job_rejects_same_idempotency_key_with_different_payload():
+    session = _FakeExistingSession(
+        _existing_job(request_payload={"transactions": [{"transaction_id": "T1"}]})
+    )
+
+    with pytest.raises(IngestionIdempotencyConflictError) as exc_info:
+        await create_or_get_job_result(
+            job_id="job_new",
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            accepted_count=1,
+            idempotency_key="idem_1",
+            correlation_id="corr_1",
+            request_id="req_1",
+            trace_id="trace_1",
+            request_payload={"transactions": [{"transaction_id": "T2"}]},
+            session_factory=lambda: _SingleSessionAsyncIterable(session),
+        )
+
+    assert exc_info.value.endpoint == "/ingest/transactions"
+    assert exc_info.value.idempotency_key == "idem_1"
+    assert session.added_rows == []
+
+
+@pytest.mark.asyncio
+async def test_ingestion_idempotency_conflict_handler_returns_deterministic_problem():
+    response = await ingestion_idempotency_conflict_handler(
+        None,
+        IngestionIdempotencyConflictError(
+            endpoint="/ingest/transactions",
+            idempotency_key="idem_1",
+        ),
+    )
+
+    assert response.status_code == 409
+    assert json.loads(response.body) == {
+        "detail": {
+            "code": "INGESTION_IDEMPOTENCY_CONFLICT",
+            "message": (
+                "Ingestion idempotency key was reused for the same endpoint with a different "
+                "payload."
+            ),
+            "endpoint": "/ingest/transactions",
+            "idempotency_key": "idem_1",
+        }
+    }

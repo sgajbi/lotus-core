@@ -99,6 +99,9 @@ classification, and lookthrough inputs are upstream canonical data products for 
 - app-local runtime expects topic creation and migration sequencing to complete before the broader
   stack becomes healthy
 - correlation identity is part of the supported traceability contract
+- duplicate `X-Idempotency-Key` use for the same endpoint and same source-safe canonical payload
+  replays the existing acknowledgement; the same endpoint/key with a different payload returns
+  `409 INGESTION_IDEMPOTENCY_CONFLICT`
 
 ## When not to use this page
 

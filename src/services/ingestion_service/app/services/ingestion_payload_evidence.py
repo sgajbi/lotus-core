@@ -27,3 +27,7 @@ def source_safe_request_payload(payload: dict[str, Any] | None) -> dict[str, Any
     if payload is None:
         return None
     return redact_sensitive(payload)
+
+
+def source_safe_payload_fingerprint(payload: dict[str, Any] | None) -> str | None:
+    return ingestion_payload_fingerprint(source_safe_request_payload(payload))
