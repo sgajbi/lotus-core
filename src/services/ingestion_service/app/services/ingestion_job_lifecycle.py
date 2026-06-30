@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
@@ -18,6 +18,7 @@ from ..DTOs.ingestion_job_dto import (
     IngestionJobFailureResponse,
     IngestionJobResponse,
 )
+from .ingestion_payload_evidence import source_safe_request_payload
 
 
 @dataclass(slots=True)
@@ -107,7 +108,10 @@ async def create_or_get_job_result(
                 correlation_id=correlation_id,
                 request_id=request_id,
                 trace_id=trace_id,
-                request_payload=request_payload,
+                request_payload=cast(
+                    dict[str, Any] | None,
+                    source_safe_request_payload(request_payload),
+                ),
             )
             db.add(row)
             await db.flush()

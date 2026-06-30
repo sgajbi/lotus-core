@@ -38,6 +38,10 @@ Consumer DLQ `payload_excerpt` values are redacted and truncated diagnostic evid
 for triage, but they can still contain client-linked identifiers such as portfolio or transaction
 IDs and must remain behind the protected event-replay control-plane access boundary.
 
+Durable ingestion `request_payload` values used for replay are stored through the source-safe
+redaction policy. Ordinary non-sensitive payload fields remain available for governed replay, but
+secret-like fields are not retained as a replay source of truth.
+
 ## Data it owns
 
 Primary durable surfaces include:
