@@ -1,7 +1,13 @@
-from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
+import pytest
+from portfolio_common.valuation_runtime_settings import (
+    ValuationRuntimeConfigurationError,
+    get_valuation_runtime_settings,
+)
 
 
 def test_get_valuation_runtime_settings_uses_defaults_when_env_missing(monkeypatch):
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     for name in (
         "VALUATION_SCHEDULER_POLL_INTERVAL",
         "VALUATION_SCHEDULER_BATCH_SIZE",
@@ -29,6 +35,7 @@ def test_get_valuation_runtime_settings_uses_defaults_when_env_missing(monkeypat
 
 
 def test_get_valuation_runtime_settings_clamps_invalid_env_values(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_INTERVAL", "0")
     monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "-5")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "abc")
@@ -40,3 +47,11 @@ def test_get_valuation_runtime_settings_clamps_invalid_env_values(monkeypatch):
     assert settings.valuation_scheduler_batch_size == 1
     assert settings.valuation_scheduler_dispatch_rounds == 7
     assert settings.reprocessing_worker_batch_size == 2
+
+
+def test_get_valuation_runtime_settings_strict_rejects_invalid_env_values(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "0")
+
+    with pytest.raises(ValuationRuntimeConfigurationError, match="VALUATION_SCHEDULER_BATCH_SIZE"):
+        get_valuation_runtime_settings()

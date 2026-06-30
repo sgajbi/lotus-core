@@ -1297,3 +1297,5 @@ Local evidence captured on 2026-06-05 after CR-1034:
   allowlist baseline.
 - CR-1209 added shared strict/local runtime settings parsing and migrated query-service plus
   query-control-plane settings onto it while preserving public helper wrappers.
+- CR-1210 migrated common outbox and valuation runtime settings onto the shared strict/local parser
+  while preserving existing local fallback and clamp semantics.

@@ -5,9 +5,12 @@ from unittest.mock import MagicMock
 
 import pytest
 from portfolio_common.kafka_utils import KafkaProducer
+from portfolio_common.outbox_settings import OutboxRuntimeConfigurationError
 
 
 def test_get_outbox_runtime_settings_uses_default(monkeypatch):
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_MAX_RETRIES", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_BATCH_SIZE", raising=False)
@@ -28,6 +31,7 @@ def test_get_outbox_runtime_settings_uses_default(monkeypatch):
 
 
 def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "11")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "77")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "7")
@@ -49,6 +53,7 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
 
 def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "nope")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "0")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "-4")
@@ -67,6 +72,16 @@ def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, capl
     assert settings.retry_max_delay_seconds == 5
     assert settings.retry_jitter_seconds == 0
     assert "falling back to default" in caplog.text
+
+
+def test_get_outbox_runtime_settings_strict_rejects_invalid_env(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "0")
+
+    import portfolio_common.outbox_settings as module
+
+    with pytest.raises(OutboxRuntimeConfigurationError, match="OUTBOX_DISPATCHER_POLL_INTERVAL"):
+        module.get_outbox_runtime_settings()
 
 
 def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
