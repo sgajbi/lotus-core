@@ -2103,6 +2103,30 @@ async def test_openapi_fully_documents_dpm_instrument_eligibility_schema_family(
     )
 
 
+async def test_openapi_describes_portfolio_source_evidence_problem_details(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    source_evidence_routes = {
+        "/integration/portfolios/{portfolio_id}/tax-lots": "PortfolioTaxLotWindow",
+        "/integration/portfolios/{portfolio_id}/transaction-cost-curve": "TransactionCostCurve",
+        "/integration/portfolios/{portfolio_id}/performance-component-economics": (
+            "PerformanceComponentEconomics"
+        ),
+    }
+    for route_path, source_product in source_evidence_routes.items():
+        responses = schema["paths"][route_path]["post"]["responses"]
+        not_found = responses["404"]["content"]["application/problem+json"]["example"]
+        assert not_found["error_code"] == "QCP_SOURCE_EVIDENCE_NOT_FOUND"
+        assert not_found["metadata"]["source_product"] == source_product
+        invalid_request = responses["400"]["content"]["application/problem+json"]["example"]
+        assert invalid_request["error_code"] == "QCP_SOURCE_EVIDENCE_INVALID_REQUEST"
+        assert invalid_request["metadata"]["source_product"] == source_product
+
+
 async def test_openapi_fully_documents_dpm_portfolio_tax_lot_schema_family(
     async_test_client,
 ):

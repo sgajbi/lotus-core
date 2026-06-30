@@ -115,10 +115,13 @@ def assert_query_control_plane_problem(
     status_code: int,
     error_code: str,
     detail: str,
+    metadata: dict[str, object] | None = None,
 ) -> None:
     assert problem.status_code == status_code
     assert problem.error_code == error_code
     assert problem.detail == detail
+    if metadata is not None:
+        assert problem.metadata == metadata
 
 
 @pytest.mark.asyncio
@@ -1122,14 +1125,49 @@ async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_portfolio_tax_lot_window = AsyncMock(side_effect=LookupError("missing"))
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_portfolio_tax_lot_window(
             portfolio_id="P404",
             request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+        detail="Requested portfolio source evidence was not found.",
+        metadata={
+            "source_product": "PortfolioTaxLotWindow",
+            "portfolio_id": "P404",
+            "reason": "LookupError",
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_tax_lot_window_maps_bad_token_to_400() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_portfolio_tax_lot_window = AsyncMock(side_effect=ValueError("bad token"))
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_portfolio_tax_lot_window(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
+            integration_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=400,
+        error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+        detail="Portfolio source evidence request is invalid.",
+        metadata={
+            "source_product": "PortfolioTaxLotWindow",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "reason": "ValueError",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -1264,7 +1302,7 @@ async def test_get_performance_component_economics_maps_missing_portfolio_to_404
         side_effect=LookupError("Portfolio with id PB_MISSING not found")
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_performance_component_economics(
             portfolio_id="PB_MISSING",
             request=PerformanceComponentEconomicsRequest(
@@ -1274,7 +1312,17 @@ async def test_get_performance_component_economics_maps_missing_portfolio_to_404
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+        detail="Requested portfolio source evidence was not found.",
+        metadata={
+            "source_product": "PerformanceComponentEconomics",
+            "portfolio_id": "PB_MISSING",
+            "reason": "LookupError",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -1284,7 +1332,7 @@ async def test_get_performance_component_economics_maps_bad_token_to_400() -> No
         side_effect=ValueError("bad token")
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_performance_component_economics(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PerformanceComponentEconomicsRequest(
@@ -1294,7 +1342,45 @@ async def test_get_performance_component_economics_maps_bad_token_to_400() -> No
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 400
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=400,
+        error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+        detail="Portfolio source evidence request is invalid.",
+        metadata={
+            "source_product": "PerformanceComponentEconomics",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "reason": "ValueError",
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_transaction_cost_curve_maps_missing_portfolio_to_404() -> None:
+    mock_service = MagicMock(spec=IntegrationService)
+    mock_service.get_transaction_cost_curve = AsyncMock(side_effect=LookupError("missing"))
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_transaction_cost_curve(
+            portfolio_id="PB_MISSING",
+            request=TransactionCostCurveRequest(
+                as_of_date="2026-05-03",
+                window={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+            ),
+            integration_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+        detail="Requested portfolio source evidence was not found.",
+        metadata={
+            "source_product": "TransactionCostCurve",
+            "portfolio_id": "PB_MISSING",
+            "reason": "LookupError",
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -1302,7 +1388,7 @@ async def test_get_transaction_cost_curve_maps_bad_token_to_400() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_transaction_cost_curve = AsyncMock(side_effect=ValueError("bad token"))
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_transaction_cost_curve(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=TransactionCostCurveRequest(
@@ -1312,7 +1398,17 @@ async def test_get_transaction_cost_curve_maps_bad_token_to_400() -> None:
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 400
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=400,
+        error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+        detail="Portfolio source evidence request is invalid.",
+        metadata={
+            "source_product": "TransactionCostCurve",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "reason": "ValueError",
+        },
+    )
 
 
 @pytest.mark.asyncio
