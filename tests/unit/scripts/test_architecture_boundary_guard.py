@@ -110,3 +110,43 @@ def test_direct_import_boundary_flags_event_replay_router_kafka_import(
         "event-replay routers must not import concrete Kafka utilities: "
         "disallowed direct import 'portfolio_common.kafka_utils'"
     ]
+
+
+def test_direct_import_boundary_flags_valuation_scheduler_kafka_import(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = tmp_path
+    scheduler = (
+        repo_root
+        / "src"
+        / "services"
+        / "valuation_orchestrator_service"
+        / "app"
+        / "core"
+        / "valuation_scheduler.py"
+    )
+    scheduler.parent.mkdir(parents=True)
+    scheduler.write_text(
+        "from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+
+    findings = _scan_for_disallowed_imports(
+        [scheduler],
+        rules=(
+            DirectImportBoundaryRule(
+                name="valuation scheduler must not import concrete Kafka utilities",
+                source_path_prefixes=(
+                    "src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py",
+                ),
+                forbidden_module_prefixes=("portfolio_common.kafka_utils",),
+            ),
+        ),
+    )
+
+    assert findings == [
+        "src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py:1: "
+        "valuation scheduler must not import concrete Kafka utilities: "
+        "disallowed direct import 'portfolio_common.kafka_utils'"
+    ]

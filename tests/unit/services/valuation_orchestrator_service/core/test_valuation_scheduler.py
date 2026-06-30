@@ -19,6 +19,9 @@ from portfolio_common.reprocessing_job_repository import ReprocessingJobReposito
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.valuation_orchestrator_service.app.core.valuation_job_publisher import (
+    KafkaValuationJobPublisher,
+)
 from src.services.valuation_orchestrator_service.app.core.valuation_scheduler import (
     ValuationScheduler,
 )
@@ -38,11 +41,10 @@ def mock_kafka_producer() -> MagicMock:
 
 @pytest.fixture
 def scheduler(mock_kafka_producer: MagicMock) -> ValuationScheduler:
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_kafka_producer",
-        return_value=mock_kafka_producer,
-    ):
-        yield ValuationScheduler(poll_interval=0.01)
+    yield ValuationScheduler(
+        poll_interval=0.01,
+        valuation_job_publisher=KafkaValuationJobPublisher(mock_kafka_producer),
+    )
 
 
 @pytest.fixture
@@ -600,6 +602,8 @@ async def test_scheduler_dispatches_claimed_jobs(
         topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
         key="P1",
         value={
+            "event_type": None,
+            "schema_version": None,
             "portfolio_id": "P1",
             "security_id": "S1",
             "valuation_date": "2025-08-11",
@@ -631,6 +635,8 @@ async def test_scheduler_omits_empty_correlation_header(
         topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
         key="P2",
         value={
+            "event_type": None,
+            "schema_version": None,
             "portfolio_id": "P2",
             "security_id": "S2",
             "valuation_date": "2025-08-12",
@@ -701,11 +707,9 @@ async def test_scheduler_reads_max_attempts_from_environment(
     monkeypatch.setenv("VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES", "12")
     monkeypatch.setenv("VALUATION_SCHEDULER_MAX_ATTEMPTS", "6")
 
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_kafka_producer",
-        return_value=mock_kafka_producer,
-    ):
-        scheduler = ValuationScheduler()
+    scheduler = ValuationScheduler(
+        valuation_job_publisher=KafkaValuationJobPublisher(mock_kafka_producer)
+    )
 
     assert scheduler._poll_interval == 9
     assert scheduler._batch_size == 17
@@ -717,11 +721,11 @@ async def test_scheduler_reads_max_attempts_from_environment(
 async def test_scheduler_claim_loop_stops_after_partial_batch(
     mock_kafka_producer: MagicMock,
 ):
-    with patch(
-        "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_kafka_producer",
-        return_value=mock_kafka_producer,
-    ):
-        scheduler = ValuationScheduler(poll_interval=0.01, batch_size=2)
+    scheduler = ValuationScheduler(
+        poll_interval=0.01,
+        batch_size=2,
+        valuation_job_publisher=KafkaValuationJobPublisher(mock_kafka_producer),
+    )
 
     claimed_batch_1 = [
         PortfolioValuationJob(

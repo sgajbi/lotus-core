@@ -4,11 +4,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List
 
-from portfolio_common.config import KAFKA_VALUATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioValuationRequiredEvent
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.monitoring import (
     INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
     POSITION_STATE_WATERMARK_LAG_DAYS,
@@ -27,6 +25,7 @@ from portfolio_common.valuation_job_repository import ValuationJobRepository, Va
 
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
+from .valuation_job_publisher import ValuationJobPublisher, get_valuation_job_publisher
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,12 @@ class ValuationScheduler:
     dispatches them, and advances watermarks upon completion.
     """
 
-    def __init__(self, poll_interval: int = 30, batch_size: int = 100):
+    def __init__(
+        self,
+        poll_interval: int = 30,
+        batch_size: int = 100,
+        valuation_job_publisher: ValuationJobPublisher | None = None,
+    ):
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
             scheduler_batch_size_default=batch_size,
@@ -51,7 +55,11 @@ class ValuationScheduler:
         self._max_attempts = runtime_settings.valuation_scheduler_max_attempts
         self._running = True
         self._stop_event = asyncio.Event()
-        self._producer: KafkaProducer = get_kafka_producer()
+        self._valuation_job_publisher = (
+            valuation_job_publisher
+            if valuation_job_publisher is not None
+            else get_valuation_job_publisher()
+        )
 
     def stop(self):
         """Signals the scheduler to gracefully shut down."""
@@ -550,8 +558,7 @@ class ValuationScheduler:
         return event.model_dump(mode="json")
 
     def _publish_valuation_job(self, job: PortfolioValuationJob) -> None:
-        self._producer.publish_message(
-            topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
+        self._valuation_job_publisher.publish_job_requested(
             key=job.portfolio_id,
             value=self._valuation_required_event(job),
             headers=self._valuation_job_headers(job),
@@ -564,7 +571,7 @@ class ValuationScheduler:
         remaining_record_keys: list[str],
         cause: Exception,
     ) -> None:
-        self._producer.flush(timeout=10)
+        self._valuation_job_publisher.confirm_delivery(timeout_seconds=10)
         remaining_keys = ", ".join(remaining_record_keys)
         raise RuntimeError(
             "Failed to dispatch valuation jobs after "
@@ -572,7 +579,7 @@ class ValuationScheduler:
         ) from cause
 
     def _confirm_dispatched_jobs(self, record_keys: list[str]) -> None:
-        undelivered_count = self._producer.flush(timeout=10)
+        undelivered_count = self._valuation_job_publisher.confirm_delivery(timeout_seconds=10)
         if not undelivered_count:
             return
         affected_keys = ", ".join(record_keys)
