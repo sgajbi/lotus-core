@@ -98,20 +98,45 @@ from src.services.query_service.app.services.core_snapshot_service import (
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
-from .response_helpers import problem_response
+from .response_helpers import problem_example, problem_response, raise_problem
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
-INTEGRATION_POLICY_BLOCKED_EXAMPLE = {
-    "detail": "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
-}
-CORE_SNAPSHOT_NOT_FOUND_EXAMPLE = {"detail": "Portfolio PORT-INT-001 not found"}
-CORE_SNAPSHOT_CONFLICT_EXAMPLE = {
-    "detail": "Simulation session SIM-20260310-0001 expected version mismatch"
-}
-CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE = {
-    "detail": "Section portfolio_totals requires valuation dependencies that are not available."
-}
+INTEGRATION_POLICY_BLOCKED_EXAMPLE = problem_example(
+    status_code=status.HTTP_403_FORBIDDEN,
+    title="Core snapshot sections blocked by policy",
+    detail="Requested snapshot sections are blocked by strict integration policy.",
+    error_code="QCP_CORE_SNAPSHOT_POLICY_BLOCKED",
+    metadata={"source_product": "PortfolioStateSnapshot"},
+)
+CORE_SNAPSHOT_INVALID_REQUEST_EXAMPLE = problem_example(
+    status_code=status.HTTP_400_BAD_REQUEST,
+    title="Core snapshot request is invalid",
+    detail="Core snapshot request is invalid.",
+    error_code="QCP_CORE_SNAPSHOT_INVALID_REQUEST",
+    metadata={"source_product": "PortfolioStateSnapshot"},
+)
+CORE_SNAPSHOT_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Core snapshot not found",
+    detail="Portfolio or simulation session was not found.",
+    error_code="QCP_CORE_SNAPSHOT_NOT_FOUND",
+    metadata={"source_product": "PortfolioStateSnapshot"},
+)
+CORE_SNAPSHOT_CONFLICT_EXAMPLE = problem_example(
+    status_code=status.HTTP_409_CONFLICT,
+    title="Core snapshot conflict",
+    detail="Core snapshot request conflicts with the current portfolio or simulation state.",
+    error_code="QCP_CORE_SNAPSHOT_CONFLICT",
+    metadata={"source_product": "PortfolioStateSnapshot"},
+)
+CORE_SNAPSHOT_UNAVAILABLE_EXAMPLE = problem_example(
+    status_code=422,
+    title="Core snapshot section unavailable",
+    detail="Requested core snapshot section cannot be fulfilled from available source data.",
+    error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
+    metadata={"source_product": "PortfolioStateSnapshot"},
+)
 INSTRUMENT_ENRICHMENT_INVALID_EXAMPLE = {
     "detail": "security_ids must contain at least one identifier"
 }
@@ -232,9 +257,10 @@ async def get_effective_integration_policy(
     "/portfolios/{portfolio_id}/core-snapshot",
     response_model=CoreSnapshotResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Invalid request payload or invalid section/mode combination."
-        },
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Invalid request payload or invalid section/mode combination.",
+            CORE_SNAPSHOT_INVALID_REQUEST_EXAMPLE,
+        ),
         status.HTTP_403_FORBIDDEN: problem_response(
             "Requested sections are blocked by strict integration policy.",
             INTEGRATION_POLICY_BLOCKED_EXAMPLE,
@@ -360,16 +386,24 @@ def _assert_core_snapshot_sections_allowed(
     strict_mode: bool,
 ) -> None:
     if dropped_sections and strict_mode:
-        dropped = ", ".join(section.value for section in dropped_sections)
-        raise HTTPException(
+        raise_problem(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: {dropped}",
+            title="Core snapshot sections blocked by policy",
+            detail="Requested snapshot sections are blocked by strict integration policy.",
+            error_code="QCP_CORE_SNAPSHOT_POLICY_BLOCKED",
+            metadata={
+                "source_product": "PortfolioStateSnapshot",
+                "blocked_sections": [section.value for section in dropped_sections],
+            },
         )
 
     if not applied_sections:
-        raise HTTPException(
+        raise_problem(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No sections remain after policy evaluation.",
+            title="Core snapshot request is invalid",
+            detail="No core snapshot sections remain after policy evaluation.",
+            error_code="QCP_CORE_SNAPSHOT_INVALID_REQUEST",
+            metadata={"source_product": "PortfolioStateSnapshot"},
         )
 
 
@@ -410,13 +444,41 @@ async def _core_snapshot_response_or_http_error(
         )
         return cast(CoreSnapshotResponse, response)
     except CoreSnapshotBadRequestError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise_problem(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            title="Core snapshot request is invalid",
+            detail="Core snapshot request is invalid.",
+            error_code="QCP_CORE_SNAPSHOT_INVALID_REQUEST",
+            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
+        )
     except CoreSnapshotNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise_problem(
+            status_code=status.HTTP_404_NOT_FOUND,
+            title="Core snapshot not found",
+            detail="Portfolio or simulation session was not found.",
+            error_code="QCP_CORE_SNAPSHOT_NOT_FOUND",
+            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
+        )
     except CoreSnapshotConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        raise_problem(
+            status_code=status.HTTP_409_CONFLICT,
+            title="Core snapshot conflict",
+            detail=(
+                "Core snapshot request conflicts with the current portfolio or simulation state."
+            ),
+            error_code="QCP_CORE_SNAPSHOT_CONFLICT",
+            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
+        )
     except CoreSnapshotUnavailableSectionError as exc:
-        raise HTTPException(status_code=HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
+        raise_problem(
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+            title="Core snapshot section unavailable",
+            detail=(
+                "Requested core snapshot section cannot be fulfilled from available source data."
+            ),
+            error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
+            metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
+        )
 
 
 @router.post(

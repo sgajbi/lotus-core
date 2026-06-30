@@ -184,6 +184,23 @@ async def async_test_client():
     app.dependency_overrides.pop(get_analytics_timeseries_service, None)
 
 
+def _assert_problem_details(
+    response,
+    *,
+    status_code: int,
+    error_code: str,
+    detail: str,
+) -> dict:
+    body = response.json()
+    assert response.status_code == status_code
+    assert body["status"] == status_code
+    assert body["error_code"] == error_code
+    assert body["detail"] == detail
+    assert body["correlation_id"]
+    assert body["type"].endswith(error_code.lower())
+    return body
+
+
 async def test_portfolio_analytics_timeseries_success(async_test_client):
     client, mock_service = async_test_client
     response = await client.post(
@@ -269,8 +286,13 @@ async def test_portfolio_analytics_timeseries_invalid_request_maps_to_400(async_
         },
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Page token does not match request scope."
+    body = _assert_problem_details(
+        response,
+        status_code=400,
+        error_code="QCP_ANALYTICS_INVALID_REQUEST",
+        detail="Analytics request is invalid.",
+    )
+    assert body["metadata"]["analytics_error_code"] == "INVALID_REQUEST"
 
 
 async def test_portfolio_analytics_timeseries_not_found_maps_to_404(async_test_client):
@@ -290,8 +312,12 @@ async def test_portfolio_analytics_timeseries_not_found_maps_to_404(async_test_c
         },
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Portfolio not found."
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_ANALYTICS_NOT_FOUND",
+        detail="Requested analytics source was not found.",
+    )
 
 
 async def test_portfolio_analytics_timeseries_insufficient_data_maps_to_422(
@@ -315,8 +341,12 @@ async def test_portfolio_analytics_timeseries_insufficient_data_maps_to_422(
         },
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == "Missing FX rate for EUR/USD on 2025-01-31."
+    _assert_problem_details(
+        response,
+        status_code=422,
+        error_code="QCP_ANALYTICS_INSUFFICIENT_DATA",
+        detail="Required analytics source data is unavailable.",
+    )
 
 
 async def test_position_analytics_timeseries_success(async_test_client):
@@ -404,8 +434,12 @@ async def test_position_analytics_timeseries_insufficient_data_maps_to_422(async
         },
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == "Missing FX rate for EUR/USD on 2025-01-31."
+    _assert_problem_details(
+        response,
+        status_code=422,
+        error_code="QCP_ANALYTICS_INSUFFICIENT_DATA",
+        detail="Required analytics source data is unavailable.",
+    )
 
 
 async def test_portfolio_analytics_reference_success(async_test_client):
@@ -448,8 +482,12 @@ async def test_portfolio_analytics_reference_not_found_maps_to_404(async_test_cl
         },
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Portfolio not found."
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_ANALYTICS_NOT_FOUND",
+        detail="Requested analytics source was not found.",
+    )
 
 
 async def test_create_analytics_export_job_success(async_test_client):
@@ -506,8 +544,12 @@ async def test_create_analytics_export_job_invalid_request_maps_to_400(async_tes
         },
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Exactly one of window or period must be provided."
+    _assert_problem_details(
+        response,
+        status_code=400,
+        error_code="QCP_ANALYTICS_INVALID_REQUEST",
+        detail="Analytics request is invalid.",
+    )
 
 
 async def test_get_analytics_export_job_success(async_test_client):
@@ -530,8 +572,12 @@ async def test_get_analytics_export_job_not_found_maps_to_404(async_test_client)
 
     response = await client.get("/integration/exports/analytics-timeseries/jobs/aexp_404")
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Export job not found."
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_ANALYTICS_NOT_FOUND",
+        detail="Requested analytics source was not found.",
+    )
 
 
 async def test_get_analytics_export_job_result_json_success(async_test_client):
@@ -573,8 +619,12 @@ async def test_get_analytics_export_job_result_incomplete_maps_to_422(async_test
         "/integration/exports/analytics-timeseries/jobs/aexp_1/result?result_format=json&compression=none"
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == "Export job JOB-AN-0001 is not complete."
+    _assert_problem_details(
+        response,
+        status_code=422,
+        error_code="QCP_ANALYTICS_INSUFFICIENT_DATA",
+        detail="Required analytics source data is unavailable.",
+    )
 
 
 async def test_get_analytics_export_job_result_unsupported_configuration_maps_to_422(
@@ -592,5 +642,9 @@ async def test_get_analytics_export_job_result_unsupported_configuration_maps_to
         "/integration/exports/analytics-timeseries/jobs/aexp_1/result?result_format=ndjson&compression=none"
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == "Export job JOB-AN-0001 cannot be rendered as NDJSON."
+    _assert_problem_details(
+        response,
+        status_code=422,
+        error_code="QCP_ANALYTICS_UNSUPPORTED_CONFIGURATION",
+        detail="Requested analytics configuration is unsupported.",
+    )

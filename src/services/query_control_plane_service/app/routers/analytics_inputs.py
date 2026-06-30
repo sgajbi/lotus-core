@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, NoReturn, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from fastapi.responses import Response
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
@@ -24,21 +24,73 @@ from src.services.query_service.app.services.analytics_timeseries_service import
     AnalyticsTimeseriesService,
 )
 
+from .response_helpers import problem_example, problem_response, raise_problem
+
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
-PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE = {"detail": "Portfolio not found."}
-ANALYTICS_INVALID_REQUEST_EXAMPLE = {"detail": "Exactly one of window or period must be provided."}
-ANALYTICS_INSUFFICIENT_DATA_EXAMPLE = {"detail": "Missing FX rate for EUR/USD on 2025-01-31."}
-ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE = {"detail": "Analytics export job JOB-AN-0001 not found."}
-ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = {
-    "detail": "Analytics export job JOB-AN-0001 is not complete."
-}
+PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Analytics source not found",
+    detail="Requested analytics source was not found.",
+    error_code="QCP_ANALYTICS_NOT_FOUND",
+    metadata={"source_product": "PortfolioTimeseriesInput"},
+)
+ANALYTICS_INVALID_REQUEST_EXAMPLE = problem_example(
+    status_code=status.HTTP_400_BAD_REQUEST,
+    title="Analytics request is invalid",
+    detail="Analytics request is invalid.",
+    error_code="QCP_ANALYTICS_INVALID_REQUEST",
+    metadata={"source_product": "PortfolioTimeseriesInput"},
+)
+ANALYTICS_INSUFFICIENT_DATA_EXAMPLE = problem_example(
+    status_code=422,
+    title="Analytics source data unavailable",
+    detail="Required analytics source data is unavailable.",
+    error_code="QCP_ANALYTICS_INSUFFICIENT_DATA",
+    metadata={"source_product": "PortfolioTimeseriesInput"},
+)
+ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Analytics source not found",
+    detail="Requested analytics source was not found.",
+    error_code="QCP_ANALYTICS_NOT_FOUND",
+    metadata={"source_product": "AnalyticsExportJob"},
+)
+ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = problem_example(
+    status_code=422,
+    title="Analytics source data unavailable",
+    detail="Required analytics source data is unavailable.",
+    error_code="QCP_ANALYTICS_INSUFFICIENT_DATA",
+    metadata={"source_product": "AnalyticsExportJob"},
+)
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 ANALYTICS_ERROR_STATUS_MAP = {
     "RESOURCE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
     "INVALID_REQUEST": status.HTTP_400_BAD_REQUEST,
     "INSUFFICIENT_DATA": HTTP_422_UNPROCESSABLE_CONTENT,
     "UNSUPPORTED_CONFIGURATION": HTTP_422_UNPROCESSABLE_CONTENT,
+}
+ANALYTICS_ERROR_CONTRACTS = {
+    "RESOURCE_NOT_FOUND": (
+        "Analytics source not found",
+        "Requested analytics source was not found.",
+        "QCP_ANALYTICS_NOT_FOUND",
+    ),
+    "INVALID_REQUEST": (
+        "Analytics request is invalid",
+        "Analytics request is invalid.",
+        "QCP_ANALYTICS_INVALID_REQUEST",
+    ),
+    "INSUFFICIENT_DATA": (
+        "Analytics source data unavailable",
+        "Required analytics source data is unavailable.",
+        "QCP_ANALYTICS_INSUFFICIENT_DATA",
+    ),
+    "UNSUPPORTED_CONFIGURATION": (
+        "Analytics configuration unsupported",
+        "Requested analytics configuration is unsupported.",
+        "QCP_ANALYTICS_UNSUPPORTED_CONFIGURATION",
+    ),
 }
 
 
@@ -53,25 +105,39 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
         exc.code,
         status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
-    raise HTTPException(status_code=status_code, detail=str(exc))
+    title, detail, error_code = ANALYTICS_ERROR_CONTRACTS.get(
+        exc.code,
+        (
+            "Analytics request failed",
+            "Analytics request failed.",
+            "QCP_ANALYTICS_ERROR",
+        ),
+    )
+    raise_problem(
+        status_code=status_code,
+        title=title,
+        detail=detail,
+        error_code=error_code,
+        metadata={"analytics_error_code": exc.code},
+    )
 
 
 @router.post(
     "/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
     response_model=PortfolioAnalyticsTimeseriesResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Invalid request contract.",
-            "content": {"application/json": {"example": ANALYTICS_INVALID_REQUEST_EXAMPLE}},
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE}},
-        },
-        HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Insufficient data or unsupported configuration.",
-            "content": {"application/json": {"example": ANALYTICS_INSUFFICIENT_DATA_EXAMPLE}},
-        },
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Invalid request contract.",
+            ANALYTICS_INVALID_REQUEST_EXAMPLE,
+        ),
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio not found.",
+            PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE,
+        ),
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            "Insufficient data or unsupported configuration.",
+            ANALYTICS_INSUFFICIENT_DATA_EXAMPLE,
+        ),
     },
     summary="Fetch portfolio analytics timeseries inputs",
     description=(
@@ -108,18 +174,18 @@ async def get_portfolio_analytics_timeseries(
     "/portfolios/{portfolio_id}/analytics/position-timeseries",
     response_model=PositionAnalyticsTimeseriesResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Invalid request contract.",
-            "content": {"application/json": {"example": ANALYTICS_INVALID_REQUEST_EXAMPLE}},
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE}},
-        },
-        HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Insufficient data or unsupported configuration.",
-            "content": {"application/json": {"example": ANALYTICS_INSUFFICIENT_DATA_EXAMPLE}},
-        },
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Invalid request contract.",
+            ANALYTICS_INVALID_REQUEST_EXAMPLE,
+        ),
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio not found.",
+            PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE,
+        ),
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            "Insufficient data or unsupported configuration.",
+            ANALYTICS_INSUFFICIENT_DATA_EXAMPLE,
+        ),
     },
     summary="Fetch position analytics timeseries inputs",
     description=(
@@ -156,10 +222,10 @@ async def get_position_analytics_timeseries(
     "/portfolios/{portfolio_id}/analytics/reference",
     response_model=PortfolioAnalyticsReferenceResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio not found.",
+            PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE,
+        ),
     },
     summary="Fetch analytics portfolio reference metadata",
     description=(
@@ -198,18 +264,18 @@ async def get_portfolio_analytics_reference(
     "/exports/analytics-timeseries/jobs",
     response_model=AnalyticsExportJobResponse,
     responses={
-        status.HTTP_400_BAD_REQUEST: {
-            "description": "Invalid export request contract.",
-            "content": {"application/json": {"example": ANALYTICS_INVALID_REQUEST_EXAMPLE}},
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Portfolio not found.",
-            "content": {"application/json": {"example": PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE}},
-        },
-        HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Insufficient source data or unsupported configuration.",
-            "content": {"application/json": {"example": ANALYTICS_INSUFFICIENT_DATA_EXAMPLE}},
-        },
+        status.HTTP_400_BAD_REQUEST: problem_response(
+            "Invalid export request contract.",
+            ANALYTICS_INVALID_REQUEST_EXAMPLE,
+        ),
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Portfolio not found.",
+            PORTFOLIO_ANALYTICS_NOT_FOUND_EXAMPLE,
+        ),
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            "Insufficient source data or unsupported configuration.",
+            ANALYTICS_INSUFFICIENT_DATA_EXAMPLE,
+        ),
     },
     summary="Create analytics timeseries export job",
     description=(
@@ -238,10 +304,10 @@ async def create_analytics_export_job(
     "/exports/analytics-timeseries/jobs/{job_id}",
     response_model=AnalyticsExportJobResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Export job not found.",
-            "content": {"application/json": {"example": ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE}},
-        },
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Export job not found.",
+            ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE,
+        ),
     },
     summary="Fetch analytics export job status",
     description=(
@@ -272,17 +338,17 @@ async def get_analytics_export_job(
     "/exports/analytics-timeseries/jobs/{job_id}/result",
     response_model=AnalyticsExportJsonResultResponse,
     responses={
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Export job not found.",
-            "content": {"application/json": {"example": ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE}},
-        },
-        HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": (
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Export job not found.",
+            ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE,
+        ),
+        HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            (
                 "Export job is incomplete, source payload unavailable, or requested "
                 "serialization is unsupported."
             ),
-            "content": {"application/json": {"example": ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE}},
-        },
+            ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE,
+        ),
     },
     summary="Fetch analytics export job result",
     description=(

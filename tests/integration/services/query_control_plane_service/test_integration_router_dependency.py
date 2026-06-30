@@ -530,6 +530,23 @@ async def async_test_client():
     app.dependency_overrides.pop(get_integration_service, None)
 
 
+def _assert_problem_details(
+    response,
+    *,
+    status_code: int,
+    error_code: str,
+    detail: str,
+) -> dict:
+    body = response.json()
+    assert response.status_code == status_code
+    assert body["status"] == status_code
+    assert body["error_code"] == error_code
+    assert body["detail"] == detail
+    assert body["correlation_id"]
+    assert body["type"].endswith(error_code.lower())
+    return body
+
+
 async def test_core_snapshot_success(async_test_client):
     client, mock_core_snapshot_service, mock_integration_service = async_test_client
 
@@ -652,8 +669,13 @@ async def test_core_snapshot_policy_block_maps_to_403(async_test_client):
         },
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "SNAPSHOT_SECTIONS_BLOCKED_BY_POLICY: positions_projected"
+    body = _assert_problem_details(
+        response,
+        status_code=403,
+        error_code="QCP_CORE_SNAPSHOT_POLICY_BLOCKED",
+        detail="Requested snapshot sections are blocked by strict integration policy.",
+    )
+    assert body["metadata"]["blocked_sections"] == ["positions_projected"]
 
 
 async def test_core_snapshot_not_found_maps_to_404(async_test_client):
@@ -673,8 +695,12 @@ async def test_core_snapshot_not_found_maps_to_404(async_test_client):
         },
     )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Portfolio or simulation session not found."
+    _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_CORE_SNAPSHOT_NOT_FOUND",
+        detail="Portfolio or simulation session was not found.",
+    )
 
 
 async def test_core_snapshot_conflict_maps_to_409(async_test_client):
@@ -697,10 +723,11 @@ async def test_core_snapshot_conflict_maps_to_409(async_test_client):
         },
     )
 
-    assert response.status_code == 409
-    assert (
-        response.json()["detail"]
-        == "Simulation expected_version mismatch or portfolio/session conflict."
+    _assert_problem_details(
+        response,
+        status_code=409,
+        error_code="QCP_CORE_SNAPSHOT_CONFLICT",
+        detail="Core snapshot request conflicts with the current portfolio or simulation state.",
     )
 
 
@@ -723,10 +750,11 @@ async def test_core_snapshot_unavailable_section_maps_to_422(async_test_client):
         },
     )
 
-    assert response.status_code == 422
-    assert (
-        response.json()["detail"]
-        == "Section cannot be fulfilled due to missing valuation dependencies."
+    _assert_problem_details(
+        response,
+        status_code=422,
+        error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
+        detail="Requested core snapshot section cannot be fulfilled from available source data.",
     )
 
 
