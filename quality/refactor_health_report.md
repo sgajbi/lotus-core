@@ -45,7 +45,7 @@ tested modules.
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
 | Cash-balance account-id provenance | Improving | CR-1200 validates transaction-derived cash-account fallback mappings against active/effective cash-account master data and exposes response-level provenance |
 | Instrument reference integrity | Improving | CR-1201 defers product cost processing when instrument master data is missing, before cost and lot-state writes |
-| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples |
+| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, simulation, and operations-support failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Transaction cost curve source reads | Improving | CR-1194 makes `TransactionCostCurve:v1` cursor paging source-read bounded through grouped keyset selection and page-key-scoped transaction evidence reads |
@@ -56,10 +56,11 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1210 continues validated GitHub issue #600 by migrating common outbox and valuation runtime
-settings onto the shared strict/local parser. Existing local fallback and clamp behavior is
-preserved, while strict/non-local profiles now reject malformed dispatcher, scheduler, and worker
-settings.
+CR-1191 continues validated GitHub issue #677 by migrating operations support, lineage,
+reconciliation, job-list, readiness, and load-run errors onto the shared QCP problem-details
+contract. HTTP statuses and success payloads are preserved; migrated failures now use stable
+`QCP_OPERATIONS_*` error codes, `application/problem+json`, bounded details, and source-safe
+metadata instead of raw service exception text.
 
 ## Health Assessment
 

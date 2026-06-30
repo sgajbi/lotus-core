@@ -2,7 +2,7 @@ import logging
 from datetime import date
 from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,21 +32,39 @@ from src.services.query_service.app.support_policy import (
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
 )
 
-from .response_helpers import problem_response
+from .response_helpers import problem_example, problem_response, raise_problem
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Operations Support"])
 
-PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-OPS-001 not found"}
+OPERATIONS_METADATA = {"route_family": "operations_support"}
+PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Operations support resource not found",
+    detail="Requested operations support resource was not found.",
+    error_code="QCP_OPERATIONS_NOT_FOUND",
+    instance="/support/portfolios/PORT-OPS-001/overview",
+    metadata=OPERATIONS_METADATA,
+)
 INVALID_DATE_RESPONSE_DESCRIPTION = "Invalid date filter."
 
-LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
-    "detail": "Lineage for portfolio PORT-OPS-001 and security SEC-US-IBM not found"
-}
-RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = {
-    "detail": "Reconciliation run recon_1234567890abcdef not found for portfolio PORT-OPS-001"
-}
+LINEAGE_NOT_FOUND_RESPONSE_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Operations support resource not found",
+    detail="Requested operations support resource was not found.",
+    error_code="QCP_OPERATIONS_NOT_FOUND",
+    instance="/lineage/portfolios/PORT-OPS-001/securities/SEC-US-IBM",
+    metadata={**OPERATIONS_METADATA, "resource": "lineage"},
+)
+RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Operations support resource not found",
+    detail="Requested operations support resource was not found.",
+    error_code="QCP_OPERATIONS_NOT_FOUND",
+    instance="/support/portfolios/PORT-OPS-001/reconciliation-runs/recon_1234567890abcdef/findings",
+    metadata={**OPERATIONS_METADATA, "resource": "reconciliation_findings"},
+)
 T = TypeVar("T")
 
 
@@ -63,8 +81,15 @@ def invalid_date_response(field_name: str) -> dict[str, object]:
     )
 
 
-def invalid_date_response_example(field_name: str) -> dict[str, str]:
-    return {"detail": f"Invalid {field_name} '2026-31-03'. Expected YYYY-MM-DD format."}
+def invalid_date_response_example(field_name: str) -> dict[str, object]:
+    return problem_example(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        title="Invalid operations date filter",
+        detail="Invalid date filter. Expected YYYY-MM-DD format.",
+        error_code="QCP_OPERATIONS_INVALID_DATE",
+        instance="/support/portfolios/PORT-OPS-001/readiness",
+        metadata={**OPERATIONS_METADATA, "field": field_name},
+    )
 
 
 def parse_optional_iso_date(field_name: str, value: Optional[str]) -> Optional[date]:
@@ -73,19 +98,25 @@ def parse_optional_iso_date(field_name: str, value: Optional[str]) -> Optional[d
 
     try:
         return date.fromisoformat(value)
-    except ValueError as exc:
-        raise HTTPException(
+    except ValueError:
+        raise_problem(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid {field_name} '{value}'. Expected YYYY-MM-DD format.",
-        ) from exc
+            title="Invalid operations date filter",
+            detail="Invalid date filter. Expected YYYY-MM-DD format.",
+            error_code="QCP_OPERATIONS_INVALID_DATE",
+            metadata={**OPERATIONS_METADATA, "field": field_name},
+        )
 
 
 def parse_required_iso_date(field_name: str, value: str) -> date:
     parsed_value = parse_optional_iso_date(field_name, value)
     if parsed_value is None:
-        raise HTTPException(
+        raise_problem(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Missing required {field_name}.",
+            title="Missing operations date filter",
+            detail="Missing required date filter.",
+            error_code="QCP_OPERATIONS_MISSING_DATE",
+            metadata={**OPERATIONS_METADATA, "field": field_name},
         )
     return parsed_value
 
@@ -99,14 +130,23 @@ async def execute_operations_call(
 ) -> T:
     try:
         return await operation
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except Exception as exc:
+    except ValueError:
+        raise_problem(
+            status_code=status.HTTP_404_NOT_FOUND,
+            title="Operations support resource not found",
+            detail="Requested operations support resource was not found.",
+            error_code="QCP_OPERATIONS_NOT_FOUND",
+            metadata=OPERATIONS_METADATA,
+        )
+    except Exception:
         logger.exception(log_message, *log_args)
-        raise HTTPException(
+        raise_problem(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Operations support request failed",
             detail=unexpected_detail,
-        ) from exc
+            error_code="QCP_OPERATIONS_UNEXPECTED_ERROR",
+            metadata=OPERATIONS_METADATA,
+        )
 
 
 def get_operations_service(
@@ -285,7 +325,14 @@ async def get_calculator_slos(
     responses={
         status.HTTP_404_NOT_FOUND: problem_response(
             "Load run not found.",
-            {"detail": "Load run 20260418T065154Z not found"},
+            problem_example(
+                status_code=status.HTTP_404_NOT_FOUND,
+                title="Operations support resource not found",
+                detail="Requested operations support resource was not found.",
+                error_code="QCP_OPERATIONS_NOT_FOUND",
+                instance="/support/load-runs/20260418T065154Z",
+                metadata={**OPERATIONS_METADATA, "resource": "load_run"},
+            ),
         ),
         status.HTTP_400_BAD_REQUEST: invalid_date_response("business_date"),
     },

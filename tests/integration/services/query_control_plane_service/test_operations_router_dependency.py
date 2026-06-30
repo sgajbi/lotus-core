@@ -21,7 +21,9 @@ async def test_parse_required_iso_date_rejects_missing_value():
         parse_required_iso_date("business_date", None)  # type: ignore[arg-type]
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "Missing required business_date."
+    assert exc_info.value.detail == "Missing required date filter."
+    assert exc_info.value.error_code == "QCP_OPERATIONS_MISSING_DATE"
+    assert exc_info.value.metadata["field"] == "business_date"
 
 
 def _source_data_product_metadata(
@@ -437,9 +439,11 @@ async def test_portfolio_readiness_invalid_as_of_date_maps_to_400(async_test_cli
     response = await client.get("/support/portfolios/P1/readiness?as_of_date=2026-31-03")
 
     assert response.status_code == 400
-    assert (
-        response.json()["detail"] == "Invalid as_of_date '2026-31-03'. Expected YYYY-MM-DD format."
-    )
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert body["detail"] == "Invalid date filter. Expected YYYY-MM-DD format."
+    assert body["error_code"] == "QCP_OPERATIONS_INVALID_DATE"
+    assert body["metadata"]["field"] == "as_of_date"
     mock_service.get_portfolio_readiness.assert_not_awaited()
 
 
@@ -449,10 +453,11 @@ async def test_control_stages_invalid_business_date_maps_to_400(async_test_clien
     response = await client.get("/support/portfolios/P1/control-stages?business_date=2026-31-03")
 
     assert response.status_code == 400
-    assert (
-        response.json()["detail"]
-        == "Invalid business_date '2026-31-03'. Expected YYYY-MM-DD format."
-    )
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert body["detail"] == "Invalid date filter. Expected YYYY-MM-DD format."
+    assert body["error_code"] == "QCP_OPERATIONS_INVALID_DATE"
+    assert body["metadata"]["field"] == "business_date"
     mock_service.get_portfolio_control_stages.assert_not_awaited()
 
 
@@ -464,10 +469,11 @@ async def test_reprocessing_keys_invalid_watermark_date_maps_to_400(async_test_c
     )
 
     assert response.status_code == 400
-    assert (
-        response.json()["detail"]
-        == "Invalid watermark_date '2026-31-03'. Expected YYYY-MM-DD format."
-    )
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert body["detail"] == "Invalid date filter. Expected YYYY-MM-DD format."
+    assert body["error_code"] == "QCP_OPERATIONS_INVALID_DATE"
+    assert body["metadata"]["field"] == "watermark_date"
     mock_service.get_reprocessing_keys.assert_not_awaited()
 
 
@@ -574,7 +580,10 @@ async def test_lineage_not_found_maps_to_404(async_test_client):
     response = await client.get("/lineage/portfolios/P1/securities/S404")
 
     assert response.status_code == 404
-    assert "lineage state not found" in response.json()["detail"].lower()
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert body["detail"] == "Requested operations support resource was not found."
+    assert body["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
 
 
 async def test_lineage_unexpected_maps_to_500(async_test_client):
