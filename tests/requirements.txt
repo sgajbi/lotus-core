@@ -12,6 +12,7 @@ pytest-asyncio==1.4.0
 # HTTP client for testing APIs
 requests==2.34.2
 httpx==0.28.1
+httpx2==2.4.0
 
 # Database drivers (sync and async)
 psycopg2-binary==2.9.12
