@@ -37,6 +37,7 @@ tested modules.
 | Outbox failure evidence | Improving | CR-1187 persists source-safe last-failure reason code, category, redacted bounded message, and failure timestamp on retryable and terminal outbox delivery failures |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
+| DLQ/replay correlation diagnostics | Improving | CR-1206 adds correlation-or-reason diagnostics to consumer DLQ and replay-audit records, exposes alternate lookup keys in replay responses, and hardens ingestion rate-limit metric registration against duplicate-import CI failures |
 | Corporate-action ordering policy | Improving | CR-1197 routes cost-engine Bundle A sorting through the canonical shared ordering helper and removes the duplicated private rank map |
 | Corporate-action reconciliation evidence | Improving | CR-1198 records Bundle A reconciliation outcomes as durable `corporate_action_bundle_a` financial reconciliation runs and findings instead of log-only diagnostics |
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
@@ -53,11 +54,12 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1205 addresses the first source-observation standardization slice for validated GitHub issue
-#557. Benchmark, index, risk-free, and classification reference-data ingestion DTOs now share
-canonical `source_system`, `source_record_id`, `observed_at`, and normalized `quality_status`
-fields while legacy `source_vendor` and `source_timestamp` payloads remain accepted and existing
-database columns remain unchanged.
+CR-1206 addresses the first durable operational-correlation slice for validated GitHub issue #556.
+Consumer DLQ and replay-audit records now expose `correlation_missing_reason` and
+`alternate_lookup_key` when correlation metadata is absent, while existing nullable
+`correlation_id` compatibility remains intact. The same slice fixed a duplicate Prometheus counter
+registration failure that appeared when ingestion and event-replay integration tests imported
+service apps in one Python process.
 
 ## Health Assessment
 

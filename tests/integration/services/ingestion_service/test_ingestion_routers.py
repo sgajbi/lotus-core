@@ -786,6 +786,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             dry_run: bool,
             replay_reason: str,
             requested_by: str | None,
+            correlation_missing_reason: str | None = None,
+            alternate_lookup_key: str | None = None,
         ) -> str:
             replay_id = f"replay_test_{len(self.replay_audit) + 1}"
             self.replay_audit[replay_fingerprint] = {
@@ -794,6 +796,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "event_id": event_id,
                 "replay_fingerprint": replay_fingerprint,
                 "correlation_id": correlation_id,
+                "correlation_missing_reason": correlation_missing_reason,
+                "alternate_lookup_key": alternate_lookup_key,
                 "job_id": job_id,
                 "endpoint": endpoint,
                 "replay_status": replay_status,
@@ -5094,11 +5098,21 @@ async def test_replay_consumer_dlq_event_reports_not_replayable_without_correlat
     assert body == {
         "event_id": "cdlq_test_no_corr",
         "correlation_id": None,
+        "correlation_missing_reason": "message_correlation_id_absent",
+        "alternate_lookup_key": (
+            "consumer_dlq|topic=transactions.raw.received|group=persistence-service-group|"
+            "dlq=dlq.persistence_service|key=TXN-2026-000199|event=cdlq_test_no_corr"
+        ),
         "job_id": None,
         "replay_status": "not_replayable",
         "replay_audit_id": body["replay_audit_id"],
         "replay_fingerprint": body["replay_fingerprint"],
-        "message": "DLQ event has no correlation id and cannot be mapped to ingestion payload.",
+        "message": (
+            "DLQ event has no correlation id and cannot be mapped to ingestion payload. "
+            "Missing reason: message_correlation_id_absent; alternate lookup key: "
+            "consumer_dlq|topic=transactions.raw.received|group=persistence-service-group|"
+            "dlq=dlq.persistence_service|key=TXN-2026-000199|event=cdlq_test_no_corr."
+        ),
     }
 
 

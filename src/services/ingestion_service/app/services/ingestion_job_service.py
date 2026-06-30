@@ -347,12 +347,16 @@ class IngestionJobService:
         dry_run: bool,
         replay_reason: str,
         requested_by: str | None,
+        correlation_missing_reason: str | None = None,
+        alternate_lookup_key: str | None = None,
     ) -> str:
         return await record_consumer_dlq_replay_audit_response(
             recovery_path=recovery_path,
             event_id=event_id,
             replay_fingerprint=replay_fingerprint,
             correlation_id=correlation_id,
+            correlation_missing_reason=correlation_missing_reason,
+            alternate_lookup_key=alternate_lookup_key,
             job_id=job_id,
             endpoint=endpoint,
             replay_status=replay_status,

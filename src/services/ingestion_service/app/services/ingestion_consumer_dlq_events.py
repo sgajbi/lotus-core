@@ -6,6 +6,28 @@ from sqlalchemy import desc, select
 from ..DTOs.ingestion_job_dto import ConsumerDlqEventResponse
 
 
+def _missing_correlation_reason(event: DBConsumerDlqEvent) -> str | None:
+    reason = getattr(event, "correlation_missing_reason", None)
+    if reason:
+        return reason
+    if event.correlation_id:
+        return None
+    return "message_correlation_id_absent"
+
+
+def _alternate_lookup_key(event: DBConsumerDlqEvent) -> str | None:
+    lookup_key = getattr(event, "alternate_lookup_key", None)
+    if lookup_key:
+        return lookup_key
+    if event.correlation_id:
+        return None
+    original_key = event.original_key or "unkeyed"
+    return (
+        f"consumer_dlq|topic={event.original_topic}|group={event.consumer_group}|"
+        f"dlq={event.dlq_topic}|key={original_key}|event={event.event_id}"
+    )
+
+
 def to_consumer_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEventResponse:
     return ConsumerDlqEventResponse(
         event_id=event.event_id,
@@ -16,6 +38,8 @@ def to_consumer_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEven
         error_reason_code=event.error_reason_code,
         error_reason=event.error_reason,
         correlation_id=event.correlation_id,
+        correlation_missing_reason=_missing_correlation_reason(event),
+        alternate_lookup_key=_alternate_lookup_key(event),
         payload_excerpt=event.payload_excerpt,
         observed_at=event.observed_at,
     )

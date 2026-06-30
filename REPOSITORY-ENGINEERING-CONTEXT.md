@@ -107,6 +107,12 @@ Current repository posture:
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
     `source_vendor` and `source_timestamp` inputs remain accepted and are mapped to the existing
     storage columns until persistence migrations are explicitly approved.
+24. Consumer DLQ and replay-audit evidence now follows a correlation-or-reason contract:
+    `correlation_id` remains nullable for legacy and malformed events, but missing-correlation rows
+    must carry `correlation_missing_reason` and `alternate_lookup_key` for support lookup and replay
+    forensics. The first implementation covers shared Kafka DLQ persistence, consumer DLQ read
+    DTOs, replay response DTOs, replay-audit persistence, and missing-correlation not-replayable
+    replay responses.
 
 ## Architecture And Module Map
 

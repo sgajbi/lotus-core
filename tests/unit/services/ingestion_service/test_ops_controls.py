@@ -52,6 +52,16 @@ def _build_hs256_jwt(secret: str, payload: dict) -> str:
     return f"{header_b64}.{payload_b64}.{signature_b64}"
 
 
+def test_ingestion_write_rate_limit_counter_registration_is_idempotent() -> None:
+    counter = ops_controls._get_or_create_counter(
+        "ingestion_write_rate_limit_denials_total",
+        "Ingestion write requests denied by the configured rate-limit policy.",
+        ("endpoint", "reason", "enforcement_scope"),
+    )
+
+    assert counter is ops_controls.INGESTION_WRITE_RATE_LIMIT_DENIALS_TOTAL
+
+
 @pytest.mark.asyncio
 async def test_require_ops_token_accepts_token_only_header(monkeypatch) -> None:
     monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "token_only")

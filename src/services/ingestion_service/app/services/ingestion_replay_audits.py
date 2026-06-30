@@ -25,6 +25,8 @@ def to_replay_audit_response(row: DBConsumerDlqReplayAudit) -> IngestionReplayAu
         event_id=row.event_id,
         replay_fingerprint=row.replay_fingerprint,
         correlation_id=row.correlation_id,
+        correlation_missing_reason=getattr(row, "correlation_missing_reason", None),
+        alternate_lookup_key=getattr(row, "alternate_lookup_key", None),
         job_id=row.job_id,
         endpoint=row.endpoint,
         replay_status=row.replay_status,  # type: ignore[arg-type]
@@ -114,6 +116,8 @@ async def record_consumer_dlq_replay_audit_response(
     replay_reason: str,
     requested_by: str | None,
     session_factory,
+    correlation_missing_reason: str | None = None,
+    alternate_lookup_key: str | None = None,
 ) -> str:
     replay_id = f"replay_{uuid4().hex}"
     try:
@@ -126,6 +130,8 @@ async def record_consumer_dlq_replay_audit_response(
                         event_id=event_id,
                         replay_fingerprint=replay_fingerprint,
                         correlation_id=correlation_id,
+                        correlation_missing_reason=correlation_missing_reason,
+                        alternate_lookup_key=alternate_lookup_key,
                         job_id=job_id,
                         endpoint=endpoint,
                         replay_status=replay_status,

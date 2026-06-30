@@ -569,6 +569,12 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     assert consumer_dlq_event["properties"]["payload_excerpt"]["description"] == (
         "Redacted, truncated payload excerpt for operational triage."
     )
+    assert consumer_dlq_event["properties"]["correlation_missing_reason"]["description"] == (
+        "Explicit reason correlation_id is absent; null when correlation_id is present."
+    )
+    assert consumer_dlq_event["properties"]["alternate_lookup_key"]["description"].startswith(
+        "Durable alternate support lookup key"
+    )
     assert consumer_dlq_event_list["properties"]["events"]["description"] == (
         "Consumer dead-letter events for operational triage."
     )
@@ -578,7 +584,19 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     assert consumer_dlq_replay["properties"]["replay_fingerprint"]["description"] == (
         "Deterministic fingerprint for this replay mapping and payload."
     )
+    assert consumer_dlq_replay["properties"]["correlation_missing_reason"]["description"] == (
+        "Explicit reason correlation_id is absent; null when replay used a correlation_id."
+    )
+    assert consumer_dlq_replay["properties"]["alternate_lookup_key"]["description"] == (
+        "Durable alternate lookup key used for diagnostics when correlation_id is absent."
+    )
     assert replay_audit["properties"]["replay_status"]["description"] == "Replay outcome status."
+    assert replay_audit["properties"]["correlation_missing_reason"]["description"] == (
+        "Explicit reason correlation_id is absent on the replay audit row."
+    )
+    assert replay_audit["properties"]["alternate_lookup_key"]["description"] == (
+        "Durable alternate lookup key for replay diagnostics when correlation_id is absent."
+    )
     assert replay_audit["properties"]["requested_by"]["description"] == (
         "Ops principal who initiated replay."
     )

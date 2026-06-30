@@ -60,7 +60,22 @@ async def test_to_consumer_dlq_event_response_preserves_operator_fields() -> Non
     assert response.consumer_group == "valuation-service-group"
     assert response.error_reason_code == "VALIDATION_ERROR"
     assert response.correlation_id == "corr-1"
+    assert response.correlation_missing_reason is None
+    assert response.alternate_lookup_key is None
     assert response.payload_excerpt == '{"portfolio_id":"portfolio-1"}'
+
+
+async def test_to_consumer_dlq_event_response_derives_missing_correlation_lineage() -> None:
+    response = to_consumer_dlq_event_response(
+        _event(correlation_id=None, original_key=None, event_id="dlq-missing-corr")
+    )
+
+    assert response.correlation_id is None
+    assert response.correlation_missing_reason == "message_correlation_id_absent"
+    assert response.alternate_lookup_key == (
+        "consumer_dlq|topic=valuation.jobs|group=valuation-service-group|"
+        "dlq=valuation.jobs.dlq|key=unkeyed|event=dlq-missing-corr"
+    )
 
 
 async def test_list_consumer_dlq_event_responses_maps_rows() -> None:

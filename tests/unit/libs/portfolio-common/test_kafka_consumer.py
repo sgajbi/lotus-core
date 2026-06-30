@@ -58,7 +58,15 @@ def test_consumer(mock_confluent_consumer, mock_kafka_producer) -> ConcreteTestC
         yield consumer
 
 
-def create_mock_message(key, value, topic="test-topic", error=None, headers=None):
+def create_mock_message(
+    key,
+    value,
+    topic="test-topic",
+    error=None,
+    headers=None,
+    partition=0,
+    offset=42,
+):
     """Helper function to create a mock Kafka message."""
     mock_msg = MagicMock()
     mock_msg.error.return_value = error
@@ -66,6 +74,8 @@ def create_mock_message(key, value, topic="test-topic", error=None, headers=None
     mock_msg.key.return_value = key.encode("utf-8") if key else None
     mock_msg.value.return_value = json.dumps(value).encode("utf-8")
     mock_msg.headers.return_value = headers or []
+    mock_msg.partition.return_value = partition
+    mock_msg.offset.return_value = offset
     return mock_msg
 
 
@@ -437,6 +447,45 @@ async def test_record_consumer_dlq_event_redacts_payload_excerpt(
         "authorization": "***REDACTED***",
         "safe": "visible",
     }
+
+
+async def test_record_consumer_dlq_event_persists_missing_correlation_diagnostics(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        None,
+        {"safe": "visible"},
+        topic="transactions.raw.received",
+        partition=3,
+        offset=9001,
+    )
+    mock_db = MagicMock()
+    transaction = MagicMock()
+    transaction.__aenter__ = AsyncMock(return_value=None)
+    transaction.__aexit__ = AsyncMock(return_value=None)
+    added_events = []
+
+    async def get_session_gen():
+        yield mock_db
+
+    mock_db.begin.return_value = transaction
+    mock_db.add.side_effect = added_events.append
+
+    with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
+        await test_consumer._record_consumer_dlq_event(
+            msg=mock_msg,
+            error=ValueError("missing portfolio_id"),
+            error_reason_code="VALIDATION_ERROR",
+            correlation_id=None,
+        )
+
+    assert len(added_events) == 1
+    assert added_events[0].correlation_id is None
+    assert added_events[0].correlation_missing_reason == "message_correlation_id_absent"
+    assert added_events[0].alternate_lookup_key == (
+        "consumer_dlq|topic=transactions.raw.received|group=test-group|"
+        "dlq=test.dlq|partition=3|offset=9001|key=unkeyed"
+    )
 
 
 async def test_record_consumer_dlq_event_uses_source_safe_validation_reason(

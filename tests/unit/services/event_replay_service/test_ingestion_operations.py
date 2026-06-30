@@ -8,6 +8,7 @@ from src.services.event_replay_service.app.application.replay_payload_dispatcher
     IngestionServiceReplayPayloadDispatcher,
 )
 from src.services.event_replay_service.app.routers.ingestion_operations import (
+    _consumer_dlq_not_replayable_response,
     _consumer_dlq_replay_candidate_or_response,
     _filter_payload_by_record_keys,
 )
@@ -155,6 +156,38 @@ async def test_consumer_dlq_replay_candidate_records_no_correlated_job_response(
     assert response.job_id is None
     assert response.message == "No correlated ingestion job found for consumer DLQ event."
     ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_consumer_dlq_not_replayable_records_missing_correlation_diagnostics() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-003")
+
+    response = await _consumer_dlq_not_replayable_response(
+        event_id="dlq-003",
+        correlation_id=None,
+        correlation_missing_reason="message_correlation_id_absent",
+        alternate_lookup_key="consumer_dlq|topic=transactions.raw.received|event=dlq-003",
+        job_id=None,
+        endpoint=None,
+        dry_run=True,
+        replay_reason="DLQ event has no correlation id.",
+        ingestion_job_service=ingestion_job_service,
+        requested_by="ops",
+    )
+
+    assert response.replay_status == "not_replayable"
+    assert response.correlation_missing_reason == "message_correlation_id_absent"
+    assert (
+        response.alternate_lookup_key
+        == "consumer_dlq|topic=transactions.raw.received|event=dlq-003"
+    )
+    ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
+    _, kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
+    assert kwargs["correlation_missing_reason"] == "message_correlation_id_absent"
+    assert kwargs["alternate_lookup_key"] == (
+        "consumer_dlq|topic=transactions.raw.received|event=dlq-003"
+    )
 
 
 @pytest.mark.asyncio
