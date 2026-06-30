@@ -64,16 +64,17 @@ python -c "from pathlib import Path; import yaml; [yaml.safe_load(p.read_text())
 
 Observed:
 
-- `make quality-integration-lite-collection-gate` collected `121` tests
-- `make quality-unit-collection-gate` collected `3082/3092` tests with `10` manifest deselects
-- focused manifest/workflow governance tests passed with `20` tests
+- `make quality-integration-lite-collection-gate` collected `126` tests
+- `make quality-unit-collection-gate` collected `3376/3386` tests with `10` manifest deselects
+- focused manifest/workflow governance tests passed with `22` tests
 - Ruff lint passed
 - Ruff format check passed
 - workflow YAML parse passed for all workflow files
 
 ## Residual Issue Scope
 
-Issue #445 should remain open until PR and QA evidence proves the new collection jobs in GitHub CI.
+Issue #445 is fixed locally pending PR CI/QA evidence. It should remain open until PR and QA
+evidence proves the new collection jobs in GitHub CI.
 Additional runtime families should only receive collection gates when their infrastructure and
 runtime profile make them deterministic enough for quality-baseline enforcement.
 
