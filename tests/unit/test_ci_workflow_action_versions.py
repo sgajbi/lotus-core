@@ -1,11 +1,75 @@
 from pathlib import Path
 
+import yaml
+
 GOVERNED_RUNTIME_WORKFLOWS = (
     Path(".github/workflows/pr-merge-gate.yml"),
     Path(".github/workflows/main-releasability.yml"),
 )
 
 ALL_WORKFLOWS = tuple(Path(".github/workflows").glob("*.yml"))
+
+APPROVED_NON_BLOCKING_JOBS = {
+    (Path(".github/workflows/pr-merge-gate.yml"), "lotus-core-validation-report"),
+}
+
+APPROVED_REPORT_ONLY_STEPS = {
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Ruff baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Test collection baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Typecheck baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Complexity baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Maintainability baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Dead-code baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Dependency baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Security baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Dependency audit baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Import boundary baseline",
+    ),
+    (
+        Path(".github/workflows/quality-baseline.yml"),
+        "report-only",
+        "Docstring baseline",
+    ),
+}
 
 NODE20_DEPRECATED_ACTION_PINS = (
     "actions/cache@v4",
@@ -79,3 +143,50 @@ def test_pr_auto_merge_does_not_emit_skipped_checks_for_label_removal() -> None:
     assert "unlabeled" not in workflow_text
     assert "HAS_AUTOMERGE_LABEL:" in workflow_text
     assert "Skipping auto-merge queue because the automerge label is absent." in workflow_text
+
+
+def test_all_workflow_jobs_have_bounded_timeouts() -> None:
+    missing_or_invalid_timeouts: list[str] = []
+
+    for workflow_path in ALL_WORKFLOWS:
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        for job_id, job in (workflow.get("jobs") or {}).items():
+            timeout_minutes = job.get("timeout-minutes")
+            if not isinstance(timeout_minutes, int) or timeout_minutes <= 0:
+                missing_or_invalid_timeouts.append(f"{workflow_path}:{job_id}")
+
+    assert missing_or_invalid_timeouts == []
+
+
+def test_continue_on_error_is_limited_to_documented_report_only_scope() -> None:
+    unexpected_non_blocking_jobs: list[str] = []
+    unexpected_non_blocking_steps: list[str] = []
+
+    for workflow_path in ALL_WORKFLOWS:
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        for job_id, job in (workflow.get("jobs") or {}).items():
+            if (
+                job.get("continue-on-error")
+                and (
+                    workflow_path,
+                    job_id,
+                )
+                not in APPROVED_NON_BLOCKING_JOBS
+            ):
+                unexpected_non_blocking_jobs.append(f"{workflow_path}:{job_id}")
+
+            for step in job.get("steps") or ():
+                step_name = step.get("name", "<unnamed step>")
+                if (
+                    step.get("continue-on-error")
+                    and (
+                        workflow_path,
+                        job_id,
+                        step_name,
+                    )
+                    not in APPROVED_REPORT_ONLY_STEPS
+                ):
+                    unexpected_non_blocking_steps.append(f"{workflow_path}:{job_id}:{step_name}")
+
+    assert unexpected_non_blocking_jobs == []
+    assert unexpected_non_blocking_steps == []
