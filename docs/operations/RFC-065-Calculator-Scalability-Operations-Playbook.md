@@ -68,6 +68,10 @@ These endpoints are hosted by `event_replay_service` after the RFC 081 control-p
 - Do not exceed configured replay maximum records per request.
 - Do not replay when ingestion backlog exceeds replay threshold.
 - Every replay must produce audit evidence (`consumer_dlq_replay_audit`).
+- If a replay endpoint returns `INGESTION_REPLAY_AUDIT_WRITE_FAILED`, treat the replay outcome as
+  unacknowledged. Restore replay-audit persistence first, inspect the response `recovery_path`,
+  `event_id`, `job_id`, `replay_status`, and `replay_fingerprint`, then retry through the governed
+  endpoint only after audit writes are healthy.
 
 ## Scaling Controls
 - Deploy KEDA scaled objects from:

@@ -233,9 +233,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     retry_conflict_examples = retry_job["responses"]["409"]["content"]["application/json"][
         "examples"
     ]
-    retry_bookkeeping_failed = retry_job["responses"]["500"]["content"]["application/json"][
-        "example"
-    ]
+    retry_500_examples = retry_job["responses"]["500"]["content"]["application/json"]["examples"]
     retry_body_schema = retry_job["requestBody"]["content"]["application/json"]["schema"]
     assert retry_job["summary"] == "Retry a failed ingestion job"
     assert "full or partial payload replay" in retry_job["description"]
@@ -252,7 +250,14 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
         retry_conflict_examples["retry_blocked"]["value"]["detail"]["code"]
         == "INGESTION_RETRY_BLOCKED"
     )
-    assert retry_bookkeeping_failed["detail"]["code"] == "INGESTION_RETRY_BOOKKEEPING_FAILED"
+    assert (
+        retry_500_examples["retry_bookkeeping_failed"]["value"]["detail"]["code"]
+        == "INGESTION_RETRY_BOOKKEEPING_FAILED"
+    )
+    assert (
+        retry_500_examples["replay_audit_write_failed"]["value"]["detail"]["code"]
+        == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
+    )
 
     health_example = health_summary["responses"]["200"]["content"]["application/json"]["example"]
     assert health_summary["summary"] == "Get ingestion operational health summary"
@@ -435,6 +440,9 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     replay_dlq_examples = replay_dlq["requestBody"]["content"]["application/json"]["examples"]
     replay_dlq_example = replay_dlq["responses"]["200"]["content"]["application/json"]["example"]
     replay_not_found = replay_dlq["responses"]["404"]["content"]["application/json"]["example"]
+    replay_dlq_500_examples = replay_dlq["responses"]["500"]["content"]["application/json"][
+        "examples"
+    ]
     assert replay_dlq["summary"] == "Replay ingestion payload for correlated consumer DLQ event"
     assert "recover rejected events safely" in replay_dlq["description"]
     assert replay_dlq_event_id_parameter["description"] == "Consumer dead-letter event identifier."
@@ -444,6 +452,10 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
         "Replayed ingestion job from correlated consumer DLQ event."
     )
     assert replay_not_found["detail"]["code"] == "INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND"
+    assert (
+        replay_dlq_500_examples["replay_audit_write_failed"]["value"]["detail"]["code"]
+        == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
+    )
 
     replay_audits_params = {param["name"]: param for param in replay_audits["parameters"]}
     replay_audits_example = replay_audits["responses"]["200"]["content"]["application/json"][

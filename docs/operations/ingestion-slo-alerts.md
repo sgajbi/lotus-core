@@ -19,6 +19,10 @@ This runbook defines baseline operational thresholds for ingestion reliability.
 - Consumer DLQ rate: warn at `>= 1 event / 10m`, critical at `>= 5 events / 10m`.
 - Duplicate replay blocked: warn at `>= 1 / 15m`, critical at `>= 3 / 15m`.
 - Replay failures/not_replayable: warn at `>= 2 / 15m`, critical at `>= 5 / 15m`.
+- Replay audit write failure: page immediately when any
+  `INGESTION_REPLAY_AUDIT_WRITE_FAILED` API response appears in operational logs. Treat the replay
+  outcome as unacknowledged until replay-audit persistence is restored and the retry is reissued
+  through the governed endpoint.
 
 ## Prometheus Rule Examples
 

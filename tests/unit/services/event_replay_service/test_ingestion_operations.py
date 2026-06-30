@@ -3,14 +3,19 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 from src.services.event_replay_service.app.application.replay_payload_dispatcher import (
     IngestionServiceReplayPayloadDispatcher,
 )
 from src.services.event_replay_service.app.routers.ingestion_operations import (
+    _block_duplicate_ingestion_job_retry,
     _consumer_dlq_not_replayable_response,
     _consumer_dlq_replay_candidate_or_response,
     _filter_payload_by_record_keys,
+    _mark_consumer_dlq_replay_replayed,
+    _mark_ingestion_job_retry_replayed,
+    _record_mandatory_replay_audit,
 )
 
 
@@ -139,6 +144,67 @@ async def test_replay_payload_dispatcher_rejects_unsupported_endpoint() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mandatory_replay_audit_returns_replay_id() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-123")
+
+    replay_id = await _record_mandatory_replay_audit(
+        ingestion_job_service=ingestion_job_service,
+        recovery_path="ingestion_job_retry",
+        event_id="job:job-123",
+        replay_fingerprint="fp-123",
+        correlation_id=None,
+        job_id="job-123",
+        endpoint="/ingest/transactions",
+        replay_status="dry_run",
+        dry_run=True,
+        replay_reason="dry-run",
+        requested_by="ops",
+        correlation_missing_reason="ingestion_job_retry_uses_job_id",
+        alternate_lookup_key="job:job-123",
+    )
+
+    assert replay_id == "audit-123"
+    _, kwargs = ingestion_job_service.record_consumer_dlq_replay_audit.await_args
+    assert kwargs["correlation_missing_reason"] == "ingestion_job_retry_uses_job_id"
+    assert kwargs["alternate_lookup_key"] == "job:job-123"
+
+
+@pytest.mark.asyncio
+async def test_mandatory_replay_audit_failure_raises_governed_error() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
+        side_effect=RuntimeError("database unavailable")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _record_mandatory_replay_audit(
+            ingestion_job_service=ingestion_job_service,
+            recovery_path="consumer_dlq_replay",
+            event_id="dlq-123",
+            replay_fingerprint="fp-456",
+            correlation_id="corr-123",
+            job_id="job-123",
+            endpoint="/ingest/transactions",
+            replay_status="replayed",
+            dry_run=False,
+            replay_reason="replayed",
+            requested_by="ops",
+        )
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == {
+        "code": "INGESTION_REPLAY_AUDIT_WRITE_FAILED",
+        "message": "Replay audit could not be recorded; replay outcome was not acknowledged.",
+        "recovery_path": "consumer_dlq_replay",
+        "event_id": "dlq-123",
+        "job_id": "job-123",
+        "replay_status": "replayed",
+        "replay_fingerprint": "fp-456",
+    }
+
+
+@pytest.mark.asyncio
 async def test_consumer_dlq_replay_candidate_records_no_correlated_job_response() -> None:
     ingestion_job_service = MagicMock()
     ingestion_job_service.list_jobs = AsyncMock(return_value=([], 0))
@@ -252,3 +318,77 @@ async def test_consumer_dlq_replay_candidate_returns_replayable_context() -> Non
     assert replay_context is context
     assert len(replay_fingerprint) == 64
     ingestion_job_service.record_consumer_dlq_replay_audit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ingestion_job_retry_success_audit_failure_is_not_bookkeeping_success() -> None:
+    context = SimpleNamespace(endpoint="/ingest/transactions")
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.mark_retried = AsyncMock()
+    ingestion_job_service.mark_queued = AsyncMock()
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
+        side_effect=RuntimeError("audit database unavailable")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _mark_ingestion_job_retry_replayed(
+            job_id="job-001",
+            context=context,
+            replay_fingerprint="fp-001",
+            ingestion_job_service=ingestion_job_service,
+            ops_actor="ops",
+        )
+
+    assert exc_info.value.detail["code"] == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
+    assert exc_info.value.detail["replay_status"] == "replayed"
+    assert ingestion_job_service.record_consumer_dlq_replay_audit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_ingestion_job_retry_duplicate_audit_failure_is_governed() -> None:
+    context = SimpleNamespace(endpoint="/ingest/transactions")
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.find_successful_replay_audit_by_fingerprint = AsyncMock(
+        return_value={"replay_id": "replay-existing", "replay_status": "replayed"}
+    )
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
+        side_effect=RuntimeError("audit database unavailable")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _block_duplicate_ingestion_job_retry(
+            job_id="job-001",
+            context=context,
+            ingestion_job_service=ingestion_job_service,
+            replay_fingerprint="fp-001",
+            ops_actor="ops",
+        )
+
+    assert exc_info.value.detail["code"] == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
+    assert exc_info.value.detail["replay_status"] == "duplicate_blocked"
+
+
+@pytest.mark.asyncio
+async def test_consumer_dlq_replay_success_audit_failure_is_not_bookkeeping_success() -> None:
+    context = SimpleNamespace(endpoint="/ingest/transactions")
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.mark_retried = AsyncMock()
+    ingestion_job_service.mark_queued = AsyncMock()
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
+        side_effect=RuntimeError("audit database unavailable")
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _mark_consumer_dlq_replay_replayed(
+            event_id="dlq-001",
+            correlation_id="corr-001",
+            job_id="job-001",
+            context=context,
+            replay_fingerprint="fp-001",
+            ingestion_job_service=ingestion_job_service,
+            requested_by="ops",
+        )
+
+    assert exc_info.value.detail["code"] == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
+    assert exc_info.value.detail["replay_status"] == "replayed"
+    assert ingestion_job_service.record_consumer_dlq_replay_audit.await_count == 1
