@@ -5,6 +5,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.instrument_dto import InstrumentRecord, PaginatedInstrumentResponse
+from ..dtos.lookup_dto import LookupItem
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.instrument_repository import InstrumentRepository
 
@@ -65,6 +66,36 @@ class InstrumentService:
         return PaginatedInstrumentResponse(
             total=total_count, skip=skip, limit=limit, instruments=instruments
         )
+
+    async def search_instrument_lookup_items(
+        self,
+        *,
+        product_type: str | None = None,
+        q: str | None = None,
+        limit: int,
+    ) -> list[LookupItem]:
+        rows = await self.repo.search_instrument_lookup_rows(
+            product_type=product_type,
+            q=q,
+            limit=limit,
+        )
+        return [
+            LookupItem(
+                id=normalized_security_id,
+                label=f"{normalized_security_id} | {name}",
+            )
+            for security_id, name in rows
+            if (normalized_security_id := normalize_security_id(security_id))
+        ]
+
+    async def list_currency_lookup_items(
+        self,
+        *,
+        q: str | None = None,
+        limit: int,
+    ) -> list[LookupItem]:
+        codes = await self.repo.list_currency_lookup_codes(q=q, limit=limit)
+        return [LookupItem(id=code, label=code) for code in codes]
 
     @staticmethod
     def _to_instrument_record(row) -> InstrumentRecord:

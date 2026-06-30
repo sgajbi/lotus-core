@@ -4,6 +4,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dtos.lookup_dto import LookupItem
 from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
 from ..repositories.portfolio_repository import PortfolioRepository
 
@@ -45,6 +46,31 @@ class PortfolioService:
         portfolios = [PortfolioRecord.model_validate(p) for p in db_results]
 
         return PortfolioQueryResponse(portfolios=portfolios)
+
+    async def search_portfolio_lookup_items(
+        self,
+        *,
+        client_id: str | None = None,
+        booking_center_code: str | None = None,
+        q: str | None = None,
+        limit: int,
+    ) -> list[LookupItem]:
+        portfolio_ids = await self.repo.search_portfolio_lookup_ids(
+            client_id=client_id,
+            booking_center_code=booking_center_code,
+            q=q,
+            limit=limit,
+        )
+        return [LookupItem(id=portfolio_id, label=portfolio_id) for portfolio_id in portfolio_ids]
+
+    async def list_currency_lookup_items(
+        self,
+        *,
+        q: str | None = None,
+        limit: int,
+    ) -> list[LookupItem]:
+        codes = await self.repo.list_currency_lookup_codes(q=q, limit=limit)
+        return [LookupItem(id=code, label=code) for code in codes]
 
     async def get_portfolio_by_id(self, portfolio_id: str) -> PortfolioRecord:
         """

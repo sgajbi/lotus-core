@@ -73,6 +73,50 @@ class InstrumentRepository:
         logger.info(f"Found {len(instruments)} instruments with given filters.")
         return instruments
 
+    async def search_instrument_lookup_rows(
+        self,
+        *,
+        product_type: str | None = None,
+        q: str | None = None,
+        limit: int,
+    ) -> list[tuple[str, str]]:
+        """Return bounded instrument selector rows."""
+        security_id = func.trim(Instrument.security_id)
+        stmt = select(security_id, Instrument.name)
+
+        if product_type:
+            stmt = stmt.where(Instrument.product_type == product_type)
+
+        if q and (q_norm := q.strip().upper()):
+            stmt = stmt.where(
+                func.upper(security_id).like(f"%{q_norm}%")
+                | func.upper(Instrument.name).like(f"%{q_norm}%")
+            )
+
+        result = await self.db.execute(stmt.order_by(security_id.asc()).limit(limit))
+        return [(security_id, name) for security_id, name in result.all()]
+
+    async def list_currency_lookup_codes(
+        self,
+        *,
+        q: str | None = None,
+        limit: int,
+    ) -> list[str]:
+        """Return bounded distinct instrument currencies for selector workflows."""
+        currency_code = func.upper(func.trim(Instrument.currency))
+        stmt = (
+            select(currency_code)
+            .distinct()
+            .where(Instrument.currency.is_not(None))
+            .where(func.trim(Instrument.currency) != "")
+        )
+
+        if q and (q_norm := q.strip().upper()):
+            stmt = stmt.where(currency_code.like(f"%{q_norm}%"))
+
+        result = await self.db.execute(stmt.order_by(currency_code.asc()).limit(limit))
+        return list(result.scalars().all())
+
     async def get_instruments_count(
         self, security_id: Optional[str] = None, product_type: Optional[str] = None
     ) -> int:

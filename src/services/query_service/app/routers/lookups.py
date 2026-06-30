@@ -9,35 +9,22 @@ from ..services.portfolio_service import PortfolioService
 router = APIRouter(prefix="/lookups", tags=["Lookup Catalogs"])
 
 
-async def _fetch_all_instruments(
-    service: InstrumentService,
-    page_limit: int,
-    product_type: str | None = None,
-) -> list:
-    skip = 0
-    collected = []
-    while True:
-        page = await service.get_instruments(
-            skip=skip,
-            limit=page_limit,
-            product_type=product_type,
-        )
-        collected.extend(page.instruments)
-        skip += page.limit
-        if skip >= page.total:
-            break
-    return collected
+def _lookup_item_code(item: LookupItem | dict) -> str:
+    if isinstance(item, dict):
+        return str(item.get("id", "")).upper()
+    return item.id.upper()
 
 
-def _filter_limit_sort_items(
-    items: list[LookupItem], q: str | None, limit: int
+def _merge_currency_lookup_items(
+    portfolio_items: list[LookupItem | dict],
+    instrument_items: list[LookupItem | dict],
+    *,
+    limit: int,
 ) -> list[LookupItem]:
-    if q:
-        q_norm = q.strip().upper()
-        items = [
-            item for item in items if q_norm in item.id.upper() or q_norm in item.label.upper()
-        ]
-    return sorted(items, key=lambda item: item.id)[:limit]
+    codes = {
+        code for item in portfolio_items + instrument_items if (code := _lookup_item_code(item))
+    }
+    return [LookupItem(id=code, label=code) for code in sorted(codes)[:limit]]
 
 
 @router.get(
@@ -76,18 +63,13 @@ async def get_portfolio_lookups(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
     service = PortfolioService(db)
-    response = await service.get_portfolios(
-        client_id=client_id, booking_center_code=booking_center_code
+    items = await service.search_portfolio_lookup_items(
+        client_id=client_id,
+        booking_center_code=booking_center_code,
+        q=q,
+        limit=limit,
     )
-
-    items = [
-        LookupItem(
-            id=portfolio.portfolio_id,
-            label=portfolio.portfolio_id,
-        )
-        for portfolio in response.portfolios
-    ]
-    return LookupResponse(items=_filter_limit_sort_items(items, q=q, limit=limit))
+    return LookupResponse(items=items)
 
 
 @router.get(
@@ -123,26 +105,12 @@ async def get_instrument_lookups(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> LookupResponse:
     service = InstrumentService(db)
-    instruments = (
-        await _fetch_all_instruments(
-            service=service,
-            page_limit=min(max(limit, 200), 1000),
-            product_type=product_type,
-        )
-        if q
-        else (
-            await service.get_instruments(skip=0, limit=limit, product_type=product_type)
-        ).instruments
+    items = await service.search_instrument_lookup_items(
+        product_type=product_type,
+        q=q,
+        limit=limit,
     )
-
-    items = [
-        LookupItem(
-            id=instrument.security_id,
-            label=f"{instrument.security_id} | {instrument.name}",
-        )
-        for instrument in instruments
-    ]
-    return LookupResponse(items=_filter_limit_sort_items(items, q=q, limit=limit))
+    return LookupResponse(items=items)
 
 
 @router.get(
@@ -160,7 +128,11 @@ async def get_currency_lookups(
         default=500,
         ge=50,
         le=1000,
-        description="Page size used when scanning instruments to derive the currency catalog.",
+        deprecated=True,
+        description=(
+            "Deprecated compatibility parameter. Currency lookups now use bounded selector queries "
+            "instead of instrument catalog scans."
+        ),
         examples=[500],
     ),
     source: str = Query(
@@ -185,28 +157,24 @@ async def get_currency_lookups(
 ) -> LookupResponse:
     portfolio_service = PortfolioService(db)
     instrument_service = InstrumentService(db)
+    _ = instrument_page_limit
 
     source_scope = source.upper()
-    portfolios_response = (
-        await portfolio_service.get_portfolios() if source_scope in {"ALL", "PORTFOLIOS"} else None
+    portfolio_items = (
+        await portfolio_service.list_currency_lookup_items(q=q, limit=limit)
+        if source_scope in {"ALL", "PORTFOLIOS"}
+        else []
     )
-    instruments = (
-        await _fetch_all_instruments(
-            service=instrument_service,
-            page_limit=instrument_page_limit,
-        )
+    instrument_items = (
+        await instrument_service.list_currency_lookup_items(q=q, limit=limit)
         if source_scope in {"ALL", "INSTRUMENTS"}
         else []
     )
 
-    codes: set[str] = set()
-    if portfolios_response:
-        codes.update(
-            portfolio.base_currency.upper()
-            for portfolio in portfolios_response.portfolios
-            if portfolio.base_currency
+    return LookupResponse(
+        items=_merge_currency_lookup_items(
+            portfolio_items,
+            instrument_items,
+            limit=limit,
         )
-    codes.update({instrument.currency.upper() for instrument in instruments if instrument.currency})
-
-    items = [LookupItem(id=code, label=code) for code in codes]
-    return LookupResponse(items=_filter_limit_sort_items(items, q=q, limit=limit))
+    )

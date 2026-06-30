@@ -26,6 +26,8 @@ async def async_test_client():
     mock_instrument_service.get_instruments = AsyncMock(
         return_value=PaginatedInstrumentResponse(total=0, skip=0, limit=50, instruments=[])
     )
+    mock_instrument_service.search_instrument_lookup_items = AsyncMock(return_value=[])
+    mock_instrument_service.list_currency_lookup_items = AsyncMock(return_value=[])
     mock_price_service = MagicMock()
     mock_price_service.get_prices = AsyncMock(
         return_value=MarketPriceResponse(security_id="SEC_1", prices=[])
@@ -34,6 +36,8 @@ async def async_test_client():
     mock_portfolio_service.get_portfolios = AsyncMock(
         return_value=PortfolioQueryResponse(portfolios=[])
     )
+    mock_portfolio_service.search_portfolio_lookup_items = AsyncMock(return_value=[])
+    mock_portfolio_service.list_currency_lookup_items = AsyncMock(return_value=[])
 
     app.dependency_overrides[get_async_db_session] = lambda: AsyncMock(spec=AsyncSession)
 
@@ -169,188 +173,80 @@ async def test_get_prices_unexpected_uses_global_500_envelope(async_test_client)
 
 async def test_get_portfolio_lookups(async_test_client):
     client, _, _, _, mock_portfolio_service = async_test_client
-    mock_portfolio_service.get_portfolios.return_value = PortfolioQueryResponse(
-        portfolios=[
-            {
-                "portfolio_id": "PF_1",
-                "base_currency": "USD",
-                "open_date": "2025-01-01",
-                "close_date": None,
-                "risk_exposure": "MODERATE",
-                "investment_time_horizon": "LONG_TERM",
-                "portfolio_type": "DISCRETIONARY",
-                "objective": "GROWTH",
-                "booking_center_code": "LON-01",
-                "client_id": "CIF-1",
-                "is_leverage_allowed": False,
-                "advisor_id": "ADV-1",
-                "status": "ACTIVE",
-            }
-        ]
-    )
+    mock_portfolio_service.search_portfolio_lookup_items.return_value = [
+        {"id": "PF_1", "label": "PF_1"}
+    ]
 
     response = await client.get("/lookups/portfolios")
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "PF_1", "label": "PF_1"}]
+    mock_portfolio_service.search_portfolio_lookup_items.assert_awaited_once_with(
+        client_id=None,
+        booking_center_code=None,
+        q=None,
+        limit=500,
+    )
+    mock_portfolio_service.get_portfolios.assert_not_awaited()
 
 
 async def test_get_portfolio_lookups_filters_query_and_limit(async_test_client):
     client, _, _, _, mock_portfolio_service = async_test_client
-    mock_portfolio_service.get_portfolios.return_value = PortfolioQueryResponse(
-        portfolios=[
-            {
-                "portfolio_id": "PF_9",
-                "base_currency": "USD",
-                "open_date": "2025-01-01",
-                "close_date": None,
-                "risk_exposure": "MODERATE",
-                "investment_time_horizon": "LONG_TERM",
-                "portfolio_type": "DISCRETIONARY",
-                "objective": "GROWTH",
-                "booking_center_code": "LON-01",
-                "client_id": "CIF-9",
-                "is_leverage_allowed": False,
-                "advisor_id": "ADV-9",
-                "status": "ACTIVE",
-            },
-            {
-                "portfolio_id": "PF_1",
-                "base_currency": "USD",
-                "open_date": "2025-01-01",
-                "close_date": None,
-                "risk_exposure": "MODERATE",
-                "investment_time_horizon": "LONG_TERM",
-                "portfolio_type": "DISCRETIONARY",
-                "objective": "GROWTH",
-                "booking_center_code": "LON-01",
-                "client_id": "CIF-9",
-                "is_leverage_allowed": False,
-                "advisor_id": "ADV-9",
-                "status": "ACTIVE",
-            },
-        ]
-    )
+    mock_portfolio_service.search_portfolio_lookup_items.return_value = [
+        {"id": "PF_1", "label": "PF_1"}
+    ]
 
     response = await client.get("/lookups/portfolios?client_id=CIF-9&q=PF_&limit=1")
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "PF_1", "label": "PF_1"}]
-    mock_portfolio_service.get_portfolios.assert_awaited_once_with(
+    mock_portfolio_service.search_portfolio_lookup_items.assert_awaited_once_with(
         client_id="CIF-9",
         booking_center_code=None,
+        q="PF_",
+        limit=1,
     )
+    mock_portfolio_service.get_portfolios.assert_not_awaited()
 
 
 async def test_get_instrument_lookups(async_test_client):
     client, _, mock_instrument_service, _, _ = async_test_client
-    mock_instrument_service.get_instruments.return_value = PaginatedInstrumentResponse(
-        total=1,
-        skip=0,
-        limit=200,
-        instruments=[
-            {
-                "security_id": "SEC_1",
-                "name": "Apple Inc.",
-                "isin": "US0378331005",
-                "currency": "USD",
-                "product_type": "Equity",
-                "asset_class": "Equity",
-            }
-        ],
-    )
+    mock_instrument_service.search_instrument_lookup_items.return_value = [
+        {"id": "SEC_1", "label": "SEC_1 | Apple Inc."}
+    ]
 
     response = await client.get("/lookups/instruments?limit=200")
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "SEC_1", "label": "SEC_1 | Apple Inc."}]
+    mock_instrument_service.search_instrument_lookup_items.assert_awaited_once_with(
+        product_type=None,
+        q=None,
+        limit=200,
+    )
+    mock_instrument_service.get_instruments.assert_not_awaited()
 
 
 async def test_get_instrument_lookups_with_product_type_and_query(async_test_client):
     client, _, mock_instrument_service, _, _ = async_test_client
-    mock_instrument_service.get_instruments.return_value = PaginatedInstrumentResponse(
-        total=2,
-        skip=0,
-        limit=200,
-        instruments=[
-            {
-                "security_id": "SEC_Z",
-                "name": "Zulu Instrument",
-                "isin": "US0000000001",
-                "currency": "USD",
-                "product_type": "Equity",
-                "asset_class": "Equity",
-            },
-            {
-                "security_id": "SEC_A",
-                "name": "Alpha Instrument",
-                "isin": "US0000000002",
-                "currency": "USD",
-                "product_type": "Equity",
-                "asset_class": "Equity",
-            },
-        ],
-    )
+    mock_instrument_service.search_instrument_lookup_items.return_value = [
+        {"id": "SEC_A", "label": "SEC_A | Alpha Instrument"}
+    ]
 
     response = await client.get("/lookups/instruments?limit=200&product_type=Equity&q=alpha")
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "SEC_A", "label": "SEC_A | Alpha Instrument"}]
-    mock_instrument_service.get_instruments.assert_awaited_once_with(
-        skip=0,
-        limit=200,
+    mock_instrument_service.search_instrument_lookup_items.assert_awaited_once_with(
         product_type="Equity",
+        q="alpha",
+        limit=200,
     )
+    mock_instrument_service.get_instruments.assert_not_awaited()
 
 
 async def test_get_currency_lookups(async_test_client):
     client, _, mock_instrument_service, _, mock_portfolio_service = async_test_client
-    mock_portfolio_service.get_portfolios.return_value = PortfolioQueryResponse(
-        portfolios=[
-            {
-                "portfolio_id": "PF_1",
-                "base_currency": "usd",
-                "open_date": "2025-01-01",
-                "close_date": None,
-                "risk_exposure": "MODERATE",
-                "investment_time_horizon": "LONG_TERM",
-                "portfolio_type": "DISCRETIONARY",
-                "objective": "GROWTH",
-                "booking_center_code": "LON-01",
-                "client_id": "CIF-1",
-                "is_leverage_allowed": False,
-                "advisor_id": "ADV-1",
-                "status": "ACTIVE",
-            }
-        ]
-    )
-    mock_instrument_service.get_instruments.side_effect = [
-        PaginatedInstrumentResponse(
-            total=51,
-            skip=0,
-            limit=50,
-            instruments=[
-                {
-                    "security_id": "SEC_1",
-                    "name": "Apple Inc.",
-                    "isin": "US0378331005",
-                    "currency": "eur",
-                    "product_type": "Equity",
-                    "asset_class": "Equity",
-                }
-            ],
-        ),
-        PaginatedInstrumentResponse(
-            total=51,
-            skip=50,
-            limit=50,
-            instruments=[
-                {
-                    "security_id": "SEC_2",
-                    "name": "Tesla Inc.",
-                    "isin": "US88160R1014",
-                    "currency": "USD",
-                    "product_type": "Equity",
-                    "asset_class": "Equity",
-                }
-            ],
-        ),
+    mock_portfolio_service.list_currency_lookup_items.return_value = [{"id": "USD", "label": "USD"}]
+    mock_instrument_service.list_currency_lookup_items.return_value = [
+        {"id": "EUR", "label": "EUR"},
+        {"id": "USD", "label": "USD"},
     ]
 
     response = await client.get("/lookups/currencies?instrument_page_limit=50")
@@ -359,54 +255,30 @@ async def test_get_currency_lookups(async_test_client):
         {"id": "EUR", "label": "EUR"},
         {"id": "USD", "label": "USD"},
     ]
+    mock_portfolio_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=500)
+    mock_instrument_service.list_currency_lookup_items.assert_awaited_once_with(q=None, limit=500)
+    mock_portfolio_service.get_portfolios.assert_not_awaited()
+    mock_instrument_service.get_instruments.assert_not_awaited()
 
 
 async def test_get_currency_lookups_source_and_query(async_test_client):
     client, _, mock_instrument_service, _, mock_portfolio_service = async_test_client
-    mock_portfolio_service.get_portfolios.return_value = PortfolioQueryResponse(
-        portfolios=[
-            {
-                "portfolio_id": "PF_1",
-                "base_currency": "gbp",
-                "open_date": "2025-01-01",
-                "close_date": None,
-                "risk_exposure": "MODERATE",
-                "investment_time_horizon": "LONG_TERM",
-                "portfolio_type": "DISCRETIONARY",
-                "objective": "GROWTH",
-                "booking_center_code": "LON-01",
-                "client_id": "CIF-1",
-                "is_leverage_allowed": False,
-                "advisor_id": "ADV-1",
-                "status": "ACTIVE",
-            }
-        ]
-    )
-    mock_instrument_service.get_instruments.return_value = PaginatedInstrumentResponse(
-        total=1,
-        skip=0,
-        limit=500,
-        instruments=[
-            {
-                "security_id": "SEC_1",
-                "name": "Apple Inc.",
-                "isin": "US0378331005",
-                "currency": "usd",
-                "product_type": "Equity",
-                "asset_class": "Equity",
-            }
-        ],
-    )
+    mock_instrument_service.list_currency_lookup_items.return_value = [
+        {"id": "USD", "label": "USD"}
+    ]
 
     response = await client.get("/lookups/currencies?source=INSTRUMENTS&q=US&limit=1")
     assert response.status_code == 200
     assert response.json()["items"] == [{"id": "USD", "label": "USD"}]
-    mock_portfolio_service.get_portfolios.assert_not_called()
+    mock_instrument_service.list_currency_lookup_items.assert_awaited_once_with(q="US", limit=1)
+    mock_portfolio_service.list_currency_lookup_items.assert_not_awaited()
+    mock_portfolio_service.get_portfolios.assert_not_awaited()
+    mock_instrument_service.get_instruments.assert_not_awaited()
 
 
 async def test_get_portfolio_lookups_unexpected_uses_global_500_envelope(async_test_client):
     client, _, _, _, mock_portfolio_service = async_test_client
-    mock_portfolio_service.get_portfolios.side_effect = RuntimeError("boom")
+    mock_portfolio_service.search_portfolio_lookup_items.side_effect = RuntimeError("boom")
 
     response = await client.get("/lookups/portfolios")
 
@@ -417,7 +289,7 @@ async def test_get_portfolio_lookups_unexpected_uses_global_500_envelope(async_t
 
 async def test_get_instrument_lookups_unexpected_uses_global_500_envelope(async_test_client):
     client, _, mock_instrument_service, _, _ = async_test_client
-    mock_instrument_service.get_instruments.side_effect = RuntimeError("boom")
+    mock_instrument_service.search_instrument_lookup_items.side_effect = RuntimeError("boom")
 
     response = await client.get("/lookups/instruments")
 
@@ -428,7 +300,7 @@ async def test_get_instrument_lookups_unexpected_uses_global_500_envelope(async_
 
 async def test_get_currency_lookups_unexpected_uses_global_500_envelope(async_test_client):
     client, _, mock_instrument_service, _, _ = async_test_client
-    mock_instrument_service.get_instruments.side_effect = RuntimeError("boom")
+    mock_instrument_service.list_currency_lookup_items.side_effect = RuntimeError("boom")
 
     response = await client.get("/lookups/currencies")
 

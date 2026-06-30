@@ -124,6 +124,53 @@ async def test_get_instruments_with_filters(
     assert "AND instruments.product_type = 'Equity'" in compiled_query
 
 
+async def test_search_instrument_lookup_rows_filters_searches_and_limits(
+    repository: InstrumentRepository,
+    mock_db_session: AsyncMock,
+):
+    mock_result = mock_db_session.execute.return_value
+    mock_result.all.return_value = [("SEC1", "Alpha Instrument")]
+
+    rows = await repository.search_instrument_lookup_rows(
+        product_type="Equity",
+        q="alpha",
+        limit=5,
+    )
+
+    assert rows == [("SEC1", "Alpha Instrument")]
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "trim(instruments.security_id)" in compiled_query
+    assert "instruments.name" in compiled_query
+    assert "instruments.product_type = 'Equity'" in compiled_query
+    assert "upper(trim(instruments.security_id)) LIKE '%ALPHA%'" in compiled_query
+    assert "upper(instruments.name) LIKE '%ALPHA%'" in compiled_query
+    assert "ORDER BY trim(instruments.security_id) ASC" in compiled_query
+    assert "LIMIT 5" in compiled_query
+
+
+async def test_list_instrument_currency_lookup_codes_uses_distinct_limit(
+    repository: InstrumentRepository,
+    mock_db_session: AsyncMock,
+):
+    mock_result = mock_db_session.execute.return_value
+    mock_result.scalars.return_value.all.return_value = ["USD"]
+
+    codes = await repository.list_currency_lookup_codes(q="us", limit=3)
+
+    assert codes == ["USD"]
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "SELECT DISTINCT upper(trim(instruments.currency))" in compiled_query
+    assert "instruments.currency IS NOT NULL" in compiled_query
+    assert "trim(instruments.currency) != ''" in compiled_query
+    assert "upper(trim(instruments.currency)) LIKE '%US%'" in compiled_query
+    assert "ORDER BY upper(trim(instruments.currency)) ASC" in compiled_query
+    assert "LIMIT 3" in compiled_query
+
+
 async def test_get_instruments_count(repository: InstrumentRepository, mock_db_session: AsyncMock):
     """
     GIVEN a call to get the count of instruments

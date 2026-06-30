@@ -151,3 +151,56 @@ async def test_get_instruments_skips_page_read_when_count_is_zero(
         product_type="Equity",
     )
     mock_instrument_repo.get_instruments.assert_not_awaited()
+
+
+async def test_search_instrument_lookup_items_uses_bounded_repository_query(
+    mock_instrument_repo: AsyncMock,
+):
+    mock_instrument_repo.search_instrument_lookup_rows.return_value = [
+        (" SEC1 ", "Alpha Instrument"),
+        ("SEC2", "Beta Instrument"),
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.instrument_service.InstrumentRepository",
+        return_value=mock_instrument_repo,
+    ):
+        service = InstrumentService(AsyncMock(spec=AsyncSession))
+        result = await service.search_instrument_lookup_items(
+            product_type="Equity",
+            q="alpha",
+            limit=2,
+        )
+
+    assert [item.model_dump() for item in result] == [
+        {"id": "SEC1", "label": "SEC1 | Alpha Instrument"},
+        {"id": "SEC2", "label": "SEC2 | Beta Instrument"},
+    ]
+    mock_instrument_repo.search_instrument_lookup_rows.assert_awaited_once_with(
+        product_type="Equity",
+        q="alpha",
+        limit=2,
+    )
+    mock_instrument_repo.get_instruments.assert_not_awaited()
+    mock_instrument_repo.get_instruments_count.assert_not_awaited()
+
+
+async def test_list_instrument_currency_lookup_items_maps_codes(
+    mock_instrument_repo: AsyncMock,
+):
+    mock_instrument_repo.list_currency_lookup_codes.return_value = ["EUR", "USD"]
+
+    with patch(
+        "src.services.query_service.app.services.instrument_service.InstrumentRepository",
+        return_value=mock_instrument_repo,
+    ):
+        service = InstrumentService(AsyncMock(spec=AsyncSession))
+        result = await service.list_currency_lookup_items(q="U", limit=10)
+
+    assert [item.model_dump() for item in result] == [
+        {"id": "EUR", "label": "EUR"},
+        {"id": "USD", "label": "USD"},
+    ]
+    mock_instrument_repo.list_currency_lookup_codes.assert_awaited_once_with(q="U", limit=10)
+    mock_instrument_repo.get_instruments.assert_not_awaited()
+    mock_instrument_repo.get_instruments_count.assert_not_awaited()
