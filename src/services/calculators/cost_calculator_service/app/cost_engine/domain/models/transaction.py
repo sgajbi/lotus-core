@@ -5,6 +5,32 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator
 
 
+def _iso_datetime_text(value: str) -> str:
+    if value.endswith("Z"):
+        return value[:-1] + "+00:00"
+    return value
+
+
+def _parse_datetime_text(value: str) -> datetime:
+    return datetime.fromisoformat(_iso_datetime_text(value))
+
+
+def _utc_aware_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def standardize_datetime_value(value: Any) -> Any:
+    if value is None:
+        return value
+    if isinstance(value, str):
+        return _utc_aware_datetime(_parse_datetime_text(value))
+    if isinstance(value, datetime):
+        return _utc_aware_datetime(value)
+    return value
+
+
 class Fees(BaseModel):
     """
     Represents various fees associated with a transaction.
@@ -88,15 +114,6 @@ class Transaction(BaseModel):
     @classmethod
     def standardize_datetimes(cls, v: Any) -> Any:
         """Ensure all incoming datetimes are timezone-aware (UTC)."""
-        if v is None:
-            return v
-        if isinstance(v, str):
-            if v.endswith("Z"):
-                v = v[:-1] + "+00:00"
-            v = datetime.fromisoformat(v)
-
-        if isinstance(v, datetime) and v.tzinfo is None:
-            return v.replace(tzinfo=timezone.utc)
-        return v
+        return standardize_datetime_value(v)
 
     model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=False, extra="allow")

@@ -30,11 +30,12 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1165 promotes workflow fail-closed governance into a first-class quality-baseline gate. The new
-`make quality-workflow-governance-gate` target runs the focused workflow contract tests, and the
-quality-baseline workflow now exposes the same target as `Quality Baseline / Workflow Governance
-Gate`. Focused workflow-governance tests now pass with 9 tests, all 5 workflow YAML files parse, and
-the gate remains fast because it does not add Docker or integration workload.
+CR-1166 hardens cost transaction datetime normalization by extracting ISO text normalization,
+datetime parsing, UTC-aware marking, and public normalization policy out of the Pydantic validator.
+Focused transaction model tests now prove `Z` suffix parsing, naive datetime UTC marking, aware
+offset preservation, and nullable settlement date behavior. The broader cost-engine unit folder
+passes with 96 tests, `Transaction.standardize_datetimes(...)` is reduced from `B (6)` to `A (1)`,
+and `Transaction` is reduced from `B (7)` to `A (2)`.
 
 ## Health Assessment
 
@@ -1933,3 +1934,9 @@ health before that claim is defensible.
      as `Quality Baseline / Workflow Governance Gate`, and adding a regression assertion that the
      workflow runs the Make target. The Make gate passed with 9 tests; scoped Ruff lint and format
      checks passed; all 5 workflow YAML files parsed successfully.
+317. Reduced cost transaction datetime normalization complexity by extracting ISO text
+     normalization, parsing, UTC-aware marking, and public normalization policy from the Pydantic
+     validator. Focused transaction model tests passed with 4 tests; the broader cost-engine unit
+     folder passed with 96 tests; scoped Ruff lint and format checks passed; Radon reports
+     `Transaction.standardize_datetimes` reduced from `B (6)` to `A (1)` and `Transaction` from
+     `B (7)` to `A (2)`.
