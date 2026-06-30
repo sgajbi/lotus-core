@@ -497,6 +497,16 @@ Most relevant current governance:
     `event_business_payload(...)` helper and the SQLAlchemy table-column whitelist in the cost
     repository instead of persisting event DTO dictionaries directly; this prevents FX lifecycle
     rows from DLQing when event-envelope metadata is present.
+51. `PortfolioMaturitySummary:v1` is the Core-owned maturity posture contract for downstream
+    opportunity and review workflows. It is served by `query_service` at
+    `/portfolios/{portfolio_id}/maturity-summary`, reuses the existing `HoldingsAsOf:v1` read path,
+    publishes `next_maturity_date`, `maturing_holding_count`, freshness, supportability reasons,
+    and request-fingerprint lineage, and prevents downstream services such as `lotus-idea` from
+    reconstructing maturity windows from raw holdings rows. The current implementation is
+    contractual-instrument-maturity-date evidence only; callable, putable, amortizing,
+    structured-note, lockup, expiry, liquidity, reinvestment, performance, risk, tax, execution,
+    and OMS methodology remain outside this product unless Core reference data and methodology
+    expand explicitly.
 
 ## Context Maintenance Rule
 

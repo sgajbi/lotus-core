@@ -283,6 +283,7 @@ async def test_openapi_declares_portfolio_not_found_contracts(async_test_client)
     assert "404" in paths["/portfolios/{portfolio_id}/cashflow-projection"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/liquidity-ladder"]["get"]["responses"]
     assert "404" in paths["/portfolios/{portfolio_id}/position-history"]["get"]["responses"]
+    assert "404" in paths["/portfolios/{portfolio_id}/maturity-summary"]["get"]["responses"]
 
 
 async def test_openapi_includes_reporting_contracts(async_test_client):
@@ -607,8 +608,10 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     schema = response.json()
 
     latest_positions = schema["paths"]["/portfolios/{portfolio_id}/positions"]["get"]
+    maturity_summary = schema["paths"]["/portfolios/{portfolio_id}/maturity-summary"]["get"]
     position_history = schema["paths"]["/portfolios/{portfolio_id}/position-history"]["get"]
     positions_response = schema["components"]["schemas"]["PortfolioPositionsResponse"]
+    maturity_summary_response = schema["components"]["schemas"]["PortfolioMaturitySummaryResponse"]
 
     positions_portfolio_id = next(
         parameter
@@ -677,6 +680,37 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert positions_response["properties"]["product_version"]["default"] == "v1"
     assert positions_response["properties"]["positions"]["description"].startswith(
         "Governed holdings rows for the resolved HoldingsAsOf scope."
+    )
+    assert "Core-owned PortfolioMaturitySummary operational read" in maturity_summary["description"]
+    assert "downstream consumers such as lotus-idea" in maturity_summary["description"]
+    assert "does not certify callable, putable, amortizing" in maturity_summary["description"]
+    assert (
+        maturity_summary["x-lotus-source-data-product"]["product_name"]
+        == "PortfolioMaturitySummary"
+    )
+    assert (
+        maturity_summary["x-lotus-source-data-security"]["required_capability"]
+        == "source_data.portfolio_maturity_summary.read"
+    )
+
+    maturity_horizon = next(
+        parameter
+        for parameter in maturity_summary["parameters"]
+        if parameter["name"] == "horizon_days"
+    )
+    assert maturity_horizon["schema"]["maximum"] == 3660
+    assert "bounded to ten years" in maturity_horizon["description"]
+    assert (
+        maturity_summary_response["properties"]["product_name"]["default"]
+        == "PortfolioMaturitySummary"
+    )
+    assert maturity_summary_response["properties"]["product_version"]["default"] == "v1"
+    assert maturity_summary_response["properties"]["next_maturity_date"]["description"].startswith(
+        "Earliest source-owned instrument maturity date"
+    )
+    assert (
+        "not an upstream source-batch fingerprint"
+        in maturity_summary_response["properties"]["request_fingerprint"]["description"]
     )
 
 

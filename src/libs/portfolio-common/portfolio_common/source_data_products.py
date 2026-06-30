@@ -140,6 +140,22 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioMaturitySummary",
+        product_version="v1",
+        route_family=OPERATIONAL_READ,
+        serving_plane=QUERY_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-gateway", "lotus-report", "lotus-manage", "lotus-advise", "lotus-idea"),
+        current_routes=("/portfolios/{portfolio_id}/maturity-summary",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Core-owned maturity posture summary over HoldingsAsOf instrument maturity facts. "
+            "It is source evidence for opportunity/review workflows, not a maturity schedule, "
+            "liquidity advice, reinvestment recommendation, or OMS acknowledgement."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="PortfolioLiquidityLadder",
         product_version="v1",
         route_family=OPERATIONAL_READ,
