@@ -116,6 +116,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     )
     assert response.totals.source_reported_cash_weight_supportability == "SUPPORTED"
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.cash_accounts[0].cash_account_id_source == "validated_transaction_mapping"
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 30, tzinfo=UTC)
@@ -184,6 +185,10 @@ async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_
         "CASH-ACC-SGD-001",
         "CASH-ACC-USD-001",
     ]
+    assert [record.cash_account_id_source for record in response.cash_accounts] == [
+        "cash_account_master",
+        "cash_account_master",
+    ]
     assert response.cash_accounts[0].balance_portfolio_currency == Decimal("0")
     assert response.cash_accounts[1].balance_portfolio_currency == Decimal("250")
     assert response.totals.cash_account_count == 2
@@ -234,6 +239,48 @@ async def test_get_cash_balances_queries_fallback_account_ids_only_for_unmatched
         "CASH-ACC-EUR-LEGACY",
         "CASH-ACC-USD-001",
     ]
+    assert [record.cash_account_id_source for record in response.cash_accounts] == [
+        "validated_transaction_mapping",
+        "cash_account_master",
+    ]
+    repo.get_latest_cash_account_ids.assert_awaited_once_with(
+        portfolio_id="P1",
+        cash_security_ids=["CASH_EUR"],
+        as_of_date=date(2026, 3, 27),
+    )
+
+
+async def test_get_cash_balances_marks_unknown_cash_account_fallback_partial() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_portfolio_by_id.return_value = portfolio
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_EUR", market_value="125"),
+            instrument=_instrument(
+                "CASH_EUR",
+                name="EUR Cash Instrument",
+                currency="EUR",
+                asset_class="CASH",
+            ),
+        )
+    ]
+    repo.list_cash_account_masters.return_value = []
+    repo.get_latest_cash_account_ids.return_value = {}
+
+    with patch(
+        "src.services.query_service.app.services.cash_balance_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        response = await service.get_cash_balances(portfolio_id="P1")
+
+    assert response.cash_accounts[0].cash_account_id == "CASH_EUR"
+    assert response.cash_accounts[0].cash_account_id_source == "cash_security_fallback"
+    assert response.cash_accounts[0].instrument_name == "EUR Cash Instrument"
+    assert response.data_quality_status == "PARTIAL"
     repo.get_latest_cash_account_ids.assert_awaited_once_with(
         portfolio_id="P1",
         cash_security_ids=["CASH_EUR"],
@@ -293,6 +340,10 @@ async def test_cash_balance_records_build_account_conversions_sequentially() -> 
         "CASH-ACC-EUR-LEGACY",
         "CASH-ACC-USD-001",
     ]
+    assert [record.cash_account_id_source for record in records] == [
+        "validated_transaction_mapping",
+        "cash_account_master",
+    ]
     assert [record.balance_reporting_currency for record in records] == [
         Decimal("150.0"),
         Decimal("300.0"),
@@ -335,6 +386,7 @@ async def test_get_cash_balances_normalizes_cash_security_ids_for_master_join() 
         response = await service.get_cash_balances(portfolio_id="P1")
 
     assert response.cash_accounts[0].cash_account_id == "CASH-ACC-USD-001"
+    assert response.cash_accounts[0].cash_account_id_source == "cash_account_master"
     assert response.cash_accounts[0].security_id == "CASH_USD"
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.cash_accounts[0].balance_portfolio_currency == Decimal("250")

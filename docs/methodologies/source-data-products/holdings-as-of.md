@@ -27,7 +27,7 @@ execution-quality assessment, or OMS acknowledgement.
 | Default booked holdings | `/positions` without `as_of_date`, `include_projected=false` | Resolves the effective `as_of_date` to the latest business date when available, otherwise the current application date. Returns latest non-zero current-epoch holdings on or before that date. |
 | Explicit as-of holdings | `/positions?as_of_date=<date>` | Returns latest non-zero current-epoch holdings on or before the requested date. |
 | Projected-inclusive holdings | `/positions?include_projected=true` without `as_of_date` | Skips the default latest-business-date cap and returns latest non-zero current-epoch holdings, including future-dated projected state when the underlying position state has advanced. |
-| Cash-balance read | `/cash-balances` without `as_of_date` | Resolves the effective `as_of_date` to the latest business date. Returns cash-account balances from snapshot rows and cash-account master data. |
+| Cash-balance read | `/cash-balances` without `as_of_date` | Resolves the effective `as_of_date` to the latest business date. Returns cash-account balances from snapshot rows, active/effective cash-account master data, and provenance-marked fallback identity only when master evidence is incomplete. |
 | Explicit as-of cash balances | `/cash-balances?as_of_date=<date>` | Returns cash-account balances for the requested date. |
 | Reporting-currency cash balances | `/cash-balances?reporting_currency=<ccy>` | Converts portfolio-currency cash balances to the requested reporting currency using the latest FX rate on or before the resolved `as_of_date`. |
 | Source-reported cash weight | `/cash-balances` and `/cash-balances?as_of_date=<date>` | Computes `source_reported_cash_weight` from Core-owned cash and same-date portfolio market-value snapshot evidence. Returns null with blocked supportability when denominator evidence is incomplete, missing, zero, or stale. |
@@ -51,7 +51,8 @@ execution-quality assessment, or OMS acknowledgement.
 | `position_history` | `security_id`, `position_date`, `quantity`, `cost_basis`, `cost_basis_local`, `epoch` | Authoritative booked quantity and cost-basis stream. Also supplements missing snapshot rows when snapshot materialization lags. |
 | `daily_position_snapshots` | `security_id`, `date`, `quantity`, valuation fields, `market_value`, local valuation fields, `epoch`, timestamps | Supplies current or as-of snapshot-backed holdings, valuation fields, cash rows, and evidence timestamps. Snapshot rows must reconcile to latest current-epoch history quantity for positions. |
 | `instruments` | name, asset class, currency, ISIN, sector, country of risk, product type, rating, liquidity tier, maturity date | Adds instrument descriptors, source-owned maturity lifecycle dates for maturity-bearing holdings, and cash classification. |
-| `cash_account_masters` | cash account identity, display name, currency, effective dates | Supplies stable account identity for cash-balance rows where available. |
+| `cash_account_masters` | cash account identity, display name, currency, lifecycle status, effective dates | Supplies stable account identity for cash-balance rows where active and effective as of the response date. |
+| `transactions` | `settlement_cash_account_id`, `settlement_cash_instrument_id`, `transaction_date` | Supplies a last-known fallback cash-account mapping only when the settlement account id validates against active/effective `cash_account_masters` for the same portfolio and cash instrument. |
 | `fx_rates` | `from_currency`, `to_currency`, `rate_date`, `rate` | Used only for optional cash reporting-currency restatement. |
 | `market_prices` | `security_id`, `price_date` | Used to classify non-cash holdings as stale when latest price coverage does not reach the response `as_of_date`. |
 
@@ -74,6 +75,15 @@ Cash balances preserve three levels:
 1. native account currency balance,
 2. portfolio-currency balance,
 3. reporting-currency balance.
+
+Cash-balance rows also expose `cash_account_id_source`:
+
+1. `cash_account_master` means `cash_account_id` came directly from active/effective
+   `cash_account_masters`;
+2. `validated_transaction_mapping` means the latest transaction settlement account mapping was
+   accepted only after validating it against active/effective `cash_account_masters`;
+3. `cash_security_fallback` means no governed cash-account identity was available and
+   `cash_account_id` is the cash security id, with partial data-quality posture.
 
 Same-currency cash restatement uses a rate of `1`. Cross-currency cash restatement uses the latest
 available FX rate on or before the resolved `as_of_date`.
@@ -108,6 +118,7 @@ adjustment, execution-quality assessment, or OMS status inference is performed b
 | `C_n` | `balance_account_currency` | Cash account native-currency balance. |
 | `C_p` | `balance_portfolio_currency` | Cash account portfolio-currency balance. |
 | `C_r` | `balance_reporting_currency` | Cash account reporting-currency balance. |
+| `C_src` | `cash_account_id_source` | Provenance for `cash_account_id`: master, validated transaction mapping, or cash-security fallback. |
 | `X_c` | reporting FX rate | Latest FX rate from portfolio currency to reporting currency on or before `A`. |
 | `D_mv` | `source_reported_cash_weight_denominator_portfolio_currency` | Sum of same-date Core snapshot market values used as the cash-weight denominator. |
 | `W_c` | `source_reported_cash_weight` | Core-owned cash weight, `sum(C_p) / D_mv`, or null when blocked. |
@@ -182,11 +193,15 @@ supportability posture is one of:
 9. Fetch latest market-price dates for non-cash positions that have market prices and compare them with response `A` to derive stale posture.
 10. Return positions with `HoldingsAsOf:v1` metadata, evidence timestamp, and data-quality status.
 11. For cash balances, read all HoldingsAsOf snapshot rows for the resolved portfolio/date, filter
-    cash instruments for account balances, join cash-account master rows and fallback account
-    identifiers, build one row per known cash account, sort by account currency and account id,
-    convert portfolio-currency balances to reporting currency, compute source-reported cash weight
-    from same-date portfolio market-value denominator evidence when supportable, and return totals
-    with `HoldingsAsOf:v1` metadata.
+    cash instruments for account balances, join active/effective cash-account master rows, and read
+    transaction-derived fallback account identifiers only for unmatched cash securities.
+12. Accept a transaction-derived fallback account identifier only when the account id and cash
+    security validate against active/effective `cash_account_masters`; otherwise use the cash
+    security id with `cash_account_id_source=cash_security_fallback`.
+13. Build one row per known cash account, sort by account currency and account id, convert
+    portfolio-currency balances to reporting currency, compute source-reported cash weight from
+    same-date portfolio market-value denominator evidence when supportable, and return totals with
+    `HoldingsAsOf:v1` metadata.
 
 ## Validation and Failure Behavior
 
@@ -204,6 +219,7 @@ supportability posture is one of:
 | All positions are current, priced through `A` where required, and snapshot-backed | Returns `data_quality_status=COMPLETE`. |
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records exist but no cash snapshot rows back them | Returns `data_quality_status=UNKNOWN`. |
+| Any cash account record uses `cash_account_id_source=cash_security_fallback` | Returns `data_quality_status=PARTIAL`. |
 | Cash account records are backed by cash snapshot rows | Returns `data_quality_status=COMPLETE`. |
 | Cash-weight denominator rows are missing, omit an open holding, or contain null market value | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_MISSING_DENOMINATOR`. |
 | Cash-weight denominator is zero or negative | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_ZERO_DENOMINATOR`. |

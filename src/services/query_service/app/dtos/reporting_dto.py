@@ -340,10 +340,25 @@ class CashAccountBalanceRecord(BaseModel):
     cash_account_id: str = Field(
         ...,
         description=(
-            "Lotus cash account identifier. Resolved from the latest known settlement cash account "
-            "mapping when available, otherwise from the cash instrument identity."
+            "Cash account identifier used for the balance row. The `cash_account_id_source` field "
+            "states whether the value is governed master data, validated transaction-derived "
+            "mapping, or a degraded cash-security fallback."
         ),
         examples=["CASH-ACC-USD-001"],
+    )
+    cash_account_id_source: Literal[
+        "cash_account_master",
+        "validated_transaction_mapping",
+        "cash_security_fallback",
+    ] = Field(
+        "cash_account_master",
+        description=(
+            "Source used to resolve `cash_account_id`: `cash_account_master` for active/effective "
+            "cash-account master data, `validated_transaction_mapping` for transaction settlement "
+            "history validated against cash-account master data, or `cash_security_fallback` when "
+            "no governed cash-account identity is available."
+        ),
+        examples=["cash_account_master"],
     )
     instrument_id: str = Field(
         ...,

@@ -61,7 +61,7 @@ def _latest_cash_account_id_ranked_subquery(
     return (
         select(
             cash_security_id.label("cash_security_id"),
-            Transaction.settlement_cash_account_id.label("cash_account_id"),
+            CashAccountMaster.cash_account_id.label("cash_account_id"),
             func.row_number()
             .over(
                 partition_by=cash_security_id,
@@ -69,11 +69,22 @@ def _latest_cash_account_id_ranked_subquery(
             )
             .label("rn"),
         )
+        .join(
+            CashAccountMaster,
+            and_(
+                CashAccountMaster.portfolio_id == Transaction.portfolio_id,
+                CashAccountMaster.cash_account_id == Transaction.settlement_cash_account_id,
+                func.trim(CashAccountMaster.security_id) == cash_security_id,
+            ),
+        )
         .where(
             Transaction.portfolio_id == portfolio_id,
             cash_security_id.in_(cash_security_ids),
             Transaction.settlement_cash_account_id.is_not(None),
             Transaction.transaction_date < start_of_next_day(as_of_date),
+            func.upper(func.trim(CashAccountMaster.lifecycle_status)) == "ACTIVE",
+            or_(CashAccountMaster.opened_on.is_(None), CashAccountMaster.opened_on <= as_of_date),
+            or_(CashAccountMaster.closed_on.is_(None), CashAccountMaster.closed_on >= as_of_date),
         )
         .subquery()
     )
