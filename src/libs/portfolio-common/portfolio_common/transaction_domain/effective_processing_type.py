@@ -8,6 +8,7 @@ FX_COMPONENT_PROCESSING_TYPES = {
     "FX_CASH_SETTLEMENT_BUY",
     "FX_CASH_SETTLEMENT_SELL",
 }
+NON_CASHFLOW_PROCESSING_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 
 
 def normalize_processing_type(value: str | None) -> str:
@@ -26,3 +27,13 @@ def resolve_effective_processing_transaction_type(event: TransactionEvent) -> st
     if component_type in FX_COMPONENT_PROCESSING_TYPES:
         return component_type
     return normalize_processing_type(event.transaction_type)
+
+
+def requires_cashflow_processing(event: TransactionEvent) -> bool:
+    """
+    Return whether the concrete transaction row is expected to emit a cashflow.
+
+    FX contract open/close rows carry position exposure only; their settlement cash
+    movements are represented by separate FX cash settlement rows.
+    """
+    return resolve_effective_processing_transaction_type(event) not in NON_CASHFLOW_PROCESSING_TYPES

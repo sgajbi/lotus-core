@@ -15,6 +15,7 @@ from portfolio_common.events import (
     TransactionProcessingCompletedEvent,
 )
 from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.transaction_domain import requires_cashflow_processing
 
 from ..repositories.pipeline_stage_repository import PipelineStageRepository
 
@@ -32,6 +33,7 @@ class PipelineOrchestratorService:
         event: TransactionEvent,
         correlation_id: str | None,
     ) -> None:
+        cashflow_required = requires_cashflow_processing(event)
         stage = await self.repo.upsert_stage_flags(
             stage_name=TRANSACTION_PROCESSING_STAGE,
             transaction_id=event.transaction_id,
@@ -41,9 +43,15 @@ class PipelineOrchestratorService:
             epoch=event.epoch or 0,
             source_event_type="processed_transaction",
             cost_event_seen=True,
-            cashflow_event_seen=False,
+            cashflow_event_seen=not cashflow_required,
         )
-        await self._emit_if_ready(stage, correlation_id)
+        await self._emit_if_ready(
+            stage,
+            correlation_id,
+            readiness_reason="cost_completed_non_cashflow"
+            if not cashflow_required
+            else "cost_and_cashflow_completed",
+        )
 
     async def register_cashflow_calculated(
         self, event: CashflowCalculatedEvent, correlation_id: str | None
@@ -127,7 +135,13 @@ class PipelineOrchestratorService:
     def is_control_stage_blocking(status: str) -> bool:
         return status in {"FAILED", "REQUIRES_REPLAY"}
 
-    async def _emit_if_ready(self, stage, correlation_id: str | None) -> None:
+    async def _emit_if_ready(
+        self,
+        stage,
+        correlation_id: str | None,
+        *,
+        readiness_reason: str = "cost_and_cashflow_completed",
+    ) -> None:
         if stage.status == "COMPLETED":
             return
         if not stage.cost_event_seen or not stage.cashflow_event_seen:
@@ -143,6 +157,7 @@ class PipelineOrchestratorService:
             epoch=stage.epoch,
             cost_event_seen=True,
             cashflow_event_seen=True,
+            readiness_reason=readiness_reason,
             correlation_id=correlation_id,
         )
         await self.outbox_repo.create_outbox_event(
@@ -160,6 +175,7 @@ class PipelineOrchestratorService:
                 security_id=stage.security_id,
                 valuation_date=stage.business_date,
                 epoch=stage.epoch,
+                readiness_reason=readiness_reason,
                 correlation_id=correlation_id,
             )
             await self.outbox_repo.create_outbox_event(

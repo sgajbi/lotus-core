@@ -59,6 +59,8 @@ from .dual_leg_pairing import (
 )
 from .effective_processing_type import (
     FX_COMPONENT_PROCESSING_TYPES,
+    NON_CASHFLOW_PROCESSING_TYPES,
+    requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
 )
 from .fx_baseline_processing import (
@@ -159,6 +161,8 @@ __all__ = [
     "validate_upstream_cash_leg_pairing",
     "assert_upstream_cash_leg_pairing",
     "FX_COMPONENT_PROCESSING_TYPES",
+    "NON_CASHFLOW_PROCESSING_TYPES",
+    "requires_cashflow_processing",
     "resolve_effective_processing_transaction_type",
     "InterestCanonicalTransaction",
     "InterestValidationError",

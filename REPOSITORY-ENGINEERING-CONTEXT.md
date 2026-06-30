@@ -461,6 +461,12 @@ Most relevant current governance:
     tests while failing in installed service images. Prefer relative imports for same-service code,
     shared libraries for durable cross-service contracts, and explicit migration plans for
     transitional cross-service app imports that are still mounted in compose.
+47. FX contract lifecycle rows use shared transaction-domain cashflow semantics. `FX_CONTRACT_OPEN`
+    and `FX_CONTRACT_CLOSE` are non-cashflow processing types: they carry position exposure, while
+    settlement cash movements are represented by separate FX cash settlement rows. Cashflow
+    consumers, pipeline readiness, reconciliation, and future supportability code must use
+    `portfolio_common.transaction_domain.requires_cashflow_processing(...)` instead of duplicating
+    local FX lifecycle skip lists.
 
 ## Context Maintenance Rule
 

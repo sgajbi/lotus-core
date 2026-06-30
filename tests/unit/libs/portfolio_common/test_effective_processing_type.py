@@ -2,7 +2,10 @@ from datetime import datetime
 from decimal import Decimal
 
 from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain import resolve_effective_processing_transaction_type
+from portfolio_common.transaction_domain import (
+    requires_cashflow_processing,
+    resolve_effective_processing_transaction_type,
+)
 
 
 def _base_event() -> TransactionEvent:
@@ -38,3 +41,17 @@ def test_effective_processing_type_prefers_fx_component_type() -> None:
 def test_effective_processing_type_normalizes_fx_component_type() -> None:
     event = _base_event().model_copy(update={"component_type": " fx_cash_settlement_buy "})
     assert resolve_effective_processing_transaction_type(event) == "FX_CASH_SETTLEMENT_BUY"
+
+
+def test_fx_contract_lifecycle_does_not_require_cashflow_processing() -> None:
+    open_event = _base_event().model_copy(update={"component_type": "FX_CONTRACT_OPEN"})
+    close_event = _base_event().model_copy(update={"component_type": "FX_CONTRACT_CLOSE"})
+
+    assert requires_cashflow_processing(open_event) is False
+    assert requires_cashflow_processing(close_event) is False
+
+
+def test_fx_cash_settlement_requires_cashflow_processing() -> None:
+    event = _base_event().model_copy(update={"component_type": "FX_CASH_SETTLEMENT_BUY"})
+
+    assert requires_cashflow_processing(event) is True

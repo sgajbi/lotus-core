@@ -106,6 +106,21 @@ def _txn_event() -> TransactionEvent:
     )
 
 
+def _fx_contract_event(component_type: str) -> TransactionEvent:
+    return _txn_event().model_copy(
+        update={
+            "transaction_id": f"TXN-PIPE-{component_type}",
+            "instrument_id": "FXC-PIPE-1",
+            "security_id": "FXC-PIPE-1",
+            "transaction_type": "FX_FORWARD",
+            "component_type": component_type,
+            "quantity": Decimal("0"),
+            "price": Decimal("0"),
+            "gross_transaction_amount": Decimal("260000"),
+        }
+    )
+
+
 def _cashflow_event() -> CashflowCalculatedEvent:
     return CashflowCalculatedEvent(
         cashflow_id=1,
@@ -133,6 +148,27 @@ async def test_only_single_signal_does_not_emit_completion_event():
     await service.register_processed_transaction(_txn_event(), correlation_id="corr-1")
 
     outbox_repo.create_outbox_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_fx_contract_lifecycle_processed_signal_emits_without_cashflow():
+    repo = _RepoStub()
+    outbox_repo = AsyncMock()
+    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
+
+    await service.register_processed_transaction(
+        _fx_contract_event("FX_CONTRACT_OPEN"), correlation_id="corr-fx-open"
+    )
+
+    assert outbox_repo.create_outbox_event.await_count == 2
+    calls = outbox_repo.create_outbox_event.await_args_list
+    completion_payload = calls[0].kwargs["payload"]
+    readiness_payload = calls[1].kwargs["payload"]
+    assert completion_payload["transaction_id"] == "TXN-PIPE-FX_CONTRACT_OPEN"
+    assert completion_payload["cashflow_event_seen"] is True
+    assert completion_payload["readiness_reason"] == "cost_completed_non_cashflow"
+    assert readiness_payload["security_id"] == "FXC-PIPE-1"
+    assert readiness_payload["readiness_reason"] == "cost_completed_non_cashflow"
 
 
 @pytest.mark.asyncio
