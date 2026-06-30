@@ -199,9 +199,7 @@ def test_direct_import_boundary_flags_reconciliation_runtime_provider_bypass(
     ]
 
 
-def test_service_runtime_import_guard_flags_own_repo_root_import(
-    tmp_path, monkeypatch
-) -> None:
+def test_service_runtime_import_guard_flags_own_repo_root_import(tmp_path, monkeypatch) -> None:
     repo_root = tmp_path
     service_module = (
         repo_root
@@ -228,9 +226,7 @@ def test_service_runtime_import_guard_flags_own_repo_root_import(
     ]
 
 
-def test_service_runtime_import_guard_allows_package_local_import(
-    tmp_path, monkeypatch
-) -> None:
+def test_service_runtime_import_guard_allows_package_local_import(tmp_path, monkeypatch) -> None:
     repo_root = tmp_path
     service_module = (
         repo_root
