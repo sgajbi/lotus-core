@@ -405,6 +405,9 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
         sell_amount=Decimal("1000000"),
         contract_rate=Decimal("1.095"),
         fx_contract_id="FXC-2026-0001",
+        event_type="RawTransactionPersisted",
+        schema_version="1.0.0",
+        correlation_id="raw-correlation-id",
     )
     mock_msg = MagicMock()
     mock_msg.value.return_value = fx_event.model_dump_json().encode("utf-8")
@@ -419,7 +422,17 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
     mock_repo.create_or_update_transaction_event.side_effect = lambda event: DBTransaction(
         **event.model_dump(
             exclude_none=True,
-            exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
+            exclude={
+                "epoch",
+                "brokerage",
+                "stamp_duty",
+                "exchange_fee",
+                "gst",
+                "other_fees",
+                "event_type",
+                "schema_version",
+                "correlation_id",
+            },
         )
     )
     mock_idempotency_repo.claim_event_processing.return_value = True
@@ -435,6 +448,17 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
     assert persisted_event.security_id == "FXC-2026-0001"
     assert persisted_event.realized_total_pnl_local == Decimal("0")
     assert mock_outbox_repo.create_outbox_event.call_count == 2
+    processed_outbox_call = next(
+        call
+        for call in mock_outbox_repo.create_outbox_event.call_args_list
+        if call.kwargs["event_type"] == "ProcessedTransactionPersisted"
+    )
+    processed_payload = processed_outbox_call.kwargs["payload"]
+    assert processed_payload["transaction_id"] == "FX-OPEN-001"
+    assert processed_payload["security_id"] == "FXC-2026-0001"
+    assert "event_type" not in processed_payload
+    assert "schema_version" not in processed_payload
+    assert "correlation_id" not in processed_payload
     mock_idempotency_repo.claim_event_processing.assert_called_once()
 
 

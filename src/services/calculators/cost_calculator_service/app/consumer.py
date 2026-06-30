@@ -15,7 +15,7 @@ from portfolio_common.config import (
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.db import get_async_db_session
 from portfolio_common.decimal_amounts import decimal_or_none
-from portfolio_common.events import InstrumentEvent, TransactionEvent
+from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -1051,7 +1051,7 @@ class CostCalculatorConsumer(BaseConsumer):
                 aggregate_id=str(publish_event.portfolio_id),
                 event_type="ProcessedTransactionPersisted",
                 topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
-                payload=publish_event.model_dump(mode="json"),
+                payload=event_business_payload(publish_event, mode="json"),
                 correlation_id=correlation_id,
             )
             self._record_lifecycle_stage(publish_event.transaction_type, "emit_outbox", "success")
