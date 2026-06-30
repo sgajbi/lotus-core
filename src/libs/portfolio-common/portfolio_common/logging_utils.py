@@ -1,9 +1,11 @@
 # libs/portfolio-common/portfolio_common/logging_utils.py
 import logging
 import os
+import re
 import sys
 import uuid
 from contextvars import ContextVar
+from typing import Any
 
 try:
     from pythonjsonlogger.json import JsonFormatter
@@ -15,6 +17,31 @@ except ImportError:  # pragma: no cover - compatibility with python-json-logger 
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="<not-set>")
 request_id_var: ContextVar[str] = ContextVar("request_id", default="<not-set>")
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="<not-set>")
+REDACTED_VALUE = "***REDACTED***"
+_SENSITIVE_KEY_TOKENS = (
+    "authorization",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "database_url",
+    "db_url",
+    "connection_string",
+    "credential",
+    "account_number",
+    "client_email",
+    "ssn",
+)
+_URL_CREDENTIALS_PATTERN = re.compile(
+    r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)(?P<userinfo>[^\s/@]+)@"
+)
+_INLINE_SECRET_PATTERN = re.compile(
+    r"(?i)\b(?P<key>authorization|password|passwd|pwd|secret|token|api[_-]?key|"
+    r"database_url|connection_string)\b(?P<separator>\s*[:=]\s*)(?P<value>[^\r\n,;]+)"
+)
 
 
 def normalize_lineage_value(value: str | None) -> str | None:
@@ -25,6 +52,46 @@ def normalize_lineage_value(value: str | None) -> str | None:
     if not normalized or normalized.lower() == "<not-set>":
         return None
     return normalized
+
+
+def redact_sensitive(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _redact_dict(value)
+    if isinstance(value, list):
+        return [redact_sensitive(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact_sensitive(item) for item in value)
+    if isinstance(value, str):
+        return redact_sensitive_text(value)
+    return value
+
+
+def redact_sensitive_text(value: str) -> str:
+    redacted = _URL_CREDENTIALS_PATTERN.sub(
+        lambda match: f"{match.group('scheme')}{REDACTED_VALUE}@",
+        value,
+    )
+    return _INLINE_SECRET_PATTERN.sub(
+        lambda match: f"{match.group('key')}{match.group('separator')}{REDACTED_VALUE}",
+        redacted,
+    )
+
+
+def _redact_dict(value: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, item in value.items():
+        result[key] = REDACTED_VALUE if _is_sensitive_key(key) else redact_sensitive(item)
+    return result
+
+
+def _is_sensitive_key(key: object) -> bool:
+    normalized = str(key).strip().lower().replace("-", "_")
+    return any(token in normalized for token in _SENSITIVE_KEY_TOKENS)
+
+
+class RedactingJsonFormatter(JsonFormatter):
+    def process_log_record(self, log_record: dict[str, Any]) -> dict[str, Any]:
+        return redact_sensitive(log_record)
 
 
 class CorrelationIdFilter(logging.Filter):
@@ -71,7 +138,7 @@ def setup_logging():
 
     handler = logging.StreamHandler(sys.stdout)
 
-    formatter = JsonFormatter(
+    formatter = RedactingJsonFormatter(
         "%(asctime)s %(name)s %(levelname)s %(message)s %(service)s "
         "%(environment)s %(correlation_id)s %(request_id)s %(trace_id)s",
         rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
