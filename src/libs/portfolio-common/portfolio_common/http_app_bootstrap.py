@@ -9,6 +9,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from portfolio_common.health import create_health_router
 from portfolio_common.logging_utils import (
     correlation_id_var,
     generate_correlation_id,
@@ -161,3 +162,31 @@ def configure_standard_http_app(
 def include_routers(app: FastAPI, *routers: Any) -> None:
     for router in routers:
         app.include_router(router)
+
+
+def create_standard_health_app(
+    *,
+    title: str,
+    service_name: str,
+    service_prefix: str,
+    dependencies: tuple[str, ...],
+    description: str | None = None,
+    version: str = "1.0.0",
+    logger: logging.Logger | None = None,
+    id_generator=generate_correlation_id,
+) -> FastAPI:
+    app = FastAPI(
+        title=title,
+        description=description,
+        version=version,
+    )
+    app_logger = logger or logging.getLogger(service_name)
+    configure_standard_http_app(
+        app,
+        service_name=service_name,
+        service_prefix=service_prefix,
+        logger=app_logger,
+        id_generator=id_generator,
+    )
+    include_routers(app, create_health_router(*dependencies))
+    return app

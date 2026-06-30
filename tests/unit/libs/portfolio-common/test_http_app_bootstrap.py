@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from portfolio_common.http_app_bootstrap import (
     UNMATCHED_ROUTE_TEMPLATE,
     configure_standard_http_app,
+    create_standard_health_app,
     http_metric_path_template,
     normalize_trace_id,
 )
@@ -67,3 +68,53 @@ def test_standard_http_metrics_use_route_template_for_dynamic_paths():
     assert {call.kwargs["path"] for call in request_metric.labels.call_args_list} == {
         "/portfolios/{portfolio_id}/positions/{security_id}"
     }
+
+
+def test_standard_health_app_exposes_shared_observability_contract():
+    latency_metric = MagicMock()
+    request_metric = MagicMock()
+
+    with (
+        patch("portfolio_common.http_app_bootstrap.HTTP_REQUEST_LATENCY_SECONDS", latency_metric),
+        patch("portfolio_common.http_app_bootstrap.HTTP_REQUESTS_TOTAL", request_metric),
+    ):
+        app = create_standard_health_app(
+            title="Worker Health",
+            service_name="worker_service_web",
+            service_prefix="WRK",
+            dependencies=(),
+            logger=MagicMock(),
+            id_generator=lambda prefix: f"{prefix}-id",
+        )
+        client = TestClient(app)
+        response = client.get("/health/live")
+        schema = client.get("/openapi.json").json()
+
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == "WRK-id"
+    assert response.headers["X-Request-Id"] == "REQ-id"
+    assert response.headers["X-Trace-Id"]
+    assert "traceparent" in response.headers
+    assert "/metrics" in schema["paths"]
+    assert schema["paths"]["/metrics"]["get"]["responses"]["200"]["content"] == {
+        "text/plain": {"schema": {"type": "string"}}
+    }
+    assert any(
+        call.kwargs
+        == {
+            "service": "worker_service_web",
+            "method": "GET",
+            "path": "/health/live",
+        }
+        for call in latency_metric.labels.call_args_list
+    )
+    assert any(
+        call.kwargs
+        == {
+            "service": "worker_service_web",
+            "method": "GET",
+            "path": "/health/live",
+            "status": "200",
+        }
+        for call in request_metric.labels.call_args_list
+    )

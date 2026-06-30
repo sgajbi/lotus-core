@@ -30,11 +30,11 @@ CUSTOM_METRICS = {
 }
 
 
-def setup_metrics(app):
+def setup_metrics(app=None):
     """
-    Sets up and attaches the Prometheus FastAPI Instrumentator to the app
-    and returns the custom metric objects for dependency injection.
+    Optionally attaches the Prometheus FastAPI Instrumentator to the app and returns custom metrics.
     """
-    Instrumentator(excluded_handlers=["/metrics"]).instrument(app).expose(app)
+    if app is not None:
+        Instrumentator(excluded_handlers=["/metrics"]).instrument(app).expose(app)
 
     return CUSTOM_METRICS
