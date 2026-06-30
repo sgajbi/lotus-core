@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from time import perf_counter
 from typing import Any
-from uuid import uuid4
 
 from portfolio_common.database_models import FinancialReconciliationFinding
 from portfolio_common.decimal_amounts import decimal_or_none, required_decimal
@@ -16,6 +14,12 @@ from portfolio_common.valuation_prices import resolve_valuation_unit_price
 
 from ..dtos import ReconciliationRunRequest
 from ..repositories import ReconciliationRepository
+from .runtime_providers import (
+    IdGenerator,
+    MonotonicTimer,
+    SystemMonotonicTimer,
+    UuidHexIdGenerator,
+)
 
 DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
 ZERO = Decimal("0")
@@ -207,8 +211,16 @@ class AutomaticBundleOutcome:
 
 
 class ReconciliationService:
-    def __init__(self, repository: ReconciliationRepository):
+    def __init__(
+        self,
+        repository: ReconciliationRepository,
+        *,
+        monotonic_timer: MonotonicTimer | None = None,
+        id_generator: IdGenerator | None = None,
+    ):
         self.repository = repository
+        self._monotonic_timer = monotonic_timer or SystemMonotonicTimer()
+        self._id_generator = id_generator or UuidHexIdGenerator()
 
     async def _aggregate_authoritative_portfolio_metrics(
         self,
@@ -342,7 +354,7 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
-        started_at = perf_counter()
+        started_at = self._monotonic_timer.seconds()
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="transaction_cashflow",
             request=request,
@@ -376,7 +388,7 @@ class ReconciliationService:
         observe_financial_reconciliation_run(
             "transaction_cashflow",
             "COMPLETED",
-            perf_counter() - started_at,
+            self._monotonic_timer.seconds() - started_at,
             findings,
         )
         return run
@@ -488,7 +500,7 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
-        started_at = perf_counter()
+        started_at = self._monotonic_timer.seconds()
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="position_valuation",
@@ -615,7 +627,7 @@ class ReconciliationService:
         observe_financial_reconciliation_run(
             "position_valuation",
             "COMPLETED",
-            perf_counter() - started_at,
+            self._monotonic_timer.seconds() - started_at,
             findings,
         )
         return run
@@ -626,7 +638,7 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
-        started_at = perf_counter()
+        started_at = self._monotonic_timer.seconds()
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="timeseries_integrity",
@@ -673,7 +685,7 @@ class ReconciliationService:
         observe_financial_reconciliation_run(
             "timeseries_integrity",
             "COMPLETED",
-            perf_counter() - started_at,
+            self._monotonic_timer.seconds() - started_at,
             findings,
         )
         return run
@@ -915,7 +927,7 @@ class ReconciliationService:
         detail: dict | None,
     ) -> FinancialReconciliationFinding:
         return FinancialReconciliationFinding(
-            finding_id=f"finding-{uuid4().hex}",
+            finding_id=f"finding-{self._id_generator.hex()}",
             run_id=run_id,
             reconciliation_type=reconciliation_type,
             finding_type=finding_type,
