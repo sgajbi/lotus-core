@@ -2024,3 +2024,6 @@ health before that claim is defensible.
 329. Continued validated GitHub issue #674 by adding returned-row instrument-reference
      supportability to `TransactionLedgerWindow:v1`. Focused transaction metadata, record,
      service, and repository tests passed with 73 tests; scoped Ruff lint and format checks passed.
+330. Continued validated GitHub issue #674 by adding returned-lot instrument-reference
+     supportability to `PortfolioTaxLotWindow:v1`. Focused tax-lot service and buy-state repository
+     tests passed with 26 tests; scoped Ruff lint and format checks passed.

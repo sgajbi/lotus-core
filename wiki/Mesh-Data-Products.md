@@ -117,6 +117,13 @@ produce `DPM_SOURCE_READINESS_READY`. This lets operations and downstream DPM se
 blockers without reconstructing mandate, eligibility, tax, market-data, valuation, suitability,
 liquidity, execution, or OMS truth.
 
+`PortfolioTaxLotWindow:v1` preserves source lot-state evidence from `position_lot_state`, reports
+requested securities with no matching lots separately from returned lots whose security ids do not
+resolve to governed instrument master data, and exposes bounded `reason_codes`,
+`missing_instrument_reference_count`, and `missing_instrument_security_ids` in supportability. This
+keeps historical or orphan lot rows visible while degrading readiness instead of presenting them as
+fully governed instrument-backed tax-lot evidence.
+
 `TransactionLedgerWindow:v1` current implementation-backed methodology is deterministic: the
 product filters booked transaction rows by portfolio, optional instrument/security, transaction
 type, FX/event linkage, date window, and effective as-of date; preserves joined row-level

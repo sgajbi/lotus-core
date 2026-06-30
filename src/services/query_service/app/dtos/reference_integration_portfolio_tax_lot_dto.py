@@ -166,6 +166,26 @@ class PortfolioTaxLotWindowSupportability(BaseModel):
         description="Requested securities with no lots in the resolved page scope.",
         examples=[["UNKNOWN_SEC"]],
     )
+    missing_instrument_security_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Returned lot security identifiers that do not resolve to governed instrument master "
+            "rows."
+        ),
+        examples=[["ORPHAN_SEC"]],
+    )
+    missing_instrument_reference_count: int = Field(
+        0,
+        description=(
+            "Number of returned lot security identifiers without instrument master support."
+        ),
+        examples=[0],
+    )
+    reason_codes: list[str] = Field(
+        default_factory=list,
+        description="Bounded supportability reason codes for the tax-lot window.",
+        examples=[["TAX_LOTS_READY"]],
+    )
 
     model_config = ConfigDict()
 
