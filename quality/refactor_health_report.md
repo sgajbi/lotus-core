@@ -39,17 +39,18 @@ tested modules.
 | Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Transaction cost curve source reads | Improving | CR-1194 makes `TransactionCostCurve:v1` cursor paging source-read bounded through grouped keyset selection and page-key-scoped transaction evidence reads |
+| Performance component economics paging | Improving | CR-1195 adds request-scoped cursor paging, bounded `page_size + 1` row evidence reads, explicit returned-page totals scope, and bad-token HTTP 400 handling for `PerformanceComponentEconomics:v1` |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 | Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
 | Boundary mapping conformance | Improving | CR-1184 adds `make test-boundary-mapping-conformance`, extracts transaction event-to-record mapping, and covers representative transaction and portfolio tax-lot source-data mappings |
 
 ## Current Slice Update
 
-CR-1194 addresses validated GitHub issue #681 by moving `TransactionCostCurve:v1` paging from
-response-only slicing toward source-read-bounded execution. The service now resolves grouped curve
-keys with cursor, minimum-observation, and `page_size + 1` budget, reads transaction evidence only
-for selected page keys, and preserves route, DTO, cursor, grouping, supportability, and methodology
-contracts.
+CR-1195 addresses validated GitHub issue #682 by adding bounded cursor paging to
+`PerformanceComponentEconomics:v1`. The service now reads row-level transaction, cashflow, and fee
+evidence with a `page_size + 1` budget, rejects malformed or cross-scope page tokens, marks
+non-terminal pages as partial/degraded, and makes component totals explicitly returned-page scoped
+while preserving route path, existing row fields, formulas, lineage, and no-evidence behavior.
 
 ## Health Assessment
 

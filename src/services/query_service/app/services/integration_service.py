@@ -427,6 +427,8 @@ class IntegrationService:
             repository=self._transaction_repository,
             portfolio_id=portfolio_id,
             request=request,
+            decode_page_token=self._decode_page_token,
+            encode_page_token=self._encode_page_token,
         )
 
     async def get_market_data_coverage(

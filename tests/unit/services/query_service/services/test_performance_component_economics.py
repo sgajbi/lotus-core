@@ -10,6 +10,9 @@ from src.services.query_service.app.services.performance_component_economics imp
     build_performance_component_economics_response,
     build_performance_component_economics_rows,
     build_performance_component_economics_totals,
+    performance_component_economics_next_page_token_payload,
+    performance_component_economics_page_scope,
+    performance_component_economics_page_token,
     resolve_performance_component_economics_response,
 )
 
@@ -232,6 +235,9 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         "fx_context",
     ]
     assert response.supportability.missing_component_families == []
+    assert response.component_totals_scope == "returned_page"
+    assert response.page.page_size == 250
+    assert response.page.next_page_token is None
     assert response.data_quality_status == "COMPLETE"
     assert response.tenant_id == "tenant-sg"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 17, tzinfo=UTC)
@@ -288,7 +294,16 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
                 self, **kwargs: object
             ) -> list[SimpleNamespace]:
                 calls.append(("performance_component_economics", kwargs))
-                return [_transaction(transaction_id="TXN-DIV-001")]
+                return [
+                    _transaction(transaction_id="TXN-DIV-001"),
+                    _transaction(transaction_id="TXN-DIV-002", security_id="EQ_US_MSFT"),
+                ]
+
+        encoded_payloads: list[dict[str, object]] = []
+
+        def encode(payload: dict[str, object]) -> str:
+            encoded_payloads.append(payload)
+            return "encoded-token"
 
         response = await resolve_performance_component_economics_response(
             repository=Repository(),
@@ -298,13 +313,21 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
                 window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
                 security_ids=["EQ_US_AAPL"],
                 transaction_types=["dividend"],
+                page={"page_size": 1},
             ),
+            decode_page_token=lambda _: {},
+            encode_page_token=encode,
         )
-        return response, calls
+        return response, calls, encoded_payloads
 
-    response, calls = asyncio.run(run_case())
+    response, calls, encoded_payloads = asyncio.run(run_case())
 
     assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.page.next_page_token == "encoded-token"
+    assert response.page.returned_component_count == 1
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
+    assert response.data_quality_status == "PARTIAL"
     assert [call[0] for call in calls] == [
         "portfolio_exists",
         "get_portfolio_base_currency",
@@ -312,3 +335,94 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
     ]
     assert calls[2][1]["transaction_types"] == ["DIVIDEND"]
     assert calls[2][1]["security_ids"] == ["EQ_US_AAPL"]
+    assert calls[2][1]["after_key"] == ()
+    assert calls[2][1]["limit"] == 2
+    assert encoded_payloads == [
+        {
+            "scope_fingerprint": response.page.request_scope_fingerprint,
+            "last_row_key": ["EQ_US_AAPL", "2026-05-10", "TXN-DIV-001"],
+        }
+    ]
+
+
+def test_performance_component_economics_page_scope_rejects_scope_mismatch() -> None:
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+    )
+
+    try:
+        performance_component_economics_page_scope(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=request,
+            cursor={"scope_fingerprint": "wrong-scope"},
+        )
+    except ValueError as exc:
+        assert "component economics page token does not match request scope" in str(exc)
+    else:
+        raise AssertionError("Expected performance component economics page token scope mismatch")
+
+
+def test_performance_component_economics_page_scope_rejects_malformed_row_key() -> None:
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+    )
+
+    try:
+        performance_component_economics_page_scope(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=request,
+            cursor={"last_row_key": ["EQ_US_AAPL"]},
+        )
+    except ValueError as exc:
+        assert "page token has an invalid row key" in str(exc)
+    else:
+        raise AssertionError("Expected performance component economics malformed page token")
+
+
+def test_performance_component_economics_page_token_uses_last_row_key() -> None:
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+    )
+    page_scope = performance_component_economics_page_scope(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        cursor={},
+    )
+    rows = build_performance_component_economics_rows(
+        [
+            _transaction(transaction_id="TXN-DIV-001"),
+            _transaction(transaction_id="TXN-DIV-002", security_id="EQ_US_MSFT"),
+        ]
+    )
+
+    assert performance_component_economics_next_page_token_payload(
+        page_scope=page_scope,
+        rows=rows,
+        has_more=True,
+    ) == {
+        "scope_fingerprint": page_scope.request_fingerprint,
+        "last_row_key": ["EQ_US_MSFT", "2026-05-10", "TXN-DIV-002"],
+    }
+    encoded_payloads: list[dict[str, object]] = []
+    assert (
+        performance_component_economics_page_token(
+            page_scope=page_scope,
+            rows=rows,
+            has_more=True,
+            encode_page_token=lambda payload: encoded_payloads.append(payload) or "token",
+        )
+        == "token"
+    )
+    assert encoded_payloads[0]["last_row_key"] == ["EQ_US_MSFT", "2026-05-10", "TXN-DIV-002"]
+    assert (
+        performance_component_economics_page_token(
+            page_scope=page_scope,
+            rows=rows,
+            has_more=False,
+            encode_page_token=lambda _: "unexpected",
+        )
+        is None
+    )

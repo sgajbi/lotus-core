@@ -80,6 +80,25 @@ def _transaction_cost_curve_key_filter(curve_keys: list[tuple[str, str, str]]):
     )
 
 
+def _performance_component_economics_after_key_predicate(
+    after_key: tuple[str, str, str] | tuple[()],
+):
+    if not after_key:
+        return None
+    security_id, transaction_date, transaction_id = after_key
+    security_expr = func.trim(Transaction.security_id)
+    transaction_date_expr = func.date(Transaction.transaction_date)
+    return or_(
+        security_expr > security_id,
+        and_(security_expr == security_id, transaction_date_expr > transaction_date),
+        and_(
+            security_expr == security_id,
+            transaction_date_expr == transaction_date,
+            Transaction.transaction_id > transaction_id,
+        ),
+    )
+
+
 def _apply_security_filter(stmt, security_id: Optional[str]):
     normalized_security_id = normalize_security_id(security_id)
     if not normalized_security_id:
@@ -525,6 +544,8 @@ class TransactionRepository:
         as_of_date: date,
         security_ids: list[str] | None = None,
         transaction_types: list[str] | None = None,
+        after_key: tuple[str, str, str] | tuple[()] = (),
+        limit: int | None = None,
     ) -> List[Transaction]:
         ranked_cashflows = (
             select(
@@ -562,8 +583,8 @@ class TransactionRepository:
                 Transaction.transaction_date < start_of_next_day(as_of_date),
             )
             .order_by(
-                Transaction.security_id.asc(),
-                Transaction.transaction_date.asc(),
+                func.trim(Transaction.security_id).asc(),
+                func.date(Transaction.transaction_date).asc(),
                 Transaction.transaction_id.asc(),
             )
         )
@@ -578,6 +599,11 @@ class TransactionRepository:
             stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
         if transaction_types:
             stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
+        after_predicate = _performance_component_economics_after_key_predicate(after_key)
+        if after_predicate is not None:
+            stmt = stmt.where(after_predicate)
+        if limit is not None:
+            stmt = stmt.limit(limit)
 
         results = await self.db.execute(stmt)
         return list(results.scalars().unique().all())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Callable
 
@@ -12,6 +13,7 @@ from ..dtos.reference_integration_dto import (
     PerformanceComponentEconomicsRow,
     PerformanceComponentEconomicsSupportability,
     PerformanceComponentEconomicsTotal,
+    ReferencePageMetadata,
 )
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
@@ -23,6 +25,68 @@ from .transaction_cost_curve import transaction_fee_amount
 
 SOURCE_CONTRACT_VERSION = "performance_component_economics_v1"
 _ComponentPredicate = Callable[[PerformanceComponentEconomicsRow], bool]
+_PerformanceEconomicsCursor = tuple[str, str, str] | tuple[()]
+
+
+@dataclass(frozen=True)
+class PerformanceComponentEconomicsPageScope:
+    request_fingerprint: str
+    after_key: _PerformanceEconomicsCursor
+
+
+def performance_component_economics_page_scope(
+    *,
+    portfolio_id: str,
+    request: PerformanceComponentEconomicsRequest,
+    cursor: dict[str, Any],
+) -> PerformanceComponentEconomicsPageScope:
+    request_fingerprint = _request_scope_fingerprint(portfolio_id=portfolio_id, request=request)
+    token_scope = cursor.get("scope_fingerprint")
+    if token_scope and token_scope != request_fingerprint:
+        raise ValueError("Performance component economics page token does not match request scope.")
+    last_row_key = tuple(cursor.get("last_row_key") or ())
+    if len(last_row_key) not in (0, 3):
+        raise ValueError("Performance component economics page token has an invalid row key.")
+    return PerformanceComponentEconomicsPageScope(
+        request_fingerprint=request_fingerprint,
+        after_key=last_row_key,
+    )
+
+
+def performance_component_economics_next_page_token_payload(
+    *,
+    page_scope: PerformanceComponentEconomicsPageScope,
+    rows: list[PerformanceComponentEconomicsRow],
+    has_more: bool,
+) -> dict[str, Any] | None:
+    if not has_more or not rows:
+        return None
+    last_row = rows[-1]
+    return {
+        "scope_fingerprint": page_scope.request_fingerprint,
+        "last_row_key": [
+            last_row.security_id,
+            last_row.transaction_date.isoformat(),
+            last_row.transaction_id,
+        ],
+    }
+
+
+def performance_component_economics_page_token(
+    *,
+    page_scope: PerformanceComponentEconomicsPageScope,
+    rows: list[PerformanceComponentEconomicsRow],
+    has_more: bool,
+    encode_page_token: Callable[[dict[str, Any]], str],
+) -> str | None:
+    payload = performance_component_economics_next_page_token_payload(
+        page_scope=page_scope,
+        rows=rows,
+        has_more=has_more,
+    )
+    if payload is None:
+        return None
+    return encode_page_token(payload)
 
 
 async def resolve_performance_component_economics_response(
@@ -30,6 +94,8 @@ async def resolve_performance_component_economics_response(
     repository: Any,
     portfolio_id: str,
     request: PerformanceComponentEconomicsRequest,
+    decode_page_token: Callable[[str | None], dict[str, Any]],
+    encode_page_token: Callable[[dict[str, Any]], str],
 ) -> PerformanceComponentEconomicsResponse:
     if not await repository.portfolio_exists(portfolio_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
@@ -38,6 +104,11 @@ async def resolve_performance_component_economics_response(
     if portfolio_base_currency is None:
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
     normalized_portfolio_base_currency = normalize_currency_code(portfolio_base_currency)
+    page_scope = performance_component_economics_page_scope(
+        portfolio_id=portfolio_id,
+        request=request,
+        cursor=decode_page_token(request.page.page_token),
+    )
     transactions = await repository.list_performance_component_economics_evidence(
         portfolio_id=portfolio_id,
         start_date=request.window.start_date,
@@ -45,14 +116,27 @@ async def resolve_performance_component_economics_response(
         as_of_date=request.as_of_date,
         security_ids=request.security_ids,
         transaction_types=request.transaction_types,
+        after_key=page_scope.after_key,
+        limit=request.page.page_size + 1,
     )
-    rows = build_performance_component_economics_rows(transactions)
+    has_more = len(transactions) > request.page.page_size
+    page_transactions = transactions[: request.page.page_size]
+    rows = build_performance_component_economics_rows(page_transactions)
+    next_page_token = performance_component_economics_page_token(
+        page_scope=page_scope,
+        rows=rows,
+        has_more=has_more,
+        encode_page_token=encode_page_token,
+    )
     return build_performance_component_economics_response(
         portfolio_id=portfolio_id,
         request=request,
         rows=rows,
-        transactions=transactions,
+        transactions=page_transactions,
         portfolio_base_currency=normalized_portfolio_base_currency,
+        request_scope_fingerprint=page_scope.request_fingerprint,
+        has_more=has_more,
+        next_page_token=next_page_token,
     )
 
 
@@ -69,28 +153,36 @@ def build_performance_component_economics_response(
     rows: list[PerformanceComponentEconomicsRow],
     transactions: list[Any],
     portfolio_base_currency: str,
+    request_scope_fingerprint: str | None = None,
+    has_more: bool = False,
+    next_page_token: str | None = None,
 ) -> PerformanceComponentEconomicsResponse:
     observed_component_families = _observed_component_families(rows)
-    state = "READY" if rows else "UNAVAILABLE"
-    reason = (
-        "PERFORMANCE_COMPONENT_ECONOMICS_READY"
-        if rows
-        else "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND"
+    state = _performance_component_economics_supportability_state(rows=rows, has_more=has_more)
+    reason = _performance_component_economics_supportability_reason(
+        rows=rows,
+        has_more=has_more,
     )
-    request_scope_fingerprint = _request_scope_fingerprint(
-        portfolio_id=portfolio_id,
-        request=request,
+    fingerprint = request_scope_fingerprint or _request_scope_fingerprint(
+        portfolio_id=portfolio_id, request=request
     )
 
     return PerformanceComponentEconomicsResponse(
         portfolio_id=portfolio_id,
         as_of_date=request.as_of_date,
         window=request.window,
-        request_fingerprint=request_scope_fingerprint,
+        request_fingerprint=fingerprint,
         rows=rows,
         component_totals=build_performance_component_economics_totals(
             rows,
             portfolio_base_currency=portfolio_base_currency,
+        ),
+        page=ReferencePageMetadata(
+            page_size=request.page.page_size,
+            sort_key="security_id:asc,transaction_date:asc,transaction_id:asc",
+            returned_component_count=len(rows),
+            request_scope_fingerprint=fingerprint,
+            next_page_token=next_page_token,
         ),
         supportability=PerformanceComponentEconomicsSupportability(
             state=state,
@@ -111,10 +203,34 @@ def build_performance_component_economics_response(
         **source_product_runtime_metadata_without_as_of_date(
             request.as_of_date,
             tenant_id=request.tenant_id,
-            data_quality_status="COMPLETE" if rows else "UNKNOWN",
+            data_quality_status="PARTIAL" if has_more else ("COMPLETE" if rows else "UNKNOWN"),
             latest_evidence_timestamp=_latest_performance_evidence_timestamp(transactions),
         ),
     )
+
+
+def _performance_component_economics_supportability_state(
+    *,
+    rows: list[PerformanceComponentEconomicsRow],
+    has_more: bool,
+) -> str:
+    if not rows:
+        return "UNAVAILABLE"
+    if has_more:
+        return "DEGRADED"
+    return "READY"
+
+
+def _performance_component_economics_supportability_reason(
+    *,
+    rows: list[PerformanceComponentEconomicsRow],
+    has_more: bool,
+) -> str:
+    if not rows:
+        return "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND"
+    if has_more:
+        return "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
+    return "PERFORMANCE_COMPONENT_ECONOMICS_READY"
 
 
 def build_performance_component_economics_totals(
