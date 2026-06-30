@@ -50,6 +50,10 @@ from src.services.query_service.app.services.reference_data_helpers import (
     market_reference_data_quality_status,
 )
 from src.services.query_service.app.services.request_fingerprint import request_fingerprint
+from src.services.query_service.app.services.transaction_cost_curve import (
+    has_observed_transaction_cost_evidence,
+    transaction_cost_curve_key,
+)
 
 
 def make_service() -> IntegrationService:
@@ -78,6 +82,99 @@ def transaction_cost_row(
         transaction_date=transaction_date,
         updated_at=transaction_date,
         costs=costs if costs is not None else [],
+    )
+
+
+def buy_state_repository_with_tax_lots(
+    rows: list[tuple[SimpleNamespace, str | None]],
+    *,
+    portfolio_exists: bool = True,
+    known_instrument_security_ids: set[str] | None = None,
+) -> SimpleNamespace:
+    known_security_ids = (
+        known_instrument_security_ids
+        if known_instrument_security_ids is not None
+        else {
+            str(row.security_id).strip()
+            for row, _local_currency in rows
+            if getattr(row, "security_id", None)
+        }
+    )
+    return SimpleNamespace(
+        portfolio_exists=AsyncMock(return_value=portfolio_exists),
+        list_portfolio_tax_lots=AsyncMock(return_value=rows),
+        list_known_instrument_security_ids=AsyncMock(return_value=known_security_ids),
+    )
+
+
+def transaction_repository_with_cost_rows(
+    rows: list[SimpleNamespace],
+    *,
+    portfolio_exists: bool = True,
+) -> SimpleNamespace:
+    def eligible_keys(
+        *,
+        security_ids: list[str] | None,
+        transaction_types: list[str] | None,
+        min_observation_count: int,
+        after_key: tuple[str, str, str] | tuple[()] = (),
+    ) -> list[tuple[str, str, str]]:
+        requested_security_ids = {
+            str(security_id).strip().upper() for security_id in security_ids or []
+        }
+        requested_transaction_types = {
+            str(transaction_type).strip().upper() for transaction_type in transaction_types or []
+        }
+        grouped: dict[tuple[str, str, str], list[SimpleNamespace]] = {}
+        for row in rows:
+            if not has_observed_transaction_cost_evidence(row):
+                continue
+            key = transaction_cost_curve_key(row)
+            if requested_security_ids and key[0] not in requested_security_ids:
+                continue
+            if requested_transaction_types and key[1] not in requested_transaction_types:
+                continue
+            grouped.setdefault(key, []).append(row)
+        return [
+            key
+            for key in sorted(grouped)
+            if len(grouped[key]) >= min_observation_count and (not after_key or key > after_key)
+        ]
+
+    async def list_transaction_cost_curve_keys(**kwargs: object) -> list[tuple[str, str, str]]:
+        return eligible_keys(
+            security_ids=kwargs.get("security_ids"),  # type: ignore[arg-type]
+            transaction_types=kwargs.get("transaction_types"),  # type: ignore[arg-type]
+            min_observation_count=kwargs["min_observation_count"],  # type: ignore[arg-type]
+            after_key=kwargs.get("after_key", ()),  # type: ignore[arg-type]
+        )[: kwargs["limit"]]  # type: ignore[index]
+
+    async def list_transaction_cost_curve_available_security_ids(
+        **kwargs: object,
+    ) -> set[str]:
+        return {
+            key[0]
+            for key in eligible_keys(
+                security_ids=kwargs.get("security_ids"),  # type: ignore[arg-type]
+                transaction_types=kwargs.get("transaction_types"),  # type: ignore[arg-type]
+                min_observation_count=kwargs["min_observation_count"],  # type: ignore[arg-type]
+            )
+        }
+
+    async def list_transaction_cost_evidence(**kwargs: object) -> list[SimpleNamespace]:
+        curve_keys = kwargs.get("curve_keys")
+        if curve_keys is None:
+            return rows
+        requested_keys = set(curve_keys)  # type: ignore[arg-type]
+        return [row for row in rows if transaction_cost_curve_key(row) in requested_keys]
+
+    return SimpleNamespace(
+        portfolio_exists=AsyncMock(return_value=portfolio_exists),
+        list_transaction_cost_curve_keys=AsyncMock(side_effect=list_transaction_cost_curve_keys),
+        list_transaction_cost_curve_available_security_ids=AsyncMock(
+            side_effect=list_transaction_cost_curve_available_security_ids
+        ),
+        list_transaction_cost_evidence=AsyncMock(side_effect=list_transaction_cost_evidence),
     )
 
 
@@ -3487,50 +3584,47 @@ async def test_benchmark_market_series_rejects_page_token_scope_mismatch() -> No
 @pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_returns_paged_portfolio_lots() -> None:
     service = make_service()
-    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_portfolio_tax_lots=AsyncMock(
-            return_value=[
-                (
-                    SimpleNamespace(
-                        portfolio_id="PB_SG_GLOBAL_BAL_001",
-                        security_id="EQ_US_AAPL",
-                        instrument_id="EQ_US_AAPL",
-                        lot_id="LOT-AAPL-001",
-                        open_quantity=Decimal("100.0000000000"),
-                        original_quantity=Decimal("100.0000000000"),
-                        acquisition_date=date(2026, 3, 25),
-                        lot_cost_base=Decimal("15005.5000000000"),
-                        lot_cost_local=Decimal("15005.5000000000"),
-                        source_transaction_id="TXN-BUY-AAPL-001",
-                        source_system="front_office_portfolio_seed",
-                        calculation_policy_id="BUY_DEFAULT_POLICY",
-                        calculation_policy_version="1.0.0",
-                        updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
-                    ),
-                    "USD",
+    service._buy_state_repository = buy_state_repository_with_tax_lots(  # type: ignore[assignment]
+        [
+            (
+                SimpleNamespace(
+                    portfolio_id="PB_SG_GLOBAL_BAL_001",
+                    security_id="EQ_US_AAPL",
+                    instrument_id="EQ_US_AAPL",
+                    lot_id="LOT-AAPL-001",
+                    open_quantity=Decimal("100.0000000000"),
+                    original_quantity=Decimal("100.0000000000"),
+                    acquisition_date=date(2026, 3, 25),
+                    lot_cost_base=Decimal("15005.5000000000"),
+                    lot_cost_local=Decimal("15005.5000000000"),
+                    source_transaction_id="TXN-BUY-AAPL-001",
+                    source_system="front_office_portfolio_seed",
+                    calculation_policy_id="BUY_DEFAULT_POLICY",
+                    calculation_policy_version="1.0.0",
+                    updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
                 ),
-                (
-                    SimpleNamespace(
-                        portfolio_id="PB_SG_GLOBAL_BAL_001",
-                        security_id="FI_US_TREASURY_10Y",
-                        instrument_id="FI_US_TREASURY_10Y",
-                        lot_id="LOT-UST-001",
-                        open_quantity=Decimal("200.0000000000"),
-                        original_quantity=Decimal("200.0000000000"),
-                        acquisition_date=date(2026, 3, 26),
-                        lot_cost_base=Decimal("20000.0000000000"),
-                        lot_cost_local=Decimal("20000.0000000000"),
-                        source_transaction_id="TXN-BUY-UST-001",
-                        source_system="front_office_portfolio_seed",
-                        calculation_policy_id="BUY_DEFAULT_POLICY",
-                        calculation_policy_version="1.0.0",
-                        updated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
-                    ),
-                    "USD",
+                "USD",
+            ),
+            (
+                SimpleNamespace(
+                    portfolio_id="PB_SG_GLOBAL_BAL_001",
+                    security_id="FI_US_TREASURY_10Y",
+                    instrument_id="FI_US_TREASURY_10Y",
+                    lot_id="LOT-UST-001",
+                    open_quantity=Decimal("200.0000000000"),
+                    original_quantity=Decimal("200.0000000000"),
+                    acquisition_date=date(2026, 3, 26),
+                    lot_cost_base=Decimal("20000.0000000000"),
+                    lot_cost_local=Decimal("20000.0000000000"),
+                    source_transaction_id="TXN-BUY-UST-001",
+                    source_system="front_office_portfolio_seed",
+                    calculation_policy_id="BUY_DEFAULT_POLICY",
+                    calculation_policy_version="1.0.0",
+                    updated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
                 ),
-            ]
-        ),
+                "USD",
+            ),
+        ]
     )
 
     response = await service.get_portfolio_tax_lot_window(
@@ -3563,10 +3657,7 @@ async def test_portfolio_tax_lot_window_returns_paged_portfolio_lots() -> None:
 @pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_reports_missing_requested_security() -> None:
     service = make_service()
-    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_portfolio_tax_lots=AsyncMock(return_value=[]),
-    )
+    service._buy_state_repository = buy_state_repository_with_tax_lots([])  # type: ignore[assignment]
 
     response = await service.get_portfolio_tax_lot_window(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -3585,31 +3676,28 @@ async def test_portfolio_tax_lot_window_reports_missing_requested_security() -> 
 @pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_normalizes_returned_security_coverage() -> None:
     service = make_service()
-    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_portfolio_tax_lots=AsyncMock(
-            return_value=[
-                (
-                    SimpleNamespace(
-                        portfolio_id="PB_SG_GLOBAL_BAL_001",
-                        security_id=" EQ_US_AAPL ",
-                        instrument_id=" EQ_US_AAPL ",
-                        lot_id="LOT-AAPL-001",
-                        open_quantity=Decimal("100.0000000000"),
-                        original_quantity=Decimal("100.0000000000"),
-                        acquisition_date=date(2026, 3, 25),
-                        lot_cost_base=Decimal("15005.5000000000"),
-                        lot_cost_local=Decimal("15005.5000000000"),
-                        source_transaction_id="TXN-BUY-AAPL-001",
-                        source_system="front_office_portfolio_seed",
-                        calculation_policy_id="BUY_DEFAULT_POLICY",
-                        calculation_policy_version="1.0.0",
-                        updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
-                    ),
-                    "USD",
-                )
-            ]
-        ),
+    service._buy_state_repository = buy_state_repository_with_tax_lots(  # type: ignore[assignment]
+        [
+            (
+                SimpleNamespace(
+                    portfolio_id="PB_SG_GLOBAL_BAL_001",
+                    security_id=" EQ_US_AAPL ",
+                    instrument_id=" EQ_US_AAPL ",
+                    lot_id="LOT-AAPL-001",
+                    open_quantity=Decimal("100.0000000000"),
+                    original_quantity=Decimal("100.0000000000"),
+                    acquisition_date=date(2026, 3, 25),
+                    lot_cost_base=Decimal("15005.5000000000"),
+                    lot_cost_local=Decimal("15005.5000000000"),
+                    source_transaction_id="TXN-BUY-AAPL-001",
+                    source_system="front_office_portfolio_seed",
+                    calculation_policy_id="BUY_DEFAULT_POLICY",
+                    calculation_policy_version="1.0.0",
+                    updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                ),
+                "USD",
+            )
+        ]
     )
 
     response = await service.get_portfolio_tax_lot_window(
@@ -3629,10 +3717,7 @@ async def test_portfolio_tax_lot_window_normalizes_returned_security_coverage() 
 @pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_marks_empty_full_portfolio_unavailable() -> None:
     service = make_service()
-    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_portfolio_tax_lots=AsyncMock(return_value=[]),
-    )
+    service._buy_state_repository = buy_state_repository_with_tax_lots([])  # type: ignore[assignment]
 
     response = await service.get_portfolio_tax_lot_window(
         portfolio_id="PB_EMPTY",
@@ -3649,10 +3734,7 @@ async def test_portfolio_tax_lot_window_marks_empty_full_portfolio_unavailable()
 @pytest.mark.asyncio
 async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> None:
     service = make_service()
-    service._buy_state_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_portfolio_tax_lots=AsyncMock(return_value=[]),
-    )
+    service._buy_state_repository = buy_state_repository_with_tax_lots([])  # type: ignore[assignment]
     token = service._encode_page_token(  # pylint: disable=protected-access
         {"scope_fingerprint": "other-scope", "last_lot_id": "LOT-AAPL-001"}
     )
@@ -3670,29 +3752,26 @@ async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> N
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_returns_ready_observed_fee_evidence() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(
-            return_value=[
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-001",
-                    security_id="EQ_US_AAPL",
-                    gross_transaction_amount=Decimal("10000.00"),
-                    trade_fee=Decimal("999.99"),
-                    costs=[
-                        SimpleNamespace(amount=Decimal("6.00")),
-                        SimpleNamespace(amount=Decimal("4.00")),
-                    ],
-                ),
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-002",
-                    security_id="EQ_US_AAPL",
-                    gross_transaction_amount=Decimal("20000.00"),
-                    trade_fee=Decimal("20.00"),
-                    transaction_date=datetime(2026, 4, 2, 10, tzinfo=UTC),
-                ),
-            ]
-        ),
+    service._transaction_repository = transaction_repository_with_cost_rows(  # type: ignore[assignment]
+        [
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-001",
+                security_id="EQ_US_AAPL",
+                gross_transaction_amount=Decimal("10000.00"),
+                trade_fee=Decimal("999.99"),
+                costs=[
+                    SimpleNamespace(amount=Decimal("6.00")),
+                    SimpleNamespace(amount=Decimal("4.00")),
+                ],
+            ),
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-002",
+                security_id="EQ_US_AAPL",
+                gross_transaction_amount=Decimal("20000.00"),
+                trade_fee=Decimal("20.00"),
+                transaction_date=datetime(2026, 4, 2, 10, tzinfo=UTC),
+            ),
+        ]
     )
 
     response = await service.get_transaction_cost_curve(
@@ -3729,50 +3808,48 @@ async def test_transaction_cost_curve_returns_ready_observed_fee_evidence() -> N
         as_of_date=date(2026, 5, 3),
         security_ids=["EQ_US_AAPL"],
         transaction_types=["BUY"],
+        curve_keys=[("EQ_US_AAPL", "BUY", "USD")],
     )
 
 
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_groups_by_security_type_and_currency() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(
-            return_value=[
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-BUY-USD-001",
-                    security_id="EQ_US_AAPL",
-                    transaction_type="BUY",
-                    currency="USD",
-                    gross_transaction_amount=Decimal("10000.00"),
-                    trade_fee=Decimal("10.00"),
-                ),
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-BUY-USD-002",
-                    security_id="EQ_US_AAPL",
-                    transaction_type=" buy ",
-                    currency=" usd ",
-                    gross_transaction_amount=Decimal("20000.00"),
-                    trade_fee=Decimal("30.00"),
-                ),
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-SELL-USD-001",
-                    security_id="EQ_US_AAPL",
-                    transaction_type="SELL",
-                    currency="USD",
-                    gross_transaction_amount=Decimal("15000.00"),
-                    trade_fee=Decimal("15.00"),
-                ),
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-BUY-SGD-001",
-                    security_id="EQ_US_AAPL",
-                    transaction_type="BUY",
-                    currency="SGD",
-                    gross_transaction_amount=Decimal("12000.00"),
-                    trade_fee=Decimal("24.00"),
-                ),
-            ]
-        ),
+    service._transaction_repository = transaction_repository_with_cost_rows(  # type: ignore[assignment]
+        [
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-BUY-USD-001",
+                security_id="EQ_US_AAPL",
+                transaction_type="BUY",
+                currency="USD",
+                gross_transaction_amount=Decimal("10000.00"),
+                trade_fee=Decimal("10.00"),
+            ),
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-BUY-USD-002",
+                security_id="EQ_US_AAPL",
+                transaction_type=" buy ",
+                currency=" usd ",
+                gross_transaction_amount=Decimal("20000.00"),
+                trade_fee=Decimal("30.00"),
+            ),
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-SELL-USD-001",
+                security_id="EQ_US_AAPL",
+                transaction_type="SELL",
+                currency="USD",
+                gross_transaction_amount=Decimal("15000.00"),
+                trade_fee=Decimal("15.00"),
+            ),
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-BUY-SGD-001",
+                security_id="EQ_US_AAPL",
+                transaction_type="BUY",
+                currency="SGD",
+                gross_transaction_amount=Decimal("12000.00"),
+                trade_fee=Decimal("24.00"),
+            ),
+        ]
     )
 
     response = await service.get_transaction_cost_curve(
@@ -3804,9 +3881,9 @@ async def test_transaction_cost_curve_groups_by_security_type_and_currency() -> 
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_rejects_unknown_portfolio() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=False),
-        list_transaction_cost_evidence=AsyncMock(),
+    service._transaction_repository = transaction_repository_with_cost_rows(  # type: ignore[assignment]
+        [],
+        portfolio_exists=False,
     )
 
     with pytest.raises(LookupError, match="Portfolio with id P404 not found"):
@@ -3824,29 +3901,26 @@ async def test_transaction_cost_curve_rejects_unknown_portfolio() -> None:
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_filters_unusable_and_insufficient_evidence() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(
-            return_value=[
-                transaction_cost_row(
-                    transaction_id="TXN-NOFEE-001",
-                    security_id="EQ_US_AAPL",
-                    trade_fee=None,
-                    costs=[],
-                ),
-                transaction_cost_row(
-                    transaction_id="TXN-ZERO-001",
-                    security_id="EQ_US_MSFT",
-                    gross_transaction_amount=Decimal("0.00"),
-                    trade_fee=Decimal("10.00"),
-                ),
-                transaction_cost_row(
-                    transaction_id="TXN-SINGLE-001",
-                    security_id="EQ_US_NVDA",
-                    trade_fee=Decimal("10.00"),
-                ),
-            ]
-        ),
+    service._transaction_repository = transaction_repository_with_cost_rows(  # type: ignore[assignment]
+        [
+            transaction_cost_row(
+                transaction_id="TXN-NOFEE-001",
+                security_id="EQ_US_AAPL",
+                trade_fee=None,
+                costs=[],
+            ),
+            transaction_cost_row(
+                transaction_id="TXN-ZERO-001",
+                security_id="EQ_US_MSFT",
+                gross_transaction_amount=Decimal("0.00"),
+                trade_fee=Decimal("10.00"),
+            ),
+            transaction_cost_row(
+                transaction_id="TXN-SINGLE-001",
+                security_id="EQ_US_NVDA",
+                trade_fee=Decimal("10.00"),
+            ),
+        ]
     )
 
     response = await service.get_transaction_cost_curve(
@@ -3867,17 +3941,14 @@ async def test_transaction_cost_curve_filters_unusable_and_insufficient_evidence
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_reports_incomplete_requested_security_coverage() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(
-            return_value=[
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-001",
-                    security_id="EQ_US_AAPL",
-                    trade_fee=Decimal("10.00"),
-                )
-            ]
-        ),
+    service._transaction_repository = transaction_repository_with_cost_rows(  # type: ignore[assignment]
+        [
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-001",
+                security_id="EQ_US_AAPL",
+                trade_fee=Decimal("10.00"),
+            )
+        ]
     )
 
     response = await service.get_transaction_cost_curve(
@@ -3898,17 +3969,14 @@ async def test_transaction_cost_curve_reports_incomplete_requested_security_cove
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_normalizes_returned_security_coverage() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(
-            return_value=[
-                transaction_cost_row(
-                    transaction_id="TXN-AAPL-001",
-                    security_id=" EQ_US_AAPL ",
-                    trade_fee=Decimal("10.00"),
-                )
-            ]
-        ),
+    service._transaction_repository = transaction_repository_with_cost_rows(  # type: ignore[assignment]
+        [
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-001",
+                security_id=" EQ_US_AAPL ",
+                trade_fee=Decimal("10.00"),
+            )
+        ]
     )
 
     response = await service.get_transaction_cost_curve(
@@ -3928,14 +3996,11 @@ async def test_transaction_cost_curve_normalizes_returned_security_coverage() ->
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_pages_observed_points_deterministically() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(
-            return_value=[
-                transaction_cost_row(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL"),
-                transaction_cost_row(transaction_id="TXN-MSFT-001", security_id="EQ_US_MSFT"),
-            ]
-        ),
+    service._transaction_repository = transaction_repository_with_cost_rows(  # type: ignore[assignment]
+        [
+            transaction_cost_row(transaction_id="TXN-AAPL-001", security_id="EQ_US_AAPL"),
+            transaction_cost_row(transaction_id="TXN-MSFT-001", security_id="EQ_US_MSFT"),
+        ]
     )
 
     first_page = await service.get_transaction_cost_curve(
@@ -3968,10 +4033,7 @@ async def test_transaction_cost_curve_pages_observed_points_deterministically() 
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_reports_missing_requested_security() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(return_value=[]),
-    )
+    service._transaction_repository = transaction_repository_with_cost_rows([])  # type: ignore[assignment]
 
     response = await service.get_transaction_cost_curve(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -3992,10 +4054,7 @@ async def test_transaction_cost_curve_reports_missing_requested_security() -> No
 @pytest.mark.asyncio
 async def test_transaction_cost_curve_rejects_page_token_scope_mismatch() -> None:
     service = make_service()
-    service._transaction_repository = SimpleNamespace(  # type: ignore[assignment]
-        portfolio_exists=AsyncMock(return_value=True),
-        list_transaction_cost_evidence=AsyncMock(return_value=[]),
-    )
+    service._transaction_repository = transaction_repository_with_cost_rows([])  # type: ignore[assignment]
     token = service._encode_page_token(  # pylint: disable=protected-access
         {"scope_fingerprint": "different-curve-scope", "last_curve_key": ["A", "BUY", "USD"]}
     )

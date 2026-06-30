@@ -2,7 +2,7 @@
 import logging
 
 from portfolio_common.database_models import Instrument as DBInstrument
-from portfolio_common.events import InstrumentEvent
+from portfolio_common.events import InstrumentEvent, event_business_payload
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +18,7 @@ class InstrumentRepository:
         Idempotently creates or updates an instrument using a native PostgreSQL UPSERT.
         """
         try:
-            instrument_data = event.model_dump()
+            instrument_data = event_business_payload(event)
 
             stmt = pg_insert(DBInstrument).values(**instrument_data)
 

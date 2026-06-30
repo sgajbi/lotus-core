@@ -3,7 +3,7 @@ import logging
 from typing import Tuple
 
 from portfolio_common.database_models import FxRate as DBFxRate
-from portfolio_common.events import FxRateEvent
+from portfolio_common.events import FxRateEvent, event_business_payload
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +24,7 @@ class FxRateRepository:
         Returns a tuple of the effective object and a status string.
         """
         try:
-            fx_rate_data = event.model_dump()
+            fx_rate_data = event_business_payload(event)
 
             stmt = pg_insert(DBFxRate).values(**fx_rate_data)
 

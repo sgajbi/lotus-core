@@ -1,7 +1,7 @@
 # libs/portfolio-common/portfolio_common/events.py
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -52,6 +52,22 @@ class CoreEventModel(BaseModel):
     event_type: Optional[str] = Field(None)
     schema_version: Optional[str] = Field(None)
     correlation_id: Optional[str] = Field(None)
+
+
+GOVERNED_EVENT_SCHEMA_FIELDS = frozenset({"event_type", "schema_version"})
+GOVERNED_EVENT_ENVELOPE_FIELDS = frozenset({*GOVERNED_EVENT_SCHEMA_FIELDS, "correlation_id"})
+
+
+def event_business_payload(
+    event: BaseModel,
+    *,
+    include_correlation_id: bool = False,
+    mode: str = "python",
+) -> dict[str, Any]:
+    exclude = set(GOVERNED_EVENT_SCHEMA_FIELDS)
+    if not include_correlation_id:
+        exclude.add("correlation_id")
+    return event.model_dump(mode=mode, exclude=exclude)
 
 
 class BusinessDateEvent(CoreEventModel):
