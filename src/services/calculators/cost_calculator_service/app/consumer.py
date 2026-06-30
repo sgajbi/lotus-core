@@ -1,8 +1,10 @@
 # src/services/calculators/cost_calculator_service/app/consumer.py
+import hashlib
 import json
 import logging
 from datetime import datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any, List
 
 from confluent_kafka import Message
@@ -17,7 +19,11 @@ from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
+from portfolio_common.monitoring import (
+    BUY_LIFECYCLE_STAGE_TOTAL,
+    SELL_LIFECYCLE_STAGE_TOTAL,
+    observe_financial_reconciliation_run,
+)
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
     DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
@@ -59,6 +65,8 @@ from .transaction_processor import TransactionProcessor
 logger = logging.getLogger(__name__)
 SERVICE_NAME = "cost-calculator"
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
+BUNDLE_A_RECONCILIATION_TYPE = "corporate_action_bundle_a"
+BUNDLE_A_REQUEST_OWNER = "cost-calculator"
 
 
 def _normalize_event_code(value: object) -> str:
@@ -120,6 +128,11 @@ def _message_value(msg: Message) -> str:
 
 def _message_event_id(msg: Message) -> str:
     return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+
+
+def _stable_bundle_a_digest(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:24]
 
 
 class FxRateNotFoundError(Exception):
@@ -512,6 +525,7 @@ class CostCalculatorConsumer(BaseConsumer):
         *,
         events_to_publish: list[TransactionEvent],
         repo: CostCalculatorRepository,
+        correlation_id: str,
     ) -> list[TransactionEvent]:
         emitted_events: list[TransactionEvent] = []
         reconciled_bundle_groups: set[tuple[str, str]] = set()
@@ -529,6 +543,7 @@ class CostCalculatorConsumer(BaseConsumer):
                 processed_event=processed_event,
                 repo=repo,
                 reconciled_bundle_groups=reconciled_bundle_groups,
+                correlation_id=correlation_id,
             )
         return emitted_events
 
@@ -589,6 +604,7 @@ class CostCalculatorConsumer(BaseConsumer):
         processed_event: TransactionEvent,
         repo: CostCalculatorRepository,
         reconciled_bundle_groups: set[tuple[str, str]],
+        correlation_id: str | None,
     ) -> None:
         group_key = self._bundle_a_reconciliation_key(processed_event)
         if group_key is None:
@@ -618,6 +634,16 @@ class CostCalculatorConsumer(BaseConsumer):
             reconciliation=reconciliation,
             missing_dependencies=missing_dependencies,
         )
+        run, findings = self._bundle_a_reconciliation_evidence(
+            processed_event=processed_event,
+            linked_group=linked_group,
+            parent_ref=parent_ref,
+            reconciliation=reconciliation,
+            missing_dependencies=missing_dependencies,
+            correlation_id=correlation_id,
+        )
+        await repo.record_bundle_a_reconciliation_evidence(run=run, findings=findings)
+        self._observe_bundle_a_reconciliation(findings)
         reconciled_bundle_groups.add(group_key)
 
     @staticmethod
@@ -662,6 +688,273 @@ class CostCalculatorConsumer(BaseConsumer):
     ) -> list[str]:
         available_ids = {event.transaction_id for event in group_events}
         return find_missing_ca_bundle_a_dependencies(processed_event, available_ids)
+
+    @staticmethod
+    def _bundle_a_reconciliation_evidence(
+        *,
+        processed_event: TransactionEvent,
+        linked_group: str,
+        parent_ref: str,
+        reconciliation: Any,
+        missing_dependencies: list[str],
+        correlation_id: str | None,
+    ) -> tuple[dict[str, object], list[dict[str, object]]]:
+        summary = CostCalculatorConsumer._bundle_a_reconciliation_summary(
+            reconciliation=reconciliation,
+            missing_dependencies=missing_dependencies,
+        )
+        evidence_signature = _stable_bundle_a_digest(
+            {
+                "portfolio_id": processed_event.portfolio_id,
+                "linked_transaction_group_id": linked_group,
+                "parent_event_reference": parent_ref,
+                "status": reconciliation.status,
+                "source_basis_out_local": str(reconciliation.source_basis_out_local),
+                "target_basis_in_local": str(reconciliation.target_basis_in_local),
+                "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
+                "basis_tolerance": str(reconciliation.basis_tolerance),
+                "missing_dependency_reference_ids": missing_dependencies,
+            }
+        )
+        run_id = f"recon-ca-bundle-a-{evidence_signature}"
+        run = {
+            "run_id": run_id,
+            "reconciliation_type": BUNDLE_A_RECONCILIATION_TYPE,
+            "portfolio_id": processed_event.portfolio_id,
+            "business_date": processed_event.transaction_date.date(),
+            "epoch": processed_event.epoch,
+            "status": "COMPLETED",
+            "requested_by": BUNDLE_A_REQUEST_OWNER,
+            "dedupe_key": f"auto:{BUNDLE_A_RECONCILIATION_TYPE}:{evidence_signature}",
+            "correlation_id": correlation_id,
+            "tolerance": reconciliation.basis_tolerance,
+            "summary": summary,
+            "failure_reason": None,
+            "completed_at": datetime.now().astimezone(),
+        }
+        findings = CostCalculatorConsumer._bundle_a_reconciliation_findings(
+            run_id=run_id,
+            evidence_signature=evidence_signature,
+            processed_event=processed_event,
+            linked_group=linked_group,
+            parent_ref=parent_ref,
+            reconciliation=reconciliation,
+            missing_dependencies=missing_dependencies,
+        )
+        return run, findings
+
+    @staticmethod
+    def _bundle_a_reconciliation_summary(
+        *,
+        reconciliation: Any,
+        missing_dependencies: list[str],
+    ) -> dict[str, object]:
+        finding_count = int(reconciliation.status != "balanced") + int(bool(missing_dependencies))
+        return {
+            "examined_count": (
+                reconciliation.source_leg_count
+                + reconciliation.target_leg_count
+                + reconciliation.cash_consideration_count
+            ),
+            "finding_count": finding_count,
+            "error_count": finding_count,
+            "warning_count": 0,
+            "passed": finding_count == 0,
+            "reconciliation_status": reconciliation.status,
+            "source_leg_count": reconciliation.source_leg_count,
+            "target_leg_count": reconciliation.target_leg_count,
+            "cash_consideration_count": reconciliation.cash_consideration_count,
+            "missing_dependency_count": len(missing_dependencies),
+        }
+
+    @staticmethod
+    def _bundle_a_reconciliation_findings(
+        *,
+        run_id: str,
+        evidence_signature: str,
+        processed_event: TransactionEvent,
+        linked_group: str,
+        parent_ref: str,
+        reconciliation: Any,
+        missing_dependencies: list[str],
+    ) -> list[dict[str, object]]:
+        findings: list[dict[str, object]] = []
+        if reconciliation.status == "basis_mismatch":
+            findings.append(
+                CostCalculatorConsumer._bundle_a_basis_mismatch_finding(
+                    run_id=run_id,
+                    evidence_signature=evidence_signature,
+                    processed_event=processed_event,
+                    linked_group=linked_group,
+                    parent_ref=parent_ref,
+                    reconciliation=reconciliation,
+                )
+            )
+        if reconciliation.status == "insufficient_legs":
+            findings.append(
+                CostCalculatorConsumer._bundle_a_insufficient_legs_finding(
+                    run_id=run_id,
+                    evidence_signature=evidence_signature,
+                    processed_event=processed_event,
+                    linked_group=linked_group,
+                    parent_ref=parent_ref,
+                    reconciliation=reconciliation,
+                )
+            )
+        if missing_dependencies:
+            findings.append(
+                CostCalculatorConsumer._bundle_a_missing_dependencies_finding(
+                    run_id=run_id,
+                    evidence_signature=evidence_signature,
+                    processed_event=processed_event,
+                    linked_group=linked_group,
+                    parent_ref=parent_ref,
+                    reconciliation=reconciliation,
+                    missing_dependencies=missing_dependencies,
+                )
+            )
+        return findings
+
+    @staticmethod
+    def _bundle_a_basis_mismatch_finding(
+        *,
+        run_id: str,
+        evidence_signature: str,
+        processed_event: TransactionEvent,
+        linked_group: str,
+        parent_ref: str,
+        reconciliation: Any,
+    ) -> dict[str, object]:
+        return CostCalculatorConsumer._bundle_a_finding(
+            run_id=run_id,
+            finding_type="ca_bundle_a_basis_mismatch",
+            evidence_signature=evidence_signature,
+            processed_event=processed_event,
+            expected_value={"net_basis_delta_local_abs": f"<= {reconciliation.basis_tolerance}"},
+            observed_value={
+                "source_basis_out_local": str(reconciliation.source_basis_out_local),
+                "target_basis_in_local": str(reconciliation.target_basis_in_local),
+                "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
+            },
+            detail=CostCalculatorConsumer._bundle_a_finding_detail(
+                linked_group=linked_group,
+                parent_ref=parent_ref,
+                reconciliation=reconciliation,
+                reason_code="CA_BUNDLE_A_BASIS_MISMATCH",
+            ),
+        )
+
+    @staticmethod
+    def _bundle_a_insufficient_legs_finding(
+        *,
+        run_id: str,
+        evidence_signature: str,
+        processed_event: TransactionEvent,
+        linked_group: str,
+        parent_ref: str,
+        reconciliation: Any,
+    ) -> dict[str, object]:
+        return CostCalculatorConsumer._bundle_a_finding(
+            run_id=run_id,
+            finding_type="ca_bundle_a_insufficient_legs",
+            evidence_signature=evidence_signature,
+            processed_event=processed_event,
+            expected_value={"source_leg_count": ">=1", "target_leg_count": ">=1"},
+            observed_value={
+                "source_leg_count": reconciliation.source_leg_count,
+                "target_leg_count": reconciliation.target_leg_count,
+            },
+            detail=CostCalculatorConsumer._bundle_a_finding_detail(
+                linked_group=linked_group,
+                parent_ref=parent_ref,
+                reconciliation=reconciliation,
+                reason_code="CA_BUNDLE_A_INSUFFICIENT_LEGS",
+            ),
+        )
+
+    @staticmethod
+    def _bundle_a_missing_dependencies_finding(
+        *,
+        run_id: str,
+        evidence_signature: str,
+        processed_event: TransactionEvent,
+        linked_group: str,
+        parent_ref: str,
+        reconciliation: Any,
+        missing_dependencies: list[str],
+    ) -> dict[str, object]:
+        return CostCalculatorConsumer._bundle_a_finding(
+            run_id=run_id,
+            finding_type="ca_bundle_a_missing_dependency",
+            evidence_signature=evidence_signature,
+            processed_event=processed_event,
+            expected_value={"dependency_reference_ids": "present in linked Bundle A group"},
+            observed_value={"missing_dependency_reference_ids": missing_dependencies},
+            detail={
+                **CostCalculatorConsumer._bundle_a_finding_detail(
+                    linked_group=linked_group,
+                    parent_ref=parent_ref,
+                    reconciliation=reconciliation,
+                    reason_code="CA_BUNDLE_A_MISSING_DEPENDENCY",
+                ),
+                "missing_dependency_reference_ids": missing_dependencies,
+            },
+        )
+
+    @staticmethod
+    def _bundle_a_finding(
+        *,
+        run_id: str,
+        finding_type: str,
+        evidence_signature: str,
+        processed_event: TransactionEvent,
+        expected_value: dict[str, object],
+        observed_value: dict[str, object],
+        detail: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "finding_id": f"finding-{finding_type}-{evidence_signature}",
+            "run_id": run_id,
+            "reconciliation_type": BUNDLE_A_RECONCILIATION_TYPE,
+            "finding_type": finding_type,
+            "severity": "ERROR",
+            "portfolio_id": processed_event.portfolio_id,
+            "security_id": processed_event.security_id,
+            "transaction_id": processed_event.transaction_id,
+            "business_date": processed_event.transaction_date.date(),
+            "epoch": processed_event.epoch,
+            "expected_value": expected_value,
+            "observed_value": observed_value,
+            "detail": detail,
+        }
+
+    @staticmethod
+    def _bundle_a_finding_detail(
+        *,
+        linked_group: str,
+        parent_ref: str,
+        reconciliation: Any,
+        reason_code: str,
+    ) -> dict[str, object]:
+        return {
+            "reason_code": reason_code,
+            "linked_transaction_group_id": linked_group,
+            "parent_event_reference": parent_ref,
+            "reconciliation_status": reconciliation.status,
+            "source_leg_count": reconciliation.source_leg_count,
+            "target_leg_count": reconciliation.target_leg_count,
+            "cash_consideration_count": reconciliation.cash_consideration_count,
+            "basis_tolerance": str(reconciliation.basis_tolerance),
+        }
+
+    @staticmethod
+    def _observe_bundle_a_reconciliation(findings: list[dict[str, object]]) -> None:
+        observe_financial_reconciliation_run(
+            BUNDLE_A_RECONCILIATION_TYPE,
+            "COMPLETED",
+            0.0,
+            [SimpleNamespace(severity=finding["severity"]) for finding in findings],
+        )
 
     @staticmethod
     def _log_bundle_a_reconciliation(
@@ -826,6 +1119,7 @@ class CostCalculatorConsumer(BaseConsumer):
                 emitted_events = await self._build_emitted_transaction_events(
                     events_to_publish=events_to_publish,
                     repo=repo,
+                    correlation_id=correlation_id,
                 )
                 await self._publish_transaction_events(
                     original_event=event,

@@ -25,6 +25,7 @@ from portfolio_common.transaction_domain import (
     SELL_AVCO_POLICY_ID,
     SELL_DEFAULT_POLICY_VERSION,
     SELL_FIFO_POLICY_ID,
+    evaluate_ca_bundle_a_reconciliation,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +48,32 @@ class _StringCountedAmount:
     def __str__(self) -> str:
         self.string_call_count += 1
         return self.value
+
+
+def _bundle_a_transaction_event(
+    *,
+    transaction_id: str,
+    transaction_type: str,
+    net_cost_local: str,
+    dependency_reference_ids: list[str] | None = None,
+) -> TransactionEvent:
+    return TransactionEvent(
+        transaction_id=transaction_id,
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 15),
+        transaction_type=transaction_type,
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=abs(Decimal(net_cost_local)),
+        trade_currency="USD",
+        currency="USD",
+        linked_transaction_group_id="LTG-CA-DEM-01",
+        parent_event_reference="CA-PARENT-DEM-01",
+        net_cost_local=Decimal(net_cost_local),
+        dependency_reference_ids=dependency_reference_ids,
+    )
 
 
 @pytest.fixture
@@ -653,8 +680,13 @@ async def test_consumer_propagates_epoch_field(
         "average_price",
         "error_reason",
     }
+    transaction_columns = {column.name for column in DBTransaction.__table__.columns}
     mock_repo.update_transaction_costs.side_effect = lambda arg: DBTransaction(
-        **arg.model_dump(exclude=exclude_fields)
+        **{
+            field_name: field_value
+            for field_name, field_value in arg.model_dump(exclude=exclude_fields).items()
+            if field_name in transaction_columns
+        }
     )
 
     # ACT
@@ -1212,6 +1244,7 @@ async def test_consumer_runs_bundle_a_reconciliation_diagnostics(
     incoming["economic_event_id"] = "EVT-CA-DEM-01"
     incoming["source_instrument_id"] = "SRC_01"
     mock_buy_kafka_message.value.return_value = json.dumps(incoming).encode("utf-8")
+    mock_buy_kafka_message.headers.return_value = [("correlation_id", b"cost-corr-id")]
 
     mock_idempotency_repo.is_event_processed.return_value = False
     mock_repo.get_transaction_history.return_value = []
@@ -1266,7 +1299,115 @@ async def test_consumer_runs_bundle_a_reconciliation_diagnostics(
         linked_transaction_group_id="LTG-CA-DEM-01",
         parent_event_reference="CA-PARENT-DEM-01",
     )
+    evidence_call = mock_repo.record_bundle_a_reconciliation_evidence.await_args.kwargs
+    assert evidence_call["run"]["reconciliation_type"] == "corporate_action_bundle_a"
+    assert evidence_call["run"]["status"] == "COMPLETED"
+    assert evidence_call["run"]["correlation_id"] == "cost-corr-id"
+    assert evidence_call["run"]["summary"]["passed"] is True
+    assert evidence_call["run"]["summary"]["reconciliation_status"] == "balanced"
+    assert evidence_call["findings"] == []
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_bundle_a_basis_mismatch_creates_reconciliation_finding(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    processed_event = _bundle_a_transaction_event(
+        transaction_id="CA-DEM-OUT-01",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+    group_events = [
+        processed_event,
+        _bundle_a_transaction_event(
+            transaction_id="CA-DEM-IN-01",
+            transaction_type="DEMERGER_IN",
+            net_cost_local="60",
+        ),
+    ]
+
+    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+        processed_event=processed_event,
+        linked_group="LTG-CA-DEM-01",
+        parent_ref="CA-PARENT-DEM-01",
+        reconciliation=evaluate_ca_bundle_a_reconciliation(group_events),
+        missing_dependencies=[],
+        correlation_id="corr-basis",
+    )
+
+    assert run["summary"]["passed"] is False
+    assert run["summary"]["error_count"] == 1
+    assert run["dedupe_key"].startswith("auto:corporate_action_bundle_a:")
+    assert [finding["finding_type"] for finding in findings] == ["ca_bundle_a_basis_mismatch"]
+    assert findings[0]["severity"] == "ERROR"
+    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_BASIS_MISMATCH"
+    assert findings[0]["observed_value"]["net_basis_delta_local"] == "-40"
+
+
+async def test_bundle_a_insufficient_legs_creates_reconciliation_finding(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    processed_event = _bundle_a_transaction_event(
+        transaction_id="CA-DEM-OUT-01",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+
+    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+        processed_event=processed_event,
+        linked_group="LTG-CA-DEM-01",
+        parent_ref="CA-PARENT-DEM-01",
+        reconciliation=evaluate_ca_bundle_a_reconciliation([processed_event]),
+        missing_dependencies=[],
+        correlation_id="corr-insufficient",
+    )
+
+    assert run["summary"]["reconciliation_status"] == "insufficient_legs"
+    assert run["summary"]["passed"] is False
+    assert [finding["finding_type"] for finding in findings] == ["ca_bundle_a_insufficient_legs"]
+    assert findings[0]["expected_value"] == {"source_leg_count": ">=1", "target_leg_count": ">=1"}
+    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_INSUFFICIENT_LEGS"
+
+
+async def test_bundle_a_dependency_gap_creates_reconciliation_finding(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    processed_event = _bundle_a_transaction_event(
+        transaction_id="CA-DEM-IN-01",
+        transaction_type="DEMERGER_IN",
+        net_cost_local="100",
+        dependency_reference_ids=["CA-DEM-OUT-01", "CA-DEM-OUT-MISSING"],
+    )
+    group_events = [
+        _bundle_a_transaction_event(
+            transaction_id="CA-DEM-OUT-01",
+            transaction_type="DEMERGER_OUT",
+            net_cost_local="-100",
+        ),
+        processed_event,
+    ]
+    missing_dependencies = cost_calculator_consumer._bundle_a_missing_dependencies(
+        processed_event=processed_event,
+        group_events=group_events,
+    )
+
+    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+        processed_event=processed_event,
+        linked_group="LTG-CA-DEM-01",
+        parent_ref="CA-PARENT-DEM-01",
+        reconciliation=evaluate_ca_bundle_a_reconciliation(group_events),
+        missing_dependencies=missing_dependencies,
+        correlation_id="corr-dependency",
+    )
+
+    assert run["summary"]["reconciliation_status"] == "balanced"
+    assert run["summary"]["missing_dependency_count"] == 1
+    assert run["summary"]["passed"] is False
+    assert [finding["finding_type"] for finding in findings] == ["ca_bundle_a_missing_dependency"]
+    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_MISSING_DEPENDENCY"
+    assert findings[0]["observed_value"] == {
+        "missing_dependency_reference_ids": ["CA-DEM-OUT-MISSING"]
+    }
 
 
 async def test_bundle_a_reconciliation_key_skips_non_bundle_a_events(

@@ -6,6 +6,8 @@ from typing import Any, List, Optional
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
+    FinancialReconciliationFinding,
+    FinancialReconciliationRun,
     FxRate,
     Instrument,
     Portfolio,
@@ -273,6 +275,46 @@ class CostCalculatorRepository:
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def record_bundle_a_reconciliation_evidence(
+        self,
+        *,
+        run: dict[str, object],
+        findings: list[dict[str, object]],
+    ) -> None:
+        run_stmt = pg_insert(FinancialReconciliationRun).values(**run)
+        await self.db.execute(
+            run_stmt.on_conflict_do_update(
+                index_elements=["run_id"],
+                set_={
+                    "status": run_stmt.excluded.status,
+                    "summary": run_stmt.excluded.summary,
+                    "failure_reason": run_stmt.excluded.failure_reason,
+                    "completed_at": run_stmt.excluded.completed_at,
+                    "updated_at": func.now(),
+                },
+            )
+        )
+        for finding in findings:
+            finding_stmt = pg_insert(FinancialReconciliationFinding).values(**finding)
+            await self.db.execute(
+                finding_stmt.on_conflict_do_update(
+                    index_elements=["finding_id"],
+                    set_={
+                        "reconciliation_type": finding_stmt.excluded.reconciliation_type,
+                        "finding_type": finding_stmt.excluded.finding_type,
+                        "severity": finding_stmt.excluded.severity,
+                        "portfolio_id": finding_stmt.excluded.portfolio_id,
+                        "security_id": finding_stmt.excluded.security_id,
+                        "transaction_id": finding_stmt.excluded.transaction_id,
+                        "business_date": finding_stmt.excluded.business_date,
+                        "epoch": finding_stmt.excluded.epoch,
+                        "expected_value": finding_stmt.excluded.expected_value,
+                        "observed_value": finding_stmt.excluded.observed_value,
+                        "detail": finding_stmt.excluded.detail,
+                    },
+                )
+            )
 
     async def create_or_update_transaction_event(self, event: TransactionEvent) -> DBTransaction:
         event_dict = event.model_dump(

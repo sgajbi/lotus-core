@@ -15,6 +15,7 @@ The current runtime centers on:
 - transaction-to-cashflow completeness controls
 - position-to-valuation consistency controls
 - portfolio timeseries integrity controls
+- Bundle A corporate-action lifecycle controls
 - durable recording of reconciliation runs and findings
 - control evidence that operators can review without re-running calculator logic manually
 
@@ -38,6 +39,9 @@ The current control families cover:
   valued snapshots remain arithmetically consistent with quantity, price, and cost basis
 - `timeseries_integrity`
   portfolio timeseries remain consistent with the underlying position-timeseries inputs
+- `corporate_action_bundle_a`
+  transfer-style corporate-action child legs reconcile source-out and target-in basis and expose
+  missing dependency references
 
 ## Data it owns
 
@@ -82,6 +86,15 @@ Check this service when:
 - transaction-to-cashflow drift is suspected
 - valuation arithmetic looks implausible despite completed upstream jobs
 - portfolio timeseries appears partially aggregated or inconsistent with underlying positions
+- a Bundle A corporate action has a basis mismatch, insufficient source/target legs, or missing
+  child-leg dependency references
+
+For Bundle A issues, list reconciliation runs with `reconciliation_type=corporate_action_bundle_a`
+and then inspect that run's findings. Stable finding types are
+`ca_bundle_a_basis_mismatch`, `ca_bundle_a_insufficient_legs`, and
+`ca_bundle_a_missing_dependency`; each row includes the portfolio, triggering transaction,
+business date, correlation id through the run, linked transaction group, parent event reference,
+reason code, and source-safe observed values for triage.
 
 Check beyond this service when:
 
