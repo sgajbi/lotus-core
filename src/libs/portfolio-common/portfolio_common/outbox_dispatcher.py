@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.db import SessionLocal
 from portfolio_common.kafka_utils import KafkaProducer
+from portfolio_common.logging_utils import redact_sensitive_text
 from portfolio_common.monitoring import (
     observe_outbox_failed,
     observe_outbox_published,
@@ -26,6 +27,7 @@ from portfolio_common.outbox_settings import get_outbox_runtime_settings
 logger = logging.getLogger(__name__)
 
 TERMINAL_FAILURE_STATUS = "FAILED"
+MAX_FAILURE_MESSAGE_LENGTH = 512
 
 
 class OutboxDispatcher:
@@ -265,6 +267,10 @@ class OutboxDispatcher:
                 status="PROCESSED",
                 processed_at=datetime.now(timezone.utc),
                 next_attempt_at=None,
+                last_failure_reason_code=None,
+                last_failure_category=None,
+                last_failure_message=None,
+                last_failure_at=None,
             )
         )
         for event in events_to_process:
@@ -292,6 +298,10 @@ class OutboxDispatcher:
                 now=attempted_at,
                 retry_count=next_retry_count,
             )
+            failure_metadata = _failure_metadata(
+                delivery_errs.get(event.id, "unknown error"),
+                failed_at=attempted_at,
+            )
             db.execute(
                 update(OutboxEvent)
                 .where(OutboxEvent.id == event.id)
@@ -300,6 +310,7 @@ class OutboxDispatcher:
                     retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
                     last_attempted_at=attempted_at,
                     next_attempt_at=next_attempt_at,
+                    **failure_metadata,
                 )
             )
             observe_outbox_failed(event.aggregate_type, event.topic)
@@ -323,27 +334,37 @@ class OutboxDispatcher:
     ) -> None:
         if not terminal_failure_ids:
             return
-        db.execute(
-            update(OutboxEvent)
-            .where(OutboxEvent.id.in_(terminal_failure_ids))
-            .values(
-                status=TERMINAL_FAILURE_STATUS,
-                retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
-                last_attempted_at=datetime.now(timezone.utc),
-                next_attempt_at=None,
+        failed_at = datetime.now(timezone.utc)
+        terminal_failure_id_set = set(terminal_failure_ids)
+        terminal_events = [
+            event for event in events_to_process if event.id in terminal_failure_id_set
+        ]
+        for event in terminal_events:
+            failure_metadata = _failure_metadata(
+                delivery_errs.get(event.id, "unknown error"),
+                failed_at=failed_at,
             )
-        )
-        for event in events_to_process:
-            if event.id in terminal_failure_ids:
-                observe_outbox_failed(event.aggregate_type, event.topic)
-        for failure_id in terminal_failure_ids:
-            reason = delivery_errs.get(failure_id, "unknown error")
+            db.execute(
+                update(OutboxEvent)
+                .where(OutboxEvent.id == event.id)
+                .values(
+                    status=TERMINAL_FAILURE_STATUS,
+                    retry_count=func.coalesce(OutboxEvent.retry_count, 0) + 1,
+                    last_attempted_at=failed_at,
+                    next_attempt_at=None,
+                    **failure_metadata,
+                )
+            )
+            observe_outbox_failed(event.aggregate_type, event.topic)
+            reason = delivery_errs.get(event.id, "unknown error")
             logger.error(
                 "OutboxDispatcher: Kafka delivery reached terminal failure threshold.",
                 extra={
-                    "outbox_id": failure_id,
-                    "reason": reason,
+                    "outbox_id": event.id,
+                    "reason": _source_safe_failure_message(reason),
                     "max_retries": self._max_retries,
+                    "failure_reason_code": failure_metadata["last_failure_reason_code"],
+                    "failure_category": failure_metadata["last_failure_category"],
                 },
             )
 
@@ -401,6 +422,31 @@ def _delivery_ids_by_outcome(delivery_ack: Dict[int, bool], *, successful: bool)
 def _retryable_failure_ids(failure_ids: list[int], terminal_failure_ids: list[int]) -> list[int]:
     terminal_failure_id_set = set(terminal_failure_ids)
     return [failure_id for failure_id in failure_ids if failure_id not in terminal_failure_id_set]
+
+
+def _failure_metadata(reason: str, *, failed_at: datetime) -> dict[str, object]:
+    return {
+        "last_failure_reason_code": _failure_reason_code(reason),
+        "last_failure_category": "event_publish_delivery",
+        "last_failure_message": _source_safe_failure_message(reason),
+        "last_failure_at": failed_at,
+    }
+
+
+def _failure_reason_code(reason: str) -> str:
+    normalized = str(reason or "").lower()
+    if "timed out" in normalized or "timeout" in normalized:
+        return "kafka_delivery_timeout"
+    if "flush" in normalized:
+        return "kafka_flush_failed"
+    if "publish" in normalized:
+        return "kafka_publish_failed"
+    return "kafka_delivery_failed"
+
+
+def _source_safe_failure_message(reason: str) -> str:
+    redacted = redact_sensitive_text(str(reason or "unknown error"))
+    return redacted[:MAX_FAILURE_MESSAGE_LENGTH]
 
 
 def _event_headers(event: OutboxEvent) -> list[tuple[str, bytes]]:

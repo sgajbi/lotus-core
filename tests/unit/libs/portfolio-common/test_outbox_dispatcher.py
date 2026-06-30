@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -130,6 +131,46 @@ def test_dispatcher_retry_delay_uses_bounded_exponential_backoff() -> None:
     assert dispatcher._retry_delay_seconds(2) == 20.0
     assert dispatcher._retry_delay_seconds(3) == 40.0
     assert dispatcher._retry_delay_seconds(4) == 45.0
+
+
+def test_outbox_failure_metadata_is_source_safe_and_bounded() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    message = "publish failed password=super-secret; token=abc; " + ("x" * 700)
+
+    metadata = module._failure_metadata(message, failed_at=module.datetime.now(module.timezone.utc))
+
+    assert metadata["last_failure_reason_code"] == "kafka_publish_failed"
+    assert metadata["last_failure_category"] == "event_publish_delivery"
+    failure_message = metadata["last_failure_message"]
+    assert "super-secret" not in failure_message
+    assert "abc" not in failure_message
+    assert "password=***REDACTED***" in failure_message
+    assert len(failure_message) == module.MAX_FAILURE_MESSAGE_LENGTH
+
+
+def test_terminal_failure_update_persists_structured_failure_metadata() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(kafka_producer=MagicMock(spec=KafkaProducer))
+    db = MagicMock()
+    event = SimpleNamespace(id=42, aggregate_type="OutboxUnit", topic="unit.topic")
+
+    dispatcher._mark_terminal_failures(
+        db,
+        [event],
+        [42],
+        {42: "flush failed authorization=Bearer secret-token"},
+    )
+
+    statement = db.execute.call_args.args[0]
+    compiled_params = statement.compile().params
+    assert compiled_params["status"] == module.TERMINAL_FAILURE_STATUS
+    assert compiled_params["last_failure_reason_code"] == "kafka_flush_failed"
+    assert compiled_params["last_failure_category"] == "event_publish_delivery"
+    assert "secret-token" not in compiled_params["last_failure_message"]
+    assert "authorization=***REDACTED***" in compiled_params["last_failure_message"]
+    assert compiled_params["last_failure_at"] is not None
 
 
 @pytest.mark.asyncio
