@@ -14,6 +14,7 @@ from tests.e2e.api_client import E2EApiClient
 from tests.test_support.db_cleanup import truncate_with_deadlock_retry
 from tests.test_support.docker_stack import (
     DockerStackError,
+    capture_compose_logs,
     compose_down,
     compose_up,
     resolve_compose_file,
@@ -257,6 +258,10 @@ def docker_services(request):  # noqa: ARG001
         pytest.fail(str(exc))
 
     finally:
+        compose_log_file = os.getenv("LOTUS_TESTS_COMPOSE_LOG_FILE")
+        if compose_log_file:
+            emit_test_output(f"\n--- Capturing Docker compose logs to {compose_log_file} ---")
+            capture_compose_logs(compose_file, compose_log_file)
         if _env_bool("LOTUS_TESTS_KEEP_STACK_UP", False):
             emit_test_output(
                 "\n--- Keeping Docker services running for post-failure inspection ---"

@@ -8,6 +8,7 @@ import requests
 
 from tests.test_support.docker_stack import (
     DockerStackError,
+    capture_compose_logs,
     compose_up,
     ensure_docker_engine_available,
     ensure_required_images_available,
@@ -284,3 +285,44 @@ def test_wait_for_kafka_metadata_raises_after_timeout(monkeypatch: pytest.Monkey
 
     with pytest.raises(DockerStackError, match="did not become metadata-ready"):
         wait_for_kafka_metadata("localhost:9092", timeout_seconds=0, poll_seconds=0)
+
+
+def test_capture_compose_logs_writes_active_project_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    calls: list[list[str]] = []
+
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "lotus-e2e-test")
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack.ensure_docker_engine_available",
+        lambda: None,
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        calls.append(list(args))
+        assert kwargs["check"] is False
+        assert kwargs["capture_output"] is True
+        assert kwargs["text"] is True
+        return SimpleNamespace(stdout="service log\n", stderr="diagnostic stderr\n")
+
+    monkeypatch.setattr("tests.test_support.docker_stack.subprocess.run", runner)
+
+    output_path = tmp_path / "e2e-smoke" / "compose.log"
+    capture_compose_logs("docker-compose.yml", output_path)
+
+    assert calls == [
+        [
+            "docker",
+            "compose",
+            "-p",
+            "lotus-e2e-test",
+            "-f",
+            "docker-compose.yml",
+            "logs",
+            "--no-color",
+        ]
+    ]
+    assert output_path.read_text(encoding="utf-8") == (
+        "service log\n\n--- docker compose logs stderr ---\ndiagnostic stderr\n"
+    )

@@ -467,6 +467,12 @@ Most relevant current governance:
     consumers, pipeline readiness, reconciliation, and future supportability code must use
     `portfolio_common.transaction_domain.requires_cashflow_processing(...)` instead of duplicating
     local FX lifecycle skip lists.
+48. Runtime CI gates that bring up the compose-backed stack must prebuild schema/topic bootstrap
+    images with the app service images. Keep `kafka-topic-creator` and `migration-runner` in the
+    shared runtime prebuild subset for Docker smoke, E2E smoke, latency, performance,
+    failure-recovery, and institutional-completion gates. E2E diagnostics should be captured by the
+    pytest fixture through `LOTUS_TESTS_COMPOSE_LOG_FILE` before compose teardown; workflow-level
+    `docker compose logs` capture is only fallback evidence after fixture ownership is gone.
 
 ## Context Maintenance Rule
 

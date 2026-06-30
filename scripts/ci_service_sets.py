@@ -9,7 +9,13 @@ from __future__ import annotations
 
 QUERY_BUILD_SERVICES: tuple[str, ...] = ("query_service",)
 
+RUNTIME_BOOTSTRAP_SERVICES: tuple[str, ...] = (
+    "kafka-topic-creator",
+    "migration-runner",
+)
+
 DOCKER_SMOKE_SERVICES: tuple[str, ...] = (
+    *RUNTIME_BOOTSTRAP_SERVICES,
     "ingestion_service",
     "query_service",
     "query_control_plane_service",
@@ -31,6 +37,7 @@ LATENCY_GATE_SERVICES: tuple[str, ...] = (
 )
 
 PERFORMANCE_GATE_SERVICES: tuple[str, ...] = (
+    *RUNTIME_BOOTSTRAP_SERVICES,
     "ingestion_service",
     "query_service",
     "event_replay_service",
@@ -42,6 +49,7 @@ PERFORMANCE_GATE_SERVICES: tuple[str, ...] = (
 FAILURE_RECOVERY_GATE_SERVICES: tuple[str, ...] = PERFORMANCE_GATE_SERVICES
 
 E2E_SMOKE_SERVICES: tuple[str, ...] = (
+    *RUNTIME_BOOTSTRAP_SERVICES,
     "ingestion_service",
     "event_replay_service",
     "query_service",

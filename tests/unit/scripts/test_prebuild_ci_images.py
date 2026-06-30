@@ -25,6 +25,8 @@ def test_prebuild_group_expands_to_named_services(
 
     assert main() == 0
     assert [service for service, _ in built] == [
+        "kafka-topic-creator",
+        "migration-runner",
         "ingestion_service",
         "query_service",
         "event_replay_service",
