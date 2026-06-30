@@ -30,13 +30,12 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1163 hardens cost reprocessing consumer orchestration by splitting JSON object payload parsing,
-requested transaction-id normalization, repository-backed reprocessing execution, and
-parse/retryable/unexpected error handling out of `ReprocessingConsumer.process_message(...)`.
-Focused unit coverage now proves malformed JSON and non-object payloads go to DLQ, missing
-transaction ids skip repository execution, database errors remain retryable, and header correlation
-continues to propagate into the repository call. `process_message(...)` is reduced from `B (6)` to
-`A (3)`, and `ReprocessingConsumer` is reduced from `B (7)` to `A (4)`.
+CR-1164 hardens workflow fail-closed governance by adding a bounded timeout to the PR auto-merge
+queue job and regression tests that require every workflow job to define a positive timeout. It also
+restricts `continue-on-error` to documented report-only scope: the app-validation report job and
+named quality-baseline report-only steps. Focused workflow-governance tests now pass with 8 tests,
+all 5 workflow YAML files parse, and the `lotus-core-validation-report` job remains report-only
+under the existing CR-1107 promotion policy instead of being silently promoted or weakened.
 
 ## Health Assessment
 
@@ -1925,3 +1924,8 @@ health before that claim is defensible.
      Focused reprocessing consumer tests passed with 6 tests, scoped Ruff lint and format checks
      passed, Radon reports `process_message` reduced from `B (6)` to `A (3)`, and the class
      reduced from `B (7)` to `A (4)`.
+315. Hardened workflow fail-closed governance by adding a 10-minute timeout to the PR auto-merge
+     queue job and adding workflow-governance tests that require every job to define a positive
+     timeout and restrict `continue-on-error` to documented report-only scope. Focused workflow
+     tests passed with 8 tests; scoped Ruff lint and format checks passed; all 5 workflow YAML files
+     parsed successfully.
