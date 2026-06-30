@@ -1,0 +1,81 @@
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Singapore"
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "pip"
+    directories:
+      - "/"
+      - "/src/libs/portfolio-common"
+      - "/src/services/calculators/cashflow_calculator_service"
+      - "/src/services/calculators/cost_calculator_service"
+      - "/src/services/calculators/position_calculator"
+      - "/src/services/calculators/position_valuation_calculator"
+      - "/src/services/event_replay_service"
+      - "/src/services/financial_reconciliation_service"
+      - "/src/services/ingestion_service"
+      - "/src/services/persistence_service"
+      - "/src/services/pipeline_orchestrator_service"
+      - "/src/services/portfolio_aggregation_service"
+      - "/src/services/query_control_plane_service"
+      - "/src/services/query_service"
+      - "/src/services/timeseries_generator_service"
+      - "/src/services/valuation_orchestrator_service"
+      - "/tests"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:30"
+      timezone: "Asia/Singapore"
+    open-pull-requests-limit: 4
+    groups:
+      python-runtime:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    directories:
+      - "/src/services/calculators/cashflow_calculator_service"
+      - "/src/services/calculators/cost_calculator_service"
+      - "/src/services/calculators/position_calculator"
+      - "/src/services/calculators/position_valuation_calculator"
+      - "/src/services/event_replay_service"
+      - "/src/services/financial_reconciliation_service"
+      - "/src/services/ingestion_service"
+      - "/src/services/persistence_service"
+      - "/src/services/pipeline_orchestrator_service"
+      - "/src/services/portfolio_aggregation_service"
+      - "/src/services/query_control_plane_service"
+      - "/src/services/query_service"
+      - "/src/services/timeseries_generator_service"
+      - "/src/services/valuation_orchestrator_service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Singapore"
+    open-pull-requests-limit: 3
+    groups:
+      docker-runtime:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
