@@ -62,6 +62,15 @@ contract. HTTP statuses and success payloads are preserved; migrated failures no
 `QCP_OPERATIONS_*` error codes, `application/problem+json`, bounded details, and source-safe
 metadata instead of raw service exception text.
 
+Current continuation: CR-1191 now also migrates the portfolio source-evidence route trio
+(`PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`, and
+`PerformanceComponentEconomics:v1`) from raw `HTTPException(detail=str(exc))` mappings to shared
+QCP problem-details responses. HTTP statuses, route paths, request DTOs, success DTOs, database
+contracts, and downstream source-data envelopes are preserved; migrated failures now use
+`QCP_SOURCE_EVIDENCE_NOT_FOUND` or `QCP_SOURCE_EVIDENCE_INVALID_REQUEST` with source-product,
+portfolio, and exception-family metadata. Focused proof passed with 10 source-evidence tests and
+101 affected integration-router/OpenAPI tests, plus scoped Ruff lint and format checks.
+
 ## Health Assessment
 
 `lotus-core` is not yet bank-buyable as a whole. It has strong existing governance machinery and

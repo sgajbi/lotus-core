@@ -539,6 +539,7 @@ def _assert_problem_details(
 ) -> dict:
     body = response.json()
     assert response.status_code == status_code
+    assert response.headers["content-type"].startswith("application/problem+json")
     assert body["status"] == status_code
     assert body["error_code"] == error_code
     assert body["detail"] == detail
@@ -756,6 +757,86 @@ async def test_core_snapshot_unavailable_section_maps_to_422(async_test_client):
         error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
         detail="Requested core snapshot section cannot be fulfilled from available source data.",
     )
+
+
+async def test_portfolio_tax_lot_window_not_found_maps_to_problem_details(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_portfolio_tax_lot_window = AsyncMock(
+        side_effect=LookupError("Portfolio with id P404 not found")
+    )
+
+    response = await client.post(
+        "/integration/portfolios/P404/tax-lots",
+        json={"as_of_date": "2026-04-10"},
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+        detail="Requested portfolio source evidence was not found.",
+    )
+    assert body["metadata"] == {
+        "source_product": "PortfolioTaxLotWindow",
+        "portfolio_id": "P404",
+        "reason": "LookupError",
+    }
+
+
+async def test_transaction_cost_curve_bad_request_maps_to_problem_details(async_test_client):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_transaction_cost_curve = AsyncMock(
+        side_effect=ValueError("page token does not match request scope")
+    )
+
+    response = await client.post(
+        "/integration/portfolios/PB_SG_GLOBAL_BAL_001/transaction-cost-curve",
+        json={
+            "as_of_date": "2026-05-03",
+            "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
+        },
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=400,
+        error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+        detail="Portfolio source evidence request is invalid.",
+    )
+    assert body["metadata"] == {
+        "source_product": "TransactionCostCurve",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "reason": "ValueError",
+    }
+
+
+async def test_performance_component_economics_not_found_maps_to_problem_details(
+    async_test_client,
+):
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_performance_component_economics = AsyncMock(
+        side_effect=LookupError("Portfolio with id PB_MISSING not found")
+    )
+
+    response = await client.post(
+        "/integration/portfolios/PB_MISSING/performance-component-economics",
+        json={
+            "as_of_date": "2026-05-10",
+            "window": {"start_date": "2026-05-01", "end_date": "2026-05-10"},
+        },
+    )
+
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+        detail="Requested portfolio source evidence was not found.",
+    )
+    assert body["metadata"] == {
+        "source_product": "PerformanceComponentEconomics",
+        "portfolio_id": "PB_MISSING",
+        "reason": "LookupError",
+    }
 
 
 async def test_benchmark_assignment_success(async_test_client):

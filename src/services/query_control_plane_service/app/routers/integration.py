@@ -1,4 +1,4 @@
-from typing import cast
+from typing import NoReturn, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from portfolio_common.db import get_async_db_session
@@ -179,24 +179,52 @@ PLANNED_WITHDRAWAL_SCHEDULE_NOT_FOUND_EXAMPLE = {
 EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE = {
     "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
 }
-PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = {
-    "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
-}
+PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Portfolio source evidence not found",
+    detail="Requested portfolio source evidence was not found.",
+    error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+    metadata={
+        "source_product": "PortfolioTaxLotWindow",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+    },
+)
 BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
     "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
 }
 BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = {
     "detail": "No overlapping benchmark definition found for benchmark_id and requested window."
 }
-TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE = {
-    "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
-}
-PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE = {
-    "detail": "Portfolio with id PB_SG_GLOBAL_BAL_001 not found"
-}
-PERFORMANCE_COMPONENT_ECONOMICS_BAD_REQUEST_EXAMPLE = {
-    "detail": "Performance component economics page token does not match request scope."
-}
+TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Portfolio source evidence not found",
+    detail="Requested portfolio source evidence was not found.",
+    error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+    metadata={
+        "source_product": "TransactionCostCurve",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+    },
+)
+PERFORMANCE_COMPONENT_ECONOMICS_NOT_FOUND_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Portfolio source evidence not found",
+    detail="Requested portfolio source evidence was not found.",
+    error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+    metadata={
+        "source_product": "PerformanceComponentEconomics",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+    },
+)
+SOURCE_EVIDENCE_INVALID_REQUEST_EXAMPLE = problem_example(
+    status_code=status.HTTP_400_BAD_REQUEST,
+    title="Portfolio source evidence request is invalid",
+    detail="Portfolio source evidence request is invalid.",
+    error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+    metadata={
+        "source_product": "PerformanceComponentEconomics",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+    },
+)
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 
 
@@ -210,6 +238,63 @@ def get_core_snapshot_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> CoreSnapshotService:
     return CoreSnapshotService(db)
+
+
+def _raise_source_evidence_problem(
+    *,
+    status_code: int,
+    title: str,
+    detail: str,
+    error_code: str,
+    source_product: str,
+    portfolio_id: str,
+    reason: str,
+) -> NoReturn:
+    raise_problem(
+        status_code=status_code,
+        title=title,
+        detail=detail,
+        error_code=error_code,
+        metadata={
+            "source_product": source_product,
+            "portfolio_id": portfolio_id,
+            "reason": reason,
+        },
+    )
+
+
+def _raise_source_evidence_not_found(
+    *,
+    source_product: str,
+    portfolio_id: str,
+    exc: Exception,
+) -> NoReturn:
+    _raise_source_evidence_problem(
+        status_code=status.HTTP_404_NOT_FOUND,
+        title="Portfolio source evidence not found",
+        detail="Requested portfolio source evidence was not found.",
+        error_code="QCP_SOURCE_EVIDENCE_NOT_FOUND",
+        source_product=source_product,
+        portfolio_id=portfolio_id,
+        reason=exc.__class__.__name__,
+    )
+
+
+def _raise_source_evidence_invalid_request(
+    *,
+    source_product: str,
+    portfolio_id: str,
+    exc: Exception,
+) -> NoReturn:
+    _raise_source_evidence_problem(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        title="Portfolio source evidence request is invalid",
+        detail="Portfolio source evidence request is invalid.",
+        error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+        source_product=source_product,
+        portfolio_id=portfolio_id,
+        reason=exc.__class__.__name__,
+    )
 
 
 @router.get(
@@ -562,7 +647,16 @@ async def resolve_instrument_eligibility_bulk(
         ),
         400: problem_response(
             "Invalid page token",
-            {"detail": "Portfolio tax-lot page token does not match request scope."},
+            problem_example(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                title="Portfolio source evidence request is invalid",
+                detail="Portfolio source evidence request is invalid.",
+                error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+                metadata={
+                    "source_product": "PortfolioTaxLotWindow",
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                },
+            ),
         ),
     },
     openapi_extra=source_data_product_openapi_extra("PortfolioTaxLotWindow"),
@@ -582,9 +676,17 @@ async def get_portfolio_tax_lot_window(
             request=request,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        _raise_source_evidence_not_found(
+            source_product="PortfolioTaxLotWindow",
+            portfolio_id=portfolio_id,
+            exc=exc,
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        _raise_source_evidence_invalid_request(
+            source_product="PortfolioTaxLotWindow",
+            portfolio_id=portfolio_id,
+            exc=exc,
+        )
 
 
 @router.post(
@@ -607,7 +709,16 @@ async def get_portfolio_tax_lot_window(
         ),
         400: problem_response(
             "Invalid transaction-cost curve request",
-            {"detail": "Transaction cost curve page token does not match request scope."},
+            problem_example(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                title="Portfolio source evidence request is invalid",
+                detail="Portfolio source evidence request is invalid.",
+                error_code="QCP_SOURCE_EVIDENCE_INVALID_REQUEST",
+                metadata={
+                    "source_product": "TransactionCostCurve",
+                    "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                },
+            ),
         ),
     },
     openapi_extra=source_data_product_openapi_extra("TransactionCostCurve"),
@@ -627,9 +738,17 @@ async def get_transaction_cost_curve(
             request=request,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        _raise_source_evidence_not_found(
+            source_product="TransactionCostCurve",
+            portfolio_id=portfolio_id,
+            exc=exc,
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        _raise_source_evidence_invalid_request(
+            source_product="TransactionCostCurve",
+            portfolio_id=portfolio_id,
+            exc=exc,
+        )
 
 
 @router.post(
@@ -654,7 +773,7 @@ async def get_transaction_cost_curve(
         ),
         400: problem_response(
             "Invalid performance component economics request",
-            PERFORMANCE_COMPONENT_ECONOMICS_BAD_REQUEST_EXAMPLE,
+            SOURCE_EVIDENCE_INVALID_REQUEST_EXAMPLE,
         ),
     },
     openapi_extra=source_data_product_openapi_extra("PerformanceComponentEconomics"),
@@ -674,9 +793,17 @@ async def get_performance_component_economics(
             request=request,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        _raise_source_evidence_not_found(
+            source_product="PerformanceComponentEconomics",
+            portfolio_id=portfolio_id,
+            exc=exc,
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        _raise_source_evidence_invalid_request(
+            source_product="PerformanceComponentEconomics",
+            portfolio_id=portfolio_id,
+            exc=exc,
+        )
 
 
 @router.post(
