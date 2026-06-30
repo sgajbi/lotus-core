@@ -54,7 +54,7 @@ acknowledgement, or client advice output.
 | `transaction_costs` | `fee_type`, `amount`, `currency` | Joined as row-level cost evidence and returned without aggregation. |
 | `cashflows` | cashflow row fields linked to the transaction | Joined as row-level linked cashflow evidence when present. |
 | `fx_rates` | `from_currency`, `to_currency`, `rate_date`, `rate` | Used only for optional reporting-currency restatement fields. |
-| `instruments` | `security_id` and instrument master context | Cost-calculator product transaction processing requires this reference before cost fields and processed events are produced. Historical rows written before that guard may still require separate read-side degraded supportability. |
+| `instruments` | `security_id` and instrument master context | Returned row security ids are checked against this governed reference source. Missing matches degrade the response to partial supportability. Cost-calculator product transaction processing also requires this reference before cost fields and processed events are produced. |
 
 ## Unit Conventions
 
@@ -92,6 +92,8 @@ this product.
 | `L` | `limit` | Maximum returned rows. |
 | `R` | `transactions[]` | Returned page of transaction rows. |
 | `Q` | `data_quality_status` | `COMPLETE`, `PARTIAL`, or `UNKNOWN` page quality posture. |
+| `G` | `reason_codes[]` | Bounded supportability reason codes for empty, paged, complete, or missing-instrument-reference ledger windows. |
+| `U` | `missing_instrument_security_ids[]` | Returned transaction security ids that do not resolve to governed `instruments.security_id`. |
 | `X_book` | reporting FX rate for book-currency fields | Latest FX rate from `currency` to reporting currency on or before `A`. |
 | `X_trade` | reporting FX rate for trade/local fields | Latest FX rate from `trade_currency` to reporting currency on or before `A`, falling back to `currency` when `trade_currency` is absent. |
 | `FX_local` | `realized_fx_pnl_local` | Upstream-supplied row-level realized FX P&L in the transaction row currency. |
@@ -110,6 +112,10 @@ Date filters are applied as:
 `transaction_date < start_of_next_day(E)` when `E` is supplied
 
 `transaction_date < start_of_next_day(A)` when an effective `A` is supplied
+
+Returned-row instrument reference support is:
+
+`U = distinct returned security ids R.security_id where no instruments.security_id match exists`
 
 Reporting-currency fields are computed independently for each populated raw monetary field:
 
@@ -137,15 +143,19 @@ page.
 5. Query the requested page with eager row-level `cashflow` and `transaction_costs` evidence.
 6. Sort by the requested allowed field and direction; when no allowed field is supplied, sort by
    `transaction_date` descending.
-7. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
+7. Resolve distinct returned row security ids against `instruments.security_id` and retain any
+   missing ids as `missing_instrument_security_ids`.
+8. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
    records when present.
-8. If `reporting_currency` is supplied and `A` exists, populate supported
+9. If `reporting_currency` is supplied and `A` exists, populate supported
    `*_reporting_currency` fields using the latest FX rate on or before `A`; book-currency fields
    use `currency`, and trade/local fields use `trade_currency` when available, including explicit
    row-level `realized_*_pnl_local` fields.
-9. Compute `data_quality_status` from `total`, returned row count, and `skip`.
-10. Return source-data runtime metadata including product identity, version, effective as-of date,
-    latest evidence timestamp, reconciliation status, restatement version, and data-quality status.
+10. Compute `data_quality_status` and `reason_codes` from `total`, returned row count, `skip`, and
+    missing instrument-reference evidence.
+11. Return source-data runtime metadata including product identity, version, effective as-of date,
+    latest evidence timestamp, reconciliation status, restatement version, data-quality status, and
+    bounded supportability reason fields.
 
 ## Validation and Failure Behavior
 
@@ -155,6 +165,7 @@ page.
 | `reporting_currency` is supplied but no FX rate exists for a required field source currency as of `A` | Service raises `ValueError`; the API maps it to HTTP `400`. |
 | No rows match the filters | Returns an empty page with `total=0` and `data_quality_status=UNKNOWN`. |
 | Returned page is smaller than all matching rows or `skip > 0` | Returns `data_quality_status=PARTIAL`. |
+| Any returned row `security_id` does not resolve to `instruments.security_id` | Returns `data_quality_status=PARTIAL`, reason `TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING`, and the bounded missing security ids. |
 | Returned page contains all matching rows from offset zero | Returns `data_quality_status=COMPLETE`. |
 | `sort_by` is not in the allowed sort-field set | Falls back to `transaction_date`. |
 | Row-level `transaction_costs` exist | Returned as `costs[]`; this endpoint does not aggregate them into cost curves. |
@@ -186,6 +197,9 @@ page.
 | `transactions[].realized_fx_pnl_local_reporting_currency` | Optional restatement of upstream-supplied row-level realized FX P&L evidence; not an FX attribution measure. |
 | `as_of_date` | Effective booked-state cap or fallback output date. |
 | `data_quality_status` | Page completeness posture for the returned ledger window. |
+| `reason_codes[]` | `TRANSACTION_LEDGER_READY`, `TRANSACTION_LEDGER_EMPTY`, `TRANSACTION_LEDGER_PAGE_PARTIAL`, or `TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING`. |
+| `missing_instrument_reference_count` | Count of returned security ids without governed instrument master support. |
+| `missing_instrument_security_ids[]` | Returned security ids that do not resolve to `instruments.security_id`. |
 | `latest_evidence_timestamp` | Latest durable transaction `updated_at` timestamp for the filtered ledger window. |
 
 ## Worked Example
@@ -210,6 +224,8 @@ Final output mapping:
 | --- | ---: |
 | `total` | 2 |
 | `data_quality_status` | `COMPLETE` |
+| `reason_codes` | `["TRANSACTION_LEDGER_READY"]` |
+| `missing_instrument_reference_count` | 0 |
 | `transactions[0].trade_fee_reporting_currency` | 18.75 |
 | `transactions[0].realized_fx_pnl_local_reporting_currency` | 1875.00 |
 | `transactions[1].withholding_tax_amount_reporting_currency` | 13.60 |

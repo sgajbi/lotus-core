@@ -65,6 +65,7 @@ def mock_transaction_repo() -> AsyncMock:
     ]
     repo.get_transactions_count.return_value = 25
     repo.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    repo.list_known_instrument_security_ids.return_value = {"S1", "S2"}
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
     repo.get_portfolio_base_currency.return_value = "USD"
     repo.list_realized_tax_evidence_transactions.return_value = [
@@ -194,8 +195,14 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         assert response_dto.restatement_version == "current"
         assert response_dto.reconciliation_status == "UNKNOWN"
         assert response_dto.data_quality_status == PARTIAL
+        assert response_dto.reason_codes == ["TRANSACTION_LEDGER_PAGE_PARTIAL"]
+        assert response_dto.missing_instrument_reference_count == 0
+        assert response_dto.missing_instrument_security_ids == []
         assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
         assert response_dto.correlation_id is None
+        mock_transaction_repo.list_known_instrument_security_ids.assert_awaited_once_with(
+            ["S1", "S2"]
+        )
 
 
 async def test_get_transactions_classifies_complete_window(
@@ -212,8 +219,29 @@ async def test_get_transactions_classifies_complete_window(
         response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
 
     assert response_dto.data_quality_status == COMPLETE
+    assert response_dto.reason_codes == ["TRANSACTION_LEDGER_READY"]
     assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
     mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
+
+
+async def test_get_transactions_marks_unknown_instrument_reference_partial(
+    mock_transaction_repo: AsyncMock,
+) -> None:
+    mock_transaction_repo.get_transactions_count.return_value = 2
+    mock_transaction_repo.list_known_instrument_security_ids.return_value = {"S1"}
+
+    with patch(
+        "src.services.query_service.app.services.transaction_service.TransactionRepository",
+        return_value=mock_transaction_repo,
+    ):
+        service = TransactionService(AsyncMock(spec=AsyncSession))
+
+        response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
+
+    assert response_dto.data_quality_status == PARTIAL
+    assert response_dto.reason_codes == ["TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING"]
+    assert response_dto.missing_instrument_reference_count == 1
+    assert response_dto.missing_instrument_security_ids == ["S2"]
 
 
 async def test_get_transactions_classifies_empty_window_as_unknown(
@@ -232,9 +260,11 @@ async def test_get_transactions_classifies_empty_window_as_unknown(
         response_dto = await service.get_transactions(portfolio_id="P1", skip=0, limit=10)
 
     assert response_dto.data_quality_status == UNKNOWN
+    assert response_dto.reason_codes == ["TRANSACTION_LEDGER_EMPTY"]
     assert response_dto.latest_evidence_timestamp is None
     mock_transaction_repo.get_transactions.assert_not_awaited()
     mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
+    mock_transaction_repo.list_known_instrument_security_ids.assert_not_awaited()
 
 
 async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_repo: AsyncMock):

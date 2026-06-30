@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     BusinessDate,
     Cashflow,
     FxRate,
+    Instrument,
     Portfolio,
     Transaction,
     TransactionCost,
@@ -178,6 +179,24 @@ class TransactionRepository:
             .limit(1)
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
+        normalized_security_ids = list(
+            dict.fromkeys(
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_security_id(security_id))
+            )
+        )
+        if not normalized_security_ids:
+            return set()
+
+        instrument_security_id = func.trim(Instrument.security_id)
+        stmt = select(instrument_security_id).where(
+            instrument_security_id.in_(normalized_security_ids)
+        )
+        result = await self.db.execute(stmt)
+        return set(result.scalars().all())
 
     def _apply_filters(
         self,

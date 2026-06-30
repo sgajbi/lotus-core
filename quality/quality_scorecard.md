@@ -1277,3 +1277,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   single unit-of-work finalizer. Duplicate, replay, fence, lifecycle, success, and failure paths now
   stage or classify outcomes before one commit/rollback boundary, preserving cashflow/outbox
   atomicity while making the reusable event-consumer transaction pattern directly testable.
+- CR-1203 added read-side instrument-reference supportability to `TransactionLedgerWindow:v1`.
+  Returned transaction security ids are checked against governed instrument master data, unresolved
+  references degrade the response to `PARTIAL`, and additive bounded reason/missing-security fields
+  make legacy or orphan rows explicit without hiding the ledger evidence.

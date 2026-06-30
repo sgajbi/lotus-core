@@ -651,6 +651,30 @@ async def test_get_latest_fx_rate_queries_latest_available_rate(
     assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
 
 
+async def test_list_known_instrument_security_ids_queries_instrument_master(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+):
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["S1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    security_ids = await repository.list_known_instrument_security_ids([" S1 ", "S2", "S1"])
+
+    assert security_ids == {"S1"}
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(instruments.security_id) IN ('S1', 'S2')" in compiled_query
+
+
+async def test_list_known_instrument_security_ids_skips_empty_scope(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+):
+    assert await repository.list_known_instrument_security_ids([" ", ""]) == set()
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_get_transactions_count_with_component_and_fx_filters(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):

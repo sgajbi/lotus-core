@@ -184,6 +184,9 @@ async def test_paginated_transaction_ledger_response_marks_complete_window() -> 
     assert response.as_of_date == date(2025, 1, 15)
     assert response.data_quality_status == COMPLETE
     assert response.latest_evidence_timestamp == latest_evidence_timestamp
+    assert response.reason_codes == ["TRANSACTION_LEDGER_READY"]
+    assert response.missing_instrument_reference_count == 0
+    assert response.missing_instrument_security_ids == []
 
 
 async def test_paginated_transaction_ledger_response_marks_partial_window() -> None:
@@ -201,6 +204,27 @@ async def test_paginated_transaction_ledger_response_marks_partial_window() -> N
 
     assert response.data_quality_status == PARTIAL
     assert response.as_of_date == date(2025, 1, 15)
+    assert response.reason_codes == ["TRANSACTION_LEDGER_PAGE_PARTIAL"]
+
+
+async def test_transaction_ledger_response_marks_missing_instrument_reference_partial() -> None:
+    response = paginated_transaction_ledger_response(
+        portfolio_id="P1",
+        reporting_currency=None,
+        total_count=2,
+        skip=0,
+        limit=10,
+        transactions=[_transaction_record("T1"), _transaction_record("T2")],
+        effective_as_of_date=date(2025, 1, 15),
+        end_date=None,
+        latest_evidence_timestamp=None,
+        missing_instrument_security_ids=["S2"],
+    )
+
+    assert response.data_quality_status == PARTIAL
+    assert response.reason_codes == ["TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING"]
+    assert response.missing_instrument_reference_count == 1
+    assert response.missing_instrument_security_ids == ["S2"]
 
 
 async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fallback() -> None:
@@ -233,3 +257,5 @@ async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fa
     assert today_response.as_of_date == date(2025, 2, 1)
     assert end_date_response.data_quality_status == UNKNOWN
     assert today_response.data_quality_status == UNKNOWN
+    assert end_date_response.reason_codes == ["TRANSACTION_LEDGER_EMPTY"]
+    assert today_response.reason_codes == ["TRANSACTION_LEDGER_EMPTY"]
