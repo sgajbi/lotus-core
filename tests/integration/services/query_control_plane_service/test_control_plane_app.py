@@ -2148,6 +2148,36 @@ async def test_openapi_describes_integration_source_problem_details(
         ),
         "/integration/dpm/portfolio-universe/candidates": "DpmPortfolioUniverseCandidate",
         "/integration/portfolios/{portfolio_id}/mandate-binding": "DiscretionaryMandateBinding",
+        "/integration/portfolios/{portfolio_id}/client-restriction-profile": (
+            "ClientRestrictionProfile"
+        ),
+        "/integration/portfolios/{portfolio_id}/sustainability-preference-profile": (
+            "SustainabilityPreferenceProfile"
+        ),
+        "/integration/portfolios/{portfolio_id}/client-tax-profile": "ClientTaxProfile",
+        "/integration/portfolios/{portfolio_id}/client-tax-rule-set": "ClientTaxRuleSet",
+        "/integration/portfolios/{portfolio_id}/client-income-needs-schedule": (
+            "ClientIncomeNeedsSchedule"
+        ),
+        "/integration/portfolios/{portfolio_id}/liquidity-reserve-requirement": (
+            "LiquidityReserveRequirement"
+        ),
+        "/integration/portfolios/{portfolio_id}/planned-withdrawal-schedule": (
+            "PlannedWithdrawalSchedule"
+        ),
+        "/integration/portfolios/{portfolio_id}/external-hedge-policy": "ExternalHedgePolicy",
+        "/integration/portfolios/{portfolio_id}/external-hedge-execution-readiness": (
+            "ExternalHedgeExecutionReadiness"
+        ),
+        "/integration/portfolios/{portfolio_id}/external-order-execution-acknowledgement": (
+            "ExternalOrderExecutionAcknowledgement"
+        ),
+        "/integration/portfolios/{portfolio_id}/external-currency-exposure": (
+            "ExternalCurrencyExposure"
+        ),
+        "/integration/portfolios/{portfolio_id}/external-eligible-hedge-instruments": (
+            "ExternalEligibleHedgeInstrument"
+        ),
     }
     for route_path, source_product in not_found_routes.items():
         example = schema["paths"][route_path]["post"]["responses"]["404"]["content"][

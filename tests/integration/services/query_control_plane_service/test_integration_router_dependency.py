@@ -548,6 +548,96 @@ def _assert_problem_details(
     return body
 
 
+@pytest.mark.parametrize(
+    ("route_path", "service_method", "source_product"),
+    [
+        (
+            "/integration/portfolios/PB_MISSING/client-restriction-profile",
+            "get_client_restriction_profile",
+            "ClientRestrictionProfile",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/sustainability-preference-profile",
+            "get_sustainability_preference_profile",
+            "SustainabilityPreferenceProfile",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/client-tax-profile",
+            "get_client_tax_profile",
+            "ClientTaxProfile",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/client-tax-rule-set",
+            "get_client_tax_rule_set",
+            "ClientTaxRuleSet",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/client-income-needs-schedule",
+            "get_client_income_needs_schedule",
+            "ClientIncomeNeedsSchedule",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/liquidity-reserve-requirement",
+            "get_liquidity_reserve_requirement",
+            "LiquidityReserveRequirement",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/planned-withdrawal-schedule",
+            "get_planned_withdrawal_schedule",
+            "PlannedWithdrawalSchedule",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/external-hedge-policy",
+            "get_external_hedge_policy",
+            "ExternalHedgePolicy",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/external-hedge-execution-readiness",
+            "get_external_hedge_execution_readiness",
+            "ExternalHedgeExecutionReadiness",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/external-order-execution-acknowledgement",
+            "get_external_order_execution_acknowledgement",
+            "ExternalOrderExecutionAcknowledgement",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/external-currency-exposure",
+            "get_external_currency_exposure",
+            "ExternalCurrencyExposure",
+        ),
+        (
+            "/integration/portfolios/PB_MISSING/external-eligible-hedge-instruments",
+            "get_external_eligible_hedge_instruments",
+            "ExternalEligibleHedgeInstrument",
+        ),
+    ],
+)
+async def test_mandate_scoped_source_routes_missing_binding_map_to_problem_details(
+    async_test_client,
+    route_path: str,
+    service_method: str,
+    source_product: str,
+) -> None:
+    client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    service_call = AsyncMock(return_value=None)
+    setattr(mock_integration_service, service_method, service_call)
+
+    response = await client.post(route_path, json={"as_of_date": "2026-05-03"})
+
+    body = _assert_problem_details(
+        response,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
+    )
+    assert body["metadata"] == {
+        "source_product": source_product,
+        "portfolio_id": "PB_MISSING",
+        "reason": "not_found",
+    }
+
+
 async def test_core_snapshot_success(async_test_client):
     client, mock_core_snapshot_service, mock_integration_service = async_test_client
 

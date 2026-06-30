@@ -45,7 +45,7 @@ tested modules.
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
 | Cash-balance account-id provenance | Improving | CR-1200 validates transaction-derived cash-account fallback mappings against active/effective cash-account master data and exposes response-level provenance |
 | Instrument reference integrity | Improving | CR-1201 defers product cost processing when instrument master data is missing, before cost and lot-state writes |
-| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, simulation, operations-support, portfolio source-evidence, and selected integration source-data discovery failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples |
+| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, simulation, operations-support, portfolio source-evidence, selected integration source-data discovery, and mandate-scoped source-route failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Transaction cost curve source reads | Improving | CR-1194 makes `TransactionCostCurve:v1` cursor paging source-read bounded through grouped keyset selection and page-key-scoped transaction evidence reads |
@@ -78,6 +78,13 @@ failures now use stable `QCP_INTEGRATION_SOURCE_*` problem-details contracts wit
 metadata. HTTP statuses, routes, request/success DTOs, service calls, persistence, and source-data
 envelopes are preserved. Focused proof passed with 105 affected unit/app/OpenAPI tests, plus scoped
 Ruff lint and format checks.
+
+Current continuation: CR-1213 applies the learned QCP pattern to twelve mandate-scoped
+client/profile, liquidity, withdrawal, external treasury, and external OMS source routes. Missing
+discretionary mandate bindings now use `QCP_INTEGRATION_SOURCE_NOT_FOUND` with source-product,
+portfolio, and reason metadata, and OpenAPI examples use route-specific source-product metadata.
+HTTP statuses, routes, request/success DTOs, service calls, persistence, and source-data envelopes
+are preserved. Focused proof passed with 84 affected unit/app/OpenAPI tests.
 
 ## Health Assessment
 

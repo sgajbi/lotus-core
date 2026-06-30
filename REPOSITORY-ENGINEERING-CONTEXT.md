@@ -128,7 +128,10 @@ Current repository posture:
     correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
     documented as legacy `application/json` bare-detail responses until their runtime handlers are
     converted; do not publish problem-details OpenAPI schemas for routes that still raise default
-    FastAPI `HTTPException(detail=...)`.
+    FastAPI `HTTPException(detail=...)`. Mandate-scoped source-data routes that fail because no
+    effective discretionary mandate binding exists should use the shared mandate-scoped
+    integration-source helper and assert `QCP_INTEGRATION_SOURCE_NOT_FOUND` with source product,
+    portfolio ID, and `not_found` reason metadata at unit, ASGI, and OpenAPI layers.
 28. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when

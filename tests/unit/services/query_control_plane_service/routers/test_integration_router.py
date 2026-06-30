@@ -1956,68 +1956,113 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("route_handler", "service_method", "route_request", "source_product"),
+    [
+        (
+            get_client_restriction_profile,
+            "get_client_restriction_profile",
+            ClientRestrictionProfileRequest(as_of_date="2026-05-03"),
+            "ClientRestrictionProfile",
+        ),
+        (
+            get_sustainability_preference_profile,
+            "get_sustainability_preference_profile",
+            SustainabilityPreferenceProfileRequest(as_of_date="2026-05-03"),
+            "SustainabilityPreferenceProfile",
+        ),
+        (
+            get_client_tax_profile,
+            "get_client_tax_profile",
+            ClientTaxProfileRequest(as_of_date="2026-05-03"),
+            "ClientTaxProfile",
+        ),
+        (
+            get_client_tax_rule_set,
+            "get_client_tax_rule_set",
+            ClientTaxRuleSetRequest(as_of_date="2026-05-03"),
+            "ClientTaxRuleSet",
+        ),
+        (
+            get_client_income_needs_schedule,
+            "get_client_income_needs_schedule",
+            ClientIncomeNeedsScheduleRequest(as_of_date="2026-05-03"),
+            "ClientIncomeNeedsSchedule",
+        ),
+        (
+            get_liquidity_reserve_requirement,
+            "get_liquidity_reserve_requirement",
+            LiquidityReserveRequirementRequest(as_of_date="2026-05-03"),
+            "LiquidityReserveRequirement",
+        ),
+        (
+            get_planned_withdrawal_schedule,
+            "get_planned_withdrawal_schedule",
+            PlannedWithdrawalScheduleRequest(as_of_date="2026-05-03"),
+            "PlannedWithdrawalSchedule",
+        ),
+        (
+            get_external_hedge_policy,
+            "get_external_hedge_policy",
+            ExternalHedgePolicyRequest(as_of_date="2026-05-03"),
+            "ExternalHedgePolicy",
+        ),
+        (
+            get_external_hedge_execution_readiness,
+            "get_external_hedge_execution_readiness",
+            ExternalHedgeExecutionReadinessRequest(as_of_date="2026-05-03"),
+            "ExternalHedgeExecutionReadiness",
+        ),
+        (
+            get_external_order_execution_acknowledgement,
+            "get_external_order_execution_acknowledgement",
+            ExternalOrderExecutionAcknowledgementRequest(as_of_date="2026-05-03"),
+            "ExternalOrderExecutionAcknowledgement",
+        ),
+        (
+            get_external_currency_exposure,
+            "get_external_currency_exposure",
+            ExternalCurrencyExposureRequest(as_of_date="2026-05-03"),
+            "ExternalCurrencyExposure",
+        ),
+        (
+            get_external_eligible_hedge_instruments,
+            "get_external_eligible_hedge_instruments",
+            ExternalEligibleHedgeInstrumentRequest(as_of_date="2026-05-03"),
+            "ExternalEligibleHedgeInstrument",
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_get_client_income_needs_schedule_router_raises_404_without_binding() -> None:
+async def test_mandate_scoped_source_routes_map_missing_binding_to_problem_details(
+    route_handler,
+    service_method: str,
+    route_request,
+    source_product: str,
+) -> None:
     mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_client_income_needs_schedule = AsyncMock(return_value=None)
-    request = ClientIncomeNeedsScheduleRequest(as_of_date="2026-05-03")
+    service_call = AsyncMock(return_value=None)
+    setattr(mock_service, service_method, service_call)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await get_client_income_needs_schedule(
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await route_handler(
             portfolio_id="PB_MISSING",
-            request=request,
+            request=route_request,
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_get_liquidity_reserve_requirement_router_raises_404_without_binding() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_liquidity_reserve_requirement = AsyncMock(return_value=None)
-    request = LiquidityReserveRequirementRequest(as_of_date="2026-05-03")
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_liquidity_reserve_requirement(
-            portfolio_id="PB_MISSING",
-            request=request,
-            integration_service=mock_service,
-        )
-
-    assert exc_info.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_get_planned_withdrawal_schedule_router_raises_404_without_binding() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_planned_withdrawal_schedule = AsyncMock(return_value=None)
-    request = PlannedWithdrawalScheduleRequest(as_of_date="2026-05-03")
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_planned_withdrawal_schedule(
-            portfolio_id="PB_MISSING",
-            request=request,
-            integration_service=mock_service,
-        )
-
-    assert exc_info.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_get_external_hedge_execution_readiness_router_raises_404_without_binding() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_external_hedge_execution_readiness = AsyncMock(return_value=None)
-    request = ExternalHedgeExecutionReadinessRequest(as_of_date="2026-05-03")
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_external_hedge_execution_readiness(
-            portfolio_id="PB_MISSING",
-            request=request,
-            integration_service=mock_service,
-        )
-
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
+        metadata={
+            "source_product": source_product,
+            "portfolio_id": "PB_MISSING",
+            "reason": "not_found",
+        },
+    )
+    service_call.assert_awaited_once_with(portfolio_id="PB_MISSING", request=route_request)
 
 
 @pytest.mark.asyncio
@@ -2065,24 +2110,6 @@ async def test_get_external_order_execution_acknowledgement_router_function() ->
 
 
 @pytest.mark.asyncio
-async def test_get_external_order_execution_acknowledgement_router_raises_404_without_binding() -> (
-    None
-):
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_external_order_execution_acknowledgement = AsyncMock(return_value=None)
-    request = ExternalOrderExecutionAcknowledgementRequest(as_of_date="2026-05-03")
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_external_order_execution_acknowledgement(
-            portfolio_id="PB_MISSING",
-            request=request,
-            integration_service=mock_service,
-        )
-
-    assert exc_info.value.status_code == 404
-
-
-@pytest.mark.asyncio
 async def test_get_external_hedge_policy_router_function() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_external_hedge_policy = AsyncMock(
@@ -2124,22 +2151,6 @@ async def test_get_external_hedge_policy_router_function() -> None:
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
     )
-
-
-@pytest.mark.asyncio
-async def test_get_external_hedge_policy_router_raises_404_without_binding() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_external_hedge_policy = AsyncMock(return_value=None)
-    request = ExternalHedgePolicyRequest(as_of_date="2026-05-03")
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_external_hedge_policy(
-            portfolio_id="PB_MISSING",
-            request=request,
-            integration_service=mock_service,
-        )
-
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -2187,22 +2198,6 @@ async def test_get_external_currency_exposure_router_function() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_external_currency_exposure_router_raises_404_without_binding() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_external_currency_exposure = AsyncMock(return_value=None)
-    request = ExternalCurrencyExposureRequest(as_of_date="2026-05-03")
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_external_currency_exposure(
-            portfolio_id="PB_MISSING",
-            request=request,
-            integration_service=mock_service,
-        )
-
-    assert exc_info.value.status_code == 404
-
-
-@pytest.mark.asyncio
 async def test_get_external_eligible_hedge_instruments_router_function() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_external_eligible_hedge_instruments = AsyncMock(
@@ -2246,22 +2241,6 @@ async def test_get_external_eligible_hedge_instruments_router_function() -> None
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
     )
-
-
-@pytest.mark.asyncio
-async def test_get_external_eligible_hedge_instruments_router_raises_404_without_binding() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_external_eligible_hedge_instruments = AsyncMock(return_value=None)
-    request = ExternalEligibleHedgeInstrumentRequest(as_of_date="2026-05-03")
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_external_eligible_hedge_instruments(
-            portfolio_id="PB_MISSING",
-            request=request,
-            integration_service=mock_service,
-        )
-
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio

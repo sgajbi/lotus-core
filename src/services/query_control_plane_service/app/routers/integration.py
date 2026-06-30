@@ -239,30 +239,71 @@ MANDATE_BINDING_NOT_FOUND_EXAMPLE = _integration_source_not_found_example(
     metadata={"portfolio_id": "PB_SG_GLOBAL_BAL_001", "reason": "not_found"},
     instance="/integration/portfolios/PB_SG_GLOBAL_BAL_001/mandate-binding",
 )
-CLIENT_RESTRICTION_PROFILE_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
-SUSTAINABILITY_PREFERENCE_PROFILE_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
-CLIENT_TAX_PROFILE_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
-CLIENT_TAX_RULE_SET_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
-CLIENT_INCOME_NEEDS_SCHEDULE_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
-LIQUIDITY_RESERVE_REQUIREMENT_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
-PLANNED_WITHDRAWAL_SCHEDULE_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
-EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective discretionary mandate binding found for portfolio and as_of_date."
-}
+
+
+def _mandate_scoped_source_not_found_example(
+    *,
+    source_product: str,
+    route_suffix: str,
+) -> dict[str, object]:
+    return _integration_source_not_found_example(
+        source_product=source_product,
+        detail=MANDATE_BINDING_NOT_FOUND_DETAIL,
+        metadata={"portfolio_id": "PB_SG_GLOBAL_BAL_001", "reason": "not_found"},
+        instance=f"/integration/portfolios/PB_SG_GLOBAL_BAL_001/{route_suffix}",
+    )
+
+
+CLIENT_RESTRICTION_PROFILE_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ClientRestrictionProfile",
+    route_suffix="client-restriction-profile",
+)
+SUSTAINABILITY_PREFERENCE_PROFILE_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="SustainabilityPreferenceProfile",
+    route_suffix="sustainability-preference-profile",
+)
+CLIENT_TAX_PROFILE_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ClientTaxProfile",
+    route_suffix="client-tax-profile",
+)
+CLIENT_TAX_RULE_SET_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ClientTaxRuleSet",
+    route_suffix="client-tax-rule-set",
+)
+CLIENT_INCOME_NEEDS_SCHEDULE_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ClientIncomeNeedsSchedule",
+    route_suffix="client-income-needs-schedule",
+)
+LIQUIDITY_RESERVE_REQUIREMENT_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="LiquidityReserveRequirement",
+    route_suffix="liquidity-reserve-requirement",
+)
+PLANNED_WITHDRAWAL_SCHEDULE_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="PlannedWithdrawalSchedule",
+    route_suffix="planned-withdrawal-schedule",
+)
+EXTERNAL_HEDGE_POLICY_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ExternalHedgePolicy",
+    route_suffix="external-hedge-policy",
+)
+EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ExternalHedgeExecutionReadiness",
+    route_suffix="external-hedge-execution-readiness",
+)
+EXTERNAL_ORDER_EXECUTION_ACKNOWLEDGEMENT_NOT_FOUND_EXAMPLE = (
+    _mandate_scoped_source_not_found_example(
+        source_product="ExternalOrderExecutionAcknowledgement",
+        route_suffix="external-order-execution-acknowledgement",
+    )
+)
+EXTERNAL_CURRENCY_EXPOSURE_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ExternalCurrencyExposure",
+    route_suffix="external-currency-exposure",
+)
+EXTERNAL_ELIGIBLE_HEDGE_INSTRUMENT_NOT_FOUND_EXAMPLE = _mandate_scoped_source_not_found_example(
+    source_product="ExternalEligibleHedgeInstrument",
+    route_suffix="external-eligible-hedge-instruments",
+)
 PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = problem_example(
     status_code=status.HTTP_404_NOT_FOUND,
     title="Portfolio source evidence not found",
@@ -336,6 +377,18 @@ def _raise_integration_source_not_found(
         detail=detail,
         error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
         metadata={"source_product": source_product, **(metadata or {})},
+    )
+
+
+def _raise_mandate_scoped_source_not_found(
+    *,
+    source_product: str,
+    portfolio_id: str,
+) -> NoReturn:
+    _raise_integration_source_not_found(
+        source_product=source_product,
+        detail=MANDATE_BINDING_NOT_FOUND_DETAIL,
+        metadata={"portfolio_id": portfolio_id, "reason": "not_found"},
     )
 
 
@@ -1348,11 +1401,9 @@ async def get_client_restriction_profile(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ClientRestrictionProfile",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1396,11 +1447,9 @@ async def get_sustainability_preference_profile(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="SustainabilityPreferenceProfile",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1444,11 +1493,9 @@ async def get_client_tax_profile(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ClientTaxProfile",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1491,11 +1538,9 @@ async def get_client_tax_rule_set(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ClientTaxRuleSet",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1540,11 +1585,9 @@ async def get_client_income_needs_schedule(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ClientIncomeNeedsSchedule",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1589,11 +1632,9 @@ async def get_liquidity_reserve_requirement(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="LiquidityReserveRequirement",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1637,11 +1678,9 @@ async def get_planned_withdrawal_schedule(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="PlannedWithdrawalSchedule",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1652,7 +1691,7 @@ async def get_planned_withdrawal_schedule(
     responses={
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
-            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+            EXTERNAL_HEDGE_POLICY_NOT_FOUND_EXAMPLE,
         ),
     },
     summary="Resolve external treasury hedge policy posture",
@@ -1687,11 +1726,9 @@ async def get_external_hedge_policy(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ExternalHedgePolicy",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1736,11 +1773,9 @@ async def get_external_hedge_execution_readiness(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ExternalHedgeExecutionReadiness",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1751,7 +1786,7 @@ async def get_external_hedge_execution_readiness(
     responses={
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
-            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+            EXTERNAL_ORDER_EXECUTION_ACKNOWLEDGEMENT_NOT_FOUND_EXAMPLE,
         ),
     },
     summary="Resolve external OMS order execution acknowledgement posture",
@@ -1787,11 +1822,9 @@ async def get_external_order_execution_acknowledgement(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ExternalOrderExecutionAcknowledgement",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1802,7 +1835,7 @@ async def get_external_order_execution_acknowledgement(
     responses={
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
-            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+            EXTERNAL_CURRENCY_EXPOSURE_NOT_FOUND_EXAMPLE,
         ),
     },
     summary="Resolve external treasury currency exposure posture",
@@ -1837,11 +1870,9 @@ async def get_external_currency_exposure(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ExternalCurrencyExposure",
+            portfolio_id=portfolio_id,
         )
     return response
 
@@ -1852,7 +1883,7 @@ async def get_external_currency_exposure(
     responses={
         status.HTTP_404_NOT_FOUND: problem_response(
             "No effective discretionary mandate binding found.",
-            EXTERNAL_HEDGE_EXECUTION_READINESS_NOT_FOUND_EXAMPLE,
+            EXTERNAL_ELIGIBLE_HEDGE_INSTRUMENT_NOT_FOUND_EXAMPLE,
         ),
     },
     summary="Resolve external treasury eligible hedge instrument posture",
@@ -1889,11 +1920,9 @@ async def get_external_eligible_hedge_instruments(
         ),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No effective discretionary mandate binding found for portfolio and as_of_date."
-            ),
+        _raise_mandate_scoped_source_not_found(
+            source_product="ExternalEligibleHedgeInstrument",
+            portfolio_id=portfolio_id,
         )
     return response
 
