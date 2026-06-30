@@ -1,9 +1,11 @@
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.services.event_replay_service.app.routers.ingestion_operations import (
+    _consumer_dlq_replay_candidate_or_response,
     _filter_payload_by_record_keys,
     _replay_job_payload,
 )
@@ -129,3 +131,87 @@ async def test_replay_job_payload_rejects_unsupported_endpoint() -> None:
             ingestion_service=MagicMock(),
             kafka_producer=MagicMock(),
         )
+
+
+@pytest.mark.asyncio
+async def test_consumer_dlq_replay_candidate_records_no_correlated_job_response() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.list_jobs = AsyncMock(return_value=([], 0))
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-001")
+
+    response = await _consumer_dlq_replay_candidate_or_response(
+        event_id="dlq-001",
+        correlation_id="corr-001",
+        dry_run=True,
+        ingestion_job_service=ingestion_job_service,
+        requested_by="ops",
+    )
+
+    assert response.replay_status == "not_replayable"
+    assert response.job_id is None
+    assert response.message == "No correlated ingestion job found for consumer DLQ event."
+    ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_consumer_dlq_replay_candidate_records_missing_payload_response() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.list_jobs = AsyncMock(
+        return_value=([{"job_id": "job-001", "correlation_id": "corr-001", "status": "failed"}], 1)
+    )
+    ingestion_job_service.get_job_replay_context = AsyncMock(
+        return_value=SimpleNamespace(
+            endpoint="/ingest/transactions",
+            request_payload=None,
+            idempotency_key="idem-001",
+        )
+    )
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-002")
+
+    response = await _consumer_dlq_replay_candidate_or_response(
+        event_id="dlq-001",
+        correlation_id="corr-001",
+        dry_run=False,
+        ingestion_job_service=ingestion_job_service,
+        requested_by="ops",
+    )
+
+    assert response.replay_status == "not_replayable"
+    assert response.job_id == "job-001"
+    assert response.message == "Correlated ingestion job does not have durable replay payload."
+    ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_consumer_dlq_replay_candidate_returns_replayable_context() -> None:
+    context = SimpleNamespace(
+        endpoint="/ingest/transactions",
+        request_payload={"transactions": [{"transaction_id": "T1"}]},
+        idempotency_key="idem-001",
+    )
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.list_jobs = AsyncMock(
+        return_value=(
+            [SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="queued")],
+            1,
+        )
+    )
+    ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock()
+
+    (
+        replay_job_id,
+        replay_context,
+        replay_fingerprint,
+    ) = await _consumer_dlq_replay_candidate_or_response(
+        event_id="dlq-001",
+        correlation_id="corr-001",
+        dry_run=False,
+        ingestion_job_service=ingestion_job_service,
+        requested_by="ops",
+    )
+
+    assert replay_job_id == "job-001"
+    assert replay_context is context
+    assert len(replay_fingerprint) == 64
+    ingestion_job_service.record_consumer_dlq_replay_audit.assert_not_awaited()

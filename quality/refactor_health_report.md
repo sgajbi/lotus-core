@@ -30,13 +30,12 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1167 makes partial progress on GitHub issue #446 by reducing event replay ingestion operations
-route complexity around replay payload publish dispatch. `_replay_job_payload(...)` now delegates to
-a declarative endpoint publisher table while preserving request DTO validation, idempotency-key
-propagation, whole-model portfolio-bundle publishing, and unsupported endpoint errors. Focused
-ingestion operations tests pass with 10 tests, event replay app integration/OpenAPI tests pass with
-10 tests, `_replay_job_payload(...)` is reduced from `B (9)` to `A (2)`, and issue #446 remains
-open for further DLQ/retry/operator-response extraction.
+CR-1168 continues GitHub issue #446 by reducing consumer-DLQ replay candidate selection complexity.
+`_consumer_dlq_replay_candidate_or_response(...)` now delegates replay job id extraction,
+deterministic fingerprint construction, and missing-payload response recording to focused helpers.
+Focused ingestion operations tests pass with 13 tests, event replay app integration/OpenAPI tests
+pass with 10 tests, `_consumer_dlq_replay_candidate_or_response(...)` is reduced from `B (8)` to
+`A (4)`, and issue #446 remains open for further retry payload and operator response extraction.
 
 ## Health Assessment
 
@@ -1947,3 +1946,9 @@ health before that claim is defensible.
      tests passed with 10 tests; event replay app integration/OpenAPI tests passed with 10 tests;
      scoped Ruff lint and format checks passed; complexity and maintainability gates passed; Radon
      reports `_replay_job_payload` reduced from `B (9)` to `A (2)`.
+319. Continued GitHub issue #446 by reducing consumer-DLQ replay candidate selection complexity.
+     Extracted replay job id, deterministic fingerprint construction, and missing-payload
+     not-replayable response helpers from `_consumer_dlq_replay_candidate_or_response(...)`.
+     Focused ingestion operations tests passed with 13 tests; event replay app integration/OpenAPI
+     tests passed with 10 tests; scoped Ruff lint and format checks passed; complexity and
+     maintainability gates passed; Radon reports the helper reduced from `B (8)` to `A (4)`.
