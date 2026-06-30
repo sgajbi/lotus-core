@@ -55,6 +55,13 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
         ),
         forbidden_module_prefixes=("portfolio_common.kafka_utils",),
     ),
+    DirectImportBoundaryRule(
+        name="financial reconciliation service must use runtime provider ports",
+        source_path_prefixes=(
+            "src/services/financial_reconciliation_service/app/services/reconciliation_service.py",
+        ),
+        forbidden_module_prefixes=("time", "uuid"),
+    ),
 )
 
 

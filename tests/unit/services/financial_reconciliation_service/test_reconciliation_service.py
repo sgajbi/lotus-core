@@ -11,6 +11,22 @@ from src.services.financial_reconciliation_service.app.services.reconciliation_s
 )
 
 
+class FakeMonotonicTimer:
+    def __init__(self, readings: list[float]):
+        self._readings = list(readings)
+
+    def seconds(self) -> float:
+        return self._readings.pop(0)
+
+
+class FakeIdGenerator:
+    def __init__(self, ids: list[str]):
+        self._ids = list(ids)
+
+    def hex(self) -> str:
+        return self._ids.pop(0)
+
+
 @pytest.mark.asyncio
 async def test_run_transaction_cashflow_records_missing_cashflow_finding():
     run = SimpleNamespace(run_id="recon-1")
@@ -50,6 +66,48 @@ async def test_run_transaction_cashflow_records_missing_cashflow_finding():
     assert summary["error_count"] == 1
     observe_metric.assert_called_once()
     assert observe_metric.call_args.args[:2] == ("transaction_cashflow", "COMPLETED")
+
+
+@pytest.mark.asyncio
+async def test_run_transaction_cashflow_uses_injected_timer_and_id_generator():
+    run = SimpleNamespace(run_id="recon-deterministic")
+    transaction = SimpleNamespace(
+        portfolio_id="PORT-DETERMINISTIC",
+        security_id="SEC-DETERMINISTIC",
+        transaction_id="TXN-DETERMINISTIC",
+        transaction_date=datetime(2026, 3, 8, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        cash_entry_mode="AUTO_GENERATE",
+    )
+    rule = SimpleNamespace(
+        classification="EXTERNAL",
+        timing="SETTLEMENT",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_transaction_cashflow_rows.return_value = [(transaction, rule, None)]
+
+    service = ReconciliationService(
+        repository,
+        monotonic_timer=FakeMonotonicTimer([100.25, 103.75]),
+        id_generator=FakeIdGenerator(["abc123"]),
+    )
+    with patch(
+        "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
+    ) as observe_metric:
+        await service.run_transaction_cashflow(
+            request=ReconciliationRunRequest(
+                portfolio_id="PORT-DETERMINISTIC",
+                business_date=date(2026, 3, 8),
+            ),
+            correlation_id="corr-deterministic",
+        )
+
+    findings = repository.add_findings.await_args.args[0]
+    assert findings[0].finding_id == "finding-abc123"
+    assert observe_metric.call_args.args[2] == 3.5
 
 
 @pytest.mark.asyncio

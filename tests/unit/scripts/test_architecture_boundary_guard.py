@@ -150,3 +150,49 @@ def test_direct_import_boundary_flags_valuation_scheduler_kafka_import(
         "valuation scheduler must not import concrete Kafka utilities: "
         "disallowed direct import 'portfolio_common.kafka_utils'"
     ]
+
+
+def test_direct_import_boundary_flags_reconciliation_runtime_provider_bypass(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = tmp_path
+    service = (
+        repo_root
+        / "src"
+        / "services"
+        / "financial_reconciliation_service"
+        / "app"
+        / "services"
+        / "reconciliation_service.py"
+    )
+    service.parent.mkdir(parents=True)
+    service.write_text(
+        "from time import perf_counter\nfrom uuid import uuid4\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+
+    findings = _scan_for_disallowed_imports(
+        [service],
+        rules=(
+            DirectImportBoundaryRule(
+                name="financial reconciliation service must use runtime provider ports",
+                source_path_prefixes=(
+                    "src/services/financial_reconciliation_service/app/services/"
+                    "reconciliation_service.py",
+                ),
+                forbidden_module_prefixes=("time", "uuid"),
+            ),
+        ),
+    )
+
+    assert findings == [
+        "src/services/financial_reconciliation_service/app/services/"
+        "reconciliation_service.py:1: "
+        "financial reconciliation service must use runtime provider ports: "
+        "disallowed direct import 'time'",
+        "src/services/financial_reconciliation_service/app/services/"
+        "reconciliation_service.py:2: "
+        "financial reconciliation service must use runtime provider ports: "
+        "disallowed direct import 'uuid'",
+    ]
