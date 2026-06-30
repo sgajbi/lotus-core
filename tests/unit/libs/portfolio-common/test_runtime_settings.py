@@ -40,6 +40,22 @@ def test_runtime_settings_explicit_strict_flag_rejects_out_of_range_int(monkeypa
         env_int("LOTUS_TEST_INT", 10, service_name="unit service", minimum=1)
 
 
+def test_runtime_settings_local_minimum_fallback_can_preserve_clamp_behavior(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("LOTUS_TEST_INT", "0")
+
+    assert (
+        env_int(
+            "LOTUS_TEST_INT",
+            10,
+            service_name="unit service",
+            minimum=1,
+            minimum_fallback=1,
+        )
+        == 1
+    )
+
+
 def test_runtime_settings_strict_profile_rejects_invalid_json(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "prod")
     monkeypatch.setenv("LOTUS_TEST_JSON", "not-json")

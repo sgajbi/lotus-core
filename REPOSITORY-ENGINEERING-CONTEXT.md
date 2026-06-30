@@ -135,9 +135,10 @@ Current repository posture:
     `LOTUS_CORE_STRICT_CONFIG_VALIDATION=true` or non-local `ENVIRONMENT` is active; local profiles
     retain explicit warning-backed fallback. Query-service and query-control-plane settings use the
     shared `portfolio_common.runtime_settings` strict/local parser for bool, int, string, and JSON
-    object settings while preserving their public helper wrappers. `make monetary-float-guard` uses
-    token-aware money-like matching and currently has zero active findings and zero allowlisted
-    suppressions.
+    object settings while preserving their public helper wrappers. Common outbox and valuation
+    runtime settings also use the shared parser while preserving existing local fallback and clamp
+    semantics. `make monetary-float-guard` uses token-aware money-like matching and currently has
+    zero active findings and zero allowlisted suppressions.
 
 ## Architecture And Module Map
 

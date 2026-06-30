@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import logging
-import os
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+from portfolio_common.runtime_settings import RuntimeConfigurationError
+from portfolio_common.runtime_settings import env_int as shared_env_int
+
+OUTBOX_RUNTIME_SERVICE_NAME = "outbox runtime"
 
 
 def _normalize_positive_default(default: int) -> int:
@@ -23,46 +24,22 @@ def _normalize_non_negative_default(default: int) -> int:
 
 def _env_positive_int(name: str, default: int) -> int:
     safe_default = _normalize_positive_default(default)
-    raw = os.getenv(name)
-    if raw is None:
-        return safe_default
-    try:
-        value = int(raw)
-    except Exception:
-        logger.warning(
-            "Invalid outbox runtime setting; falling back to default.",
-            extra={"setting": name, "raw_value": raw, "default": safe_default},
-        )
-        return safe_default
-    if value <= 0:
-        logger.warning(
-            "Non-positive outbox runtime setting; falling back to default.",
-            extra={"setting": name, "raw_value": raw, "default": safe_default},
-        )
-        return safe_default
-    return value
+    return shared_env_int(
+        name,
+        safe_default,
+        service_name=OUTBOX_RUNTIME_SERVICE_NAME,
+        minimum=1,
+    )
 
 
 def _env_non_negative_int(name: str, default: int) -> int:
     safe_default = _normalize_non_negative_default(default)
-    raw = os.getenv(name)
-    if raw is None:
-        return safe_default
-    try:
-        value = int(raw)
-    except Exception:
-        logger.warning(
-            "Invalid outbox runtime setting; falling back to default.",
-            extra={"setting": name, "raw_value": raw, "default": safe_default},
-        )
-        return safe_default
-    if value < 0:
-        logger.warning(
-            "Negative outbox runtime setting; falling back to default.",
-            extra={"setting": name, "raw_value": raw, "default": safe_default},
-        )
-        return safe_default
-    return value
+    return shared_env_int(
+        name,
+        safe_default,
+        service_name=OUTBOX_RUNTIME_SERVICE_NAME,
+        minimum=0,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +50,9 @@ class OutboxRuntimeSettings:
     retry_initial_delay_seconds: int
     retry_max_delay_seconds: int
     retry_jitter_seconds: int
+
+
+OutboxRuntimeConfigurationError = RuntimeConfigurationError
 
 
 def get_outbox_runtime_settings(

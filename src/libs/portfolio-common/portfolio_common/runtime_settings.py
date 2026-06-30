@@ -52,6 +52,7 @@ def env_int(
     service_name: str,
     minimum: int | None = None,
     maximum: int | None = None,
+    minimum_fallback: int | None = None,
 ) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -73,7 +74,7 @@ def env_int(
             invalid_env_setting(
                 name=name,
                 raw=raw,
-                default=default,
+                default=default if minimum_fallback is None else minimum_fallback,
                 reason=f"expected value >= {minimum}",
                 service_name=service_name,
             )
