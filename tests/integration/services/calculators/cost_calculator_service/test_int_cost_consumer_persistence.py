@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import (
+    Instrument,
     OutboxEvent,
     Portfolio,
     PositionLotState,
@@ -125,6 +126,16 @@ async def test_buy_then_sell_processing_reconciles_open_lot_quantity(
             client_id="CLIENT-COST-INT-LOT-01",
             is_leverage_allowed=False,
             status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        Instrument(
+            security_id="FO_EQ_AAPL_US",
+            name="Apple Inc.",
+            isin="US0378331005",
+            currency="USD",
+            product_type="EQUITY",
+            asset_class="Equity",
         )
     )
     async_db_session.add_all(
