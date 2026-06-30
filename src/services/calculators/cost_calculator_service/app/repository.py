@@ -116,6 +116,7 @@ def _transaction_event_payload(event: TransactionEvent) -> dict[str, Any]:
         and field not in TRANSACTION_EVENT_PERSISTENCE_EXCLUDE_FIELDS
     }
 
+
 FEE_COMPONENT_FIELDS = (
     "brokerage",
     "stamp_duty",
