@@ -32,6 +32,7 @@ tested modules.
 | Ingestion idempotency | Improving | CR-1177 compares source-safe canonical payload fingerprints for duplicate ingestion idempotency keys and returns deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT` when the same endpoint/key is reused with a different payload |
 | Reference-data ingestion unit of work | Improving | CR-1185 removes commit ownership from the low-level reference-data upsert staging helper, preserves existing single-table commit behavior through an explicit wrapper, and adds source-batch commit/rollback orchestration |
 | Outbox retry eligibility | Improving | CR-1186 adds durable `next_attempt_at` retry eligibility, bounded exponential outbox retry scheduling, and claim filtering so retryable publish failures are not immediately reselected before their retry window matures |
+| Outbox failure evidence | Improving | CR-1187 persists source-safe last-failure reason code, category, redacted bounded message, and failure timestamp on retryable and terminal outbox delivery failures |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 | Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
@@ -39,11 +40,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1186 begins validated GitHub issue #669 by adding durable outbox retry eligibility. Retryable
-publish failures now persist `next_attempt_at`, the dispatcher claims only pending rows with matured
-eligibility, and existing pending rows with no schedule remain immediately eligible for compatibility.
-Local Docker was unavailable, so DB-backed integration proof must come from GitHub CI or a Docker
-environment before closure.
+CR-1187 begins validated GitHub issue #670 by adding durable source-safe outbox failure evidence.
+Retryable and terminal delivery failures now persist reason code, category, redacted bounded message,
+and failure timestamp on the outbox row, while successful delivery clears stale failure metadata.
+Protected diagnostics and governed requeue controls remain follow-up work.
 
 ## Health Assessment
 

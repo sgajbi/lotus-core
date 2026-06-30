@@ -385,12 +385,20 @@ def test_dispatcher_marks_terminal_failures_as_failed(db_engine, clean_db):
     dispatcher._process_batch_sync()
 
     with TestSessionFactory() as session:
-        status, retry_count = session.execute(
-            text("SELECT status, retry_count FROM outbox_events WHERE aggregate_id = :id"),
+        status, retry_count, reason_code, category, message, failed_at = session.execute(
+            text(
+                "SELECT status, retry_count, last_failure_reason_code, "
+                "last_failure_category, last_failure_message, last_failure_at "
+                "FROM outbox_events WHERE aggregate_id = :id"
+            ),
             {"id": aggregate_id},
         ).one()
         assert status == "FAILED"
         assert retry_count == 3
+        assert reason_code == "kafka_delivery_failed"
+        assert category == "event_publish_delivery"
+        assert message == "terminal failure"
+        assert failed_at is not None
 
 
 def test_dispatcher_respects_configured_terminal_retry_ceiling(db_engine, clean_db):
@@ -435,12 +443,20 @@ def test_dispatcher_respects_configured_terminal_retry_ceiling(db_engine, clean_
     dispatcher._process_batch_sync()
 
     with TestSessionFactory() as session:
-        status, retry_count = session.execute(
-            text("SELECT status, retry_count FROM outbox_events WHERE aggregate_id = :id"),
+        status, retry_count, reason_code, category, message, failed_at = session.execute(
+            text(
+                "SELECT status, retry_count, last_failure_reason_code, "
+                "last_failure_category, last_failure_message, last_failure_at "
+                "FROM outbox_events WHERE aggregate_id = :id"
+            ),
             {"id": aggregate_id},
         ).one()
         assert status == "FAILED"
         assert retry_count == 2
+        assert reason_code == "kafka_delivery_failed"
+        assert category == "event_publish_delivery"
+        assert message == "terminal failure"
+        assert failed_at is not None
 
 
 def test_dispatcher_reads_pending_failed_and_oldest_age_gauges(db_engine, clean_db, monkeypatch):

@@ -1817,6 +1817,10 @@ class OutboxEvent(Base):
     retry_count = Column(Integer, default=0, nullable=False)
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
     next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    last_failure_reason_code = Column(String, nullable=True)
+    last_failure_category = Column(String, nullable=True)
+    last_failure_message = Column(String, nullable=True)
+    last_failure_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
@@ -1835,6 +1839,11 @@ class OutboxEvent(Base):
             "status",
             "next_attempt_at",
             "created_at",
+        ),
+        Index(
+            "ix_outbox_events_status_last_failure_at",
+            "status",
+            "last_failure_at",
         ),
     )
 
