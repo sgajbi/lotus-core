@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
+IngestionRateLimitEnforcementScope = Literal[
+    "local_process",
+    "upstream_gateway",
+    "local_process_with_upstream_gateway",
+]
+
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -66,6 +72,8 @@ class IngestionRateLimitSettings:
     window_seconds: int
     max_requests: int
     max_records: int
+    enforcement_scope: IngestionRateLimitEnforcementScope
+    gateway_policy_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +156,18 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
         auth_mode = raw_auth_mode
     else:
         auth_mode = "token_or_jwt"
+    raw_rate_limit_scope = _env_str(
+        "LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE", "local_process"
+    )
+    rate_limit_scope: IngestionRateLimitEnforcementScope
+    if raw_rate_limit_scope in {
+        "local_process",
+        "upstream_gateway",
+        "local_process_with_upstream_gateway",
+    }:
+        rate_limit_scope = raw_rate_limit_scope
+    else:
+        rate_limit_scope = "local_process"
 
     return IngestionServiceSettings(
         adapter_mode=IngestionAdapterModeSettings(
@@ -168,6 +188,8 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             window_seconds=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS", 60),
             max_requests=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS", 120),
             max_records=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_RECORDS", 10000),
+            enforcement_scope=rate_limit_scope,
+            gateway_policy_id=_env_str("LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID", ""),
         ),
         runtime_policy=IngestionRuntimePolicySettings(
             replay_max_records_per_request=_env_int(

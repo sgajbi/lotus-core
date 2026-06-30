@@ -4,14 +4,18 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
+from prometheus_client import Counter
 
 from .settings import get_ingestion_service_settings
+
+logger = logging.getLogger(__name__)
 
 _SETTINGS = get_ingestion_service_settings()
 
@@ -27,6 +31,17 @@ RATE_LIMIT_ENABLED = _SETTINGS.rate_limit.enabled
 RATE_LIMIT_WINDOW_SECONDS = _SETTINGS.rate_limit.window_seconds
 RATE_LIMIT_MAX_REQUESTS = _SETTINGS.rate_limit.max_requests
 RATE_LIMIT_MAX_RECORDS = _SETTINGS.rate_limit.max_records
+RATE_LIMIT_ENFORCEMENT_SCOPE = _SETTINGS.rate_limit.enforcement_scope
+RATE_LIMIT_GATEWAY_POLICY_ID = _SETTINGS.rate_limit.gateway_policy_id
+
+_LOCAL_RATE_LIMIT_SCOPES = {"local_process", "local_process_with_upstream_gateway"}
+_GATEWAY_RATE_LIMIT_SCOPES = {"upstream_gateway", "local_process_with_upstream_gateway"}
+
+INGESTION_WRITE_RATE_LIMIT_DENIALS_TOTAL = Counter(
+    "ingestion_write_rate_limit_denials_total",
+    "Ingestion write requests denied by the configured rate-limit policy.",
+    ("endpoint", "reason", "enforcement_scope"),
+)
 
 
 @dataclass(slots=True)
@@ -64,9 +79,21 @@ def _rate_limit_exceeded(*, projected_requests: int, projected_records: int) -> 
     )
 
 
-def _rate_limit_error_message() -> str:
+def _rate_limit_denial_reason(*, projected_requests: int, projected_records: int) -> str:
+    request_budget_exceeded = projected_requests > RATE_LIMIT_MAX_REQUESTS
+    record_budget_exceeded = projected_records > RATE_LIMIT_MAX_RECORDS
+    if request_budget_exceeded and record_budget_exceeded:
+        return "request_and_record_budget"
+    if request_budget_exceeded:
+        return "request_budget"
+    return "record_budget"
+
+
+def _rate_limit_error_message(*, reason: str) -> str:
     return (
         "Ingestion write rate limit exceeded. "
+        f"reason={reason}, "
+        f"enforcement_scope={RATE_LIMIT_ENFORCEMENT_SCOPE}, "
         f"window_seconds={RATE_LIMIT_WINDOW_SECONDS}, "
         f"max_requests={RATE_LIMIT_MAX_REQUESTS}, "
         f"max_records={RATE_LIMIT_MAX_RECORDS}."
@@ -82,8 +109,58 @@ def _record_write_event(
     events.append(_WriteEvent(observed_at=now_utc, record_count=record_count))
 
 
+def _uses_local_rate_limit_store() -> bool:
+    return RATE_LIMIT_ENFORCEMENT_SCOPE in _LOCAL_RATE_LIMIT_SCOPES
+
+
+def _requires_gateway_rate_limit_policy() -> bool:
+    return RATE_LIMIT_ENABLED and RATE_LIMIT_ENFORCEMENT_SCOPE in _GATEWAY_RATE_LIMIT_SCOPES
+
+
+def validate_ingestion_write_rate_limit_contract() -> None:
+    if _requires_gateway_rate_limit_policy() and not RATE_LIMIT_GATEWAY_POLICY_ID.strip():
+        raise RuntimeError(
+            "Ingestion write rate limiting is configured for upstream gateway enforcement but "
+            "LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID is not set."
+        )
+
+
+def ingestion_write_rate_limit_contract() -> dict[str, object]:
+    return {
+        "enabled": RATE_LIMIT_ENABLED,
+        "enforcement_scope": RATE_LIMIT_ENFORCEMENT_SCOPE,
+        "global_enforcement_claimed": RATE_LIMIT_ENFORCEMENT_SCOPE in _GATEWAY_RATE_LIMIT_SCOPES,
+        "local_process_enforcement": _uses_local_rate_limit_store(),
+        "gateway_policy_id": RATE_LIMIT_GATEWAY_POLICY_ID or None,
+        "window_seconds": RATE_LIMIT_WINDOW_SECONDS,
+        "max_requests": RATE_LIMIT_MAX_REQUESTS,
+        "max_records": RATE_LIMIT_MAX_RECORDS,
+    }
+
+
+def _record_rate_limit_denial(*, endpoint: str, reason: str) -> None:
+    INGESTION_WRITE_RATE_LIMIT_DENIALS_TOTAL.labels(
+        endpoint=endpoint,
+        reason=reason,
+        enforcement_scope=RATE_LIMIT_ENFORCEMENT_SCOPE,
+    ).inc()
+    logger.warning(
+        "Ingestion write rate limit denied request.",
+        extra={
+            "endpoint": endpoint,
+            "reason": reason,
+            "enforcement_scope": RATE_LIMIT_ENFORCEMENT_SCOPE,
+            "window_seconds": RATE_LIMIT_WINDOW_SECONDS,
+            "max_requests": RATE_LIMIT_MAX_REQUESTS,
+            "max_records": RATE_LIMIT_MAX_RECORDS,
+        },
+    )
+
+
 def enforce_ingestion_write_rate_limit(*, endpoint: str, record_count: int) -> None:
     if not RATE_LIMIT_ENABLED:
+        return
+    if not _uses_local_rate_limit_store():
         return
 
     record_count = _normalized_record_count(record_count)
@@ -99,7 +176,12 @@ def enforce_ingestion_write_rate_limit(*, endpoint: str, record_count: int) -> N
             projected_requests=projected_requests,
             projected_records=projected_records,
         ):
-            raise PermissionError(_rate_limit_error_message())
+            reason = _rate_limit_denial_reason(
+                projected_requests=projected_requests,
+                projected_records=projected_records,
+            )
+            _record_rate_limit_denial(endpoint=endpoint, reason=reason)
+            raise PermissionError(_rate_limit_error_message(reason=reason))
         _record_write_event(events=events, now_utc=now_utc, record_count=record_count)
 
 

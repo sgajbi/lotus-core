@@ -14,6 +14,8 @@ def test_load_ingestion_service_settings_defaults(monkeypatch):
     assert settings.runtime_policy.default_failure_rate_threshold == Decimal("0.03")
     assert settings.runtime_policy.calculator_peak_lag_age_seconds["position"] == 30
     assert settings.ops_auth.auth_mode == "token_or_jwt"
+    assert settings.rate_limit.enforcement_scope == "local_process"
+    assert settings.rate_limit.gateway_policy_id == ""
 
 
 def test_load_ingestion_service_settings_invalid_json_falls_back(monkeypatch):
@@ -32,6 +34,11 @@ def test_load_ingestion_service_settings_invalid_json_falls_back(monkeypatch):
 
 def test_load_ingestion_service_settings_coerces_env_values(monkeypatch):
     monkeypatch.setenv("LOTUS_CORE_INGEST_OPS_AUTH_MODE", "jwt_only")
+    monkeypatch.setenv(
+        "LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE",
+        "local_process_with_upstream_gateway",
+    )
+    monkeypatch.setenv("LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID", "kong-ingest-write-v1")
     monkeypatch.setenv("LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD", "0.125")
     monkeypatch.setenv("LOTUS_CORE_OPERATING_BAND_RED_DLQ_PRESSURE_RATIO", "2.5")
     monkeypatch.setenv(
@@ -42,6 +49,8 @@ def test_load_ingestion_service_settings_coerces_env_values(monkeypatch):
     settings = load_ingestion_service_settings()
 
     assert settings.ops_auth.auth_mode == "jwt_only"
+    assert settings.rate_limit.enforcement_scope == "local_process_with_upstream_gateway"
+    assert settings.rate_limit.gateway_policy_id == "kong-ingest-write-v1"
     assert settings.runtime_policy.default_failure_rate_threshold == Decimal("0.125")
     assert settings.runtime_policy.operating_band.red_dlq_pressure_ratio == Decimal("2.5")
     assert settings.runtime_policy.calculator_peak_lag_age_seconds["position"] == 99
@@ -56,3 +65,11 @@ def test_load_ingestion_service_settings_adapter_mode_flags(monkeypatch):
 
     assert settings.adapter_mode.portfolio_bundle_enabled is False
     assert settings.adapter_mode.upload_apis_enabled is False
+
+
+def test_load_ingestion_service_settings_invalid_rate_limit_scope_falls_back(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE", "global_magic")
+
+    settings = load_ingestion_service_settings()
+
+    assert settings.rate_limit.enforcement_scope == "local_process"

@@ -9,6 +9,10 @@ from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.logging_utils import generate_correlation_id, setup_logging
 from starlette.responses import JSONResponse
 
+from .ops_controls import (
+    ingestion_write_rate_limit_contract,
+    validate_ingestion_write_rate_limit_contract,
+)
 from .routers import (
     business_dates,
     fx_rates,
@@ -34,6 +38,11 @@ app_state = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Ingestion Service starting up...")
+    validate_ingestion_write_rate_limit_contract()
+    logger.info(
+        "Ingestion write rate-limit contract loaded.",
+        extra=ingestion_write_rate_limit_contract(),
+    )
     try:
         app_state["kafka_producer"] = get_kafka_producer()
         logger.info("Kafka producer initialized successfully.")
