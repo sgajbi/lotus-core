@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 
 from .settings import get_ingestion_service_settings
 
@@ -37,7 +37,25 @@ RATE_LIMIT_GATEWAY_POLICY_ID = _SETTINGS.rate_limit.gateway_policy_id
 _LOCAL_RATE_LIMIT_SCOPES = {"local_process", "local_process_with_upstream_gateway"}
 _GATEWAY_RATE_LIMIT_SCOPES = {"upstream_gateway", "local_process_with_upstream_gateway"}
 
-INGESTION_WRITE_RATE_LIMIT_DENIALS_TOTAL = Counter(
+
+def _get_or_create_counter(
+    name: str,
+    documentation: str,
+    labelnames: tuple[str, ...],
+):
+    try:
+        return Counter(name, documentation, labelnames)
+    except ValueError:
+        names_to_collectors = getattr(REGISTRY, "_names_to_collectors", {})
+        existing = names_to_collectors.get(name)
+        if existing is None and name.endswith("_total"):
+            existing = names_to_collectors.get(name.removesuffix("_total"))
+        if existing is None:
+            raise
+        return existing
+
+
+INGESTION_WRITE_RATE_LIMIT_DENIALS_TOTAL = _get_or_create_counter(
     "ingestion_write_rate_limit_denials_total",
     "Ingestion write requests denied by the configured rate-limit policy.",
     ("endpoint", "reason", "enforcement_scope"),

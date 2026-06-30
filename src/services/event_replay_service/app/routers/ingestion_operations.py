@@ -324,6 +324,8 @@ CONSUMER_DLQ_EVENT_LIST_RESPONSE_EXAMPLE = {
             "error_reason_code": "VALIDATION_ERROR",
             "error_reason": "ValidationError: portfolio_id is required",
             "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
             "payload_excerpt": '{"transaction_id":"TXN-2026-000145"}',
             "observed_at": "2026-03-06T09:11:05.812Z",
         },
@@ -336,6 +338,8 @@ CONSUMER_DLQ_EVENT_LIST_RESPONSE_EXAMPLE = {
             "error_reason_code": "DEPENDENCY_TIMEOUT",
             "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
             "correlation_id": "ING:e59dd219-3902-4f38-8f8d-7c6cb1456672",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
             "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
             "observed_at": "2026-03-06T09:15:42.114Z",
         },
@@ -368,6 +372,8 @@ CONSUMER_DLQ_REPLAY_REQUEST_EXAMPLES = {
 CONSUMER_DLQ_REPLAY_RESPONSE_EXAMPLE = {
     "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
     "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+    "correlation_missing_reason": None,
+    "alternate_lookup_key": None,
     "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
     "replay_status": "replayed",
     "replay_audit_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
@@ -381,6 +387,8 @@ INGESTION_REPLAY_AUDIT_RESPONSE_EXAMPLE = {
     "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
     "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
     "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+    "correlation_missing_reason": None,
+    "alternate_lookup_key": None,
     "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
     "endpoint": "/ingest/transactions",
     "replay_status": "replayed",
@@ -402,6 +410,8 @@ INGESTION_REPLAY_AUDIT_LIST_RESPONSE_EXAMPLE = {
                 "8d9d2ddf66ef6a5c5f0fbd7654a7de0b7f7982393e0d3b599d4fa32e84793d09"
             ),
             "correlation_id": "ING:e59dd219-3902-4f38-8f8d-7c6cb1456672",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
             "job_id": "job_01J5S0M3BVX8M5A4SK13Q20D8D",
             "endpoint": "/ingest/portfolio-bundles",
             "replay_status": "dry_run",
@@ -676,6 +686,7 @@ def _deterministic_replay_fingerprint(
     endpoint: str | None,
     payload: dict[str, Any] | None,
     idempotency_key: str | None,
+    alternate_lookup_key: str | None = None,
 ) -> str:
     basis = {
         "event_id": event_id,
@@ -685,6 +696,8 @@ def _deterministic_replay_fingerprint(
         "idempotency_key": idempotency_key,
         "payload": payload or {},
     }
+    if alternate_lookup_key is not None:
+        basis["alternate_lookup_key"] = alternate_lookup_key
     canonical = json.dumps(basis, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -1103,6 +1116,8 @@ async def _record_ingestion_job_retry_audit(
         dry_run=dry_run,
         replay_reason=replay_reason,
         requested_by=requested_by,
+        correlation_missing_reason="ingestion_job_retry_uses_job_id",
+        alternate_lookup_key=f"job:{job_id}",
     )
 
 
@@ -1807,14 +1822,20 @@ async def replay_consumer_dlq_event(
 ):
     event = await _required_consumer_dlq_event(event_id, ingestion_job_service)
     if not event.correlation_id:
+        correlation_missing_reason = _consumer_dlq_correlation_missing_reason(event)
+        alternate_lookup_key = _consumer_dlq_alternate_lookup_key(event)
         return await _consumer_dlq_not_replayable_response(
             event_id=event_id,
             correlation_id=None,
+            correlation_missing_reason=correlation_missing_reason,
+            alternate_lookup_key=alternate_lookup_key,
             job_id=None,
             endpoint=None,
             dry_run=replay_request.dry_run,
             replay_reason=(
-                "DLQ event has no correlation id and cannot be mapped to ingestion payload."
+                "DLQ event has no correlation id and cannot be mapped to ingestion payload. "
+                f"Missing reason: {correlation_missing_reason}; "
+                f"alternate lookup key: {alternate_lookup_key}."
             ),
             ingestion_job_service=ingestion_job_service,
             requested_by=ops_actor,
@@ -1903,6 +1924,24 @@ def _job_field(job: Any, field: str) -> Any:
     return getattr(job, field, None)
 
 
+def _consumer_dlq_correlation_missing_reason(event: Any) -> str:
+    reason = getattr(event, "correlation_missing_reason", None)
+    return reason or "message_correlation_id_absent"
+
+
+def _consumer_dlq_alternate_lookup_key(event: Any) -> str:
+    lookup_key = getattr(event, "alternate_lookup_key", None)
+    if lookup_key:
+        return lookup_key
+    original_key = getattr(event, "original_key", None) or "unkeyed"
+    return (
+        f"consumer_dlq|topic={getattr(event, 'original_topic', 'unknown')}|"
+        f"group={getattr(event, 'consumer_group', 'unknown')}|"
+        f"dlq={getattr(event, 'dlq_topic', 'unknown')}|key={original_key}|"
+        f"event={getattr(event, 'event_id', 'unknown')}"
+    )
+
+
 def _replay_job_id(replay_job: Any) -> str:
     return str(_job_field(replay_job, "job_id"))
 
@@ -1966,6 +2005,8 @@ async def _consumer_dlq_replay_candidate_or_response(
         return await _consumer_dlq_not_replayable_response(
             event_id=event_id,
             correlation_id=correlation_id,
+            correlation_missing_reason=None,
+            alternate_lookup_key=None,
             job_id=None,
             endpoint=None,
             dry_run=dry_run,
@@ -2017,6 +2058,8 @@ async def _consumer_dlq_not_replayable_response(
     *,
     event_id: str,
     correlation_id: str | None,
+    correlation_missing_reason: str | None = None,
+    alternate_lookup_key: str | None = None,
     job_id: str | None,
     endpoint: str | None,
     dry_run: bool,
@@ -2031,10 +2074,13 @@ async def _consumer_dlq_not_replayable_response(
         endpoint=endpoint,
         payload=None,
         idempotency_key=None,
+        alternate_lookup_key=alternate_lookup_key,
     )
     return await _record_consumer_dlq_replay_response(
         event_id=event_id,
         correlation_id=correlation_id,
+        correlation_missing_reason=correlation_missing_reason,
+        alternate_lookup_key=alternate_lookup_key,
         job_id=job_id,
         endpoint=endpoint,
         replay_fingerprint=replay_fingerprint,
@@ -2051,6 +2097,8 @@ async def _record_consumer_dlq_replay_response(
     *,
     event_id: str,
     correlation_id: str | None,
+    correlation_missing_reason: str | None = None,
+    alternate_lookup_key: str | None = None,
     job_id: str | None,
     endpoint: str | None,
     replay_fingerprint: str,
@@ -2072,10 +2120,14 @@ async def _record_consumer_dlq_replay_response(
         dry_run=dry_run,
         replay_reason=replay_reason,
         requested_by=requested_by,
+        correlation_missing_reason=correlation_missing_reason,
+        alternate_lookup_key=alternate_lookup_key,
     )
     return ConsumerDlqReplayResponse(
         event_id=event_id,
         correlation_id=correlation_id,
+        correlation_missing_reason=correlation_missing_reason,
+        alternate_lookup_key=alternate_lookup_key,
         job_id=job_id,
         replay_status=replay_status,
         replay_audit_id=replay_audit_id,

@@ -109,6 +109,8 @@ async def test_record_consumer_dlq_replay_audit_persists_row_and_metrics(
         event_id="event_123",
         replay_fingerprint="fp_123",
         correlation_id="corr-123",
+        correlation_missing_reason=None,
+        alternate_lookup_key=None,
         job_id="job_123",
         endpoint="/ingest/transactions",
         replay_status="replayed_bookkeeping_failed",
@@ -130,6 +132,50 @@ async def test_record_consumer_dlq_replay_audit_persists_row_and_metrics(
         replay_status="replayed_bookkeeping_failed",
     ).calls == [1]
     assert duplicate_counter.handles == {}
+
+
+async def test_record_consumer_dlq_replay_audit_persists_missing_correlation_diagnostics():
+    class _FakeBegin:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class _FakeSession:
+        def __init__(self):
+            self.added = []
+
+        def add(self, row):
+            self.added.append(row)
+
+        def begin(self):
+            return _FakeBegin()
+
+    session = _FakeSession()
+
+    await module.record_consumer_dlq_replay_audit_response(
+        recovery_path="consumer_dlq_replay",
+        event_id="event_456",
+        replay_fingerprint="fp_456",
+        correlation_id=None,
+        job_id=None,
+        endpoint=None,
+        replay_status="not_replayable",
+        dry_run=True,
+        replay_reason="missing correlation",
+        requested_by="ops-token",
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+        correlation_missing_reason="message_correlation_id_absent",
+        alternate_lookup_key="consumer_dlq|topic=transactions.raw.received|event=event_456",
+    )
+
+    assert session.added[0].correlation_id is None
+    assert session.added[0].correlation_missing_reason == "message_correlation_id_absent"
+    assert (
+        session.added[0].alternate_lookup_key
+        == "consumer_dlq|topic=transactions.raw.received|event=event_456"
+    )
 
 
 async def test_record_consumer_dlq_replay_audit_raises_typed_error_when_no_session():

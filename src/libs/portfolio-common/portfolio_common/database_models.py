@@ -2093,6 +2093,8 @@ class ConsumerDlqEvent(Base):
     )
     error_reason = Column(Text, nullable=False)
     correlation_id = Column(String, nullable=True)
+    correlation_missing_reason = Column(String, nullable=True)
+    alternate_lookup_key = Column(String, nullable=True)
     payload_excerpt = Column(Text, nullable=True)
     observed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -2103,6 +2105,7 @@ class ConsumerDlqEvent(Base):
             "original_topic",
             observed_at.desc(),
         ),
+        Index("ix_consumer_dlq_events_alternate_lookup_key", "alternate_lookup_key"),
     )
 
 
@@ -2115,6 +2118,8 @@ class ConsumerDlqReplayAudit(Base):
     event_id = Column(String, index=True, nullable=False)
     replay_fingerprint = Column(String, index=True, nullable=False)
     correlation_id = Column(String, nullable=True)
+    correlation_missing_reason = Column(String, nullable=True)
+    alternate_lookup_key = Column(String, nullable=True)
     job_id = Column(String, nullable=True, index=True)
     endpoint = Column(String, nullable=True)
     replay_status = Column(String, nullable=False, index=True)
@@ -2138,6 +2143,7 @@ class ConsumerDlqReplayAudit(Base):
             "recovery_path",
             requested_at.desc(),
         ),
+        Index("ix_consumer_dlq_replay_audit_alternate_lookup_key", "alternate_lookup_key"),
     )
 
 

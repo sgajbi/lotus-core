@@ -39,6 +39,26 @@ class ConsumerDlqEventResponse(BaseModel):
         description="Correlation identifier associated with the failed message.",
         examples=["ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3"],
     )
+    correlation_missing_reason: str | None = Field(
+        default=None,
+        description=(
+            "Explicit reason correlation_id is absent; null when correlation_id is present."
+        ),
+        examples=["message_correlation_id_absent"],
+    )
+    alternate_lookup_key: str | None = Field(
+        default=None,
+        description=(
+            "Durable alternate support lookup key built from topic, consumer group, message key, "
+            "and event identity when correlation_id is absent."
+        ),
+        examples=[
+            (
+                "consumer_dlq|topic=transactions.raw.received|group=persistence-service-group|"
+                "dlq=dlq.persistence_service|key=TXN-2026-000145|event=cdlq_01J5VK"
+            )
+        ],
+    )
     payload_excerpt: str | None = Field(
         default=None,
         description="Redacted, truncated payload excerpt for operational triage.",
@@ -127,6 +147,20 @@ class ConsumerDlqReplayResponse(BaseModel):
         description="Correlation id carried by the failed consumer event.",
         examples=["ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3"],
     )
+    correlation_missing_reason: str | None = Field(
+        default=None,
+        description=(
+            "Explicit reason correlation_id is absent; null when replay used a correlation_id."
+        ),
+        examples=["message_correlation_id_absent"],
+    )
+    alternate_lookup_key: str | None = Field(
+        default=None,
+        description=(
+            "Durable alternate lookup key used for diagnostics when correlation_id is absent."
+        ),
+        examples=["consumer_dlq|topic=transactions.raw.received|group=persistence-service-group"],
+    )
     job_id: str | None = Field(
         default=None,
         description="Correlated ingestion job replayed from durable payload.",
@@ -178,6 +212,18 @@ class IngestionReplayAuditResponse(BaseModel):
         default=None,
         description="Correlation id used for replay mapping.",
         examples=["ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3"],
+    )
+    correlation_missing_reason: str | None = Field(
+        default=None,
+        description="Explicit reason correlation_id is absent on the replay audit row.",
+        examples=["ingestion_job_retry_uses_job_id"],
+    )
+    alternate_lookup_key: str | None = Field(
+        default=None,
+        description=(
+            "Durable alternate lookup key for replay diagnostics when correlation_id is absent."
+        ),
+        examples=["job:job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     )
     job_id: str | None = Field(
         default=None,

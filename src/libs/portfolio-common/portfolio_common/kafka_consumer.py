@@ -123,6 +123,14 @@ def _source_safe_error_reason(error: Exception) -> str:
     return redact_sensitive_text(str(error))
 
 
+def _message_attr_or_unknown(msg: Message, attr_name: str) -> str:
+    try:
+        value = getattr(msg, attr_name)()
+    except Exception:
+        return "unknown"
+    return str(value) if value is not None else "unknown"
+
+
 def _source_safe_error_traceback(error: Exception) -> str:
     if isinstance(error, ValidationError):
         return f"{error.__class__.__name__}: {_source_safe_error_reason(error)}"
@@ -391,6 +399,16 @@ class BaseConsumer(ABC):
         raw_value = msg.value().decode("utf-8")
         return _redacted_payload_text(raw_value)
 
+    def _consumer_dlq_alternate_lookup_key(self, msg: Message) -> str:
+        original_key = self._message_key_text(msg) or "unkeyed"
+        partition = _message_attr_or_unknown(msg, "partition")
+        offset = _message_attr_or_unknown(msg, "offset")
+        return (
+            f"consumer_dlq|topic={msg.topic()}|group={self._consumer_config['group.id']}|"
+            f"dlq={self.dlq_topic or 'unconfigured'}|partition={partition}|"
+            f"offset={offset}|key={original_key}"
+        )
+
     async def _record_consumer_dlq_event(
         self,
         msg: Message,
@@ -413,6 +431,12 @@ class BaseConsumer(ABC):
             error_reason_code=error_reason_code,
             error_reason=_source_safe_error_reason(error),
             correlation_id=correlation_id,
+            correlation_missing_reason=(
+                None if correlation_id else "message_correlation_id_absent"
+            ),
+            alternate_lookup_key=(
+                None if correlation_id else self._consumer_dlq_alternate_lookup_key(msg)
+            ),
             payload_excerpt=payload_excerpt,
         )
         async for db in get_async_db_session():

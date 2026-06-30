@@ -1155,6 +1155,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `original_key` (String): Domain attribute used by the owning module.
   - `error_reason` (Text): Human-readable reason for failure/exception status.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
+  - `correlation_missing_reason` (String): Explicit reason correlation_id is absent for replay and support diagnostics.
+  - `alternate_lookup_key` (String): Durable alternate support lookup key when correlation_id is absent.
   - `payload_excerpt` (Text): Domain attribute used by the owning module.
   - `observed_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
 
@@ -1172,6 +1174,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `event_id` (String): Identifier for event.
   - `replay_fingerprint` (String): Domain attribute used by the owning module.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
+  - `correlation_missing_reason` (String): Explicit reason correlation_id is absent for replay and support diagnostics.
+  - `alternate_lookup_key` (String): Durable alternate support lookup key when correlation_id is absent.
   - `job_id` (String): Identifier for job.
   - `endpoint` (String): Domain attribute used by the owning module.
   - `replay_status` (String): Domain attribute used by the owning module.
