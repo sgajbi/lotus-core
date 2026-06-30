@@ -13,6 +13,7 @@ from typing import Dict, Iterator, Optional
 from uuid import uuid4
 
 from confluent_kafka import Consumer, Message
+from pydantic import ValidationError
 
 from .config import get_kafka_consumer_runtime_overrides
 from .database_models import ConsumerDlqEvent
@@ -109,6 +110,23 @@ def _redacted_payload_text(raw_value: str) -> str:
     if redacted == parsed:
         return raw_value
     return json.dumps(redacted, separators=(",", ":"), sort_keys=True)
+
+
+def _source_safe_error_reason(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        return json.dumps(
+            error.errors(include_input=False),
+            default=str,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    return redact_sensitive_text(str(error))
+
+
+def _source_safe_error_traceback(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        return f"{error.__class__.__name__}: {_source_safe_error_reason(error)}"
+    return redact_sensitive_text(traceback.format_exc())
 
 
 def _redacted_dlq_header(header: tuple[str, bytes]) -> tuple[str, bytes]:
@@ -325,8 +343,8 @@ class BaseConsumer(ABC):
             "original_value": self._redacted_message_value_text(msg),
             "error_timestamp": datetime.now(timezone.utc).isoformat(),
             "error_reason_code": error_reason_code,
-            "error_reason": redact_sensitive_text(str(error)),
-            "error_traceback": redact_sensitive_text(traceback.format_exc()),
+            "error_reason": _source_safe_error_reason(error),
+            "error_traceback": _source_safe_error_traceback(error),
         }
 
     def _build_dlq_headers(
@@ -393,7 +411,7 @@ class BaseConsumer(ABC):
             dlq_topic=self.dlq_topic or "",
             original_key=msg.key().decode("utf-8") if msg.key() else None,
             error_reason_code=error_reason_code,
-            error_reason=redact_sensitive_text(str(error)),
+            error_reason=_source_safe_error_reason(error),
             correlation_id=correlation_id,
             payload_excerpt=payload_excerpt,
         )

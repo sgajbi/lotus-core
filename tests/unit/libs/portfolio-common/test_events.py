@@ -1,7 +1,9 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
+from pydantic import ValidationError
 
 
 def _txn(
@@ -154,3 +156,39 @@ def test_transaction_event_ordering_key_orders_rights_lifecycle_dependencies() -
         "TXN_DELIVERY",
         "TXN_REFUND",
     ]
+
+
+def test_transaction_event_rejects_unknown_payload_fields() -> None:
+    payload = _txn("TXN_DRIFT", datetime(2026, 1, 10, 8, 0, tzinfo=UTC), None).model_dump()
+    payload["event_version"] = "vNext"
+
+    with pytest.raises(ValidationError) as exc_info:
+        TransactionEvent.model_validate(payload)
+
+    errors = exc_info.value.errors(include_input=False)
+    assert errors == [
+        {
+            "type": "extra_forbidden",
+            "loc": ("event_version",),
+            "msg": "Extra inputs are not permitted",
+            "url": "https://errors.pydantic.dev/2.13/v/extra_forbidden",
+        }
+    ]
+    assert "vNext" not in str(errors)
+
+
+def test_transaction_event_accepts_governed_envelope_metadata() -> None:
+    payload = _txn("TXN_ENVELOPE", datetime(2026, 1, 10, 8, 0, tzinfo=UTC), None).model_dump()
+    payload.update(
+        {
+            "event_type": "TransactionPersisted",
+            "schema_version": "1.0.0",
+            "correlation_id": "corr-transaction-envelope",
+        }
+    )
+
+    event = TransactionEvent.model_validate(payload)
+
+    assert event.event_type == "TransactionPersisted"
+    assert event.schema_version == "1.0.0"
+    assert event.correlation_id == "corr-transaction-envelope"
