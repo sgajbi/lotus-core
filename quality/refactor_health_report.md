@@ -39,6 +39,7 @@ tested modules.
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | DLQ/replay correlation diagnostics | Improving | CR-1206 adds correlation-or-reason diagnostics to consumer DLQ and replay-audit records, exposes alternate lookup keys in replay responses, and hardens ingestion rate-limit metric registration against duplicate-import CI failures |
 | Mandatory replay audit | Improving | CR-1207 removes best-effort replay-audit recording from ingestion retry and consumer-DLQ replay paths, adds `INGESTION_REPLAY_AUDIT_WRITE_FAILED`, and keeps replay outcomes unacknowledged when audit persistence fails |
+| Runtime configuration strictness | Improving | CR-1208 makes ingestion resilience env parsing strict in non-local profiles, logs explicit local fallback, and restores monetary-float CI enforcement to a zero-finding, zero-allowlist baseline |
 | Corporate-action ordering policy | Improving | CR-1197 routes cost-engine Bundle A sorting through the canonical shared ordering helper and removes the duplicated private rank map |
 | Corporate-action reconciliation evidence | Improving | CR-1198 records Bundle A reconciliation outcomes as durable `corporate_action_bundle_a` financial reconciliation runs and findings instead of log-only diagnostics |
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
@@ -55,11 +56,9 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1191 follow-up addresses the remaining query-control-plane problem-details contract gaps for
-validated GitHub issue #677. Migrated representative route examples now document
-`application/problem+json`, unmigrated legacy examples stay explicitly `application/json` with a
-bare-detail schema, and direct router unit tests assert stable `QueryControlPlaneProblem` mappings
-instead of old `HTTPException` expectations.
+CR-1208 advances validated GitHub issue #600 by making ingestion resilience configuration strict in
+non-local profiles, preserving explicit local fallback logging, and turning the monetary-float guard
+back into a high-signal CI gate with zero active findings and zero stale suppressions.
 
 ## Health Assessment
 
@@ -2030,3 +2029,7 @@ health before that claim is defensible.
 330. Continued validated GitHub issue #674 by adding returned-lot instrument-reference
      supportability to `PortfolioTaxLotWindow:v1`. Focused tax-lot service and buy-state repository
      tests passed with 26 tests; scoped Ruff lint and format checks passed.
+331. Began validated GitHub issue #600 by making ingestion resilience configuration strict in
+     non-local profiles while preserving explicit local fallback logging. The monetary-float guard
+     now uses token-aware matching, rejects stale allowlist entries, and passes with zero findings
+     and zero allowlisted suppressions.

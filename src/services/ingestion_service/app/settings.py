@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, cast
+
+logger = logging.getLogger(__name__)
+
+STRICT_CONFIG_VALIDATION_ENV = "LOTUS_CORE_STRICT_CONFIG_VALIDATION"
+LOCAL_CONFIG_ENVIRONMENTS = {"", "local", "dev", "development", "test"}
+TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+FALSY_ENV_VALUES = {"0", "false", "no", "off"}
 
 IngestionRateLimitEnforcementScope = Literal[
     "local_process",
@@ -13,46 +21,204 @@ IngestionRateLimitEnforcementScope = Literal[
 ]
 
 
+class IngestionConfigurationError(ValueError):
+    """Raised when strict ingestion configuration validation rejects an env value."""
+
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
         return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = raw.strip().lower()
+    if normalized in TRUTHY_ENV_VALUES:
+        return True
+    if normalized in FALSY_ENV_VALUES:
+        return False
+    return bool(
+        _invalid_env_setting(
+            name=name,
+            raw=raw,
+            default=default,
+            reason="expected boolean value",
+        )
+    )
 
 
-def _env_int(name: str, default: int) -> int:
+def _env_int(
+    name: str,
+    default: int,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
     raw = os.getenv(name)
     if raw is None:
         return default
     try:
-        return int(raw)
+        value = int(raw)
     except (TypeError, ValueError):
-        return default
+        return int(
+            _invalid_env_setting(
+                name=name,
+                raw=raw,
+                default=default,
+                reason="expected integer value",
+            )
+        )
+    if minimum is not None and value < minimum:
+        return int(
+            _invalid_env_setting(
+                name=name,
+                raw=raw,
+                default=default,
+                reason=f"expected value >= {minimum}",
+            )
+        )
+    if maximum is not None and value > maximum:
+        return int(
+            _invalid_env_setting(
+                name=name,
+                raw=raw,
+                default=default,
+                reason=f"expected value <= {maximum}",
+            )
+        )
+    return value
 
 
-def _env_float(name: str, default: float) -> float:
+def _env_float(
+    name: str,
+    default: float,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
     raw = os.getenv(name)
     if raw is None:
         return default
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
-        return default
+        return float(
+            _invalid_env_setting(
+                name=name,
+                raw=raw,
+                default=default,
+                reason="expected numeric seconds value",
+            )
+        )
+    if minimum is not None and value < minimum:
+        return float(
+            _invalid_env_setting(
+                name=name,
+                raw=raw,
+                default=default,
+                reason=f"expected value >= {minimum}",
+            )
+        )
+    if maximum is not None and value > maximum:
+        return float(
+            _invalid_env_setting(
+                name=name,
+                raw=raw,
+                default=default,
+                reason=f"expected value <= {maximum}",
+            )
+        )
+    return value
 
 
-def _env_decimal(name: str, default: str) -> Decimal:
+def _env_decimal(
+    name: str,
+    default: str,
+    *,
+    minimum: Decimal | None = None,
+    maximum: Decimal | None = None,
+) -> Decimal:
     raw = os.getenv(name)
     if raw is None:
         return Decimal(default)
     try:
-        return Decimal(raw)
+        value = Decimal(raw)
     except Exception:
-        return Decimal(default)
+        return Decimal(
+            str(
+                _invalid_env_setting(
+                    name=name,
+                    raw=raw,
+                    default=default,
+                    reason="expected decimal value",
+                )
+            )
+        )
+    if minimum is not None and value < minimum:
+        return Decimal(
+            str(
+                _invalid_env_setting(
+                    name=name,
+                    raw=raw,
+                    default=default,
+                    reason=f"expected value >= {minimum}",
+                )
+            )
+        )
+    if maximum is not None and value > maximum:
+        return Decimal(
+            str(
+                _invalid_env_setting(
+                    name=name,
+                    raw=raw,
+                    default=default,
+                    reason=f"expected value <= {maximum}",
+                )
+            )
+        )
+    return value
 
 
 def _env_str(name: str, default: str) -> str:
     raw = os.getenv(name)
     return default if raw is None else raw
+
+
+def _strict_config_validation_enabled() -> bool:
+    raw = os.getenv(STRICT_CONFIG_VALIDATION_ENV)
+    if raw is not None:
+        return raw.strip().lower() in TRUTHY_ENV_VALUES
+    environment = os.getenv("ENVIRONMENT", "local").strip().lower()
+    return environment not in LOCAL_CONFIG_ENVIRONMENTS
+
+
+def _invalid_env_setting(
+    *,
+    name: str,
+    raw: object,
+    default: object,
+    reason: str,
+) -> object:
+    if _strict_config_validation_enabled():
+        raise IngestionConfigurationError(
+            f"Invalid ingestion service configuration for {name}: {reason}"
+        )
+    logger.warning(
+        "Invalid ingestion service setting; falling back to default.",
+        extra={"setting": name, "raw_value": str(raw), "default": str(default), "reason": reason},
+    )
+    return default
+
+
+def _env_choice(name: str, default: str, allowed_values: set[str]) -> str:
+    raw = _env_str(name, default)
+    if raw in allowed_values:
+        return raw
+    return str(
+        _invalid_env_setting(
+            name=name,
+            raw=raw,
+            default=default,
+            reason=f"expected one of {sorted(allowed_values)}",
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,8 +301,20 @@ def _load_calculator_peak_lag_age_seconds() -> dict[str, int]:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
+        _invalid_env_setting(
+            name="LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON",
+            raw=raw,
+            default=defaults,
+            reason="expected JSON object",
+        )
         return dict(defaults)
     if not isinstance(parsed, dict):
+        _invalid_env_setting(
+            name="LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON",
+            raw=raw,
+            default=defaults,
+            reason="expected JSON object",
+        )
         return dict(defaults)
     return {key: _env_int_from_mapping(parsed, key, default) for key, default in defaults.items()}
 
@@ -144,30 +322,49 @@ def _load_calculator_peak_lag_age_seconds() -> dict[str, int]:
 def _env_int_from_mapping(values: dict[str, object], key: str, default: int) -> int:
     raw = values.get(key)
     try:
-        return int(raw) if raw is not None else default
+        value = int(raw) if raw is not None else default
     except (TypeError, ValueError):
-        return default
+        return int(
+            _invalid_env_setting(
+                name=f"LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON.{key}",
+                raw=raw,
+                default=default,
+                reason="expected integer seconds value",
+            )
+        )
+    if value < 0:
+        return int(
+            _invalid_env_setting(
+                name=f"LOTUS_CORE_CALCULATOR_PEAK_LAG_AGE_SECONDS_JSON.{key}",
+                raw=raw,
+                default=default,
+                reason="expected value >= 0",
+            )
+        )
+    return value
 
 
 def load_ingestion_service_settings() -> IngestionServiceSettings:
-    raw_auth_mode = _env_str("LOTUS_CORE_INGEST_OPS_AUTH_MODE", "token_or_jwt")
-    auth_mode: Literal["token_or_jwt", "jwt_only", "token_only"]
-    if raw_auth_mode in {"token_or_jwt", "jwt_only", "token_only"}:
-        auth_mode = raw_auth_mode
-    else:
-        auth_mode = "token_or_jwt"
-    raw_rate_limit_scope = _env_str(
-        "LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE", "local_process"
+    auth_mode = cast(
+        Literal["token_or_jwt", "jwt_only", "token_only"],
+        _env_choice(
+            "LOTUS_CORE_INGEST_OPS_AUTH_MODE",
+            "token_or_jwt",
+            {"token_or_jwt", "jwt_only", "token_only"},
+        ),
     )
-    rate_limit_scope: IngestionRateLimitEnforcementScope
-    if raw_rate_limit_scope in {
-        "local_process",
-        "upstream_gateway",
-        "local_process_with_upstream_gateway",
-    }:
-        rate_limit_scope = raw_rate_limit_scope
-    else:
-        rate_limit_scope = "local_process"
+    rate_limit_scope = cast(
+        IngestionRateLimitEnforcementScope,
+        _env_choice(
+            "LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE",
+            "local_process",
+            {
+                "local_process",
+                "upstream_gateway",
+                "local_process_with_upstream_gateway",
+            },
+        ),
+    )
 
     return IngestionServiceSettings(
         adapter_mode=IngestionAdapterModeSettings(
@@ -181,42 +378,56 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             jwt_hs256_secret=_env_str("LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET", ""),
             jwt_issuer=_env_str("LOTUS_CORE_INGEST_OPS_JWT_ISSUER", ""),
             jwt_audience=_env_str("LOTUS_CORE_INGEST_OPS_JWT_AUDIENCE", ""),
-            jwt_clock_skew_seconds=_env_int("LOTUS_CORE_INGEST_OPS_JWT_CLOCK_SKEW_SECONDS", 60),
+            jwt_clock_skew_seconds=_env_int(
+                "LOTUS_CORE_INGEST_OPS_JWT_CLOCK_SKEW_SECONDS", 60, minimum=0
+            ),
         ),
         rate_limit=IngestionRateLimitSettings(
             enabled=_env_bool("LOTUS_CORE_INGEST_RATE_LIMIT_ENABLED", True),
-            window_seconds=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS", 60),
-            max_requests=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS", 120),
-            max_records=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_RECORDS", 10000),
+            window_seconds=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS", 60, minimum=1),
+            max_requests=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS", 120, minimum=1),
+            max_records=_env_int("LOTUS_CORE_INGEST_RATE_LIMIT_MAX_RECORDS", 10000, minimum=1),
             enforcement_scope=rate_limit_scope,
             gateway_policy_id=_env_str("LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID", ""),
         ),
         runtime_policy=IngestionRuntimePolicySettings(
             replay_max_records_per_request=_env_int(
-                "LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", 5000
+                "LOTUS_CORE_REPLAY_MAX_RECORDS_PER_REQUEST", 5000, minimum=1
             ),
-            replay_max_backlog_jobs=_env_int("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", 5000),
-            dlq_budget_events_per_window=_env_int("LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", 10),
-            default_lookback_minutes=_env_int("LOTUS_CORE_DEFAULT_LOOKBACK_MINUTES", 60),
+            replay_max_backlog_jobs=_env_int("LOTUS_CORE_REPLAY_MAX_BACKLOG_JOBS", 5000, minimum=1),
+            dlq_budget_events_per_window=_env_int(
+                "LOTUS_CORE_DLQ_EVENTS_BUDGET_PER_WINDOW", 10, minimum=0
+            ),
+            default_lookback_minutes=_env_int("LOTUS_CORE_DEFAULT_LOOKBACK_MINUTES", 60, minimum=1),
             default_failure_rate_threshold=_env_decimal(
-                "LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD", "0.03"
+                "LOTUS_CORE_DEFAULT_FAILURE_RATE_THRESHOLD",
+                "0.03",
+                minimum=Decimal("0"),
             ),
             default_queue_latency_threshold_seconds=_env_float(
-                "LOTUS_CORE_DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS", 5.0
+                "LOTUS_CORE_DEFAULT_QUEUE_LATENCY_THRESHOLD_SECONDS", 5.0, minimum=0.0
             ),
             default_backlog_age_threshold_seconds=_env_float(
-                "LOTUS_CORE_DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS", 300.0
+                "LOTUS_CORE_DEFAULT_BACKLOG_AGE_THRESHOLD_SECONDS", 300.0, minimum=0.0
             ),
             reprocessing_worker_poll_interval_seconds=_env_int(
-                "REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", 10
+                "REPROCESSING_WORKER_POLL_INTERVAL_SECONDS", 10, minimum=1
             ),
-            reprocessing_worker_batch_size=_env_int("REPROCESSING_WORKER_BATCH_SIZE", 10),
+            reprocessing_worker_batch_size=_env_int(
+                "REPROCESSING_WORKER_BATCH_SIZE", 10, minimum=1
+            ),
             valuation_scheduler_poll_interval_seconds=_env_int(
-                "VALUATION_SCHEDULER_POLL_INTERVAL", 30
+                "VALUATION_SCHEDULER_POLL_INTERVAL", 30, minimum=1
             ),
-            valuation_scheduler_batch_size=_env_int("VALUATION_SCHEDULER_BATCH_SIZE", 100),
-            valuation_scheduler_dispatch_rounds=_env_int("VALUATION_SCHEDULER_DISPATCH_ROUNDS", 10),
-            capacity_assumed_replicas=_env_int("LOTUS_CORE_CAPACITY_ASSUMED_REPLICAS", 1),
+            valuation_scheduler_batch_size=_env_int(
+                "VALUATION_SCHEDULER_BATCH_SIZE", 100, minimum=1
+            ),
+            valuation_scheduler_dispatch_rounds=_env_int(
+                "VALUATION_SCHEDULER_DISPATCH_ROUNDS", 10, minimum=1
+            ),
+            capacity_assumed_replicas=_env_int(
+                "LOTUS_CORE_CAPACITY_ASSUMED_REPLICAS", 1, minimum=1
+            ),
             replay_isolation_mode=_env_str("LOTUS_CORE_REPLAY_ISOLATION_MODE", "shared_workers"),
             partition_growth_strategy=_env_str(
                 "LOTUS_CORE_PARTITION_GROWTH_STRATEGY", "scale_out_only"
@@ -224,22 +435,28 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             calculator_peak_lag_age_seconds=_load_calculator_peak_lag_age_seconds(),
             operating_band=IngestionOperatingBandSettings(
                 yellow_backlog_age_seconds=_env_float(
-                    "LOTUS_CORE_OPERATING_BAND_YELLOW_BACKLOG_AGE_SECONDS", 15.0
+                    "LOTUS_CORE_OPERATING_BAND_YELLOW_BACKLOG_AGE_SECONDS", 15.0, minimum=0.0
                 ),
                 orange_backlog_age_seconds=_env_float(
-                    "LOTUS_CORE_OPERATING_BAND_ORANGE_BACKLOG_AGE_SECONDS", 60.0
+                    "LOTUS_CORE_OPERATING_BAND_ORANGE_BACKLOG_AGE_SECONDS", 60.0, minimum=0.0
                 ),
                 red_backlog_age_seconds=_env_float(
-                    "LOTUS_CORE_OPERATING_BAND_RED_BACKLOG_AGE_SECONDS", 180.0
+                    "LOTUS_CORE_OPERATING_BAND_RED_BACKLOG_AGE_SECONDS", 180.0, minimum=0.0
                 ),
                 yellow_dlq_pressure_ratio=_env_decimal(
-                    "LOTUS_CORE_OPERATING_BAND_YELLOW_DLQ_PRESSURE_RATIO", "0.25"
+                    "LOTUS_CORE_OPERATING_BAND_YELLOW_DLQ_PRESSURE_RATIO",
+                    "0.25",
+                    minimum=Decimal("0"),
                 ),
                 orange_dlq_pressure_ratio=_env_decimal(
-                    "LOTUS_CORE_OPERATING_BAND_ORANGE_DLQ_PRESSURE_RATIO", "0.50"
+                    "LOTUS_CORE_OPERATING_BAND_ORANGE_DLQ_PRESSURE_RATIO",
+                    "0.50",
+                    minimum=Decimal("0"),
                 ),
                 red_dlq_pressure_ratio=_env_decimal(
-                    "LOTUS_CORE_OPERATING_BAND_RED_DLQ_PRESSURE_RATIO", "1.0"
+                    "LOTUS_CORE_OPERATING_BAND_RED_DLQ_PRESSURE_RATIO",
+                    "1.0",
+                    minimum=Decimal("0"),
                 ),
             ),
         ),
