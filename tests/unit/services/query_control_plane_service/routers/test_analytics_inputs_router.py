@@ -4,7 +4,6 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import HTTPException
 from fastapi.responses import Response
 
 from src.services.query_control_plane_service.app.routers.analytics_inputs import (
@@ -17,6 +16,9 @@ from src.services.query_control_plane_service.app.routers.analytics_inputs impor
     get_portfolio_analytics_timeseries,
     get_position_analytics_timeseries,
 )
+from src.services.query_control_plane_service.app.routers.response_helpers import (
+    QueryControlPlaneProblem,
+)
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
     AnalyticsWindow,
@@ -28,6 +30,18 @@ from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.services.analytics_timeseries_service import AnalyticsInputError
+
+
+def assert_query_control_plane_problem(
+    problem: QueryControlPlaneProblem,
+    *,
+    status_code: int,
+    error_code: str,
+    detail: str,
+) -> None:
+    assert problem.status_code == status_code
+    assert problem.error_code == error_code
+    assert problem.detail == detail
 
 
 @pytest.mark.asyncio
@@ -88,7 +102,7 @@ async def test_router_error_mapping_for_position_timeseries() -> None:
     service.get_position_timeseries = AsyncMock(
         side_effect=AnalyticsInputError("INSUFFICIENT_DATA", "missing fx")
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_position_analytics_timeseries(
             portfolio_id="P1",
             request=PositionAnalyticsTimeseriesRequest(
@@ -97,7 +111,12 @@ async def test_router_error_mapping_for_position_timeseries() -> None:
             ),
             service=service,
         )
-    assert exc_info.value.status_code == 422
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=422,
+        error_code="QCP_ANALYTICS_INSUFFICIENT_DATA",
+        detail="Required analytics source data is unavailable.",
+    )
 
 
 @pytest.mark.asyncio
@@ -106,13 +125,18 @@ async def test_router_error_mapping_for_reference_not_found() -> None:
     service.get_portfolio_reference = AsyncMock(
         side_effect=AnalyticsInputError("RESOURCE_NOT_FOUND", "missing")
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_portfolio_analytics_reference(
             portfolio_id="P1",
             request=PortfolioAnalyticsReferenceRequest(as_of_date="2025-12-31"),
             service=service,
         )
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_ANALYTICS_NOT_FOUND",
+        detail="Requested analytics source was not found.",
+    )
 
 
 @pytest.mark.asyncio
@@ -161,7 +185,7 @@ async def test_router_error_mapping_invalid_request() -> None:
     service.get_portfolio_timeseries = AsyncMock(
         side_effect=AnalyticsInputError("INVALID_REQUEST", "bad request")
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_portfolio_analytics_timeseries(
             portfolio_id="P1",
             request=PortfolioAnalyticsTimeseriesRequest(
@@ -170,21 +194,36 @@ async def test_router_error_mapping_invalid_request() -> None:
             ),
             service=service,
         )
-    assert exc_info.value.status_code == 400
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=400,
+        error_code="QCP_ANALYTICS_INVALID_REQUEST",
+        detail="Analytics request is invalid.",
+    )
 
 
 def test_raise_http_for_analytics_error_unsupported_configuration() -> None:
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         _raise_http_for_analytics_error(
             AnalyticsInputError("UNSUPPORTED_CONFIGURATION", "unsupported")
         )
-    assert exc_info.value.status_code == 422
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=422,
+        error_code="QCP_ANALYTICS_UNSUPPORTED_CONFIGURATION",
+        detail="Requested analytics configuration is unsupported.",
+    )
 
 
 def test_raise_http_for_analytics_error_unknown_code_maps_to_500() -> None:
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         _raise_http_for_analytics_error(AnalyticsInputError("UNKNOWN", "unknown"))
-    assert exc_info.value.status_code == 500
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=500,
+        error_code="QCP_ANALYTICS_ERROR",
+        detail="Analytics request failed.",
+    )
 
 
 def test_get_analytics_timeseries_service_factory() -> None:
@@ -278,7 +317,7 @@ async def test_router_export_endpoints_error_mapping() -> None:
     service.create_export_job = AsyncMock(
         side_effect=AnalyticsInputError("RESOURCE_NOT_FOUND", "missing")
     )
-    with pytest.raises(HTTPException) as exc_info_create:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info_create:
         await create_analytics_export_job(
             request=AnalyticsExportCreateRequest(
                 dataset_type="portfolio_timeseries",
@@ -290,23 +329,38 @@ async def test_router_export_endpoints_error_mapping() -> None:
             ),
             service=service,
         )
-    assert exc_info_create.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info_create.value,
+        status_code=404,
+        error_code="QCP_ANALYTICS_NOT_FOUND",
+        detail="Requested analytics source was not found.",
+    )
 
     service.get_export_job = AsyncMock(
         side_effect=AnalyticsInputError("INSUFFICIENT_DATA", "no result")
     )
-    with pytest.raises(HTTPException) as exc_info_get:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info_get:
         await get_analytics_export_job(job_id="aexp_1", service=service)
-    assert exc_info_get.value.status_code == 422
+    assert_query_control_plane_problem(
+        exc_info_get.value,
+        status_code=422,
+        error_code="QCP_ANALYTICS_INSUFFICIENT_DATA",
+        detail="Required analytics source data is unavailable.",
+    )
 
     service.get_export_result_json = AsyncMock(
         side_effect=AnalyticsInputError("UNSUPPORTED_CONFIGURATION", "in progress")
     )
-    with pytest.raises(HTTPException) as exc_info_result:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info_result:
         await get_analytics_export_job_result(
             job_id="aexp_1",
             result_format="json",
             compression="none",
             service=service,
         )
-    assert exc_info_result.value.status_code == 422
+    assert_query_control_plane_problem(
+        exc_info_result.value,
+        status_code=422,
+        error_code="QCP_ANALYTICS_UNSUPPORTED_CONFIGURATION",
+        detail="Requested analytics configuration is unsupported.",
+    )

@@ -44,7 +44,7 @@ tested modules.
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
 | Cash-balance account-id provenance | Improving | CR-1200 validates transaction-derived cash-account fallback mappings against active/effective cash-account master data and exposes response-level provenance |
 | Instrument reference integrity | Improving | CR-1201 defers product cost processing when instrument master data is missing, before cost and lot-state writes |
-| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
+| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Transaction cost curve source reads | Improving | CR-1194 makes `TransactionCostCurve:v1` cursor paging source-read bounded through grouped keyset selection and page-key-scoped transaction evidence reads |
@@ -55,10 +55,11 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1192 follow-up addresses the remaining metrics access-policy gaps for validated GitHub issue
-#678. Metrics-token env parsing now lives in approved common settings, the config-access guard
-passes, and web-backed worker runtime `/metrics` exposure uses the same token policy as standard
-HTTP apps.
+CR-1191 follow-up addresses the remaining query-control-plane problem-details contract gaps for
+validated GitHub issue #677. Migrated representative route examples now document
+`application/problem+json`, unmigrated legacy examples stay explicitly `application/json` with a
+bare-detail schema, and direct router unit tests assert stable `QueryControlPlaneProblem` mappings
+instead of old `HTTPException` expectations.
 
 ## Health Assessment
 

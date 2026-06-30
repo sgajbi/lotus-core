@@ -48,6 +48,9 @@ from src.services.query_control_plane_service.app.routers.integration import (
     resolve_portfolio_benchmark_assignment,
     resolve_portfolio_manager_book_membership,
 )
+from src.services.query_control_plane_service.app.routers.response_helpers import (
+    QueryControlPlaneProblem,
+)
 from src.services.query_service.app.dtos.core_snapshot_dto import (
     CoreSnapshotMode,
     CoreSnapshotRequest,
@@ -104,6 +107,18 @@ from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotUnavailableSectionError,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+
+
+def assert_query_control_plane_problem(
+    problem: QueryControlPlaneProblem,
+    *,
+    status_code: int,
+    error_code: str,
+    detail: str,
+) -> None:
+    assert problem.status_code == status_code
+    assert problem.error_code == error_code
+    assert problem.detail == detail
 
 
 @pytest.mark.asyncio
@@ -253,7 +268,7 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotNotFoundError("not found")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await create_core_snapshot(
             portfolio_id="PORT_404",
             request=request,
@@ -261,7 +276,12 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
             integration_service=mock_integration_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_CORE_SNAPSHOT_NOT_FOUND",
+        detail="Portfolio or simulation session was not found.",
+    )
 
 
 @pytest.mark.asyncio
@@ -290,7 +310,7 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotBadRequestError("bad")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
@@ -298,7 +318,12 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
             integration_service=mock_integration_service,
         )
 
-    assert exc_info.value.status_code == 400
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=400,
+        error_code="QCP_CORE_SNAPSHOT_INVALID_REQUEST",
+        detail="Core snapshot request is invalid.",
+    )
 
 
 @pytest.mark.asyncio
@@ -328,7 +353,7 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotConflictError("conflict")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
@@ -336,7 +361,12 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
             integration_service=mock_integration_service,
         )
 
-    assert exc_info.value.status_code == 409
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=409,
+        error_code="QCP_CORE_SNAPSHOT_CONFLICT",
+        detail="Core snapshot request conflicts with the current portfolio or simulation state.",
+    )
 
 
 @pytest.mark.asyncio
@@ -366,7 +396,7 @@ async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
     )
     mock_service.get_core_snapshot.side_effect = CoreSnapshotUnavailableSectionError("missing")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
@@ -374,7 +404,12 @@ async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
             integration_service=mock_integration_service,
         )
 
-    assert exc_info.value.status_code == 422
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=422,
+        error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
+        detail="Requested core snapshot section cannot be fulfilled from available source data.",
+    )
 
 
 @pytest.mark.asyncio
@@ -402,7 +437,7 @@ async def test_create_core_snapshot_maps_policy_block_to_403() -> None:
         tenant_id="default",
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await create_core_snapshot(
             portfolio_id="PORT_001",
             request=request,
@@ -410,7 +445,12 @@ async def test_create_core_snapshot_maps_policy_block_to_403() -> None:
             integration_service=mock_integration_service,
         )
 
-    assert exc_info.value.status_code == 403
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=403,
+        error_code="QCP_CORE_SNAPSHOT_POLICY_BLOCKED",
+        detail="Requested snapshot sections are blocked by strict integration policy.",
+    )
 
 
 @pytest.mark.asyncio

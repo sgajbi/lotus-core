@@ -5,6 +5,11 @@ from typing import Any, NoReturn
 from pydantic import BaseModel, Field
 
 QUERY_CONTROL_PLANE_PROBLEM_TYPE_PREFIX = "https://lotus-platform.dev/problems/query-control-plane"
+LEGACY_DETAIL_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {"detail": {"type": "string"}},
+    "required": ["detail"],
+}
 
 
 class QueryControlPlaneProblemDetails(BaseModel):
@@ -117,11 +122,30 @@ def raise_problem(
 
 
 def problem_response(description: str, example: dict[str, Any]) -> dict[str, object]:
-    schema = QueryControlPlaneProblemDetails.model_json_schema()
+    if _is_problem_details_example(example):
+        schema = QueryControlPlaneProblemDetails.model_json_schema()
+        return {
+            "description": description,
+            "content": {"application/problem+json": {"schema": schema, "example": example}},
+        }
+
     return {
         "description": description,
         "content": {
-            "application/json": {"schema": schema, "example": example},
-            "application/problem+json": {"schema": schema, "example": example},
+            "application/json": {
+                "schema": LEGACY_DETAIL_RESPONSE_SCHEMA,
+                "example": example,
+            }
         },
     }
+
+
+def _is_problem_details_example(example: dict[str, Any]) -> bool:
+    return {
+        "type",
+        "title",
+        "status",
+        "detail",
+        "error_code",
+        "correlation_id",
+    } <= set(example)

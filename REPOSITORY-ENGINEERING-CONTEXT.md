@@ -123,6 +123,12 @@ Current repository posture:
     health-only worker apps, and web-backed worker runtime paths must all use the shared policy so
     `LOTUS_METRICS_ACCESS_TOKEN` consistently enables bearer-token protection without direct env
     reads in HTTP middleware.
+27. Query-control-plane routes migrated to the shared `QueryControlPlaneProblem` contract must
+    document error responses as `application/problem+json` with stable QCP error codes,
+    correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
+    documented as legacy `application/json` bare-detail responses until their runtime handlers are
+    converted; do not publish problem-details OpenAPI schemas for routes that still raise default
+    FastAPI `HTTPException(detail=...)`.
 
 ## Architecture And Module Map
 
