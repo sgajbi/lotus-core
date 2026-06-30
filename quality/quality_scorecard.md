@@ -1295,3 +1295,5 @@ Local evidence captured on 2026-06-05 after CR-1034:
 - CR-1208 added strict/non-local ingestion resilience configuration validation, explicit local
   fallback logging, token-aware monetary float scanning, stale allowlist rejection, and an empty
   allowlist baseline.
+- CR-1209 added shared strict/local runtime settings parsing and migrated query-service plus
+  query-control-plane settings onto it while preserving public helper wrappers.

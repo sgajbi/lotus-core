@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from src.services.query_control_plane_service.app.settings import (
+    QueryControlPlaneConfigurationError,
     env_bool,
     env_int,
     env_json_map,
@@ -9,6 +12,8 @@ from src.services.query_control_plane_service.app.settings import (
 
 
 def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     for name in (
         "ENTERPRISE_POLICY_VERSION",
         "ENTERPRISE_ENFORCE_AUTHZ",
@@ -40,6 +45,7 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
 
 
 def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "2.3.1")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
@@ -76,6 +82,7 @@ def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
 
 
 def test_control_plane_settings_helpers_fail_closed_for_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("CONTROL_BOOL", "maybe")
     monkeypatch.setenv("CONTROL_INT", "not-an-int")
     monkeypatch.setenv("CONTROL_JSON", "[]")
@@ -83,3 +90,31 @@ def test_control_plane_settings_helpers_fail_closed_for_invalid_values(monkeypat
     assert env_bool("CONTROL_BOOL", False) is False
     assert env_int("CONTROL_INT", 11) == 11
     assert env_json_map("CONTROL_JSON") == {}
+
+
+def test_control_plane_settings_strict_rejects_invalid_boolean(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "maybe")
+
+    with pytest.raises(QueryControlPlaneConfigurationError, match="ENTERPRISE_ENFORCE_AUTHZ"):
+        load_query_control_plane_settings()
+
+
+def test_control_plane_settings_strict_rejects_out_of_range_rotation_days(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "0")
+
+    with pytest.raises(
+        QueryControlPlaneConfigurationError, match="ENTERPRISE_SECRET_ROTATION_DAYS"
+    ):
+        load_query_control_plane_settings()
+
+
+def test_control_plane_settings_strict_rejects_invalid_json_map(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("ENTERPRISE_CAPABILITY_RULES_JSON", "not-json")
+
+    with pytest.raises(
+        QueryControlPlaneConfigurationError, match="ENTERPRISE_CAPABILITY_RULES_JSON"
+    ):
+        load_query_control_plane_settings()

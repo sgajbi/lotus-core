@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from src.services.query_service.app.settings import (
+    QueryServiceConfigurationError,
     env_bool,
     env_int,
     env_json_map,
@@ -9,6 +12,8 @@ from src.services.query_service.app.settings import (
 
 
 def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     for name in (
         "ENTERPRISE_POLICY_VERSION",
         "ENTERPRISE_ENFORCE_AUTHZ",
@@ -40,6 +45,7 @@ def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
 
 
 def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "2.3.1")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
@@ -76,6 +82,7 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
 
 
 def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("QUERY_BOOL", "maybe")
     monkeypatch.setenv("QUERY_INT", "not-an-int")
     monkeypatch.setenv("QUERY_JSON", "[]")
@@ -83,3 +90,27 @@ def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypat
     assert env_bool("QUERY_BOOL", False) is False
     assert env_int("QUERY_INT", 11) == 11
     assert env_json_map("QUERY_JSON") == {}
+
+
+def test_query_service_settings_strict_rejects_invalid_integer(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "not-an-int")
+
+    with pytest.raises(QueryServiceConfigurationError, match="ENTERPRISE_SECRET_ROTATION_DAYS"):
+        load_query_service_settings()
+
+
+def test_query_service_settings_strict_rejects_out_of_range_payload_size(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "0")
+
+    with pytest.raises(QueryServiceConfigurationError, match="ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES"):
+        load_query_service_settings()
+
+
+def test_query_service_settings_strict_rejects_invalid_json_map(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("ENTERPRISE_FEATURE_FLAGS_JSON", "[]")
+
+    with pytest.raises(QueryServiceConfigurationError, match="ENTERPRISE_FEATURE_FLAGS_JSON"):
+        load_query_service_settings()

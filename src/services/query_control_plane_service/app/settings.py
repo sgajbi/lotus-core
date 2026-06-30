@@ -1,40 +1,43 @@
 from __future__ import annotations
 
-import json
-import os
 from dataclasses import dataclass
 from typing import Any
 
+from portfolio_common.runtime_settings import RuntimeConfigurationError
+from portfolio_common.runtime_settings import env_bool as shared_env_bool
+from portfolio_common.runtime_settings import env_int as shared_env_int
+from portfolio_common.runtime_settings import env_json_map as shared_env_json_map
+from portfolio_common.runtime_settings import env_str as shared_env_str
+
+QUERY_CONTROL_PLANE_SERVICE_NAME = "query control plane service"
+
 
 def env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return shared_env_bool(name, default, service_name=QUERY_CONTROL_PLANE_SERVICE_NAME)
 
 
-def env_int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
+def env_int(
+    name: str,
+    default: int,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    return shared_env_int(
+        name,
+        default,
+        service_name=QUERY_CONTROL_PLANE_SERVICE_NAME,
+        minimum=minimum,
+        maximum=maximum,
+    )
 
 
 def env_str(name: str, default: str) -> str:
-    raw = os.getenv(name)
-    return default if raw is None else raw
+    return shared_env_str(name, default)
 
 
 def env_json_map(name: str) -> dict[str, Any]:
-    raw = env_str(name, "{}")
-    try:
-        decoded = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return decoded if isinstance(decoded, dict) else {}
+    return shared_env_json_map(name, service_name=QUERY_CONTROL_PLANE_SERVICE_NAME)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,8 +64,13 @@ def load_query_control_plane_settings() -> QueryControlPlaneSettings:
         enterprise_require_capability_rules=env_bool("ENTERPRISE_REQUIRE_CAPABILITY_RULES", False),
         enterprise_enforce_runtime_config=env_bool("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", False),
         enterprise_primary_key_id=env_str("ENTERPRISE_PRIMARY_KEY_ID", ""),
-        enterprise_secret_rotation_days=env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90),
-        enterprise_max_write_payload_bytes=env_int("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576),
+        enterprise_secret_rotation_days=env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90, minimum=1),
+        enterprise_max_write_payload_bytes=env_int(
+            "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576, minimum=1
+        ),
         enterprise_feature_flags=env_json_map("ENTERPRISE_FEATURE_FLAGS_JSON"),
         enterprise_capability_rules=env_json_map("ENTERPRISE_CAPABILITY_RULES_JSON"),
     )
+
+
+QueryControlPlaneConfigurationError = RuntimeConfigurationError
