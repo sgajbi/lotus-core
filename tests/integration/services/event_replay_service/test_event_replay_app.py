@@ -567,7 +567,7 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
         "Canonical DLQ reason code for routing, replay policy, and incident analytics."
     )
     assert consumer_dlq_event["properties"]["payload_excerpt"]["description"] == (
-        "Truncated payload excerpt for operational triage."
+        "Redacted, truncated payload excerpt for operational triage."
     )
     assert consumer_dlq_event_list["properties"]["events"]["description"] == (
         "Consumer dead-letter events for operational triage."
