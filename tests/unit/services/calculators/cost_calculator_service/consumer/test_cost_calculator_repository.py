@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.database_models import FxRate, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.events import TransactionEvent
 
 from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
     Transaction as EngineTransaction,
@@ -190,3 +191,39 @@ async def test_update_transaction_costs_persists_linkage_metadata() -> None:
     assert db_transaction.calculation_policy_version == "1.0.0"
     assert db_transaction.cash_entry_mode == "AUTO_GENERATE"
     assert db_transaction.settlement_cash_account_id == "CASH-USD-01"
+
+
+async def test_create_or_update_transaction_event_ignores_event_envelope_fields() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+
+    event = TransactionEvent(
+        event_type="ProcessedTransactionPersisted",
+        schema_version="1.0.0",
+        correlation_id="ING:FX-CORR-01",
+        transaction_id="FX-OPEN-001",
+        portfolio_id="PORT_COST_01",
+        instrument_id="FXC-2026-0001",
+        security_id="FXC-2026-0001",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        transaction_date=datetime(2026, 4, 1, 9, 0, 0),
+        settlement_date=datetime(2026, 7, 1, 0, 0, 0),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095000"),
+        sell_amount=Decimal("1000000"),
+        contract_rate=Decimal("1.095"),
+        fx_contract_id="FXC-2026-0001",
+    )
+
+    persisted = await repository.create_or_update_transaction_event(event)
+
+    assert persisted.transaction_id == "FX-OPEN-001"
+    assert not hasattr(persisted, "event_type")
+    db_session.execute.assert_awaited_once()
