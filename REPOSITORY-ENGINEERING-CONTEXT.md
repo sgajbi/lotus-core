@@ -123,7 +123,8 @@ Current repository posture:
     health-only worker apps, and web-backed worker runtime paths must all use the shared policy so
     `LOTUS_METRICS_ACCESS_TOKEN` consistently enables bearer-token protection without direct env
     reads in HTTP middleware.
-27. Query-control-plane routes migrated to the shared `QueryControlPlaneProblem` contract must
+27. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
+    shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,
     correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
     documented as legacy `application/json` bare-detail responses until their runtime handlers are
@@ -132,6 +133,8 @@ Current repository posture:
     effective discretionary mandate binding exists should use the shared mandate-scoped
     integration-source helper and assert `QCP_INTEGRATION_SOURCE_NOT_FOUND` with source product,
     portfolio ID, and `not_found` reason metadata at unit, ASGI, and OpenAPI layers.
+    `make qcp-problem-details-guard` now prevents active QCP routers from reintroducing direct
+    FastAPI/Starlette `HTTPException` calls or raw `detail=str(...)` payloads.
 28. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
