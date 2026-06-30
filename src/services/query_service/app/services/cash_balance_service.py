@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable, cast
 
-from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
@@ -21,6 +21,15 @@ from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
+CASH_ACCOUNT_MASTER_SOURCE = "cash_account_master"
+VALIDATED_TRANSACTION_MAPPING_SOURCE = "validated_transaction_mapping"
+CASH_SECURITY_FALLBACK_SOURCE = "cash_security_fallback"
+
+
+@dataclass(frozen=True)
+class _CashAccountIdentity:
+    cash_account_id: str
+    source: str
 
 
 class CashBalanceResolver:
@@ -170,6 +179,7 @@ class CashBalanceResolver:
         resolved_as_of_date: date,
         reporting_currency: str,
         cash_account_id: str,
+        cash_account_id_source: str,
         security_id: str,
         instrument_name: str,
         account_currency: str,
@@ -194,6 +204,7 @@ class CashBalanceResolver:
         )
         return CashAccountBalanceRecord(
             cash_account_id=cash_account_id,
+            cash_account_id_source=cash_account_id_source,
             instrument_id=security_id,
             security_id=security_id,
             account_currency=account_currency,
@@ -218,6 +229,11 @@ class CashBalanceResolver:
     ) -> str:
         if not account_records:
             return cast(str, UNKNOWN)
+        if any(
+            record.cash_account_id_source == CASH_SECURITY_FALLBACK_SOURCE
+            for record in account_records
+        ):
+            return cast(str, PARTIAL)
         return cast(str, COMPLETE if cash_rows else UNKNOWN)
 
 
@@ -377,6 +393,7 @@ def _cash_balance_source_fingerprint(
             "cash_accounts": [
                 {
                     "cash_account_id": record.cash_account_id,
+                    "cash_account_id_source": record.cash_account_id_source,
                     "security_id": record.security_id,
                     "instrument_name": record.instrument_name,
                     "account_currency": record.account_currency,
@@ -414,6 +431,7 @@ def _master_record_input(
         "resolved_as_of_date": resolved_as_of_date,
         "reporting_currency": reporting_currency,
         "cash_account_id": master_row.cash_account_id,
+        "cash_account_id_source": CASH_ACCOUNT_MASTER_SOURCE,
         "security_id": security_id,
         "instrument_name": _master_instrument_name(
             master_row=master_row,
@@ -434,6 +452,7 @@ def _cash_row_record_input(
     portfolio: Any,
     cash_row: Any,
     cash_account_id: str,
+    cash_account_id_source: str,
     security_id: str,
     resolved_as_of_date: date,
     reporting_currency: str,
@@ -444,6 +463,7 @@ def _cash_row_record_input(
         "resolved_as_of_date": resolved_as_of_date,
         "reporting_currency": reporting_currency,
         "cash_account_id": cash_account_id,
+        "cash_account_id_source": cash_account_id_source,
         "security_id": security_id,
         "instrument_name": _cash_row_instrument_name(
             cash_row=cash_row,
@@ -468,16 +488,27 @@ def _cash_row_account_currency(*, cash_row: Any, portfolio: Any) -> str:
     return cast(str, portfolio.base_currency)
 
 
-def _cash_row_account_id(
+def _cash_row_account_identity(
     *,
     security_id: str,
     master_by_security_id: dict[str, Any],
     fallback_cash_account_ids: dict[str, str],
-) -> str:
+) -> _CashAccountIdentity:
     master_row = master_by_security_id.get(security_id)
     if master_row is not None:
-        return cast(str, master_row.cash_account_id)
-    return fallback_cash_account_ids.get(security_id) or security_id
+        return _CashAccountIdentity(
+            cash_account_id=cast(str, master_row.cash_account_id),
+            source=CASH_ACCOUNT_MASTER_SOURCE,
+        )
+    if fallback_cash_account_id := fallback_cash_account_ids.get(security_id):
+        return _CashAccountIdentity(
+            cash_account_id=fallback_cash_account_id,
+            source=VALIDATED_TRANSACTION_MAPPING_SOURCE,
+        )
+    return _CashAccountIdentity(
+        cash_account_id=security_id,
+        source=CASH_SECURITY_FALLBACK_SOURCE,
+    )
 
 
 def _cash_account_record_inputs(
@@ -546,11 +577,12 @@ def _fallback_record_inputs(
     record_inputs: list[dict[str, Any]] = []
     for cash_row in cash_rows:
         security_id = normalize_security_id(cash_row.snapshot.security_id)
-        cash_account_id = _cash_row_account_id(
+        cash_account_identity = _cash_row_account_identity(
             security_id=security_id,
             master_by_security_id=master_by_security_id,
             fallback_cash_account_ids=fallback_cash_account_ids,
         )
+        cash_account_id = cash_account_identity.cash_account_id
         if cash_account_id in emitted_cash_account_ids:
             continue
         record_inputs.append(
@@ -558,6 +590,7 @@ def _fallback_record_inputs(
                 portfolio=portfolio,
                 cash_row=cash_row,
                 cash_account_id=cash_account_id,
+                cash_account_id_source=cash_account_identity.source,
                 security_id=security_id,
                 resolved_as_of_date=resolved_as_of_date,
                 reporting_currency=reporting_currency,

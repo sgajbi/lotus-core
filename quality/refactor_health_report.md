@@ -39,6 +39,7 @@ tested modules.
 | Corporate-action ordering policy | Improving | CR-1197 routes cost-engine Bundle A sorting through the canonical shared ordering helper and removes the duplicated private rank map |
 | Corporate-action reconciliation evidence | Improving | CR-1198 records Bundle A reconciliation outcomes as durable `corporate_action_bundle_a` financial reconciliation runs and findings instead of log-only diagnostics |
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
+| Cash-balance account-id provenance | Improving | CR-1200 validates transaction-derived cash-account fallback mappings against active/effective cash-account master data and exposes response-level provenance |
 | Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
@@ -50,10 +51,10 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1199 addresses validated GitHub issue #672 by adding a durable transaction-cost component
-identity. The schema now enforces one normalized fee component per transaction, fee type, and
-currency, while `TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1` defensively reuse
-the same grain when already-loaded duplicate rows are encountered.
+CR-1200 addresses validated GitHub issue #673 by validating transaction-derived cash-account
+fallback mappings against active/effective cash-account master data. `HoldingsAsOf:v1` cash-balance
+rows now publish `cash_account_id_source`, and unresolved cash-security fallback rows degrade to
+`PARTIAL` instead of presenting an ungoverned transaction string as fully governed account identity.
 
 ## Health Assessment
 

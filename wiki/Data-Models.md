@@ -32,6 +32,10 @@ Primary master and reference tables include:
 These tables define the static or slowly changing portfolio and instrument context consumed by
 downstream operational and analytics-input contracts.
 
+`cash_account_masters` is the governed cash-account identity source for cash-balance account rows.
+Transaction settlement cash-account strings can support fallback mapping only after they validate
+against active/effective cash-account master rows for the same portfolio and cash instrument.
+
 ### Transactions and cashflows
 
 Primary transaction-flow tables include:

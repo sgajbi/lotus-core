@@ -199,8 +199,10 @@ projected-inclusive holdings modes, reconciles snapshot-backed positions to the 
 current-epoch history quantity, supplements missing snapshot securities from position history,
 preserves valuation continuity for history-backed rows, computes weights from returned position
 values, derives `held_since_date` within the active epoch, classifies unknown, partial, stale, and
-complete data-quality posture, and restates cash balances into a requested reporting currency
-without claiming liquidity planning, performance, risk, tax, or execution methodology.
+complete data-quality posture, restates cash balances into a requested reporting currency, and
+publishes `cash_account_id_source` so downstream consumers can distinguish active/effective
+cash-account master identity from validated transaction-derived fallback and degraded cash-security
+fallback without claiming liquidity planning, performance, risk, tax, or execution methodology.
 
 `MarketDataCoverageWindow:v1` now has implementation-backed methodology truth in
 `docs/methodologies/source-data-products/market-data-coverage-window.md`. The method resolves

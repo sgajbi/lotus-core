@@ -197,6 +197,17 @@ async def test_reporting_repository_cash_account_resolution_uses_index_friendly_
     )
     assert "transactions.transaction_date < '2026-03-28 00:00:00'" in compiled
     assert "transactions.settlement_cash_account_id IS NOT NULL" in compiled
+    assert "JOIN cash_account_masters" in compiled
+    assert (
+        "cash_account_masters.cash_account_id = transactions.settlement_cash_account_id" in compiled
+    )
+    assert (
+        "trim(cash_account_masters.security_id) = trim(transactions.settlement_cash_instrument_id)"
+        in compiled
+    )
+    assert "upper(trim(cash_account_masters.lifecycle_status)) = 'ACTIVE'" in compiled
+    assert "cash_account_masters.opened_on <= '2026-03-27'" in compiled
+    assert "cash_account_masters.closed_on >= '2026-03-27'" in compiled
     assert (
         "row_number() over (partition by trim(transactions.settlement_cash_instrument_id)"
         in normalized

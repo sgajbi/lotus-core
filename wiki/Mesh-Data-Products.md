@@ -92,11 +92,15 @@ projected-inclusive holdings modes, reconciles snapshot-backed positions to late
 history quantity, supplements missing snapshot securities from position history, preserves valuation
 continuity for supplement rows, checks non-cash market-price freshness against the response as-of
 date, classifies unknown, partial, stale, and complete posture, and builds cash balances from cash
-snapshot rows plus cash-account master data. Cash-balances also publish a Core-owned
-source-reported cash weight only when same-date portfolio market-value denominator evidence is
-complete and supportable; incomplete, missing, zero, or stale denominators block the field instead
-of forcing downstream inference. The product does not derive downstream liquidity, risk,
-performance, tax, or execution conclusions.
+snapshot rows plus active/effective cash-account master data. Cash-balance rows publish
+`cash_account_id_source` so consumers can distinguish `cash_account_master`,
+`validated_transaction_mapping`, and degraded `cash_security_fallback` identity; unknown
+cash-account identity returns partial quality instead of presenting a transaction string as
+governed account master data. Cash-balances also publish a Core-owned source-reported cash weight
+only when same-date portfolio market-value denominator evidence is complete and supportable;
+incomplete, missing, zero, or stale denominators block the field instead of forcing downstream
+inference. The product does not derive downstream liquidity, risk, performance, tax, or execution
+conclusions.
 
 `MarketDataCoverageWindow:v1` is the governed source for DPM market-price and FX coverage
 diagnostics over an explicit held and target universe. It resolves latest market prices and FX

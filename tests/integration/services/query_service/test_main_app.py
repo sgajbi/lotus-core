@@ -376,6 +376,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     aum_request = components["AssetsUnderManagementQueryRequest"]
     allocation_response = components["AssetAllocationResponse"]
     cash_response = components["CashBalancesResponse"]
+    cash_account_balance_record = components["CashAccountBalanceRecord"]
     portfolio_summary_response = components["PortfolioSummaryResponse"]
     cash_account_query_response = components["CashAccountQueryResponse"]
     transaction_record = components["TransactionRecord"]
@@ -402,6 +403,14 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert cash_response["properties"]["resolved_as_of_date"]["examples"] == ["2026-03-27"]
     assert cash_response["properties"]["product_name"]["default"] == "HoldingsAsOf"
     assert cash_response["properties"]["product_version"]["default"] == "v1"
+    cash_account_id_source = cash_account_balance_record["properties"]["cash_account_id_source"]
+    assert cash_account_id_source["default"] == "cash_account_master"
+    assert cash_account_id_source["enum"] == [
+        "cash_account_master",
+        "validated_transaction_mapping",
+        "cash_security_fallback",
+    ]
+    assert "active/effective cash-account master data" in cash_account_id_source["description"]
     cash_totals = components["CashBalancesTotals"]
     cash_weight_description = cash_totals["properties"]["source_reported_cash_weight"][
         "description"
