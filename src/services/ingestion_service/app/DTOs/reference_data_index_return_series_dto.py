@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import cast
 
 from portfolio_common.currency_codes import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class IndexReturnSeriesRecord(BaseModel):
+
+class IndexReturnSeriesRecord(SourceObservationLineage):
     series_id: str = Field(..., description="Series identifier.", examples=["series_idx_world_ret"])
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
@@ -22,16 +24,6 @@ class IndexReturnSeriesRecord(BaseModel):
         description="Canonical three-letter currency for the index return series.",
         examples=["USD"],
     )
-    source_timestamp: datetime | None = Field(
-        None,
-        description="Source publication timestamp for the index return series record.",
-        examples=["2026-01-02T21:00:00Z"],
-    )
-    source_vendor: str | None = Field(None, description="Source vendor.", examples=["MSCI"])
-    source_record_id: str | None = Field(
-        None, description="Source record identifier.", examples=["idxr_20260102"]
-    )
-    quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
 
     @field_validator("series_currency", mode="before")
     @classmethod

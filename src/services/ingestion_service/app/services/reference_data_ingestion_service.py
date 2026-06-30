@@ -71,6 +71,30 @@ class ReferenceDataIngestionService:
             normalized_records.append(row)
         return normalized_records
 
+    @staticmethod
+    def _legacy_source_observation_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        legacy_records = []
+        for record in records:
+            row = dict(record)
+            has_source_system = "source_system" in row
+            has_observed_at = "observed_at" in row
+            source_system = row.pop("source_system", None)
+            observed_at = row.pop("observed_at", None)
+            if has_source_system and "source_vendor" not in row:
+                row["source_vendor"] = source_system
+            if has_observed_at and "source_timestamp" not in row:
+                row["source_timestamp"] = observed_at
+            legacy_records.append(row)
+        return legacy_records
+
+    @classmethod
+    def _normalize_legacy_source_currency_field(
+        cls, records: list[dict[str, Any]], field_name: str
+    ) -> list[dict[str, Any]]:
+        return cls._normalize_currency_field(
+            cls._legacy_source_observation_records(records), field_name
+        )
+
     async def upsert_portfolio_benchmark_assignments(self, records: list[dict[str, Any]]) -> None:
         now = datetime.now(UTC)
         normalized_records = []
@@ -418,7 +442,7 @@ class ReferenceDataIngestionService:
     async def upsert_benchmark_definitions(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=BenchmarkDefinition,
-            records=self._normalize_currency_field(records, "benchmark_currency"),
+            records=self._normalize_legacy_source_currency_field(records, "benchmark_currency"),
             conflict_columns=["benchmark_id", "effective_from"],
             update_columns=[
                 "benchmark_name",
@@ -442,7 +466,7 @@ class ReferenceDataIngestionService:
     async def upsert_benchmark_compositions(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=BenchmarkCompositionSeries,
-            records=records,
+            records=self._legacy_source_observation_records(records),
             conflict_columns=["benchmark_id", "index_id", "composition_effective_from"],
             update_columns=[
                 "composition_effective_to",
@@ -458,7 +482,7 @@ class ReferenceDataIngestionService:
     async def upsert_indices(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=IndexDefinition,
-            records=self._normalize_currency_field(records, "index_currency"),
+            records=self._normalize_legacy_source_currency_field(records, "index_currency"),
             conflict_columns=["index_id", "effective_from"],
             update_columns=[
                 "index_name",
@@ -480,7 +504,7 @@ class ReferenceDataIngestionService:
     async def upsert_index_price_series(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=IndexPriceSeries,
-            records=self._normalize_currency_field(records, "series_currency"),
+            records=self._normalize_legacy_source_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "index_id", "series_date"],
             update_columns=[
                 "index_price",
@@ -496,7 +520,7 @@ class ReferenceDataIngestionService:
     async def upsert_index_return_series(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=IndexReturnSeries,
-            records=self._normalize_currency_field(records, "series_currency"),
+            records=self._normalize_legacy_source_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "index_id", "series_date"],
             update_columns=[
                 "index_return",
@@ -513,7 +537,7 @@ class ReferenceDataIngestionService:
     async def upsert_benchmark_return_series(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=BenchmarkReturnSeries,
-            records=self._normalize_currency_field(records, "series_currency"),
+            records=self._normalize_legacy_source_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "benchmark_id", "series_date"],
             update_columns=[
                 "benchmark_return",
@@ -530,7 +554,7 @@ class ReferenceDataIngestionService:
     async def upsert_risk_free_series(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=RiskFreeSeries,
-            records=self._normalize_currency_field(records, "series_currency"),
+            records=self._normalize_legacy_source_currency_field(records, "series_currency"),
             conflict_columns=["series_id", "risk_free_curve_id", "series_date"],
             update_columns=[
                 "value",
@@ -548,7 +572,7 @@ class ReferenceDataIngestionService:
     async def upsert_classification_taxonomy(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=ClassificationTaxonomy,
-            records=records,
+            records=self._legacy_source_observation_records(records),
             conflict_columns=[
                 "classification_set_id",
                 "taxonomy_scope",

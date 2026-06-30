@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Literal, cast
 
 from portfolio_common.currency_codes import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class RiskFreeSeriesRecord(BaseModel):
+
+class RiskFreeSeriesRecord(SourceObservationLineage):
     series_id: str = Field(..., description="Series identifier.", examples=["rf_usd_3m"])
     risk_free_curve_id: str = Field(
         ..., description="Risk-free curve identifier.", examples=["USD_SOFR_3M"]
@@ -35,16 +37,6 @@ class RiskFreeSeriesRecord(BaseModel):
         description="Canonical three-letter currency for the risk-free series.",
         examples=["USD"],
     )
-    source_timestamp: datetime | None = Field(
-        None,
-        description="Source publication timestamp for the risk-free curve series record.",
-        examples=["2026-01-02T06:00:00Z"],
-    )
-    source_vendor: str | None = Field(None, description="Source vendor.", examples=["BLOOMBERG"])
-    source_record_id: str | None = Field(
-        None, description="Source record identifier.", examples=["rf_20260102"]
-    )
-    quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
 
     @field_validator("series_currency", mode="before")
     @classmethod

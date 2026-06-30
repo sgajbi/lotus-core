@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import cast
 
 from portfolio_common.currency_codes import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class ClassificationTaxonomyRecord(BaseModel):
+
+class ClassificationTaxonomyRecord(SourceObservationLineage):
     classification_set_id: str = Field(
         ..., description="Classification set identifier.", examples=["wm_global_taxonomy_v1"]
     )
@@ -24,19 +26,6 @@ class ClassificationTaxonomyRecord(BaseModel):
     effective_to: date | None = Field(
         None, description="Effective end date.", examples=["2026-12-31"]
     )
-    source_timestamp: datetime | None = Field(
-        None,
-        description="Source publication timestamp for the taxonomy record.",
-        examples=["2026-01-31T23:00:00Z"],
-    )
-    source_vendor: str | None = Field(
-        None, description="Source vendor.", examples=["LOTUS_TAXONOMY"]
-    )
-    source_record_id: str | None = Field(
-        None, description="Source record identifier.", examples=["tax_20260131"]
-    )
-    quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
-
     model_config = ConfigDict()
 
 

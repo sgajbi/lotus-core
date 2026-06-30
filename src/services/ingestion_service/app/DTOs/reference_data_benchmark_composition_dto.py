@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .reference_data_source_observation_dto import SourceObservationLineage
 
-class BenchmarkCompositionRecord(BaseModel):
+
+class BenchmarkCompositionRecord(SourceObservationLineage):
     benchmark_id: str = Field(
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )
@@ -35,17 +37,6 @@ class BenchmarkCompositionRecord(BaseModel):
         description="Rebalance event identifier.",
         examples=["rebalance_2026q1"],
     )
-    source_timestamp: datetime | None = Field(
-        None,
-        description="Source publication timestamp for the benchmark composition payload.",
-        examples=["2026-01-31T23:00:00Z"],
-    )
-    source_vendor: str | None = Field(None, description="Source vendor.", examples=["MSCI"])
-    source_record_id: str | None = Field(
-        None, description="Source record identifier.", examples=["cmp_v20260131"]
-    )
-    quality_status: str = Field("accepted", description="Quality status.", examples=["accepted"])
-
     model_config = ConfigDict()
 
 

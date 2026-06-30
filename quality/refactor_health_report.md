@@ -31,6 +31,7 @@ tested modules.
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 | Ingestion idempotency | Improving | CR-1177 added deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT`; CR-1188 stores full canonical non-reversible request fingerprints so same endpoint/key reuse with changed sensitive values conflicts while durable payload evidence remains redacted |
 | Source-batch lineage semantics | Improving | CR-1189 stops selected source-data products from populating upstream `source_batch_fingerprint` with request/snapshot fingerprints when true source-batch evidence is unavailable |
+| Reference-data source observation lineage | Improving | CR-1205 adds a shared source-observation DTO contract for benchmark/index/risk-free/classification ingestion families while preserving legacy aliases and storage columns |
 | Reference-data ingestion unit of work | Improving | CR-1185 removes commit ownership from the low-level reference-data upsert staging helper, preserves existing single-table commit behavior through an explicit wrapper, and adds source-batch commit/rollback orchestration |
 | Outbox retry eligibility | Improving | CR-1186 adds durable `next_attempt_at` retry eligibility, bounded exponential outbox retry scheduling, and claim filtering so retryable publish failures are not immediately reselected before their retry window matures |
 | Outbox failure evidence | Improving | CR-1187 persists source-safe last-failure reason code, category, redacted bounded message, and failure timestamp on retryable and terminal outbox delivery failures |
@@ -52,11 +53,11 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1201 addresses the first write-side enforcement slice for validated GitHub issue #674 by
-deferring product cost processing when instrument master data is missing. The cost consumer now
-blocks cost-engine processing, transaction-cost persistence, BUY lot-state persistence, and
-processed-event publication for unresolved product instrument references while preserving FX and
-pure adjustment specialized flows.
+CR-1205 addresses the first source-observation standardization slice for validated GitHub issue
+#557. Benchmark, index, risk-free, and classification reference-data ingestion DTOs now share
+canonical `source_system`, `source_record_id`, `observed_at`, and normalized `quality_status`
+fields while legacy `source_vendor` and `source_timestamp` payloads remain accepted and existing
+database columns remain unchanged.
 
 ## Health Assessment
 

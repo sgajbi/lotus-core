@@ -342,6 +342,42 @@ def test_benchmark_definition_normalizes_benchmark_currency() -> None:
     assert record.benchmark_currency == "USD"
 
 
+def test_reference_data_source_observation_accepts_canonical_lineage_fields() -> None:
+    record = BenchmarkDefinitionRecord.model_validate(
+        _benchmark_definition(
+            source_system="MSCI",
+            source_record_id="bmk_v20260131",
+            observed_at="2026-01-31T23:00:00Z",
+            quality_status=" Accepted ",
+        )
+    )
+
+    assert record.source_system == "MSCI"
+    assert record.observed_at is not None
+    assert record.quality_status == "accepted"
+    assert record.model_dump(mode="json")["observed_at"] == "2026-01-31T23:00:00Z"
+    assert "source_timestamp" not in record.model_dump(mode="json")
+
+
+def test_reference_data_source_observation_accepts_legacy_lineage_aliases() -> None:
+    record = IndexPriceSeriesRecord.model_validate(
+        _index_price_series(
+            source_vendor="MSCI",
+            source_record_id="idxp_20260102",
+            source_timestamp="2026-01-02T21:00:00Z",
+        )
+    )
+
+    assert record.source_system == "MSCI"
+    assert record.observed_at is not None
+    assert record.model_dump()["source_record_id"] == "idxp_20260102"
+
+
+def test_reference_data_source_observation_rejects_blank_quality_status() -> None:
+    with pytest.raises(ValidationError, match="quality_status must not be blank"):
+        BenchmarkDefinitionRecord.model_validate(_benchmark_definition(quality_status="  "))
+
+
 @pytest.mark.parametrize(
     ("record_type", "payload", "field_name"),
     [
