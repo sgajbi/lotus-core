@@ -28,16 +28,15 @@ tested modules.
 | Architecture gates | Improving | Existing `make architecture-guard` now enforces removed-domain import exclusions plus selected direct-import boundaries after CR-1171; `make quality-import-boundary-gate` enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are enforced in the quality-baseline API governance job; CR-1170 adds stable generated OpenAPI artifacts under `output/openapi/` and enforced portable Spectral blocker-subset linting through `make quality-openapi-spectral-gate` |
 | HTTP observability | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics; CR-1175 routes health-only worker web apps through the standard HTTP bootstrap for `/metrics`, `/health/live`, `/health/ready`, correlation/request/trace headers, route-template HTTP metrics, and request-completion logs |
-| Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads, copied headers, traceback/error text, persisted error reasons, and persisted payload excerpts |
+| Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 
 ## Current Slice Update
 
-CR-1175 begins validated GitHub issue #562 by adding a shared health-only worker app factory over
-the standard HTTP bootstrap and routing calculator, orchestration, aggregation, timeseries,
-valuation, and persistence worker web apps through it. Focused tests prove the shared health app
-contract and duplicate-metrics runtime guard; local HTTP smoke verifies all nine touched worker
-web apps expose `/health/live`, `/health/ready`, `/metrics`, and standard trace/correlation
-headers.
+CR-1176 begins validated GitHub issue #559 by adding a centralized ingestion payload evidence
+boundary. Ingestion job creation now stores source-safe redacted request payloads while preserving
+non-sensitive replay payload shape, and the new helper provides canonical SHA-256 fingerprint
+groundwork for the schema-backed idempotency/conflict follow-up. Focused tests prove fingerprint
+stability, no input mutation, sensitive-field redaction, and redacted lifecycle persistence.
 
 ## Health Assessment
 
