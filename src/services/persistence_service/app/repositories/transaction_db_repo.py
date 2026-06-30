@@ -11,6 +11,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 
+_TRANSACTION_EVENT_ONLY_FIELDS = frozenset(
+    {
+        "event_type",
+        "schema_version",
+        "correlation_id",
+        "epoch",
+        "brokerage",
+        "stamp_duty",
+        "exchange_fee",
+        "gst",
+        "other_fees",
+    }
+)
+
+
+def transaction_event_to_record_values(event: TransactionEvent) -> dict[str, object]:
+    """Map a validated transaction event to transaction-table values."""
+    return event.model_dump(exclude=_TRANSACTION_EVENT_ONLY_FIELDS, exclude_none=True)
+
+
 class TransactionDBRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -27,11 +47,7 @@ class TransactionDBRepository:
         UPSERT (INSERT ... ON CONFLICT DO UPDATE) for high performance and concurrency safety.
         """
         try:
-            # Exclude event-only fields that do not map to the transactions table.
-            event_dict = event.model_dump(
-                exclude={"epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"},
-                exclude_none=True,
-            )
+            event_dict = transaction_event_to_record_values(event)
 
             # The statement to execute.
             stmt = pg_insert(DBTransaction).values(**event_dict)
