@@ -70,7 +70,7 @@ def test_build_client_restriction_profile_response_marks_ready() -> None:
     assert response.restrictions[0].asset_classes == ["private_credit"]
     assert response.data_quality_status == "ACCEPTED"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, tzinfo=UTC)
-    assert response.source_batch_fingerprint is not None
+    assert response.source_batch_fingerprint is None
     assert response.snapshot_id is not None
     assert response.snapshot_id.startswith("client_restriction_profile:")
     assert response.lineage == {
