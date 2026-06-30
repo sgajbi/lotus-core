@@ -37,6 +37,7 @@ tested modules.
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads and migrates representative core-snapshot, analytics-input, and simulation failures away from raw bare `detail` responses |
+| Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Transaction cost curve source reads | Improving | CR-1194 makes `TransactionCostCurve:v1` cursor paging source-read bounded through grouped keyset selection and page-key-scoped transaction evidence reads |
 | Performance component economics paging | Improving | CR-1195 adds request-scoped cursor paging, bounded `page_size + 1` row evidence reads, explicit returned-page totals scope, and bad-token HTTP 400 handling for `PerformanceComponentEconomics:v1` |
@@ -46,11 +47,11 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1195 addresses validated GitHub issue #682 by adding bounded cursor paging to
-`PerformanceComponentEconomics:v1`. The service now reads row-level transaction, cashflow, and fee
-evidence with a `page_size + 1` budget, rejects malformed or cross-scope page tokens, marks
-non-terminal pages as partial/degraded, and makes component totals explicitly returned-page scoped
-while preserving route path, existing row fields, formulas, lineage, and no-evidence behavior.
+CR-1196 addresses validated GitHub issue #684 by making ingestion write rate-limit enforcement
+scope explicit and startup-validated. The default local-process limiter remains compatible, but it
+no longer silently implies global scaled-service enforcement; gateway-backed scopes now require a
+declared policy ID, startup logs expose the active contract, and local denials emit bounded
+reason/scope metrics and logs.
 
 ## Health Assessment
 

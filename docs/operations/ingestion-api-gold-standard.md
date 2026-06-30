@@ -32,12 +32,26 @@ This runbook summarizes the ingestion operations controls expected for productio
 
 ## Ingestion write rate limiting
 
-- Canonical ingestion write APIs enforce rolling-window rate limits.
+- Canonical ingestion write APIs support rolling-window rate limits.
+- The default `local_process` scope is a per-process safety guard only. It is useful for local
+  protection and defense in depth, but it is not a global service-level limit across multiple
+  Uvicorn workers, containers, or pods.
+- Scaled or production-like deployments must use an upstream gateway policy for global enforcement
+  and set `LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE` to `upstream_gateway` or
+  `local_process_with_upstream_gateway`.
+- Gateway-backed scopes require `LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID`; the ingestion
+  service fails startup when a gateway-backed scope is selected without that policy identifier.
+- Rate-limit denials emitted by the local process limiter increment
+  `ingestion_write_rate_limit_denials_total` with bounded `endpoint`, `reason`, and
+  `enforcement_scope` labels and write a source-safe warning log.
 - Controls:
   - `LOTUS_CORE_INGEST_RATE_LIMIT_ENABLED` (default: `true`)
   - `LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS` (default: `60`)
   - `LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS` (default: `120`)
   - `LOTUS_CORE_INGEST_RATE_LIMIT_MAX_RECORDS` (default: `10000`)
+  - `LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE` (`local_process`, `upstream_gateway`,
+    `local_process_with_upstream_gateway`; default: `local_process`)
+  - `LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID` (required for gateway-backed scopes)
 
 ## High-value operations endpoints
 

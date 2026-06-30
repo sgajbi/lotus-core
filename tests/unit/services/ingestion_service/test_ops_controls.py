@@ -11,6 +11,18 @@ from starlette.requests import Request
 from src.services.ingestion_service.app import ops_controls
 
 
+class _FakeCounter:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def labels(self, **labels: str) -> "_FakeCounter":
+        self.calls.append(labels)
+        return self
+
+    def inc(self) -> None:
+        return None
+
+
 def _request(headers: dict[str, str]) -> Request:
     return Request(
         {
@@ -120,9 +132,56 @@ def test_ingestion_write_rate_limit_noops_when_disabled(monkeypatch) -> None:
     assert "/ingest/test" not in ops_controls._write_events
 
 
+def test_ingestion_write_rate_limit_contract_declares_local_scope(monkeypatch) -> None:
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENFORCEMENT_SCOPE", "local_process")
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_GATEWAY_POLICY_ID", "")
+
+    contract = ops_controls.ingestion_write_rate_limit_contract()
+
+    assert contract["enforcement_scope"] == "local_process"
+    assert contract["local_process_enforcement"] is True
+    assert contract["global_enforcement_claimed"] is False
+
+
+def test_ingestion_write_rate_limit_gateway_scope_requires_policy(monkeypatch) -> None:
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENFORCEMENT_SCOPE", "upstream_gateway")
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_GATEWAY_POLICY_ID", "")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        ops_controls.validate_ingestion_write_rate_limit_contract()
+
+    assert "LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID" in str(exc_info.value)
+
+
+def test_ingestion_write_rate_limit_gateway_scope_accepts_policy(monkeypatch) -> None:
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENFORCEMENT_SCOPE", "upstream_gateway")
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_GATEWAY_POLICY_ID", "kong-ingest-write-v1")
+
+    ops_controls.validate_ingestion_write_rate_limit_contract()
+    contract = ops_controls.ingestion_write_rate_limit_contract()
+
+    assert contract["global_enforcement_claimed"] is True
+    assert contract["local_process_enforcement"] is False
+    assert contract["gateway_policy_id"] == "kong-ingest-write-v1"
+
+
+def test_ingestion_write_rate_limit_upstream_gateway_bypasses_local_store(monkeypatch) -> None:
+    ops_controls._write_events.clear()
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENFORCEMENT_SCOPE", "upstream_gateway")
+
+    ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/test", record_count=10)
+
+    assert "/ingest/test" not in ops_controls._write_events
+
+
 def test_ingestion_write_rate_limit_floors_record_count(monkeypatch) -> None:
     ops_controls._write_events.clear()
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENFORCEMENT_SCOPE", "local_process")
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_REQUESTS", 10)
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_RECORDS", 10)
 
@@ -134,20 +193,32 @@ def test_ingestion_write_rate_limit_floors_record_count(monkeypatch) -> None:
 def test_ingestion_write_rate_limit_blocks_projected_record_budget(monkeypatch) -> None:
     ops_controls._write_events.clear()
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENFORCEMENT_SCOPE", "local_process")
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_REQUESTS", 10)
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_RECORDS", 2)
+    fake_counter = _FakeCounter()
+    monkeypatch.setattr(ops_controls, "INGESTION_WRITE_RATE_LIMIT_DENIALS_TOTAL", fake_counter)
 
     ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/test", record_count=2)
     with pytest.raises(PermissionError) as exc_info:
         ops_controls.enforce_ingestion_write_rate_limit(endpoint="/ingest/test", record_count=1)
 
+    assert "reason=record_budget" in str(exc_info.value)
     assert "max_records=2" in str(exc_info.value)
     assert len(ops_controls._write_events["/ingest/test"]) == 1
+    assert fake_counter.calls == [
+        {
+            "endpoint": "/ingest/test",
+            "reason": "record_budget",
+            "enforcement_scope": "local_process",
+        }
+    ]
 
 
 def test_ingestion_write_rate_limit_is_endpoint_scoped(monkeypatch) -> None:
     ops_controls._write_events.clear()
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(ops_controls, "RATE_LIMIT_ENFORCEMENT_SCOPE", "local_process")
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_REQUESTS", 1)
     monkeypatch.setattr(ops_controls, "RATE_LIMIT_MAX_RECORDS", 100)
 
