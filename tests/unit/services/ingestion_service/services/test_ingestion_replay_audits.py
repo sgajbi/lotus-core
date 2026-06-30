@@ -130,3 +130,59 @@ async def test_record_consumer_dlq_replay_audit_persists_row_and_metrics(
         replay_status="replayed_bookkeeping_failed",
     ).calls == [1]
     assert duplicate_counter.handles == {}
+
+
+async def test_record_consumer_dlq_replay_audit_raises_typed_error_when_no_session():
+    async def _empty_session_factory():
+        if False:
+            yield None
+
+    with pytest.raises(module.InfrastructureAuditWriteFailed) as exc_info:
+        await module.record_consumer_dlq_replay_audit_response(
+            recovery_path="consumer_dlq_replay",
+            event_id="event_123",
+            replay_fingerprint="fp_123",
+            correlation_id="corr-123",
+            job_id="job_123",
+            endpoint="/ingest/transactions",
+            replay_status="failed",
+            dry_run=False,
+            replay_reason="no session",
+            requested_by="ops-token",
+            session_factory=_empty_session_factory,
+        )
+
+    assert str(exc_info.value) == "Unable to record consumer DLQ replay audit."
+    assert exc_info.value.reason_code == "audit_session_unavailable"
+
+
+async def test_record_consumer_dlq_replay_audit_wraps_persistence_failure():
+    class _FailingBegin:
+        async def __aenter__(self):
+            raise ConnectionError("database unavailable")
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class _FailingSession:
+        def begin(self):
+            return _FailingBegin()
+
+    with pytest.raises(module.InfrastructureAuditWriteFailed) as exc_info:
+        await module.record_consumer_dlq_replay_audit_response(
+            recovery_path="consumer_dlq_replay",
+            event_id="event_123",
+            replay_fingerprint="fp_123",
+            correlation_id="corr-123",
+            job_id="job_123",
+            endpoint="/ingest/transactions",
+            replay_status="failed",
+            dry_run=False,
+            replay_reason="db down",
+            requested_by="ops-token",
+            session_factory=lambda: _SingleSessionAsyncIterable(_FailingSession()),
+        )
+
+    assert str(exc_info.value) == "Unable to record consumer DLQ replay audit."
+    assert exc_info.value.reason_code == "audit_persistence_failed"
+    assert isinstance(exc_info.value.__cause__, ConnectionError)
