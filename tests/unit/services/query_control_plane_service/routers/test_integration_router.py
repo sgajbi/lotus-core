@@ -2407,11 +2407,11 @@ async def test_fetch_benchmark_composition_window_router_functions() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fetch_benchmark_composition_window_maps_not_found_to_404() -> None:
+async def test_fetch_benchmark_composition_window_maps_not_found_to_problem_details() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_benchmark_composition_window = AsyncMock(return_value=None)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_composition_window(
             benchmark_id="BMK_MISSING",
             request=BenchmarkCompositionWindowRequest(
@@ -2420,11 +2420,23 @@ async def test_fetch_benchmark_composition_window_maps_not_found_to_404() -> Non
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No overlapping benchmark definition found for benchmark_id and requested window.",
+        metadata={
+            "source_product": "BenchmarkConstituentWindow",
+            "benchmark_id": "BMK_MISSING",
+            "reason": "not_found",
+        },
+    )
 
 
 @pytest.mark.asyncio
-async def test_fetch_benchmark_composition_window_maps_currency_conflict_to_409() -> None:
+async def test_fetch_benchmark_composition_window_maps_currency_conflict_to_problem_details() -> (
+    None
+):
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_benchmark_composition_window = AsyncMock(
         side_effect=ValueError(
@@ -2432,7 +2444,7 @@ async def test_fetch_benchmark_composition_window_maps_currency_conflict_to_409(
         )
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_composition_window(
             benchmark_id="BMK_CONFLICT",
             request=BenchmarkCompositionWindowRequest(
@@ -2441,22 +2453,45 @@ async def test_fetch_benchmark_composition_window_maps_currency_conflict_to_409(
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 409
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=409,
+        error_code="QCP_INTEGRATION_SOURCE_CONFLICT",
+        detail=(
+            "Benchmark composition window request conflicts with effective benchmark "
+            "definition data."
+        ),
+        metadata={
+            "source_product": "BenchmarkConstituentWindow",
+            "reason": "ValueError",
+            "benchmark_id": "BMK_CONFLICT",
+        },
+    )
 
 
 @pytest.mark.asyncio
-async def test_fetch_benchmark_definition_not_found_maps_404() -> None:
+async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     mock_service.get_benchmark_definition = AsyncMock(return_value=None)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_definition(
             benchmark_id="BMK_MISSING",
             request=BenchmarkDefinitionRequest(as_of_date="2026-01-31"),
             integration_service=mock_service,
         )
 
-    assert exc_info.value.status_code == 404
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective benchmark definition found for benchmark_id and as_of_date.",
+        metadata={
+            "source_product": "BenchmarkDefinition",
+            "benchmark_id": "BMK_MISSING",
+            "reason": "not_found",
+        },
+    )
 
 
 @pytest.mark.asyncio

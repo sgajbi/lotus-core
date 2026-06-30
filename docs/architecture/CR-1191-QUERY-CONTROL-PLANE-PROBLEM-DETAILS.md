@@ -78,6 +78,9 @@ depend on raw internal exception text for the migrated representative paths.
   preference, client tax, client cashflow/liquidity, external treasury, and external OMS missing
   mandate-binding failures raise or return `QCP_INTEGRATION_SOURCE_NOT_FOUND` with exact
   source-product, portfolio, and reason metadata.
+- Benchmark reference route tests now assert benchmark definition not-found, composition-window
+  not-found, and composition-window conflict failures raise or return `QCP_INTEGRATION_SOURCE_*`
+  problem-details payloads with benchmark source-product metadata.
 
 ## Validation Evidence
 
@@ -105,6 +108,8 @@ depend on raw internal exception text for the migrated representative paths.
   passed with 109 tests after the review-driven 422 validation-media fix.
 - `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_mandate_scoped_source_routes_missing_binding_map_to_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_integration_source_problem_details -q`
   passed with 84 tests.
+- `python -m pytest tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_composition_window_maps_not_found_to_problem_details tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_composition_window_maps_currency_conflict_to_problem_details tests/unit/services/query_control_plane_service/routers/test_integration_router.py::test_fetch_benchmark_definition_not_found_maps_problem_details tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_definition_not_found_maps_to_404 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_composition_window_not_found_maps_to_404 tests/integration/services/query_control_plane_service/test_integration_router_dependency.py::test_benchmark_composition_window_conflict_maps_to_problem_details tests/integration/services/query_control_plane_service/test_control_plane_app.py::test_openapi_describes_benchmark_reference_parameters -q`
+  passed with 7 tests.
 - `python -m ruff check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
   passed.
 - `python -m ruff format --check src/services/query_control_plane_service/app/main.py src/services/query_control_plane_service/app/routers/response_helpers.py src/services/query_control_plane_service/app/routers/integration.py src/services/query_control_plane_service/app/routers/analytics_inputs.py src/services/query_control_plane_service/app/routers/simulation.py tests/integration/services/query_control_plane_service/test_integration_router_dependency.py tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`
@@ -146,6 +151,9 @@ For the migrated mandate-scoped source routes, missing discretionary mandate bin
 stable `QCP_INTEGRATION_SOURCE_NOT_FOUND` payloads with the source product, portfolio ID, and
 `not_found` reason. Existing HTTP status codes, routes, request/success DTOs, service calls, and
 source-data envelopes are preserved.
+For the migrated benchmark reference routes, benchmark definition and composition-window not-found
+failures expose `QCP_INTEGRATION_SOURCE_NOT_FOUND`, and composition-window conflicts expose
+`QCP_INTEGRATION_SOURCE_CONFLICT` with bounded details instead of raw service exception text.
 
 ## Documentation And Wiki Decision
 

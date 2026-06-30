@@ -142,6 +142,23 @@ def _integration_source_invalid_request_example(
     )
 
 
+def _integration_source_conflict_example(
+    *,
+    source_product: str,
+    detail: str,
+    metadata: dict[str, object] | None = None,
+    instance: str = "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/composition-window",
+) -> dict[str, object]:
+    return problem_example(
+        status_code=status.HTTP_409_CONFLICT,
+        title="Integration source data conflict",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_CONFLICT",
+        instance=instance,
+        metadata={"source_product": source_product, **(metadata or {})},
+    )
+
+
 INTEGRATION_POLICY_BLOCKED_EXAMPLE = problem_example(
     status_code=status.HTTP_403_FORBIDDEN,
     title="Core snapshot sections blocked by policy",
@@ -314,12 +331,32 @@ PORTFOLIO_TAX_LOTS_NOT_FOUND_EXAMPLE = problem_example(
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
     },
 )
-BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = {
-    "detail": "No effective benchmark definition found for benchmark_id and as_of_date."
-}
-BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = {
-    "detail": "No overlapping benchmark definition found for benchmark_id and requested window."
-}
+BENCHMARK_DEFINITION_NOT_FOUND_DETAIL = (
+    "No effective benchmark definition found for benchmark_id and as_of_date."
+)
+BENCHMARK_DEFINITION_NOT_FOUND_EXAMPLE = _integration_source_not_found_example(
+    source_product="BenchmarkDefinition",
+    detail=BENCHMARK_DEFINITION_NOT_FOUND_DETAIL,
+    metadata={"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "reason": "not_found"},
+    instance="/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/definition",
+)
+BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_DETAIL = (
+    "No overlapping benchmark definition found for benchmark_id and requested window."
+)
+BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE = _integration_source_not_found_example(
+    source_product="BenchmarkConstituentWindow",
+    detail=BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_DETAIL,
+    metadata={"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "reason": "not_found"},
+    instance="/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/composition-window",
+)
+BENCHMARK_COMPOSITION_WINDOW_CONFLICT_DETAIL = (
+    "Benchmark composition window request conflicts with effective benchmark definition data."
+)
+BENCHMARK_COMPOSITION_WINDOW_CONFLICT_EXAMPLE = _integration_source_conflict_example(
+    source_product="BenchmarkConstituentWindow",
+    detail=BENCHMARK_COMPOSITION_WINDOW_CONFLICT_DETAIL,
+    metadata={"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "reason": "ValueError"},
+)
 TRANSACTION_COST_CURVE_NOT_FOUND_EXAMPLE = problem_example(
     status_code=status.HTTP_404_NOT_FOUND,
     title="Portfolio source evidence not found",
@@ -404,6 +441,26 @@ def _raise_integration_source_invalid_request(
         title="Integration source request is invalid",
         detail=detail,
         error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        metadata={
+            "source_product": source_product,
+            "reason": exc.__class__.__name__,
+            **(metadata or {}),
+        },
+    )
+
+
+def _raise_integration_source_conflict(
+    *,
+    source_product: str,
+    detail: str,
+    exc: Exception,
+    metadata: dict[str, object] | None = None,
+) -> NoReturn:
+    raise_problem(
+        status_code=status.HTTP_409_CONFLICT,
+        title="Integration source data conflict",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_CONFLICT",
         metadata={
             "source_product": source_product,
             "reason": exc.__class__.__name__,
@@ -1960,9 +2017,10 @@ async def get_external_fx_forward_curve(
             "No overlapping benchmark definition found.",
             BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_EXAMPLE,
         ),
-        status.HTTP_409_CONFLICT: {
-            "description": "Benchmark definition changed incompatibly inside the requested window."
-        },
+        status.HTTP_409_CONFLICT: problem_response(
+            "Benchmark definition changed incompatibly inside the requested window.",
+            BENCHMARK_COMPOSITION_WINDOW_CONFLICT_EXAMPLE,
+        ),
     },
     summary="Fetch overlapping benchmark composition segments",
     description=(
@@ -1995,13 +2053,17 @@ async def fetch_benchmark_composition_window(
             ),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        _raise_integration_source_conflict(
+            source_product="BenchmarkConstituentWindow",
+            detail=BENCHMARK_COMPOSITION_WINDOW_CONFLICT_DETAIL,
+            exc=exc,
+            metadata={"benchmark_id": benchmark_id},
+        )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "No overlapping benchmark definition found for benchmark_id and requested window."
-            ),
+        _raise_integration_source_not_found(
+            source_product="BenchmarkConstituentWindow",
+            detail=BENCHMARK_COMPOSITION_WINDOW_NOT_FOUND_DETAIL,
+            metadata={"benchmark_id": benchmark_id, "reason": "not_found"},
         )
     return response
 
@@ -2040,9 +2102,10 @@ async def fetch_benchmark_definition(
         await integration_service.get_benchmark_definition(benchmark_id, request.as_of_date),
     )
     if response is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No effective benchmark definition found for benchmark_id and as_of_date.",
+        _raise_integration_source_not_found(
+            source_product="BenchmarkDefinition",
+            detail=BENCHMARK_DEFINITION_NOT_FOUND_DETAIL,
+            metadata={"benchmark_id": benchmark_id, "reason": "not_found"},
         )
     return response
 
