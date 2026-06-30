@@ -30,14 +30,16 @@ tested modules.
 | HTTP observability | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics; CR-1175 routes health-only worker web apps through the standard HTTP bootstrap for `/metrics`, `/health/live`, `/health/ready`, correlation/request/trace headers, route-template HTTP metrics, and request-completion logs |
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 | Ingestion idempotency | Improving | CR-1177 compares source-safe canonical payload fingerprints for duplicate ingestion idempotency keys and returns deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT` when the same endpoint/key is reused with a different payload |
+| Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 
 ## Current Slice Update
 
-CR-1177 begins validated GitHub issue #554 by comparing source-safe canonical payload fingerprints
-when an ingestion idempotency key already exists for the same endpoint. Same payloads still replay
-the original job acknowledgement; different payloads now return deterministic
-`409 INGESTION_IDEMPOTENCY_CONFLICT` instead of silently replaying unrelated prior job evidence.
-Focused tests prove same-payload replay, different-payload rejection, and the conflict response body.
+CR-1178 addresses validated GitHub issue #558 by moving shared governed event models from
+`extra="ignore"` to `extra="forbid"` while explicitly preserving existing outbox envelope metadata
+fields. Producer/consumer drift is now rejected instead of silently dropping unknown lineage,
+version, or audit fields. Shared Kafka consumer DLQ evidence renders Pydantic validation errors
+without raw rejected input values. Focused tests prove event-contract rejection, envelope
+compatibility, and source-safe DLQ error evidence.
 
 ## Health Assessment
 

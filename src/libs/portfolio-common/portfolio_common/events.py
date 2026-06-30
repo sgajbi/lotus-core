@@ -47,7 +47,11 @@ def _event_decimal_amount(value: object) -> Decimal:
 
 
 class CoreEventModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True, extra="ignore")
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    event_type: Optional[str] = Field(None)
+    schema_version: Optional[str] = Field(None)
+    correlation_id: Optional[str] = Field(None)
 
 
 class BusinessDateEvent(CoreEventModel):

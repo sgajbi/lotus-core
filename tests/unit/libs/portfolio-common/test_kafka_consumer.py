@@ -3,12 +3,14 @@ import json
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.events import TransactionEvent
 from portfolio_common.kafka_consumer import (
     BaseConsumer,
     RetryableConsumerError,
     classify_dlq_reason_code,
 )
 from portfolio_common.logging_utils import correlation_id_var
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.asyncio
 
@@ -65,6 +67,30 @@ def create_mock_message(key, value, topic="test-topic", error=None, headers=None
     mock_msg.value.return_value = json.dumps(value).encode("utf-8")
     mock_msg.headers.return_value = headers or []
     return mock_msg
+
+
+def _transaction_event_payload(**overrides):
+    payload = {
+        "transaction_id": "TXN-DRIFT-001",
+        "portfolio_id": "P1",
+        "instrument_id": "INS1",
+        "security_id": "SEC1",
+        "transaction_date": "2026-01-10T08:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": "1",
+        "price": "10",
+        "gross_transaction_amount": "10",
+        "trade_currency": "USD",
+        "currency": "USD",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _transaction_validation_error(payload: dict) -> Exception:
+    with pytest.raises(ValidationError) as exc_info:
+        TransactionEvent.model_validate(payload)
+    return exc_info.value
 
 
 async def test_run_loop_success_path(
@@ -327,6 +353,32 @@ async def test_dlq_payload_and_headers_are_redacted(
     assert headers_dict["source"] == b"postgresql://***REDACTED***@localhost/db"
 
 
+async def test_dlq_validation_error_reason_omits_rejected_input_value(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    payload = _transaction_event_payload(authorization="Bearer event-drift-token")
+    mock_msg = create_mock_message(
+        "key-validation-drift",
+        payload,
+        headers=[("correlation_id", b"corr-validation-drift")],
+    )
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    result = await test_consumer._send_to_dlq_async(
+        mock_msg,
+        _transaction_validation_error(payload),
+    )
+
+    assert result is True
+    dlq_payload = mock_kafka_producer.publish_message.call_args.kwargs["value"]
+    assert dlq_payload["error_reason_code"] == "VALIDATION_ERROR"
+    assert "authorization" in dlq_payload["error_reason"]
+    assert "event-drift-token" not in dlq_payload["error_reason"]
+    assert "event-drift-token" not in dlq_payload["error_traceback"]
+    assert "input_value" not in dlq_payload["error_reason"]
+    assert json.loads(dlq_payload["original_value"])["authorization"] == "***REDACTED***"
+
+
 async def test_dlq_omits_unset_correlation_header(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -385,6 +437,38 @@ async def test_record_consumer_dlq_event_redacts_payload_excerpt(
         "authorization": "***REDACTED***",
         "safe": "visible",
     }
+
+
+async def test_record_consumer_dlq_event_uses_source_safe_validation_reason(
+    test_consumer: ConcreteTestConsumer,
+):
+    payload = _transaction_event_payload(authorization="Bearer persisted-validation-token")
+    mock_msg = create_mock_message("key-validation-persisted", payload)
+    mock_db = MagicMock()
+    transaction = MagicMock()
+    transaction.__aenter__ = AsyncMock(return_value=None)
+    transaction.__aexit__ = AsyncMock(return_value=None)
+    added_events = []
+
+    async def get_session_gen():
+        yield mock_db
+
+    mock_db.begin.return_value = transaction
+    mock_db.add.side_effect = added_events.append
+
+    with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
+        await test_consumer._record_consumer_dlq_event(
+            msg=mock_msg,
+            error=_transaction_validation_error(payload),
+            error_reason_code="VALIDATION_ERROR",
+            correlation_id="corr-validation-persisted",
+        )
+
+    assert len(added_events) == 1
+    assert "authorization" in added_events[0].error_reason
+    assert "persisted-validation-token" not in added_events[0].error_reason
+    assert "input_value" not in added_events[0].error_reason
+    assert "persisted-validation-token" not in added_events[0].payload_excerpt
 
 
 async def test_message_correlation_context_keeps_existing_context(

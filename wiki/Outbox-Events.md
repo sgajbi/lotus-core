@@ -110,6 +110,9 @@ Use this page together with:
 
 - use outbox for governed derived-state and supportability publication from durable state changes
 - keep emitted envelope metadata aligned with the RFC-0083 eventing contract
+- consumers must accept the governed envelope metadata fields and reject other unknown governed
+  event fields instead of silently dropping them; producer drift belongs in validation/DLQ evidence
+  until the event contract is versioned explicitly
 - do not bypass durable publish intent with ad hoc direct publish from state-mutating paths unless
   the contract is explicitly governed as direct Kafka publication
 
