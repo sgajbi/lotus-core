@@ -151,6 +151,94 @@ async def test_get_latest_positions_forwards_as_of_and_include_projected(async_t
     )
 
 
+async def test_get_portfolio_maturity_summary_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_maturity_summary.return_value = {
+        "portfolio_id": "P1",
+        "source_product_name": "HoldingsAsOf",
+        "source_product_version": "v1",
+        "window_start_date": date(2026, 3, 10),
+        "window_end_date": date(2026, 6, 8),
+        "horizon_days": 90,
+        "include_projected": False,
+        "maturity_basis": "CONTRACTUAL_INSTRUMENT_MATURITY_DATE",
+        "freshness_status": "CURRENT",
+        "next_maturity_date": date(2026, 4, 15),
+        "maturing_holding_count": 1,
+        "maturity_bearing_holding_count": 2,
+        "missing_maturity_date_count": 0,
+        "unsupported_maturity_feature_count": 0,
+        "supportability_status": "SUPPORTED",
+        "supportability_reasons": [],
+        "request_fingerprint": "maturity_summary:abc123",
+        **source_data_product_runtime_metadata(as_of_date=date(2026, 3, 10)),
+    }
+
+    response = await client.get("/portfolios/P1/maturity-summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["portfolio_id"] == "P1"
+    assert payload["product_name"] == "PortfolioMaturitySummary"
+    assert payload["product_version"] == "v1"
+    assert payload["next_maturity_date"] == "2026-04-15"
+    assert payload["maturing_holding_count"] == 1
+    mock_service.get_portfolio_maturity_summary.assert_awaited_once_with(
+        portfolio_id="P1",
+        as_of_date=None,
+        horizon_days=90,
+        include_projected=False,
+    )
+
+
+async def test_get_portfolio_maturity_summary_forwards_query_params(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_maturity_summary.return_value = {
+        "portfolio_id": "P1",
+        "source_product_name": "HoldingsAsOf",
+        "source_product_version": "v1",
+        "window_start_date": date(2026, 2, 28),
+        "window_end_date": date(2026, 4, 29),
+        "horizon_days": 60,
+        "include_projected": True,
+        "maturity_basis": "CONTRACTUAL_INSTRUMENT_MATURITY_DATE",
+        "freshness_status": "CURRENT",
+        "next_maturity_date": None,
+        "maturing_holding_count": 0,
+        "maturity_bearing_holding_count": 0,
+        "missing_maturity_date_count": 0,
+        "unsupported_maturity_feature_count": 0,
+        "supportability_status": "SUPPORTED",
+        "supportability_reasons": [],
+        "request_fingerprint": "maturity_summary:def456",
+        **source_data_product_runtime_metadata(as_of_date=date(2026, 2, 28)),
+    }
+
+    response = await client.get(
+        "/portfolios/P1/maturity-summary?"
+        "as_of_date=2026-02-28&horizon_days=60&include_projected=true"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["include_projected"] is True
+    mock_service.get_portfolio_maturity_summary.assert_awaited_once_with(
+        portfolio_id="P1",
+        as_of_date=date(2026, 2, 28),
+        horizon_days=60,
+        include_projected=True,
+    )
+
+
+async def test_get_portfolio_maturity_summary_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_maturity_summary.side_effect = LookupError("not found")
+
+    response = await client.get("/portfolios/P404/maturity-summary")
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
 async def test_get_position_service_dependency_factory():
     db = AsyncMock(spec=AsyncSession)
 

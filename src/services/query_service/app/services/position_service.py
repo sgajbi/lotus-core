@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.position_dto import (
+    PortfolioMaturitySummaryResponse,
     PortfolioPositionHistoryResponse,
     PortfolioPositionsResponse,
 )
@@ -14,6 +15,7 @@ from .portfolio_validation import ensure_portfolio_exists
 from .position_history_reads import position_history_response
 from .position_holdings_reads import effective_holdings_read_as_of_date
 from .position_holdings_response import portfolio_holdings_response
+from .position_maturity_summary import portfolio_maturity_summary_response
 
 logger = logging.getLogger(__name__)
 
@@ -72,4 +74,28 @@ class PositionService:
             repository=self.repo,
             portfolio_id=portfolio_id,
             effective_as_of_date=effective_as_of_date,
+        )
+
+    async def get_portfolio_maturity_summary(
+        self,
+        portfolio_id: str,
+        as_of_date: Optional[date] = None,
+        horizon_days: int = 90,
+        include_projected: bool = False,
+    ) -> PortfolioMaturitySummaryResponse:
+        """
+        Retrieves the Core-owned maturity summary for a portfolio holdings window.
+        """
+        logger.info(f"Fetching maturity summary for portfolio '{portfolio_id}'.")
+
+        holdings = await self.get_portfolio_positions(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+            include_projected=include_projected,
+        )
+        return portfolio_maturity_summary_response(
+            portfolio_id=portfolio_id,
+            holdings=holdings,
+            horizon_days=horizon_days,
+            include_projected=include_projected,
         )

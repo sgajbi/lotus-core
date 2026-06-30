@@ -1332,3 +1332,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   dependency failures through a shared HTTP 503 mapper with `Retry-After`, dependency metadata,
   retryability, lineage, failed-record keys, publish state, and published-record count while
   preserving failure-history writes and the `INGESTION_PUBLISH_FAILED` application code.
+- CR-1219 fixed issue #686 by adding `PortfolioMaturitySummary:v1` as a Core-owned operational
+  read over `HoldingsAsOf:v1` maturity facts. Downstream consumers now have explicit
+  `next_maturity_date`, `maturing_holding_count`, freshness, supportability reasons, and
+  request-fingerprint lineage without reconstructing maturity windows from raw holdings rows.

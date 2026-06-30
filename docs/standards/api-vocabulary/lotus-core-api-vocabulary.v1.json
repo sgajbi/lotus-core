@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-06-28T04:44:31.576111+00:00",
+  "generatedAt": "2026-06-30T23:39:18.897002+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -946,8 +946,22 @@
       "semanticId": "lotus.cash_account_id",
       "canonicalTerm": "cash_account_id",
       "preferredName": "cash_account_id",
-      "description": "Lotus cash account identifier. Resolved from the latest known settlement cash account mapping when available, otherwise from the cash instrument identity.",
+      "description": "Cash account identifier used for the balance row. The `cash_account_id_source` field states whether the value is governed master data, validated transaction-derived mapping, or a degraded cash-security fallback.",
       "example": "CASH_ACCOUNT_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.cash_account_id_source",
+      "canonicalTerm": "cash_account_id_source",
+      "preferredName": "cash_account_id_source",
+      "description": "Source used to resolve `cash_account_id`: `cash_account_master` for active/effective cash-account master data, `validated_transaction_mapping` for transaction settlement history validated against cash-account master data, or `cash_security_fallback` when no governed cash-account identity is available.",
+      "example": "cash_account_master",
       "type": "string",
       "locations": [
         "body"
@@ -964,6 +978,7 @@
       "example": [
         {
           "cash_account_id": "CASH_ACCOUNT_001",
+          "cash_account_id_source": "cash_account_master",
           "instrument_id": "EQ_US_AAPL",
           "security_id": "AAPL",
           "account_currency": "USD",
@@ -2052,6 +2067,20 @@
       ]
     },
     {
+      "semanticId": "lotus.freshness_status",
+      "canonicalTerm": "freshness_status",
+      "preferredName": "freshness_status",
+      "description": "Freshness posture inherited from the underlying HoldingsAsOf evidence.",
+      "example": "CURRENT",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.from_currency",
       "canonicalTerm": "from_currency",
       "preferredName": "from_currency",
@@ -2305,8 +2334,8 @@
       "semanticId": "lotus.horizon_days",
       "canonicalTerm": "horizon_days",
       "preferredName": "horizon_days",
-      "description": "Calendar-day liquidity horizon from the as-of date.",
-      "example": 30,
+      "description": "Calendar-day maturity horizon from the resolved as_of_date. The route is bounded to ten years because it returns a summary rather than a full maturity schedule.",
+      "example": 90,
       "type": "integer",
       "locations": [
         "body",
@@ -2651,7 +2680,7 @@
       "semanticId": "lotus.instrument_page_limit",
       "canonicalTerm": "instrument_page_limit",
       "preferredName": "instrument_page_limit",
-      "description": "Page size used when scanning instruments to derive the currency catalog.",
+      "description": "Deprecated compatibility parameter. Currency lookups now use bounded selector queries instead of instrument catalog scans.",
       "example": 500,
       "type": "integer",
       "locations": [
@@ -3439,6 +3468,48 @@
       ]
     },
     {
+      "semanticId": "lotus.maturing_holding_count",
+      "canonicalTerm": "maturing_holding_count",
+      "preferredName": "maturing_holding_count",
+      "description": "Count of returned holdings with a maturity_date inside the requested window.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.maturity_basis",
+      "canonicalTerm": "maturity_basis",
+      "preferredName": "maturity_basis",
+      "description": "Lifecycle basis used by this summary. The current implementation uses Core instrument reference maturity_date facts and does not infer callable, putable, amortizing, structured-note, lockup, or other product-specific schedules.",
+      "example": "example_maturity_basis",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.maturity_bearing_holding_count",
+      "canonicalTerm": "maturity_bearing_holding_count",
+      "preferredName": "maturity_bearing_holding_count",
+      "description": "Count of returned holdings that Core classifies as maturity-bearing from asset-class or product-type evidence.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.maturity_date",
       "canonicalTerm": "maturity_date",
       "preferredName": "maturity_date",
@@ -3534,6 +3605,50 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.missing_instrument_reference_count",
+      "canonicalTerm": "missing_instrument_reference_count",
+      "preferredName": "missing_instrument_reference_count",
+      "description": "Number of returned transaction security identifiers without matching governed instrument master rows.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.missing_instrument_security_ids",
+      "canonicalTerm": "missing_instrument_security_ids",
+      "preferredName": "missing_instrument_security_ids",
+      "description": "Returned transaction security identifiers that do not resolve to governed instrument master rows. Empty when all returned rows have instrument reference support.",
+      "example": [
+        "SEC_UNKNOWN_001"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.missing_maturity_date_count",
+      "canonicalTerm": "missing_maturity_date_count",
+      "preferredName": "missing_maturity_date_count",
+      "description": "Count of maturity-bearing holdings where Core reference data does not carry a maturity_date lifecycle fact.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -3819,6 +3934,20 @@
       "preferredName": "net_sell_proceeds_local",
       "description": "Net SELL proceeds in trade/local currency after fees.",
       "example": 4250.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.next_maturity_date",
+      "canonicalTerm": "next_maturity_date",
+      "preferredName": "next_maturity_date",
+      "description": "Earliest source-owned instrument maturity date inside the requested window, or null when no returned holding matures in the window.",
+      "example": "2026-07-15",
       "type": "object",
       "locations": [
         "body"
@@ -5139,9 +5268,9 @@
       "semanticId": "lotus.reason_codes",
       "canonicalTerm": "reason_codes",
       "preferredName": "reason_codes",
-      "description": "Supportability reason codes for the realized-tax summary.",
+      "description": "Bounded supportability reason codes for this transaction ledger page.",
       "example": [
-        "PORTFOLIO_REALIZED_TAX_SUMMARY_READY"
+        "TRANSACTION_LEDGER_READY"
       ],
       "type": "array",
       "locations": [
@@ -5295,6 +5424,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_fingerprint",
+      "canonicalTerm": "request_fingerprint",
+      "preferredName": "request_fingerprint",
+      "description": "Deterministic fingerprint of the requested portfolio, as-of scope, horizon, projection mode, and resulting summary content. This is request/product lineage, not an upstream source-batch fingerprint.",
+      "example": "example_request_fingerprint",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -6240,7 +6383,7 @@
       "semanticId": "lotus.source_batch_fingerprint",
       "canonicalTerm": "source_batch_fingerprint",
       "preferredName": "source_batch_fingerprint",
-      "description": "Source-batch fingerprint when the product can be traced to a batch.",
+      "description": "Upstream source-batch fingerprint when the product can be traced to source-batch evidence. Request-scope and snapshot identities must use request/snapshot fields, not this lineage field.",
       "example": "sbf_9c3f13c0a5d14f3e",
       "type": "object",
       "locations": [
@@ -6276,6 +6419,34 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_product_name",
+      "canonicalTerm": "source_product_name",
+      "preferredName": "source_product_name",
+      "description": "Core source-data product used to derive this maturity summary.",
+      "example": "example_source_product_name",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_product_version",
+      "canonicalTerm": "source_product_version",
+      "preferredName": "source_product_version",
+      "description": "Version of the source-data product used to derive this maturity summary.",
+      "example": "example_source_product_version",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -6349,20 +6520,6 @@
       ]
     },
     {
-      "semanticId": "lotus.source_timestamp",
-      "canonicalTerm": "source_timestamp",
-      "preferredName": "source_timestamp",
-      "description": "Source publication timestamp for the benchmark definition payload.",
-      "example": "2026-01-31T23:00:00Z",
-      "type": "object",
-      "locations": [
-        "body"
-      ],
-      "observedTypes": [
-        "object"
-      ]
-    },
-    {
       "semanticId": "lotus.source_transaction_count",
       "canonicalTerm": "source_transaction_count",
       "preferredName": "source_transaction_count",
@@ -6396,20 +6553,6 @@
       "preferredName": "source_transaction_reference",
       "description": "Reference to source-side corporate-action child transaction.",
       "example": "CA-CHILD-OUT-001",
-      "type": "object",
-      "locations": [
-        "body"
-      ],
-      "observedTypes": [
-        "object"
-      ]
-    },
-    {
-      "semanticId": "lotus.source_vendor",
-      "canonicalTerm": "source_vendor",
-      "preferredName": "source_vendor",
-      "description": "Source vendor.",
-      "example": "MSCI",
       "type": "object",
       "locations": [
         "body"
@@ -6468,6 +6611,36 @@
       "preferredName": "status",
       "description": "Liveness state for the service process.",
       "example": "ACTIVE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.supportability_reasons",
+      "canonicalTerm": "supportability_reasons",
+      "preferredName": "supportability_reasons",
+      "description": "Bounded reason codes explaining partial, stale, or unavailable maturity summary posture. Empty means the returned summary is supported for contractual maturity-date use.",
+      "example": [
+        "MISSING_INSTRUMENT_MATURITY_DATE"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.supportability_status",
+      "canonicalTerm": "supportability_status",
+      "preferredName": "supportability_status",
+      "description": "Summary supportability status after applying HoldingsAsOf data quality, missing maturity facts, and unsupported lifecycle feature diagnostics.",
+      "example": "SUPPORTED",
       "type": "string",
       "locations": [
         "body"
@@ -7524,6 +7697,20 @@
       ]
     },
     {
+      "semanticId": "lotus.unsupported_maturity_feature_count",
+      "canonicalTerm": "unsupported_maturity_feature_count",
+      "preferredName": "unsupported_maturity_feature_count",
+      "description": "Count of returned holdings whose product classification suggests lifecycle features such as callable, putable, amortizing, structured, lockup, or expiry behavior that the current contractual-date summary does not fully certify.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.unvalued_position_count",
       "canonicalTerm": "unvalued_position_count",
       "preferredName": "unvalued_position_count",
@@ -7652,6 +7839,34 @@
       ],
       "observedTypes": [
         "object",
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.window_end_date",
+      "canonicalTerm": "window_end_date",
+      "preferredName": "window_end_date",
+      "description": "Inclusive end date for the maturity summary window.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.window_start_date",
+      "canonicalTerm": "window_start_date",
+      "preferredName": "window_start_date",
+      "description": "Inclusive start date for the maturity summary window.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
         "string"
       ]
     },
@@ -7921,6 +8136,66 @@
       "description": "When true, returns the latest projected state even if future-dated transactions push holdings beyond the latest booked business_date.",
       "example": false,
       "behaviorImpact": "Affects get_latest_positions_portfolios__portfolio_id__positions_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "include_projected",
+      "semanticId": "lotus.include_projected"
+    },
+    {
+      "name": "portfolio_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Portfolio identifier.",
+      "example": "PORT-POS-001",
+      "behaviorImpact": "Affects get_portfolio_maturity_summary_portfolios__portfolio_id__maturity_summary_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_id",
+      "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "as_of_date",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Optional as-of date for booked maturity posture. When omitted and `include_projected=false`, lotus-core resolves the latest booked business date.",
+      "example": "2026-03-10",
+      "behaviorImpact": "Affects get_portfolio_maturity_summary_portfolios__portfolio_id__maturity_summary_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "as_of_date",
+      "semanticId": "lotus.as_of_date"
+    },
+    {
+      "name": "horizon_days",
+      "kind": "request_option",
+      "location": "query",
+      "type": "integer",
+      "required": false,
+      "default": 90,
+      "allowedValues": [],
+      "description": "Calendar-day maturity horizon from the resolved as_of_date. The route is bounded to ten years because it returns a summary rather than a full maturity schedule.",
+      "example": 90,
+      "behaviorImpact": "Affects get_portfolio_maturity_summary_portfolios__portfolio_id__maturity_summary_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "horizon_days",
+      "semanticId": "lotus.horizon_days"
+    },
+    {
+      "name": "include_projected",
+      "kind": "request_option",
+      "location": "query",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "allowedValues": [],
+      "description": "When true, summarizes the latest projected holdings state even if future-dated transactions push holdings beyond the latest booked business_date.",
+      "example": false,
+      "behaviorImpact": "Affects get_portfolio_maturity_summary_portfolios__portfolio_id__maturity_summary_get request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "include_projected",
       "semanticId": "lotus.include_projected"
@@ -8953,7 +9228,7 @@
       "required": false,
       "default": 500,
       "allowedValues": [],
-      "description": "Page size used when scanning instruments to derive the currency catalog.",
+      "description": "Deprecated compatibility parameter. Currency lookups now use bounded selector queries instead of instrument catalog scans.",
       "example": 500,
       "behaviorImpact": "Affects get_currency_lookups_lookups_currencies_get request behavior.",
       "exposure": "consumer_visible",
@@ -9103,8 +9378,8 @@
       "tags": [
         "Monitoring"
       ],
-      "summary": "Metrics",
-      "description": "Endpoint that serves Prometheus metrics.",
+      "summary": "Prometheus metrics scrape endpoint",
+      "description": "Operational Prometheus scrape endpoint. This is not a public business API; access is governed by the shared metrics access policy and should be reachable only by authorized scrapers or a private metrics network.",
       "naming": {
         "boundedContext": "monitoring",
         "canonicalTerms": []
@@ -10063,6 +10338,335 @@
       }
     },
     {
+      "operationId": "get_portfolio_maturity_summary_portfolios__portfolio_id__maturity_summary_get",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/maturity-summary",
+      "domain": "positions",
+      "serviceGroup": "query",
+      "tags": [
+        "Positions"
+      ],
+      "summary": "Get Portfolio Maturity Summary",
+      "description": "What: Return the Core-owned PortfolioMaturitySummary operational read for one portfolio.\nHow: Resolves the same HoldingsAsOf scope as the strategic positions endpoint, then summarizes source-owned instrument maturity_date facts over a bounded calendar-day window with freshness, lineage, and supportability diagnostics.\nWhen: Use this route when downstream consumers such as lotus-idea need upcoming maturity posture without reconstructing bond schedules from raw holdings rows. The current contract summarizes contractual instrument maturity dates only; it does not certify callable, putable, amortizing, structured-note, lockup, expiry, advice, liquidity, performance, risk, reinvestment, or OMS execution methodology.",
+      "naming": {
+        "boundedContext": "positions",
+        "canonicalTerms": [
+          "as_of_date",
+          "correlation_id",
+          "data_quality_status",
+          "freshness_status",
+          "generated_at",
+          "horizon_days",
+          "include_projected",
+          "latest_evidence_timestamp",
+          "maturing_holding_count",
+          "maturity_basis",
+          "maturity_bearing_holding_count",
+          "missing_maturity_date_count",
+          "next_maturity_date",
+          "policy_version",
+          "portfolio_id",
+          "product_name",
+          "product_version",
+          "reconciliation_status",
+          "request_fingerprint",
+          "restatement_version",
+          "snapshot_id",
+          "source_batch_fingerprint",
+          "source_product_name",
+          "source_product_version",
+          "supportability_reasons",
+          "supportability_status",
+          "tenant_id",
+          "unsupported_maturity_feature_count",
+          "window_end_date",
+          "window_start_date"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "as_of_date",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "horizon_days",
+            "location": "query",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.horizon_days",
+            "attributeRef": "lotus.horizon_days"
+          },
+          {
+            "name": "include_projected",
+            "location": "query",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.include_projected",
+            "attributeRef": "lotus.include_projected"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "PortfolioMaturitySummaryResponse",
+        "fields": [
+          {
+            "name": "tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "generated_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.generated_at",
+            "attributeRef": "lotus.generated_at"
+          },
+          {
+            "name": "as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "restatement_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.restatement_version",
+            "attributeRef": "lotus.restatement_version"
+          },
+          {
+            "name": "reconciliation_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.reconciliation_status",
+            "attributeRef": "lotus.reconciliation_status"
+          },
+          {
+            "name": "data_quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.data_quality_status",
+            "attributeRef": "lotus.data_quality_status"
+          },
+          {
+            "name": "latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "source_batch_fingerprint",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_fingerprint",
+            "attributeRef": "lotus.source_batch_fingerprint"
+          },
+          {
+            "name": "snapshot_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.snapshot_id",
+            "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "policy_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.policy_version",
+            "attributeRef": "lotus.policy_version"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "product_name",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.product_name",
+            "attributeRef": "lotus.product_name"
+          },
+          {
+            "name": "product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.product_version",
+            "attributeRef": "lotus.product_version"
+          },
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "source_product_name",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "window_start_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.window_start_date",
+            "attributeRef": "lotus.window_start_date"
+          },
+          {
+            "name": "window_end_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.window_end_date",
+            "attributeRef": "lotus.window_end_date"
+          },
+          {
+            "name": "horizon_days",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.horizon_days",
+            "attributeRef": "lotus.horizon_days"
+          },
+          {
+            "name": "include_projected",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.include_projected",
+            "attributeRef": "lotus.include_projected"
+          },
+          {
+            "name": "maturity_basis",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.maturity_basis",
+            "attributeRef": "lotus.maturity_basis"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "next_maturity_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.next_maturity_date",
+            "attributeRef": "lotus.next_maturity_date"
+          },
+          {
+            "name": "maturing_holding_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.maturing_holding_count",
+            "attributeRef": "lotus.maturing_holding_count"
+          },
+          {
+            "name": "maturity_bearing_holding_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.maturity_bearing_holding_count",
+            "attributeRef": "lotus.maturity_bearing_holding_count"
+          },
+          {
+            "name": "missing_maturity_date_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.missing_maturity_date_count",
+            "attributeRef": "lotus.missing_maturity_date_count"
+          },
+          {
+            "name": "unsupported_maturity_feature_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.unsupported_maturity_feature_count",
+            "attributeRef": "lotus.unsupported_maturity_feature_count"
+          },
+          {
+            "name": "supportability_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.supportability_status",
+            "attributeRef": "lotus.supportability_status"
+          },
+          {
+            "name": "supportability_reasons",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.supportability_reasons",
+            "attributeRef": "lotus.supportability_reasons"
+          },
+          {
+            "name": "request_fingerprint",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_fingerprint",
+            "attributeRef": "lotus.request_fingerprint"
+          }
+        ]
+      }
+    },
+    {
       "operationId": "get_cash_balances_portfolios__portfolio_id__cash_balances_get",
       "method": "GET",
       "path": "/portfolios/{portfolio_id}/cash-balances",
@@ -10083,6 +10687,7 @@
           "balance_reporting_currency",
           "cash_account_count",
           "cash_account_id",
+          "cash_account_id_source",
           "cash_accounts",
           "correlation_id",
           "data_quality_status",
@@ -10350,6 +10955,14 @@
             "type": "string",
             "semanticId": "lotus.cash_account_id",
             "attributeRef": "lotus.cash_account_id"
+          },
+          {
+            "name": "cash_accounts[].cash_account_id_source",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.cash_account_id_source",
+            "attributeRef": "lotus.cash_account_id_source"
           },
           {
             "name": "cash_accounts[].instrument_id",
@@ -12218,6 +12831,8 @@
           "linked_fx_cash_leg_id",
           "linked_parent_event_id",
           "linked_transaction_group_id",
+          "missing_instrument_reference_count",
+          "missing_instrument_security_ids",
           "movement_direction",
           "near_leg_group_id",
           "net_cost",
@@ -12251,6 +12866,7 @@
           "realized_total_pnl_base",
           "realized_total_pnl_local",
           "realized_total_pnl_local_reporting_currency",
+          "reason_codes",
           "reconciliation_key",
           "reconciliation_status",
           "reporting_currency",
@@ -13461,6 +14077,30 @@
             "type": "object",
             "semanticId": "lotus.cashflow",
             "attributeRef": "lotus.cashflow"
+          },
+          {
+            "name": "reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "missing_instrument_reference_count",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.missing_instrument_reference_count",
+            "attributeRef": "lotus.missing_instrument_reference_count"
+          },
+          {
+            "name": "missing_instrument_security_ids",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.missing_instrument_security_ids",
+            "attributeRef": "lotus.missing_instrument_security_ids"
           }
         ]
       }
@@ -15638,8 +16278,8 @@
       "tags": [
         "Monitoring"
       ],
-      "summary": "Metrics",
-      "description": "Endpoint that serves Prometheus metrics.",
+      "summary": "Prometheus metrics scrape endpoint",
+      "description": "Operational Prometheus scrape endpoint. This is not a public business API; access is governed by the shared metrics access policy and should be reachable only by authorized scrapers or a private metrics network.",
       "naming": {
         "boundedContext": "monitoring",
         "canonicalTerms": []
@@ -23648,13 +24288,13 @@
           "idempotency_key",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "rebalance_frequency",
           "request_id",
           "return_convention",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "trace_id"
         ]
       },
@@ -23667,6 +24307,38 @@
             "type": "array",
             "semanticId": "lotus.benchmark_definitions",
             "attributeRef": "lotus.benchmark_definitions"
+          },
+          {
+            "name": "benchmark_definitions[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "benchmark_definitions[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "benchmark_definitions[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "benchmark_definitions[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "benchmark_definitions[].benchmark_id",
@@ -23771,38 +24443,6 @@
             "type": "object",
             "semanticId": "lotus.effective_to",
             "attributeRef": "lotus.effective_to"
-          },
-          {
-            "name": "benchmark_definitions[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "benchmark_definitions[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "benchmark_definitions[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "benchmark_definitions[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -23903,12 +24543,12 @@
           "index_id",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "rebalance_event_id",
           "request_id",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "trace_id"
         ]
       },
@@ -23921,6 +24561,38 @@
             "type": "array",
             "semanticId": "lotus.benchmark_compositions",
             "attributeRef": "lotus.benchmark_compositions"
+          },
+          {
+            "name": "benchmark_compositions[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "benchmark_compositions[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "benchmark_compositions[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "benchmark_compositions[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "benchmark_compositions[].benchmark_id",
@@ -23969,38 +24641,6 @@
             "type": "object",
             "semanticId": "lotus.rebalance_event_id",
             "attributeRef": "lotus.rebalance_event_id"
-          },
-          {
-            "name": "benchmark_compositions[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "benchmark_compositions[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "benchmark_compositions[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "benchmark_compositions[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -24107,11 +24747,11 @@
           "indices",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "request_id",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "trace_id"
         ]
       },
@@ -24124,6 +24764,38 @@
             "type": "array",
             "semanticId": "lotus.indices",
             "attributeRef": "lotus.indices"
+          },
+          {
+            "name": "indices[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "indices[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "indices[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "indices[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "indices[].index_id",
@@ -24212,38 +24884,6 @@
             "type": "object",
             "semanticId": "lotus.effective_to",
             "attributeRef": "lotus.effective_to"
-          },
-          {
-            "name": "indices[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "indices[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "indices[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "indices[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -24341,14 +24981,14 @@
           "index_price_series",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "request_id",
           "series_currency",
           "series_date",
           "series_id",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "trace_id",
           "value_convention"
         ]
@@ -24362,6 +25002,38 @@
             "type": "array",
             "semanticId": "lotus.index_price_series",
             "attributeRef": "lotus.index_price_series"
+          },
+          {
+            "name": "index_price_series[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "index_price_series[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "index_price_series[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "index_price_series[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "index_price_series[].series_id",
@@ -24410,38 +25082,6 @@
             "type": "string",
             "semanticId": "lotus.value_convention",
             "attributeRef": "lotus.value_convention"
-          },
-          {
-            "name": "index_price_series[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "index_price_series[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "index_price_series[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "index_price_series[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -24539,6 +25179,7 @@
           "index_return_series",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "request_id",
           "return_convention",
@@ -24547,8 +25188,7 @@
           "series_date",
           "series_id",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "trace_id"
         ]
       },
@@ -24561,6 +25201,38 @@
             "type": "array",
             "semanticId": "lotus.index_return_series",
             "attributeRef": "lotus.index_return_series"
+          },
+          {
+            "name": "index_return_series[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "index_return_series[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "index_return_series[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "index_return_series[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "index_return_series[].series_id",
@@ -24617,38 +25289,6 @@
             "type": "string",
             "semanticId": "lotus.series_currency",
             "attributeRef": "lotus.series_currency"
-          },
-          {
-            "name": "index_return_series[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "index_return_series[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "index_return_series[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "index_return_series[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -24746,6 +25386,7 @@
           "idempotency_key",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "request_id",
           "return_convention",
@@ -24754,8 +25395,7 @@
           "series_date",
           "series_id",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "trace_id"
         ]
       },
@@ -24768,6 +25408,38 @@
             "type": "array",
             "semanticId": "lotus.benchmark_return_series",
             "attributeRef": "lotus.benchmark_return_series"
+          },
+          {
+            "name": "benchmark_return_series[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "benchmark_return_series[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "benchmark_return_series[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "benchmark_return_series[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "benchmark_return_series[].series_id",
@@ -24824,38 +25496,6 @@
             "type": "string",
             "semanticId": "lotus.series_currency",
             "attributeRef": "lotus.series_currency"
-          },
-          {
-            "name": "benchmark_return_series[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "benchmark_return_series[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "benchmark_return_series[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "benchmark_return_series[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -24952,6 +25592,7 @@
           "idempotency_key",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "request_id",
           "risk_free_curve_id",
@@ -24960,8 +25601,7 @@
           "series_date",
           "series_id",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "trace_id",
           "value",
           "value_convention"
@@ -24976,6 +25616,38 @@
             "type": "array",
             "semanticId": "lotus.risk_free_series",
             "attributeRef": "lotus.risk_free_series"
+          },
+          {
+            "name": "risk_free_series[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "risk_free_series[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "risk_free_series[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "risk_free_series[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "risk_free_series[].series_id",
@@ -25040,38 +25712,6 @@
             "type": "string",
             "semanticId": "lotus.series_currency",
             "attributeRef": "lotus.series_currency"
-          },
-          {
-            "name": "risk_free_series[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "risk_free_series[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "risk_free_series[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "risk_free_series[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },
@@ -25173,11 +25813,11 @@
           "idempotency_key",
           "job_id",
           "message",
+          "observed_at",
           "quality_status",
           "request_id",
           "source_record_id",
-          "source_timestamp",
-          "source_vendor",
+          "source_system",
           "taxonomy_scope",
           "trace_id"
         ]
@@ -25191,6 +25831,38 @@
             "type": "array",
             "semanticId": "lotus.classification_taxonomy",
             "attributeRef": "lotus.classification_taxonomy"
+          },
+          {
+            "name": "classification_taxonomy[].source_system",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "classification_taxonomy[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "classification_taxonomy[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "classification_taxonomy[].quality_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.quality_status",
+            "attributeRef": "lotus.quality_status"
           },
           {
             "name": "classification_taxonomy[].classification_set_id",
@@ -25247,38 +25919,6 @@
             "type": "object",
             "semanticId": "lotus.effective_to",
             "attributeRef": "lotus.effective_to"
-          },
-          {
-            "name": "classification_taxonomy[].source_timestamp",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_timestamp",
-            "attributeRef": "lotus.source_timestamp"
-          },
-          {
-            "name": "classification_taxonomy[].source_vendor",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_vendor",
-            "attributeRef": "lotus.source_vendor"
-          },
-          {
-            "name": "classification_taxonomy[].source_record_id",
-            "location": "body",
-            "required": false,
-            "type": "object",
-            "semanticId": "lotus.source_record_id",
-            "attributeRef": "lotus.source_record_id"
-          },
-          {
-            "name": "classification_taxonomy[].quality_status",
-            "location": "body",
-            "required": false,
-            "type": "string",
-            "semanticId": "lotus.quality_status",
-            "attributeRef": "lotus.quality_status"
           }
         ]
       },

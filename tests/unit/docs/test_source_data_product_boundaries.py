@@ -49,6 +49,10 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "portfolio-cash-movement-summary.md" in catalog
     assert "latest cashflow rows by classification, timing, currency, and flow scope" in catalog
     assert "must not treat the summary as a forecast" in catalog
+    assert "| `PortfolioMaturitySummary:v1` |" in catalog
+    assert "portfolio-maturity-summary.md" in catalog
+    assert "Core-owned contractual maturity posture over `HoldingsAsOf:v1`" in catalog
+    assert "must not treat this summary as a full callable/putable" in catalog
     assert "| `PortfolioLiquidityLadder:v1` |" in catalog
     assert "cash-availability buckets" in catalog
     assert "asset exposure by source-owned instrument liquidity tier" in catalog
@@ -331,6 +335,35 @@ def test_portfolio_cash_movement_summary_methodology_is_implementation_backed() 
     assert "not a cashflow forecast, income plan, funding recommendation" in normalized_methodology
 
 
+def test_portfolio_maturity_summary_methodology_is_implementation_backed() -> None:
+    methodology = _read("docs/methodologies/source-data-products/portfolio-maturity-summary.md")
+    normalized_methodology = _single_line(methodology)
+
+    expected_sections = [
+        "## Metric",
+        "## Inputs",
+        "## Source Data",
+        "## Methodology",
+        "## Supportability",
+        "## Outputs",
+        "## Worked Example",
+    ]
+    section_positions = [methodology.index(section) for section in expected_sections]
+
+    assert section_positions == sorted(section_positions)
+    assert "`PortfolioMaturitySummary:v1`" in methodology
+    assert "`GET /portfolios/{portfolio_id}/maturity-summary`" in methodology
+    assert "`lotus-idea`" in methodology
+    assert "window_end_date = window_start_date + horizon_days" in methodology
+    assert "`missing_maturity_date_count`" in methodology
+    assert "`unsupported_maturity_feature_count`" in methodology
+    assert "`request_fingerprint`" in methodology
+    assert "not an upstream `source_batch_fingerprint`" in methodology
+    assert "must remain visible as partial supportability" in normalized_methodology
+    assert "not a full maturity schedule, cashflow forecast" in normalized_methodology
+    assert "| `next_maturity_date` | `2026-04-15` |" in methodology
+
+
 def test_portfolio_liquidity_ladder_methodology_is_implementation_backed() -> None:
     methodology = _read("docs/methodologies/source-data-products/portfolio-liquidity-ladder.md")
     normalized_methodology = _single_line(methodology)
@@ -508,6 +541,7 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "source-data-products/dpm-source-readiness.md" in index
     assert "source-data-products/transaction-ledger-window.md" in index
     assert "source-data-products/portfolio-cashflow-projection.md" in index
+    assert "source-data-products/portfolio-maturity-summary.md" in index
     assert "source-data-products/portfolio-liquidity-ladder.md" in index
     assert "source-data-products/portfolio-tax-lot-window.md" in index
     assert "source-data-products/portfolio-realized-tax-summary.md" in index
@@ -521,6 +555,7 @@ def test_methodology_index_links_source_data_product_methodologies() -> None:
     assert "Held and target universe price and FX coverage diagnostics" in index
     assert "Fail-closed DPM source-family readiness" in index
     assert "Governed booked transaction-row windowing" in index
+    assert "Core-owned contractual maturity posture" in index
     assert "Source-owned cash-availability buckets" in index
     assert "Portfolio-level aggregation of explicit booked withholding-tax" in index
     assert "Fail-closed external treasury eligible hedge instrument posture" in index

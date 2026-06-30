@@ -2116,3 +2116,11 @@ health before that claim is defensible.
      Mapper/service, ASGI router, and OpenAPI tests passed with 258 tests; `make lint`, OpenAPI,
      vocabulary, Spectral, typecheck, unit-collection, wiki-docs, scoped Ruff, and diff checks
      passed.
+336. Continued validated GitHub issue #686 by adding `PortfolioMaturitySummary:v1` as a
+     Core-owned operational read over `HoldingsAsOf:v1` maturity facts. The new
+     `/portfolios/{portfolio_id}/maturity-summary` route exposes product identity, trust metadata,
+     freshness, requested window, `next_maturity_date`, `maturing_holding_count`, supportability
+     reasons, and request-fingerprint lineage so downstream consumers do not reconstruct maturity
+     posture from raw holdings. Focused builder/service/DTO tests passed with 41 tests,
+     router/OpenAPI tests passed with 40 tests, and source-data catalog/security/domain-product
+     tests passed with 43 tests.

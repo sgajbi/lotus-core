@@ -7,7 +7,11 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dtos.position_dto import PortfolioPositionHistoryResponse, PortfolioPositionsResponse
+from ..dtos.position_dto import (
+    PortfolioMaturitySummaryResponse,
+    PortfolioPositionHistoryResponse,
+    PortfolioPositionsResponse,
+)
 from ..services.position_service import PositionService
 
 router = APIRouter(prefix="/portfolios", tags=["Positions"])
@@ -127,6 +131,74 @@ async def get_latest_positions(
         return await service.get_portfolio_positions(
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
+            include_projected=include_projected,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get(
+    "/{portfolio_id}/maturity-summary",
+    response_model=PortfolioMaturitySummaryResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "description": "Portfolio not found.",
+            "content": {"application/json": {"example": PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE}},
+        }
+    },
+    summary="Get Portfolio Maturity Summary",
+    description=(
+        "What: Return the Core-owned PortfolioMaturitySummary operational read for one portfolio.\n"
+        "How: Resolves the same HoldingsAsOf scope as the strategic positions endpoint, then "
+        "summarizes source-owned instrument maturity_date facts over a bounded calendar-day "
+        "window with freshness, lineage, and supportability diagnostics.\n"
+        "When: Use this route when downstream consumers such as lotus-idea need upcoming "
+        "maturity posture without reconstructing bond schedules from raw holdings rows. The "
+        "current contract summarizes contractual instrument maturity dates only; it does not "
+        "certify callable, putable, amortizing, structured-note, lockup, expiry, advice, "
+        "liquidity, performance, risk, reinvestment, or OMS execution methodology."
+    ),
+    openapi_extra=source_data_product_openapi_extra("PortfolioMaturitySummary"),
+)
+async def get_portfolio_maturity_summary(
+    portfolio_id: str = Path(
+        ...,
+        description="Portfolio identifier.",
+        examples=["PORT-POS-001"],
+    ),
+    as_of_date: Optional[date] = Query(
+        None,
+        description=(
+            "Optional as-of date for booked maturity posture. When omitted and "
+            "`include_projected=false`, lotus-core resolves the latest booked business date."
+        ),
+        examples=["2026-03-10"],
+    ),
+    horizon_days: int = Query(
+        90,
+        ge=1,
+        le=3660,
+        description=(
+            "Calendar-day maturity horizon from the resolved as_of_date. The route is bounded "
+            "to ten years because it returns a summary rather than a full maturity schedule."
+        ),
+        examples=[90],
+    ),
+    include_projected: bool = Query(
+        False,
+        description=(
+            "When true, summarizes the latest projected holdings state even if future-dated "
+            "transactions push holdings beyond the latest booked business_date."
+        ),
+        examples=[False],
+    ),
+    service: PositionService = Depends(get_position_service),
+):
+    try:
+        return await service.get_portfolio_maturity_summary(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+            horizon_days=horizon_days,
             include_projected=include_projected,
         )
     except LookupError as exc:

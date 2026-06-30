@@ -172,6 +172,7 @@
         "GET /portfolios/{portfolio_id}/cash-movement-summary",
         "GET /portfolios/{portfolio_id}/cashflow-projection",
         "GET /portfolios/{portfolio_id}/liquidity-ladder",
+        "GET /portfolios/{portfolio_id}/maturity-summary",
         "GET /portfolios/{portfolio_id}/position-history",
         "GET /portfolios/{portfolio_id}/positions",
         "GET /portfolios/{portfolio_id}/positions/{security_id}/accrued-offsets",

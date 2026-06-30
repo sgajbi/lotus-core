@@ -17,7 +17,10 @@ from src.services.query_service.app.dtos.operations_dto import (
     ReprocessingJobListResponse,
     ReprocessingKeyListResponse,
 )
-from src.services.query_service.app.dtos.position_dto import PortfolioPositionsResponse
+from src.services.query_service.app.dtos.position_dto import (
+    PortfolioMaturitySummaryResponse,
+    PortfolioPositionsResponse,
+)
 from src.services.query_service.app.dtos.reporting_dto import (
     CashBalancesResponse,
 )
@@ -42,6 +45,7 @@ from src.services.query_service.app.dtos.transaction_dto import (
         (ReconciliationRunListResponse, "ReconciliationEvidenceBundle"),
         (ReconciliationFindingListResponse, "ReconciliationEvidenceBundle"),
         (PortfolioPositionsResponse, "HoldingsAsOf"),
+        (PortfolioMaturitySummaryResponse, "PortfolioMaturitySummary"),
         (CashBalancesResponse, "HoldingsAsOf"),
         (PaginatedTransactionResponse, "TransactionLedgerWindow"),
         (PortfolioRealizedTaxSummaryResponse, "PortfolioRealizedTaxSummary"),

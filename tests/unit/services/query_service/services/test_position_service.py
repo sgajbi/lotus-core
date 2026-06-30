@@ -414,6 +414,63 @@ async def test_get_portfolio_positions_raises_when_portfolio_missing(mock_positi
             await service.get_portfolio_positions("P404")
 
 
+async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
+    mock_position_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        bond_instrument = Instrument(
+            name="Issuer 2026 Bond",
+            isin="ISINBOND1",
+            currency="USD",
+            asset_class="Bond",
+            product_type="Bond",
+            sector="Financials",
+            country_of_risk="US",
+            rating="A",
+            liquidity_tier="L3",
+            maturity_date=date(2026, 4, 15),
+        )
+        snapshot = DailyPositionSnapshot(
+            security_id="BOND1",
+            quantity=Decimal("100"),
+            cost_basis=Decimal("1000"),
+            cost_basis_local=Decimal("1000"),
+            market_price=Decimal("10"),
+            market_value=Decimal("1000"),
+            market_value_local=Decimal("1000"),
+            unrealized_gain_loss=Decimal("0"),
+            unrealized_gain_loss_local=Decimal("0"),
+            date=date(2026, 3, 10),
+        )
+        mock_position_repo.get_latest_business_date.return_value = date(2026, 3, 10)
+        mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
+            (snapshot, bond_instrument, PositionState(status="CURRENT", epoch=1))
+        ]
+        mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = []
+        mock_position_repo.get_held_since_dates.return_value = {("BOND1", 1): date(2026, 1, 2)}
+        mock_position_repo.get_latest_market_price_dates.return_value = {"BOND1": date(2026, 3, 10)}
+        service = PositionService(AsyncMock())
+
+        response = await service.get_portfolio_maturity_summary(
+            portfolio_id="P1",
+            horizon_days=60,
+        )
+
+        assert response.product_name == "PortfolioMaturitySummary"
+        assert response.as_of_date == date(2026, 3, 10)
+        assert response.window_end_date == date(2026, 5, 9)
+        assert response.next_maturity_date == date(2026, 4, 15)
+        assert response.maturing_holding_count == 1
+        assert response.maturity_bearing_holding_count == 1
+        assert response.supportability_status == "SUPPORTED"
+        mock_position_repo.get_latest_positions_by_portfolio_as_of_date.assert_awaited_once_with(
+            "P1", date(2026, 3, 10)
+        )
+
+
 async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cost_basis(
     mock_position_repo: AsyncMock,
 ):
