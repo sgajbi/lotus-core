@@ -23,7 +23,7 @@ tested modules.
 | Service modularity | Improving | CR-832 through CR-845 isolate transaction ledger and realized-tax boundaries |
 | Repository-wide quality baseline | Started | `quality/baseline_report.md` |
 | Progressive quality CI | Improving | `.github/workflows/quality-baseline.yml` now has enforced Ruff lint, Ruff format, import boundary, API governance, typecheck, Bandit security, Vulture source dead-code, Deptry source dependency, maintainability, complexity, manifest-backed unit collection, manifest-backed integration-lite collection, workflow-governance, and wiki-docs gates while other baseline checks remain report-only |
-| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the manifest-backed runtime-safe unit lane with `3257/3267` tests and 10 manifest deselects; `make quality-integration-lite-collection-gate` collects 121 integration-lite tests |
+| Full test collection | Improving | Import/plugin collection blockers removed; `pytest --collect-only -q` reaches collection before the governed mixed-runtime guard stops all-suite collection; `make quality-unit-collection-gate` cleanly collects the manifest-backed runtime-safe unit lane with `3376/3386` tests and 10 manifest deselects; `make quality-integration-lite-collection-gate` collects 126 integration-lite tests |
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
@@ -150,6 +150,13 @@ the `INGESTION_PUBLISH_FAILED` application code are preserved; reference-data pe
 post-publish bookkeeping failures remain distinct 500 contracts. Proof passed with 258 affected
 mapper/service, ASGI router, and OpenAPI tests plus `make lint`, OpenAPI, vocabulary, Spectral,
 typecheck, unit-collection, wiki-docs, scoped Ruff, and diff checks.
+
+Current continuation: CR-1169 addresses validated GitHub issue #445 by moving collection gates onto
+`scripts/test_manifest.py` and adding a manifest-backed `integration-lite` collection gate to the
+quality-baseline workflow. `make quality-unit-collection-gate` collects `3376/3386` unit-lane tests
+with 10 manifest deselects, `make quality-integration-lite-collection-gate` collects 126
+integration-lite tests, focused manifest/workflow governance tests pass with 22 tests, and issue
+#445 is fixed locally pending PR CI/QA evidence.
 
 ## Health Assessment
 
@@ -2069,9 +2076,9 @@ health before that claim is defensible.
 320. Addressed validated GitHub issue #445 by routing collection-only gates through
      `scripts/test_manifest.py` and adding a named manifest-backed `integration-lite` collection
      job to the quality-baseline workflow. `make quality-unit-collection-gate` collected
-     `3082/3092` tests with 10 manifest deselects, `make quality-integration-lite-collection-gate`
-     collected 121 tests, focused manifest/workflow governance tests passed with 20 tests, scoped
-     Ruff lint and format checks passed, and workflow YAML parsing passed.
+     `3376/3386` tests with 10 manifest deselects, `make quality-integration-lite-collection-gate`
+     collected 126 tests, focused manifest/workflow governance tests passed with 22 tests, and
+     `make quality-workflow-governance-gate` passed with 12 tests.
 321. Addressed validated GitHub issue #444 by generating stable per-service OpenAPI artifacts under
      `output/openapi/` and adding an enforced portable Spectral blocker-subset gate to the
      quality-baseline API governance job. The new `make quality-openapi-spectral-gate` generated
