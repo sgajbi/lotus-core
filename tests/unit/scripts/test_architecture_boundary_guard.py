@@ -72,3 +72,41 @@ def test_direct_import_boundary_ignores_allowed_dto_import(tmp_path, monkeypatch
         )
         == []
     )
+
+
+def test_direct_import_boundary_flags_event_replay_router_kafka_import(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = tmp_path
+    router = (
+        repo_root
+        / "src"
+        / "services"
+        / "event_replay_service"
+        / "app"
+        / "routers"
+        / "ingestion_operations.py"
+    )
+    router.parent.mkdir(parents=True)
+    router.write_text(
+        "from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+
+    findings = _scan_for_disallowed_imports(
+        [router],
+        rules=(
+            DirectImportBoundaryRule(
+                name="event-replay routers must not import concrete Kafka utilities",
+                source_path_prefixes=("src/services/event_replay_service/app/routers/",),
+                forbidden_module_prefixes=("portfolio_common.kafka_utils",),
+            ),
+        ),
+    )
+
+    assert findings == [
+        "src/services/event_replay_service/app/routers/ingestion_operations.py:1: "
+        "event-replay routers must not import concrete Kafka utilities: "
+        "disallowed direct import 'portfolio_common.kafka_utils'"
+    ]

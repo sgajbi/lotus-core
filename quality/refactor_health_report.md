@@ -25,7 +25,7 @@ tested modules.
 | Dependency-usage baseline | Clean and enforced | `make quality-deptry-source-gate` reports no production-source dependency issues after CR-878 |
 | Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; CR-883 removed shared OpenAPI enrichment from the C-ranked hotspot list |
 | Complexity baseline | Clean and enforced | CR-880 reduced advisory proposal simulation from F to B, CR-881 reduced the cost-calculator consumer from F to C, and CR-882 reduced FX linkage from D to B; `make quality-complexity-gate` now passes |
-| Architecture gates | Improving | Existing `make architecture-guard` now enforces removed-domain import exclusions plus selected direct-import boundaries after CR-1171; `make quality-import-boundary-gate` enforces 2 kept import-linter contracts |
+| Architecture gates | Improving | Existing `make architecture-guard` now enforces removed-domain import exclusions plus selected direct-import boundaries after CR-1171; CR-1180 adds an event-replay router rule blocking concrete Kafka utility imports; `make quality-import-boundary-gate` enforces 2 kept import-linter contracts |
 | OpenAPI governance | Improving | Existing `make openapi-gate` and `make api-vocabulary-gate` are enforced in the quality-baseline API governance job; CR-1170 adds stable generated OpenAPI artifacts under `output/openapi/` and enforced portable Spectral blocker-subset linting through `make quality-openapi-spectral-gate` |
 | HTTP observability | Improving | CR-1172 removes raw HTTP request paths and portfolio/security business-key labels from shared Prometheus metrics; CR-1175 routes health-only worker web apps through the standard HTTP bootstrap for `/metrics`, `/health/live`, `/health/ready`, correlation/request/trace headers, route-template HTTP metrics, and request-completion logs |
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
@@ -35,11 +35,11 @@ tested modules.
 
 ## Current Slice Update
 
-CR-1179 begins validated GitHub issue #619 by adding a fast wiki docs governance gate. The new
-stdlib-only guard validates repo-authored `wiki/` source for sidebar coverage, orphaned pages,
-publication-safe names, first headings, local relative links, and optional authored-vs-published
-wiki parity when a publication target is available. The gate is exposed as
-`make quality-wiki-docs-gate` and enforced in the Quality Baseline workflow.
+CR-1180 begins validated GitHub issue #639 by removing concrete Kafka utility imports and
+dependencies from the event replay API router. Retry and consumer-DLQ replay routes now depend on
+an application-layer replay payload dispatcher, while the existing `IngestionService` backed runtime
+publish path and all public API behavior remain unchanged. `make architecture-guard` now blocks
+future `portfolio_common.kafka_utils` imports from event-replay routers.
 
 ## Health Assessment
 
@@ -1975,3 +1975,8 @@ health before that claim is defensible.
      implementations. Focused architecture boundary tests passed with 2 tests; `make
      architecture-guard` and `make quality-import-boundary-gate` passed; scoped Ruff lint and
      format checks passed.
+323. Began validated GitHub issue #639 by moving event replay payload dispatch behind an
+     application-layer `ReplayPayloadDispatcher` and removing concrete Kafka utility imports from
+     the event replay router. Focused dispatcher, architecture-boundary, and event replay app tests
+     passed with 26 tests; `make architecture-guard`, `make quality-import-boundary-gate`, scoped
+     Ruff lint/format, and `git diff --check` passed.

@@ -1,16 +1,16 @@
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
-from src.services.ingestion_service.app.DTOs.business_date_dto import BusinessDateIngestionRequest
-from src.services.ingestion_service.app.DTOs.fx_rate_dto import FxRateIngestionRequest
+from src.services.event_replay_service.app.application.replay_payload_dispatcher import (
+    IngestionServiceReplayPayloadDispatcher,
+    ReplayPayloadDispatcher,
+)
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     ConsumerDlqEventListResponse,
     ConsumerDlqReplayRequest,
@@ -37,14 +37,6 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     IngestionSloStatusResponse,
     IngestionStalledJobListResponse,
 )
-from src.services.ingestion_service.app.DTOs.instrument_dto import InstrumentIngestionRequest
-from src.services.ingestion_service.app.DTOs.market_price_dto import MarketPriceIngestionRequest
-from src.services.ingestion_service.app.DTOs.portfolio_bundle_dto import (
-    PortfolioBundleIngestionRequest,
-)
-from src.services.ingestion_service.app.DTOs.portfolio_dto import PortfolioIngestionRequest
-from src.services.ingestion_service.app.DTOs.reprocessing_dto import ReprocessingRequest
-from src.services.ingestion_service.app.DTOs.transaction_dto import TransactionIngestionRequest
 from src.services.ingestion_service.app.ops_controls import require_ops_token
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
@@ -525,73 +517,10 @@ INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE = {
 _RetryPayloadFilter = Callable[[dict[str, Any], set[str]], dict[str, Any]]
 
 
-@dataclass(frozen=True)
-class _ReplayPayloadPublisher:
-    request_model: type[Any]
-    publish_method: str
-    payload_field: str | None
-
-    async def publish(
-        self,
-        *,
-        payload: dict[str, Any],
-        idempotency_key: str | None,
-        ingestion_service: IngestionService,
-    ) -> None:
-        request_model = self.request_model.model_validate(payload)
-        publish_payload = (
-            request_model
-            if self.payload_field is None
-            else getattr(request_model, self.payload_field)
-        )
-        await getattr(ingestion_service, self.publish_method)(
-            publish_payload,
-            idempotency_key=idempotency_key,
-        )
-
-
-_REPLAY_PAYLOAD_PUBLISHERS = {
-    "/ingest/transactions": _ReplayPayloadPublisher(
-        request_model=TransactionIngestionRequest,
-        publish_method="publish_transactions",
-        payload_field="transactions",
-    ),
-    "/ingest/portfolios": _ReplayPayloadPublisher(
-        request_model=PortfolioIngestionRequest,
-        publish_method="publish_portfolios",
-        payload_field="portfolios",
-    ),
-    "/ingest/instruments": _ReplayPayloadPublisher(
-        request_model=InstrumentIngestionRequest,
-        publish_method="publish_instruments",
-        payload_field="instruments",
-    ),
-    "/ingest/market-prices": _ReplayPayloadPublisher(
-        request_model=MarketPriceIngestionRequest,
-        publish_method="publish_market_prices",
-        payload_field="market_prices",
-    ),
-    "/ingest/fx-rates": _ReplayPayloadPublisher(
-        request_model=FxRateIngestionRequest,
-        publish_method="publish_fx_rates",
-        payload_field="fx_rates",
-    ),
-    "/ingest/business-dates": _ReplayPayloadPublisher(
-        request_model=BusinessDateIngestionRequest,
-        publish_method="publish_business_dates",
-        payload_field="business_dates",
-    ),
-    "/ingest/portfolio-bundle": _ReplayPayloadPublisher(
-        request_model=PortfolioBundleIngestionRequest,
-        publish_method="publish_portfolio_bundle",
-        payload_field=None,
-    ),
-    "/reprocess/transactions": _ReplayPayloadPublisher(
-        request_model=ReprocessingRequest,
-        publish_method="publish_reprocessing_requests",
-        payload_field="transaction_ids",
-    ),
-}
+def get_replay_payload_dispatcher(
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
+) -> ReplayPayloadDispatcher:
+    return IngestionServiceReplayPayloadDispatcher(ingestion_service)
 
 
 def _filter_record_collection_payload(
@@ -730,18 +659,12 @@ async def _replay_job_payload(
     endpoint: str,
     payload: dict[str, Any],
     idempotency_key: str | None,
-    ingestion_service: IngestionService,
-    kafka_producer: KafkaProducer,
+    replay_payload_dispatcher: ReplayPayloadDispatcher,
 ) -> None:
-    try:
-        publisher = _REPLAY_PAYLOAD_PUBLISHERS[endpoint]
-    except KeyError as exc:
-        raise ValueError(f"Retry not supported for endpoint '{endpoint}'.") from exc
-
-    await publisher.publish(
+    await replay_payload_dispatcher.replay_payload(
+        endpoint=endpoint,
         payload=payload,
         idempotency_key=idempotency_key,
-        ingestion_service=ingestion_service,
     )
 
 
@@ -1040,8 +963,7 @@ async def retry_ingestion_job(
     ),
     ops_actor: str = Depends(require_ops_token),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
-    ingestion_service: IngestionService = Depends(get_ingestion_service),
-    kafka_producer: KafkaProducer = Depends(get_kafka_producer),
+    replay_payload_dispatcher: ReplayPayloadDispatcher = Depends(get_replay_payload_dispatcher),
 ):
     context = await _required_job_replay_context(job_id, ingestion_job_service)
     replay_payload = _retry_payload_or_http_error(
@@ -1086,8 +1008,7 @@ async def retry_ingestion_job(
         replay_payload=replay_payload,
         replay_fingerprint=replay_fingerprint,
         ingestion_job_service=ingestion_job_service,
-        ingestion_service=ingestion_service,
-        kafka_producer=kafka_producer,
+        replay_payload_dispatcher=replay_payload_dispatcher,
         ops_actor=ops_actor,
     )
     await _mark_ingestion_job_retry_replayed(
@@ -1261,8 +1182,7 @@ async def _publish_ingestion_job_retry(
     replay_payload: dict[str, Any],
     replay_fingerprint: str,
     ingestion_job_service: IngestionJobService,
-    ingestion_service: IngestionService,
-    kafka_producer: KafkaProducer,
+    replay_payload_dispatcher: ReplayPayloadDispatcher,
     ops_actor: str | None,
 ) -> None:
     try:
@@ -1270,8 +1190,7 @@ async def _publish_ingestion_job_retry(
             endpoint=context.endpoint,
             payload=replay_payload,
             idempotency_key=context.idempotency_key,
-            ingestion_service=ingestion_service,
-            kafka_producer=kafka_producer,
+            replay_payload_dispatcher=replay_payload_dispatcher,
         )
     except Exception as exc:
         await _record_ingestion_job_retry_audit(
@@ -1884,8 +1803,7 @@ async def replay_consumer_dlq_event(
     ),
     ops_actor: str = Depends(require_ops_token),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
-    ingestion_service: IngestionService = Depends(get_ingestion_service),
-    kafka_producer: KafkaProducer = Depends(get_kafka_producer),
+    replay_payload_dispatcher: ReplayPayloadDispatcher = Depends(get_replay_payload_dispatcher),
 ):
     event = await _required_consumer_dlq_event(event_id, ingestion_job_service)
     if not event.correlation_id:
@@ -1952,8 +1870,7 @@ async def replay_consumer_dlq_event(
         context=context,
         replay_fingerprint=replay_fingerprint,
         ingestion_job_service=ingestion_job_service,
-        ingestion_service=ingestion_service,
-        kafka_producer=kafka_producer,
+        replay_payload_dispatcher=replay_payload_dispatcher,
         requested_by=ops_actor,
     )
     return await _mark_consumer_dlq_replay_replayed(
@@ -2210,8 +2127,7 @@ async def _publish_consumer_dlq_replay(
     context,
     replay_fingerprint: str,
     ingestion_job_service: IngestionJobService,
-    ingestion_service: IngestionService,
-    kafka_producer: KafkaProducer,
+    replay_payload_dispatcher: ReplayPayloadDispatcher,
     requested_by: str | None,
 ) -> None:
     try:
@@ -2219,8 +2135,7 @@ async def _publish_consumer_dlq_replay(
             endpoint=context.endpoint,
             payload=context.request_payload,
             idempotency_key=context.idempotency_key,
-            ingestion_service=ingestion_service,
-            kafka_producer=kafka_producer,
+            replay_payload_dispatcher=replay_payload_dispatcher,
         )
     except Exception as exc:
         replay_audit_id = await ingestion_job_service.record_consumer_dlq_replay_audit(

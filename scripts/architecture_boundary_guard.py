@@ -43,6 +43,11 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
             "services.calculators",
         ),
     ),
+    DirectImportBoundaryRule(
+        name="event-replay routers must not import concrete Kafka utilities",
+        source_path_prefixes=("src/services/event_replay_service/app/routers/",),
+        forbidden_module_prefixes=("portfolio_common.kafka_utils",),
+    ),
 )
 
 
