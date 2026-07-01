@@ -143,6 +143,7 @@
         "GET /support/portfolios/{portfolio_id}/reprocessing-jobs",
         "GET /support/portfolios/{portfolio_id}/reprocessing-keys",
         "GET /support/portfolios/{portfolio_id}/valuation-jobs",
+        "POST /support/outbox/failed-events/{outbox_id}/requeue",
         "POST /integration/benchmarks/{benchmark_id}/coverage",
         "POST /integration/portfolios/{portfolio_id}/dpm-source-readiness",
         "POST /integration/reference/risk-free-series/coverage"

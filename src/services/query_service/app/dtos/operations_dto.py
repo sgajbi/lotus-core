@@ -1935,6 +1935,104 @@ class FailedOutboxEventListResponse(BaseModel):
     )
 
 
+class FailedOutboxRequeueRequest(BaseModel):
+    requested_by: str = Field(
+        ...,
+        min_length=3,
+        max_length=128,
+        description="Operator, automation principal, or support workflow requesting requeue.",
+        examples=["ops.sre"],
+    )
+    reason: str = Field(
+        ...,
+        min_length=10,
+        max_length=512,
+        description=(
+            "Source-safe business or operational reason for requeue. Do not include raw payload, "
+            "secrets, client PII, or stack traces."
+        ),
+        examples=["Kafka delivery timeout cleared; payload contract inspected and still valid."],
+    )
+    correlation_id: Optional[str] = Field(
+        None,
+        max_length=128,
+        description="Incident, trace, or operator correlation identifier for this recovery action.",
+        examples=["incident-20260314-outbox-701"],
+    )
+    confirm_payload_contract_reviewed: bool = Field(
+        ...,
+        description=(
+            "Must be true to confirm the failed event payload and event contract were inspected "
+            "before requeue, reducing poison-event replay risk."
+        ),
+        examples=[True],
+    )
+
+
+class FailedOutboxRequeueResponse(BaseModel):
+    outbox_id: int = Field(
+        ...,
+        description="Durable outbox row identifier that was requeued.",
+        examples=[701],
+    )
+    audit_id: int = Field(
+        ...,
+        description="Durable outbox recovery audit row identifier.",
+        examples=[42],
+    )
+    prior_status: Literal["FAILED"] = Field(
+        ...,
+        description="Outbox status before the governed recovery action.",
+        examples=["FAILED"],
+    )
+    new_status: Literal["PENDING"] = Field(
+        ...,
+        description="Outbox status after the governed recovery action.",
+        examples=["PENDING"],
+    )
+    outcome: Literal["REQUEUED"] = Field(
+        ...,
+        description="Durable recovery outcome recorded for this action.",
+        examples=["REQUEUED"],
+    )
+    requested_by: str = Field(
+        ...,
+        description="Operator, automation principal, or support workflow that requested requeue.",
+        examples=["ops.sre"],
+    )
+    reason: str = Field(
+        ...,
+        description="Source-safe reason captured for the recovery audit.",
+        examples=["Kafka delivery timeout cleared; payload contract inspected and still valid."],
+    )
+    correlation_id: Optional[str] = Field(
+        None,
+        description="Incident, trace, or operator correlation identifier for this recovery action.",
+        examples=["incident-20260314-outbox-701"],
+    )
+    requested_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when the recovery action was requested.",
+        examples=["2026-03-14T10:55:00Z"],
+    )
+    completed_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when the failed row was moved back to pending.",
+        examples=["2026-03-14T10:55:00Z"],
+    )
+    retry_count: int = Field(
+        ...,
+        ge=0,
+        description="Retry count after requeue; controlled requeue resets this to zero.",
+        examples=[0],
+    )
+    next_attempt_at: datetime = Field(
+        ...,
+        description="Next dispatcher eligibility timestamp set by the recovery action.",
+        examples=["2026-03-14T10:55:00Z"],
+    )
+
+
 class AnalyticsExportJobRecord(BaseModel):
     job_id: str = Field(
         ...,

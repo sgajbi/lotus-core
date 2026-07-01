@@ -64,7 +64,7 @@ operator-facing diagnostic surface changed.
 
 ## Remaining Follow-Up
 
-- Add governed requeue/recovery controls with actor, reason, correlation ID, prior/new status, new
+- CR-1222 adds governed requeue/recovery controls with actor, reason, correlation ID, prior/new
   status, and outcome evidence.
 - Add Docker-backed proof that terminal failed rows created by the dispatcher are visible through the
   QCP route in the integrated runtime.

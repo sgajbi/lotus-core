@@ -130,9 +130,12 @@ Use this section for control-plane completion.
 2. Check `Oldest Outbox Age`.
 3. Check `Durable Outbox Failures`.
 4. If failures are non-zero, inspect `GET /support/outbox/failed-events` with topic,
-   correlation, or reason-code filters before considering requeue.
-5. Check `Outbox Backlog and Publish Pressure`.
-6. Check `Outbox Publication by Topic` to identify the starving topic.
+   correlation, or reason-code filters.
+5. After confirming the event payload and contract are safe to retry, use
+   `POST /support/outbox/failed-events/{outbox_id}/requeue` with operator, reason,
+   correlation, and payload-contract review confirmation.
+6. Check `Outbox Backlog and Publish Pressure`.
+7. Check `Outbox Publication by Topic` to identify the starving topic.
 
 ### Workflow: Valuation Is Not Converging
 

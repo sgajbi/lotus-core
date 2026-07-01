@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from typing import TypeVar
 
 from portfolio_common.database_models import FinancialReconciliationRun, PipelineStageState
+from portfolio_common.logging_utils import redact_sensitive_text
 from portfolio_common.reconciliation_quality import (
     COMPLETE,
     UNKNOWN,
@@ -18,6 +19,8 @@ from ..dtos.operations_dto import (
     CalculatorSloResponse,
     FailedOutboxEventListResponse,
     FailedOutboxEventRecord,
+    FailedOutboxRequeueRequest,
+    FailedOutboxRequeueResponse,
     LineageKeyListResponse,
     LineageKeyRecord,
     LineageResponse,
@@ -75,6 +78,7 @@ from .support_overview_builder import (
 )
 
 _PagedRowT = TypeVar("_PagedRowT")
+MAX_OUTBOX_RECOVERY_REASON_LENGTH = 512
 
 
 class OperationsService:
@@ -1035,6 +1039,39 @@ class OperationsService:
             ],
         )
 
+    async def requeue_failed_outbox_event(
+        self,
+        *,
+        outbox_id: int,
+        request: FailedOutboxRequeueRequest,
+    ) -> FailedOutboxRequeueResponse:
+        requested_at = datetime.now(timezone.utc)
+        audit, event = await self.repo.requeue_failed_outbox_event(
+            outbox_id=outbox_id,
+            requested_by=request.requested_by.strip(),
+            reason=_source_safe_outbox_recovery_reason(request.reason),
+            correlation_id=(
+                request.correlation_id.strip() if request.correlation_id is not None else None
+            ),
+            confirm_payload_contract_reviewed=request.confirm_payload_contract_reviewed,
+            requested_at=requested_at,
+        )
+        completed_at = audit.completed_at or requested_at
+        return FailedOutboxRequeueResponse(
+            outbox_id=event.id,
+            audit_id=audit.id,
+            prior_status="FAILED",
+            new_status="PENDING",
+            outcome="REQUEUED",
+            requested_by=audit.requested_by,
+            reason=audit.reason,
+            correlation_id=audit.correlation_id,
+            requested_at_utc=audit.requested_at,
+            completed_at_utc=completed_at,
+            retry_count=event.retry_count or 0,
+            next_attempt_at=event.next_attempt_at or completed_at,
+        )
+
     async def get_reconciliation_runs(
         self,
         portfolio_id: str,
@@ -1436,3 +1473,7 @@ class OperationsService:
             return None
         reference_now = now or datetime.now(timezone.utc)
         return max(0, int((reference_now - created_at).total_seconds() // 60))
+
+
+def _source_safe_outbox_recovery_reason(reason: str) -> str:
+    return redact_sensitive_text(reason.strip())[:MAX_OUTBOX_RECOVERY_REASON_LENGTH]

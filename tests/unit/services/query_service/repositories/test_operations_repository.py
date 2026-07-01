@@ -2,8 +2,10 @@ from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.database_models import OutboxEvent
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.operations_errors import OutboxRecoveryRejected
 from src.services.query_service.app.repositories.operations_repository import (
     OperationsRepository,
 )
@@ -1446,6 +1448,105 @@ async def test_get_failed_outbox_events_query(
     assert "outbox_events.last_attempted_at DESC NULLS LAST" in compiled
     assert "outbox_events.created_at DESC" in compiled
     assert "LIMIT 10 OFFSET 5" in compiled
+
+
+async def test_requeue_failed_outbox_event_records_audit_and_resets_dispatch_state(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    requested_at = datetime(2026, 3, 14, 10, 55, tzinfo=timezone.utc)
+    failed_at = datetime(2026, 3, 14, 10, 35, tzinfo=timezone.utc)
+    event = OutboxEvent(
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        payload={"event_type": "PortfolioValuationCompleted"},
+        topic="portfolio.valuation.completed",
+        status="FAILED",
+        correlation_id="corr-outbox-701",
+        retry_count=3,
+        last_attempted_at=failed_at,
+        next_attempt_at=None,
+        last_failure_reason_code="kafka_delivery_timeout",
+        last_failure_category="event_publish_delivery",
+        last_failure_message="Kafka delivery timed out before acknowledgement.",
+        last_failure_at=failed_at,
+        created_at=datetime(2026, 3, 14, 10, 30, tzinfo=timezone.utc),
+    )
+    event.id = 701
+    mock_execute_scalar_one_or_none(mock_db_session, event)
+
+    audit, updated_event = await repository.requeue_failed_outbox_event(
+        outbox_id=701,
+        requested_by="ops.sre",
+        reason="Kafka delivery timeout cleared; payload contract inspected.",
+        correlation_id="incident-20260314-outbox-701",
+        confirm_payload_contract_reviewed=True,
+        requested_at=requested_at,
+    )
+
+    assert updated_event is event
+    assert event.status == "PENDING"
+    assert event.retry_count == 0
+    assert event.last_attempted_at is None
+    assert event.next_attempt_at == requested_at
+    assert event.last_failure_reason_code is None
+    assert event.last_failure_category is None
+    assert event.last_failure_message is None
+    assert event.last_failure_at is None
+    assert audit.outbox_id == 701
+    assert audit.recovery_action == "requeue_failed_outbox"
+    assert audit.requested_by == "ops.sre"
+    assert audit.prior_status == "FAILED"
+    assert audit.new_status == "PENDING"
+    assert audit.outcome == "REQUEUED"
+    assert audit.outcome_message == "outbox_row_requeued_for_dispatch"
+    assert audit.prior_retry_count == 3
+    assert audit.prior_last_failure_reason_code == "kafka_delivery_timeout"
+    assert audit.prior_last_failure_at == failed_at
+    mock_db_session.add.assert_called_once_with(audit)
+    mock_db_session.flush.assert_awaited_once()
+    mock_db_session.commit.assert_awaited_once()
+
+
+async def test_requeue_failed_outbox_event_rejects_blind_requeue_with_audit(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    requested_at = datetime(2026, 3, 14, 10, 55, tzinfo=timezone.utc)
+    event = OutboxEvent(
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        payload={"event_type": "PortfolioValuationCompleted"},
+        topic="portfolio.valuation.completed",
+        status="FAILED",
+        retry_count=3,
+        created_at=datetime(2026, 3, 14, 10, 30, tzinfo=timezone.utc),
+    )
+    event.id = 701
+    mock_execute_scalar_one_or_none(mock_db_session, event)
+
+    with pytest.raises(OutboxRecoveryRejected) as exc_info:
+        await repository.requeue_failed_outbox_event(
+            outbox_id=701,
+            requested_by="ops.sre",
+            reason="Retry requested without payload contract review.",
+            correlation_id="incident-20260314-outbox-701",
+            confirm_payload_contract_reviewed=False,
+            requested_at=requested_at,
+        )
+
+    assert event.status == "FAILED"
+    assert event.retry_count == 3
+    audit = mock_db_session.add.call_args.args[0]
+    assert audit.outbox_id == 701
+    assert audit.prior_status == "FAILED"
+    assert audit.new_status == "FAILED"
+    assert audit.outcome == "REJECTED"
+    assert audit.outcome_message == "payload_contract_review_required"
+    assert exc_info.value.metadata["outcome"] == "REJECTED"
+    assert exc_info.value.metadata["reason"] == "payload_contract_review_required"
+    mock_db_session.flush.assert_awaited_once()
+    mock_db_session.commit.assert_awaited_once()
 
 
 async def test_get_reconciliation_runs_count_with_filters(

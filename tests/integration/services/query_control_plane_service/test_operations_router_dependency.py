@@ -12,6 +12,7 @@ from src.services.query_control_plane_service.app.routers.operations import (
     get_operations_service,
     parse_required_iso_date,
 )
+from src.services.query_service.app.operations_errors import OutboxRecoveryRejected
 
 pytestmark = pytest.mark.asyncio
 
@@ -917,6 +918,77 @@ async def test_failed_outbox_events_unexpected_maps_to_500(async_test_client):
 
     assert response.status_code == 500
     assert "failed outbox" in response.json()["detail"].lower()
+
+
+async def test_requeue_failed_outbox_event_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.requeue_failed_outbox_event.return_value = {
+        "outbox_id": 701,
+        "audit_id": 42,
+        "prior_status": "FAILED",
+        "new_status": "PENDING",
+        "outcome": "REQUEUED",
+        "requested_by": "ops.sre",
+        "reason": "Kafka delivery timeout cleared; payload contract inspected.",
+        "correlation_id": "incident-20260314-outbox-701",
+        "requested_at_utc": "2026-03-14T10:55:00Z",
+        "completed_at_utc": "2026-03-14T10:55:00Z",
+        "retry_count": 0,
+        "next_attempt_at": "2026-03-14T10:55:00Z",
+    }
+
+    response = await client.post(
+        "/support/outbox/failed-events/701/requeue",
+        json={
+            "requested_by": "ops.sre",
+            "reason": "Kafka delivery timeout cleared; payload contract inspected.",
+            "correlation_id": "incident-20260314-outbox-701",
+            "confirm_payload_contract_reviewed": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["outbox_id"] == 701
+    assert body["audit_id"] == 42
+    assert body["prior_status"] == "FAILED"
+    assert body["new_status"] == "PENDING"
+    assert body["outcome"] == "REQUEUED"
+    request = mock_service.requeue_failed_outbox_event.await_args.kwargs["request"]
+    mock_service.requeue_failed_outbox_event.assert_awaited_once()
+    assert mock_service.requeue_failed_outbox_event.await_args.kwargs["outbox_id"] == 701
+    assert request.requested_by == "ops.sre"
+    assert request.confirm_payload_contract_reviewed is True
+
+
+async def test_requeue_failed_outbox_event_rejected_maps_to_409(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.requeue_failed_outbox_event.side_effect = OutboxRecoveryRejected(
+        "Payload contract review confirmation is required before requeue.",
+        metadata={
+            "outbox_id": 701,
+            "audit_id": 42,
+            "outcome": "REJECTED",
+            "reason": "payload_contract_review_required",
+        },
+    )
+
+    response = await client.post(
+        "/support/outbox/failed-events/701/requeue",
+        json={
+            "requested_by": "ops.sre",
+            "reason": "Retry requested before payload contract review.",
+            "correlation_id": "incident-20260314-outbox-701",
+            "confirm_payload_contract_reviewed": False,
+        },
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error_code"] == "QCP_OUTBOX_RECOVERY_REJECTED"
+    assert body["metadata"]["resource"] == "failed_outbox_requeue"
+    assert body["metadata"]["outcome"] == "REJECTED"
+    assert body["metadata"]["reason"] == "payload_contract_review_required"
 
 
 async def test_lineage_keys_unexpected_maps_to_500(async_test_client):
