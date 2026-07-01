@@ -358,6 +358,85 @@ def test_performance_component_economics_deduplicates_fee_component_identity() -
     assert totals[("fee", "USD")].evidence_count == 1
 
 
+def test_performance_component_economics_uses_trade_fee_when_costs_are_absent() -> None:
+    rows = build_performance_component_economics_rows(
+        [
+            _transaction(
+                transaction_id="TXN-TRADE-FEE-001",
+                trade_currency=None,  # type: ignore[arg-type]
+                currency="sgd",
+                trade_fee="4.0000",
+                costs=[],
+            )
+        ]
+    )
+
+    assert rows[0].trade_currency == "SGD"
+    assert rows[0].trade_fee_amount == Decimal("4.0000")
+    assert rows[0].trade_fee_currency == "SGD"
+    assert rows[0].trade_fee_components[0].evidence_count == 1
+
+
+def test_performance_component_economics_omits_non_positive_fee_evidence() -> None:
+    rows = build_performance_component_economics_rows(
+        [
+            _transaction(
+                transaction_id="TXN-NO-FEE-001",
+                trade_fee="0",
+                costs=[
+                    _cost(fee_type="brokerage", amount="0", currency="USD"),
+                    _cost(fee_type=None, amount="-1", currency=None),  # type: ignore[arg-type]
+                ],
+            )
+        ]
+    )
+
+    assert rows[0].trade_fee_amount == Decimal("0")
+    assert rows[0].trade_fee_currency == ""
+    assert rows[0].trade_fee_components == []
+
+
+def test_performance_component_economics_keeps_anonymous_cost_components_distinct() -> None:
+    rows = build_performance_component_economics_rows(
+        [
+            _transaction(
+                transaction_id="TXN-ANON-FEE-001",
+                costs=[
+                    _cost(fee_type=None, amount="1.0000", currency=None),  # type: ignore[arg-type]
+                    _cost(fee_type=None, amount="2.0000", currency=None),  # type: ignore[arg-type]
+                ],
+            )
+        ]
+    )
+
+    assert rows[0].trade_fee_components == [
+        rows[0].trade_fee_components[0],
+    ]
+    assert rows[0].trade_fee_components[0].currency == "USD"
+    assert rows[0].trade_fee_components[0].amount == Decimal("3.0000")
+    assert rows[0].trade_fee_components[0].evidence_count == 2
+
+
+def test_performance_component_economics_empty_response_is_unavailable() -> None:
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+    )
+
+    response = build_performance_component_economics_response(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        rows=[],
+        transactions=[],
+        portfolio_base_currency="USD",
+    )
+
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND"
+    assert response.supportability.observed_component_families == []
+    assert response.data_quality_status == "UNKNOWN"
+
+
 def test_resolve_performance_component_economics_response_orchestrates_repository_read() -> None:
     async def run_case():
         calls: list[tuple[str, dict[str, object]]] = []
