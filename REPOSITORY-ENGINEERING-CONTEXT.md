@@ -113,6 +113,11 @@ Current repository posture:
     component evidence are modeled explicitly before source-data response assembly. Extend this
     pattern before adding new high-value source-data mappers that would otherwise accept raw ORM
     rows, ORM relationship objects, or tuple-shaped SQL results.
+    Repository output-shape governance now also has `make repository-output-shape-guard`, wired into
+    `make lint`, backed by `scripts/repository_output_shape_guard.py`, and documented in
+    `docs/architecture/repository-output-shape-standard.md`. It blocks new public repository methods
+    from exposing SQLAlchemy ORM return annotations unless the method is explicitly registered as a
+    transitional exception, and it fails stale exceptions after future typed-record conversions.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
