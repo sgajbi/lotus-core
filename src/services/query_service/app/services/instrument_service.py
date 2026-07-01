@@ -2,6 +2,7 @@
 import logging
 from typing import List, Optional
 
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.instrument_dto import InstrumentRecord, PaginatedInstrumentResponse
@@ -32,7 +33,16 @@ class InstrumentService:
         )
         if not normalized_security_ids:
             return []
-        logger.info(f"Fetching details for {len(normalized_security_ids)} instruments.")
+        logger.info(
+            "Instrument batch lookup requested.",
+            extra=operation_log_extra(
+                event_name="query.instrument_service.batch_lookup_requested",
+                operation="query.instrument_service.get_instruments_by_ids",
+                status="started",
+                reason_code="request_received",
+                requested_count=len(normalized_security_ids),
+            ),
+        )
         db_results = await self.repo.get_by_security_ids(normalized_security_ids)
         return [self._to_instrument_record(row) for row in db_results]
 
@@ -46,7 +56,17 @@ class InstrumentService:
         """
         Retrieves a paginated and filtered list of instruments.
         """
-        logger.info("Fetching instruments.")
+        logger.info(
+            "Instrument query requested.",
+            extra=operation_log_extra(
+                event_name="query.instrument_service.query_requested",
+                operation="query.instrument_service.get_instruments",
+                status="started",
+                reason_code="request_received",
+                has_security_filter=security_id is not None,
+                has_product_type_filter=product_type is not None,
+            ),
+        )
         security_id = normalize_security_id(security_id) if security_id else None
 
         total_count = await self.repo.get_instruments_count(

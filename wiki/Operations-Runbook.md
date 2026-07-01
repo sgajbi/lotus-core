@@ -139,6 +139,21 @@ retryable failures, terminal failures, DLQ outcomes, commit failures, poll error
 exits, and shutdown failures. Keep message keys, offsets, payload fields, raw exception text,
 portfolio/security IDs, request/correlation IDs, and trace IDs out of metric labels.
 
+Operational logs in guarded health, Kafka, outbox, ingestion, query, replay, and scheduler paths
+use constant messages with `event_name`, `operation`, `status`, and `reason_code` structured
+fields. Use `portfolio_common.logging_utils.operation_log_extra(...)` or
+`log_operation_event(...)` for new operational logs in these paths. Do not embed portfolio,
+account, client, security, request, correlation, or trace identifiers in free-text log messages; use
+support APIs, audit records, DLQ evidence, or bounded structured fields for drill-through.
+
+Run the guard with:
+
+```bash
+make structured-log-guard
+```
+
+It is also part of `make lint`.
+
 ## Database-first diagnostics
 
 Prefer API diagnostics first, but go to the database when:

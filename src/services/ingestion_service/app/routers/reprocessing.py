@@ -2,6 +2,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from portfolio_common.logging_utils import operation_log_extra
 
 from ..ack_response import build_batch_ack
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
@@ -138,7 +139,16 @@ async def reprocess_transactions(
             accepted_count=job_result.job.accepted_count,
             idempotency_key=idempotency_key,
         )
-    logger.info(f"Received request to reprocess {num_to_reprocess} transaction(s).")
+    logger.info(
+        "Transaction reprocessing request accepted.",
+        extra=operation_log_extra(
+            event_name="ingestion.reprocessing.request_accepted",
+            operation="ingestion.reprocess_transactions",
+            status="accepted",
+            reason_code="request_accepted",
+            record_count=num_to_reprocess,
+        ),
+    )
 
     try:
         await ingestion_service.publish_reprocessing_requests(
@@ -169,7 +179,16 @@ async def reprocess_transactions(
             published_record_count=num_to_reprocess,
         )
 
-    logger.info(f"Successfully queued {num_to_reprocess} reprocessing requests.")
+    logger.info(
+        "Transaction reprocessing requests queued.",
+        extra=operation_log_extra(
+            event_name="ingestion.reprocessing.requests_queued",
+            operation="ingestion.reprocess_transactions",
+            status="queued",
+            reason_code="publish_queued",
+            record_count=num_to_reprocess,
+        ),
+    )
     return build_batch_ack(
         message=f"Successfully queued {num_to_reprocess} transactions for reprocessing.",
         entity_type="reprocessing_request",

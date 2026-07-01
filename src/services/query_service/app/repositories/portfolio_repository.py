@@ -4,6 +4,7 @@ from datetime import date
 from typing import List, Optional
 
 from portfolio_common.database_models import Portfolio
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,7 +45,20 @@ class PortfolioRepository:
 
         results = await self.db.execute(stmt.order_by(Portfolio.portfolio_id.asc()))
         portfolios = results.scalars().all()
-        logger.info(f"Found {len(portfolios)} portfolios with the given filters.")
+        logger.info(
+            "Portfolio repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.portfolio_repository.query_completed",
+                operation="query.portfolio_repository.get_portfolios",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(portfolios),
+                has_portfolio_id_filter=portfolio_id is not None,
+                has_portfolio_ids_filter=bool(portfolio_ids),
+                has_client_filter=client_id is not None,
+                has_booking_center_filter=booking_center_code is not None,
+            ),
+        )
         return portfolios
 
     async def search_portfolio_lookup_ids(

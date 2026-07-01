@@ -49,6 +49,13 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     `kafka_consumer_processing_duration_seconds{service,topic,group_id}`. The shared class owns
     processing attempts, success, retryable failure, terminal failure, DLQ success/failure, commit
     failure, poll error, critical loop exit, and shutdown-failure outcomes.
+13. Operational logs in shared health, Kafka, outbox, ingestion, query, replay, and scheduler
+    paths use constant message text plus structured taxonomy fields: `event_name`, `operation`,
+    `status`, and `reason_code`. Use `portfolio_common.logging_utils.operation_log_extra(...)` or
+    `log_operation_event(...)` for new operational logs in those paths. Do not embed portfolio,
+    account, client, security, request, correlation, or trace identifiers in free-text log
+    messages; use support APIs, audit tables, DLQ evidence, or bounded structured fields for
+    drill-through. `make structured-log-guard` is enforced through `make lint`.
 
 ## Current Gaps
 
@@ -57,6 +64,8 @@ monitoring guard now rejects forbidden production Prometheus labels and unowned 
 metric definitions. The shared HTTP bootstrap and web-backed worker runtime now enforce the
 configured metrics access policy, and shared readiness checks now emit bounded dependency
 outcome/latency telemetry. Shared `BaseConsumer` paths now emit standard Kafka consumer lifecycle
-and processing metrics. Future slices should add automated checks for correlation ID propagation,
-sensitive logging, health/readiness completeness, and inventory enforcement that prevents new
-runtime web apps from bypassing the shared metrics policy.
+and processing metrics. Structured operational log taxonomy is now enforced for guarded health,
+Kafka, outbox, ingestion, query, replay, and scheduler paths. Future slices should expand the guard
+coverage as additional services standardize their logging surfaces, add automated checks for
+correlation ID propagation, health/readiness completeness, and inventory enforcement that prevents
+new runtime web apps from bypassing the shared metrics policy.

@@ -24,6 +24,7 @@ from .logging_utils import (
     REDACTED_VALUE,
     correlation_id_var,
     generate_correlation_id,
+    log_operation_event,
     normalize_lineage_value,
     normalize_traceparent,
     redact_sensitive,
@@ -200,22 +201,33 @@ class BaseConsumer(ABC):
 
         if self.dlq_topic:
             self._producer = get_kafka_producer()
-            logger.info(
-                "DLQ enabled for consumer of topic "
-                f"'{self.topic}'. Failing messages will be sent "
-                f"to '{self.dlq_topic}'."
+            self._log_consumer_event(
+                logging.INFO,
+                "Kafka consumer DLQ enabled.",
+                event_name="kafka.consumer.dlq_enabled",
+                status="configured",
+                reason_code="dlq_configured",
+                dlq_topic=self.dlq_topic,
             )
 
     def _initialize_consumer(self):
         """Initializes and subscribes the Kafka consumer."""
-        logger.info(
-            "Initializing consumer for topic "
-            f"'{self.topic}' with group "
-            f"'{self._consumer_config['group.id']}'..."
+        self._log_consumer_event(
+            logging.INFO,
+            "Kafka consumer initialization started.",
+            event_name="kafka.consumer.initialization_started",
+            status="started",
+            reason_code="consumer_initializing",
         )
         self._consumer = Consumer(self._consumer_config)
         self._consumer.subscribe([self.topic])
-        logger.info(f"Consumer successfully subscribed to topic '{self.topic}'.")
+        self._log_consumer_event(
+            logging.INFO,
+            "Kafka consumer subscribed.",
+            event_name="kafka.consumer.subscribed",
+            status="succeeded",
+            reason_code="consumer_subscribed",
+        )
 
     def _resolve_message_correlation_id(self, msg: Message) -> str:
         """
@@ -225,9 +237,12 @@ class BaseConsumer(ABC):
         corr_id = self._get_message_header_correlation_id(msg)
         if not corr_id:
             corr_id = generate_correlation_id(self.service_prefix)
-            logger.warning(
-                "No correlation ID in message from topic "
-                f"'{msg.topic()}'. Generated new ID: {corr_id}"
+            self._log_consumer_event(
+                logging.WARNING,
+                "Kafka message missing correlation id; generated fallback.",
+                event_name="kafka.consumer.correlation_missing",
+                status="degraded",
+                reason_code="message_correlation_id_absent",
             )
 
         return corr_id
@@ -363,13 +378,26 @@ class BaseConsumer(ABC):
                 correlation_id=message_correlation_id,
             )
             self._record_consumer_event("dlq_published", error_reason_code)
-            logger.warning(
-                f"Message with key '{dlq_payload['original_key']}' sent to DLQ '{self.dlq_topic}'."
+            self._log_consumer_event(
+                logging.WARNING,
+                "Kafka message published to DLQ.",
+                event_name="kafka.consumer.dlq_published",
+                status="succeeded",
+                reason_code=error_reason_code,
+                dlq_topic=self.dlq_topic,
             )
             return True
         except Exception as e:
             self._record_consumer_event("dlq_failed", "dlq_publish_error")
-            logger.error(f"FATAL: Could not send message to DLQ. Error: {e}", exc_info=True)
+            self._log_consumer_event(
+                logging.ERROR,
+                "Kafka DLQ publication failed.",
+                event_name="kafka.consumer.dlq_failed",
+                status="failed",
+                reason_code="dlq_publish_error",
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             return False
 
     def _build_dlq_payload(
@@ -501,7 +529,13 @@ class BaseConsumer(ABC):
         try:
             self._initialize_consumer()
             loop = asyncio.get_running_loop()
-            logger.info(f"Starting to consume messages from topic '{self.topic}'...")
+            self._log_consumer_event(
+                logging.INFO,
+                "Kafka consumer loop started.",
+                event_name="kafka.consumer.loop_started",
+                status="started",
+                reason_code="consumer_loop_started",
+            )
             while self._running:
                 msg = await loop.run_in_executor(None, self._consumer.poll, 1.0)
 
@@ -577,15 +611,27 @@ class BaseConsumer(ABC):
 
     def _handle_fatal_consumer_error(self, error: object) -> None:
         self._record_consumer_event("poll_error", "fatal")
-        logger.error(
-            f"Fatal consumer error on topic {self.topic}: {error}. Shutting down.",
+        self._log_consumer_event(
+            logging.ERROR,
+            "Kafka consumer poll error was fatal; shutting down.",
+            event_name="kafka.consumer.poll_error",
+            status="failed",
+            reason_code="fatal_poll_error",
+            error_type=type(error).__name__,
             exc_info=True,
         )
         self._running = False
 
     def _handle_nonfatal_consumer_error(self, error: object) -> None:
         self._record_consumer_event("poll_error", "nonfatal")
-        logger.warning(f"Non-fatal consumer error on topic {self.topic}: {error}.")
+        self._log_consumer_event(
+            logging.WARNING,
+            "Kafka consumer poll error was non-fatal.",
+            event_name="kafka.consumer.poll_error",
+            status="degraded",
+            reason_code="nonfatal_poll_error",
+            error_type=type(error).__name__,
+        )
 
     async def _dispatch_message_for_processing(
         self,
@@ -598,14 +644,24 @@ class BaseConsumer(ABC):
         await loop.run_in_executor(None, functools.partial(self.process_message, msg))
 
     def _log_retryable_processing_error(self, error: RetryableConsumerError) -> None:
-        logger.warning(
-            f"Retryable error occurred: {error}. Offset will not be committed.",
-            exc_info=False,
+        self._log_consumer_event(
+            logging.WARNING,
+            "Kafka message processing failed retryably; offset not committed.",
+            event_name="kafka.consumer.processing_retryable",
+            status="retryable_failure",
+            reason_code="retryable_consumer_error",
+            error_type=type(error).__name__,
         )
 
     async def _handle_terminal_processing_error(self, msg: Message, error: Exception) -> None:
-        logger.error(
-            f"Terminal error processing message for topic {self.topic}: {error}", exc_info=True
+        self._log_consumer_event(
+            logging.ERROR,
+            "Kafka message processing failed terminally.",
+            event_name="kafka.consumer.processing_terminal",
+            status="terminal_failure",
+            reason_code=classify_dlq_reason_code(error),
+            error_type=type(error).__name__,
+            exc_info=True,
         )
         dlq_succeeded = await self._send_to_dlq_async(msg, error)
         if dlq_succeeded:
@@ -665,13 +721,14 @@ class BaseConsumer(ABC):
             self._consumer.commit(message=msg, asynchronous=False)
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "dlq_publication")
-            logger.warning(
-                (
-                    "Offset commit failed after successful DLQ publication; "
-                    "offset will not be committed so Kafka can redeliver."
-                ),
+            self._log_consumer_event(
+                logging.WARNING,
+                "Kafka offset commit failed after DLQ publication.",
+                event_name="kafka.consumer.commit_failed",
+                status="failed",
+                reason_code="dlq_publication",
                 exc_info=True,
-                extra=self._commit_failure_log_context(msg, commit_error),
+                error_type=type(commit_error).__name__,
             )
 
     def _commit_after_successful_processing(self, msg: Message) -> bool:
@@ -680,51 +737,48 @@ class BaseConsumer(ABC):
             return True
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "successful_processing")
-            logger.warning(
-                (
-                    "Offset commit failed after successful processing; "
-                    "offset will not be committed so Kafka can redeliver."
-                ),
+            self._log_consumer_event(
+                logging.WARNING,
+                "Kafka offset commit failed after successful processing.",
+                event_name="kafka.consumer.commit_failed",
+                status="failed",
+                reason_code="successful_processing",
                 exc_info=True,
-                extra=self._commit_failure_log_context(msg, commit_error),
+                error_type=type(commit_error).__name__,
             )
             return False
 
     def _log_dlq_publication_failed(self, msg: Message) -> None:
-        logger.warning(
+        self._log_consumer_event(
+            logging.WARNING,
             "DLQ publication failed; offset will not be committed so Kafka can redeliver.",
-            extra=self._message_log_context(msg),
+            event_name="kafka.consumer.dlq_failed",
+            status="failed",
+            reason_code="dlq_publish_error",
         )
-
-    def _commit_failure_log_context(self, msg: Message, error: Exception) -> dict[str, str | None]:
-        return {
-            **self._message_log_context(msg),
-            "commit_error": str(error),
-        }
-
-    def _message_log_context(self, msg: Message) -> dict[str, str | None]:
-        return {
-            "topic": self.topic,
-            "consumer_group": self._consumer_config["group.id"],
-            "message_key": self._message_key_text(msg),
-        }
 
     def shutdown(self):
         """Gracefully shuts down the consumer."""
-        logger.info(f"Shutting down consumer for topic '{self.topic}'...")
+        self._log_consumer_event(
+            logging.INFO,
+            "Kafka consumer shutdown started.",
+            event_name="kafka.consumer.shutdown_started",
+            status="started",
+            reason_code="consumer_shutdown_started",
+        )
         self._running = False
         if self._consumer:
             self._wakeup_consumer_for_shutdown()
             self._close_consumer_for_shutdown()
         if self._producer:
             self._flush_dlq_producer_for_shutdown()
-        logger.info(f"Consumer for topic '{self.topic}' has been closed.")
-
-    def _shutdown_log_context(self) -> dict[str, str]:
-        return {
-            "topic": self.topic,
-            "consumer_group": self._consumer_config["group.id"],
-        }
+        self._log_consumer_event(
+            logging.INFO,
+            "Kafka consumer shutdown completed.",
+            event_name="kafka.consumer.shutdown_completed",
+            status="succeeded",
+            reason_code="consumer_shutdown_completed",
+        )
 
     def _wakeup_consumer_for_shutdown(self) -> None:
         if self._consumer is None:
@@ -736,11 +790,39 @@ class BaseConsumer(ABC):
             wakeup()
         except Exception:
             self._record_consumer_event("shutdown_failed", "consumer_wakeup")
-            logger.warning(
+            self._log_consumer_event(
+                logging.WARNING,
                 "Consumer wakeup failed during shutdown.",
+                event_name="kafka.consumer.shutdown_failed",
+                status="failed",
+                reason_code="consumer_wakeup",
                 exc_info=True,
-                extra=self._shutdown_log_context(),
             )
+
+    def _log_consumer_event(
+        self,
+        level: int,
+        message: str,
+        *,
+        event_name: str,
+        status: str,
+        reason_code: str,
+        exc_info: bool = False,
+        **fields: object,
+    ) -> None:
+        log_operation_event(
+            logger,
+            level,
+            message,
+            event_name=event_name,
+            operation="kafka.consume",
+            status=status,
+            reason_code=reason_code,
+            topic=self.topic,
+            consumer_group=self._consumer_config["group.id"],
+            **fields,
+            exc_info=exc_info,
+        )
 
     def _close_consumer_for_shutdown(self) -> None:
         if self._consumer is None:
@@ -749,10 +831,13 @@ class BaseConsumer(ABC):
             self._consumer.close()
         except Exception:
             self._record_consumer_event("shutdown_failed", "consumer_close")
-            logger.error(
+            self._log_consumer_event(
+                logging.ERROR,
                 "Consumer close failed during shutdown.",
+                event_name="kafka.consumer.shutdown_failed",
+                status="failed",
+                reason_code="consumer_close",
                 exc_info=True,
-                extra=self._shutdown_log_context(),
             )
 
     def _flush_dlq_producer_for_shutdown(self) -> None:
@@ -762,17 +847,21 @@ class BaseConsumer(ABC):
             undelivered_count = self._producer.flush(timeout=5)
             if undelivered_count:
                 self._record_consumer_event("shutdown_failed", "dlq_flush_undelivered")
-                logger.error(
+                self._log_consumer_event(
+                    logging.ERROR,
                     "DLQ producer flush left undelivered messages during shutdown.",
-                    extra={
-                        **self._shutdown_log_context(),
-                        "undelivered_count": undelivered_count,
-                    },
+                    event_name="kafka.consumer.shutdown_failed",
+                    status="failed",
+                    reason_code="dlq_flush_undelivered",
+                    undelivered_count=undelivered_count,
                 )
         except Exception:
             self._record_consumer_event("shutdown_failed", "dlq_flush")
-            logger.error(
+            self._log_consumer_event(
+                logging.ERROR,
                 "DLQ producer flush failed during shutdown.",
+                event_name="kafka.consumer.shutdown_failed",
+                status="failed",
+                reason_code="dlq_flush",
                 exc_info=True,
-                extra=self._shutdown_log_context(),
             )

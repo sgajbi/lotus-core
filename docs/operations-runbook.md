@@ -76,6 +76,31 @@ Use these for worker fleet dashboards and incident triage. Keep message keys, of
 fields, raw exception text, portfolio/security IDs, request/correlation IDs, and trace IDs out of
 metric labels; use logs, DLQ evidence, replay audit, and support APIs for drill-through.
 
+## Structured Operational Logs
+
+Operational logs in guarded health, Kafka, outbox, ingestion, query, replay, and scheduler paths
+must use constant messages with these structured fields:
+
+| Field | Meaning |
+| --- | --- |
+| `event_name` | Stable dotted event name for search, dashboards, and support runbooks. |
+| `operation` | Stable operation name for the workflow or method boundary. |
+| `status` | Bounded outcome such as `started`, `succeeded`, `failed`, `retrying`, `skipped`, or `stopped`. |
+| `reason_code` | Bounded machine-readable reason for the event. |
+
+Use `portfolio_common.logging_utils.operation_log_extra(...)` or `log_operation_event(...)` for new
+operational logs in these paths. Keep portfolio, account, client, security, request, correlation,
+and trace identifiers out of free-text log messages. Use support APIs, audit records, DLQ evidence,
+or bounded structured fields for drill-through.
+
+The guard is:
+
+```powershell
+make structured-log-guard
+```
+
+It is also part of `make lint`.
+
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
 `X-Trace-Id` is supplied, the shared HTTP bootstrap emits a W3C-shaped `traceparent` with the same

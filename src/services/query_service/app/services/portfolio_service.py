@@ -2,6 +2,7 @@
 import logging
 from typing import Optional
 
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.lookup_dto import LookupItem
@@ -31,9 +32,17 @@ class PortfolioService:
         Retrieves a filtered list of portfolios.
         """
         logger.info(
-            "Fetching portfolios with filters: "
-            f"portfolio_id={portfolio_id}, portfolio_ids={portfolio_ids}, "
-            f"client_id={client_id}, booking_center_code={booking_center_code}"
+            "Portfolio query requested.",
+            extra=operation_log_extra(
+                event_name="query.portfolio_service.query_requested",
+                operation="query.portfolio_service.get_portfolios",
+                status="started",
+                reason_code="request_received",
+                has_portfolio_id_filter=portfolio_id is not None,
+                has_portfolio_ids_filter=bool(portfolio_ids),
+                has_client_filter=client_id is not None,
+                has_booking_center_filter=booking_center_code is not None,
+            ),
         )
 
         db_results = await self.repo.get_portfolios(
@@ -77,7 +86,15 @@ class PortfolioService:
         Retrieves a single portfolio by its ID.
         Raises an exception if the portfolio is not found.
         """
-        logger.info(f"Fetching portfolio with id: {portfolio_id}")
+        logger.info(
+            "Portfolio lookup requested.",
+            extra=operation_log_extra(
+                event_name="query.portfolio_service.lookup_requested",
+                operation="query.portfolio_service.get_portfolio_by_id",
+                status="started",
+                reason_code="request_received",
+            ),
+        )
         db_portfolio = await self.repo.get_by_id(portfolio_id)
         if not db_portfolio:
             raise LookupError(f"Portfolio with id {portfolio_id} not found")

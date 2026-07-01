@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from confluent_kafka import KafkaException, Producer
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
+from .logging_utils import operation_log_extra
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,29 @@ class KafkaProducer:
             }
 
             self.producer = Producer(conf)
-            logger.info(f"Kafka producer initialized for brokers: {self.bootstrap_servers}")
+            broker_count = len([server for server in self.bootstrap_servers.split(",") if server])
+            logger.info(
+                "Kafka producer initialized.",
+                extra=operation_log_extra(
+                    event_name="kafka.producer.initialized",
+                    operation="kafka.produce",
+                    status="succeeded",
+                    reason_code="producer_initialized",
+                    broker_count=broker_count,
+                ),
+            )
         except KafkaException as e:
-            logger.error(f"Failed to initialize Kafka producer: {e}")
+            logger.error(
+                "Kafka producer initialization failed.",
+                exc_info=True,
+                extra=operation_log_extra(
+                    event_name="kafka.producer.initialization_failed",
+                    operation="kafka.produce",
+                    status="failed",
+                    reason_code="producer_initialization_error",
+                    error_type=type(e).__name__,
+                ),
+            )
             self.producer = None
             raise
 
@@ -70,7 +91,14 @@ class KafkaProducer:
         """
         if not self.producer:
             logger.error(
-                f"Kafka producer not initialized. Cannot publish message to topic {topic}."
+                "Kafka producer is not initialized.",
+                extra=operation_log_extra(
+                    event_name="kafka.producer.publish_rejected",
+                    operation="kafka.produce",
+                    status="failed",
+                    reason_code="producer_not_initialized",
+                    topic=topic,
+                ),
             )
             raise RuntimeError("Kafka producer is not initialized.")
 
@@ -88,7 +116,16 @@ class KafkaProducer:
             self.producer.poll(0)
         except Exception as e:
             logger.error(
-                f"An unexpected error occurred during message production: {e}", exc_info=True
+                "Kafka message production failed.",
+                exc_info=True,
+                extra=operation_log_extra(
+                    event_name="kafka.producer.publish_failed",
+                    operation="kafka.produce",
+                    status="failed",
+                    reason_code="producer_publish_error",
+                    topic=topic,
+                    error_type=type(e).__name__,
+                ),
             )
             raise
 
@@ -104,10 +141,27 @@ class KafkaProducer:
                 if undelivered_count:
                     logger.error(
                         "Kafka producer close left undelivered messages.",
-                        extra={"undelivered_count": undelivered_count, "timeout": timeout},
+                        extra=operation_log_extra(
+                            event_name="kafka.producer.close_incomplete",
+                            operation="kafka.produce",
+                            status="failed",
+                            reason_code="undelivered_messages",
+                            undelivered_count=undelivered_count,
+                            timeout_seconds=timeout,
+                        ),
                     )
             except Exception:
-                logger.error("Kafka producer close flush failed.", exc_info=True)
+                logger.error(
+                    "Kafka producer close flush failed.",
+                    exc_info=True,
+                    extra=operation_log_extra(
+                        event_name="kafka.producer.close_failed",
+                        operation="kafka.produce",
+                        status="failed",
+                        reason_code="producer_flush_error",
+                        timeout_seconds=timeout,
+                    ),
+                )
             finally:
                 self.producer = None
 
@@ -181,7 +235,19 @@ def _handle_delivery_failure(
     outbox_id: Optional[str],
     on_delivery: Optional[Callable[[str, bool, Optional[str]], None]],
 ) -> None:
-    logger.error(f"Message delivery failed for topic {msg.topic()} key {msg.key()}: {err}")
+    logger.error(
+        "Kafka message delivery failed.",
+        extra=operation_log_extra(
+            event_name="kafka.producer.delivery_failed",
+            operation="kafka.produce",
+            status="failed",
+            reason_code="delivery_error",
+            topic=msg.topic(),
+            partition=msg.partition(),
+            offset=msg.offset(),
+            error_type=type(err).__name__,
+        ),
+    )
     _notify_delivery_callback(
         on_delivery,
         outbox_id,
@@ -197,7 +263,7 @@ def _handle_delivery_success(
     on_delivery: Optional[Callable[[str, bool, Optional[str]], None]],
 ) -> None:
     logger.info(
-        f"Message delivered with key '{_message_key_repr(msg)}'",
+        "Kafka message delivered.",
         extra=_delivery_log_extra(msg),
     )
     _notify_delivery_callback(
@@ -210,18 +276,15 @@ def _handle_delivery_success(
 
 
 def _delivery_log_extra(msg) -> Dict[str, Any]:
-    return {
-        "topic": msg.topic(),
-        "partition": msg.partition(),
-        "offset": msg.offset(),
-    }
-
-
-def _message_key_repr(msg) -> str:
-    try:
-        return msg.key().decode("utf-8") if msg.key() else ""
-    except Exception:
-        return "<binary>"
+    return operation_log_extra(
+        event_name="kafka.producer.delivery_succeeded",
+        operation="kafka.produce",
+        status="succeeded",
+        reason_code="delivery_acknowledged",
+        topic=msg.topic(),
+        partition=msg.partition(),
+        offset=msg.offset(),
+    )
 
 
 def _notify_delivery_callback(

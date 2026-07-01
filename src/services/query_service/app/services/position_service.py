@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from typing import Optional
 
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.position_dto import (
@@ -39,7 +40,15 @@ class PositionService:
         Retrieves and formats the position history for a given security.
         """
         logger.info(
-            f"Fetching position history for security '{security_id}' in portfolio '{portfolio_id}'."
+            "Position history query requested.",
+            extra=operation_log_extra(
+                event_name="query.position_service.history_requested",
+                operation="query.position_service.get_position_history",
+                status="started",
+                reason_code="request_received",
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+            ),
         )
 
         await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
@@ -61,7 +70,17 @@ class PositionService:
         """
         Retrieves and formats the latest positions for a given portfolio.
         """
-        logger.info(f"Fetching latest positions for portfolio '{portfolio_id}'.")
+        logger.info(
+            "Portfolio positions query requested.",
+            extra=operation_log_extra(
+                event_name="query.position_service.positions_requested",
+                operation="query.position_service.get_portfolio_positions",
+                status="started",
+                reason_code="request_received",
+                has_as_of_date_filter=as_of_date is not None,
+                include_projected=include_projected,
+            ),
+        )
 
         await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         effective_as_of_date = await effective_holdings_read_as_of_date(
@@ -86,7 +105,18 @@ class PositionService:
         """
         Retrieves the Core-owned maturity summary for a portfolio holdings window.
         """
-        logger.info(f"Fetching maturity summary for portfolio '{portfolio_id}'.")
+        logger.info(
+            "Portfolio maturity summary query requested.",
+            extra=operation_log_extra(
+                event_name="query.position_service.maturity_summary_requested",
+                operation="query.position_service.get_portfolio_maturity_summary",
+                status="started",
+                reason_code="request_received",
+                has_as_of_date_filter=as_of_date is not None,
+                include_projected=include_projected,
+                horizon_days=horizon_days,
+            ),
+        )
 
         holdings = await self.get_portfolio_positions(
             portfolio_id=portfolio_id,

@@ -7,10 +7,13 @@ from portfolio_common.logging_utils import (
     RedactingJsonFormatter,
     correlation_id_var,
     generate_span_id,
+    log_operation_event,
     normalize_lineage_value,
+    normalize_log_taxonomy_value,
     normalize_span_id,
     normalize_trace_id,
     normalize_traceparent,
+    operation_log_extra,
     redact_sensitive,
     redact_sensitive_text,
     request_id_var,
@@ -145,3 +148,63 @@ def test_redacting_json_formatter_masks_message_and_extra_fields():
     assert formatted["database_url"] == "***REDACTED***"
     assert formatted["authorization"] == "***REDACTED***"
     assert formatted["safe"] == "visible"
+
+
+def test_normalize_log_taxonomy_value_keeps_bounded_codes():
+    assert normalize_log_taxonomy_value("kafka.consumer.started") == "kafka.consumer.started"
+    assert normalize_log_taxonomy_value("DLQ-Publish Failed") == "dlq_publish_failed"
+    assert normalize_log_taxonomy_value("bad/value") == "unspecified"
+    assert normalize_log_taxonomy_value(None) == "unspecified"
+
+
+def test_operation_log_extra_sets_required_taxonomy_and_redacts_fields():
+    extra = operation_log_extra(
+        event_name="Kafka.Consumer.Started",
+        operation="Kafka Consume",
+        status="Succeeded",
+        reason_code="Consumer Started",
+        authorization="Bearer abc123",
+        safe_count=3,
+    )
+
+    assert extra == {
+        "event_name": "kafka.consumer.started",
+        "operation": "kafka_consume",
+        "status": "succeeded",
+        "reason_code": "consumer_started",
+        "authorization": "***REDACTED***",
+        "safe_count": 3,
+    }
+
+
+def test_log_operation_event_emits_required_taxonomy_fields():
+    logger = logging.getLogger("test-operation-event")
+    logger.handlers = []
+    logger.propagate = False
+    records = []
+
+    class _ListHandler(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    logger.addHandler(_ListHandler())
+    logger.setLevel(logging.INFO)
+
+    log_operation_event(
+        logger,
+        logging.INFO,
+        "Kafka consumer started.",
+        event_name="kafka.consumer.started",
+        operation="kafka.consume",
+        status="succeeded",
+        reason_code="consumer_started",
+        topic="transactions.processed",
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.event_name == "kafka.consumer.started"
+    assert record.operation == "kafka.consume"
+    assert record.status == "succeeded"
+    assert record.reason_code == "consumer_started"
+    assert record.topic == "transactions.processed"

@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from typing import Optional
 
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.price_dto import MarketPriceRecord, MarketPriceResponse
@@ -27,7 +28,17 @@ class MarketPriceService:
         """
         Retrieves a filtered list of market prices for a security.
         """
-        logger.info(f"Fetching market prices for security '{security_id}'.")
+        logger.info(
+            "Market price query requested.",
+            extra=operation_log_extra(
+                event_name="query.price_service.query_requested",
+                operation="query.price_service.get_prices",
+                status="started",
+                reason_code="request_received",
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+            ),
+        )
         security_id = normalize_security_id(security_id)
 
         db_results = await self.repo.get_prices(

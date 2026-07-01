@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Dict, List
 from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioValuationRequiredEvent
+from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import (
     INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
     POSITION_STATE_WATERMARK_LAG_DAYS,
@@ -70,7 +71,15 @@ class ValuationScheduler:
 
     def stop(self):
         """Signals the scheduler to gracefully shut down."""
-        logger.info("Valuation scheduler shutdown signal received.")
+        logger.info(
+            "Valuation scheduler shutdown signal received.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.shutdown_started",
+                operation="valuation.scheduler.run",
+                status="stopping",
+                reason_code="shutdown_requested",
+            ),
+        )
         self._running = False
         self._stop_event.set()
 
@@ -122,7 +131,14 @@ class ValuationScheduler:
             return
 
         logger.info(
-            f"Found {len(triggers)} instrument-level reprocessing triggers to convert to jobs."
+            "Instrument-level reprocessing triggers claimed.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.instrument_triggers_claimed",
+                operation="valuation.scheduler.process_instrument_triggers",
+                status="started",
+                reason_code="triggers_claimed",
+                trigger_count=len(triggers),
+            ),
         )
 
         for trigger in triggers:
@@ -138,6 +154,13 @@ class ValuationScheduler:
         logger.info(
             "Consumed %s instrument-level triggers into durable replay jobs.",
             len(triggers),
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.instrument_triggers_consumed",
+                operation="valuation.scheduler.process_instrument_triggers",
+                status="succeeded",
+                reason_code="jobs_created",
+                trigger_count=len(triggers),
+            ),
         )
 
     def _build_terminal_reprocessing_updates(self, states) -> List[Dict[str, Any]]:
@@ -176,12 +199,6 @@ class ValuationScheduler:
                 )
         return updates_to_commit
 
-    def _watermark_update_examples(self, updates: List[Dict[str, Any]]) -> List[str]:
-        return [
-            f"({update['portfolio_id']},{update['security_id']})->{update['watermark_date']}"
-            for update in updates[:3]
-        ]
-
     async def _bulk_update_watermark_states(
         self,
         position_state_repo: PositionStateRepository,
@@ -197,23 +214,31 @@ class ValuationScheduler:
 
         updated_count = await position_state_repo.bulk_update_states(updates)
         stale_skipped_count = len(updates) - updated_count
-        examples = self._watermark_update_examples(updates)
 
         if stale_skipped_count:
             observe_reprocessing_stale_skips(stale_skip_reason, stale_skipped_count)
             logger.warning(
                 warning_message,
-                extra={
-                    "prepared_count": len(updates),
-                    "updated_count": updated_count,
-                    "stale_skipped_count": stale_skipped_count,
-                    "examples": examples,
-                },
+                extra=operation_log_extra(
+                    event_name="valuation.scheduler.watermark_bulk_update_partial",
+                    operation="valuation.scheduler.advance_watermarks",
+                    status="partial",
+                    reason_code=stale_skip_reason,
+                    prepared_count=len(updates),
+                    updated_count=updated_count,
+                    stale_skipped_count=stale_skipped_count,
+                ),
             )
         elif updated_count:
             logger.info(
                 success_message,
-                extra={success_extra_key: updated_count, "examples": examples},
+                extra=operation_log_extra(
+                    event_name="valuation.scheduler.watermark_bulk_update_completed",
+                    operation="valuation.scheduler.advance_watermarks",
+                    status="succeeded",
+                    reason_code="watermark_update_completed",
+                    **{success_extra_key: updated_count},
+                ),
             )
 
         return updated_count
@@ -258,7 +283,7 @@ class ValuationScheduler:
             updates_to_commit,
             stale_skip_reason="watermark_advance",
             warning_message="ValuationScheduler advanced fewer watermarks than prepared updates.",
-            success_message=f"ValuationScheduler: advanced {len(updates_to_commit)} watermarks.",
+            success_message="ValuationScheduler advanced watermarks.",
             success_extra_key="updated_count",
         )
 
@@ -379,16 +404,26 @@ class ValuationScheduler:
         if stale_skipped_count:
             logger.warning(
                 "ValuationScheduler normalized fewer no-history states than prepared updates.",
-                extra={
-                    "prepared_count": len(normalized_updates),
-                    "updated_count": normalized_count,
-                    "stale_skipped_count": stale_skipped_count,
-                },
+                extra=operation_log_extra(
+                    event_name="valuation.scheduler.no_history_normalization_partial",
+                    operation="valuation.scheduler.create_backfill_jobs",
+                    status="partial",
+                    reason_code="no_history_ownership_lost",
+                    prepared_count=len(normalized_updates),
+                    updated_count=normalized_count,
+                    stale_skipped_count=stale_skipped_count,
+                ),
             )
         elif normalized_count:
             logger.info(
                 "ValuationScheduler normalized no-history states to current watermark.",
-                extra={"normalized_count": normalized_count},
+                extra=operation_log_extra(
+                    event_name="valuation.scheduler.no_history_normalization_completed",
+                    operation="valuation.scheduler.create_backfill_jobs",
+                    status="succeeded",
+                    reason_code="no_history_normalized",
+                    normalized_count=normalized_count,
+                ),
             )
 
     def _log_no_history_reprocessing_defer(self, states_waiting_for_history) -> None:
@@ -398,13 +433,13 @@ class ValuationScheduler:
         logger.info(
             "ValuationScheduler deferred no-history reprocessing states until "
             "current-epoch position history is visible.",
-            extra={
-                "deferred_count": len(states_waiting_for_history),
-                "examples": [
-                    f"({state.portfolio_id},{state.security_id},{state.epoch})"
-                    for state in states_waiting_for_history[:3]
-                ],
-            },
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.no_history_deferred",
+                operation="valuation.scheduler.create_backfill_jobs",
+                status="deferred",
+                reason_code="current_epoch_history_missing",
+                deferred_count=len(states_waiting_for_history),
+            ),
         )
 
     def _observe_backfill_gap_metrics(self, state, latest_business_date) -> None:
@@ -416,13 +451,15 @@ class ValuationScheduler:
     def _log_missing_current_epoch_history(self, state, latest_business_date) -> None:
         logger.info(
             "No current-epoch position history found; skipping backfill for now.",
-            extra={
-                "portfolio_id": state.portfolio_id,
-                "security_id": state.security_id,
-                "epoch": state.epoch,
-                "status": state.status,
-                "latest_business_date": str(latest_business_date),
-            },
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.current_epoch_history_missing",
+                operation="valuation.scheduler.create_backfill_jobs",
+                status="skipped",
+                reason_code="current_epoch_history_missing",
+                epoch=state.epoch,
+                state_status=state.status,
+                latest_business_date=str(latest_business_date),
+            ),
         )
 
     def _build_backfill_job_requests(
@@ -471,10 +508,16 @@ class ValuationScheduler:
         staged_count = await job_repo.upsert_jobs(job_requests)
         VALUATION_JOBS_CREATED_TOTAL.labels(job_type="backfill").inc(staged_count)
         logger.info(
-            "Scheduler: Created "
-            f"{staged_count}/{len(job_requests)} backfill valuation jobs for "
-            f"{state.security_id} in {state.portfolio_id} "
-            f"for epoch {state.epoch}."
+            "Backfill valuation jobs staged.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.backfill_jobs_staged",
+                operation="valuation.scheduler.create_backfill_jobs",
+                status="succeeded",
+                reason_code="jobs_staged",
+                staged_count=staged_count,
+                requested_count=len(job_requests),
+                epoch=state.epoch,
+            ),
         )
 
     async def _process_backfill_states(
@@ -521,9 +564,15 @@ class ValuationScheduler:
             return
 
         logger.info(
-            "Scheduler: Found "
-            f"{len(states_to_backfill)} keys needing backfill "
-            f"up to {latest_business_date}."
+            "Valuation states needing backfill found.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.backfill_states_found",
+                operation="valuation.scheduler.create_backfill_jobs",
+                status="started",
+                reason_code="backfill_states_found",
+                state_count=len(states_to_backfill),
+                latest_business_date=str(latest_business_date),
+            ),
         )
 
         keys_to_check = [(s.portfolio_id, s.security_id, s.epoch) for s in states_to_backfill]
@@ -629,7 +678,16 @@ class ValuationScheduler:
         if not jobs:
             return
 
-        logger.info(f"Dispatching {len(jobs)} claimed valuation jobs to Kafka.")
+        logger.info(
+            "Claimed valuation jobs dispatch started.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.dispatch_started",
+                operation="valuation.scheduler.dispatch_jobs",
+                status="started",
+                reason_code="jobs_claimed",
+                job_count=len(jobs),
+            ),
+        )
         record_keys = [self._valuation_job_record_key(job) for job in jobs]
         for idx, job in enumerate(jobs):
             try:
@@ -653,17 +711,30 @@ class ValuationScheduler:
                 published_record_keys=exc.published_record_keys,
                 failure_phase=exc.failure_phase,
             ) from exc
-        logger.info(f"Successfully flushed {len(jobs)} valuation jobs.")
+        logger.info(
+            "Claimed valuation jobs dispatch flushed.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.dispatch_flushed",
+                operation="valuation.scheduler.dispatch_jobs",
+                status="succeeded",
+                reason_code="producer_flush_completed",
+                job_count=len(jobs),
+            ),
+        )
 
     async def _recover_dispatch_failure(self, failure: SchedulerDispatchError) -> None:
         if not failure.recovery_job_ids:
             logger.warning(
                 "Valuation scheduler dispatch failure had no durable job ids to recover.",
-                extra={
-                    "failure_phase": failure.failure_phase,
-                    "record_keys": list(failure.recovery_record_keys),
-                    "published_record_keys": list(failure.published_record_keys),
-                },
+                extra=operation_log_extra(
+                    event_name="valuation.scheduler.dispatch_recovery_skipped",
+                    operation="valuation.scheduler.dispatch_jobs",
+                    status="skipped",
+                    reason_code="missing_recovery_job_ids",
+                    failure_phase=failure.failure_phase,
+                    recovery_record_count=len(failure.recovery_record_keys),
+                    published_record_count=len(failure.published_record_keys),
+                ),
             )
             return
         async for db in get_async_db_session():
@@ -731,14 +802,40 @@ class ValuationScheduler:
 
     async def run(self):
         """The main polling loop for the scheduler."""
-        logger.info(f"ValuationScheduler started. Polling every {self._poll_interval} seconds.")
+        logger.info(
+            "Valuation scheduler started.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.started",
+                operation="valuation.scheduler.run",
+                status="running",
+                reason_code="poll_loop_started",
+                poll_interval_seconds=self._poll_interval,
+            ),
+        )
         while self._running:
             try:
                 await self._run_poll_once()
             except Exception:
-                logger.error("Error in scheduler polling loop.", exc_info=True)
+                logger.error(
+                    "Valuation scheduler polling loop failed.",
+                    exc_info=True,
+                    extra=operation_log_extra(
+                        event_name="valuation.scheduler.poll_loop_failed",
+                        operation="valuation.scheduler.run",
+                        status="failed",
+                        reason_code="poll_loop_error",
+                    ),
+                )
 
             if not await self._wait_for_next_poll_or_stop():
                 break
 
-        logger.info("ValuationScheduler has stopped.")
+        logger.info(
+            "Valuation scheduler stopped.",
+            extra=operation_log_extra(
+                event_name="valuation.scheduler.stopped",
+                operation="valuation.scheduler.run",
+                status="stopped",
+                reason_code="poll_loop_stopped",
+            ),
+        )

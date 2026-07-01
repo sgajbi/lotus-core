@@ -4,6 +4,7 @@ from datetime import date
 from typing import List, Optional
 
 from portfolio_common.database_models import MarketPrice
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,5 +42,16 @@ class MarketPriceRepository:
 
         results = await self.db.execute(stmt.order_by(MarketPrice.price_date.asc()))
         prices = results.scalars().all()
-        logger.info(f"Found {len(prices)} prices for security '{security_id}' with given filters.")
+        logger.info(
+            "Market price repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.price_repository.query_completed",
+                operation="query.price_repository.get_prices",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(prices),
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+            ),
+        )
         return prices
