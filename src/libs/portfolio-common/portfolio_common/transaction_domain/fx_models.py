@@ -9,13 +9,11 @@ from portfolio_common.control_code_normalization import (
     normalize_transaction_control_code,
 )
 from portfolio_common.currency_codes import normalize_currency_code
-from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
-
-FX_BUSINESS_TRANSACTION_TYPES = frozenset(
-    code
-    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
-    if definition.production_booking_allowed and definition.lifecycle_family == "fx"
+from portfolio_common.transaction_type_registry import (
+    production_transaction_types_for_lifecycle_families,
 )
+
+FX_BUSINESS_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("fx")
 FX_COMPONENT_TYPES = {
     "FX_CONTRACT_OPEN",
     "FX_CONTRACT_CLOSE",

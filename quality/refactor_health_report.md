@@ -2167,3 +2167,8 @@ health before that claim is defensible.
      linkage sets from the canonical transaction type registry. FX validation and metadata
      enrichment now share one registry-derived set for `FX_SPOT`, `FX_FORWARD`, and `FX_SWAP`,
      preventing copy-pasted FX type drift between validation and linkage enrichment.
+344. Continued validated GitHub issue #474 by adding a reusable registry selector for
+     production-booking lifecycle-family views and deriving portfolio-flow no-auto-generate
+     transaction types from registry `cash_movement`, `expense`, and `transfer` families. The
+     portfolio-flow cash-entry guardrail keeps existing behavior while future lifecycle-family
+     additions must be classified once in the registry.
