@@ -61,7 +61,7 @@ def test_dependabot_covers_all_runtime_dockerfiles() -> None:
     assert _configured_directories("docker") == dockerfile_directories
 
 
-def test_dependabot_covers_github_actions_with_pr_flood_limits() -> None:
+def test_dependabot_covers_github_actions_with_disabled_routine_pr_churn() -> None:
     config = yaml.safe_load(DEPENDABOT_CONFIG_PATH.read_text(encoding="utf-8"))
     updates = config["updates"]
 
@@ -71,5 +71,5 @@ def test_dependabot_covers_github_actions_with_pr_flood_limits() -> None:
         "github-actions",
         "pip",
     }
-    assert all(update["open-pull-requests-limit"] <= 4 for update in updates)
+    assert all(update["open-pull-requests-limit"] == 0 for update in updates)
     assert all(update.get("groups") for update in updates)
