@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.events import TransactionEvent
@@ -74,3 +74,28 @@ async def test_create_or_update_transaction_persists_aggregated_trade_fee() -> N
     assert persisted.trade_fee == Decimal("5.00")
     assert not hasattr(persisted, "brokerage")
     db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_check_instrument_exists_queries_instrument_master() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar.return_value = True
+    db.execute.return_value = result
+    repo = TransactionDBRepository(db)
+
+    assert await repo.check_instrument_exists(" SEC-1 ") is True
+
+    stmt = db.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "trim(instruments.security_id) = 'SEC-1'" in compiled_query
+
+
+@pytest.mark.asyncio
+async def test_check_instrument_exists_skips_blank_security_id() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = TransactionDBRepository(db)
+
+    assert await repo.check_instrument_exists("   ") is False
+
+    db.execute.assert_not_awaited()

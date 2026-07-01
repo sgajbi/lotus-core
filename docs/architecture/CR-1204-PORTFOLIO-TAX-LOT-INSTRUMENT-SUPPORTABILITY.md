@@ -75,9 +75,9 @@ Focused static proof:
 
 ## Residual Risk
 
-This slice covers `PortfolioTaxLotWindow:v1` returned lot rows. Issue #674 remains open for broader
-transaction ingestion/persistence policy outside the cost-consumer path and final PR/CI/QA
-evidence.
+This slice covers `PortfolioTaxLotWindow:v1` returned lot rows. CR-1255 adds the raw transaction
+persistence policy outside the cost-consumer path; final #674 closure still requires PR/CI/QA and
+post-merge wiki publication evidence.
 
 ## Documentation And Wiki Decision
 
@@ -94,4 +94,5 @@ This slice improves:
 3. bounded downstream diagnostics without hiding source evidence,
 4. reusable read-side degraded-reference behavior across transaction and lot source products.
 
-It does not claim complete closure of issue #674.
+This slice does not claim complete closure of issue #674 by itself; closure also depends on
+CR-1201, CR-1203, and CR-1255 evidence.

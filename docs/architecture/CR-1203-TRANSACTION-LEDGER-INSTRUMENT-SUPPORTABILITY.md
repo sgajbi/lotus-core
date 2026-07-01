@@ -75,8 +75,9 @@ Focused static proof:
 
 ## Residual Risk
 
-This slice covers transaction-ledger returned rows. Issue #674 remains open for broader ingestion
-policy and source-product coverage for position lot-state/tax-lot read paths.
+This slice covers transaction-ledger returned rows. CR-1204 adds the matching tax-lot read-side
+supportability policy, and CR-1255 adds the raw transaction persistence policy for unresolved
+instrument references.
 
 ## Documentation And Wiki Decision
 
@@ -93,4 +94,5 @@ This slice improves:
 3. deterministic data-quality classification for legacy or orphan ledger rows,
 4. a reusable read-side degraded-reference pattern for other Core source products.
 
-It does not claim complete closure of issue #674.
+This slice does not claim complete closure of issue #674 by itself; closure also depends on
+CR-1201, CR-1204, and CR-1255 evidence.

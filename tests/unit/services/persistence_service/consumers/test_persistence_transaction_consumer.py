@@ -119,6 +119,7 @@ async def test_process_message_success(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_repo.check_portfolio_exists.return_value = True
+    mock_repo.check_instrument_exists.return_value = True
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     # Use patch.object for robust mocking
@@ -130,6 +131,7 @@ async def test_process_message_success(
 
         # ASSERT
         mock_repo.create_or_update_transaction.assert_called_once()
+        mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
         mock_outbox_repo.create_outbox_event.assert_called_once()
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
             "test-corr-id"
@@ -153,6 +155,7 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
     mock_repo.check_portfolio_exists.return_value = True
+    mock_repo.check_instrument_exists.return_value = True
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     token = correlation_id_var.set("<not-set>")
@@ -188,6 +191,7 @@ async def test_handle_persistence_retries_and_succeeds(
 
     # Simulate portfolio not found on first call, but found on the second
     mock_repo.check_portfolio_exists.side_effect = [False, True]
+    mock_repo.check_instrument_exists.return_value = True
 
     # ACT
     # This call will invoke the retry logic internally and should complete without error
@@ -198,4 +202,30 @@ async def test_handle_persistence_retries_and_succeeds(
     assert mock_repo.check_portfolio_exists.call_count == 2
 
     # Verify the transaction was created only on the successful attempt
+    mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
     mock_repo.create_or_update_transaction.assert_awaited_once_with(valid_transaction_event)
+
+
+async def test_handle_persistence_allows_provisional_raw_landing_for_missing_instrument(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+    mock_dependencies: dict,
+    caplog: pytest.LogCaptureFixture,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_repo.check_portfolio_exists.return_value = True
+    mock_repo.check_instrument_exists.return_value = False
+
+    await transaction_consumer.handle_persistence(AsyncMock(), valid_transaction_event)
+
+    mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
+    mock_repo.create_or_update_transaction.assert_awaited_once_with(valid_transaction_event)
+    assert "Transaction raw landing has unresolved instrument reference." in caplog.text
+    warning = next(
+        record
+        for record in caplog.records
+        if record.message == "Transaction raw landing has unresolved instrument reference."
+    )
+    assert warning.reason_code == "transaction_instrument_reference_pending"
+    assert warning.policy_id == "raw_transaction_instrument_reference_policy_v1"
+    assert warning.downstream_lifecycle_blocked is True

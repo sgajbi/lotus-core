@@ -1,10 +1,10 @@
 # services/persistence_service/app/repositories/transaction_db_repo.py
 import logging
 
-from portfolio_common.database_models import Portfolio
+from portfolio_common.database_models import Instrument, Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +40,15 @@ class TransactionDBRepository:
         stmt = select(exists().where(Portfolio.portfolio_id == portfolio_id))
         result = await self.db.execute(stmt)
         return result.scalar()
+
+    async def check_instrument_exists(self, security_id: str) -> bool:
+        """Checks whether a governed instrument master row exists for a security."""
+        normalized_security_id = security_id.strip()
+        if not normalized_security_id:
+            return False
+        stmt = select(exists().where(func.trim(Instrument.security_id) == normalized_security_id))
+        result = await self.db.execute(stmt)
+        return bool(result.scalar())
 
     async def create_or_update_transaction(self, event: TransactionEvent) -> DBTransaction:
         """
