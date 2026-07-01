@@ -52,6 +52,49 @@ class _StringCountedAmount:
         return self.value
 
 
+def _canonical_fx_transaction(
+    *,
+    transaction_id: str = "FX-BASELINE-001",
+    transaction_type: str = "FX_FORWARD",
+    component_type: str = "FX_CONTRACT_CLOSE",
+    fx_realized_pnl_mode: str = "NONE",
+    **updates,
+) -> Transaction:
+    data = {
+        "transaction_id": transaction_id,
+        "portfolio_id": "PORT-FX",
+        "instrument_id": "FXC-EURUSD-001",
+        "security_id": "FXC-EURUSD-001",
+        "transaction_type": transaction_type,
+        "transaction_date": datetime(2026, 7, 1, 9, 0, 0),
+        "settlement_date": datetime(2026, 7, 1, 9, 0, 0),
+        "quantity": Decimal("0"),
+        "price": Decimal("0"),
+        "gross_transaction_amount": Decimal("0"),
+        "trade_currency": "USD",
+        "currency": "USD",
+        "portfolio_base_currency": "USD",
+        "transaction_fx_rate": Decimal("1"),
+        "component_type": component_type,
+        "component_id": f"{transaction_id}-COMP",
+        "linked_component_ids": [f"{transaction_id}-BUY", f"{transaction_id}-SELL"],
+        "pair_base_currency": "EUR",
+        "pair_quote_currency": "USD",
+        "fx_rate_quote_convention": "QUOTE_PER_BASE",
+        "buy_currency": "USD",
+        "sell_currency": "EUR",
+        "buy_amount": Decimal("1095000"),
+        "sell_amount": Decimal("1000000"),
+        "contract_rate": Decimal("1.095"),
+        "fx_contract_id": "FXC-2026-0001",
+        "fx_contract_open_transaction_id": "FX-OPEN-001",
+        "spot_exposure_model": "NONE",
+        "fx_realized_pnl_mode": fx_realized_pnl_mode,
+    }
+    data.update(updates)
+    return Transaction(**data)
+
+
 @pytest.fixture
 def buy_transaction():
     return Transaction(
@@ -236,6 +279,129 @@ def test_cost_calculator_has_explicit_strategies_for_production_booking_enum_typ
 
     assert set(cost_calculator._strategies) == production_booking_cost_types
     assert TransactionType.OTHER not in cost_calculator._strategies
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "component_type", "extra_fields"),
+    [
+        (
+            "FX_SPOT",
+            "FX_CASH_SETTLEMENT_BUY",
+            {
+                "linked_fx_cash_leg_id": "FX-SPOT-SELL-001",
+                "fx_cash_leg_role": "BUY",
+                "fx_contract_id": None,
+            },
+        ),
+        ("FX_FORWARD", "FX_CONTRACT_CLOSE", {}),
+        (
+            "FX_SWAP",
+            "FX_CONTRACT_CLOSE",
+            {
+                "swap_event_id": "SWAP-001",
+                "near_leg_group_id": "SWAP-001-NEAR",
+                "far_leg_group_id": "SWAP-001-FAR",
+            },
+        ),
+    ],
+)
+def test_fx_strategy_applies_baseline_processing_without_generic_pending_error(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+    transaction_type,
+    component_type,
+    extra_fields,
+):
+    fx_transaction = _canonical_fx_transaction(
+        transaction_id=f"{transaction_type}-BASELINE-001",
+        transaction_type=transaction_type,
+        component_type=component_type,
+        **extra_fields,
+    )
+
+    cost_calculator.calculate_transaction_costs(fx_transaction)
+
+    assert not error_reporter.has_errors_for(fx_transaction.transaction_id)
+    assert fx_transaction.gross_cost == Decimal("0")
+    assert fx_transaction.net_cost == Decimal("0")
+    assert fx_transaction.net_cost_local == Decimal("0")
+    assert fx_transaction.realized_gain_loss == Decimal("0")
+    assert fx_transaction.realized_gain_loss_local == Decimal("0")
+    assert fx_transaction.realized_capital_pnl_local == Decimal("0")
+    assert fx_transaction.realized_fx_pnl_local == Decimal("0")
+    assert fx_transaction.realized_total_pnl_local == Decimal("0")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_fx_strategy_preserves_upstream_provided_realized_fx_pnl(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+):
+    fx_transaction = _canonical_fx_transaction(
+        transaction_id="FX-UPSTREAM-PNL-001",
+        fx_realized_pnl_mode=" upstream_provided ",
+        realized_capital_pnl_local=Decimal("0"),
+        realized_fx_pnl_local=Decimal("1250"),
+        realized_capital_pnl_base=Decimal("0"),
+        realized_fx_pnl_base=Decimal("1310"),
+    )
+
+    cost_calculator.calculate_transaction_costs(fx_transaction)
+
+    assert not error_reporter.has_errors_for("FX-UPSTREAM-PNL-001")
+    assert fx_transaction.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
+    assert fx_transaction.realized_capital_pnl_local == Decimal("0")
+    assert fx_transaction.realized_fx_pnl_local == Decimal("1250")
+    assert fx_transaction.realized_total_pnl_local == Decimal("1250")
+    assert fx_transaction.realized_capital_pnl_base == Decimal("0")
+    assert fx_transaction.realized_fx_pnl_base == Decimal("1310")
+    assert fx_transaction.realized_total_pnl_base == Decimal("1310")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_fx_strategy_rejects_invalid_swap_linkage(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+):
+    fx_transaction = _canonical_fx_transaction(
+        transaction_id="FX-SWAP-BAD-LINKAGE-001",
+        transaction_type="FX_SWAP",
+    )
+
+    cost_calculator.calculate_transaction_costs(fx_transaction)
+
+    errors = error_reporter.get_errors()
+    assert error_reporter.has_errors_for("FX-SWAP-BAD-LINKAGE-001")
+    assert "FX_019_MISSING_SWAP_GROUP_IDENTIFIER:swap_event_id" in errors[0].error_reason
+    assert fx_transaction.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_fx_strategy_rejects_unsupported_cash_lot_realized_pnl_mode(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+):
+    fx_transaction = _canonical_fx_transaction(
+        transaction_id="FX-CASH-LOT-MODE-001",
+        fx_realized_pnl_mode="CASH_LOT_COST_METHOD",
+    )
+
+    cost_calculator.calculate_transaction_costs(fx_transaction)
+
+    errors = error_reporter.get_errors()
+    assert error_reporter.has_errors_for("FX-CASH-LOT-MODE-001")
+    assert "CASH_LOT_COST_METHOD" in errors[0].error_reason
+    assert "supported modes are NONE and UPSTREAM_PROVIDED" in errors[0].error_reason
+    assert fx_transaction.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
 def test_cost_calculator_rejects_other_before_default_costing(

@@ -64,7 +64,9 @@ from .effective_processing_type import (
     resolve_effective_processing_transaction_type,
 )
 from .fx_baseline_processing import (
+    UnsupportedFxRealizedPnlModeError,
     assert_fx_processed_event_valid,
+    build_fx_baseline_processing_update,
     build_fx_processed_event,
 )
 from .fx_contract_instrument import (
@@ -184,7 +186,9 @@ __all__ = [
     "is_fx_contract_component_event",
     "build_fx_contract_instrument_event",
     "build_fx_processed_event",
+    "build_fx_baseline_processing_update",
     "assert_fx_processed_event_valid",
+    "UnsupportedFxRealizedPnlModeError",
     "FxValidationError",
     "FxValidationIssue",
     "FxValidationReasonCode",

@@ -2,6 +2,12 @@ from decimal import Decimal
 from typing import Protocol, cast
 
 from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.transaction_domain import (
+    FxCanonicalTransaction,
+    UnsupportedFxRealizedPnlModeError,
+    build_fx_baseline_processing_update,
+    validate_fx_transaction,
+)
 from portfolio_common.transaction_type_registry import (
     get_transaction_type_definition,
     is_production_booking_transaction_type,
@@ -27,6 +33,11 @@ ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES = {
 }
 SELL_ALLOW_OVERSOLD_POLICIES = {
     "SELL_ALLOW_OVERSOLD_POLICY",
+}
+FX_BASELINE_TRANSACTION_TYPES = {
+    TransactionType.FX_SPOT.value,
+    TransactionType.FX_FORWARD.value,
+    TransactionType.FX_SWAP.value,
 }
 
 
@@ -437,6 +448,18 @@ def _validate_normalized_transaction_fx(
     return False
 
 
+def _validate_transaction_currency_context(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+) -> bool:
+    _normalize_transaction_currencies(transaction)
+    if not _normalize_existing_transaction_fx_rate(transaction, error_reporter):
+        return False
+    if _normalize_transaction_type(transaction.transaction_type) in FX_BASELINE_TRANSACTION_TYPES:
+        return True
+    return _validate_normalized_transaction_fx(transaction, error_reporter)
+
+
 class BuyStrategy:
     def calculate_costs(
         self,
@@ -712,20 +735,48 @@ class UnsupportedTaxStrategy:
         )
 
 
-class FxPendingStrategy:
+class FxBaselineStrategy:
     def calculate_costs(
         self,
         transaction: Transaction,
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None:
+        if not _validate_canonical_fx_transaction(transaction, error_reporter):
+            return
+        try:
+            update = build_fx_baseline_processing_update(transaction)
+        except UnsupportedFxRealizedPnlModeError as exc:
+            error_reporter.add_error(transaction.transaction_id, str(exc))
+            return
+        for field_name, field_value in update.items():
+            setattr(transaction, field_name, field_value)
+
+
+def _validate_canonical_fx_transaction(
+    transaction: Transaction,
+    error_reporter: ErrorReporter,
+) -> bool:
+    try:
+        canonical = FxCanonicalTransaction.model_validate(transaction.model_dump(mode="python"))
+    except ValueError as exc:
         error_reporter.add_error(
             transaction.transaction_id,
             (
-                "Canonical FX transaction processing is not implemented yet for "
-                f"transaction_type '{transaction.transaction_type}'."
+                "FX validation failed: canonical FX fields are incomplete or invalid "
+                f"({exc.__class__.__name__})."
             ),
         )
+        return False
+    issues = validate_fx_transaction(canonical, strict_metadata=False)
+    if issues:
+        issue_summary = "; ".join(f"{issue.code}:{issue.field}" for issue in issues)
+        error_reporter.add_error(
+            transaction.transaction_id,
+            f"FX validation failed: {issue_summary}.",
+        )
+        return False
+    return True
 
 
 class CostCalculator:
@@ -735,9 +786,9 @@ class CostCalculator:
         self._strategies: dict[TransactionType, TransactionCostStrategy] = {
             TransactionType.BUY: BuyStrategy(),
             TransactionType.SELL: SellStrategy(),
-            TransactionType.FX_SPOT: FxPendingStrategy(),
-            TransactionType.FX_FORWARD: FxPendingStrategy(),
-            TransactionType.FX_SWAP: FxPendingStrategy(),
+            TransactionType.FX_SPOT: FxBaselineStrategy(),
+            TransactionType.FX_FORWARD: FxBaselineStrategy(),
+            TransactionType.FX_SWAP: FxBaselineStrategy(),
             TransactionType.INTEREST: InterestStrategy(),
             TransactionType.DIVIDEND: DividendStrategy(),
             TransactionType.DEPOSIT: CashInflowStrategy(),
@@ -776,10 +827,7 @@ class CostCalculator:
         }
 
     def _validate_fx(self, t: Transaction) -> bool:
-        _normalize_transaction_currencies(t)
-        return _normalize_existing_transaction_fx_rate(
-            t, self._error_reporter
-        ) and _validate_normalized_transaction_fx(t, self._error_reporter)
+        return _validate_transaction_currency_context(t, self._error_reporter)
 
     def calculate_transaction_costs(self, transaction: Transaction):
         if not self._validate_fx(transaction):

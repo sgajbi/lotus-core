@@ -26,7 +26,7 @@ Slice 8 closes RFC 082 by wiring canonical FX coverage into the repository's sta
 | Cash settlement semantics | [cashflow_logic.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\cashflow_calculator_service\app\core\cashflow_logic.py); [test_cashflow_rule_contract.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\calculators\cashflow_calculator_service\test_cashflow_rule_contract.py); [test_cashflow_logic.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\cashflow_calculator_service\unit\core\test_cashflow_logic.py) |
 | FX contract lifecycle | [fx_contract_instrument.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_contract_instrument.py); [consumer.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\cost_calculator_service\app\consumer.py); [position_logic.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\position_calculator\app\core\position_logic.py); [test_fx_contract_instrument.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_contract_instrument.py); [test_position_logic.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\position_calculator\core\test_position_logic.py) |
 | Swap grouping | [fx_linkage.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_linkage.py); [fx_validation.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_validation.py); [test_fx_linkage.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_linkage.py) |
-| Realized FX P&L baseline | [fx_baseline_processing.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_baseline_processing.py); [test_cost_calculator_consumer.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\cost_calculator_service\consumer\test_cost_calculator_consumer.py) |
+| Realized FX P&L baseline | [fx_baseline_processing.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_baseline_processing.py); [cost_calculator.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\cost_calculator_service\app\cost_engine\processing\cost_calculator.py); [test_fx_baseline_processing.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_baseline_processing.py); [test_cost_calculator.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\cost_calculator_service\engine\test_cost_calculator.py); [test_cost_calculator_consumer.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\cost_calculator_service\consumer\test_cost_calculator_consumer.py) |
 | Query and observability | [transactions.py](C:\Users\Sandeep\projects\lotus-core\src\services\query_service\app\routers\transactions.py); [transaction_repository.py](C:\Users\Sandeep\projects\lotus-core\src\services\query_service\app\repositories\transaction_repository.py); [transaction_service.py](C:\Users\Sandeep\projects\lotus-core\src\services\query_service\app\services\transaction_service.py); [test_transactions_router.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\query_service\test_transactions_router.py) |
 | Persistence round-trip | [database_models.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\database_models.py); [events.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\events.py); [test_repositories.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\persistence_service\repositories\test_repositories.py) |
 | Full-stack lifecycle | [test_fx_lifecycle.py](C:\Users\Sandeep\projects\lotus-core\tests\e2e\test_fx_lifecycle.py) |
@@ -71,6 +71,22 @@ Repository-level gates expected after PR:
 1. CI transaction matrix executes `transaction-fx-contract`
 2. `main` pipeline executes the full E2E tree via `e2e-all`, including the FX lifecycle scenario
 3. `main` also executes full integration coverage via `integration-all`
+
+## Current Cost-Engine Reconciliation
+
+GitHub issue #447 identified that the consumer path used canonical FX baseline processing while the
+generic cost engine strategy table still emitted a pending error for `FX_SPOT`, `FX_FORWARD`, and
+`FX_SWAP`. CR-1266 reconciled that drift:
+
+1. `build_fx_baseline_processing_update(...)` is the shared baseline update helper used by both
+   processed-event construction and cost-engine strategy execution.
+2. `FxBaselineStrategy` validates canonical FX fields before applying the baseline update.
+3. `NONE` and `UPSTREAM_PROVIDED` realized-FX-P&L modes are supported.
+4. `CASH_LOT_COST_METHOD` remains deferred and is explicitly rejected instead of being silently
+   simulated.
+5. Focused proof passed with 68 shared-helper, engine, and characterization tests; both
+   `python scripts/test_manifest.py --suite transaction-fx-contract --quiet` and
+   `make test-transaction-fx-contract` passed at 336 tests.
 
 ## Accepted Residuals
 1. Spot realized FX P&L remains baseline-policy driven; advanced derivation modes are intentionally deferred and explicitly modeled as policy choices, not hidden behavior.

@@ -1,8 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
 from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain import build_fx_processed_event
+from portfolio_common.transaction_domain import (
+    UnsupportedFxRealizedPnlModeError,
+    build_fx_processed_event,
+)
 
 
 def _fx_event(**updates: object) -> TransactionEvent:
@@ -69,3 +73,13 @@ def test_build_fx_processed_event_normalizes_upstream_provided_realized_pnl_mode
     assert processed.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
     assert processed.realized_total_pnl_local == Decimal("20")
     assert processed.realized_total_pnl_base == Decimal("25")
+
+
+def test_build_fx_processed_event_rejects_unsupported_cash_lot_mode() -> None:
+    event = _fx_event(fx_realized_pnl_mode=" cash_lot_cost_method ")
+
+    with pytest.raises(
+        UnsupportedFxRealizedPnlModeError,
+        match="CASH_LOT_COST_METHOD.*supported modes are NONE and UPSTREAM_PROVIDED",
+    ):
+        build_fx_processed_event(event)

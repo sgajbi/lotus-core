@@ -92,7 +92,7 @@ def test_fx_query_record_maps_foundation_fields() -> None:
     assert record.buy_amount == Decimal("13450")
 
 
-def test_fx_transaction_types_are_registered_but_engine_processing_is_explicitly_blocked() -> None:
+def test_fx_transaction_types_are_registered_and_engine_uses_baseline_processing() -> None:
     assert TransactionType.is_valid("FX_SPOT")
     assert TransactionType.is_valid("FX_FORWARD")
     assert TransactionType.is_valid("FX_SWAP")
@@ -109,20 +109,35 @@ def test_fx_transaction_types_are_registered_but_engine_processing_is_explicitly
         security_id="FXC-EURUSD-001",
         transaction_type=TransactionType.FX_FORWARD,
         transaction_date=datetime(2026, 4, 1, 9, 0, 0),
+        settlement_date=datetime(2026, 7, 1, 9, 0, 0),
         quantity=Decimal("0"),
         price=Decimal("0"),
-        gross_transaction_amount=Decimal("1095000"),
+        gross_transaction_amount=Decimal("0"),
         trade_currency="USD",
+        currency="USD",
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1"),
+        component_type="FX_CONTRACT_CLOSE",
+        component_id="FX-COMP-CLOSE-003",
+        linked_component_ids=["FX-COMP-BUY-003", "FX-COMP-SELL-003"],
+        pair_base_currency="EUR",
+        pair_quote_currency="USD",
+        fx_rate_quote_convention="QUOTE_PER_BASE",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095000"),
+        sell_amount=Decimal("1000000"),
+        contract_rate=Decimal("1.095"),
+        fx_contract_id="FXC-2026-0003",
+        fx_contract_open_transaction_id="FX-SLICE0-003-OPEN",
+        fx_realized_pnl_mode="NONE",
     )
 
     calculator.calculate_transaction_costs(fx_transaction)
 
-    assert error_reporter.has_errors()
-    assert error_reporter.has_errors_for("FX-SLICE0-003")
-    assert any(
-        "Canonical FX transaction processing is not implemented yet" in errored.error_reason
-        for errored in error_reporter.get_errors()
-    )
-    assert fx_transaction.net_cost is None
+    assert not error_reporter.has_errors_for("FX-SLICE0-003")
+    assert fx_transaction.net_cost == Decimal("0")
+    assert fx_transaction.net_cost_local == Decimal("0")
+    assert fx_transaction.realized_gain_loss == Decimal("0")
+    assert fx_transaction.realized_gain_loss_local == Decimal("0")
+    assert fx_transaction.realized_fx_pnl_local == Decimal("0")
