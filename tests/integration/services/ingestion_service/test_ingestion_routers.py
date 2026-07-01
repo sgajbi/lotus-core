@@ -3908,6 +3908,10 @@ async def test_ingestion_job_retry_reports_bookkeeping_failure_after_replay_publ
     assert retry_response.status_code == 500
     body = retry_response.json()
     assert body["detail"]["code"] == "INGESTION_RETRY_BOOKKEEPING_FAILED"
+    assert body["detail"]["outcome"] == "bookkeeping_failed"
+    assert "post-publish bookkeeping did not complete" in body["detail"]["message"]
+    assert "queue state write failed" not in body["detail"]["message"]
+    assert body["detail"]["remediation"]
     assert body["detail"]["replay_audit_id"]
     assert body["detail"]["replay_fingerprint"]
 
@@ -4160,10 +4164,11 @@ async def test_ingestion_job_retry_returns_not_found_and_unsupported_payload_err
 ):
     missing = await event_replay_test_client.post("/ingestion/jobs/job_missing_001/retry")
     assert missing.status_code == 404
-    assert missing.json()["detail"] == {
-        "code": "INGESTION_JOB_NOT_FOUND",
-        "message": "Ingestion job 'job_missing_001' was not found.",
-    }
+    missing_detail = missing.json()["detail"]
+    assert missing_detail["code"] == "INGESTION_JOB_NOT_FOUND"
+    assert missing_detail["message"] == "Ingestion job 'job_missing_001' was not found."
+    assert missing_detail["outcome"] == "not_found"
+    assert missing_detail["recovery_path"] == "ingestion_job_retry"
 
     ingest_response = await async_test_client.post(
         "/ingest/transactions",
@@ -4177,12 +4182,13 @@ async def test_ingestion_job_retry_returns_not_found_and_unsupported_payload_err
     unsupported = await event_replay_test_client.post(f"/ingestion/jobs/{job_id}/retry")
 
     assert unsupported.status_code == 409
-    assert unsupported.json()["detail"] == {
-        "code": "INGESTION_JOB_RETRY_UNSUPPORTED",
-        "message": (
-            f"Ingestion job '{job_id}' does not have stored request payload and cannot be retried."
-        ),
-    }
+    unsupported_detail = unsupported.json()["detail"]
+    assert unsupported_detail["code"] == "INGESTION_JOB_RETRY_UNSUPPORTED"
+    assert unsupported_detail["message"] == (
+        f"Ingestion job '{job_id}' does not have stored request payload and cannot be retried."
+    )
+    assert unsupported_detail["outcome"] == "retry_unsupported"
+    assert unsupported_detail["remediation"]
 
 
 async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_mode(
@@ -4202,10 +4208,13 @@ async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_m
         json={"record_keys": ["SEC_RETRY_PARTIAL_UNSUPPORTED_001"], "dry_run": True},
     )
     assert partial_unsupported.status_code == 409
-    assert partial_unsupported.json()["detail"] == {
-        "code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED",
-        "message": "Partial retry is not supported for endpoint '/ingest/market-prices'.",
-    }
+    partial_detail = partial_unsupported.json()["detail"]
+    assert partial_detail["code"] == "INGESTION_PARTIAL_RETRY_UNSUPPORTED"
+    assert partial_detail["message"] == (
+        "Partial retry is not supported for endpoint '/ingest/market-prices'."
+    )
+    assert partial_detail["outcome"] == "partial_retry_unsupported"
+    assert partial_detail["remediation"]
 
     transaction_response = await async_test_client.post(
         "/ingest/transactions",
@@ -4218,10 +4227,11 @@ async def test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_m
     blocked = await event_replay_test_client.post(f"/ingestion/jobs/{transaction_job_id}/retry")
 
     assert blocked.status_code == 409
-    assert blocked.json()["detail"] == {
-        "code": "INGESTION_RETRY_BLOCKED",
-        "message": "Retries are blocked while ingestion is paused.",
-    }
+    blocked_detail = blocked.json()["detail"]
+    assert blocked_detail["code"] == "INGESTION_RETRY_BLOCKED"
+    assert blocked_detail["message"] == "Retries are blocked while ingestion is paused."
+    assert blocked_detail["outcome"] == "retry_blocked"
+    assert blocked_detail["remediation"]
     ingestion_test_harness["fake_job_service"].mode = "normal"
 
 
