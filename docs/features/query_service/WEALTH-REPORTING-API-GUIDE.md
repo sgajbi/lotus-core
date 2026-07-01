@@ -79,8 +79,10 @@ Security drill-down behavior:
 
 Settlement-date semantics:
 
-- `transaction_date` is the booked ledger date/time
+- `transaction_date` is the current transaction event/trade date-time used for filtering and
+  latest-first ordering
 - `settlement_date` is the canonical contractual or effective settlement timestamp when available
+- `booking_date` is a future transaction-booking target concept and is not first-class in this route
 - downstream UI and reporting consumers should use the source-owned `settlement_date` directly
   rather than inferring settlement timing from cash legs or transaction type
 

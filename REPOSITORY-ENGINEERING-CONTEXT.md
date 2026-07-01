@@ -31,7 +31,7 @@ Current repository posture:
 1. `lotus-core` is the domain authority for portfolio-management and transaction data,
 2. downstream-facing API ownership is now classified under the RFC-0082 contract-family model, with `query_service` as the operational read plane and `query_control_plane_service` as the governed analytics-input, snapshot/simulation, support, and policy contract plane,
 3. RFC-0083 now defines the target system-of-record architecture, and the local Slice 0 gap analysis maps current route, model, temporal, source-data product, ingestion, reconciliation, and observability gaps to the implementation program,
-4. RFC-0083 Slice 1 now defines repo-local temporal vocabulary and schema policy for as-of, valuation, trade, settlement, booking, effective, ingestion, observation, correction, and restatement semantics,
+4. RFC-0083 Slice 1 now defines repo-local temporal vocabulary and schema policy for as-of, valuation, trade, settlement, booking, effective, ingestion, observation, correction, and restatement semantics. Current query-service `transaction_date` is the transaction event/trade timestamp used for filtering and ordering; do not describe or implement it as `booking_date` unless a future slice introduces a first-class booking field with a migration plan,
 5. RFC-0083 Slice 2 now enforces route contract-family classification through a machine-readable registry and guard,
 6. RFC-0083 Slice 3 now defines the portfolio reconstruction target model and deterministic snapshot identity helper,
 7. RFC-0083 Slice 4 now defines the ingestion source-lineage target model and source-batch evidence helper,
