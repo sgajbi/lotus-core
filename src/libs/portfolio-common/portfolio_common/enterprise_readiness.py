@@ -15,8 +15,13 @@ from portfolio_common.logging_utils import (
     normalize_lineage_value,
     redact_sensitive,
 )
-from portfolio_common.runtime_settings import env_bool, env_int, env_json_map, env_str
-from portfolio_common.runtime_settings import production_security_profile_enabled
+from portfolio_common.runtime_settings import (
+    env_bool,
+    env_int,
+    env_json_map,
+    env_str,
+    production_security_profile_enabled,
+)
 from portfolio_common.source_data_security import source_data_capability_rules
 
 MiddlewareNext = Callable[[Request], Awaitable[Response]]

@@ -6,10 +6,10 @@ from typing import Any, Sequence
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from starlette.middleware.cors import CORSMiddleware
 
 from portfolio_common.health import create_health_router
 from portfolio_common.logging_utils import (

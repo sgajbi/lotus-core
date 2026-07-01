@@ -5,13 +5,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from ..adapter_mode import require_upload_adapter_enabled
 from ..DTOs.upload_dto import UploadCommitResponse, UploadEntityType, UploadPreviewResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..settings import get_ingestion_service_settings
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from ..services.ingestion_service import IngestionPublishError
 from ..services.upload_ingestion_service import (
     UploadIngestionService,
     get_upload_ingestion_service,
 )
+from ..settings import get_ingestion_service_settings
 from .publish_errors import (
     ingestion_publish_failed_example,
     ingestion_unavailable_response,
