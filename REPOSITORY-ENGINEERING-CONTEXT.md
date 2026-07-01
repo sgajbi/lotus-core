@@ -201,6 +201,10 @@ Current repository posture:
     Auto-generated adjustment cash-leg eligibility is registry-derived from production-booking
     trade and income transaction types with direct inflow/outflow cash effects and required cash-leg
     settlement; amount, direction, and reason formulas remain explicit resolver behavior.
+    Cost-engine cash dependency sort sets are registry-conformance guarded. Do not derive them from
+    product-leg `cash_effect` until cash-leg transaction direction is modeled explicitly because
+    cash rows intentionally invert trade labels (`BUY` cash rows are inflows; `SELL` cash rows are
+    outflows).
 
 ## Architecture And Module Map
 
