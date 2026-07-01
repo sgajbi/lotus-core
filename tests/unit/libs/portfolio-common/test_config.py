@@ -145,6 +145,30 @@ def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
     assert reloaded.BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE is False
 
 
+def test_dlq_failure_budget_env_is_non_negative(monkeypatch):
+    monkeypatch.setenv("KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS", "3")
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS == 3
+    monkeypatch.delenv("KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS")
+    importlib.reload(config_module)
+
+
+def test_invalid_dlq_failure_budget_falls_back_to_disabled(monkeypatch):
+    monkeypatch.setenv("KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS", "-1")
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS == 0
+    monkeypatch.delenv("KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS")
+    importlib.reload(config_module)
+
+
 def test_canonical_topic_env_overrides_default_runtime_name(monkeypatch):
     monkeypatch.setenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", "custom.transactions.persisted")
 

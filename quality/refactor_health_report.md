@@ -47,6 +47,7 @@ tested modules.
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | DLQ/replay correlation diagnostics | Improving | CR-1206 adds correlation-or-reason diagnostics to consumer DLQ and replay-audit records, exposes alternate lookup keys in replay responses, and hardens ingestion rate-limit metric registration against duplicate-import CI failures |
+| DLQ failure containment | Improving | CR-1261 adds default-disabled DLQ publication failure budgeting to `BaseConsumer`; configured consumers now stop with bounded source-safe logs/metrics after repeated DLQ publication failure for the same topic/group/partition/offset/key while preserving no-commit offset behavior |
 | Mandatory replay audit | Improving | CR-1207 removes best-effort replay-audit recording from ingestion retry and consumer-DLQ replay paths, adds `INGESTION_REPLAY_AUDIT_WRITE_FAILED`, and keeps replay outcomes unacknowledged when audit persistence fails |
 | Scheduler dispatch recovery | Improving | CR-1229 adds immediate durable recovery for valuation and aggregation jobs claimed into `PROCESSING` when scheduler Kafka publish or delivery-confirmation fails, preserving published/unpublished record-key evidence and applying max-attempt policy instead of waiting for stale-job reset |
 | Analytics export execution bounds | Improving | CR-1230 adds configurable `LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS`, bounds inline analytics export collection/materialization, and records durable failed jobs with bounded reason text when timeout or request cancellation is observed |
@@ -2269,3 +2270,10 @@ health before that claim is defensible.
      passed with 41 tests; scoped Ruff lint/format passed; Radon now reports every function in
      `ingestion_operations.py` as A-ranked, with `repair_ingestion_job_bookkeeping` reduced to
      `A (3)` and the large route module still honestly tracked as `B (12.86)` maintainability.
+355. Fixed validated GitHub issue #593 by adding a default-disabled DLQ publication failure budget
+     to the shared `BaseConsumer`. Operators can configure
+     `KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS` to stop a consumer with
+     `DlqPublicationBudgetExhausted` after repeated DLQ publish failure for the same
+     topic/group/partition/offset/key; offsets remain uncommitted, and source-safe logs/metrics
+     expose `dlq_failure_budget_exhausted` for alerting. Focused shared-consumer/config tests
+     passed with 68 tests, scoped Ruff lint/format passed, and new helpers are A-ranked.

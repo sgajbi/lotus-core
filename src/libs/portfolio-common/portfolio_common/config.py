@@ -402,6 +402,14 @@ BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = _env_bool(
 # Cashflow calculator runtime cache policy
 CASHFLOW_RULE_CACHE_TTL_SECONDS = _env_int("CASHFLOW_RULE_CACHE_TTL_SECONDS", 300, minimum=1)
 
+# Shared Kafka consumer DLQ failure policy. Default 0 preserves current conservative behavior:
+# do not commit offsets when DLQ publication fails, allowing Kafka redelivery.
+KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS = _env_int(
+    "KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS",
+    0,
+    minimum=0,
+)
+
 
 _CONSUMER_ALLOWED_TYPES: dict[str, type] = {
     "auto.offset.reset": str,

@@ -177,7 +177,12 @@ Current repository posture:
     `kafka_consumer_events_total` and `kafka_consumer_processing_duration_seconds` metrics. Keep
     processing attempts, success, retryable/terminal failure, DLQ, commit, poll, critical-exit, and
     shutdown telemetry on the shared consumer boundary; add service-local metrics only as
-    registered extensions when the shared fleet-level metrics are insufficient.
+    registered extensions when the shared fleet-level metrics are insufficient. DLQ publication
+    failures default to no-commit redelivery; operators can set
+    `KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS` to a positive value to stop the consumer with
+    `DlqPublicationBudgetExhausted` and bounded `dlq_failure_budget_exhausted` telemetry after
+    repeated DLQ failure for the same topic/group/partition/offset/key. Do not claim durable local
+    quarantine unless a separate service-owned quarantine store exists.
 33. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,
