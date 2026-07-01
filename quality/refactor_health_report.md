@@ -31,7 +31,7 @@ tested modules.
 | Sensitive output redaction | Improving | CR-1173 centralizes structured-log/test-output redaction in `portfolio_common.logging_utils`; CR-1174 reuses the shared policy for shared Kafka consumer DLQ payloads; CR-1176 routes durable ingestion request payload storage through source-safe redaction and adds canonical fingerprint groundwork |
 | Ingestion idempotency | Improving | CR-1177 added deterministic `409 INGESTION_IDEMPOTENCY_CONFLICT`; CR-1188 stores full canonical non-reversible request fingerprints so same endpoint/key reuse with changed sensitive values conflicts while durable payload evidence remains redacted |
 | Source-batch lineage semantics | Improving | CR-1189 stops selected source-data products from populating upstream `source_batch_fingerprint` with request/snapshot fingerprints when true source-batch evidence is unavailable; CR-1220 extends the correction to the remaining active products found in this pass and adds source-data contract guard coverage to block request/snapshot fingerprints from reentering source-batch lineage |
-| Async trace context | Hardened | CR-1247 preserves W3C `traceparent` from HTTP bootstrap through governed outbox payload metadata, Kafka headers, shared consumer context, consumer DLQ payload/headers, direct ingestion publish, and DLQ replay while keeping `correlation_id` as the Lotus operator correlation key |
+| Async trace context | Hardened | CR-1247 preserves W3C `traceparent` from HTTP bootstrap through governed outbox payload metadata, Kafka headers, shared consumer context, consumer DLQ payload/headers, direct ingestion publish, and DLQ replay while keeping `correlation_id` as the Lotus operator correlation key. CR-1248 removes the fixed synthetic HTTP fallback span id, rejects all-zero trace/span IDs, and generates fresh non-zero W3C span IDs when deriving `traceparent` from `X-Trace-Id` or fresh request context without claiming full OpenTelemetry export. |
 | Reference-data source observation lineage | Improving | CR-1205 adds a shared source-observation DTO contract for benchmark/index/risk-free/classification ingestion families while preserving legacy aliases and storage columns |
 | Reference-data ingestion unit of work | Improving | CR-1185 removes commit ownership from the low-level reference-data upsert staging helper, preserves existing single-table commit behavior through an explicit wrapper, and adds source-batch commit/rollback orchestration |
 | Simulation unit of work | Improving | CR-1243 moves simulation session commits, rollbacks, UUID generation, clock selection, and version mutation out of the repository adapter and into the application service while preserving route and response behavior |
@@ -2211,3 +2211,11 @@ health before that claim is defensible.
      Repository tests now prove staging-only behavior, service tests prove deterministic clock/ID
      injection plus commit/rollback/refresh ownership, and focused simulation proof passed with 57
      tests.
+350. Fixed validated GitHub issue #492 by replacing the standard HTTP bootstrap fixed synthetic
+     `traceparent` span id with shared W3C trace-context helpers that reject all-zero trace/span
+     IDs and generate fresh non-zero span IDs for `X-Trace-Id` or fresh request context fallback.
+     Focused shared bootstrap/logging tests passed with 22 tests, query-service middleware/metrics
+     proof passed with 6 tests, adjacent async trace-context tests passed with 88 tests, scoped
+     Ruff lint/format, typecheck, wiki-docs gate, and diff checks passed. The platform wiki
+     check-only command reported expected unpublished `Operations-Runbook.md` drift plus existing
+     `Outbox-Events.md` drift; wiki publication remains a post-merge action.

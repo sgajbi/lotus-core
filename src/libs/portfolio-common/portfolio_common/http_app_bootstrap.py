@@ -198,9 +198,12 @@ def configure_standard_http_app(
         if not trace_id:
             trace_id = uuid4().hex
         if not traceparent:
-            traceparent = (
-                traceparent_from_trace_id(trace_id) or f"00-{trace_id}-0000000000000001-01"
-            )
+            traceparent = traceparent_from_trace_id(trace_id)
+        if not traceparent:
+            trace_id = uuid4().hex
+            traceparent = traceparent_from_trace_id(trace_id)
+        if not traceparent:  # pragma: no cover - uuid4-generated trace IDs should be valid.
+            raise RuntimeError("failed to generate W3C traceparent context")
 
         correlation_token = correlation_id_var.set(correlation_id)
         request_token = request_id_var.set(request_id)
