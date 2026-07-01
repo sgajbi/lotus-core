@@ -59,6 +59,25 @@ def test_registry_classifies_local_position_and_cashflow_rule_table_types() -> N
     assert local_rule_table_types <= TRANSACTION_TYPE_CODES
 
 
+def test_position_transfer_inflow_rule_table_matches_registry_inflow_effects() -> None:
+    inflow_lot_behaviors = {
+        "preserve_or_restate_lot",
+        "transfer_basis_in",
+        "basis_allocation_in",
+        "open_rights_lot",
+        "open_lot",
+    }
+    registry_inflows = {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.lifecycle_family in {"transfer", "corporate_action", "rights"}
+        and definition.position_effect == "increase"
+        and definition.lot_behavior in inflow_lot_behaviors
+    }
+
+    assert POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES == registry_inflows
+
+
 def test_other_is_registered_only_as_migration_type_not_production_booking() -> None:
     definition = require_registered_transaction_type("OTHER")
 
