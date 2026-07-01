@@ -38,7 +38,10 @@ against active/effective cash-account master rows for the same portfolio and cas
 
 `instruments` is the governed instrument identity source for product transaction cost processing and
 new BUY lot-state writes. Product transactions whose instrument master has not arrived are
-retryable reference-data dependencies, not normal cost or lot-state writes.
+retryable reference-data dependencies, not normal cost or lot-state writes. Raw transaction
+persistence may land unresolved instrument references only as provisional source-batch ordering
+evidence; downstream lifecycle processing and source-data products must block or degrade those rows
+until governed instrument master data exists.
 
 ### Transactions and cashflows
 

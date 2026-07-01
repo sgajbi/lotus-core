@@ -538,8 +538,10 @@ Most relevant current governance:
     cost-engine processing, transaction-cost persistence, BUY lot-state persistence, or processed
     event publication. Missing product instrument references are retryable reference-data
     dependencies, not normal cost/lot writes; FX contract and pure adjustment flows keep their
-    specialized creation/validation paths. This is the first write-side enforcement slice for the
-    broader instrument-reference integrity backlog.
+    specialized creation/validation paths. Raw transaction persistence uses the explicit
+    `raw_transaction_instrument_reference_policy_v1` policy: unresolved instrument references may
+    land as provisional raw evidence for source-batch ordering tolerance, but they remain blocked
+    from downstream lifecycle processing and are surfaced through read-side supportability.
 43. Cashflow-calculator transaction processing uses a classify-then-finalize unit-of-work pattern:
     branch helpers return typed processing outcomes and a single application boundary owns commit
     or rollback. Preserve this pattern for replay, duplicate, epoch-fence, lifecycle, and

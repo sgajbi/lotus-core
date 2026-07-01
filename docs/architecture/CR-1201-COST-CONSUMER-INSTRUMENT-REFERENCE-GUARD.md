@@ -67,11 +67,11 @@ Focused static proof:
 
 ## Residual Risk
 
-This is the first write-side enforcement slice for issue #674. Follow-up work should add broader
-ingestion-side policy and read-side degraded supportability for historical rows that predate this
-guard or entered through other write paths.
+This is the first write-side enforcement slice for issue #674. CR-1203 and CR-1204 add read-side
+degraded supportability for historical transaction-ledger and tax-lot rows. CR-1255 adds the raw
+transaction persistence policy for unresolved instrument references.
 
-Issue #674 remains open for PR/CI/QA evidence and broader completion.
+Issue #674 remains open for PR/CI/QA evidence and post-merge wiki publication.
 
 ## Bank-Buyable Control Movement
 
@@ -82,4 +82,5 @@ This slice improves:
 3. prevention of normal-looking downstream cost/lot evidence for unresolved instruments,
 4. a reusable reference-data dependency pattern aligned with #673 cash-account provenance.
 
-It does not claim full closure of every instrument-reference path in `lotus-core`.
+This slice does not claim full closure by itself; closure also depends on CR-1203, CR-1204, and
+CR-1255 evidence.
