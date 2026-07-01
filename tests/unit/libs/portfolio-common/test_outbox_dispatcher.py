@@ -187,6 +187,7 @@ def test_dispatcher_elapsed_retry_budget_moves_failure_to_terminal() -> None:
         payload={},
         topic="elapsed.topic",
         correlation_id=None,
+        traceparent=None,
         retry_count=0,
         created_at=module.datetime.now(module.timezone.utc) - timedelta(minutes=5),
         claim_token="elapsed-claim",
