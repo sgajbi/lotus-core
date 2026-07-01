@@ -6,6 +6,7 @@ import pytest
 from portfolio_common.events import TransactionEvent
 from portfolio_common.kafka_consumer import (
     BaseConsumer,
+    DlqPublicationBudgetExhausted,
     RetryableConsumerError,
     classify_dlq_reason_code,
 )
@@ -211,6 +212,100 @@ async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
     mock_confluent_consumer.commit.assert_not_called()
     test_consumer._send_to_dlq_async.assert_awaited_once()
     assert "DLQ publication failed" in mock_warning.call_args.args[0]
+    assert (
+        test_consumer._dlq_failure_attempts[
+            "topic=test-topic|group=test-group|partition=0|offset=42|key=key2b"
+        ]
+        == 1
+    )
+
+
+async def test_run_loop_dlq_failure_budget_exhaustion_fails_fast_without_commit(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key2c", {"data": "value2c"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer._dlq_failure_max_attempts = 1
+
+    async def fail_processing(*args, **kwargs):
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_processing
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=False)
+
+    with (
+        pytest.raises(DlqPublicationBudgetExhausted),
+        patch("portfolio_common.kafka_consumer.logger.error") as mock_error,
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+    ):
+        await test_consumer.run()
+
+    mock_confluent_consumer.commit.assert_not_called()
+    assert test_consumer._running is False
+    assert (
+        "dlq_failure_budget_exhausted",
+        "dlq_publish_error",
+    ) in _consumer_event_outcomes(event_metric)
+    budget_log = [
+        call
+        for call in mock_error.call_args_list
+        if call.kwargs["extra"]["event_name"] == "kafka.consumer.dlq_failure_budget_exhausted"
+    ]
+    assert len(budget_log) == 1
+    log_extra = budget_log[0].kwargs["extra"]
+    assert log_extra["reason_code"] == "dlq_publish_error_budget_exhausted"
+    assert log_extra["failure_attempts"] == 1
+    assert log_extra["max_failure_attempts"] == 1
+    assert log_extra["original_topic"] == "test-topic"
+    assert log_extra["original_partition"] == "0"
+    assert log_extra["original_offset"] == "42"
+
+
+async def test_run_loop_dlq_failure_budget_allows_transient_failure_before_exhaustion(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key2d", {"data": "value2d"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer._dlq_failure_max_attempts = 2
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=False)
+
+    await test_consumer.run()
+
+    mock_confluent_consumer.commit.assert_not_called()
+    assert (
+        test_consumer._dlq_failure_attempts[
+            "topic=test-topic|group=test-group|partition=0|offset=42|key=key2d"
+        ]
+        == 1
+    )
+
+
+async def test_run_loop_dlq_success_clears_prior_failure_attempts(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key2e", {"data": "value2e"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer._dlq_failure_attempts[
+        "topic=test-topic|group=test-group|partition=0|offset=42|key=key2e"
+    ] = 1
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
+
+    await test_consumer.run()
+
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+    assert test_consumer._dlq_failure_attempts == {}
 
 
 async def test_run_loop_dlq_commit_failure_does_not_crash_or_re_dlq(

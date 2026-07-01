@@ -15,7 +15,10 @@ from uuid import uuid4
 from confluent_kafka import Consumer, Message
 from pydantic import ValidationError
 
-from .config import get_kafka_consumer_runtime_overrides
+from .config import (
+    KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS,
+    get_kafka_consumer_runtime_overrides,
+)
 from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
@@ -161,6 +164,10 @@ def _is_sensitive_dlq_header(key: str) -> bool:
     return any(token in normalized for token in _DLQ_SENSITIVE_HEADER_TOKENS)
 
 
+class DlqPublicationBudgetExhausted(RuntimeError):
+    """Raised when a terminal message repeatedly cannot be published to DLQ."""
+
+
 class BaseConsumer(ABC):
     """
     An abstract base class for creating robust, retrying Kafka consumers
@@ -198,6 +205,8 @@ class BaseConsumer(ABC):
                 extra={"group_id": group_id, "override_keys": sorted(runtime_overrides.keys())},
             )
         self._running = True
+        self._dlq_failure_attempts: dict[str, int] = {}
+        self._dlq_failure_max_attempts = KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS
 
         if self.dlq_topic:
             self._producer = get_kafka_producer()
@@ -665,9 +674,10 @@ class BaseConsumer(ABC):
         )
         dlq_succeeded = await self._send_to_dlq_async(msg, error)
         if dlq_succeeded:
+            self._clear_dlq_failure_attempts(msg)
             self._commit_after_dlq_publication(msg)
         else:
-            self._log_dlq_publication_failed(msg)
+            self._handle_dlq_publication_failed(msg, error)
 
     def _record_processing_metrics(
         self,
@@ -755,6 +765,66 @@ class BaseConsumer(ABC):
             event_name="kafka.consumer.dlq_failed",
             status="failed",
             reason_code="dlq_publish_error",
+            failure_attempts=self._dlq_failure_attempts.get(
+                self._dlq_failure_message_key(msg),
+                0,
+            ),
+            max_failure_attempts=self._dlq_failure_max_attempts,
+        )
+
+    def _handle_dlq_publication_failed(self, msg: Message, error: Exception) -> None:
+        attempts = self._record_dlq_failure_attempt(msg)
+        if self._dlq_failure_max_attempts <= 0 or attempts < self._dlq_failure_max_attempts:
+            self._log_dlq_publication_failed(msg)
+            return
+        self._raise_dlq_publication_budget_exhausted(msg, error, attempts)
+
+    def _record_dlq_failure_attempt(self, msg: Message) -> int:
+        message_key = self._dlq_failure_message_key(msg)
+        attempts = self._dlq_failure_attempts.get(message_key, 0) + 1
+        self._dlq_failure_attempts[message_key] = attempts
+        return attempts
+
+    def _clear_dlq_failure_attempts(self, msg: Message) -> None:
+        self._dlq_failure_attempts.pop(self._dlq_failure_message_key(msg), None)
+
+    def _dlq_failure_message_key(self, msg: Message) -> str:
+        partition = _message_attr_or_unknown(msg, "partition")
+        offset = _message_attr_or_unknown(msg, "offset")
+        original_key = self._message_key_text(msg) or "unkeyed"
+        return (
+            f"topic={msg.topic()}|group={self._consumer_config['group.id']}|"
+            f"partition={partition}|offset={offset}|key={original_key}"
+        )
+
+    def _raise_dlq_publication_budget_exhausted(
+        self,
+        msg: Message,
+        error: Exception,
+        attempts: int,
+    ) -> None:
+        self._running = False
+        self._record_consumer_event("dlq_failure_budget_exhausted", "dlq_publish_error")
+        self._log_consumer_event(
+            logging.ERROR,
+            (
+                "Kafka DLQ publication failure budget exhausted; stopping consumer without "
+                "committing offset."
+            ),
+            event_name="kafka.consumer.dlq_failure_budget_exhausted",
+            status="failed",
+            reason_code="dlq_publish_error_budget_exhausted",
+            original_topic=msg.topic(),
+            original_partition=_message_attr_or_unknown(msg, "partition"),
+            original_offset=_message_attr_or_unknown(msg, "offset"),
+            dlq_topic=self.dlq_topic or "unconfigured",
+            failure_attempts=attempts,
+            max_failure_attempts=self._dlq_failure_max_attempts,
+            processing_error_type=type(error).__name__,
+        )
+        raise DlqPublicationBudgetExhausted(
+            "Kafka DLQ publication failure budget exhausted; consumer stopped without "
+            "committing the terminal message offset."
         )
 
     def shutdown(self):

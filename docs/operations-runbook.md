@@ -76,6 +76,27 @@ Use these for worker fleet dashboards and incident triage. Keep message keys, of
 fields, raw exception text, portfolio/security IDs, request/correlation IDs, and trace IDs out of
 metric labels; use logs, DLQ evidence, replay audit, and support APIs for drill-through.
 
+## Kafka Consumer DLQ Failure Containment
+
+`BaseConsumer` commits terminal-message offsets only after DLQ publication succeeds. If DLQ
+publication fails, the default behavior remains safe redelivery: the offset is not committed.
+
+Operators can bound repeated poison-message redelivery during sustained DLQ outages with:
+
+```text
+KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS=<positive integer>
+```
+
+Default `0` disables the budget and preserves existing redelivery behavior. With a positive budget,
+the shared consumer tracks DLQ failures for the same topic/group/partition/offset/key. When the
+budget is exhausted, the consumer stops without committing the offset, raises
+`DlqPublicationBudgetExhausted`, emits `kafka.consumer.dlq_failure_budget_exhausted`, and records
+`kafka_consumer_events_total` with outcome `dlq_failure_budget_exhausted`.
+
+This is controlled fail-fast, not durable local quarantine. Restart only after the DLQ dependency,
+topic permissions, or producer path is restored, or after a governed service-specific quarantine
+plan is in place.
+
 ## Structured Operational Logs
 
 Operational logs in guarded health, Kafka, outbox, ingestion, query, replay, and scheduler paths
