@@ -19,6 +19,9 @@ change without silently changing downstream banking evidence.
 - Source-data response envelopes must preserve product identity, version, runtime metadata,
   supportability, paging, and source lineage.
 
+See [Repository Output-Shape Standard](./repository-output-shape-standard.md) for the repository
+adapter rule and transitional exception register.
+
 Current typed read-record precedent:
 
 - `PortfolioTaxLotWindow:v1` uses `PortfolioTaxLotReadRecord` from `query_service.app.read_models`.
@@ -35,6 +38,9 @@ Current typed read-record precedent:
 `make test-boundary-mapping-conformance` runs the current mapper conformance suite. The suite is
 also included in `make test-medium` and `make test-pr-suites`.
 
+`make repository-output-shape-guard` runs the static repository output-shape guard and is included
+in `make lint`.
+
 Current coverage:
 
 - transaction ingestion DTO to published payload headers and body;
@@ -48,8 +54,7 @@ Current coverage:
 ## Follow-Up Scope
 
 GitHub issue #665 is fixed locally pending PR CI/QA for the current conformance gate. GitHub issue
-#664 can be marked fixed locally pending PR CI/QA after final validation of the current typed
-source-data read-record slice. GitHub issue #661 remains the umbrella mapping/anti-corruption
-contract for continued coverage across more event families, source-data products, API DTO to command
-paths, and typed read records. GitHub issue #648 remains open for broader repository output-shape
-standards and static/architecture detection of ORM-row leakage.
+#664 is fixed locally pending PR CI/QA for typed source-data read records. GitHub issue #648 is fixed
+locally pending PR CI/QA for the repository output-shape standard and static guard. GitHub issue
+#661 remains the umbrella mapping/anti-corruption contract for continued coverage across more event
+families, source-data products, API DTO to command paths, and typed read records.

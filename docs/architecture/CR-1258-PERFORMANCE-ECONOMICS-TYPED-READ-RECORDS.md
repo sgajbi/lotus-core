@@ -85,8 +85,7 @@ high-value source-data mappers now cover both `PortfolioTaxLotWindow:v1` and
 multiple fee currencies, fee component identity, currency/date normalization, source lineage, and
 typecheck-backed field access.
 
-Issue #648 remains open for broader repository result-mapping standards and static/architecture
-detection of ORM-row leakage across the remaining repository surface.
+CR-1259 later added the broader repository result-mapping standard and static guard for #648.
 
 ## Bank-Buyable Control Movement
 
