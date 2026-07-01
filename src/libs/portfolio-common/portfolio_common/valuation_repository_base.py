@@ -348,6 +348,45 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         return result.rowcount == 1
 
+    @async_timed(repository="ValuationRepository", method="recover_dispatch_failed_jobs")
+    async def recover_dispatch_failed_jobs(
+        self,
+        job_ids: list[int],
+        *,
+        max_attempts: int,
+        failure_reason: str,
+    ) -> dict[str, int]:
+        if not job_ids:
+            return {"pending_count": 0, "failed_count": 0}
+
+        failed_result = await self.db.execute(
+            _dispatch_failed_valuation_jobs_update_stmt(
+                job_ids=job_ids,
+                max_attempts=max_attempts,
+                failure_reason=failure_reason,
+            )
+        )
+        pending_result = await self.db.execute(
+            _dispatch_retryable_valuation_jobs_update_stmt(
+                job_ids=job_ids,
+                max_attempts=max_attempts,
+                failure_reason=failure_reason,
+            )
+        )
+        failed_count = int(failed_result.rowcount or 0)
+        pending_count = int(pending_result.rowcount or 0)
+        if failed_count or pending_count:
+            logger.warning(
+                "Recovered valuation scheduler dispatch failure.",
+                extra={
+                    "job_ids": job_ids,
+                    "pending_count": pending_count,
+                    "failed_count": failed_count,
+                    "max_attempts": max_attempts,
+                },
+            )
+        return {"pending_count": pending_count, "failed_count": failed_count}
+
     @async_timed(repository="ValuationRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioValuationJob]:
         newer_epoch = aliased(PortfolioValuationJob)
@@ -761,4 +800,39 @@ def _stale_jobs_update_stmt(job_ids: list[int], stale_threshold: datetime):
         PortfolioValuationJob.id.in_(job_ids),
         PortfolioValuationJob.status == "PROCESSING",
         PortfolioValuationJob.updated_at < stale_threshold,
+    )
+
+
+def _dispatch_failed_valuation_jobs_update_stmt(
+    *,
+    job_ids: list[int],
+    max_attempts: int,
+    failure_reason: str,
+):
+    return (
+        _dispatch_recovery_valuation_jobs_update_stmt(job_ids)
+        .where(PortfolioValuationJob.attempt_count >= max_attempts)
+        .values(status="FAILED", failure_reason=failure_reason, updated_at=func.now())
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _dispatch_retryable_valuation_jobs_update_stmt(
+    *,
+    job_ids: list[int],
+    max_attempts: int,
+    failure_reason: str,
+):
+    return (
+        _dispatch_recovery_valuation_jobs_update_stmt(job_ids)
+        .where(PortfolioValuationJob.attempt_count < max_attempts)
+        .values(status="PENDING", failure_reason=failure_reason, updated_at=func.now())
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _dispatch_recovery_valuation_jobs_update_stmt(job_ids: list[int]):
+    return update(PortfolioValuationJob).where(
+        PortfolioValuationJob.id.in_(job_ids),
+        PortfolioValuationJob.status == "PROCESSING",
     )

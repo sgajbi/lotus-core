@@ -161,6 +161,39 @@ async def test_find_and_reset_stale_jobs_rechecks_stale_processing_state(
     assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
 
 
+async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhausted_rows(
+    repository: TimeseriesRepository, mock_db_session: AsyncMock
+):
+    failed_result = MagicMock()
+    failed_result.rowcount = 1
+    pending_result = MagicMock()
+    pending_result.rowcount = 2
+    mock_db_session.execute.side_effect = [failed_result, pending_result]
+
+    result = await repository.recover_dispatch_failed_jobs(
+        [101, 102, 103],
+        max_attempts=3,
+        failure_reason="Scheduler dispatch publish failed before queueing record keys: key-1",
+    )
+
+    assert result == {"pending_count": 2, "failed_count": 1}
+    failed_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    pending_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    failed_sql = str(failed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    pending_sql = str(pending_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "UPDATE portfolio_aggregation_jobs" in failed_sql
+    assert "SET status='FAILED'" in failed_sql
+    assert "failure_reason='Scheduler dispatch publish failed" in failed_sql
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in failed_sql
+    assert "portfolio_aggregation_jobs.attempt_count >= 3" in failed_sql
+
+    assert "UPDATE portfolio_aggregation_jobs" in pending_sql
+    assert "SET status='PENDING'" in pending_sql
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in pending_sql
+    assert "portfolio_aggregation_jobs.attempt_count < 3" in pending_sql
+
+
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):

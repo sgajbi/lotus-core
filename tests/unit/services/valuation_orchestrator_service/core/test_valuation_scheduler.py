@@ -16,6 +16,11 @@ from portfolio_common.monitoring import (
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.scheduler_dispatch_recovery import (
+    DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
+    DISPATCH_PUBLISH_FAILURE_PHASE,
+    SchedulerDispatchError,
+)
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -676,6 +681,119 @@ async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispa
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
 
 
+async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublished_jobs(
+    scheduler: ValuationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioValuationJob(
+            id=101,
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            id=102,
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker unavailable")
+
+    with pytest.raises(
+        SchedulerDispatchError,
+        match="Remaining job keys: P1\\|S1\\|2025-08-11\\|1, P1\\|S2\\|2025-08-12\\|1",
+    ) as exc_info:
+        await scheduler._dispatch_jobs(claimed_jobs)
+
+    assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
+    assert exc_info.value.recovery_job_ids == (101, 102)
+    assert exc_info.value.recovery_record_keys == (
+        "P1|S1|2025-08-11|1",
+        "P1|S2|2025-08-12|1",
+    )
+    assert exc_info.value.published_record_keys == ()
+    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs(
+    scheduler: ValuationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioValuationJob(
+            id=201,
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            id=202,
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+
+    with pytest.raises(SchedulerDispatchError) as exc_info:
+        await scheduler._dispatch_jobs(claimed_jobs)
+
+    assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
+    assert exc_info.value.recovery_job_ids == (202,)
+    assert exc_info.value.recovery_record_keys == ("P1|S2|2025-08-12|1",)
+    assert exc_info.value.published_record_keys == ("P1|S1|2025-08-11|1",)
+
+
+async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_jobs(
+    scheduler: ValuationScheduler,
+    mock_kafka_producer: MagicMock,
+):
+    claimed_jobs = [
+        PortfolioValuationJob(
+            id=211,
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            id=212,
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+    mock_kafka_producer.flush.return_value = 1
+
+    with pytest.raises(
+        SchedulerDispatchError,
+        match="Delivery confirmation timed out while recovering from valuation dispatch failure",
+    ) as exc_info:
+        await scheduler._dispatch_jobs(claimed_jobs)
+
+    assert exc_info.value.failure_phase == DISPATCH_CONFIRMATION_TIMEOUT_PHASE
+    assert exc_info.value.recovery_job_ids == (211, 212)
+    assert exc_info.value.recovery_record_keys == (
+        "P1|S1|2025-08-11|1",
+        "P1|S2|2025-08-12|1",
+    )
+    assert exc_info.value.published_record_keys == ("P1|S1|2025-08-11|1",)
+
+
 async def test_scheduler_raises_on_flush_timeout(
     scheduler: ValuationScheduler,
     mock_kafka_producer: MagicMock,
@@ -692,10 +810,14 @@ async def test_scheduler_raises_on_flush_timeout(
     mock_kafka_producer.flush.return_value = 1
 
     with pytest.raises(
-        RuntimeError,
+        SchedulerDispatchError,
         match="Delivery confirmation timed out while dispatching valuation jobs",
-    ):
+    ) as exc_info:
         await scheduler._dispatch_jobs(claimed_jobs)
+
+    assert exc_info.value.failure_phase == DISPATCH_CONFIRMATION_TIMEOUT_PHASE
+    assert exc_info.value.recovery_record_keys == ("P1|S1|2025-08-11|1",)
+    assert exc_info.value.published_record_keys == ("P1|S1|2025-08-11|1",)
 
 
 async def test_scheduler_reads_max_attempts_from_environment(
@@ -778,6 +900,62 @@ async def test_scheduler_claim_loop_stops_after_partial_batch(
             call(claimed_batch_1),
             call(claimed_batch_2),
         ]
+    )
+
+
+async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
+    mock_kafka_producer: MagicMock,
+):
+    scheduler = ValuationScheduler(
+        poll_interval=0.01,
+        batch_size=2,
+        valuation_job_publisher=KafkaValuationJobPublisher(mock_kafka_producer),
+    )
+    claimed_batch = [
+        PortfolioValuationJob(
+            id=301,
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        )
+    ]
+
+    async def get_session_gen():
+        yield AsyncMock(spec=AsyncSession)
+
+    dispatch_error = SchedulerDispatchError(
+        message="dispatch failed",
+        recovery_job_ids=(301,),
+        recovery_record_keys=("P1|S1|2025-08-11|1",),
+        published_record_keys=(),
+        failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
+    )
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
+        ) as mock_repo_factory,
+        patch.object(scheduler, "_dispatch_jobs", side_effect=dispatch_error),
+    ):
+        mock_repo = AsyncMock()
+        mock_repo.find_and_claim_eligible_jobs.return_value = claimed_batch
+        mock_repo_factory.return_value = mock_repo
+
+        with pytest.raises(SchedulerDispatchError):
+            await scheduler._claim_and_dispatch_ready_jobs()
+
+    mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
+        [301],
+        max_attempts=scheduler._max_attempts,
+        failure_reason=(
+            "Scheduler dispatch publish failed before queueing record keys: P1|S1|2025-08-11|1"
+        ),
     )
 
 

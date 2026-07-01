@@ -13,6 +13,13 @@ from portfolio_common.monitoring import (
     set_control_queue_oldest_pending_age_seconds,
     set_control_queue_pending,
 )
+from portfolio_common.scheduler_dispatch_recovery import (
+    DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
+    DISPATCH_PUBLISH_FAILURE_PHASE,
+    SchedulerDispatchError,
+    dispatch_failure_reason,
+    present_job_ids,
+)
 
 from ..repositories.timeseries_repository import TimeseriesRepository
 from ..settings import get_aggregation_runtime_settings
@@ -83,20 +90,67 @@ class AggregationScheduler:
                     headers=headers,
                 )
             except Exception as exc:
-                self._producer.flush(timeout=10)
+                undelivered_count = self._producer.flush(timeout=10)
+                if undelivered_count:
+                    affected_keys = ", ".join(record_keys)
+                    raise SchedulerDispatchError(
+                        message=(
+                            "Delivery confirmation timed out while recovering from aggregation "
+                            f"dispatch failure. Affected job keys: {affected_keys}."
+                        ),
+                        recovery_job_ids=present_job_ids(jobs),
+                        recovery_record_keys=tuple(record_keys),
+                        published_record_keys=tuple(record_keys[:idx]),
+                        failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
+                    ) from exc
                 remaining_keys = ", ".join(record_keys[idx:])
-                raise RuntimeError(
-                    "Failed to dispatch aggregation jobs after "
-                    f"{idx} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+                raise SchedulerDispatchError(
+                    message=(
+                        "Failed to dispatch aggregation jobs after "
+                        f"{idx} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+                    ),
+                    recovery_job_ids=present_job_ids(jobs[idx:]),
+                    recovery_record_keys=tuple(record_keys[idx:]),
+                    published_record_keys=tuple(record_keys[:idx]),
+                    failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
                 ) from exc
         undelivered_count = self._producer.flush(timeout=10)
         if undelivered_count:
             affected_keys = ", ".join(record_keys)
-            raise RuntimeError(
-                "Delivery confirmation timed out while dispatching aggregation jobs. "
-                f"Affected job keys: {affected_keys}."
+            raise SchedulerDispatchError(
+                message=(
+                    "Delivery confirmation timed out while dispatching aggregation jobs. "
+                    f"Affected job keys: {affected_keys}."
+                ),
+                recovery_job_ids=present_job_ids(jobs),
+                recovery_record_keys=tuple(record_keys),
+                published_record_keys=tuple(record_keys),
+                failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
             )
         logger.info(f"Successfully flushed {len(jobs)} aggregation jobs.")
+
+    async def _recover_dispatch_failure(self, failure: SchedulerDispatchError) -> None:
+        if not failure.recovery_job_ids:
+            logger.warning(
+                "Aggregation scheduler dispatch failure had no durable job ids to recover.",
+                extra={
+                    "failure_phase": failure.failure_phase,
+                    "record_keys": list(failure.recovery_record_keys),
+                    "published_record_keys": list(failure.published_record_keys),
+                },
+            )
+            return
+        async for db in get_async_db_session():
+            async with db.begin():
+                repo = TimeseriesRepository(db)
+                await repo.recover_dispatch_failed_jobs(
+                    list(failure.recovery_job_ids),
+                    max_attempts=self._max_attempts,
+                    failure_reason=dispatch_failure_reason(
+                        failure_phase=failure.failure_phase,
+                        record_keys=failure.recovery_record_keys,
+                    ),
+                )
 
     async def run(self):
         logger.info(f"AggregationScheduler started. Polling every {self._poll_interval} seconds.")
@@ -116,7 +170,11 @@ class AggregationScheduler:
 
                 if claimed_jobs:
                     logger.info(f"Scheduler claimed {len(claimed_jobs)} jobs for processing.")
-                    await self._dispatch_jobs(claimed_jobs)
+                    try:
+                        await self._dispatch_jobs(claimed_jobs)
+                    except SchedulerDispatchError as exc:
+                        await self._recover_dispatch_failure(exc)
+                        raise
                 else:
                     logger.info("Scheduler poll found no eligible jobs.")
 

@@ -537,6 +537,13 @@ Most relevant current governance:
     return `source_batch_fingerprint: null`. `make source-data-product-contract-guard` now blocks
     `request_fingerprint(...)`, `snapshot_fingerprint`, and `request_scope_fingerprint` from being
     assigned to source-batch lineage.
+53. Durable claim-and-publish scheduler loops must recover rows immediately when they directly
+    observe Kafka publish or delivery-confirmation failure after claiming work into `PROCESSING`.
+    Use the shared `portfolio_common.scheduler_dispatch_recovery` vocabulary and repository-level
+    recovery methods for valuation and aggregation control queues. Preserve published versus
+    unpublished record-key evidence where possible, requeue retryable rows to `PENDING`, mark rows
+    at or above max-attempt policy `FAILED`, and keep stale-job reset as a crash/unknown-failure
+    safety net rather than the primary recovery path for observed dispatch failures.
 
 ## Context Maintenance Rule
 

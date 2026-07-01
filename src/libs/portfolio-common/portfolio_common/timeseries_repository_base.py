@@ -195,6 +195,45 @@ class TimeseriesRepositoryBase:
             logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_jobs))
         return claimed_jobs
 
+    @async_timed(repository="TimeseriesRepository", method="recover_dispatch_failed_jobs")
+    async def recover_dispatch_failed_jobs(
+        self,
+        job_ids: list[int],
+        *,
+        max_attempts: int,
+        failure_reason: str,
+    ) -> dict[str, int]:
+        if not job_ids:
+            return {"pending_count": 0, "failed_count": 0}
+
+        failed_result = await self.db.execute(
+            _dispatch_failed_aggregation_jobs_update_stmt(
+                job_ids=job_ids,
+                max_attempts=max_attempts,
+                failure_reason=failure_reason,
+            )
+        )
+        pending_result = await self.db.execute(
+            _dispatch_retryable_aggregation_jobs_update_stmt(
+                job_ids=job_ids,
+                max_attempts=max_attempts,
+                failure_reason=failure_reason,
+            )
+        )
+        failed_count = int(failed_result.rowcount or 0)
+        pending_count = int(pending_result.rowcount or 0)
+        if failed_count or pending_count:
+            logger.warning(
+                "Recovered aggregation scheduler dispatch failure.",
+                extra={
+                    "job_ids": job_ids,
+                    "pending_count": pending_count,
+                    "failed_count": failed_count,
+                    "max_attempts": max_attempts,
+                },
+            )
+        return {"pending_count": pending_count, "failed_count": failed_count}
+
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
@@ -623,6 +662,41 @@ def _stale_aggregation_jobs_update_stmt(job_ids: list[int], stale_threshold: dat
         PortfolioAggregationJob.id.in_(job_ids),
         PortfolioAggregationJob.status == "PROCESSING",
         PortfolioAggregationJob.updated_at < stale_threshold,
+    )
+
+
+def _dispatch_failed_aggregation_jobs_update_stmt(
+    *,
+    job_ids: list[int],
+    max_attempts: int,
+    failure_reason: str,
+):
+    return (
+        _dispatch_recovery_aggregation_jobs_update_stmt(job_ids)
+        .where(PortfolioAggregationJob.attempt_count >= max_attempts)
+        .values(status="FAILED", failure_reason=failure_reason, updated_at=func.now())
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _dispatch_retryable_aggregation_jobs_update_stmt(
+    *,
+    job_ids: list[int],
+    max_attempts: int,
+    failure_reason: str,
+):
+    return (
+        _dispatch_recovery_aggregation_jobs_update_stmt(job_ids)
+        .where(PortfolioAggregationJob.attempt_count < max_attempts)
+        .values(status="PENDING", failure_reason=failure_reason, updated_at=func.now())
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _dispatch_recovery_aggregation_jobs_update_stmt(job_ids: list[int]):
+    return update(PortfolioAggregationJob).where(
+        PortfolioAggregationJob.id.in_(job_ids),
+        PortfolioAggregationJob.status == "PROCESSING",
     )
 
 
