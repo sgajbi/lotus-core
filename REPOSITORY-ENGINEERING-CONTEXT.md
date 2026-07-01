@@ -47,9 +47,13 @@ Current repository posture:
 17. RFC-0086 repo-native domain-product declarations now live under
     `contracts/domain-data-products/` and are validated by `make domain-product-validate` when the
     sibling `lotus-platform` validator and vocabulary registries are available.
-18. RFC-0087 trust telemetry proof for `PortfolioStateSnapshot` now lives under
-    `contracts/trust-telemetry/` and is validated by `tests/unit/test_trust_telemetry.py` against
-    the platform trust telemetry validator when `lotus-platform` is available.
+18. RFC-0087 trust telemetry proof currently covers exactly `PortfolioStateSnapshot:v1` and
+    `DpmSourceReadiness:v1` under `contracts/trust-telemetry/`; it is validated by
+    `tests/unit/test_trust_telemetry.py` against the platform trust telemetry validator when
+    `lotus-platform` is available. Active source-product declaration, local implementation proof,
+    CI proof, live validator proof, trust telemetry coverage, and platform mesh certification are
+    distinct statuses; do not describe every active Core source product as mesh certified unless
+    current generated platform certification artifacts prove that exact product state.
 19. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
     discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
@@ -257,7 +261,8 @@ Primary areas:
    Repo-native RFC-0086 domain-product producer declarations for governed `lotus-core` source-data
    products.
 10. `contracts/trust-telemetry/`
-    Repo-native RFC-0087 trust telemetry fixtures for governed first-wave source-data products.
+    Repo-native RFC-0087 trust telemetry fixtures for the currently covered
+    `PortfolioStateSnapshot:v1` and `DpmSourceReadiness:v1` products.
 11. `wiki/`
    canonical authored source for GitHub wiki publication and core-owned operator and onboarding summaries.
 12. `docs/architecture/README.md`
