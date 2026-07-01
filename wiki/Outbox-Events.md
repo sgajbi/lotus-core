@@ -87,6 +87,7 @@ The dispatcher exposes monitoring for:
 - total terminal failed rows
 - oldest pending outbox age
 - batch dispatch duration
+- governed recovery attempts by recovery action, outcome, and stable reason
 
 If pending age or failed counts grow, that is an operational defect, not a cosmetic metric blip.
 
@@ -133,6 +134,10 @@ GET /support/outbox/recovery-audits
 Optional filters include `outbox_id`, `outcome`, `correlation_id`, `requested_by`,
 `recovery_action`, `skip`, and `limit`. The endpoint returns source-safe recovery metadata,
 including prior failure summaries, but never exposes the raw outbox payload.
+
+The Prometheus counter `outbox_recovery_attempts_total` records accepted, rejected, missing-row,
+and unexpected-error recovery attempts with bounded labels only: `recovery_action`, `outcome`, and
+stable `reason`.
 
 Use this page together with:
 

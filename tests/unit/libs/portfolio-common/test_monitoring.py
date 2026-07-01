@@ -3,7 +3,19 @@ from prometheus_client.metrics import MetricWrapperBase
 
 
 def test_production_prometheus_metric_labels_exclude_business_identifiers():
-    forbidden_labels = {"portfolio_id", "security_id"}
+    forbidden_labels = {
+        "account_id",
+        "client_id",
+        "correlation_id",
+        "outbox_id",
+        "portfolio_id",
+        "requested_by",
+        "request_body",
+        "response_body",
+        "security_id",
+        "trace_id",
+        "transaction_id",
+    }
     metrics_with_forbidden_labels: dict[str, tuple[str, ...]] = {}
 
     for name, value in vars(monitoring).items():
@@ -14,3 +26,11 @@ def test_production_prometheus_metric_labels_exclude_business_identifiers():
             metrics_with_forbidden_labels[name] = labelnames
 
     assert metrics_with_forbidden_labels == {}
+
+
+def test_outbox_recovery_metric_uses_bounded_operator_labels():
+    assert monitoring._OUTBOX_RECOVERY_ATTEMPTS._labelnames == (
+        "recovery_action",
+        "outcome",
+        "reason",
+    )

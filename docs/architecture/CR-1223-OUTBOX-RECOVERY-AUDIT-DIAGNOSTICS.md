@@ -66,5 +66,5 @@ updated because operator recovery evidence changed platform truth.
 
 - Add Docker-backed integrated proof that dispatcher-created terminal failed rows can be requeued
   through QCP and later processed by the dispatcher.
-- Consider failed-row age, recovery outcome, and recovery rejection metrics after the audit table
-  has real runtime use.
+- CR-1224 adds bounded recovery outcome metrics for accepted, rejected, not-found, and unexpected
+  recovery command attempts.

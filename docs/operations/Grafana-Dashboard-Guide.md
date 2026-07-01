@@ -89,6 +89,8 @@ Use this section when ingestion, replay, or event publication looks unhealthy.
 - `Replay Audit Outcomes`: replay results by recovery path and status
 - `Replay Pressure`: duplicate pressure, stale-skip pressure, and replay failures
 - `Outbox Backlog and Publish Pressure`: durable publication queue health
+- `Outbox Recovery Attempts`: governed failed-outbox recovery attempts by recovery action,
+  outcome, and stable reason
 - `Reprocessing Worker Throughput and Backlog`: claim/completion/failure balance, explicit no-op replay outcomes, and backlog age
 - `Control Queue Pressure`: pending rows, terminal failures, and oldest pending age across the valuation, aggregation, and replay control queues
 
@@ -136,8 +138,10 @@ Use this section for control-plane completion.
    correlation, and payload-contract review confirmation.
 6. Review `GET /support/outbox/recovery-audits` with outbox, outcome, requester, or correlation
    filters to confirm accepted and rejected recovery attempts.
-7. Check `Outbox Backlog and Publish Pressure`.
-8. Check `Outbox Publication by Topic` to identify the starving topic.
+7. Check `Outbox Recovery Attempts` for repeated `REJECTED`, `NOT_FOUND`, or `ERROR` recovery
+   outcomes.
+8. Check `Outbox Backlog and Publish Pressure`.
+9. Check `Outbox Publication by Topic` to identify the starving topic.
 
 ### Workflow: Valuation Is Not Converging
 
