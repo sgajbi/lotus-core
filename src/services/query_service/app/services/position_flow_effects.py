@@ -1,41 +1,25 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import cast
+
+from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from .decimal_amounts import decimal_or_zero
 
-POSITION_INCREASE_TRANSACTION_TYPES = {
-    "BUY",
-    "TRANSFER_IN",
-    "MERGER_IN",
-    "EXCHANGE_IN",
-    "REPLACEMENT_IN",
-    "SPIN_IN",
-    "DEMERGER_IN",
-    "SPLIT",
-    "BONUS_ISSUE",
-    "STOCK_DIVIDEND",
-    "RIGHTS_ALLOCATE",
-    "RIGHTS_SHARE_DELIVERY",
-}
-POSITION_DECREASE_TRANSACTION_TYPES = {
-    "SELL",
-    "CASH_IN_LIEU",
-    "TRANSFER_OUT",
-    "MERGER_OUT",
-    "EXCHANGE_OUT",
-    "REPLACEMENT_OUT",
-    "SPIN_OFF",
-    "DEMERGER_OUT",
-    "REVERSE_SPLIT",
-    "CONSOLIDATION",
-    "RIGHTS_SUBSCRIBE",
-    "RIGHTS_OVERSUBSCRIBE",
-    "RIGHTS_SELL",
-    "RIGHTS_EXPIRE",
-}
-CASH_POSITION_INCREASE_TRANSACTION_TYPES = {"DEPOSIT"}
-CASH_POSITION_DECREASE_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
+
+def _transaction_types_with_position_effect(position_effect: str) -> frozenset[str]:
+    return frozenset(
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed and definition.position_effect == position_effect
+    )
+
+
+POSITION_INCREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("increase")
+POSITION_DECREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("decrease")
+CASH_POSITION_INCREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("cash_increase")
+CASH_POSITION_DECREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("cash_decrease")
 
 
 def transaction_quantity_effect_decimal(
@@ -44,12 +28,12 @@ def transaction_quantity_effect_decimal(
     normalized_type = str(transaction_type or "").strip().upper()
     if normalized_type in POSITION_INCREASE_TRANSACTION_TYPES:
         magnitude = decimal_or_zero(quantity)
-        return magnitude
+        return cast(Decimal, magnitude)
     if normalized_type in POSITION_DECREASE_TRANSACTION_TYPES:
         magnitude = decimal_or_zero(quantity)
-        return -magnitude
+        return cast(Decimal, -magnitude)
     if normalized_type in CASH_POSITION_INCREASE_TRANSACTION_TYPES:
-        return abs(decimal_or_zero(amount))
+        return cast(Decimal, abs(decimal_or_zero(amount)))
     if normalized_type in CASH_POSITION_DECREASE_TRANSACTION_TYPES:
-        return -abs(decimal_or_zero(amount))
+        return cast(Decimal, -abs(decimal_or_zero(amount)))
     return Decimal(0)

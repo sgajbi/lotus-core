@@ -1,8 +1,13 @@
 from decimal import Decimal
 
 import pytest
+from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from src.services.query_service.app.services.position_flow_effects import (
+    CASH_POSITION_DECREASE_TRANSACTION_TYPES,
+    CASH_POSITION_INCREASE_TRANSACTION_TYPES,
+    POSITION_DECREASE_TRANSACTION_TYPES,
+    POSITION_INCREASE_TRANSACTION_TYPES,
     transaction_quantity_effect_decimal,
 )
 
@@ -80,3 +85,25 @@ def test_unknown_position_effect_does_not_convert_unused_values() -> None:
     assert effect == Decimal("0")
     assert quantity.string_call_count == 0
     assert amount.string_call_count == 0
+
+
+def test_position_flow_effect_sets_are_registry_derived() -> None:
+    production_position_effects = {
+        position_effect: {
+            code
+            for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+            if definition.production_booking_allowed
+            and definition.position_effect == position_effect
+        }
+        for position_effect in {
+            "increase",
+            "decrease",
+            "cash_increase",
+            "cash_decrease",
+        }
+    }
+
+    assert POSITION_INCREASE_TRANSACTION_TYPES == production_position_effects["increase"]
+    assert POSITION_DECREASE_TRANSACTION_TYPES == production_position_effects["decrease"]
+    assert CASH_POSITION_INCREASE_TRANSACTION_TYPES == production_position_effects["cash_increase"]
+    assert CASH_POSITION_DECREASE_TRANSACTION_TYPES == production_position_effects["cash_decrease"]
