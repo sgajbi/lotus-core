@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import OutboxEvent
+from portfolio_common.database_models import OutboxEvent, OutboxRecoveryAudit
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.operations_errors import OutboxRecoveryRejected
@@ -1547,6 +1547,81 @@ async def test_requeue_failed_outbox_event_rejects_blind_requeue_with_audit(
     assert exc_info.value.metadata["reason"] == "payload_contract_review_required"
     mock_db_session.flush.assert_awaited_once()
     mock_db_session.commit.assert_awaited_once()
+
+
+async def test_get_outbox_recovery_audits_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+    as_of = datetime(2026, 3, 14, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_outbox_recovery_audits_count(
+        outbox_id=701,
+        outcome="REQUEUED",
+        correlation_id="incident-20260314-outbox-701",
+        requested_by="ops.sre",
+        recovery_action="requeue_failed_outbox",
+        as_of=as_of,
+    )
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from outbox_recovery_audit" in compiled.lower()
+    assert "outbox_recovery_audit.outbox_id = 701" in compiled
+    assert "outbox_recovery_audit.outcome = 'REQUEUED'" in compiled
+    assert "outbox_recovery_audit.correlation_id = 'incident-20260314-outbox-701'" in compiled
+    assert "outbox_recovery_audit.requested_by = 'ops.sre'" in compiled
+    assert "outbox_recovery_audit.recovery_action = 'requeue_failed_outbox'" in compiled
+    assert "outbox_recovery_audit.requested_at <= '2026-03-14 11:00:00+00:00'" in compiled
+
+
+async def test_get_outbox_recovery_audits_query_filters_and_ordering(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    as_of = datetime(2026, 3, 14, 11, 0, tzinfo=timezone.utc)
+    audit = OutboxRecoveryAudit(
+        outbox_id=701,
+        recovery_action="requeue_failed_outbox",
+        requested_by="ops.sre",
+        reason="Kafka delivery timeout cleared; payload contract inspected.",
+        correlation_id="incident-20260314-outbox-701",
+        prior_status="FAILED",
+        new_status="PENDING",
+        outcome="REQUEUED",
+        prior_retry_count=3,
+        requested_at=as_of,
+        completed_at=as_of,
+    )
+    audit.id = 42
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [audit]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_outbox_recovery_audits(
+        skip=5,
+        limit=10,
+        outbox_id=701,
+        outcome="REQUEUED",
+        correlation_id="incident-20260314-outbox-701",
+        requested_by="ops.sre",
+        recovery_action="requeue_failed_outbox",
+        as_of=as_of,
+    )
+
+    assert value == [audit]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from outbox_recovery_audit" in compiled.lower()
+    assert "outbox_recovery_audit.outbox_id = 701" in compiled
+    assert "outbox_recovery_audit.outcome = 'REQUEUED'" in compiled
+    assert "outbox_recovery_audit.correlation_id = 'incident-20260314-outbox-701'" in compiled
+    assert "outbox_recovery_audit.requested_by = 'ops.sre'" in compiled
+    assert "outbox_recovery_audit.recovery_action = 'requeue_failed_outbox'" in compiled
+    assert "outbox_recovery_audit.requested_at <= '2026-03-14 11:00:00+00:00'" in compiled
+    assert "outbox_recovery_audit.requested_at DESC" in compiled
+    assert "outbox_recovery_audit.id DESC" in compiled
+    assert "LIMIT 10 OFFSET 5" in compiled
 
 
 async def test_get_reconciliation_runs_count_with_filters(

@@ -16,6 +16,7 @@ from src.services.query_service.app.dtos.operations_dto import (
     LineageKeyListResponse,
     LineageResponse,
     LoadRunProgressResponse,
+    OutboxRecoveryAuditListResponse,
     PortfolioControlStageListResponse,
     PortfolioReadinessResponse,
     ReconciliationFindingListResponse,
@@ -890,6 +891,70 @@ async def get_failed_outbox_events(
         ),
         log_message="Failed to list failed outbox rows",
         unexpected_detail="An unexpected server error occurred while listing failed outbox rows.",
+        log_args=(),
+    )
+
+
+@router.get(
+    "/support/outbox/recovery-audits",
+    response_model=OutboxRecoveryAuditListResponse,
+    summary="List outbox recovery audit rows for operator support",
+    description=(
+        "What: List durable outbox recovery audit rows with source-safe recovery metadata.\n"
+        "How: Query `outbox_recovery_audit` with pagination and optional outbox row, outcome, "
+        "correlation, requester, and recovery-action filters. Raw event payloads are intentionally "
+        "excluded from this response.\n"
+        "When: Use after failed-row diagnostics or a governed recovery command to review who "
+        "requested recovery, why it was requested, whether it was accepted, and which prior "
+        "failure evidence was preserved. This is operator recovery evidence, not a business "
+        "source-data or front-office analytics contract."
+    ),
+)
+async def get_outbox_recovery_audits(
+    outbox_id: Optional[int] = Query(
+        None,
+        ge=1,
+        description="Optional durable outbox row identifier filter.",
+        examples=[701],
+    ),
+    outcome: Optional[str] = Query(
+        None,
+        description="Optional recovery outcome filter.",
+        examples=["REQUEUED"],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional incident, trace, or operator correlation identifier filter.",
+        examples=["incident-20260314-outbox-701"],
+    ),
+    requested_by: Optional[str] = Query(
+        None,
+        description="Optional operator, automation principal, or support workflow filter.",
+        examples=["ops.sre"],
+    ),
+    recovery_action: Optional[str] = Query(
+        None,
+        description="Optional governed recovery action filter.",
+        examples=["requeue_failed_outbox"],
+    ),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
+    service: OperationsService = Depends(get_operations_service),
+):
+    return await execute_operations_call(
+        service.get_outbox_recovery_audits(
+            skip=skip,
+            limit=limit,
+            outbox_id=outbox_id,
+            outcome=outcome,
+            correlation_id=correlation_id,
+            requested_by=requested_by,
+            recovery_action=recovery_action,
+        ),
+        log_message="Failed to list outbox recovery audit rows",
+        unexpected_detail=(
+            "An unexpected server error occurred while listing outbox recovery audit rows."
+        ),
         log_args=(),
     )
 

@@ -131,6 +131,7 @@
         "GET /lineage/portfolios/{portfolio_id}/keys",
         "GET /lineage/portfolios/{portfolio_id}/securities/{security_id}",
         "GET /support/outbox/failed-events",
+        "GET /support/outbox/recovery-audits",
         "GET /support/portfolios/{portfolio_id}/aggregation-jobs",
         "GET /support/portfolios/{portfolio_id}/analytics-export-jobs",
         "GET /support/portfolios/{portfolio_id}/calculator-slos",

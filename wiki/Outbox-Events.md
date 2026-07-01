@@ -124,6 +124,16 @@ The request must include `requested_by`, a source-safe `reason`, optional `corre
 `confirm_payload_contract_reviewed=true`. The command records `outbox_recovery_audit` evidence and
 rejects blind requeue attempts or rows that are no longer terminal `FAILED`.
 
+To review recovery history without direct database access, use:
+
+```text
+GET /support/outbox/recovery-audits
+```
+
+Optional filters include `outbox_id`, `outcome`, `correlation_id`, `requested_by`,
+`recovery_action`, `skip`, and `limit`. The endpoint returns source-safe recovery metadata,
+including prior failure summaries, but never exposes the raw outbox payload.
+
 Use this page together with:
 
 - [Operations Runbook](Operations-Runbook)

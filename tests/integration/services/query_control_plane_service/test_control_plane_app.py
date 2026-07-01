@@ -412,6 +412,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
     ]["get"]
     failed_outbox_events = schema["paths"]["/support/outbox/failed-events"]["get"]
+    outbox_recovery_audits = schema["paths"]["/support/outbox/recovery-audits"]["get"]
     failed_outbox_requeue = schema["paths"]["/support/outbox/failed-events/{outbox_id}/requeue"][
         "post"
     ]
@@ -599,6 +600,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert "terminally failed outbox rows" in failed_outbox_events["description"]
     assert "raw event payload is intentionally excluded" in failed_outbox_events["description"]
     assert "operator recovery evidence" in failed_outbox_events["description"]
+    outbox_recovery_outcome = next(
+        parameter
+        for parameter in outbox_recovery_audits["parameters"]
+        if parameter["name"] == "outcome"
+    )
+    assert outbox_recovery_outcome["description"] == "Optional recovery outcome filter."
+    assert "outbox_recovery_audit" in outbox_recovery_audits["description"]
+    assert "Raw event payloads are intentionally excluded" in outbox_recovery_audits["description"]
+    assert "operator recovery evidence" in outbox_recovery_audits["description"]
     outbox_requeue_id = next(
         parameter
         for parameter in failed_outbox_requeue["parameters"]
@@ -684,6 +694,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     failed_outbox_event_record = components["FailedOutboxEventRecord"]
     failed_outbox_requeue_request = components["FailedOutboxRequeueRequest"]
     failed_outbox_requeue_response = components["FailedOutboxRequeueResponse"]
+    outbox_recovery_audits_schema = components["OutboxRecoveryAuditListResponse"]
+    outbox_recovery_audit_record = components["OutboxRecoveryAuditRecord"]
 
     assert calculator_slo["properties"]["valuation"]["description"] == (
         "Valuation calculator SLO snapshot for this portfolio."
@@ -976,6 +988,19 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert failed_outbox_requeue_response["properties"]["retry_count"]["description"].startswith(
         "Retry count after requeue"
+    )
+    assert outbox_recovery_audits_schema["properties"]["items"]["description"] == (
+        "Source-safe outbox recovery audit rows for operator support workflows."
+    )
+    assert "payload" not in outbox_recovery_audit_record["properties"]
+    assert outbox_recovery_audit_record["properties"]["audit_id"]["description"] == (
+        "Durable outbox recovery audit row identifier."
+    )
+    assert outbox_recovery_audit_record["properties"]["prior_last_failure_message"][
+        "description"
+    ].startswith("Bounded, redacted failure message")
+    assert outbox_recovery_audit_record["properties"]["outcome"]["description"] == (
+        "Durable recovery outcome recorded for this attempt."
     )
     reprocessing_slo = components["ReprocessingSloBucket"]
     calculator_bucket = components["CalculatorSloBucket"]

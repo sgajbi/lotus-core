@@ -25,6 +25,8 @@ from ..dtos.operations_dto import (
     LineageKeyRecord,
     LineageResponse,
     LoadRunProgressResponse,
+    OutboxRecoveryAuditListResponse,
+    OutboxRecoveryAuditRecord,
     PortfolioControlStageListResponse,
     PortfolioControlStageRecord,
     PortfolioReadinessResponse,
@@ -1070,6 +1072,67 @@ class OperationsService:
             completed_at_utc=completed_at,
             retry_count=event.retry_count or 0,
             next_attempt_at=event.next_attempt_at or completed_at,
+        )
+
+    async def get_outbox_recovery_audits(
+        self,
+        *,
+        skip: int,
+        limit: int,
+        outbox_id: int | None = None,
+        outcome: str | None = None,
+        correlation_id: str | None = None,
+        requested_by: str | None = None,
+        recovery_action: str | None = None,
+    ) -> OutboxRecoveryAuditListResponse:
+        generated_at_utc = datetime.now(timezone.utc)
+        total, audits = await self._read_count_and_page(
+            self.repo.get_outbox_recovery_audits_count(
+                outbox_id=outbox_id,
+                outcome=outcome,
+                correlation_id=correlation_id,
+                requested_by=requested_by,
+                recovery_action=recovery_action,
+                as_of=generated_at_utc,
+            ),
+            self.repo.get_outbox_recovery_audits(
+                skip=skip,
+                limit=limit,
+                outbox_id=outbox_id,
+                outcome=outcome,
+                correlation_id=correlation_id,
+                requested_by=requested_by,
+                recovery_action=recovery_action,
+                as_of=generated_at_utc,
+            ),
+        )
+        return OutboxRecoveryAuditListResponse(
+            generated_at_utc=generated_at_utc,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                OutboxRecoveryAuditRecord(
+                    audit_id=audit.id,
+                    outbox_id=audit.outbox_id,
+                    recovery_action=audit.recovery_action,
+                    requested_by=audit.requested_by,
+                    reason=audit.reason,
+                    correlation_id=audit.correlation_id,
+                    prior_status=audit.prior_status,
+                    new_status=audit.new_status,
+                    outcome=audit.outcome,
+                    outcome_message=audit.outcome_message,
+                    prior_retry_count=audit.prior_retry_count,
+                    prior_last_failure_reason_code=audit.prior_last_failure_reason_code,
+                    prior_last_failure_category=audit.prior_last_failure_category,
+                    prior_last_failure_message=audit.prior_last_failure_message,
+                    prior_last_failure_at=audit.prior_last_failure_at,
+                    requested_at_utc=audit.requested_at,
+                    completed_at_utc=audit.completed_at,
+                )
+                for audit in audits
+            ],
         )
 
     async def get_reconciliation_runs(

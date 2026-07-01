@@ -134,8 +134,10 @@ Use this section for control-plane completion.
 5. After confirming the event payload and contract are safe to retry, use
    `POST /support/outbox/failed-events/{outbox_id}/requeue` with operator, reason,
    correlation, and payload-contract review confirmation.
-6. Check `Outbox Backlog and Publish Pressure`.
-7. Check `Outbox Publication by Topic` to identify the starving topic.
+6. Review `GET /support/outbox/recovery-audits` with outbox, outcome, requester, or correlation
+   filters to confirm accepted and rejected recovery attempts.
+7. Check `Outbox Backlog and Publish Pressure`.
+8. Check `Outbox Publication by Topic` to identify the starving topic.
 
 ### Workflow: Valuation Is Not Converging
 
