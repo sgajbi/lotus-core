@@ -8,6 +8,7 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    OutboxEvent,
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
@@ -16,7 +17,7 @@ from portfolio_common.database_models import (
     PositionState,
     ReprocessingJob,
 )
-from sqlalchemy import and_, func, select, true
+from sqlalchemy import and_, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .identifier_normalization import normalize_security_id
@@ -954,6 +955,95 @@ class OperationsRepository:
                 ).asc(),
                 AnalyticsExportJob.created_at.asc(),
                 AnalyticsExportJob.id.asc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    def _failed_outbox_events_stmt(
+        self,
+        *,
+        aggregate_type: Optional[str] = None,
+        aggregate_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        topic: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = select(OutboxEvent).where(OutboxEvent.status == "FAILED")
+        if aggregate_type is not None:
+            stmt = stmt.where(OutboxEvent.aggregate_type == aggregate_type)
+        if aggregate_id is not None:
+            stmt = stmt.where(OutboxEvent.aggregate_id == aggregate_id)
+        if event_type is not None:
+            stmt = stmt.where(OutboxEvent.event_type == event_type)
+        if topic is not None:
+            stmt = stmt.where(OutboxEvent.topic == topic)
+        if correlation_id is not None:
+            stmt = stmt.where(OutboxEvent.correlation_id == correlation_id)
+        if reason_code is not None:
+            stmt = stmt.where(OutboxEvent.last_failure_reason_code == reason_code)
+        if as_of is not None:
+            stmt = stmt.where(
+                OutboxEvent.created_at <= as_of,
+                or_(OutboxEvent.last_failure_at.is_(None), OutboxEvent.last_failure_at <= as_of),
+            )
+        return stmt
+
+    async def get_failed_outbox_events_count(
+        self,
+        *,
+        aggregate_type: Optional[str] = None,
+        aggregate_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        topic: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> int:
+        base_stmt = self._failed_outbox_events_stmt(
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            event_type=event_type,
+            topic=topic,
+            correlation_id=correlation_id,
+            reason_code=reason_code,
+            as_of=as_of,
+        ).subquery()
+        return int(
+            (await self.db.execute(select(func.count()).select_from(base_stmt))).scalar_one() or 0
+        )
+
+    async def get_failed_outbox_events(
+        self,
+        *,
+        skip: int,
+        limit: int,
+        aggregate_type: Optional[str] = None,
+        aggregate_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        topic: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> list[OutboxEvent]:
+        stmt = self._failed_outbox_events_stmt(
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            event_type=event_type,
+            topic=topic,
+            correlation_id=correlation_id,
+            reason_code=reason_code,
+            as_of=as_of,
+        )
+        stmt = (
+            stmt.order_by(
+                OutboxEvent.last_failure_at.desc().nullslast(),
+                OutboxEvent.last_attempted_at.desc().nullslast(),
+                OutboxEvent.created_at.desc(),
+                OutboxEvent.id.asc(),
             )
             .offset(skip)
             .limit(limit)

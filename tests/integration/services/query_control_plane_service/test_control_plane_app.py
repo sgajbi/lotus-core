@@ -411,6 +411,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     analytics_export_jobs = schema["paths"][
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
     ]["get"]
+    failed_outbox_events = schema["paths"]["/support/outbox/failed-events"]["get"]
     reconciliation_runs = schema["paths"]["/support/portfolios/{portfolio_id}/reconciliation-runs"][
         "get"
     ]
@@ -583,6 +584,18 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     )
     assert "large-window extraction or support escalation" in analytics_export_jobs["description"]
     assert "operator support evidence" in analytics_export_jobs["description"]
+    failed_outbox_reason_code = next(
+        parameter
+        for parameter in failed_outbox_events["parameters"]
+        if parameter["name"] == "reason_code"
+    )
+    assert (
+        failed_outbox_reason_code["description"]
+        == "Optional source-safe failure reason code filter."
+    )
+    assert "terminally failed outbox rows" in failed_outbox_events["description"]
+    assert "raw event payload is intentionally excluded" in failed_outbox_events["description"]
+    assert "operator recovery evidence" in failed_outbox_events["description"]
     assert "fleet-health baselining" in calculator_slos["description"]
     assert (
         "valuation, aggregation, replay, or export-job listings" in calculator_slos["description"]
@@ -647,6 +660,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     readiness_response = components["PortfolioReadinessResponse"]
     analytics_export_jobs_schema = components["AnalyticsExportJobListResponse"]
     analytics_export_job_record = components["AnalyticsExportJobRecord"]
+    failed_outbox_events_schema = components["FailedOutboxEventListResponse"]
+    failed_outbox_event_record = components["FailedOutboxEventRecord"]
 
     assert calculator_slo["properties"]["valuation"]["description"] == (
         "Valuation calculator SLO snapshot for this portfolio."
@@ -918,6 +933,19 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert analytics_export_job_record["properties"]["backlog_age_minutes"][
         "description"
     ].startswith("Age in minutes from created_at to the current UTC time")
+    assert failed_outbox_events_schema["properties"]["items"]["description"] == (
+        "Source-safe failed outbox rows for operator triage."
+    )
+    assert "payload" not in failed_outbox_event_record["properties"]
+    assert failed_outbox_event_record["properties"]["last_failure_message"][
+        "description"
+    ].startswith("Bounded, redacted delivery failure message")
+    assert failed_outbox_event_record["properties"]["retry_safe"]["description"].startswith(
+        "False for terminal failed rows"
+    )
+    assert failed_outbox_event_record["properties"]["recommended_recovery_action"][
+        "description"
+    ].startswith("Operator recovery hint")
     reprocessing_slo = components["ReprocessingSloBucket"]
     calculator_bucket = components["CalculatorSloBucket"]
     assert reprocessing_slo["properties"]["stale_reprocessing_keys"]["description"].startswith(

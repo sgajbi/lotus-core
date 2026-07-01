@@ -1378,6 +1378,76 @@ async def test_get_analytics_export_jobs_query(
     assert "analytics_export_jobs.created_at ASC" in compiled
 
 
+async def test_get_failed_outbox_events_count_with_filters(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one(mock_db_session, 2)
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
+
+    value = await repository.get_failed_outbox_events_count(
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        topic="portfolio.valuation.completed",
+        correlation_id="corr-outbox-701",
+        reason_code="kafka_delivery_timeout",
+        as_of=as_of,
+    )
+
+    assert value == 2
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from outbox_events" in compiled.lower()
+    assert "outbox_events.status = 'FAILED'" in compiled
+    assert "outbox_events.aggregate_type = 'portfolio'" in compiled
+    assert "outbox_events.aggregate_id = 'PB_SG_GLOBAL_BAL_001'" in compiled
+    assert "outbox_events.event_type = 'PortfolioValuationCompleted'" in compiled
+    assert "outbox_events.topic = 'portfolio.valuation.completed'" in compiled
+    assert "outbox_events.correlation_id = 'corr-outbox-701'" in compiled
+    assert "outbox_events.last_failure_reason_code = 'kafka_delivery_timeout'" in compiled
+    assert "outbox_events.created_at <= '2026-03-14 10:50:00+00:00'" in compiled
+    assert "outbox_events.last_failure_at <= '2026-03-14 10:50:00+00:00'" in compiled
+
+
+async def test_get_failed_outbox_events_query(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    as_of = datetime(2026, 3, 14, 10, 50, tzinfo=timezone.utc)
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = ["outbox1"]
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    value = await repository.get_failed_outbox_events(
+        skip=5,
+        limit=10,
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        topic="portfolio.valuation.completed",
+        correlation_id="corr-outbox-701",
+        reason_code="kafka_delivery_timeout",
+        as_of=as_of,
+    )
+
+    assert value == ["outbox1"]
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "from outbox_events" in compiled.lower()
+    assert "outbox_events.status = 'FAILED'" in compiled
+    assert "outbox_events.aggregate_type = 'portfolio'" in compiled
+    assert "outbox_events.aggregate_id = 'PB_SG_GLOBAL_BAL_001'" in compiled
+    assert "outbox_events.event_type = 'PortfolioValuationCompleted'" in compiled
+    assert "outbox_events.topic = 'portfolio.valuation.completed'" in compiled
+    assert "outbox_events.correlation_id = 'corr-outbox-701'" in compiled
+    assert "outbox_events.last_failure_reason_code = 'kafka_delivery_timeout'" in compiled
+    assert "outbox_events.created_at <= '2026-03-14 10:50:00+00:00'" in compiled
+    assert "outbox_events.last_failure_at <= '2026-03-14 10:50:00+00:00'" in compiled
+    assert "outbox_events.last_failure_at DESC NULLS LAST" in compiled
+    assert "outbox_events.last_attempted_at DESC NULLS LAST" in compiled
+    assert "outbox_events.created_at DESC" in compiled
+    assert "LIMIT 10 OFFSET 5" in compiled
+
+
 async def test_get_reconciliation_runs_count_with_filters(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):

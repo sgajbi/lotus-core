@@ -100,6 +100,19 @@ Start with:
 4. whether the dispatcher is running and healthy
 5. whether downstream consumers are blocked or merely lagging
 
+For terminal failures, use the query-control-plane operator diagnostic endpoint:
+
+```text
+GET /support/outbox/failed-events
+```
+
+Optional filters include `aggregate_type`, `aggregate_id`, `event_type`, `topic`,
+`correlation_id`, `reason_code`, `skip`, and `limit`.
+
+The endpoint intentionally returns source-safe failure metadata only. It does not expose the raw
+outbox payload, and it marks terminal rows as not requeue-safe until a governed recovery workflow
+records actor, reason, correlation, status-transition, and outcome evidence.
+
 Use this page together with:
 
 - [Operations Runbook](Operations-Runbook)
