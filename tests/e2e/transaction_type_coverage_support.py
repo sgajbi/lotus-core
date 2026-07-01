@@ -2,50 +2,57 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from cost_engine.domain.enums.transaction_type import TransactionType
 from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
     CA_BUNDLE_A_SOURCE_OUT_TYPES,
     CA_BUNDLE_A_TARGET_IN_TYPES,
 )
+from portfolio_common.transaction_type_registry import (
+    PRODUCTION_BOOKING_TRANSACTION_TYPES,
+    TRANSACTION_TYPE_REGISTRY,
+)
 
 from .api_client import E2EApiClient
 from .data_factory import unique_suffix
 
-SUPPORTED_TRANSACTION_TYPES = set(TransactionType.list())
+SUPPORTED_TRANSACTION_TYPES = set(PRODUCTION_BOOKING_TRANSACTION_TYPES) | {"OTHER"}
+
+_TRANSFER_SIGNING_FAMILIES = {"transfer", "corporate_action", "rights"}
+_FALLBACK_SIGNED_TRANSACTION_TYPES = {"CASH_IN_LIEU"}
 
 TRANSFER_INFLOW_TRANSACTION_TYPES = {
-    "TRANSFER_IN",
-    "MERGER_IN",
-    "EXCHANGE_IN",
-    "REPLACEMENT_IN",
-    "SPIN_IN",
-    "DEMERGER_IN",
-    "SPLIT",
-    "BONUS_ISSUE",
-    "STOCK_DIVIDEND",
-    "RIGHTS_ALLOCATE",
-    "RIGHTS_SHARE_DELIVERY",
-    "RIGHTS_REFUND",
-}
+    code
+    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+    if definition.production_booking_allowed
+    and definition.lifecycle_family in _TRANSFER_SIGNING_FAMILIES
+    and definition.position_effect == "increase"
+    and code not in _FALLBACK_SIGNED_TRANSACTION_TYPES
+} | {"RIGHTS_REFUND"}
 
 TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
-    "TRANSFER_OUT",
-    "MERGER_OUT",
-    "EXCHANGE_OUT",
-    "REPLACEMENT_OUT",
-    "SPIN_OFF",
-    "DEMERGER_OUT",
-    "REVERSE_SPLIT",
-    "CONSOLIDATION",
-    "RIGHTS_SUBSCRIBE",
-    "RIGHTS_OVERSUBSCRIBE",
-    "RIGHTS_SELL",
-    "RIGHTS_EXPIRE",
+    code
+    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+    if definition.production_booking_allowed
+    and definition.lifecycle_family in _TRANSFER_SIGNING_FAMILIES
+    and definition.position_effect == "decrease"
+    and code not in _FALLBACK_SIGNED_TRANSACTION_TYPES
 }
 
-CASH_INSTRUMENT_TYPES = {"DEPOSIT", "WITHDRAWAL", "FEE", "TAX"}
-TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE = {"OTHER", "FX_SPOT", "FX_FORWARD", "FX_SWAP"}
+CASH_INSTRUMENT_TYPES = {
+    code
+    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+    if definition.production_booking_allowed
+    and definition.lifecycle_family in {"cash_movement", "expense"}
+}
+
+TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE = {
+    code
+    for code in SUPPORTED_TRANSACTION_TYPES
+    if (
+        not TRANSACTION_TYPE_REGISTRY[code].production_booking_allowed
+        or TRANSACTION_TYPE_REGISTRY[code].cash_effect == "linked_cash_legs"
+    )
+}
 BUNDLE_A_OUT_TYPES = set(CA_BUNDLE_A_SOURCE_OUT_TYPES)
 BUNDLE_A_IN_TYPES = set(CA_BUNDLE_A_TARGET_IN_TYPES)
 MIN_E2E_CASHFLOW_DISTINCT_TYPES = 5

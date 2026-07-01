@@ -1,16 +1,60 @@
 from decimal import Decimal
 
+from portfolio_common.transaction_type_registry import (
+    PRODUCTION_BOOKING_TRANSACTION_TYPES,
+    TRANSACTION_TYPE_REGISTRY,
+)
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .api_client import E2EApiClient
 from .transaction_type_coverage_support import (
+    CASH_INSTRUMENT_TYPES,
     MIN_E2E_CASHFLOW_DISTINCT_TYPES,
     SUPPORTED_TRANSACTION_TYPES,
     TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE,
+    TRANSFER_INFLOW_TRANSACTION_TYPES,
+    TRANSFER_OUTFLOW_TRANSACTION_TYPES,
     build_transaction_payloads,
     expected_cashflow_sign,
 )
+
+
+def test_transaction_type_coverage_sets_are_registry_derived():
+    transfer_signing_families = {"transfer", "corporate_action", "rights"}
+    fallback_signed_types = {"CASH_IN_LIEU"}
+
+    assert SUPPORTED_TRANSACTION_TYPES == set(PRODUCTION_BOOKING_TRANSACTION_TYPES) | {"OTHER"}
+    assert CASH_INSTRUMENT_TYPES == {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in {"cash_movement", "expense"}
+    }
+    assert TRANSFER_INFLOW_TRANSACTION_TYPES == {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in transfer_signing_families
+        and definition.position_effect == "increase"
+        and code not in fallback_signed_types
+    } | {"RIGHTS_REFUND"}
+    assert TRANSFER_OUTFLOW_TRANSACTION_TYPES == {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in transfer_signing_families
+        and definition.position_effect == "decrease"
+        and code not in fallback_signed_types
+    }
+    assert TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE == {
+        code
+        for code in SUPPORTED_TRANSACTION_TYPES
+        if (
+            not TRANSACTION_TYPE_REGISTRY[code].production_booking_allowed
+            or TRANSACTION_TYPE_REGISTRY[code].cash_effect == "linked_cash_legs"
+        )
+    }
 
 
 def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
