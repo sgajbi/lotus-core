@@ -2063,7 +2063,13 @@ health before that claim is defensible.
      as `Quality Baseline / Workflow Governance Gate`, and adding a regression assertion that the
      workflow runs the Make target. The Make gate passed with 9 tests; scoped Ruff lint and format
      checks passed; all 5 workflow YAML files parsed successfully.
-317. Reduced cost transaction datetime normalization complexity by extracting ISO text
+317. Promoted app-level validation from report-only PR evidence to a blocking PR Merge Gate. The
+     previous soft-green job hid an inner `make lotus-core-validate` failure when the CI runner
+     lacked the sibling `lotus-platform` domain-product validator; the workflow now checks out
+     `lotus-platform`, sets `LOTUS_PLATFORM_ROOT`, runs the validation command fail-closed, and
+     keeps artifact upload for diagnosis. Focused workflow and domain-product validator tests
+     protect the promoted posture.
+318. Reduced cost transaction datetime normalization complexity by extracting ISO text
      normalization, parsing, UTC-aware marking, and public normalization policy from the Pydantic
      validator. Focused transaction model tests passed with 4 tests; the broader cost-engine unit
      folder passed with 96 tests; scoped Ruff lint and format checks passed; Radon reports

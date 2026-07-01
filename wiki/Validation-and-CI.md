@@ -106,6 +106,8 @@
 runs contract checks and deterministic runtime smoke, writes machine-readable evidence under
 `output/lotus-core-validation/`, and exits non-zero when proof is weak.
 
-The PR Merge Gate runs this command as report-only evidence first. It must not become blocking until
-the signal has repeated stable CI runs, clear false-positive handling, and explicit
-lotus-ci-enforcement-governance approval for lane placement and exception policy.
+The PR Merge Gate runs this command as a blocking validation gate. The job checks out
+`lotus-platform` into the workflow workspace and sets `LOTUS_PLATFORM_ROOT` before running the
+command so domain-product contract validation uses the governed platform validator and vocabulary.
+If static contracts, supported-feature truth, or deterministic runtime smoke fail, the PR gate fails
+and still uploads the generated evidence for diagnosis.

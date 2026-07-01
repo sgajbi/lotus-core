@@ -35,6 +35,10 @@ CI is more reliable and harder to weaken accidentally:
 
 ## Compatibility And Behavior
 
+Current posture update: CR-1264 removed the `lotus-core-validation-report` non-blocking exception
+after adding the required `lotus-platform` checkout and `LOTUS_PLATFORM_ROOT` wiring for app-level
+validation. The report-only statement below is retained as historical CR-1164 rollout context.
+
 No product runtime, API, OpenAPI, database schema, data product, or downstream response contract
 changed. The `lotus-core-validation-report` job remains report-only per CR-1107 because promotion to
 blocking still requires stable low-noise CI evidence and lotus-ci-enforcement-governance approval.

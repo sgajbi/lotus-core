@@ -99,9 +99,8 @@ Current repository posture:
     `make lotus-core-validate`. It runs static contract guards plus deterministic runtime smoke over
     ingestion, event replay and ops, operational query reads, query-control-plane support and
     lineage, integration policy and capabilities, core snapshot, simulation, and source-data
-    contract governance. PR Merge Gate records it as report-only evidence first; blocking promotion
-    requires lotus-ci-enforcement-governance proof that the signal is stable, deterministic,
-    low-noise, and policy-backed.
+    contract governance. PR Merge Gate now runs it as a blocking app-validation gate with a
+    workflow-provided `lotus-platform` checkout for domain-product contract validation.
 22. Boundary mapping conformance now has a repo-native command,
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
     `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
@@ -670,6 +669,13 @@ Most relevant current governance:
     `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES` and return `INGESTION_UPLOAD_TOO_LARGE` for oversized
     payloads. The guard is static repo evidence only; live ingress, IAM, WAF, network, and
     penetration-test proof remain separate higher-lane evidence.
+59. App-level supported-surface validation is blocking in PR Merge Gate. The
+    `lotus-core-validation-report` workflow job is retained as the stable job id, but its check name
+    is `PR Merge Gate / Lotus Core Validation Gate`, it checks out `sgajbi/lotus-platform` into the
+    workflow workspace, sets `LOTUS_PLATFORM_ROOT`, and runs `make lotus-core-validate`
+    fail-closed. Do not reintroduce `continue-on-error`, `set +e`, warning-only exit handling, or
+    `exit 0` around this command. Local runs still use the default sibling
+    `../lotus-platform` path unless `LOTUS_PLATFORM_ROOT` is set explicitly.
 
 ## Context Maintenance Rule
 

@@ -31,6 +31,10 @@ The command:
 
 ## CI Posture
 
+Current posture update: CR-1264 promoted this job to a blocking PR Merge Gate after adding the
+required `lotus-platform` checkout and `LOTUS_PLATFORM_ROOT` wiring. The original report-only
+rollout description below is retained as historical rollout evidence.
+
 The PR Merge Gate now runs `make lotus-core-validate` as report-only evidence and uploads the JSON
 artifacts. The command still exits non-zero on weak proof when run directly; the report-only
 workflow step records that exit code in

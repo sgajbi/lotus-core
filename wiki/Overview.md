@@ -57,8 +57,8 @@ flowchart LR
 
 - RFC-0082 governs downstream contract-family placement.
 - RFC-0083 governs target-state hardening and implementation closure tracking.
-- `make lotus-core-validate` produces machine-readable app-level evidence and is report-only in PR
-  CI until promoted through governed CI-enforcement proof.
+- `make lotus-core-validate` produces machine-readable app-level evidence and is blocking in the
+  PR Merge Gate with a workflow-provided `lotus-platform` validation contract checkout.
 - Local validation is heavier than most Lotus repos because core contracts are high blast-radius.
 - App-local isolated runtime is supported, while shared platform runtime ownership stays in
   `lotus-platform`.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import sys
 import tempfile
@@ -21,18 +22,38 @@ VOCABULARY_FILENAMES = (
 )
 
 
+def _platform_root() -> Path:
+    configured_root = os.environ.get("LOTUS_PLATFORM_ROOT")
+    if configured_root:
+        return Path(configured_root).expanduser().resolve()
+    return PLATFORM_ROOT
+
+
+def _platform_declaration_dir() -> Path:
+    return _platform_root() / "platform-contracts" / "domain-data-products"
+
+
+def _platform_vocabulary_dir() -> Path:
+    return _platform_root() / "platform-contracts" / "domain-vocabulary"
+
+
+def _platform_validator_path() -> Path:
+    return _platform_declaration_dir() / "validate_domain_data_product_contracts.py"
+
+
 def _load_platform_validator():
-    if not PLATFORM_VALIDATOR_PATH.exists():
+    validator_path = _platform_validator_path()
+    if not validator_path.exists():
         raise FileNotFoundError(
-            f"Platform validator not found at {PLATFORM_VALIDATOR_PATH}. "
-            "Ensure the sibling lotus-platform repository is available."
+            f"Platform validator not found at {validator_path}. Ensure the sibling "
+            "lotus-platform repository is available or set LOTUS_PLATFORM_ROOT."
         )
 
     spec = importlib.util.spec_from_file_location(
-        "lotus_platform_domain_product_validator", PLATFORM_VALIDATOR_PATH
+        "lotus_platform_domain_product_validator", validator_path
     )
     if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to load platform validator from {PLATFORM_VALIDATOR_PATH}")
+        raise ImportError(f"Unable to load platform validator from {validator_path}")
 
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -46,9 +67,10 @@ def _collect_local_declaration_paths(source_directory: Path) -> list[Path]:
 
 
 def platform_validation_dependencies_available() -> bool:
+    platform_vocabulary_dir = _platform_vocabulary_dir()
     required_paths = [
-        PLATFORM_VALIDATOR_PATH,
-        *(PLATFORM_VOCABULARY_DIR / file_name for file_name in VOCABULARY_FILENAMES),
+        _platform_validator_path(),
+        *(platform_vocabulary_dir / file_name for file_name in VOCABULARY_FILENAMES),
     ]
     return all(path.exists() for path in required_paths)
 
@@ -63,6 +85,7 @@ def validate_repo_native_contracts(source_directory: Path = LOCAL_DECLARATION_DI
         return [f"{source_directory}: no repo-native declaration files were found"]
 
     validator = _load_platform_validator()
+    platform_vocabulary_dir = _platform_vocabulary_dir()
 
     with tempfile.TemporaryDirectory(prefix="lotus-core-domain-products-") as temp_dir_string:
         temp_root = Path(temp_dir_string)
@@ -76,7 +99,7 @@ def validate_repo_native_contracts(source_directory: Path = LOCAL_DECLARATION_DI
 
         for vocabulary_file_name in VOCABULARY_FILENAMES:
             shutil.copy2(
-                PLATFORM_VOCABULARY_DIR / vocabulary_file_name,
+                platform_vocabulary_dir / vocabulary_file_name,
                 temp_vocabulary_dir / vocabulary_file_name,
             )
 

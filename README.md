@@ -64,8 +64,9 @@ Current repo truth:
 5. App-local Docker Compose remains available for isolated backend development; shared platform
    runtime and ingress ownership belongs in `lotus-platform`.
 6. `make lotus-core-validate` writes machine-readable app-level evidence under
-   `output/lotus-core-validation/` and is report-only in PR CI until its signal is proven stable
-   enough for blocking promotion.
+   `output/lotus-core-validation/` and is blocking in the PR Merge Gate. The workflow checks out
+   `lotus-platform` validation contracts so repo-native domain-product validation has its required
+   platform vocabulary and validator.
 7. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
    [CR-1123](docs/architecture/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
 

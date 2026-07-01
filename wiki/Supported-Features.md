@@ -157,7 +157,7 @@ business APIs unless the route family explicitly supports that use.
 | Sensitive-data posture | Source-data security profiles, access classifications, audit requirements, and retention posture are governed through RFC-0083 security/tenancy/lifecycle material. | [Security and Governance](Security-and-Governance), `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md` |
 | Observability | Portfolio readiness publishes bounded supportability metric labels; ingestion and support routes expose operational health, SLO, backlog, and saturation views. | [API Surface](API-Surface), [Operations Runbook](Operations-Runbook) |
 | Degraded and unavailable states | DPM readiness and external treasury/OMS products fail closed with explicit missing-data families and blocked capabilities instead of inventing unsupported data. | [Mesh Data Products](Mesh-Data-Products), source-product methodologies |
-| App-level validation evidence | `make lotus-core-validate` runs static contract checks plus deterministic runtime smoke across ingestion, event replay/ops, query reads, support and lineage, integration policy/capabilities, core snapshot, simulation, and source-data contract governance. | `scripts/certify_lotus_core_app.py`, PR Merge Gate report-only artifact |
+| App-level validation evidence | `make lotus-core-validate` runs static contract checks plus deterministic runtime smoke across ingestion, event replay/ops, query reads, support and lineage, integration policy/capabilities, core snapshot, simulation, and source-data contract governance. | `scripts/certify_lotus_core_app.py`, PR Merge Gate blocking validation artifact |
 
 ## Demo And Pitch Guidance
 
