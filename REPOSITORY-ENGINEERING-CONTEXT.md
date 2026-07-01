@@ -205,6 +205,9 @@ Current repository posture:
     product-leg `cash_effect` until cash-leg transaction direction is modeled explicitly because
     cash rows intentionally invert trade labels (`BUY` cash rows are inflows; `SELL` cash rows are
     outflows).
+    E2E transaction-type coverage support derives supported types, transfer sign sets, cash
+    instrument routing, and no-cashflow-rule exceptions from the registry while preserving
+    migration-only `OTHER` coverage and explicit fallback exceptions.
 
 ## Architecture And Module Map
 

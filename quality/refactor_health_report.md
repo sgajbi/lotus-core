@@ -2181,3 +2181,7 @@ health before that claim is defensible.
      dependency transaction-type sets against the canonical registry. The guard preserves current
      cash-row trade-label inversion while preventing unregistered, target-only, migration-only, or
      directionally incompatible transaction types from entering the sorter rule table.
+347. Continued validated GitHub issue #474 by deriving e2e transaction coverage support sets from
+     the canonical transaction registry. Supported-type coverage, transfer sign sets, cash
+     instrument routing, and no-cashflow-rule exceptions now follow registry semantics while
+     preserving the existing dry-run payload matrix.
