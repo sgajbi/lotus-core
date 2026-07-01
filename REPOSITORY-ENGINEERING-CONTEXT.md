@@ -185,6 +185,8 @@ Current repository posture:
     add validation, cost, position, cashflow, supportability, and downstream compatibility proof.
     `SPIN_IN` and `DEMERGER_IN` are position transfer inflows; keep position rule tables aligned
     with registry-classified target-security inflow legs.
+    The cost engine must fail closed for registry-classified migration-only or target-not-implemented
+    types such as `OTHER`; production-booking cost enum values need explicit strategy mappings.
 
 ## Architecture And Module Map
 

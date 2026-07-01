@@ -1,7 +1,11 @@
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, cast
 
 from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.transaction_type_registry import (
+    get_transaction_type_definition,
+    is_production_booking_transaction_type,
+)
 
 from ..domain.enums.transaction_type import TransactionType
 from ..domain.models.transaction import Transaction
@@ -59,7 +63,7 @@ def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
     resolved_value = decimal_or_none(value)
     if resolved_value is None:
         raise ValueError(f"invalid decimal for {field_name}: {value!r}")
-    return resolved_value
+    return cast(Decimal, resolved_value)
 
 
 def _is_cash_instrument(transaction: Transaction) -> bool:
@@ -109,7 +113,7 @@ def _normalize_currency_code(currency_code: str) -> str:
 
 def _normalize_transaction_type(transaction_type: str | TransactionType) -> str:
     if isinstance(transaction_type, TransactionType):
-        return transaction_type.value
+        return cast(str, transaction_type.value)
     return str(transaction_type).strip().upper()
 
 
@@ -138,13 +142,14 @@ def _apply_no_realized_pnl(transaction: Transaction) -> None:
 
 
 def _has_non_zero_cost_fields(transaction: Transaction) -> bool:
-    return transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0)
+    return bool(transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0))
 
 
 def _has_non_zero_realized_pnl(transaction: Transaction) -> bool:
-    return transaction.realized_gain_loss != Decimal(
-        0
-    ) or transaction.realized_gain_loss_local != Decimal(0)
+    return bool(
+        transaction.realized_gain_loss != Decimal(0)
+        or transaction.realized_gain_loss_local != Decimal(0)
+    )
 
 
 def _normalized_price_or_error(
@@ -260,7 +265,9 @@ def _record_buy_lot(
 
 
 def _net_sell_proceeds_local(transaction: Transaction) -> Decimal:
-    return transaction.gross_transaction_amount - _transaction_total_fees(transaction)
+    return cast(Decimal, transaction.gross_transaction_amount) - _transaction_total_fees(
+        transaction
+    )
 
 
 def _validate_sell_quantity_and_proceeds(
@@ -766,9 +773,7 @@ class CostCalculator:
             TransactionType.ADJUSTMENT: DefaultStrategy(),
             TransactionType.FEE: DefaultStrategy(),
             TransactionType.TAX: UnsupportedTaxStrategy(),
-            TransactionType.OTHER: DefaultStrategy(),
         }
-        self._default_strategy = DefaultStrategy()
 
     def _validate_fx(self, t: Transaction) -> bool:
         _normalize_transaction_currencies(t)
@@ -795,11 +800,26 @@ class CostCalculator:
             )
             return
         strategy = self._resolve_strategy(transaction_type_enum, transaction)
+        if strategy is None:
+            return
         strategy.calculate_costs(transaction, self._disposition_engine, self._error_reporter)
 
     def _resolve_strategy(
         self, transaction_type: TransactionType, transaction: Transaction
-    ) -> TransactionCostStrategy:
+    ) -> TransactionCostStrategy | None:
+        if not is_production_booking_transaction_type(transaction_type.value):
+            definition = get_transaction_type_definition(transaction_type.value)
+            support_status = (
+                definition.calculation_support_status if definition is not None else "unknown"
+            )
+            self._error_reporter.add_error(
+                transaction.transaction_id,
+                "Transaction type "
+                f"'{transaction_type.value}' is not allowed for production booking "
+                f"(registry_status={support_status}).",
+            )
+            return None
+
         if _is_cash_instrument(transaction):
             if transaction_type in {
                 TransactionType.SELL,
@@ -813,4 +833,10 @@ class CostCalculator:
             }:
                 return CashOutflowStrategy()
 
-        return self._strategies.get(transaction_type, self._default_strategy)
+        strategy = self._strategies.get(transaction_type)
+        if strategy is None:
+            self._error_reporter.add_error(
+                transaction.transaction_id,
+                f"No cost calculation strategy is registered for '{transaction_type.value}'.",
+            )
+        return strategy
