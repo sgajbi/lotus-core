@@ -65,9 +65,9 @@ changed in this slice.
 
 ## Issue Posture
 
-This advances #664 and #648 but does not close either issue locally. #664 still needs the
-`PerformanceComponentEconomics:v1` optional cashflow/cost-row mapping work called out in its
-acceptance criteria, including multiple fee currencies. #648 still needs broader repository
+This advanced #664 and #648 but did not close either issue locally at the time of CR-1257. CR-1258
+later completed the `PerformanceComponentEconomics:v1` optional cashflow/cost-row typed mapping work
+called out in #664, including multiple fee currencies. #648 still needs broader repository
 result-mapping standards and at least one architecture/static detection path for ORM-row leakage.
 
 ## Bank-Buyable Control Movement

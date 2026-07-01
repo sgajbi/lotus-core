@@ -11,7 +11,6 @@ from portfolio_common.logging_utils import correlation_id_var
 from pydantic import ValidationError
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
-from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from services.ingestion_service.app.services.ingestion_service import IngestionService
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     transaction_event_to_record_values,
@@ -20,6 +19,14 @@ from src.services.query_service.app.dtos.reference_integration_dto import Refere
 from src.services.query_service.app.dtos.reference_integration_portfolio_tax_lot_dto import (
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
+)
+from src.services.query_service.app.read_models import (
+    PerformanceEconomicsCostReadRecord,
+    PerformanceEconomicsTransactionReadRecord,
+    PortfolioTaxLotReadRecord,
+)
+from src.services.query_service.app.services.performance_component_economics import (
+    build_performance_component_economics_rows,
 )
 from src.services.query_service.app.services.reference_data_mappers import portfolio_tax_lot_record
 
@@ -231,4 +238,65 @@ def test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity() -
         "source_transaction_id": "TXN-MAP-001",
         "calculation_policy_id": "BUY_DEFAULT_POLICY",
         "calculation_policy_version": "1.0.0",
+    }
+
+
+def test_performance_economics_mapping_uses_typed_read_records_for_optional_joins() -> None:
+    rows = build_performance_component_economics_rows(
+        [
+            PerformanceEconomicsTransactionReadRecord(
+                transaction_id="TXN-MAP-PERF-001",
+                portfolio_id="PB_SG_GLOBAL_BAL_001",
+                security_id=" EQ_US_AAPL ",
+                transaction_type=" dividend ",
+                currency=" eur ",
+                trade_currency=" usd ",
+                transaction_date=datetime(2026, 3, 25, 9, 30, tzinfo=UTC),
+                gross_transaction_amount=Decimal("1000.0000000000"),
+                trade_fee=Decimal("1.0000000000"),
+                withholding_tax_amount=Decimal("15.0000000000"),
+                other_interest_deductions_amount=Decimal("5.0000000000"),
+                net_interest_amount=Decimal("80.0000000000"),
+                realized_capital_pnl_local=Decimal("0"),
+                realized_fx_pnl_local=Decimal("0"),
+                realized_total_pnl_local=Decimal("0"),
+                realized_capital_pnl_base=Decimal("10.0000000000"),
+                realized_fx_pnl_base=Decimal("2.0000000000"),
+                realized_total_pnl_base=Decimal("12.0000000000"),
+                transaction_fx_rate=Decimal("1.1000000000"),
+                fx_contract_id="FXC-MAP-001",
+                cashflow=None,
+                costs=(
+                    PerformanceEconomicsCostReadRecord(
+                        fee_type="brokerage",
+                        amount=Decimal("1.2500000000"),
+                        currency="usd",
+                        updated_at=datetime(2026, 3, 25, 10, 0, tzinfo=UTC),
+                    ),
+                    PerformanceEconomicsCostReadRecord(
+                        fee_type="exchange_fee",
+                        amount=Decimal("2.5000000000"),
+                        currency="eur",
+                        updated_at=datetime(2026, 3, 25, 10, 5, tzinfo=UTC),
+                    ),
+                ),
+                updated_at=datetime(2026, 3, 25, 9, 45, tzinfo=UTC),
+            )
+        ]
+    )
+
+    assert rows[0].security_id == "EQ_US_AAPL"
+    assert rows[0].transaction_type == "DIVIDEND"
+    assert rows[0].currency == "EUR"
+    assert rows[0].trade_currency == "USD"
+    assert rows[0].cashflow_amount is None
+    assert rows[0].trade_fee_currency == "MIXED"
+    assert [(fee.currency, fee.amount) for fee in rows[0].trade_fee_components] == [
+        ("EUR", Decimal("2.5000000000")),
+        ("USD", Decimal("1.2500000000")),
+    ]
+    assert rows[0].source_lineage == {
+        "source_system": "transactions",
+        "source_table": "transactions,cashflows,transaction_costs",
+        "contract_version": "performance_component_economics_v1",
     }

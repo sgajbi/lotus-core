@@ -4,7 +4,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import Transaction
+from portfolio_common.database_models import Cashflow, Transaction, TransactionCost
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
@@ -36,6 +36,69 @@ def mock_db_session() -> AsyncMock:
 def repository(mock_db_session: AsyncMock) -> TransactionRepository:
     """Provides an instance of the repository with a mock session."""
     return TransactionRepository(mock_db_session)
+
+
+def _performance_economics_transaction(
+    transaction_id: str = "TXN-PERF-001",
+) -> Transaction:
+    transaction = Transaction(
+        transaction_id=transaction_id,
+        portfolio_id="P1",
+        instrument_id="EQ_US_AAPL",
+        security_id=" EQ_US_AAPL ",
+        transaction_type="DIVIDEND",
+        quantity=Decimal("10.0000000000"),
+        price=Decimal("100.0000000000"),
+        gross_transaction_amount=Decimal("1000.0000000000"),
+        trade_currency="usd",
+        currency="usd",
+        transaction_date=datetime(2026, 4, 10, 14, 0, tzinfo=UTC),
+        trade_fee=Decimal("2.0000000000"),
+        withholding_tax_amount=Decimal("15.0000000000"),
+        other_interest_deductions_amount=Decimal("5.0000000000"),
+        net_interest_amount=Decimal("80.0000000000"),
+        realized_capital_pnl_local=Decimal("10.0000000000"),
+        realized_fx_pnl_local=Decimal("1.0000000000"),
+        realized_total_pnl_local=Decimal("11.0000000000"),
+        realized_capital_pnl_base=Decimal("12.0000000000"),
+        realized_fx_pnl_base=Decimal("2.0000000000"),
+        realized_total_pnl_base=Decimal("14.0000000000"),
+        transaction_fx_rate=Decimal("1.2000000000"),
+        fx_contract_id="FXC-001",
+        updated_at=datetime(2026, 4, 10, 16, 0, tzinfo=UTC),
+    )
+    transaction.cashflow = Cashflow(
+        transaction_id=transaction_id,
+        portfolio_id="P1",
+        security_id="EQ_US_AAPL",
+        cashflow_date=date(2026, 4, 10),
+        epoch=2,
+        amount=Decimal("100.0000000000"),
+        currency="usd",
+        classification="DIVIDEND",
+        timing="EOD",
+        calculation_type="BOOKED",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        updated_at=datetime(2026, 4, 10, 17, 0, tzinfo=UTC),
+    )
+    transaction.costs = [
+        TransactionCost(
+            transaction_id=transaction_id,
+            fee_type="brokerage",
+            amount=Decimal("1.2500000000"),
+            currency="usd",
+            updated_at=datetime(2026, 4, 10, 18, 0, tzinfo=UTC),
+        ),
+        TransactionCost(
+            transaction_id=transaction_id,
+            fee_type="exchange_fee",
+            amount=Decimal("0.7500000000"),
+            currency="usd",
+            updated_at=datetime(2026, 4, 10, 18, 30, tzinfo=UTC),
+        ),
+    ]
+    return transaction
 
 
 async def test_get_transactions_default_sort(
@@ -490,7 +553,9 @@ async def test_list_performance_component_economics_evidence_selects_latest_cash
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     mock_rows = MagicMock()
-    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    mock_rows.scalars.return_value.unique.return_value.all.return_value = [
+        _performance_economics_transaction()
+    ]
     mock_db_session.execute = AsyncMock(return_value=mock_rows)
 
     rows = await repository.list_performance_component_economics_evidence(
@@ -503,6 +568,16 @@ async def test_list_performance_component_economics_evidence_selects_latest_cash
     )
 
     assert len(rows) == 1
+    assert rows[0].transaction_id == "TXN-PERF-001"
+    assert rows[0].security_id == " EQ_US_AAPL "
+    assert rows[0].cashflow is not None
+    assert rows[0].cashflow.amount == Decimal("100.0000000000")
+    assert rows[0].cashflow.updated_at == datetime(2026, 4, 10, 17, 0, tzinfo=UTC)
+    assert [cost.fee_type for cost in rows[0].costs] == ["brokerage", "exchange_fee"]
+    assert [cost.amount for cost in rows[0].costs] == [
+        Decimal("1.2500000000"),
+        Decimal("0.7500000000"),
+    ]
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "row_number() OVER" in compiled_query
@@ -524,7 +599,10 @@ async def test_list_performance_component_economics_evidence_applies_cursor_and_
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     mock_rows = MagicMock()
-    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    transaction = _performance_economics_transaction(transaction_id="TXN-PERF-002")
+    transaction.cashflow = None
+    transaction.costs = []
+    mock_rows.scalars.return_value.unique.return_value.all.return_value = [transaction]
     mock_db_session.execute = AsyncMock(return_value=mock_rows)
 
     rows = await repository.list_performance_component_economics_evidence(
@@ -539,6 +617,9 @@ async def test_list_performance_component_economics_evidence_applies_cursor_and_
     )
 
     assert len(rows) == 1
+    assert rows[0].transaction_id == "TXN-PERF-002"
+    assert rows[0].cashflow is None
+    assert rows[0].costs == ()
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "trim(transactions.security_id) IN ('EQ_US_AAPL', 'EQ_US_MSFT')" in compiled_query
