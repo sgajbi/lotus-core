@@ -69,17 +69,26 @@ python -c "from pathlib import Path; import yaml; [yaml.safe_load(p.read_text())
 
 Observed:
 
-- focused OpenAPI/workflow/Spectral tests passed with `21` tests
+- focused OpenAPI/workflow/Spectral tests passed with `22` tests
 - Ruff lint passed
 - Ruff format check passed
 - `python scripts\openapi_quality_gate.py` passed
 - `make quality-openapi-spectral-gate` generated 14 service artifacts and reported no Spectral
   results at `warn` or higher
+- `make quality-workflow-governance-gate` passed with `12` tests
+- `make quality-wiki-docs-gate` passed
+- `git diff --check` passed
+- stranded-truth reconciliation found only
+  `origin/dependabot/github_actions/github-actions-02325a8da5` and
+  `origin/dependabot/pip/python-runtime-b808a9fc65`
+- wiki publication check still reports pre-existing published-wiki drift for `Data-Models.md`,
+  `Mesh-Data-Products.md`, `Operations-Runbook.md`, and `Outbox-Events.md`
 - workflow YAML parse passed for all workflow files
 
 ## Residual Issue Scope
 
-Issue #444 should remain open until GitHub CI proves the new quality-baseline step on the branch.
+Issue #444 is fixed locally pending PR CI/QA evidence. It should remain open until GitHub CI proves
+the new quality-baseline step on the branch.
 Broader `spectral:oas` cleanup remains a separate backlog item and should not be represented as
 complete by this blocker-subset gate.
 

@@ -2083,8 +2083,8 @@ health before that claim is defensible.
      `output/openapi/` and adding an enforced portable Spectral blocker-subset gate to the
      quality-baseline API governance job. The new `make quality-openapi-spectral-gate` generated
      14 service artifacts and reported no warn-or-higher Spectral results; focused
-     OpenAPI/workflow/Spectral tests passed with 21 tests; scoped Ruff lint and format checks
-     passed; `python scripts/openapi_quality_gate.py` passed; and workflow YAML parsing passed.
+     OpenAPI/workflow/Spectral tests passed with 22 tests; `python scripts/openapi_quality_gate.py`
+     passed; and `make quality-workflow-governance-gate` passed with 12 tests.
 322. Began validated GitHub issue #462 by adding AST-based direct-import architecture checks to
      `scripts/architecture_boundary_guard.py`. `make architecture-guard` now blocks direct
      query-control-plane router imports of query-service repositories, query runtime router imports
