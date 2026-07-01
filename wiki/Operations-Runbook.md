@@ -123,6 +123,12 @@ Readiness dependency checks emit bounded Prometheus telemetry:
 Use these for dependency flapping and latency trends. Keep portfolio, security, request,
 correlation, trace, and raw exception details in logs or support APIs, not metric labels.
 
+Metric vocabulary is guarded by `make metric-vocabulary-guard`. HTTP request metrics use
+`endpoint_template` for route templates; raw `path`, portfolio/account/client/security IDs,
+request/correlation/trace IDs, payload fields, stack traces, and raw exception text are forbidden
+Prometheus labels. Service-local metrics must either move to `portfolio_common.monitoring` or be
+registered with an owner in `SERVICE_LOCAL_METRIC_OWNERS`.
+
 ## Database-first diagnostics
 
 Prefer API diagnostics first, but go to the database when:

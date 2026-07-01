@@ -151,7 +151,13 @@ Current repository posture:
     `health_readiness_state` metrics with only service, dependency, status, and readiness-state
     labels; keep raw exception text, business identifiers, request IDs, correlation IDs, and trace
     IDs out of Prometheus labels.
-31. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
+31. Prometheus metric vocabulary is governed by `portfolio_common.observability_contracts` and
+    enforced by `make metric-vocabulary-guard` through `make lint`. HTTP request metrics must use
+    `endpoint_template`, not raw `path`. New labels must be registered in
+    `TELEMETRY_METRIC_ALLOWED_LABELS`, must not be listed in `TELEMETRY_METRIC_FORBIDDEN_LABELS`,
+    and service-local metrics outside `portfolio_common.monitoring` must be registered in
+    `SERVICE_LOCAL_METRIC_OWNERS` with an owning service.
+32. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
     shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,
     correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
@@ -166,7 +172,7 @@ Current repository posture:
     maps application/service failures, prefer typed service exceptions and router type dispatch
     over substring checks against exception message text; keep human-readable details bounded and
     stable in the problem-details mapper.
-32. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
+33. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
     `LOTUS_CORE_STRICT_CONFIG_VALIDATION=true` or non-local `ENVIRONMENT` is active; local profiles
@@ -179,12 +185,12 @@ Current repository posture:
     defense in depth, not as global service-level enforcement, unless a gateway-backed scope and
     gateway policy ID are configured. `make monetary-float-guard` uses token-aware money-like
     matching and currently has zero active findings and zero allowlisted suppressions.
-31. Service runtime import correctness is now part of the architecture guard. Service code under
+34. Service runtime import correctness is now part of the architecture guard. Service code under
     `src/services/<service>/app` must not import its own application package through the repo-root
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root
     tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`
     enforces this to prevent CI-only Docker readiness failures caused by packaging path drift.
-33. Canonical transaction-type classification now starts in
+35. Canonical transaction-type classification now starts in
     `portfolio_common.transaction_type_registry`. New or changed transaction types in cost,
     cashflow, position, query, validation, or RFC target work must be classified there first.
     `OTHER` is migration-only and not production-booking allowed. Redemption and
