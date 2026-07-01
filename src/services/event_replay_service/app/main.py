@@ -41,5 +41,5 @@ configure_standard_http_app(
     id_generator=lambda prefix: generate_correlation_id(prefix),
 )
 
-health_router = create_health_router("db", "kafka")
+health_router = create_health_router("db", "kafka", service_name=SERVICE_NAME)
 include_routers(app, health_router, ingestion_operations.router)

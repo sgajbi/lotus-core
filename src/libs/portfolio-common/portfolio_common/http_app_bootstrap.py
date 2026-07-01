@@ -304,5 +304,5 @@ def create_standard_health_app(
         id_generator=id_generator,
         metrics_access_token=metrics_access_token,
     )
-    include_routers(app, create_health_router(*dependencies))
+    include_routers(app, create_health_router(*dependencies, service_name=service_name))
     return app
