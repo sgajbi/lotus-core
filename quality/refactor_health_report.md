@@ -2148,3 +2148,8 @@ health before that claim is defensible.
      outflows in the position calculator. Focused position and registry-conformance tests passed
      with 20 tests and now fail if registry-classified inflow target-security legs drift from the
      position rule table.
+340. Continued validated GitHub issue #474 by removing the cost-engine `OTHER` catch-all path.
+     `TransactionType.OTHER` no longer maps to `DefaultStrategy`; registry-disallowed transaction
+     types fail closed before cost fields are populated, and focused cost/registry tests passed
+     with 10 tests. Cost-engine production-booking enum values now need both registry approval and
+     an explicit strategy.

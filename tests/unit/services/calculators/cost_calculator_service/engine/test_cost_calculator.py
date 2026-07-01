@@ -22,6 +22,7 @@ from cost_engine.processing.disposition_engine import (
 from cost_engine.processing.error_reporter import (
     ErrorReporter,
 )
+from portfolio_common.transaction_type_registry import PRODUCTION_BOOKING_TRANSACTION_TYPES
 
 
 @pytest.fixture
@@ -222,6 +223,49 @@ def test_cost_calculator_normalizes_transaction_type_before_strategy_resolution(
     assert lowercase_buy.transaction_type == "BUY"
     assert lowercase_buy.net_cost == Decimal("1000.0")
     mock_disposition_engine.add_buy_lot.assert_called_once_with(lowercase_buy)
+
+
+def test_cost_calculator_has_explicit_strategies_for_production_booking_enum_types(
+    cost_calculator,
+):
+    production_booking_cost_types = {
+        TransactionType(code)
+        for code in PRODUCTION_BOOKING_TRANSACTION_TYPES
+        if TransactionType.is_valid(code)
+    }
+
+    assert set(cost_calculator._strategies) == production_booking_cost_types
+    assert TransactionType.OTHER not in cost_calculator._strategies
+
+
+def test_cost_calculator_rejects_other_before_default_costing(
+    cost_calculator, mock_disposition_engine, error_reporter
+):
+    migration_only_transaction = Transaction(
+        transaction_id="OTHER_MIGRATION_ONLY_01",
+        portfolio_id="P1",
+        instrument_id="LEGACY",
+        security_id="LEGACY",
+        transaction_type=" other ",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("1"),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+    )
+
+    cost_calculator.calculate_transaction_costs(migration_only_transaction)
+
+    assert migration_only_transaction.transaction_type == "OTHER"
+    assert error_reporter.has_errors_for("OTHER_MIGRATION_ONLY_01")
+    assert "not allowed for production booking" in error_reporter.get_errors()[0].error_reason
+    assert "registry_status=migration_only" in error_reporter.get_errors()[0].error_reason
+    assert migration_only_transaction.net_cost is None
+    assert migration_only_transaction.net_cost_local is None
+    assert migration_only_transaction.gross_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
 def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
