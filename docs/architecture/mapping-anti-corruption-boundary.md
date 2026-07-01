@@ -34,6 +34,6 @@ Current coverage:
 
 ## Follow-Up Scope
 
-GitHub issue #661 remains the umbrella mapping/anti-corruption contract. GitHub issue #665 tracks
-continued conformance coverage across more event families, source-data products, API DTO to command
-paths, and typed read records.
+GitHub issue #665 is fixed locally pending PR CI/QA for the current conformance gate. GitHub issue
+#661 remains the umbrella mapping/anti-corruption contract for continued coverage across more event
+families, source-data products, API DTO to command paths, and typed read records.

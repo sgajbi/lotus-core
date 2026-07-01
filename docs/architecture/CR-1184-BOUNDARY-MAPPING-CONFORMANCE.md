@@ -2,8 +2,9 @@
 
 ## Objective
 
-Begin GitHub issues #665 and #661 by adding a discoverable boundary-mapping conformance suite and
-extracting the transaction event-to-persistence-record mapping into an explicit function.
+Fix GitHub issue #665 locally and begin the broader #661 mapping/anti-corruption contract by adding
+a discoverable boundary-mapping conformance suite and extracting the transaction
+event-to-persistence-record mapping into an explicit function.
 
 ## Expected Improvement
 
@@ -36,7 +37,9 @@ new mapper also explicitly excludes event envelope metadata (`event_type`, `sche
 ## Validation
 
 - `python -m pytest tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py tests/unit/services/persistence_service/repositories/test_transaction_db_repository.py -q`
+- Result refreshed on 2026-07-01: `9 passed`
 - `make test-boundary-mapping-conformance`
+- Result refreshed on 2026-07-01: `3 passed`
 - `python scripts/test_manifest.py --suite boundary-mapping-conformance --validate-only`
 - `python -m ruff check tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py src/services/persistence_service/app/repositories/transaction_db_repo.py scripts/test_manifest.py`
 
@@ -47,8 +50,12 @@ new repo-native conformance command and mapping boundary policy were introduced.
 update is required because no operator workflow, public API contract, or user-facing runtime
 behavior changed.
 
-## Follow-Up
+## Issue Closure And Follow-Up
 
-Issues #661 and #665 remain open for broader API DTO-to-command mappers, typed read records,
+Issue #665 is fixed locally pending PR CI/QA because the acceptance criteria are now backed by a
+dedicated repo-native conformance suite, positive and negative mapping examples, a transaction
+lifecycle payload, a source-data product response, and manifest/Makefile wiring.
+
+Issue #661 remains open as the broader umbrella for API DTO-to-command mappers, typed read records,
 Kafka/event adapter mappers, additional source-data product envelopes, architecture guard coverage,
 and CI evidence after the branch is pushed.

@@ -66,7 +66,7 @@ tested modules.
 | Performance component economics paging | Improving | CR-1195 adds request-scoped cursor paging, bounded `page_size + 1` row evidence reads, explicit returned-page totals scope, and bad-token HTTP 400 handling for `PerformanceComponentEconomics:v1` |
 | Documentation governance | Improving | CR-1179 adds a repo-native wiki docs gate for sidebar coverage, orphan pages, publication-safe names, first headings, local relative links, optional publication parity, and quality-baseline enforcement |
 | Infrastructure error handling | Improving | CR-1183 adds an initial typed infrastructure error taxonomy and routes replay audit persistence no-session/persistence failures through `InfrastructureAuditWriteFailed` with safe reason codes |
-| Boundary mapping conformance | Improving | CR-1184 adds `make test-boundary-mapping-conformance`, extracts transaction event-to-record mapping, and covers representative transaction and portfolio tax-lot source-data mappings |
+| Boundary mapping conformance | Improving | CR-1184 adds `make test-boundary-mapping-conformance`, extracts transaction event-to-record mapping, covers representative transaction and portfolio tax-lot source-data mappings, and fixes #665 locally pending PR CI/QA while #661 remains the broader mapping/anti-corruption umbrella |
 
 ## Current Slice Update
 
