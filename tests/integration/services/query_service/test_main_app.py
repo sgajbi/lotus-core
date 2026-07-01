@@ -137,6 +137,30 @@ async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadat
         assert response_schema["properties"]["product_version"]["default"] == "v1"
 
 
+async def test_openapi_describes_transaction_date_as_event_timestamp(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    components = response.json()["components"]["schemas"]
+
+    transaction_date = components["TransactionRecord"]["properties"]["transaction_date"]
+    description = transaction_date["description"]
+
+    assert description == (
+        "Current transaction event timestamp used for trade/event-date filtering and ordering."
+    )
+    assert "booking" not in description.lower()
+
+    sell_disposal_transaction_date = components["SellDisposalRecord"]["properties"][
+        "transaction_date"
+    ]
+    sell_disposal_description = sell_disposal_transaction_date["description"]
+
+    assert sell_disposal_description == (
+        "SELL transaction event timestamp used for disposal chronology."
+    )
+    assert "booking" not in sell_disposal_description.lower()
+
+
 async def test_openapi_excludes_control_plane_analytics_input_contracts(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
@@ -564,7 +588,7 @@ async def test_openapi_describes_transaction_filters_and_not_found_examples(asyn
             "description"
         ]
         == "Canonical settlement timestamp when known. Use alongside transaction_date to "
-        "differentiate trade booking from contractual or effective cash/value settlement."
+        "differentiate the transaction event from contractual or effective cash/value settlement."
     )
     assert transaction_response["properties"]["product_name"]["default"] == (
         "TransactionLedgerWindow"

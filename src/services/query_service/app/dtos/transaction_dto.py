@@ -34,13 +34,18 @@ class TransactionRecord(BaseModel):
         ..., description="Transaction identifier.", examples=["TXN-2026-0001"]
     )
     transaction_date: datetime = Field(
-        ..., description="Transaction booking timestamp.", examples=["2026-03-01T09:30:00Z"]
+        ...,
+        description=(
+            "Current transaction event timestamp used for trade/event-date filtering and ordering."
+        ),
+        examples=["2026-03-01T09:30:00Z"],
     )
     settlement_date: Optional[datetime] = Field(
         None,
         description=(
             "Canonical settlement timestamp when known. Use alongside transaction_date to "
-            "differentiate trade booking from contractual or effective cash/value settlement."
+            "differentiate the transaction event from contractual or effective cash/value "
+            "settlement."
         ),
         examples=["2026-03-03T00:00:00Z"],
     )

@@ -11,7 +11,7 @@ class SellDisposalRecord(BaseModel):
     )
     transaction_date: datetime = Field(
         ...,
-        description="Timestamp when the SELL transaction was booked.",
+        description="SELL transaction event timestamp used for disposal chronology.",
         examples=["2026-03-01T09:30:00Z"],
     )
     instrument_id: str = Field(..., description="Instrument identifier.", examples=["AAPL"])

@@ -2128,3 +2128,11 @@ health before that claim is defensible.
      posture from raw holdings. Focused builder/service/DTO tests passed with 41 tests,
      router/OpenAPI tests passed with 40 tests, and source-data catalog/security/domain-product
      tests passed with 43 tests.
+337. Addressed validated GitHub issue #440 by aligning transaction-date API/OpenAPI wording with
+     the temporal vocabulary and RFC-0083 reconstruction target model. `TransactionRecord` now
+     describes the current transaction event timestamp used for trade/event-date filtering and
+     ordering, adjacent `SellDisposalRecord` wording no longer teaches the shared vocabulary that
+     transaction dates are booked timestamps, `booking_date` remains a future target concept, the
+     wealth-reporting guide and API vocabulary inventory were updated, and OpenAPI regression
+     assertions now prevent booking terminology from returning to transaction-date field
+     descriptions.
