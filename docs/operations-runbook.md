@@ -32,6 +32,7 @@ Dependency status values are:
 | `ok` | Dependency responded within the readiness budget. |
 | `unavailable` | Dependency check completed and reported unavailable. |
 | `timeout` | Dependency check exceeded its per-check readiness timeout. |
+| `misconfigured` | Dependency configuration was invalid or missing before the probe ran. |
 | `error` | Dependency check raised an unexpected exception after readiness isolation. |
 
 Readiness returns HTTP 200 only when every configured dependency is `ok`; otherwise it returns HTTP
@@ -45,9 +46,9 @@ Shared readiness checks also emit Prometheus dependency telemetry:
 | `health_dependency_check_duration_seconds` | `service`, `dependency` | Track dependency-check latency. |
 | `health_readiness_state` | `service`, `state` | Expose the current service readiness posture. |
 
-The dependency status label uses only `ok`, `unavailable`, `timeout`, or `error`. Do not add raw
-exception text, portfolio IDs, security IDs, request IDs, trace IDs, or correlation IDs as health
-metric labels.
+The dependency status label uses only `ok`, `unavailable`, `timeout`, `misconfigured`, or `error`.
+Do not add raw exception text, portfolio IDs, security IDs, request IDs, trace IDs, or correlation
+IDs as health metric labels.
 
 ## Metric Vocabulary Guard
 

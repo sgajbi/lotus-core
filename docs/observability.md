@@ -36,7 +36,8 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     `health_dependency_check_total{service,dependency,status}`,
     `health_dependency_check_duration_seconds{service,dependency}`, and
     `health_readiness_state{service,state}`. Status values reuse the readiness vocabulary `ok`,
-    `unavailable`, `timeout`, and `error`; readiness state is bounded to `ready` or `not_ready`.
+    `unavailable`, `timeout`, `misconfigured`, and `error`; readiness state is bounded to `ready`
+    or `not_ready`.
     Raw exception text, portfolio IDs, security IDs, request IDs, trace IDs, and correlation IDs
     must not be metric labels.
 11. Metric vocabulary is governed by `portfolio_common.observability_contracts` and enforced by
