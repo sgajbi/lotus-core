@@ -599,7 +599,9 @@ Most relevant current governance:
     `docker compose logs` capture is only fallback evidence after fixture ownership is gone.
 49. GitHub Security automation coverage is governed as repository truth. `.github/dependabot.yml`
     covers GitHub Actions, every governed Python dependency manifest, and every runtime service
-    Dockerfile with grouped, bounded PR limits. Keep
+    Dockerfile. Routine Dependabot version-update PR churn is currently paused with
+    `open-pull-requests-limit: 0` while issue-closure PRs are stabilized; reviewed bot suggestions
+    should be cherry-picked into governed dependency or CI slices with local gates. Keep
     `tests/unit/test_dependabot_security_coverage.py` aligned with new service manifests or
     Dockerfiles so supply-chain coverage cannot silently drift. Repository admins still need to
     enable Dependabot alerts/security updates and CodeQL/default code scanning in GitHub settings;
