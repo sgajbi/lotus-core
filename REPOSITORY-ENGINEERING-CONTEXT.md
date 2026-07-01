@@ -177,6 +177,12 @@ Current repository posture:
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root
     tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`
     enforces this to prevent CI-only Docker readiness failures caused by packaging path drift.
+33. Canonical transaction-type classification now starts in
+    `portfolio_common.transaction_type_registry`. New or changed transaction types in cost,
+    cashflow, position, query, validation, or RFC target work must be classified there first.
+    `OTHER` is migration-only and not production-booking allowed. Redemption and
+    conversion/exercise target types are known but not implemented until dedicated runtime slices
+    add validation, cost, position, cashflow, supportability, and downstream compatibility proof.
 
 ## Architecture And Module Map
 

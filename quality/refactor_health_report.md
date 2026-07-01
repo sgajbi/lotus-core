@@ -2136,3 +2136,10 @@ health before that claim is defensible.
      wealth-reporting guide and API vocabulary inventory were updated, and OpenAPI regression
      assertions now prevent booking terminology from returning to transaction-date field
      descriptions.
+338. Began validated GitHub issue #474 by adding a canonical shared transaction type registry in
+     `portfolio_common.transaction_type_registry`. The registry classifies current cost-engine
+     transaction types, representative cashflow/position/query rule-table types, internal
+     generated FX cash-settlement markers, migration-only `OTHER`, and target-only redemption and
+     conversion/exercise types. Focused registry tests passed with 7 tests and now fail when a
+     cost enum or representative local transaction-type rule table adds a type without registry
+     classification.
