@@ -1946,8 +1946,16 @@ async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
 
     assert response.status_code == 500
     body = response.json()
-    assert body["detail"]["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
-    job_id = body["detail"]["job_id"]
+    detail = body["detail"]
+    assert detail["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
+    assert detail["publish_state"] == "published"
+    assert detail["work_state"] == "published"
+    assert detail["published_record_count"] == 1
+    assert detail["retry_safe"] is False
+    assert detail["recovery_action"] == "repair_ingestion_job_bookkeeping"
+    assert detail["recovery_path"] == "ingestion_job_bookkeeping_repair"
+    assert detail["supportability_reason_code"] == "POST_PUBLISH_BOOKKEEPING_FAILED"
+    job_id = detail["job_id"]
 
     job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert job.status == "accepted"
@@ -1955,6 +1963,19 @@ async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failure_phase"] == "queue_bookkeeping"
+
+    repair_response = await event_replay_test_client.post(
+        f"/ingestion/jobs/{job_id}/bookkeeping/repair"
+    )
+    assert repair_response.status_code == 200
+    repair_body = repair_response.json()
+    assert repair_body["job_id"] == job_id
+    assert repair_body["previous_status"] == "accepted"
+    assert repair_body["repaired_status"] == "queued"
+    assert repair_body["recovery_action"] == "repair_ingestion_job_bookkeeping"
+    assert repair_body["supportability_reason_code"] == "POST_PUBLISH_BOOKKEEPING_FAILED"
+    assert repair_body["retry_safe"] is False
+    assert ingestion_test_harness["fake_job_service"].jobs[job_id].status == "queued"
 
 
 async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
@@ -1980,8 +2001,15 @@ async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
 
     assert response.status_code == 500
     body = response.json()
-    assert body["detail"]["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
-    job_id = body["detail"]["job_id"]
+    detail = body["detail"]
+    assert detail["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
+    assert detail["publish_state"] == "not_published"
+    assert detail["work_state"] == "persisted"
+    assert detail["published_record_count"] == 0
+    assert detail["retry_safe"] is False
+    assert detail["recovery_action"] == "repair_ingestion_job_bookkeeping"
+    assert detail["supportability_reason_code"] == "POST_PERSIST_BOOKKEEPING_FAILED"
+    job_id = detail["job_id"]
 
     persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
         "benchmark_definitions"
@@ -1995,6 +2023,38 @@ async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failure_phase"] == "persist_bookkeeping"
+
+    repair_response = await event_replay_test_client.post(
+        f"/ingestion/jobs/{job_id}/bookkeeping/repair"
+    )
+    assert repair_response.status_code == 200
+    assert repair_response.json()["supportability_reason_code"] == (
+        "POST_PERSIST_BOOKKEEPING_FAILED"
+    )
+
+
+async def test_ingestion_bookkeeping_repair_rejects_jobs_without_failure_evidence(
+    async_test_client: httpx.AsyncClient,
+    event_replay_test_client: httpx.AsyncClient,
+):
+    ingest_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_BOOKKEEPING_REPAIR_NOT_ELIGIBLE_001"),
+    )
+    assert ingest_response.status_code == 202
+    job_id = ingest_response.json()["job_id"]
+
+    repair_response = await event_replay_test_client.post(
+        f"/ingestion/jobs/{job_id}/bookkeeping/repair"
+    )
+
+    assert repair_response.status_code == 409
+    assert repair_response.json()["detail"] == {
+        "code": "INGESTION_BOOKKEEPING_REPAIR_NOT_ELIGIBLE",
+        "message": "Ingestion job is not eligible for bookkeeping repair.",
+        "job_id": job_id,
+        "status": "queued",
+    }
 
 
 def _model_portfolio_definition_payload() -> dict[str, list[dict[str, object]]]:

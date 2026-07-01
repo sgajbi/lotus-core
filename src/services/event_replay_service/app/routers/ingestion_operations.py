@@ -7,6 +7,11 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 
+from src.services.ingestion_service.app.bookkeeping_recovery import (
+    POST_BOOKKEEPING_FAILURE_PHASES,
+    POST_BOOKKEEPING_REPAIR_ACTION,
+    bookkeeping_reason_code,
+)
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     ConsumerDlqEventListResponse,
     ConsumerDlqReplayRequest,
@@ -17,6 +22,7 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     IngestionErrorBudgetStatusResponse,
     IngestionHealthSummaryResponse,
     IngestionIdempotencyDiagnosticsResponse,
+    IngestionJobBookkeepingRepairResponse,
     IngestionJobFailureListResponse,
     IngestionJobListResponse,
     IngestionJobRecordStatusResponse,
@@ -887,6 +893,143 @@ async def get_ingestion_job(
             },
         )
     return job
+
+
+INGESTION_BOOKKEEPING_REPAIR_RESPONSE_EXAMPLE = {
+    "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    "previous_status": "accepted",
+    "repaired_status": "queued",
+    "recovery_action": "repair_ingestion_job_bookkeeping",
+    "supportability_reason_code": "POST_PUBLISH_BOOKKEEPING_FAILED",
+    "retry_safe": False,
+    "message": "Ingestion job bookkeeping repaired from accepted to queued.",
+}
+
+INGESTION_BOOKKEEPING_REPAIR_NOT_ELIGIBLE_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_BOOKKEEPING_REPAIR_NOT_ELIGIBLE",
+        "message": "Ingestion job is not eligible for bookkeeping repair.",
+        "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+        "status": "failed",
+    }
+}
+
+INGESTION_BOOKKEEPING_REPAIR_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_BOOKKEEPING_REPAIR_FAILED",
+        "message": "Ingestion job bookkeeping repair did not complete.",
+        "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+        "recovery_action": "repair_ingestion_job_bookkeeping",
+    }
+}
+
+
+@router.post(
+    "/ingestion/jobs/{job_id}/bookkeeping/repair",
+    response_model=IngestionJobBookkeepingRepairResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Ingestion Operations"],
+    summary="Repair post-publish ingestion job bookkeeping",
+    description=(
+        "What: Repair a job left accepted after publish or persist work completed but "
+        "bookkeeping failed.\n"
+        "How: Require recorded `queue_bookkeeping` or `persist_bookkeeping` failure evidence "
+        "before marking the job queued.\n"
+        "When: Use after a client receives `INGESTION_JOB_BOOKKEEPING_FAILED` and operators "
+        "confirm the work completed."
+    ),
+    responses={
+        200: {
+            "description": "Bookkeeping repair was applied or was already reflected.",
+            "content": {
+                "application/json": {"example": INGESTION_BOOKKEEPING_REPAIR_RESPONSE_EXAMPLE}
+            },
+        },
+        404: {
+            "description": "Ingestion job was not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
+        409: {
+            "description": "Ingestion job does not have post-publish bookkeeping failure evidence.",
+            "content": {
+                "application/json": {"example": INGESTION_BOOKKEEPING_REPAIR_NOT_ELIGIBLE_EXAMPLE}
+            },
+        },
+        500: {
+            "description": "Bookkeeping repair did not complete.",
+            "content": {
+                "application/json": {"example": INGESTION_BOOKKEEPING_REPAIR_FAILED_EXAMPLE}
+            },
+        },
+    },
+)
+async def repair_ingestion_job_bookkeeping(
+    job_id: str = Path(
+        description="Ingestion job identifier.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+):
+    job = await ingestion_job_service.get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "INGESTION_JOB_NOT_FOUND",
+                "message": f"Ingestion job '{job_id}' was not found.",
+            },
+        )
+
+    previous_status = str(_job_field(job, "status"))
+    failures = await ingestion_job_service.list_failures(job_id=job_id, limit=25)
+    bookkeeping_phase = _first_bookkeeping_failure_phase(failures)
+    if bookkeeping_phase is None or previous_status not in {"accepted", "queued"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "INGESTION_BOOKKEEPING_REPAIR_NOT_ELIGIBLE",
+                "message": "Ingestion job is not eligible for bookkeeping repair.",
+                "job_id": job_id,
+                "status": previous_status,
+            },
+        )
+
+    if previous_status == "accepted":
+        try:
+            await ingestion_job_service.mark_queued(job_id)
+        except Exception as exc:
+            logger.exception(
+                "Ingestion bookkeeping repair failed.",
+                extra={"job_id": job_id, "previous_status": previous_status},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code": "INGESTION_BOOKKEEPING_REPAIR_FAILED",
+                    "message": "Ingestion job bookkeeping repair did not complete.",
+                    "job_id": job_id,
+                    "recovery_action": POST_BOOKKEEPING_REPAIR_ACTION,
+                },
+            ) from exc
+    repaired = await ingestion_job_service.get_job(job_id)
+    repaired_status = str(_job_field(repaired or job, "status"))
+    return IngestionJobBookkeepingRepairResponse(
+        job_id=job_id,
+        previous_status=previous_status,
+        repaired_status=repaired_status,
+        recovery_action=POST_BOOKKEEPING_REPAIR_ACTION,
+        supportability_reason_code=bookkeeping_reason_code(bookkeeping_phase),
+        retry_safe=False,
+        message=f"Ingestion job bookkeeping repaired from {previous_status} to {repaired_status}.",
+    )
+
+
+def _first_bookkeeping_failure_phase(failures: list[Any]) -> str | None:
+    for failure in failures:
+        failure_phase = _job_field(failure, "failure_phase")
+        if failure_phase in POST_BOOKKEEPING_FAILURE_PHASES:
+            return str(failure_phase)
+    return None
 
 
 @router.get(

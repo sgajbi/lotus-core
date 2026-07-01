@@ -141,6 +141,7 @@ async def ingest_portfolios(
             ingestion_job_service=ingestion_job_service,
             job_id=job_result.job.job_id,
             failure_reason=str(exc),
+            published_record_count=num_portfolios,
         )
 
     logger.info("Portfolios successfully queued.", extra={"num_portfolios": num_portfolios})

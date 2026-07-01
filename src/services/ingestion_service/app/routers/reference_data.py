@@ -139,6 +139,9 @@ async def _handle_reference_ingestion(
             job_id=job_result.job.job_id,
             failure_reason=str(exc),
             failure_phase="persist_bookkeeping",
+            publish_state="not_published",
+            work_state="persisted",
+            published_record_count=0,
         )
 
     return build_batch_ack(

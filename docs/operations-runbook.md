@@ -55,6 +55,30 @@ Current retry outcomes are `not_found`, `retry_unsupported`, `partial_retry_unsu
 Publish and bookkeeping failures keep raw downstream exception details out of the primary client
 message. Use replay audit records and ingestion job failure history for detailed incident evidence.
 
+## Ingestion Bookkeeping Repair
+
+Direct ingestion endpoints can return `INGESTION_JOB_BOOKKEEPING_FAILED` after publish or persist
+work completed but job-state bookkeeping failed. These responses are not client-retry-safe and
+include:
+
+| Field | Meaning |
+| --- | --- |
+| `publish_state` | `published` when publish completed, `not_published` for persistence-only paths. |
+| `work_state` | Completed work category, such as `published` or `persisted`. |
+| `published_record_count` | Number of records already published when applicable. |
+| `retry_safe` | Always `false` for this partial-failure response. |
+| `recovery_action` | Governed operator command, `repair_ingestion_job_bookkeeping`. |
+| `supportability_reason_code` | `POST_PUBLISH_BOOKKEEPING_FAILED` or `POST_PERSIST_BOOKKEEPING_FAILED`. |
+
+Operators can repair eligible jobs with:
+
+```text
+POST /ingestion/jobs/{job_id}/bookkeeping/repair
+```
+
+The repair command only runs when failure history contains `queue_bookkeeping` or
+`persist_bookkeeping` evidence. It rejects blind repair attempts for unrelated jobs.
+
 ## Escalation
 
 Treat new collection failures, new architecture-boundary violations, new security findings, and new

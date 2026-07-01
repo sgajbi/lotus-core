@@ -140,6 +140,7 @@ async def ingest_fx_rates(
             ingestion_job_service=ingestion_job_service,
             job_id=job_result.job.job_id,
             failure_reason=str(exc),
+            published_record_count=num_rates,
         )
 
     logger.info("FX rates successfully queued.", extra={"num_rates": num_rates})
