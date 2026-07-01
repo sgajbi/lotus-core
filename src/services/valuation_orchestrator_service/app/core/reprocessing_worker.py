@@ -4,7 +4,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 
 from portfolio_common.db import get_async_db_session
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import correlation_id_var, operation_log_extra
 from portfolio_common.monitoring import (
     observe_reprocessing_stale_skips,
     observe_reprocessing_worker_jobs_claimed,
@@ -41,24 +41,33 @@ def _record_reset_watermark_fanout(
     targeted_count = len(affected_portfolios)
     if updated_count == targeted_count:
         logger.info(
-            f"Job {job.id}: Fanned out watermark reset to {updated_count} portfolios "
-            f"for security {security_id}."
+            "Reprocessing watermark reset fanout completed.",
+            extra=operation_log_extra(
+                event_name="valuation.reprocessing.watermark_fanout_completed",
+                operation="valuation.reprocessing.reset_watermarks",
+                status="succeeded",
+                reason_code="fanout_completed",
+                job_id=job.id,
+                targeted_count=targeted_count,
+                updated_count=updated_count,
+            ),
         )
         return
 
     stale_skipped_count = targeted_count - updated_count
     observe_reprocessing_stale_skips("reset_watermarks_fanout", stale_skipped_count)
     logger.warning(
-        "Job %s: Reset fewer watermarks than targeted for security %s.",
-        job.id,
-        security_id,
-        extra={
-            "targeted_count": targeted_count,
-            "updated_count": updated_count,
-            "stale_skipped_count": stale_skipped_count,
-            "security_id": security_id,
-            "examples": [f"({p_id},{security_id})" for p_id in affected_portfolios[:3]],
-        },
+        "Reprocessing watermark reset fanout updated fewer rows than targeted.",
+        extra=operation_log_extra(
+            event_name="valuation.reprocessing.watermark_fanout_partial",
+            operation="valuation.reprocessing.reset_watermarks",
+            status="partial",
+            reason_code="stale_watermark_rows",
+            job_id=job.id,
+            targeted_count=targeted_count,
+            updated_count=updated_count,
+            stale_skipped_count=stale_skipped_count,
+        ),
     )
 
 
@@ -80,7 +89,15 @@ class ReprocessingWorker:
         self._stop_event = asyncio.Event()
 
     def stop(self):
-        logger.info("Reprocessing worker shutdown signal received.")
+        logger.info(
+            "Reprocessing worker shutdown signal received.",
+            extra=operation_log_extra(
+                event_name="valuation.reprocessing_worker.shutdown_started",
+                operation="valuation.reprocessing_worker.run",
+                status="stopping",
+                reason_code="shutdown_requested",
+            ),
+        )
         self._running = False
         self._stop_event.set()
 
@@ -207,11 +224,15 @@ class ReprocessingWorker:
             "no_impacted_portfolios",
         )
         logger.info(
-            "Job %s: No impacted portfolios are visible yet for security %s on %s; "
-            "requeueing durable replay intent.",
-            job.id,
-            security_id,
-            earliest_date.isoformat(),
+            "No impacted portfolios are visible yet; requeueing durable replay intent.",
+            extra=operation_log_extra(
+                event_name="valuation.reprocessing.no_impacted_portfolios",
+                operation="valuation.reprocessing.reset_watermarks",
+                status="retrying",
+                reason_code="no_impacted_portfolios",
+                job_id=job.id,
+                earliest_impacted_date=earliest_date.isoformat(),
+            ),
         )
 
     async def _update_reset_watermark_job_terminal_status(
@@ -237,7 +258,14 @@ class ReprocessingWorker:
         logger.warning(
             "Skipping replay job %s after losing job ownership.",
             "completion" if should_complete_job else "requeue",
-            extra={"job_id": job.id, "security_id": security_id},
+            extra=operation_log_extra(
+                event_name="valuation.reprocessing.ownership_lost",
+                operation="valuation.reprocessing.reset_watermarks",
+                status="skipped",
+                reason_code=ownership_lost_reason,
+                job_id=job.id,
+                terminal_status=terminal_status,
+            ),
         )
 
     @staticmethod
@@ -247,7 +275,18 @@ class ReprocessingWorker:
         job_repo: ReprocessingJobRepository,
         exc: Exception,
     ) -> None:
-        logger.error(f"Failed to process reprocessing job {job.id}", exc_info=True)
+        logger.error(
+            "Reprocessing job processing failed.",
+            exc_info=True,
+            extra=operation_log_extra(
+                event_name="valuation.reprocessing.job_failed",
+                operation="valuation.reprocessing.reset_watermarks",
+                status="failed",
+                reason_code="job_processing_error",
+                job_id=job.id,
+                error_type=type(exc).__name__,
+            ),
+        )
         updated = await job_repo.update_job_status(job.id, "FAILED", failure_reason=str(exc))
         if updated:
             observe_reprocessing_worker_jobs_failed("RESET_WATERMARKS")
@@ -255,12 +294,30 @@ class ReprocessingWorker:
             observe_reprocessing_stale_skips("reset_watermarks_terminal_ownership_lost", 1)
 
     async def run(self):
-        logger.info(f"ReprocessingWorker started. Polling every {self._poll_interval} seconds.")
+        logger.info(
+            "Reprocessing worker started.",
+            extra=operation_log_extra(
+                event_name="valuation.reprocessing_worker.started",
+                operation="valuation.reprocessing_worker.run",
+                status="running",
+                reason_code="poll_loop_started",
+                poll_interval_seconds=self._poll_interval,
+            ),
+        )
         while self._running:
             try:
                 await self._process_batch()
             except Exception:
-                logger.error("Error in reprocessing worker polling loop.", exc_info=True)
+                logger.error(
+                    "Reprocessing worker polling loop failed.",
+                    exc_info=True,
+                    extra=operation_log_extra(
+                        event_name="valuation.reprocessing_worker.poll_loop_failed",
+                        operation="valuation.reprocessing_worker.run",
+                        status="failed",
+                        reason_code="poll_loop_error",
+                    ),
+                )
 
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
@@ -270,4 +327,12 @@ class ReprocessingWorker:
             except asyncio.CancelledError:
                 break
 
-        logger.info("ReprocessingWorker has stopped.")
+        logger.info(
+            "Reprocessing worker stopped.",
+            extra=operation_log_extra(
+                event_name="valuation.reprocessing_worker.stopped",
+                operation="valuation.reprocessing_worker.run",
+                status="stopped",
+                reason_code="poll_loop_stopped",
+            ),
+        )

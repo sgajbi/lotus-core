@@ -233,7 +233,9 @@ async def test_run_loop_dlq_commit_failure_does_not_crash_or_re_dlq(
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
-    assert "Offset commit failed after successful DLQ publication" in mock_warning.call_args.args[0]
+    assert mock_warning.call_args.args[0] == "Kafka offset commit failed after DLQ publication."
+    assert mock_warning.call_args.kwargs["extra"]["event_name"] == "kafka.consumer.commit_failed"
+    assert mock_warning.call_args.kwargs["extra"]["reason_code"] == "dlq_publication"
 
 
 async def test_run_loop_retryable_error_does_not_commit(
@@ -307,7 +309,11 @@ async def test_run_loop_commit_failure_does_not_send_to_dlq(
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
     test_consumer._send_to_dlq_async.assert_not_awaited()
-    assert "Offset commit failed after successful processing" in mock_warning.call_args.args[0]
+    assert mock_warning.call_args.args[0] == (
+        "Kafka offset commit failed after successful processing."
+    )
+    assert mock_warning.call_args.kwargs["extra"]["event_name"] == "kafka.consumer.commit_failed"
+    assert mock_warning.call_args.kwargs["extra"]["reason_code"] == "successful_processing"
 
 
 async def test_run_loop_commit_failure_emits_standard_consumer_metric(
@@ -346,7 +352,11 @@ async def test_run_loop_fatal_consumer_error_stops_without_processing(
 
     test_consumer.process_message_mock.assert_not_awaited()
     mock_confluent_consumer.commit.assert_not_called()
-    assert "Fatal consumer error" in mock_log_error.call_args.args[0]
+    assert mock_log_error.call_args.args[0] == (
+        "Kafka consumer poll error was fatal; shutting down."
+    )
+    assert mock_log_error.call_args.kwargs["extra"]["event_name"] == "kafka.consumer.poll_error"
+    assert mock_log_error.call_args.kwargs["extra"]["reason_code"] == "fatal_poll_error"
 
 
 async def test_run_loop_nonfatal_consumer_error_skips_message(
@@ -368,8 +378,8 @@ async def test_run_loop_nonfatal_consumer_error_skips_message(
 
     test_consumer.process_message_mock.assert_awaited_once_with(valid_msg)
     mock_confluent_consumer.commit.assert_called_once_with(message=valid_msg, asynchronous=False)
-    warning_messages = [call.args[0] for call in mock_warning.call_args_list]
-    assert any("Non-fatal consumer error" in message for message in warning_messages)
+    warning_events = [call.kwargs["extra"]["event_name"] for call in mock_warning.call_args_list]
+    assert "kafka.consumer.poll_error" in warning_events
 
 
 async def test_run_loop_poll_errors_emit_standard_consumer_metrics(
@@ -790,7 +800,9 @@ async def test_dlq_flush_timeout_does_not_record_event(
     mock_kafka_producer.flush.assert_called_once_with(timeout=5)
     test_consumer._record_consumer_dlq_event.assert_not_awaited()
     mock_log_error.assert_called_once()
-    assert "Could not send message to DLQ" in mock_log_error.call_args.args[0]
+    assert mock_log_error.call_args.args[0] == "Kafka DLQ publication failed."
+    assert mock_log_error.call_args.kwargs["extra"]["event_name"] == "kafka.consumer.dlq_failed"
+    assert mock_log_error.call_args.kwargs["extra"]["reason_code"] == "dlq_publish_error"
 
 
 async def test_dlq_failure_emits_standard_consumer_metric(

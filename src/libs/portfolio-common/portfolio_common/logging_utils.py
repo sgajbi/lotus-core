@@ -6,6 +6,7 @@ import secrets
 import sys
 import uuid
 from contextvars import ContextVar
+from types import TracebackType
 from typing import Any
 
 try:
@@ -50,6 +51,8 @@ _INLINE_SECRET_PATTERN = re.compile(
     r"(?i)\b(?P<key>authorization|password|passwd|pwd|secret|token|api[_-]?key|"
     r"database_url|connection_string)\b(?P<separator>\s*[:=]\s*)(?P<value>[^\r\n,;]+)"
 )
+_LOG_TAXONOMY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
+_LOG_TAXONOMY_FALLBACK = "unspecified"
 
 
 def normalize_lineage_value(value: str | None) -> str | None:
@@ -159,6 +162,66 @@ def _redact_dict(value: dict[str, Any]) -> dict[str, Any]:
 def _is_sensitive_key(key: object) -> bool:
     normalized = str(key).strip().lower().replace("-", "_")
     return any(token in normalized for token in _SENSITIVE_KEY_TOKENS)
+
+
+def normalize_log_taxonomy_value(value: str | None) -> str:
+    normalized = normalize_lineage_value(value)
+    if normalized is None:
+        return _LOG_TAXONOMY_FALLBACK
+    candidate = normalized.strip().lower().replace("-", "_").replace(" ", "_")
+    return candidate if _LOG_TAXONOMY_PATTERN.fullmatch(candidate) else _LOG_TAXONOMY_FALLBACK
+
+
+def operation_log_extra(
+    *,
+    event_name: str,
+    operation: str,
+    status: str,
+    reason_code: str,
+    **fields: Any,
+) -> dict[str, Any]:
+    extra = {
+        "event_name": normalize_log_taxonomy_value(event_name),
+        "operation": normalize_log_taxonomy_value(operation),
+        "status": normalize_log_taxonomy_value(status),
+        "reason_code": normalize_log_taxonomy_value(reason_code),
+    }
+    extra.update(redact_sensitive(fields))
+    return extra
+
+
+def log_operation_event(
+    logger: logging.Logger,
+    level: int,
+    message: str,
+    *,
+    event_name: str,
+    operation: str,
+    status: str,
+    reason_code: str,
+    exc_info: bool | tuple[type[BaseException], BaseException, TracebackType | None] = False,
+    **fields: Any,
+) -> None:
+    kwargs = dict(
+        exc_info=exc_info,
+        extra=operation_log_extra(
+            event_name=event_name,
+            operation=operation,
+            status=status,
+            reason_code=reason_code,
+            **fields,
+        ),
+    )
+    if level >= logging.CRITICAL:
+        logger.critical(message, **kwargs)
+    elif level >= logging.ERROR:
+        logger.error(message, **kwargs)
+    elif level >= logging.WARNING:
+        logger.warning(message, **kwargs)
+    elif level >= logging.INFO:
+        logger.info(message, **kwargs)
+    else:
+        logger.debug(message, **kwargs)
 
 
 class RedactingJsonFormatter(JsonFormatter):

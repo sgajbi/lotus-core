@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional, cast
 
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
@@ -67,7 +68,24 @@ class TransactionService:
         """
         Retrieves a paginated and filtered list of transactions for a portfolio.
         """
-        logger.info(f"Fetching transactions for portfolio '{portfolio_id}'.")
+        logger.info(
+            "Transaction ledger query requested.",
+            extra=operation_log_extra(
+                event_name="query.transaction_service.ledger_requested",
+                operation="query.transaction_service.get_transactions",
+                status="started",
+                reason_code="request_received",
+                has_instrument_filter=instrument_id is not None,
+                has_security_filter=security_id is not None,
+                has_transaction_type_filter=transaction_type is not None,
+                has_component_type_filter=component_type is not None,
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+                has_as_of_date_filter=as_of_date is not None,
+                include_projected=include_projected,
+                has_reporting_currency=reporting_currency is not None,
+            ),
+        )
 
         await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         effective_as_of_date = await transaction_ledger_effective_as_of_date(
@@ -131,7 +149,19 @@ class TransactionService:
         as_of_date: Optional[date] = None,
         reporting_currency: Optional[str] = None,
     ) -> PortfolioRealizedTaxSummaryResponse:
-        logger.info("Fetching realized tax summary for portfolio '%s'.", portfolio_id)
+        logger.info(
+            "Realized tax summary query requested.",
+            extra=operation_log_extra(
+                event_name="query.transaction_service.realized_tax_requested",
+                operation="query.transaction_service.get_realized_tax_summary",
+                status="started",
+                reason_code="request_received",
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+                has_as_of_date_filter=as_of_date is not None,
+                has_reporting_currency=reporting_currency is not None,
+            ),
+        )
 
         base_currency = await self.repo.get_portfolio_base_currency(portfolio_id)
         if base_currency is None:

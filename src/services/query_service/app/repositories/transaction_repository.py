@@ -14,6 +14,7 @@ from portfolio_common.database_models import (
     Transaction,
     TransactionCost,
 )
+from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
 from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -330,9 +331,21 @@ class TransactionRepository:
         results = await self.db.execute(stmt.offset(skip).limit(limit))
         transactions = results.scalars().unique().all()
         logger.info(
-            "Found %s transactions for portfolio '%s' with given filters.",
-            len(transactions),
-            portfolio_id,
+            "Transaction repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.transaction_repository.query_completed",
+                operation="query.transaction_repository.get_transactions",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(transactions),
+                has_instrument_filter=instrument_id is not None,
+                has_security_filter=security_id is not None,
+                has_transaction_type_filter=transaction_type is not None,
+                has_component_type_filter=component_type is not None,
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+                has_as_of_date_filter=as_of_date is not None,
+            ),
         )
         return transactions
 

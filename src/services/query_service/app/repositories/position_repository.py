@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     PositionHistory,
     PositionState,
 )
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -204,8 +205,16 @@ class PositionRepository:
         results = await self.db.execute(stmt.order_by(PositionHistory.position_date.asc()))
         history = results.all()
         logger.info(
-            f"Found {len(history)} position history records for security '{security_id}' "
-            f"in portfolio '{portfolio_id}'."
+            "Position history repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.position_repository.history_query_completed",
+                operation="query.position_repository.get_position_history",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(history),
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+            ),
         )
         return history
 
@@ -278,7 +287,16 @@ class PositionRepository:
 
         results = await self.db.execute(stmt)
         positions = results.all()
-        logger.info(f"Found {len(positions)} latest positions for portfolio '{portfolio_id}'.")
+        logger.info(
+            "Latest portfolio position repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.position_repository.latest_positions_completed",
+                operation="query.position_repository.get_latest_positions_by_portfolio",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(positions),
+            ),
+        )
         return positions
 
     async def get_latest_position_history_by_portfolio(self, portfolio_id: str) -> List[Any]:
@@ -333,7 +351,14 @@ class PositionRepository:
         results = await self.db.execute(stmt)
         positions = results.all()
         logger.info(
-            f"Found {len(positions)} fallback position-history rows for portfolio '{portfolio_id}'."
+            "Fallback portfolio position-history repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.position_repository.latest_history_fallback_completed",
+                operation="query.position_repository.get_latest_position_history_by_portfolio",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(positions),
+            ),
         )
         return positions
 
@@ -405,10 +430,15 @@ class PositionRepository:
         results = await self.db.execute(stmt)
         positions = results.all()
         logger.info(
-            "Found %s as-of snapshot positions for portfolio '%s' at %s.",
-            len(positions),
-            portfolio_id,
-            as_of_date,
+            "As-of portfolio position snapshot repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.position_repository.as_of_snapshot_completed",
+                operation="query.position_repository.get_latest_positions_by_portfolio_as_of_date",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(positions),
+                as_of_date=as_of_date.isoformat(),
+            ),
         )
         return positions
 
@@ -520,10 +550,17 @@ class PositionRepository:
         results = await self.db.execute(stmt)
         positions = results.all()
         logger.info(
-            "Found %s as-of fallback position-history rows for portfolio '%s' at %s.",
-            len(positions),
-            portfolio_id,
-            as_of_date,
+            "As-of fallback portfolio position-history repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.position_repository.as_of_history_fallback_completed",
+                operation=(
+                    "query.position_repository.get_latest_position_history_by_portfolio_as_of_date"
+                ),
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(positions),
+                as_of_date=as_of_date.isoformat(),
+            ),
         )
         return positions
 

@@ -14,7 +14,11 @@ from sqlalchemy.orm import sessionmaker
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.db import SessionLocal
 from portfolio_common.kafka_utils import KafkaProducer
-from portfolio_common.logging_utils import normalize_traceparent, redact_sensitive_text
+from portfolio_common.logging_utils import (
+    normalize_traceparent,
+    operation_log_extra,
+    redact_sensitive_text,
+)
 from portfolio_common.monitoring import (
     observe_outbox_failed,
     observe_outbox_published,
@@ -115,7 +119,15 @@ class OutboxDispatcher:
         self._retry_random = SystemRandom()
 
     def stop(self):
-        logger.info("Outbox dispatcher shutdown signal received.")
+        logger.info(
+            "Outbox dispatcher shutdown signal received.",
+            extra=operation_log_extra(
+                event_name="outbox.dispatcher.shutdown_started",
+                operation="outbox.dispatch",
+                status="stopping",
+                reason_code="shutdown_requested",
+            ),
+        )
         self._running = False
         self._stop_event.set()
 
@@ -279,7 +291,14 @@ class OutboxDispatcher:
                 logger.error(
                     "OutboxDispatcher: Synchronous Kafka publish failed.",
                     exc_info=True,
-                    extra={"outbox_id": event.id, "topic": event.topic},
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.publish_failed",
+                        operation="outbox.dispatch",
+                        status="failed",
+                        reason_code="synchronous_publish_error",
+                        outbox_id=event.id,
+                        topic=event.topic,
+                    ),
                 )
 
     def _flush_delivery_results(
@@ -290,7 +309,17 @@ class OutboxDispatcher:
     ) -> None:
         try:
             undelivered_count = self._producer.flush(timeout=10)
-            logger.info(f"OutboxDispatcher: Flush complete for {len(events_to_process)} events.")
+            logger.info(
+                "Outbox dispatcher flush completed.",
+                extra=operation_log_extra(
+                    event_name="outbox.dispatcher.flush_completed",
+                    operation="outbox.dispatch",
+                    status="succeeded",
+                    reason_code="producer_flush_completed",
+                    event_count=len(events_to_process),
+                    undelivered_count=undelivered_count,
+                ),
+            )
             if undelivered_count:
                 _mark_callbackless_events_failed(
                     events_to_process,
@@ -299,7 +328,18 @@ class OutboxDispatcher:
                     reason="Kafka flush timed out before delivery callback.",
                 )
         except Exception as e:
-            logger.error("OutboxDispatcher: Kafka flush failed.", exc_info=True)
+            logger.error(
+                "Outbox dispatcher flush failed.",
+                exc_info=True,
+                extra=operation_log_extra(
+                    event_name="outbox.dispatcher.flush_failed",
+                    operation="outbox.dispatch",
+                    status="failed",
+                    reason_code="producer_flush_error",
+                    event_count=len(events_to_process),
+                    error_type=type(e).__name__,
+                ),
+            )
             _mark_callbackless_events_failed(
                 events_to_process,
                 delivery_ack,
@@ -399,9 +439,25 @@ class OutboxDispatcher:
                 logger.warning(
                     "OutboxDispatcher: Skipped success update because claim token no longer "
                     "owns row.",
-                    extra={"outbox_id": event.id},
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.success_update_skipped",
+                        operation="outbox.dispatch",
+                        status="skipped",
+                        reason_code="claim_token_lost",
+                        outbox_id=event.id,
+                        topic=event.topic,
+                    ),
                 )
-        logger.info(f"OutboxDispatcher: Marked {updated_count} events as PROCESSED in DB.")
+        logger.info(
+            "Outbox dispatcher marked events as processed.",
+            extra=operation_log_extra(
+                event_name="outbox.dispatcher.events_processed",
+                operation="outbox.dispatch",
+                status="succeeded",
+                reason_code="database_update_completed",
+                updated_count=updated_count,
+            ),
+        )
 
     def _mark_retryable_failures(
         self,
@@ -445,7 +501,14 @@ class OutboxDispatcher:
                 logger.warning(
                     "OutboxDispatcher: Skipped retry update because claim token no longer "
                     "owns row.",
-                    extra={"outbox_id": event.id},
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.retry_update_skipped",
+                        operation="outbox.dispatch",
+                        status="skipped",
+                        reason_code="claim_token_lost",
+                        outbox_id=event.id,
+                        topic=event.topic,
+                    ),
                 )
                 continue
             observe_outbox_failed(event.aggregate_type, event.topic)
@@ -453,11 +516,17 @@ class OutboxDispatcher:
             reason = delivery_errs.get(event.id, "unknown error")
             logger.warning(
                 "OutboxDispatcher: Kafka delivery failed; will retry later.",
-                extra={
-                    "outbox_id": event.id,
-                    "reason": reason,
-                    "next_attempt_at": next_attempt_at.isoformat(),
-                },
+                extra=operation_log_extra(
+                    event_name="outbox.dispatcher.delivery_retry_scheduled",
+                    operation="outbox.dispatch",
+                    status="retrying",
+                    reason_code="delivery_error",
+                    outbox_id=event.id,
+                    topic=event.topic,
+                    retry_count=event.retry_count,
+                    delivery_error=_source_safe_failure_message(reason),
+                    next_attempt_at=next_attempt_at.isoformat(),
+                ),
             )
 
     def _mark_terminal_failures(
@@ -497,20 +566,33 @@ class OutboxDispatcher:
                 logger.warning(
                     "OutboxDispatcher: Skipped terminal update because claim token no longer "
                     "owns row.",
-                    extra={"outbox_id": event.id},
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.terminal_update_skipped",
+                        operation="outbox.dispatch",
+                        status="skipped",
+                        reason_code="claim_token_lost",
+                        outbox_id=event.id,
+                        topic=event.topic,
+                    ),
                 )
                 continue
             observe_outbox_failed(event.aggregate_type, event.topic)
             reason = delivery_errs.get(event.id, "unknown error")
             logger.error(
                 "OutboxDispatcher: Kafka delivery reached terminal failure threshold.",
-                extra={
-                    "outbox_id": event.id,
-                    "reason": _source_safe_failure_message(reason),
-                    "max_retries": self._max_retries,
-                    "failure_reason_code": failure_metadata["last_failure_reason_code"],
-                    "failure_category": failure_metadata["last_failure_category"],
-                },
+                extra=operation_log_extra(
+                    event_name="outbox.dispatcher.delivery_terminal_failure",
+                    operation="outbox.dispatch",
+                    status="failed",
+                    reason_code="terminal_delivery_error",
+                    outbox_id=event.id,
+                    topic=event.topic,
+                    retry_count=event.retry_count,
+                    delivery_error=_source_safe_failure_message(reason),
+                    max_retries=self._max_retries,
+                    failure_reason_code=failure_metadata["last_failure_reason_code"],
+                    failure_category=failure_metadata["last_failure_category"],
+                ),
             )
 
     def _retry_delay_seconds(self, retry_count: int) -> float:
@@ -526,13 +608,31 @@ class OutboxDispatcher:
         return now + timedelta(seconds=self._retry_delay_seconds(retry_count))
 
     async def run(self):
-        logger.info(f"Outbox dispatcher started. Polling every {self._poll_interval} seconds.")
+        logger.info(
+            "Outbox dispatcher started.",
+            extra=operation_log_extra(
+                event_name="outbox.dispatcher.started",
+                operation="outbox.dispatch",
+                status="running",
+                reason_code="poll_loop_started",
+                poll_interval_seconds=self._poll_interval,
+            ),
+        )
 
         while self._running:
             try:
                 await asyncio.to_thread(self._process_batch_sync)
             except Exception:
-                logger.error("Failed to process outbox batch.", exc_info=True)
+                logger.error(
+                    "Outbox dispatcher batch processing failed.",
+                    exc_info=True,
+                    extra=operation_log_extra(
+                        event_name="outbox.dispatcher.batch_failed",
+                        operation="outbox.dispatch",
+                        status="failed",
+                        reason_code="batch_processing_error",
+                    ),
+                )
 
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
@@ -542,7 +642,15 @@ class OutboxDispatcher:
             except asyncio.CancelledError:
                 break
 
-        logger.info("Outbox dispatcher has stopped.")
+        logger.info(
+            "Outbox dispatcher stopped.",
+            extra=operation_log_extra(
+                event_name="outbox.dispatcher.stopped",
+                operation="outbox.dispatch",
+                status="stopped",
+                reason_code="poll_loop_stopped",
+            ),
+        )
 
 
 def _make_on_delivery(

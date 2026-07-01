@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from typing import Optional
 
+from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.fx_rate_dto import FxRateRecord, FxRateResponse
@@ -30,7 +31,17 @@ class FxRateService:
         """
         Retrieves a filtered list of FX rates for a currency pair.
         """
-        logger.info(f"Fetching FX rates for '{from_currency}-{to_currency}'.")
+        logger.info(
+            "FX rate query requested.",
+            extra=operation_log_extra(
+                event_name="query.fx_rate_service.query_requested",
+                operation="query.fx_rate_service.get_fx_rates",
+                status="started",
+                reason_code="request_received",
+                has_start_date_filter=start_date is not None,
+                has_end_date_filter=end_date is not None,
+            ),
+        )
 
         db_results = await self.repo.get_fx_rates(
             from_currency=from_currency,

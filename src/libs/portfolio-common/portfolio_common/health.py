@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
 from .db import AsyncSessionLocal
+from .logging_utils import log_operation_event
 from .monitoring import observe_health_dependency_check, set_health_readiness_state
 
 logger = logging.getLogger(__name__)
@@ -67,8 +68,17 @@ async def check_db_health() -> bool:
             async with session.begin():
                 await session.execute(text("SELECT 1"))
         return True
-    except Exception as e:
-        logger.error(f"Health Check: Database connection failed: {e}", exc_info=False)
+    except Exception:
+        log_operation_event(
+            logger,
+            logging.ERROR,
+            "Health dependency check failed.",
+            event_name="health.dependency_check.failed",
+            operation="health.readiness",
+            status="failed",
+            reason_code="database_unavailable",
+            dependency="database",
+        )
         return False
 
 
@@ -78,8 +88,17 @@ async def check_kafka_health() -> bool:
         admin_client = AdminClient({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
         await asyncio.to_thread(admin_client.list_topics, timeout=5)
         return True
-    except Exception as e:
-        logger.error(f"Health Check: Kafka connection failed: {e}", exc_info=False)
+    except Exception:
+        log_operation_event(
+            logger,
+            logging.ERROR,
+            "Health dependency check failed.",
+            event_name="health.dependency_check.failed",
+            operation="health.readiness",
+            status="failed",
+            reason_code="kafka_unavailable",
+            dependency="kafka",
+        )
         return False
 
 
@@ -94,10 +113,16 @@ async def _run_dependency_check(
     try:
         is_ready = await asyncio.wait_for(check(), timeout=timeout_seconds)
     except TimeoutError:
-        logger.warning(
-            "Health Check: %s readiness check timed out after %.2f seconds.",
-            dependency_name,
-            timeout_seconds,
+        log_operation_event(
+            logger,
+            logging.WARNING,
+            "Health dependency check timed out.",
+            event_name="health.dependency_check.timeout",
+            operation="health.readiness",
+            status="timeout",
+            reason_code="dependency_timeout",
+            dependency=dependency_name,
+            timeout_seconds=timeout_seconds,
         )
         observe_health_dependency_check(
             service=service_name,
@@ -107,7 +132,17 @@ async def _run_dependency_check(
         )
         return DependencyReadinessResult(dependency_name, READINESS_TIMEOUT)
     except Exception:
-        logger.exception("Health Check: %s readiness check failed.", dependency_name)
+        log_operation_event(
+            logger,
+            logging.ERROR,
+            "Health dependency check failed.",
+            event_name="health.dependency_check.failed",
+            operation="health.readiness",
+            status="failed",
+            reason_code="dependency_error",
+            dependency=dependency_name,
+            exc_info=True,
+        )
         observe_health_dependency_check(
             service=service_name,
             dependency=dependency_name,
@@ -134,9 +169,15 @@ def _coerce_dependency_result(
 ) -> DependencyReadinessResult:
     if isinstance(result, DependencyReadinessResult):
         return result
-    logger.error(
-        "Health Check: %s readiness isolation failed.",
-        dependency_name,
+    log_operation_event(
+        logger,
+        logging.ERROR,
+        "Health readiness isolation failed.",
+        event_name="health.readiness_isolation.failed",
+        operation="health.readiness",
+        status="failed",
+        reason_code="dependency_isolation_error",
+        dependency=dependency_name,
         exc_info=(type(result), result, result.__traceback__),
     )
     observe_health_dependency_check(

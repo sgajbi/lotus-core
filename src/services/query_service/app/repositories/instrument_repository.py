@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 
 from portfolio_common.database_models import Instrument
+from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +71,18 @@ class InstrumentRepository:
             stmt.order_by(Instrument.name.asc()).offset(skip).limit(limit)
         )
         instruments = results.scalars().all()
-        logger.info(f"Found {len(instruments)} instruments with given filters.")
+        logger.info(
+            "Instrument repository query completed.",
+            extra=operation_log_extra(
+                event_name="query.instrument_repository.query_completed",
+                operation="query.instrument_repository.get_instruments",
+                status="succeeded",
+                reason_code="query_completed",
+                result_count=len(instruments),
+                has_security_filter=security_id is not None,
+                has_product_type_filter=product_type is not None,
+            ),
+        )
         return instruments
 
     async def search_instrument_lookup_rows(
