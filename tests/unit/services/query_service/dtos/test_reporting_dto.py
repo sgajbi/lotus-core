@@ -17,11 +17,30 @@ def test_reporting_scope_requires_exactly_one_selector() -> None:
         ReportingScope(portfolio_id="P1", booking_center_code="SGPB")
 
 
+def test_reporting_scope_rejects_blank_portfolio_ids() -> None:
+    with pytest.raises(ValidationError, match="portfolio_ids cannot contain blank identifiers"):
+        ReportingScope(portfolio_ids=["P1", " "])
+
+
+def test_reporting_scope_classifies_supported_scope_types() -> None:
+    assert ReportingScope(portfolio_id="P1").scope_type == "portfolio"
+    assert ReportingScope(portfolio_ids=["P1", "P2"]).scope_type == "portfolio_list"
+    assert ReportingScope(booking_center_code="SGPB").scope_type == "business_unit"
+
+
 def test_aum_request_requires_reporting_currency_for_multi_portfolio_scope() -> None:
     with pytest.raises(ValidationError, match="reporting_currency is required"):
         AssetsUnderManagementQueryRequest(
             scope=ReportingScope(portfolio_ids=["P1", "P2"]),
             as_of_date=date(2026, 3, 27),
+        )
+
+
+def test_asset_allocation_request_requires_reporting_currency_for_business_unit() -> None:
+    with pytest.raises(ValidationError, match="reporting_currency is required"):
+        AssetAllocationQueryRequest(
+            scope=ReportingScope(booking_center_code="SGPB"),
+            dimensions=["asset_class"],
         )
 
 
