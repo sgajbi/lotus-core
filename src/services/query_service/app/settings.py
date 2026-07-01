@@ -4,12 +4,14 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from portfolio_common.runtime_settings import RuntimeConfigurationError
+from portfolio_common.runtime_settings import (
+    RuntimeConfigurationError,
+    production_security_profile_enabled,
+)
 from portfolio_common.runtime_settings import env_bool as shared_env_bool
 from portfolio_common.runtime_settings import env_int as shared_env_int
 from portfolio_common.runtime_settings import env_json_map as shared_env_json_map
 from portfolio_common.runtime_settings import env_str as shared_env_str
-from portfolio_common.runtime_settings import production_security_profile_enabled
 
 QUERY_SERVICE_NAME = "query service"
 

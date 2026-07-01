@@ -115,9 +115,10 @@ class SimulationService:
     async def add_changes(
         self, session_id: str, changes: list[dict[str, Any]]
     ) -> SimulationChangesResponse:
-        session = await self.repo.get_session(session_id)
-        self._validate_session_active(session_id, session)
-        assert session is not None
+        session = self._require_active_session(
+            session_id,
+            await self.repo.get_session(session_id),
+        )
 
         session.version += 1
         session, rows = await self.repo.add_changes(
@@ -132,9 +133,10 @@ class SimulationService:
         )
 
     async def delete_change(self, session_id: str, change_id: str) -> SimulationChangesResponse:
-        session = await self.repo.get_session(session_id)
-        self._validate_session_active(session_id, session)
-        assert session is not None
+        session = self._require_active_session(
+            session_id,
+            await self.repo.get_session(session_id),
+        )
 
         deleted = await self.repo.delete_change(session, change_id)
         if not deleted:
@@ -199,6 +201,10 @@ class SimulationService:
             raise SimulationMutationInvalidError(f"Simulation session {session_id} is not active")
         if session.expires_at is not None and session.expires_at < self._clock():
             raise SimulationMutationInvalidError(f"Simulation session {session_id} is expired")
+
+    def _require_active_session(self, session_id: str, session):
+        self._validate_session_active(session_id, session)
+        return session
 
     def _change_payload_with_id(self, item: dict[str, Any]) -> dict[str, Any]:
         return {**item, "change_id": self._id_generator()}
