@@ -1,5 +1,6 @@
+import asyncio
 from datetime import date, datetime, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import (
@@ -9,6 +10,8 @@ from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     Instrument,
+    OutboxEvent,
+    OutboxRecoveryAudit,
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
@@ -20,15 +23,19 @@ from portfolio_common.database_models import (
     ReprocessingJob,
     Transaction,
 )
+from portfolio_common.kafka_utils import KafkaProducer
+from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
 from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 
 from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
     PipelineStageRepository,
 )
+from src.services.query_service.app.dtos.operations_dto import FailedOutboxRequeueRequest
 from src.services.query_service.app.services import operations_service as operations_service_module
 from src.services.query_service.app.services.operations_service import OperationsService
 
@@ -1482,6 +1489,137 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
     assert response.items[0].status == "running"
     assert response.items[0].is_stale_running is True
     assert response.items[0].operational_state == "STALE_RUNNING"
+
+
+async def test_failed_outbox_recovery_round_trip_from_dispatcher_to_service_to_dispatcher(
+    clean_db, db_engine, async_db_session: AsyncSession
+):
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    aggregate_id = "PB_SG_GLOBAL_BAL_001"
+
+    with test_session_factory() as session:
+        with session.begin():
+            event = OutboxEvent(
+                aggregate_type="portfolio",
+                aggregate_id=aggregate_id,
+                event_type="PortfolioValuationCompleted",
+                payload={
+                    "event_type": "PortfolioValuationCompleted",
+                    "portfolio_id": aggregate_id,
+                },
+                topic="portfolio.valuation.completed",
+                status="PENDING",
+                correlation_id="corr-outbox-integration-670",
+                retry_count=2,
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+
+    failing_producer = MagicMock(spec=KafkaProducer)
+
+    def _failing_flush(timeout=10):
+        for call in failing_producer.publish_message.call_args_list:
+            kwargs = call.kwargs
+            cb = kwargs.get("on_delivery")
+            outbox_id = kwargs.get("outbox_id")
+            if cb and outbox_id:
+                cb(outbox_id, False, "Kafka delivery timed out before acknowledgement.")
+
+    failing_producer.flush.side_effect = _failing_flush
+    OutboxDispatcher(
+        kafka_producer=failing_producer,
+        db_session_factory=test_session_factory,
+        max_retries=3,
+    )._process_batch_sync()
+
+    service = OperationsService(async_db_session)
+    failed_rows = await service.get_failed_outbox_events(
+        skip=0,
+        limit=10,
+        aggregate_type="portfolio",
+        aggregate_id=aggregate_id,
+        reason_code="kafka_delivery_timeout",
+    )
+
+    assert failed_rows.total == 1
+    failed_row = failed_rows.items[0]
+    assert failed_row.outbox_id == event_id
+    assert failed_row.status == "FAILED"
+    assert failed_row.retry_count == 3
+    assert failed_row.last_failure_reason_code == "kafka_delivery_timeout"
+    assert failed_row.last_failure_category == "event_publish_delivery"
+    assert failed_row.last_failure_message == "Kafka delivery timed out before acknowledgement."
+    assert failed_row.retry_safe is False
+    assert failed_row.recommended_recovery_action == "inspect_payload_contract_before_requeue"
+    assert "payload" not in failed_row.model_dump()
+
+    requeue_response = await service.requeue_failed_outbox_event(
+        outbox_id=event_id,
+        request=FailedOutboxRequeueRequest(
+            requested_by="ops.sre",
+            reason="Kafka delivery timeout cleared; payload contract inspected.",
+            correlation_id="incident-20260701-outbox-670",
+            confirm_payload_contract_reviewed=True,
+        ),
+    )
+
+    assert requeue_response.outbox_id == event_id
+    assert requeue_response.prior_status == "FAILED"
+    assert requeue_response.new_status == "PENDING"
+    assert requeue_response.outcome == "REQUEUED"
+    assert requeue_response.retry_count == 0
+
+    success_producer = MagicMock(spec=KafkaProducer)
+    pending_deliveries: list[dict[str, object]] = []
+
+    def _publish_success(**kwargs):
+        pending_deliveries.append(kwargs)
+
+    def _successful_flush(timeout=10):
+        for queued in pending_deliveries:
+            queued["on_delivery"](queued["outbox_id"], True, None)
+        pending_deliveries.clear()
+
+    success_producer.publish_message.side_effect = _publish_success
+    success_producer.flush.side_effect = _successful_flush
+    success_dispatcher = OutboxDispatcher(
+        kafka_producer=success_producer,
+        db_session_factory=test_session_factory,
+    )
+    for _ in range(3):
+        success_dispatcher._process_batch_sync()
+        if success_producer.publish_message.call_count:
+            break
+        await asyncio.sleep(0.05)
+
+    success_producer.publish_message.assert_called_once()
+    assert success_producer.publish_message.call_args.kwargs["outbox_id"] == str(event_id)
+
+    with test_session_factory() as session:
+        event = session.get(OutboxEvent, event_id)
+        audit = (
+            session.query(OutboxRecoveryAudit)
+            .filter(OutboxRecoveryAudit.outbox_id == event_id)
+            .one()
+        )
+
+    assert event is not None
+    assert event.status == "PROCESSED"
+    assert event.retry_count == 0
+    assert event.last_failure_reason_code is None
+    assert event.last_failure_category is None
+    assert event.last_failure_message is None
+    assert event.last_failure_at is None
+    assert event.processed_at is not None
+    assert audit.recovery_action == "requeue_failed_outbox"
+    assert audit.requested_by == "ops.sre"
+    assert audit.prior_status == "FAILED"
+    assert audit.new_status == "PENDING"
+    assert audit.outcome == "REQUEUED"
+    assert audit.prior_retry_count == 3
+    assert audit.prior_last_failure_reason_code == "kafka_delivery_timeout"
+    assert audit.prior_last_failure_message == "Kafka delivery timed out before acknowledgement."
 
 
 async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
