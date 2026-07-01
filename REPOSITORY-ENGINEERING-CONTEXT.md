@@ -148,8 +148,11 @@ Current repository posture:
     shared `portfolio_common.runtime_settings` strict/local parser for bool, int, string, and JSON
     object settings while preserving their public helper wrappers. Common outbox and valuation
     runtime settings also use the shared parser while preserving existing local fallback and clamp
-    semantics. `make monetary-float-guard` uses token-aware money-like matching and currently has
-    zero active findings and zero allowlisted suppressions.
+    semantics. Ingestion write rate-limit scope truth is guarded by
+    `make ingestion-rate-limit-scope-guard`; `local_process` must remain documented as per-process
+    defense in depth, not as global service-level enforcement, unless a gateway-backed scope and
+    gateway policy ID are configured. `make monetary-float-guard` uses token-aware money-like
+    matching and currently has zero active findings and zero allowlisted suppressions.
 30. Service runtime import correctness is now part of the architecture guard. Service code under
     `src/services/<service>/app` must not import its own application package through the repo-root
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root

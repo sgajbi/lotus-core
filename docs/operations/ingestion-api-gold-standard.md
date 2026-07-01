@@ -9,6 +9,7 @@ This runbook summarizes the ingestion operations controls expected for productio
   - `How:` processing behavior and controls.
   - `When:` recommended operational usage context.
 - Validation gate: `python scripts/ingestion_endpoint_contract_gate.py`
+- Rate-limit scope truth gate: `make ingestion-rate-limit-scope-guard`
 
 ## Operations authorization
 
@@ -41,6 +42,9 @@ This runbook summarizes the ingestion operations controls expected for productio
   `local_process_with_upstream_gateway`.
 - Gateway-backed scopes require `LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID`; the ingestion
   service fails startup when a gateway-backed scope is selected without that policy identifier.
+- `make ingestion-rate-limit-scope-guard` verifies the runtime contract and documentation continue
+  to distinguish the default `local_process` safety guard from gateway-backed global enforcement
+  claims.
 - Rate-limit denials emitted by the local process limiter increment
   `ingestion_write_rate_limit_denials_total` with bounded `endpoint`, `reason`, and
   `enforcement_scope` labels and write a source-safe warning log.
